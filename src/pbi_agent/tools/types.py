@@ -25,5 +25,6 @@ class ToolResult:
 
 
 class ToolHandler(Protocol):
-    def __call__(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any] | str:
-        ...
+    def __call__(
+        self, arguments: dict[str, Any], context: ToolContext
+    ) -> dict[str, Any] | str: ...

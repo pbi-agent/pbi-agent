@@ -140,4 +140,3 @@ def _handle_tools_command(args: argparse.Namespace) -> int:
         return 0
 
     return 1
-

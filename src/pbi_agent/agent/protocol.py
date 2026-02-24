@@ -40,7 +40,9 @@ def build_response_create_payload(
     return payload
 
 
-def parse_completed_response(response_obj: dict[str, Any], streamed_text_parts: list[str]) -> CompletedResponse:
+def parse_completed_response(
+    response_obj: dict[str, Any], streamed_text_parts: list[str]
+) -> CompletedResponse:
     text_parts: list[str] = []
     function_calls: list[ToolCall] = []
     apply_patch_calls: list[ApplyPatchCall] = []
@@ -93,14 +95,23 @@ def parse_completed_response(response_obj: dict[str, Any], streamed_text_parts: 
                 )
 
     usage_obj = response_obj.get("usage", {})
-    input_tokens = int(usage_obj.get("input_tokens", 0) or 0) if isinstance(usage_obj, dict) else 0
-    output_tokens = int(usage_obj.get("output_tokens", 0) or 0) if isinstance(usage_obj, dict) else 0
+    input_tokens = (
+        int(usage_obj.get("input_tokens", 0) or 0) if isinstance(usage_obj, dict) else 0
+    )
+    output_tokens = (
+        int(usage_obj.get("output_tokens", 0) or 0)
+        if isinstance(usage_obj, dict)
+        else 0
+    )
     cached_input_tokens = 0
     if isinstance(usage_obj, dict):
         input_details = usage_obj.get("input_tokens_details", {})
         if isinstance(input_details, dict):
             cached_input_tokens = int(
-                input_details.get("cached_tokens", input_details.get("cached_input_tokens", 0)) or 0
+                input_details.get(
+                    "cached_tokens", input_details.get("cached_input_tokens", 0)
+                )
+                or 0
             )
 
     final_text = "".join(text_parts).strip() or "".join(streamed_text_parts).strip()

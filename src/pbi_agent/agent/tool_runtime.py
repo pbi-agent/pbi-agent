@@ -26,7 +26,9 @@ def execute_tool_calls(
 
     if len(calls) == 1 or max_workers == 1:
         results = [_execute_one_tool_call(call) for call in calls]
-        return ToolExecutionBatch(results=results, had_errors=any(r.is_error for r in results))
+        return ToolExecutionBatch(
+            results=results, had_errors=any(r.is_error for r in results)
+        )
 
     results: list[ToolResult | None] = [None] * len(calls)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -57,7 +59,9 @@ def to_function_call_output_items(results: list[ToolResult]) -> list[dict[str, A
 def _execute_one_tool_call(call: ToolCall) -> ToolResult:
     handler = get_tool_handler(call.name)
     if handler is None:
-        return _error_result(call, "unknown_tool", f"Tool '{call.name}' is not registered.")
+        return _error_result(
+            call, "unknown_tool", f"Tool '{call.name}' is not registered."
+        )
 
     args_or_error = _normalize_arguments(call.arguments)
     if isinstance(args_or_error, str):
@@ -69,12 +73,16 @@ def _execute_one_tool_call(call: ToolCall) -> ToolResult:
             payload = {"ok": True, "result": output}
         else:
             payload = {"ok": True, "result": output}
-        return ToolResult(call_id=call.call_id, output_json=json.dumps(payload), is_error=False)
+        return ToolResult(
+            call_id=call.call_id, output_json=json.dumps(payload), is_error=False
+        )
     except Exception as exc:
         return _error_result(call, "tool_execution_failed", str(exc))
 
 
-def _normalize_arguments(arguments: dict[str, Any] | str | None) -> dict[str, Any] | str:
+def _normalize_arguments(
+    arguments: dict[str, Any] | str | None,
+) -> dict[str, Any] | str:
     if arguments is None:
         return {}
     if isinstance(arguments, dict):

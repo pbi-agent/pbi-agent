@@ -28,6 +28,7 @@ from pbi_agent.models.messages import TokenUsage
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _shorten(text: str, limit: int = 80) -> str:
     if len(text) <= limit:
         return text
@@ -45,6 +46,7 @@ def _compact_json(value: Any) -> str:
 # Display
 # ---------------------------------------------------------------------------
 
+
 class Display:
     """Single entry-point for every piece of CLI output."""
 
@@ -56,7 +58,7 @@ class Display:
 
     # -- lifecycle ----------------------------------------------------------
 
-    def welcome(self) -> None:
+    def welcome(self, *, interactive: bool = True) -> None:
         logo = Text(justify="center")
         bar_1 = "#F6E27A"
         bar_2 = "#F2C811"
@@ -83,11 +85,19 @@ class Display:
                 logo.append("\n")
 
         title = Text("PBI AGENT", style="bold #F2C811", justify="center")
-        subtitle = Text("Transform data into decisions.", style="bold white", justify="center")
-        tips = Text.from_markup(
-            "[dim]Interactive mode:[/dim] Type [bold]exit[/bold] or [bold]quit[/bold] to stop.",
-            justify="center",
+        subtitle = Text(
+            "Transform data into decisions.", style="bold white", justify="center"
         )
+        if interactive:
+            tips = Text.from_markup(
+                "[dim]Interactive mode:[/dim] Type [bold]exit[/bold] or [bold]quit[/bold] to stop.",
+                justify="center",
+            )
+        else:
+            tips = Text.from_markup(
+                "[dim]Single prompt mode:[/dim] Running one request from [bold]--prompt[/bold].",
+                justify="center",
+            )
 
         panel_width = min(72, max(54, self.console.size.width - 4))
         self.console.print(
@@ -98,7 +108,8 @@ class Display:
                 title="[bold #F2C811]Welcome[/bold #F2C811]",
                 subtitle="[dim]Power BI Report Assistant[/dim]",
                 padding=(1, 2),
-            )
+            ),
+            justify="center",
         )
         self.console.print()
 
@@ -113,26 +124,39 @@ class Display:
         self.console.print()
 
     def stream_delta(self, delta: str) -> None:
-        """Append a streaming token and update the live Markdown render."""
+        """Append a streaming token and update the live Markdown preview.
+
+        Uses ``transient=True`` so the live preview is removed from the
+        terminal when streaming ends.  The default ``vertical_overflow``
+        (``"ellipsis"``) keeps the preview clipped to the terminal height,
+        which avoids the duplication bug caused by ``"visible"`` overflow
+        when content exceeded the viewport.
+        """
         self._stream_parts.append(delta)
         if self._live is None:
             self._live = Live(
                 Markdown(""),
                 console=self.console,
                 refresh_per_second=8,
-                vertical_overflow="visible",
+                transient=True,
             )
             self._live.start()
         text = "".join(self._stream_parts)
         self._live.update(Markdown(text))
 
     def stream_end(self) -> None:
-        """Finalise the live render and freeze output on screen."""
+        """Stop the transient live preview and print the final Markdown.
+
+        The ``transient=True`` live display is cleared automatically when
+        stopped, then the full accumulated text is rendered once as
+        formatted Markdown via ``console.print``.
+        """
+        text = "".join(self._stream_parts)
         if self._live is not None:
-            text = "".join(self._stream_parts)
-            self._live.update(Markdown(text))
             self._live.stop()
             self._live = None
+        if text.strip():
+            self.console.print(Markdown(text))
         self._stream_parts = []
 
     def render_markdown(self, text: str) -> None:

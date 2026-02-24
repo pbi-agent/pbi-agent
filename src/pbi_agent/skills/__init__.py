@@ -4,6 +4,7 @@ Scans this directory for *.md files and provides:
 - list_available_skills() -> [(name, brief_description), ...]
 - load_skill(name)        -> full markdown content or None
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,4 +1,5 @@
 """skill_knowledge tool — retrieves Power BI skill definitions from the knowledge base."""
+
 from __future__ import annotations
 
 from typing import Any

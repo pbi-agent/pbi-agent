@@ -36,6 +36,7 @@ When CLI modules are split into `src/`, prefer:
 - Keep Power BI operations explicit: use names like `create_report`, `update_visual`, `validate_dataset_binding`.
 - Add type hints on public functions and command handlers.
 - Keep CLI I/O thin; place business logic in reusable modules.
+- **Always run `uv run ruff format .` after modifying code to ensure consistent formatting.**
 
 ## Testing Guidelines
 

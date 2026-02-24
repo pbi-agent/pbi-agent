@@ -11,7 +11,10 @@ from pbi_agent.agent.protocol import (
 )
 from pbi_agent.agent.shell_runtime import execute_shell_calls
 from pbi_agent.agent.system_prompt import get_system_prompt
-from pbi_agent.agent.tool_runtime import execute_tool_calls, to_function_call_output_items
+from pbi_agent.agent.tool_runtime import (
+    execute_tool_calls,
+    to_function_call_output_items,
+)
 from pbi_agent.agent.ws_client import (
     ResponsesWebSocketClient,
     WebSocketClientError,
@@ -27,7 +30,9 @@ from pbi_agent.tools.registry import get_openai_tool_definitions
 # Public entry-points
 # ---------------------------------------------------------------------------
 
+
 def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentOutcome:
+    display.welcome(interactive=False)
     tools = get_openai_tool_definitions()
     instructions = get_system_prompt()
     session_usage = TokenUsage()
@@ -112,6 +117,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
 # Tool iteration loop
 # ---------------------------------------------------------------------------
 
+
 def _run_tool_iterations(
     *,
     ws: ResponsesWebSocketClient,
@@ -187,7 +193,9 @@ def _run_tool_iterations(
                 working_directory = call.action.get("working_directory", ".")
                 outcomes = _extract_shell_outcomes(item.get("output"))
                 for idx, command in enumerate(commands):
-                    exit_code, timed_out = outcomes[idx] if idx < len(outcomes) else (None, False)
+                    exit_code, timed_out = (
+                        outcomes[idx] if idx < len(outcomes) else (None, False)
+                    )
                     display.shell_command(
                         command=command,
                         exit_code=exit_code,
@@ -221,6 +229,7 @@ def _run_tool_iterations(
 # Request / response helpers
 # ---------------------------------------------------------------------------
 
+
 def _request_turn(
     *,
     ws: ResponsesWebSocketClient,
@@ -249,7 +258,9 @@ def _request_turn(
             ws.reconnect()
         try:
             ws.send_json(payload)
-            response = _read_one_response(ws, stream_output=stream_output, display=display)
+            response = _read_one_response(
+                ws, stream_output=stream_output, display=display
+            )
             session_usage.add(response.usage)
             return response
         except WebSocketClientTransientError as exc:
@@ -286,7 +297,9 @@ def _read_one_response(
         elif event_type == "response.completed":
             if stream_output:
                 display.stream_end()
-            return parse_completed_response(event.get("response", {}), streamed_text_parts)
+            return parse_completed_response(
+                event.get("response", {}), streamed_text_parts
+            )
         elif event_type == "error":
             error = event.get("error", {})
             code = error.get("code", "unknown_error")
@@ -297,6 +310,7 @@ def _read_one_response(
 # ---------------------------------------------------------------------------
 # Internal utilities
 # ---------------------------------------------------------------------------
+
 
 def _build_user_input_item(prompt: str) -> dict[str, Any]:
     return {
