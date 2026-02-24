@@ -19,7 +19,7 @@ from pbi_agent.agent.ws_client import (
 )
 from pbi_agent.config import Settings
 from pbi_agent.display import Display
-from pbi_agent.models.messages import AgentOutcome, CompletedResponse
+from pbi_agent.models.messages import AgentOutcome, CompletedResponse, TokenUsage
 from pbi_agent.tools.registry import get_openai_tool_definitions
 
 
@@ -30,6 +30,7 @@ from pbi_agent.tools.registry import get_openai_tool_definitions
 def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentOutcome:
     tools = get_openai_tool_definitions()
     instructions = get_system_prompt()
+    session_usage = TokenUsage()
     with ResponsesWebSocketClient(settings.ws_url, settings.api_key) as ws:
         response = _request_turn(
             ws=ws,
@@ -41,6 +42,7 @@ def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentO
             instructions=instructions,
             ws_max_retries=settings.ws_max_retries,
             display=display,
+            session_usage=session_usage,
         )
         response, had_tool_errors = _run_tool_iterations(
             ws=ws,
@@ -50,7 +52,9 @@ def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentO
             max_workers=settings.max_tool_workers,
             ws_max_retries=settings.ws_max_retries,
             display=display,
+            session_usage=session_usage,
         )
+        display.session_usage(session_usage)
         return AgentOutcome(
             response_id=response.response_id,
             text=response.text,
@@ -64,6 +68,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
     instructions = get_system_prompt()
     previous_response_id: str | None = None
     had_tool_errors = False
+    session_usage = TokenUsage()
 
     with ResponsesWebSocketClient(settings.ws_url, settings.api_key) as ws:
         while True:
@@ -84,6 +89,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
                 instructions=instructions,
                 ws_max_retries=settings.ws_max_retries,
                 display=display,
+                session_usage=session_usage,
             )
             response, loop_had_errors = _run_tool_iterations(
                 ws=ws,
@@ -93,9 +99,11 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
                 max_workers=settings.max_tool_workers,
                 ws_max_retries=settings.ws_max_retries,
                 display=display,
+                session_usage=session_usage,
             )
             had_tool_errors = had_tool_errors or loop_had_errors
             previous_response_id = response.response_id
+            display.session_usage(session_usage)
 
     return 4 if had_tool_errors else 0
 
@@ -113,6 +121,7 @@ def _run_tool_iterations(
     max_workers: int,
     ws_max_retries: int,
     display: Display,
+    session_usage: TokenUsage,
 ) -> tuple[CompletedResponse, bool]:
     instructions = get_system_prompt()
     had_errors = False
@@ -203,6 +212,7 @@ def _run_tool_iterations(
             instructions=instructions,
             ws_max_retries=ws_max_retries,
             display=display,
+            session_usage=session_usage,
         )
     return response, had_errors
 
@@ -222,6 +232,7 @@ def _request_turn(
     instructions: str | None,
     ws_max_retries: int,
     display: Display,
+    session_usage: TokenUsage,
 ) -> CompletedResponse:
     payload = build_response_create_payload(
         model=model,
@@ -238,7 +249,9 @@ def _request_turn(
             ws.reconnect()
         try:
             ws.send_json(payload)
-            return _read_one_response(ws, stream_output=stream_output, display=display)
+            response = _read_one_response(ws, stream_output=stream_output, display=display)
+            session_usage.add(response.usage)
+            return response
         except WebSocketClientTransientError as exc:
             # Treat receive/decode failures as transient: reconnect and retry the full
             # request. This favors resiliency over strict "exactly-once" semantics.

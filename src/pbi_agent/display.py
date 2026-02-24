@@ -18,6 +18,8 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.rule import Rule
 
+from pbi_agent.models.messages import TokenUsage
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -93,6 +95,25 @@ class Display:
         """Render a completed response as Markdown (single-turn mode)."""
         self.console.print()
         self.console.print(Markdown(text))
+
+    def session_usage(self, usage: TokenUsage) -> None:
+        """Show cumulative session usage and estimated cost in a bordered section."""
+        self.console.print()
+        self.console.print(Rule("Session usage", style="dim"))
+
+        total = f"{usage.total_tokens:,}"
+        inp = f"{usage.input_tokens:,}"
+        cached = f"{usage.cached_input_tokens:,}"
+        out = f"{usage.output_tokens:,}"
+        cost = f"${usage.estimated_cost_usd:.6f}"
+
+        self.console.print(
+            f"  [dim]Tokens[/dim]  {total} total  "
+            f"[dim]([/dim]{inp} in [dim]·[/dim] {cached} cached [dim]·[/dim] {out} out[dim])[/dim]"
+        )
+        self.console.print(f"  [dim]Cost[/dim]    {cost}")
+        self.console.print(Rule(style="dim"))
+        self.console.print()
 
     # -- tool: shell --------------------------------------------------------
 

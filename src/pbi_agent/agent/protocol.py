@@ -7,6 +7,7 @@ from pbi_agent.models.messages import (
     ApplyPatchCall,
     CompletedResponse,
     ShellCall,
+    TokenUsage,
     ToolCall,
 )
 
@@ -91,10 +92,26 @@ def parse_completed_response(response_obj: dict[str, Any], streamed_text_parts: 
                     )
                 )
 
+    usage_obj = response_obj.get("usage", {})
+    input_tokens = int(usage_obj.get("input_tokens", 0) or 0) if isinstance(usage_obj, dict) else 0
+    output_tokens = int(usage_obj.get("output_tokens", 0) or 0) if isinstance(usage_obj, dict) else 0
+    cached_input_tokens = 0
+    if isinstance(usage_obj, dict):
+        input_details = usage_obj.get("input_tokens_details", {})
+        if isinstance(input_details, dict):
+            cached_input_tokens = int(
+                input_details.get("cached_tokens", input_details.get("cached_input_tokens", 0)) or 0
+            )
+
     final_text = "".join(text_parts).strip() or "".join(streamed_text_parts).strip()
     return CompletedResponse(
         response_id=response_obj.get("id"),
         text=final_text,
+        usage=TokenUsage(
+            input_tokens=input_tokens,
+            cached_input_tokens=cached_input_tokens,
+            output_tokens=output_tokens,
+        ),
         function_calls=function_calls,
         apply_patch_calls=apply_patch_calls,
         shell_calls=shell_calls,
