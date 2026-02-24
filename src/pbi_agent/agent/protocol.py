@@ -30,6 +30,7 @@ def build_response_create_payload(
         "store": store,
         "input": input_items,
         "tools": tools or [],
+        "prompt_cache_retention": "24h",
     }
     if previous_response_id:
         payload["previous_response_id"] = previous_response_id

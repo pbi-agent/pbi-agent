@@ -16,6 +16,7 @@ from typing import Any
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.rule import Rule
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +99,8 @@ class Display:
     def shell_start(self, commands: list[str]) -> None:
         n = len(commands)
         label = f"Running {n} shell command{'s' if n != 1 else ''}"
-        self.console.print(f"\n[bold cyan]{label}[/bold cyan]")
+        self.console.print()
+        self.console.print(Rule(label, style="cyan"))
 
     def shell_command(
         self,
@@ -130,7 +132,8 @@ class Display:
 
     def patch_start(self, count: int) -> None:
         label = f"Editing {count} file{'s' if count != 1 else ''}"
-        self.console.print(f"\n[bold cyan]{label}[/bold cyan]")
+        self.console.print()
+        self.console.print(Rule(label, style="cyan"))
 
     def patch_result(
         self,
@@ -158,7 +161,8 @@ class Display:
 
     def function_start(self, count: int) -> None:
         label = f"Calling {count} function{'s' if count != 1 else ''}"
-        self.console.print(f"\n[bold cyan]{label}[/bold cyan]")
+        self.console.print()
+        self.console.print(Rule(label, style="cyan"))
 
     def function_result(
         self,
@@ -177,6 +181,13 @@ class Display:
             )
         else:
             self.console.print(f"  {name}()  {icon}")
+
+    # -- tool group end (shared) -------------------------------------------
+
+    def tool_group_end(self) -> None:
+        """Print a closing rule and a blank line after a tool group."""
+        self.console.print(Rule(style="dim"))
+        self.console.print()
 
     # -- retries / errors ---------------------------------------------------
 

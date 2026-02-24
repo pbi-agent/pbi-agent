@@ -138,6 +138,7 @@ def _run_tool_iterations(
                     arguments=call.arguments if call else None,
                 )
             output_items.extend(to_function_call_output_items(function_batch.results))
+            display.tool_group_end()
 
         # --- apply_patch calls ---------------------------------------------
         if response.apply_patch_calls:
@@ -158,6 +159,7 @@ def _run_tool_iterations(
                     detail=output,
                 )
             output_items.extend(apply_patch_items)
+            display.tool_group_end()
 
         # --- shell calls ---------------------------------------------------
         if response.shell_calls:
@@ -186,6 +188,7 @@ def _run_tool_iterations(
                         timeout_ms=timeout_ms,
                     )
             output_items.extend(shell_items)
+            display.tool_group_end()
 
         if not output_items:
             break
