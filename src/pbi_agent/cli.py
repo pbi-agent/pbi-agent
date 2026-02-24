@@ -4,11 +4,14 @@ import argparse
 import json
 import logging
 
+from pathlib import Path
+
 from pbi_agent.agent.protocol import ProtocolError
 from pbi_agent.agent.session import run_chat_loop, run_single_turn
 from pbi_agent.agent.ws_client import WebSocketClientError
 from pbi_agent.config import ConfigError, resolve_settings
 from pbi_agent.display import Display
+from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
 from pbi_agent.tools.registry import get_tool_spec, get_tool_specs
 
@@ -54,6 +57,22 @@ def build_parser() -> argparse.ArgumentParser:
     describe_parser = tools_subparsers.add_parser("describe", help="Describe one tool.")
     describe_parser.add_argument("--name", required=True, help="Tool name.")
 
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Scaffold a new Power BI report project from the bundled template.",
+    )
+    init_parser.add_argument(
+        "--dest",
+        type=Path,
+        default=None,
+        help="Target directory (defaults to current directory).",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing files if they already exist.",
+    )
+
     return parser
 
 
@@ -70,6 +89,9 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "tools":
             return _handle_tools_command(args)
+
+        if args.command == "init":
+            return _handle_init_command(args, display)
 
         settings.validate()
         LOGGER.debug("Resolved settings: %s", settings.redacted())
@@ -140,3 +162,14 @@ def _handle_tools_command(args: argparse.Namespace) -> int:
         return 0
 
     return 1
+
+
+def _handle_init_command(args: argparse.Namespace, display: Display) -> int:
+    dest = args.dest or Path.cwd()
+    try:
+        init_report(dest, force=args.force)
+        print(f"Report template created in {dest}")
+        return 0
+    except FileExistsError as exc:
+        display.error(str(exc))
+        return 1
