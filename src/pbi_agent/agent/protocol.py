@@ -32,6 +32,7 @@ def build_response_create_payload(
         "input": input_items,
         "tools": tools or [],
         "prompt_cache_retention": "24h",
+        "context_management": [{"type": "compaction", "compact_threshold": 150000}]
     }
     if previous_response_id:
         payload["previous_response_id"] = previous_response_id

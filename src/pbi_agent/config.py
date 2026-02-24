@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 DEFAULT_WS_URL = "wss://api.openai.com/v1/responses"
-DEFAULT_MODEL = "gpt-5.2-2025-12-11"
+DEFAULT_MODEL = "gpt-5.3-codex"
 
 
 class ConfigError(ValueError):
