@@ -2,24 +2,25 @@
 
 WebSocket-based CLI scaffold for a Power BI editing “coding agent”, built on the **OpenAI Responses WebSocket API**.
 
-This repository is intentionally a foundation: it wires up configuration, a CLI, a websocket client, and a tool-execution loop (including parallel function tool calls), but it does **not** ship real Power BI mutation tools yet.
+This repository is intentionally a foundation: it wires up configuration, a CLI, a websocket client, and a tool-execution loop (including **parallel tool calls**), but it does **not** ship real Power BI mutation tools yet.
 
-## What’s in this repo
+## Features
 
 - **Python package**: `src/pbi_agent`
 - **CLI entrypoint**: `pbi-agent` (also: `python -m pbi_agent`)
-- **Single-turn** agent flow: `pbi-agent run --prompt "..."`
-- **Interactive** agent flow: `pbi-agent chat`
-- **Tool system**
-  - Built-in runtime handlers for OpenAI built-ins: `shell`, `apply_patch`
-  - Extensible function-tool registry (centralized): `src/pbi_agent/tools/registry.py`
+- Agent flows:
+  - **Single-turn**: `pbi-agent run --prompt "..."`
+  - **Interactive**: `pbi-agent chat`
+- **Tool execution loop**
+  - Supports OpenAI built-in tool types: `shell`, `apply_patch`
+  - Extensible **function tool registry**: `src/pbi_agent/tools/registry.py`
   - Parallel-capable execution via `--max-tool-workers`
 
 ## Requirements
 
 - Python **3.12+**
 - An OpenAI API key in `OPENAI_API_KEY`
-- Recommended: [`uv`](https://github.com/astral-sh/uv) for dependency management (repo includes `uv.lock`)
+- Recommended: [`uv`](https://github.com/astral-sh/uv) (repo includes `uv.lock`)
 
 ## Install
 
@@ -77,9 +78,13 @@ Configuration precedence is: **CLI args > environment variables > defaults**.
 At runtime the agent advertises tools to the Responses API:
 
 - **Built-in tool types**: `shell`, `apply_patch`
-- **Function tools** registered in the local registry (see below)
+- **Function tools** registered in the local registry
 
 When the model returns tool calls, the CLI executes them and feeds results back to the websocket session until the response completes.
+
+### Security model: workspace confinement
+
+The built-in `shell` runtime resolves a *workspace root* and rejects `working_directory` values that would escape it (path traversal protection). Treat `shell` as powerful and avoid running the agent on sensitive directories.
 
 ## Adding a new function tool
 
@@ -94,7 +99,7 @@ uv run pbi-agent tools describe --name <tool_name>
 
 ## Project layout
 
-```
+```text
 .
 ├─ README.md
 ├─ pyproject.toml
@@ -104,10 +109,11 @@ uv run pbi-agent tools describe --name <tool_name>
       ├─ cli.py            # argparse CLI
       ├─ config.py         # env/CLI settings resolution
       ├─ agent/            # websocket session + tool loop
+      ├─ models/           # request/response message models
       └─ tools/            # tool specs + implementations
 ```
 
-## Current limits / non-goals (for now)
+## Limits / non-goals (for now)
 
 - No concrete Power BI edit operations are implemented yet (this is scaffolding).
 - In-memory sessions only.

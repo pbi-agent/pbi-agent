@@ -63,14 +63,16 @@ def _execute_one(call: ShellCall, *, root: Path) -> ShellExecutionResult:
                     cwd=str(working_directory),
                     env=env,
                     capture_output=True,
-                    text=True,
+                    text=False,
                     shell=True,
                     timeout=(timeout_ms / 1000.0),
                 )
+                stdout = _decode_output(completed.stdout)
+                stderr = _decode_output(completed.stderr)
                 output_chunks.append(
                     {
-                        "stdout": completed.stdout or "",
-                        "stderr": completed.stderr or "",
+                        "stdout": stdout,
+                        "stderr": stderr,
                         "outcome": {"type": "exit", "exit_code": completed.returncode},
                     }
                 )
@@ -78,8 +80,8 @@ def _execute_one(call: ShellCall, *, root: Path) -> ShellExecutionResult:
             except subprocess.TimeoutExpired as exc:
                 output_chunks.append(
                     {
-                        "stdout": (exc.stdout or ""),  # type: ignore[attr-defined]
-                        "stderr": (exc.stderr or ""),  # type: ignore[attr-defined]
+                        "stdout": _decode_output(exc.stdout),  # type: ignore[attr-defined]
+                        "stderr": _decode_output(exc.stderr),  # type: ignore[attr-defined]
                         "outcome": {"type": "timeout"},
                     }
                 )
@@ -180,3 +182,12 @@ def _normalize_optional_positive_int(value: Any) -> int | None:
     if not isinstance(value, int) or value < 1:
         raise ValueError("max_output_length must be a positive integer when provided")
     return value
+
+
+def _decode_output(value: bytes | str | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    # Prefer UTF-8 and never fail on undecodable bytes.
+    return value.decode("utf-8", errors="replace")
