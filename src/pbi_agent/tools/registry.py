@@ -8,8 +8,10 @@ _REGISTRY: dict[str, tuple[ToolSpec, ToolHandler]] = {}
 
 # --- built-in function tools -----------------------------------------------
 from pbi_agent.tools.skill_knowledge import SPEC as _sk_spec, handle as _sk_handle  # noqa: E402
+from pbi_agent.tools.init_report import SPEC as _ir_spec, handle as _ir_handle  # noqa: E402
 
 _REGISTRY[_sk_spec.name] = (_sk_spec, _sk_handle)
+_REGISTRY[_ir_spec.name] = (_ir_spec, _ir_handle)
 
 
 def get_tool_specs() -> list[ToolSpec]:
