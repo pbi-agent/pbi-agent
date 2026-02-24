@@ -45,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum retries for transient websocket request/response failures.",
     )
     parser.add_argument(
+        "--compact-threshold",
+        type=int,
+        default=150000,
+        help="Context compaction token threshold (default: 150000).",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable verbose logs.",
@@ -149,7 +155,7 @@ def _handle_tools_command(args: argparse.Namespace) -> int:
         # Check built-in tools first
         if args.name in _BUILTIN_TOOLS:
             print(f"name: {args.name}")
-            print(f"type: built-in")
+            print("type: built-in")
             print(f"description: {_BUILTIN_TOOLS[args.name]}")
             return 0
         # Check registered function tools
@@ -160,7 +166,7 @@ def _handle_tools_command(args: argparse.Namespace) -> int:
             print(f"Available: {', '.join(all_names)}")
             return 1
         print(f"name: {tool.name}")
-        print(f"type: function")
+        print("type: function")
         print(f"description: {tool.description}")
         print(f"is_destructive: {tool.is_destructive}")
         print("parameters_schema:")

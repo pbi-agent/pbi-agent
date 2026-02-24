@@ -25,6 +25,7 @@ def build_response_create_payload(
     store: bool = False,
     instructions: str | None = None,
     reasoning_effort: str = "medium",
+    compact_threshold: int = 150000,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "type": "response.create",
@@ -33,7 +34,9 @@ def build_response_create_payload(
         "input": input_items,
         "tools": tools or [],
         "prompt_cache_retention": "24h",
-        "context_management": [{"type": "compaction", "compact_threshold": 150000}]
+        "context_management": [
+            {"type": "compaction", "compact_threshold": compact_threshold}
+        ],
     }
     payload["reasoning"] = {"effort": reasoning_effort}
     if previous_response_id:

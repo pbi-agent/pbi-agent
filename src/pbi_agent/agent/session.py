@@ -50,6 +50,7 @@ def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentO
             stream_output=True,
             instructions=instructions,
             reasoning_effort=settings.reasoning_effort,
+            compact_threshold=settings.compact_threshold,
             ws_max_retries=settings.ws_max_retries,
             display=display,
             session_usage=session_usage,
@@ -61,6 +62,7 @@ def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentO
             response=response,
             max_workers=settings.max_tool_workers,
             ws_max_retries=settings.ws_max_retries,
+            compact_threshold=settings.compact_threshold,
             display=display,
             session_usage=session_usage,
         )
@@ -101,6 +103,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
                 stream_output=True,
                 instructions=instructions,
                 reasoning_effort=settings.reasoning_effort,
+                compact_threshold=settings.compact_threshold,
                 ws_max_retries=settings.ws_max_retries,
                 display=display,
                 session_usage=session_usage,
@@ -112,6 +115,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
                 response=response,
                 max_workers=settings.max_tool_workers,
                 ws_max_retries=settings.ws_max_retries,
+                compact_threshold=settings.compact_threshold,
                 display=display,
                 session_usage=session_usage,
             )
@@ -135,6 +139,7 @@ def _run_tool_iterations(
     response: CompletedResponse,
     max_workers: int,
     ws_max_retries: int,
+    compact_threshold: int,
     display: Display,
     session_usage: TokenUsage,
 ) -> tuple[CompletedResponse, bool]:
@@ -228,6 +233,7 @@ def _run_tool_iterations(
             stream_output=True,
             instructions=instructions,
             reasoning_effort="medium",
+            compact_threshold=compact_threshold,
             ws_max_retries=ws_max_retries,
             display=display,
             session_usage=session_usage,
@@ -250,6 +256,7 @@ def _request_turn(
     stream_output: bool,
     instructions: str | None,
     reasoning_effort: str,
+    compact_threshold: int,
     ws_max_retries: int,
     display: Display,
     session_usage: TokenUsage,
@@ -262,6 +269,7 @@ def _request_turn(
         store=True,
         instructions=instructions,
         reasoning_effort=reasoning_effort,
+        compact_threshold=compact_threshold,
     )
     last_error: Exception | None = None
     for attempt in range(ws_max_retries + 1):

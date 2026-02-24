@@ -23,6 +23,7 @@ class Settings:
     max_tool_workers: int = 4
     ws_max_retries: int = 2
     reasoning_effort: str = "medium"
+    compact_threshold: int = 150000
 
     def validate(self) -> None:
         if not self.api_key:
@@ -35,6 +36,8 @@ class Settings:
             raise ConfigError("--ws-max-retries must be >= 0.")
         if self.reasoning_effort not in {"low", "medium", "high"}:
             raise ConfigError("--reasoning-effort must be one of: low, medium, high.")
+        if self.compact_threshold < 1:
+            raise ConfigError("--compact-threshold must be >= 1.")
 
     def redacted(self) -> dict[str, str | int | bool]:
         return {
@@ -45,6 +48,7 @@ class Settings:
             "max_tool_workers": self.max_tool_workers,
             "ws_max_retries": self.ws_max_retries,
             "reasoning_effort": self.reasoning_effort,
+            "compact_threshold": self.compact_threshold,
         }
 
 
@@ -70,6 +74,9 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     reasoning_effort = (
         args.reasoning_effort or os.getenv("PBI_AGENT_REASONING_EFFORT") or "medium"
     )
+    compact_threshold = args.compact_threshold
+    if compact_threshold is None:
+        compact_threshold = int(os.getenv("PBI_AGENT_COMPACT_THRESHOLD", "150000"))
 
     return Settings(
         api_key=api_key,
@@ -79,4 +86,5 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
         max_tool_workers=max_tool_workers,
         ws_max_retries=ws_max_retries,
         reasoning_effort=reasoning_effort,
+        compact_threshold=compact_threshold,
     )
