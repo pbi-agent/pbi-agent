@@ -10,6 +10,7 @@ from pbi_agent.agent.protocol import (
     parse_completed_response,
 )
 from pbi_agent.agent.shell_runtime import execute_shell_calls
+from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls, to_function_call_output_items
 from pbi_agent.agent.ws_client import ResponsesWebSocketClient
 from pbi_agent.config import Settings
@@ -19,6 +20,7 @@ from pbi_agent.tools.registry import get_openai_tool_definitions
 
 def run_single_turn(prompt: str, settings: Settings) -> AgentOutcome:
     tools = get_openai_tool_definitions()
+    instructions = get_system_prompt()
     with ResponsesWebSocketClient(settings.ws_url, settings.api_key) as ws:
         response = _request_turn(
             ws=ws,
@@ -27,6 +29,7 @@ def run_single_turn(prompt: str, settings: Settings) -> AgentOutcome:
             input_items=[_build_user_input_item(prompt)],
             previous_response_id=None,
             stream_output=True,
+            instructions=instructions,
         )
         response, had_tool_errors = _run_tool_iterations(
             ws=ws,
@@ -45,6 +48,7 @@ def run_single_turn(prompt: str, settings: Settings) -> AgentOutcome:
 def run_chat_loop(settings: Settings) -> int:
     print("Interactive mode. Type 'exit' or 'quit' to stop.")
     tools = get_openai_tool_definitions()
+    instructions = get_system_prompt()
     previous_response_id: str | None = None
     had_tool_errors = False
 
@@ -64,14 +68,15 @@ def run_chat_loop(settings: Settings) -> int:
                 input_items=[_build_user_input_item(user_input)],
                 previous_response_id=previous_response_id,
                 stream_output=True,
+                instructions=instructions,
             )
             response, loop_had_errors = _run_tool_iterations(
                 ws=ws,
                 model=settings.model,
                 tools=tools,
-                response=response,
-                max_workers=settings.max_tool_workers,
-            )
+            response=response,
+            max_workers=settings.max_tool_workers,
+        )
             had_tool_errors = had_tool_errors or loop_had_errors
             previous_response_id = response.response_id
 
@@ -86,6 +91,7 @@ def _run_tool_iterations(
     response: CompletedResponse,
     max_workers: int,
 ) -> tuple[CompletedResponse, bool]:
+    instructions = get_system_prompt()
     had_errors = False
     while response.has_tool_calls:
         output_items: list[dict[str, Any]] = []
@@ -124,6 +130,7 @@ def _run_tool_iterations(
             input_items=output_items,
             previous_response_id=response.response_id,
             stream_output=True,
+            instructions=instructions,
         )
     return response, had_errors
 
@@ -136,6 +143,7 @@ def _request_turn(
     input_items: list[dict[str, Any]],
     previous_response_id: str | None,
     stream_output: bool,
+    instructions: str | None,
 ) -> CompletedResponse:
     payload = build_response_create_payload(
         model=model,
@@ -143,6 +151,7 @@ def _request_turn(
         tools=tools,
         previous_response_id=previous_response_id,
         store=False,
+        instructions=instructions,
     )
     ws.send_json(payload)
     return _read_one_response(ws, stream_output=stream_output)

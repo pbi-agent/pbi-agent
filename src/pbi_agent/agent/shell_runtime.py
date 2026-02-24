@@ -190,4 +190,4 @@ def _decode_output(value: bytes | str | None) -> str:
     if isinstance(value, str):
         return value
     # Prefer UTF-8 and never fail on undecodable bytes.
-    return value.decode("utf-8", errors="replace")
+    return value.decode("utf-8", errors="replace")  # type: ignore[union-attr]
