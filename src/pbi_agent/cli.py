@@ -4,12 +4,14 @@ import argparse
 import json
 import logging
 
+from contextlib import chdir
 from pathlib import Path
 
+from pbi_agent.audit_command import AUDIT_REPORT_FILENAME, build_audit_prompt
 from pbi_agent.agent.protocol import ProtocolError
 from pbi_agent.agent.session import run_chat_loop, run_single_turn
 from pbi_agent.agent.ws_client import WebSocketClientError
-from pbi_agent.config import ConfigError, resolve_settings
+from pbi_agent.config import ConfigError, Settings, resolve_settings
 from pbi_agent.display import Display
 from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
@@ -62,6 +64,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--prompt", required=True, help="User prompt.")
 
     subparsers.add_parser("chat", help="Run an interactive chat loop.")
+    audit_parser = subparsers.add_parser(
+        "audit",
+        help="Run report audit mode and write AUDIT-REPORT.md.",
+    )
+    audit_parser.add_argument(
+        "--report-dir",
+        type=Path,
+        default=Path("."),
+        help="Relative report directory to audit (default: current directory).",
+    )
 
     tools_parser = subparsers.add_parser("tools", help="Inspect tool registry.")
     tools_subparsers = tools_parser.add_subparsers(dest="tools_command", required=True)
@@ -113,6 +125,8 @@ def main(argv: list[str] | None = None) -> int:
             return 4 if outcome.tool_errors else 0
         if args.command == "chat":
             return run_chat_loop(settings, display)
+        if args.command == "audit":
+            return _handle_audit_command(args, settings, display)
         parser.error("Unknown command.")
         return 1
     except ConfigError as exc:
@@ -185,3 +199,41 @@ def _handle_init_command(args: argparse.Namespace, display: Display) -> int:
     except FileExistsError as exc:
         display.error(str(exc))
         return 1
+
+
+def _handle_audit_command(
+    args: argparse.Namespace,
+    settings: Settings,
+    display: Display,
+) -> int:
+    report_dir_input = args.report_dir or Path(".")
+    report_dir = (Path.cwd() / report_dir_input).resolve()
+
+    if not report_dir.exists():
+        display.error(f"Report directory does not exist: {report_dir}")
+        return 1
+    if not report_dir.is_dir():
+        display.error(f"Report path is not a directory: {report_dir}")
+        return 1
+
+    with chdir(report_dir):
+        outcome = run_single_turn(
+            build_audit_prompt(),
+            settings,
+            display,
+            single_turn_hint=(
+                "[dim]Audit mode:[/dim] Evaluating report and writing "
+                "[bold]AUDIT-REPORT.md[/bold]."
+            ),
+        )
+
+    report_path = report_dir / AUDIT_REPORT_FILENAME
+    if not report_path.exists():
+        display.error(
+            "Audit mode completed but did not produce "
+            f"{AUDIT_REPORT_FILENAME} in {report_dir}"
+        )
+        return 4 if outcome.tool_errors else 1
+
+    print(f"Audit report written to {report_path}")
+    return 4 if outcome.tool_errors else 0

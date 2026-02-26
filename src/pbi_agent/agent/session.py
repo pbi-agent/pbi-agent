@@ -32,11 +32,18 @@ from pbi_agent.tools.registry import get_openai_tool_definitions
 # ---------------------------------------------------------------------------
 
 
-def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentOutcome:
+def run_single_turn(
+    prompt: str,
+    settings: Settings,
+    display: Display,
+    *,
+    single_turn_hint: str | None = None,
+) -> AgentOutcome:
     display.welcome(
         interactive=False,
         model=settings.model,
         reasoning_effort=settings.reasoning_effort,
+        single_turn_hint=single_turn_hint,
     )
     tools = get_openai_tool_definitions()
     instructions = get_system_prompt()

@@ -91,6 +91,7 @@ class Display:
         interactive: bool = True,
         model: str | None = None,
         reasoning_effort: str | None = None,
+        single_turn_hint: str | None = None,
     ) -> None:
         logo = Text(justify="center")
         bar_1 = "#F6E27A"
@@ -128,8 +129,13 @@ class Display:
                 justify="center",
             )
         else:
+            single_turn_markup = (
+                single_turn_hint
+                if single_turn_hint is not None
+                else "[dim]Single prompt mode:[/dim] Running one request from [bold]--prompt[/bold]."
+            )
             tips = Text.from_markup(
-                "[dim]Single prompt mode:[/dim] Running one request from [bold]--prompt[/bold].",
+                single_turn_markup,
                 justify="center",
             )
         model_bits: list[str] = []

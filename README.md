@@ -11,6 +11,7 @@ This repository is intentionally a foundation: it wires up configuration, a CLI,
 - Agent flows:
   - **Single-turn**: `pbi-agent run --prompt "..."`
   - **Interactive**: `pbi-agent chat`
+  - **Audit mode**: `pbi-agent audit [--report-dir <relative-path>]`
 - **Tool execution loop**
   - Supports OpenAI built-in tool types: `shell`, `apply_patch`
   - Extensible **function tool registry**: `src/pbi_agent/tools/registry.py`
@@ -48,6 +49,21 @@ Interactive:
 uv run pbi-agent chat
 ```
 
+Audit the current report folder and generate a local audit file:
+
+```bash
+uv run pbi-agent audit
+```
+
+Audit a report in a relative subfolder:
+
+```bash
+uv run pbi-agent audit --report-dir ./my-report
+```
+
+`audit` runs with a built-in prompt (no `--prompt` needed) and writes
+`AUDIT-REPORT.md` in the audited report directory.
+
 Compatibility runner (thin wrapper kept for convenience):
 
 ```bash
@@ -69,7 +85,7 @@ Configuration precedence is: **CLI args > environment variables > defaults**.
 
 ### Environment variables
 
-- `OPENAI_API_KEY` (required for `run` / `chat`)
+- `OPENAI_API_KEY` (required for `run` / `chat` / `audit`)
 - `PBI_AGENT_MODEL` (optional)
 - `PBI_AGENT_WS_URL` (optional)
 - `PBI_AGENT_MAX_TOOL_WORKERS` (optional)
