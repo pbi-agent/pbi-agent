@@ -21,6 +21,7 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
 
+from pbi_agent import __version__
 from pbi_agent.models.messages import TokenUsage
 
 
@@ -125,7 +126,7 @@ class Display:
                 else Group(logo, Text(""), title, subtitle, tips),
                 width=panel_width,
                 border_style="#F2C811",
-                title="[bold #F2C811]Welcome[/bold #F2C811]",
+                title=f"[bold #F2C811]Welcome[/bold #F2C811] [dim]v{__version__}[/dim]",
                 subtitle="[dim]Power BI Report Assistant[/dim]",
                 padding=(1, 2),
             ),
