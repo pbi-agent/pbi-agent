@@ -97,7 +97,7 @@ def build_response_create_payload(
     store: bool = False,
     instructions: str | None = None,
     reasoning_effort: str = "xhigh",
-    compact_threshold: int = 100000,
+    compact_threshold: int = 200000,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "type": "response.create",

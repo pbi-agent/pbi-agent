@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key", help="Override OPENAI_API_KEY.")
     parser.add_argument(
         "--reasoning-effort",
-        choices=["low", "medium", "high"],
+        choices=["low", "medium", "high", "xhigh"],
         default=None,
         help="Set model reasoning effort (default: medium).",
     )

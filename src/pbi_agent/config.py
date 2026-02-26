@@ -23,7 +23,7 @@ class Settings:
     max_tool_workers: int = 4
     ws_max_retries: int = 2
     reasoning_effort: str = "xhigh"
-    compact_threshold: int = 100000
+    compact_threshold: int = 200000
 
     def validate(self) -> None:
         if not self.api_key:
