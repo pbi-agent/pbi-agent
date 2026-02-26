@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from pbi_agent.models.messages import (
@@ -14,6 +15,77 @@ from pbi_agent.models.messages import (
 
 class ProtocolError(RuntimeError):
     """Raised when an unexpected protocol event is received."""
+
+
+class RateLimitError(ProtocolError):
+    """Raised when the API rejects a request due to rate limits."""
+
+    def __init__(
+        self,
+        *,
+        code: str,
+        message: str,
+        retry_after_seconds: float | None = None,
+    ) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+        self.message = message
+        self.retry_after_seconds = retry_after_seconds
+
+
+_RETRY_AFTER_SECONDS_RE = re.compile(
+    r"(?:try again in|retry after)\s+([0-9]*\.?[0-9]+)\s*(ms|s)\b",
+    re.IGNORECASE,
+)
+
+
+def parse_error_event(event: dict[str, Any]) -> ProtocolError:
+    """Convert an API ``error`` event into a typed protocol exception."""
+    error_obj = event.get("error", {})
+    if not isinstance(error_obj, dict):
+        return ProtocolError("unknown_error: No error message")
+
+    code = str(error_obj.get("code", "unknown_error"))
+    message = str(error_obj.get("message", "No error message"))
+
+    if code in {"rate_limit_exceeded", "rate_limit_error"}:
+        return RateLimitError(
+            code=code,
+            message=message,
+            retry_after_seconds=_extract_retry_after_seconds(error_obj, message),
+        )
+
+    return ProtocolError(f"{code}: {message}")
+
+
+def _extract_retry_after_seconds(
+    error_obj: dict[str, Any], message: str
+) -> float | None:
+    for key in ("retry_after_seconds", "retry_after"):
+        parsed = _parse_positive_float(error_obj.get(key))
+        if parsed is not None:
+            return parsed
+
+    retry_after_ms = _parse_positive_float(error_obj.get("retry_after_ms"))
+    if retry_after_ms is not None:
+        return retry_after_ms / 1000.0
+
+    match = _RETRY_AFTER_SECONDS_RE.search(message)
+    if match:
+        value = float(match.group(1))
+        unit = match.group(2).lower()
+        if value > 0:
+            return value / 1000.0 if unit == "ms" else value
+
+    return None
+
+
+def _parse_positive_float(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
 
 def build_response_create_payload(

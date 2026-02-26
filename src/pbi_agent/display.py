@@ -396,6 +396,22 @@ class Display:
             f"[yellow]  Reconnecting… ({attempt}/{max_retries})[/yellow]"
         )
 
+    def rate_limit_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.wait_stop()
+        wait_display = f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
+        self.console.print(
+            "[yellow]"
+            f"  Rate limit reached. Retrying in {wait_display}s "
+            f"({attempt}/{max_retries})"
+            "[/yellow]"
+        )
+
     def error(self, message: str) -> None:
         self.stream_abort()
         self.console.print(f"[bold red]Error:[/bold red] {message}")

@@ -7,7 +7,7 @@ import logging
 from contextlib import chdir
 from pathlib import Path
 
-from pbi_agent.audit_command import AUDIT_REPORT_FILENAME, build_audit_prompt
+from pbi_agent.agent.audit_prompt import AUDIT_REPORT_FILENAME, build_audit_prompt
 from pbi_agent.agent.protocol import ProtocolError
 from pbi_agent.agent.session import run_chat_loop, run_single_turn
 from pbi_agent.agent.ws_client import WebSocketClientError
@@ -44,7 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--ws-max-retries",
         type=int,
         default=None,
-        help="Maximum retries for transient websocket request/response failures.",
+        help=(
+            "Maximum retries for transient websocket failures and rate-limit responses."
+        ),
     )
     parser.add_argument(
         "--compact-threshold",

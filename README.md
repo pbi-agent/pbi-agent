@@ -80,7 +80,7 @@ Configuration precedence is: **CLI args > environment variables > defaults**.
 - `--ws-url` (overrides `PBI_AGENT_WS_URL`, default: `wss://api.openai.com/v1/responses`)
 - `--model` (overrides `PBI_AGENT_MODEL`)
 - `--max-tool-workers` (overrides `PBI_AGENT_MAX_TOOL_WORKERS`, default: `4`)
-- `--ws-max-retries` (overrides `PBI_AGENT_WS_MAX_RETRIES`, default: `2`)
+- `--ws-max-retries` (overrides `PBI_AGENT_WS_MAX_RETRIES`, default: `2`; applies to transient websocket failures and rate-limit responses)
 - `--verbose`
 
 ### Environment variables

@@ -6,8 +6,9 @@ from typing import Any
 
 from pbi_agent.agent.apply_patch_runtime import execute_apply_patch_calls
 from pbi_agent.agent.protocol import (
-    ProtocolError,
+    RateLimitError,
     build_response_create_payload,
+    parse_error_event,
     parse_completed_response,
 )
 from pbi_agent.agent.shell_runtime import execute_shell_calls
@@ -298,6 +299,17 @@ def _request_turn(
             )
             session_usage.add(response.usage)
             return response
+        except RateLimitError as exc:
+            if attempt >= ws_max_retries:
+                raise
+            wait_seconds = _rate_limit_wait_seconds(exc, attempt)
+            display.rate_limit_notice(
+                wait_seconds=wait_seconds,
+                attempt=attempt + 1,
+                max_retries=ws_max_retries,
+            )
+            time.sleep(wait_seconds)
+            continue
         except WebSocketClientTransientError as exc:
             # Treat receive/decode failures as transient: reconnect and retry the full
             # request. This favors resiliency over strict "exactly-once" semantics.
@@ -340,10 +352,7 @@ def _read_one_response(
                     event.get("response", {}), streamed_text_parts
                 )
             elif event_type == "error":
-                error = event.get("error", {})
-                code = error.get("code", "unknown_error")
-                message = error.get("message", "No error message")
-                raise ProtocolError(f"{code}: {message}")
+                raise parse_error_event(event)
     except Exception:
         if stream_output:
             display.stream_abort()
@@ -420,3 +429,10 @@ def _extract_shell_outcomes(output: Any) -> list[tuple[int | None, bool]]:
         else:
             results.append((None, False))
     return results
+
+
+def _rate_limit_wait_seconds(error: RateLimitError, attempt: int) -> float:
+    """Choose wait duration before retrying a rate-limited request."""
+    if error.retry_after_seconds is not None:
+        return max(0.1, min(error.retry_after_seconds, 30.0))
+    return min(2.0 * (2**attempt), 30.0)
