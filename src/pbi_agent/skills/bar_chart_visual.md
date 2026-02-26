@@ -1,59 +1,37 @@
 # Bar Chart Visual
 
-Properties and JSON structure for Bar and Column chart visuals in Power BI PBIR format.
+Use PBIR bar-chart patterns with `Category` + `Y` roles, series-level formatting, and optional visual filters.
 
-## Overview
+## Supported Visual Types
 
-Bar charts display categorical data with horizontal bars; column charts use
-vertical bars. Both share the same property structure. Use `clusteredBarChart`
-for horizontal and `clusteredColumnChart` for vertical. Stacked variants are
-`stackedBarChart` and `stackedColumnChart`.
+- `barChart`
+- `clusteredBarChart`
+- `stackedBarChart`
+- `hundredPercentStackedBarChart`
 
-## Visual Type Options
+## Required Query Shape
 
-| visualType                         | Orientation | Grouping       |
-| ---                                | ---         | ---            |
-| `clusteredBarChart`                | Horizontal  | Side-by-side   |
-| `clusteredColumnChart`             | Vertical    | Side-by-side   |
-| `stackedBarChart`                  | Horizontal  | Stacked        |
-| `stackedColumnChart`               | Vertical    | Stacked        |
-| `hundredPercentStackedBarChart`    | Horizontal  | 100% stacked   |
-| `hundredPercentStackedColumnChart` | Vertical    | 100% stacked   |
+- `visual.visualType` set to one of the bar chart types.
+- `visual.query.queryState.Category.projections`: at least one categorical field.
+- `visual.query.queryState.Y.projections`: one or more measures.
+- Optional: `visual.query.sortDefinition` for explicit sort behavior.
+- Optional: `filterConfig.filters` for fixed-scope visual filtering.
 
-## Required Properties
+## Common Object Blocks
 
-| Property                                        | Type   | Description            |
-| ---                                             | ---    | ---                    |
-| `visual.visualType`                             | string | One of the types above |
-| `visual.query.queryState.Category.projections`  | array  | Category axis field(s) |
-| `visual.query.queryState.Y.projections`         | array  | Value axis measure(s)  |
+- `valueAxis`: show/hide, axis title, display units.
+- `categoryAxis`: label formatting and density control.
+- `labels`: show/hide and precision.
+- `dataPoint`: per-series color using `selector.metadata`.
+- `legend`: position and visibility.
+- `visualContainerObjects`: title/background/border/dropShadow.
 
-## Optional Properties
-
-| Property                                            | Type   | Description                       |
-| ---                                                 | ---    | ---                               |
-| `visual.query.queryState.Series.projections`        | array  | Legend / series split field       |
-| `visual.objects.categoryAxis.properties.show`       | bool   | Show category axis                |
-| `visual.objects.categoryAxis.properties.labelColor` | color  | Axis label color                  |
-| `visual.objects.categoryAxis.properties.fontSize`   | int    | Axis label font size              |
-| `visual.objects.valueAxis.properties.show`          | bool   | Show value axis                   |
-| `visual.objects.valueAxis.properties.gridlineShow`  | bool   | Show gridlines                    |
-| `visual.objects.valueAxis.properties.start`         | number | Axis minimum value                |
-| `visual.objects.valueAxis.properties.end`           | number | Axis maximum value                |
-| `visual.objects.legend.properties.show`             | bool   | Show/hide legend                  |
-| `visual.objects.legend.properties.position`         | string | Top, Bottom, Left, Right          |
-| `visual.objects.dataPoint.properties.fill`          | color  | Bar color (single series)         |
-| `visual.objects.labels.properties.show`             | bool   | Show data labels                  |
-| `visual.objects.labels.properties.color`            | color  | Data label color                  |
-| `visual.objects.labels.properties.labelDisplayUnits`| int    | Label display units               |
-| `visual.objects.labels.properties.labelPrecision`   | int    | Label decimal places              |
-
-## Minimal JSON Structure
+## Minimal PBIR Skeleton
 
 ```json
 {
   "visual": {
-    "visualType": "clusteredColumnChart",
+    "visualType": "clusteredBarChart",
     "query": {
       "queryState": {
         "Category": {
@@ -61,10 +39,11 @@ for horizontal and `clusteredColumnChart` for vertical. Stacked variants are
             {
               "field": {
                 "Column": {
-                  "property": "Region",
-                  "expressionRef": { "source": { "entity": "Geography" } }
+                  "Expression": { "SourceRef": { "Entity": "<dimension_table>" } },
+                  "Property": "<category_column>"
                 }
-              }
+              },
+              "queryRef": "<dimension_table>.<category_column>"
             }
           ]
         },
@@ -72,29 +51,41 @@ for horizontal and `clusteredColumnChart` for vertical. Stacked variants are
           "projections": [
             {
               "field": {
-                "measure": {
-                  "property": "Total Sales",
-                  "expressionRef": { "source": { "entity": "Sales" } }
+                "Measure": {
+                  "Expression": { "SourceRef": { "Entity": "<measure_table>" } },
+                  "Property": "<measure_1>"
                 }
-              }
+              },
+              "queryRef": "<measure_table>.<measure_1>"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": { "SourceRef": { "Entity": "<measure_table>" } },
+                  "Property": "<measure_2>"
+                }
+              },
+              "queryRef": "<measure_table>.<measure_2>"
             }
           ]
         }
       }
     },
     "objects": {
-      "legend": [
+      "dataPoint": [
         {
           "properties": {
-            "show": { "expr": { "Literal": { "Value": "false" } } }
-          }
-        }
-      ],
-      "labels": [
-        {
-          "properties": {
-            "show": { "expr": { "Literal": { "Value": "true" } } }
-          }
+            "fill": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "Literal": { "Value": "'#00AA55'" }
+                  }
+                }
+              }
+            }
+          },
+          "selector": { "metadata": "<measure_table>.<measure_1>" }
         }
       ]
     }
@@ -104,7 +95,7 @@ for horizontal and `clusteredColumnChart` for vertical. Stacked variants are
 
 ## Constraints
 
-- `Category` and `Y` are both required query roles; without them the visual renders blank.
-- `Series` is optional — only needed when splitting bars by a second dimension.
-- Use stacked variants when showing part-to-whole relationships.
-- `dataPoint.fill` applies to all bars in single-series; for multi-series, use series-scoped selectors.
+- Keep PBIR field node casing exact (`Measure`, `Column`, `Expression`, `SourceRef`, `Property`).
+- Keep `queryRef` aligned with projected fields.
+- In stacked/100% stacked charts, use consistent series ordering across related pages.
+- Prefer selector-scoped formatting over global formatting when multiple measures are shown.

@@ -232,7 +232,7 @@ def _run_tool_iterations(
             previous_response_id=response.response_id,
             stream_output=True,
             instructions=instructions,
-            reasoning_effort="medium",
+            reasoning_effort="xhigh",
             compact_threshold=compact_threshold,
             ws_max_retries=ws_max_retries,
             display=display,

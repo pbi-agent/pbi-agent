@@ -1,60 +1,68 @@
 # Card Visual
 
-Properties and JSON structure for the Card (new) visual in Power BI PBIR format.
+Use PBIR card patterns (`cardVisual` and `card`) with correct query roles and selector-scoped formatting.
 
-## Overview
+## Visual Type Choice
 
-The Card visual displays a single aggregate value with optional category label,
-callout formatting, and reference labels. Use visual type `card` (the modern
-card, not the legacy `cardVisual`).
+- Use `"cardVisual"` when editing legacy/multi-tile cards.
+- Use `"card"` for modern single-value cards.
+- Do not switch type in-place unless you migrate the full object/query schema.
 
-## Required Properties
+## Required Structure
 
-| Property | Type | Description |
-|---|---|---|
-| `visual.visualType` | string | Must be `"card"` |
-| `visual.query.queryState.Values.projections` | array | Exactly one field — the measure or column to display |
+- For `cardVisual`:
+  - `visual.query.queryState.Data.projections`.
+  - Optional multi-field tiles with `selector.metadata` formatting.
+- For `card`:
+  - `visual.query.queryState.Values.projections`.
+  - Single primary callout value.
+- Keep query expression casing exact: `Measure`/`Column`/`Expression`/`SourceRef`/`Property`.
 
-## Optional Properties
+## Common Object Blocks (`cardVisual`)
 
-| Property | Type | Description |
-|---|---|---|
-| `visual.objects.calloutValue.properties.color` | color | Font color of the main value |
-| `visual.objects.calloutValue.properties.fontSize` | int | Font size in pt (default 27) |
-| `visual.objects.calloutValue.properties.fontFamily` | string | Font family |
-| `visual.objects.calloutValue.properties.displayUnits` | int | Auto=0, None=1, K=2, M=3, B=4, T=5 |
-| `visual.objects.calloutValue.properties.labelPrecision` | int | Decimal places |
-| `visual.objects.categoryLabel.properties.show` | bool | Show/hide category label |
-| `visual.objects.categoryLabel.properties.color` | color | Category label font color |
-| `visual.objects.categoryLabel.properties.fontSize` | int | Category label font size |
+- `layout`: orientation, alignment, tile behavior.
+- `label`: text, placement, font, per-field override.
+- `value`: font size/color/alignment, per-field override.
+- `accentBar`: status-color strip per field.
+- `padding`, `spacing`, `outline`, `shapeCustomRectangle`.
+- `visualContainerObjects`: `title`, `background`, `border`, `dropShadow`.
 
-## Minimal JSON Structure
+## Minimal PBIR Skeleton
 
 ```json
 {
   "visual": {
-    "visualType": "card",
+    "visualType": "cardVisual",
     "query": {
       "queryState": {
-        "Values": {
+        "Data": {
           "projections": [
             {
               "field": {
-                "measure": {
-                  "property": "Total Sales",
-                  "expressionRef": { "source": { "entity": "Sales" } }
+                "Measure": {
+                  "Expression": { "SourceRef": { "Entity": "<measure_table>" } },
+                  "Property": "<metric_name>"
                 }
-              }
+              },
+              "queryRef": "<measure_table>.<metric_name>"
             }
           ]
         }
       }
     },
     "objects": {
-      "calloutValue": [
+      "label": [
         {
           "properties": {
-            "fontSize": { "expr": { "Literal": { "Value": "27D" } } }
+            "text": { "expr": { "Literal": { "Value": "'<label_text>'" } } }
+          },
+          "selector": { "metadata": "<measure_table>.<metric_name>" }
+        }
+      ],
+      "value": [
+        {
+          "properties": {
+            "fontSize": { "expr": { "Literal": { "Value": "20D" } } }
           }
         }
       ]
@@ -65,6 +73,6 @@ card, not the legacy `cardVisual`).
 
 ## Constraints
 
-- Only one field in `Values` projections; the card shows a single value.
-- Use `"card"` not `"cardVisual"` — the latter is the deprecated legacy card.
-- `displayUnits` is an integer enum, not a string.
+- Preserve `selector.metadata` in multi-field cards when editing formatting.
+- Keep `queryRef` and `Property` names exact, including spaces/symbols.
+- Use explicit formatting for status/threshold cards instead of relying only on theme defaults.

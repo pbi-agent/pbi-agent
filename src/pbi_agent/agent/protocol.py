@@ -24,8 +24,8 @@ def build_response_create_payload(
     previous_response_id: str | None = None,
     store: bool = False,
     instructions: str | None = None,
-    reasoning_effort: str = "medium",
-    compact_threshold: int = 150000,
+    reasoning_effort: str = "xhigh",
+    compact_threshold: int = 100000,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "type": "response.create",
