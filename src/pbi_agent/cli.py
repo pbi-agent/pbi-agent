@@ -7,7 +7,12 @@ import logging
 from contextlib import chdir
 from pathlib import Path
 
-from pbi_agent.agent.audit_prompt import AUDIT_REPORT_FILENAME, build_audit_prompt
+from pbi_agent.agent.audit_prompt import (
+    AUDIT_REPORT_FILENAME,
+    AUDIT_TODO_FILENAME,
+    build_audit_prompt,
+    copy_audit_todo,
+)
 from pbi_agent.agent.protocol import ProtocolError
 from pbi_agent.agent.session import run_chat_loop, run_single_turn
 from pbi_agent.agent.ws_client import WebSocketClientError
@@ -219,12 +224,14 @@ def _handle_audit_command(
         return 1
 
     with chdir(report_dir):
+        copy_audit_todo(report_dir)
         outcome = run_single_turn(
             build_audit_prompt(),
             settings,
             display,
             single_turn_hint=(
                 "[dim]Audit mode:[/dim] Evaluating report and writing "
+                f"[bold]{AUDIT_TODO_FILENAME}[/bold] progress tracker and "
                 "[bold]AUDIT-REPORT.md[/bold]."
             ),
         )
