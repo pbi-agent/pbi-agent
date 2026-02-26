@@ -13,12 +13,16 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Console
 from rich.console import Group
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.rule import Rule
+from rich.spinner import Spinner
 from rich.text import Text
 
 from pbi_agent import __version__
@@ -56,6 +60,28 @@ class Display:
         self.verbose = verbose
         self._stream_parts: list[str] = []
         self._live: Live | None = None
+        self._wait_live: Live | None = None
+        self._prompt_session: PromptSession[str] | None = None
+        self._prompt_session_unavailable = False
+
+    def _ensure_prompt_session(self) -> None:
+        if self._prompt_session is not None or self._prompt_session_unavailable:
+            return
+
+        # Multi-line prompt: Enter submits, Alt+Enter inserts a newline.
+        kb = KeyBindings()
+        kb.add("enter")(lambda event: event.current_buffer.validate_and_handle())
+        kb.add("escape", "enter")(lambda event: event.current_buffer.insert_text("\n"))
+
+        try:
+            self._prompt_session = PromptSession(
+                key_bindings=kb,
+                multiline=True,
+            )
+        except Exception:
+            # Some environments (non-console Windows hosts) can't initialize
+            # prompt_toolkit output. Fall back to standard single-line input.
+            self._prompt_session_unavailable = True
 
     # -- lifecycle ----------------------------------------------------------
 
@@ -97,7 +123,8 @@ class Display:
         )
         if interactive:
             tips = Text.from_markup(
-                "[dim]Interactive mode:[/dim] Type [bold]exit[/bold] or [bold]quit[/bold] to stop.",
+                "[dim]Interactive mode:[/dim] Type [bold]exit[/bold] or [bold]quit[/bold] to stop.\n"
+                "[dim]Alt+Enter[/dim] for new line · [dim]Enter[/dim] to submit.",
                 justify="center",
             )
         else:
@@ -109,9 +136,7 @@ class Display:
         if model:
             model_bits.append(f"[dim]Model:[/dim] [bold]{model}[/bold]")
         if reasoning_effort:
-            model_bits.append(
-                f"[dim]Reasoning:[/dim] [bold]{reasoning_effort}[/bold]"
-            )
+            model_bits.append(f"[dim]Reasoning:[/dim] [bold]{reasoning_effort}[/bold]")
         model_line = (
             Text.from_markup("  [dim]·[/dim]  ".join(model_bits), justify="center")
             if model_bits
@@ -135,7 +160,16 @@ class Display:
         self.console.print()
 
     def user_prompt(self) -> str:
-        """Display the prompt and return user input (blocking)."""
+        """Display the prompt and return user input (blocking).
+
+        Supports multi-line editing: press **Alt+Enter** to insert a new
+        line, and **Enter** to submit the prompt.
+        """
+        self._ensure_prompt_session()
+        if self._prompt_session is not None:
+            return self._prompt_session.prompt(
+                HTML("<ansigreen><b>&gt;</b></ansigreen> "),
+            )
         return self.console.input("[bold green]>[/bold green] ")
 
     # -- assistant streaming ------------------------------------------------
@@ -143,6 +177,36 @@ class Display:
     def assistant_start(self) -> None:
         """Visual separator before the assistant response."""
         self.console.print()
+
+    def wait_start(self, message: str = "model is processing your request...") -> None:
+        """Show a transient waiting spinner until output starts arriving."""
+        if self._wait_live is not None or self._live is not None:
+            return
+
+        spinner = Spinner(
+            "dots12",
+            text=Text.from_markup(
+                f"[bold cyan]Thinking[/bold cyan] [dim]{message}[/dim]"
+            ),
+            style="cyan",
+        )
+        self._wait_live = Live(
+            Panel(
+                spinner,
+                border_style="cyan",
+                padding=(0, 1),
+                title="[cyan]PBI Agent[/cyan]",
+            ),
+            console=self.console,
+            refresh_per_second=12,
+            transient=True,
+        )
+        self._wait_live.start()
+
+    def wait_stop(self) -> None:
+        if self._wait_live is not None:
+            self._wait_live.stop()
+            self._wait_live = None
 
     def stream_delta(self, delta: str) -> None:
         """Append a streaming token and update the live Markdown preview.
@@ -153,6 +217,7 @@ class Display:
         which avoids the duplication bug caused by ``"visible"`` overflow
         when content exceeded the viewport.
         """
+        self.wait_stop()
         self._stream_parts.append(delta)
         if self._live is None:
             self._live = Live(
@@ -172,6 +237,7 @@ class Display:
         stopped, then the full accumulated text is rendered once as
         formatted Markdown via ``console.print``.
         """
+        self.wait_stop()
         text = "".join(self._stream_parts)
         if self._live is not None:
             self._live.stop()
@@ -180,15 +246,29 @@ class Display:
             self.console.print(Markdown(text))
         self._stream_parts = []
 
+    def stream_abort(self) -> None:
+        """Stop active waiting/stream rendering without printing final text."""
+        self.wait_stop()
+        if self._live is not None:
+            self._live.stop()
+            self._live = None
+        self._stream_parts = []
+
     def render_markdown(self, text: str) -> None:
         """Render a completed response as Markdown (single-turn mode)."""
         self.console.print()
         self.console.print(Markdown(text))
 
-    def session_usage(self, usage: TokenUsage) -> None:
-        """Show cumulative session usage and estimated cost in a bordered section."""
-        self.console.print()
-        self.console.print(Rule("Session usage", style="dim"))
+    def session_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:
+        """Show cumulative session usage and estimated cost in a single row."""
+        # Format elapsed time
+        total_secs = int(elapsed_seconds)
+        hours, remainder = divmod(total_secs, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours > 0:
+            time_str = f"{hours}:{minutes:02d}:{seconds:02d}"
+        else:
+            time_str = f"{minutes}:{seconds:02d}"
 
         total = f"{usage.total_tokens:,}"
         inp = f"{usage.input_tokens:,}"
@@ -196,12 +276,15 @@ class Display:
         out = f"{usage.output_tokens:,}"
         cost = f"${usage.estimated_cost_usd:.6f}"
 
+        self.console.print()
         self.console.print(
-            f"  [dim]Tokens[/dim]  {total} total  "
-            f"[dim]([/dim]{inp} in [dim]·[/dim] {cached} cached [dim]·[/dim] {out} out[dim])[/dim]"
+            Rule(
+                f" {total} tokens [dim]([/dim]{inp} in [dim]·[/dim] {cached} cached [dim]·[/dim] {out} out[dim])[/dim]"
+                f"  [dim]|[/dim]  {cost}"
+                f"  [dim]|[/dim]  {time_str} ",
+                style="dim",
+            )
         )
-        self.console.print(f"  [dim]Cost[/dim]    {cost}")
-        self.console.print(Rule(style="dim"))
         self.console.print()
 
     # -- tool: shell --------------------------------------------------------
@@ -302,11 +385,13 @@ class Display:
     # -- retries / errors ---------------------------------------------------
 
     def retry_notice(self, attempt: int, max_retries: int) -> None:
+        self.wait_stop()
         self.console.print(
             f"[yellow]  Reconnecting… ({attempt}/{max_retries})[/yellow]"
         )
 
     def error(self, message: str) -> None:
+        self.stream_abort()
         self.console.print(f"[bold red]Error:[/bold red] {message}")
 
     # -- verbose-only technical dump ----------------------------------------

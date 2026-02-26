@@ -26,14 +26,13 @@ SPEC = ToolSpec(
                 "type": "string",
                 "description": (
                     "Target directory path.  Defaults to the current working "
-                    "directory (\".\") if omitted."
+                    'directory (".") if omitted.'
                 ),
             },
             "force": {
                 "type": "boolean",
                 "description": (
-                    "If true, overwrite existing template files.  "
-                    "Defaults to false."
+                    "If true, overwrite existing template files.  Defaults to false."
                 ),
             },
         },

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,7 @@ def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentO
     tools = get_openai_tool_definitions()
     instructions = get_system_prompt()
     session_usage = TokenUsage()
+    session_start = time.monotonic()
     with ResponsesWebSocketClient(settings.ws_url, settings.api_key) as ws:
         response = _request_turn(
             ws=ws,
@@ -66,7 +68,8 @@ def run_single_turn(prompt: str, settings: Settings, display: Display) -> AgentO
             display=display,
             session_usage=session_usage,
         )
-        display.session_usage(session_usage)
+        elapsed = time.monotonic() - session_start
+        display.session_usage(session_usage, elapsed)
         return AgentOutcome(
             response_id=response.response_id,
             text=response.text,
@@ -93,6 +96,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
             if not user_input:
                 continue
 
+            turn_start = time.monotonic()
             display.assistant_start()
             response = _request_turn(
                 ws=ws,
@@ -121,7 +125,8 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
             )
             had_tool_errors = had_tool_errors or loop_had_errors
             previous_response_id = response.response_id
-            display.session_usage(session_usage)
+            elapsed = time.monotonic() - turn_start
+            display.session_usage(session_usage, elapsed)
 
     return 4 if had_tool_errors else 0
 
@@ -279,7 +284,10 @@ def _request_turn(
         try:
             ws.send_json(payload)
             response = _read_one_response(
-                ws, stream_output=stream_output, display=display
+                ws,
+                stream_output=stream_output,
+                display=display,
+                waiting_message=_waiting_message_for_input_items(input_items),
             )
             session_usage.add(response.usage)
             return response
@@ -301,30 +309,38 @@ def _read_one_response(
     *,
     stream_output: bool,
     display: Display,
+    waiting_message: str,
 ) -> CompletedResponse:
     streamed_text_parts: list[str] = []
+    if stream_output:
+        display.wait_start(waiting_message)
 
-    while True:
-        event = ws.recv_json()
-        event_type = event.get("type")
+    try:
+        while True:
+            event = ws.recv_json()
+            event_type = event.get("type")
 
-        if event_type == "response.output_text.delta":
-            delta = event.get("delta", "")
-            if delta:
-                streamed_text_parts.append(delta)
+            if event_type == "response.output_text.delta":
+                delta = event.get("delta", "")
+                if delta:
+                    streamed_text_parts.append(delta)
+                    if stream_output:
+                        display.stream_delta(delta)
+            elif event_type == "response.completed":
                 if stream_output:
-                    display.stream_delta(delta)
-        elif event_type == "response.completed":
-            if stream_output:
-                display.stream_end()
-            return parse_completed_response(
-                event.get("response", {}), streamed_text_parts
-            )
-        elif event_type == "error":
-            error = event.get("error", {})
-            code = error.get("code", "unknown_error")
-            message = error.get("message", "No error message")
-            raise ProtocolError(f"{code}: {message}")
+                    display.stream_end()
+                return parse_completed_response(
+                    event.get("response", {}), streamed_text_parts
+                )
+            elif event_type == "error":
+                error = event.get("error", {})
+                code = error.get("code", "unknown_error")
+                message = error.get("message", "No error message")
+                raise ProtocolError(f"{code}: {message}")
+    except Exception:
+        if stream_output:
+            display.stream_abort()
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +372,24 @@ def _collect_shell_commands(shell_calls: list) -> list[str]:  # type: ignore[typ
         if isinstance(cmds, list):
             commands.extend(cmds)
     return commands
+
+
+def _waiting_message_for_input_items(input_items: list[dict[str, Any]]) -> str:
+    """Choose a spinner subtitle based on what the model is processing."""
+    item_types = {
+        item.get("type")
+        for item in input_items
+        if isinstance(item, dict) and isinstance(item.get("type"), str)
+    }
+    if "message" in item_types:
+        return "analyzing your request..."
+    if item_types & {
+        "function_call_output",
+        "apply_patch_call_output",
+        "shell_call_output",
+    }:
+        return "integrating tool results..."
+    return "processing..."
 
 
 def _extract_shell_outcomes(output: Any) -> list[tuple[int | None, bool]]:

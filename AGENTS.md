@@ -16,8 +16,7 @@ uv run pbi-agent tools describe --name skill_knowledge
 ## Linting & Formatting
 
 ```bash
-uv run ruff check . --fix
-uv run ruff format .
+uvx ruff check . --fix && uvx ruff format .
 ```
 
 ## Project-Specific Tooling

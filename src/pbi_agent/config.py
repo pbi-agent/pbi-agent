@@ -35,7 +35,9 @@ class Settings:
         if self.ws_max_retries < 0:
             raise ConfigError("--ws-max-retries must be >= 0.")
         if self.reasoning_effort not in {"low", "medium", "high", "xhigh"}:
-            raise ConfigError("--reasoning-effort must be one of: low, medium, high, xhigh.")
+            raise ConfigError(
+                "--reasoning-effort must be one of: low, medium, high, xhigh."
+            )
         if self.compact_threshold < 1:
             raise ConfigError("--compact-threshold must be >= 1.")
 

@@ -60,8 +60,7 @@ def _copy_tree(src: Path, dst: Path, *, force: bool) -> None:
         if entry.is_dir():
             if target.exists() and not force:
                 raise FileExistsError(
-                    f"Directory already exists: {target}\n"
-                    "Use --force to overwrite."
+                    f"Directory already exists: {target}\nUse --force to overwrite."
                 )
             if target.exists() and force:
                 shutil.rmtree(target)
@@ -69,7 +68,6 @@ def _copy_tree(src: Path, dst: Path, *, force: bool) -> None:
         else:
             if target.exists() and not force:
                 raise FileExistsError(
-                    f"File already exists: {target}\n"
-                    "Use --force to overwrite."
+                    f"File already exists: {target}\nUse --force to overwrite."
                 )
             shutil.copy2(entry, target)

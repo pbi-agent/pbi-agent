@@ -1,10 +1,11 @@
 [project]
 name = "oai-ws"
-version = "0.1.5"
+version = "0.1.6"
 description = "WebSocket-based Power BI editing agent CLI foundation"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "prompt-toolkit>=3.0",
     "python-dotenv>=1.2.1",
     "rich>=13.0",
     "websocket-client>=1.9.0",
