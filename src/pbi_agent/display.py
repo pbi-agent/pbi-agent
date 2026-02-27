@@ -24,6 +24,7 @@ from textual.widgets import (
     Footer,
     Header,
     Input,
+    LoadingIndicator,
     Markdown as MarkdownWidget,
     Static,
 )
@@ -133,22 +134,15 @@ class AssistantMarkdown(MarkdownWidget):
     """Markdown widget for assistant responses."""
 
 
-class ThinkingIndicator(Static):
-    """Animated thinking indicator."""
+class WaitingIndicator(Vertical):
+    """Loading indicator with contextual message."""
 
-    def __init__(self, message: str = "Thinking", **kwargs: Any) -> None:
-        super().__init__("", **kwargs)
-        self._message = message
-        self._frame = 0
-        self._frames = ["   ", ".  ", ".. ", "..."]
-
-    def on_mount(self) -> None:
-        self.set_interval(0.4, self._tick)
-
-    def _tick(self) -> None:
-        self._frame = (self._frame + 1) % len(self._frames)
-        self.update(
-            f"[bold cyan]{self._message}{self._frames[self._frame]}[/bold cyan]"
+    def __init__(self, message: str = "processing...", **kwargs: Any) -> None:
+        clean_message = message.strip() or "processing..."
+        super().__init__(
+            LoadingIndicator(classes="waiting-spinner"),
+            Static(clean_message, classes="waiting-message"),
+            **kwargs,
         )
 
 
@@ -274,14 +268,14 @@ class Display:
         """Visual separator before the assistant response (no-op in TUI)."""
 
     def wait_start(self, message: str = "model is processing your request...") -> None:
-        """Show a transient thinking indicator."""
+        """Show a transient loading indicator."""
         if self._thinking_id is not None:
             return
         tid = self._next_id("think")
         self._thinking_id = tid
         self._safe_call(
             self.app.mount_widget,
-            ThinkingIndicator(message=message.rstrip("."), id=tid),
+            WaitingIndicator(message=message, id=tid),
         )
 
     def wait_stop(self) -> None:
@@ -556,10 +550,16 @@ class ChatApp(App):
         padding: 0 2;
     }
 
-    /* ---- thinking ---- */
-    ThinkingIndicator {
+    /* ---- waiting ---- */
+    WaitingIndicator {
         margin: 0 12 0 1;
         padding: 0 2;
+        height: auto;
+    }
+    WaitingIndicator > .waiting-spinner {
+        color: $accent;
+    }
+    WaitingIndicator > .waiting-message {
         color: $text-muted;
     }
 
