@@ -131,7 +131,7 @@ class UserMessage(Static):
     """User message bubble."""
 
     def __init__(self, text: str, **kwargs: Any) -> None:
-        super().__init__(f"[bold green]You[/bold green]  {text}", **kwargs)
+        super().__init__(text, **kwargs)
 
 
 class AssistantMarkdown(MarkdownWidget):
@@ -626,6 +626,9 @@ class ChatApp(App):
         padding: 0 2;
         height: auto;
         background: $boost;
+    }
+    ToolGroup > CollapsibleTitle {
+        padding: 1 2;
     }
     ToolGroup > Contents {
         padding: 1 2;
