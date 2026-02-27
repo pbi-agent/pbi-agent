@@ -13,22 +13,26 @@ import json
 import logging
 import os
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import (
+    Button,
+    Collapsible,
     Footer,
     Header,
-    Input,
     LoadingIndicator,
     Markdown as MarkdownWidget,
     Static,
+    TextArea,
 )
-from textual import on, work
 
 from pbi_agent import __version__
 from pbi_agent.models.messages import TokenUsage
@@ -97,7 +101,7 @@ class WelcomeBanner(Static):
                 "[dim]Interactive mode:[/dim] Type [bold]exit[/bold] or "
                 "[bold]quit[/bold] to stop."
             )
-            lines.append("[dim]Enter[/dim] to submit")
+            lines.append("[dim]Enter[/dim] for newline  ·  [dim]Ctrl+S[/dim] to submit")
         elif single_turn_hint:
             cleaned = single_turn_hint
             for tag in (
@@ -146,8 +150,8 @@ class WaitingIndicator(Vertical):
         )
 
 
-class ToolGroup(Vertical):
-    """Container for tool execution items."""
+class ToolGroup(Collapsible):
+    """Collapsible container for tool execution items."""
 
 
 class ToolHeader(Static):
@@ -168,6 +172,32 @@ class ErrorMessage(Static):
 
 class NoticeMessage(Static):
     """Notice/warning message."""
+
+
+class ChatInput(TextArea):
+    """Multiline input where Enter inserts newline and Ctrl+S submits."""
+
+    @dataclass
+    class Submitted(Message):
+        """Message emitted when the user submits the chat input."""
+
+        input: "ChatInput"
+        value: str
+
+        @property
+        def control(self) -> "ChatInput":
+            return self.input
+
+    async def _on_key(self, event: events.Key) -> None:
+        self._restart_blink()
+        if self.read_only:
+            return
+        if event.key == "ctrl+s" or "ctrl+s" in event.aliases:
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.Submitted(self, self.text))
+            return
+        await super()._on_key(event)
 
 
 # ---------------------------------------------------------------------------
@@ -566,12 +596,12 @@ class ChatApp(App):
     /* ---- tool groups ---- */
     ToolGroup {
         margin: 1 4;
-        padding: 1 2;
+        padding: 0 2;
         height: auto;
-        border: round $accent;
         background: $boost;
-        border-title-color: $accent;
-        border-title-style: bold;
+    }
+    ToolGroup > Contents {
+        padding: 1 2;
     }
     ToolItem {
         padding-left: 2;
@@ -604,11 +634,28 @@ class ChatApp(App):
     }
 
     /* ---- input ---- */
-    #user-input {
+    #input-row {
         dock: bottom;
         margin: 0 2 1 2;
+        height: auto;
+        align-vertical: middle;
+    }
+    #user-input {
+        width: 1fr;
+        min-width: 0;
+        height: 4;
+        min-height: 4;
+        max-height: 8;
     }
     #user-input:disabled {
+        opacity: 0.5;
+    }
+    #send-button {
+        width: auto;
+        min-width: 10;
+        margin: 1 5 0 0;
+    }
+    #send-button:disabled {
         opacity: 0.5;
     }
     """
@@ -643,10 +690,17 @@ class ChatApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         yield VerticalScroll(id="chat-log")
-        yield Input(
-            placeholder="Type your message\u2026  (Enter to send, Ctrl+Q to quit)",
-            id="user-input",
-            disabled=True,
+        yield Horizontal(
+            ChatInput(
+                placeholder=(
+                    "Type your message\u2026  "
+                    "(Enter: newline, Ctrl+S: send, Ctrl+Q: quit)"
+                ),
+                id="user-input",
+                disabled=True,
+            ),
+            Button("Send", id="send-button", variant="primary", disabled=True),
+            id="input-row",
         )
         yield Footer()
 
@@ -733,22 +787,25 @@ class ChatApp(App):
 
     def enable_input(self) -> None:
         """Enable the input field and give it focus."""
-        inp = self.query_one("#user-input", Input)
+        inp = self.query_one("#user-input", ChatInput)
+        send_btn = self.query_one("#send-button", Button)
         inp.disabled = False
+        send_btn.disabled = False
         inp.focus()
 
     def disable_input(self) -> None:
         """Disable the input field."""
-        inp = self.query_one("#user-input", Input)
+        inp = self.query_one("#user-input", ChatInput)
+        send_btn = self.query_one("#send-button", Button)
         inp.disabled = True
+        send_btn.disabled = True
 
     async def mount_tool_group(
         self, group_id: str, label: str, items: list[str]
     ) -> None:
         """Mount a complete tool group with all items in one DOM operation."""
         children = [ToolItem(text) for text in items]
-        group = ToolGroup(*children, id=group_id)
-        group.border_title = label
+        group = ToolGroup(*children, title=label, collapsed=True, id=group_id)
         chat_log = self.query_one("#chat-log", VerticalScroll)
         await chat_log.mount(group)
         chat_log.scroll_end(animate=False)
@@ -761,17 +818,27 @@ class ChatApp(App):
 
     # -- event handlers -----------------------------------------------------
 
-    @on(Input.Submitted, "#user-input")
-    def handle_input_submitted(self, event: Input.Submitted) -> None:
-        """Forward user input to the session worker thread."""
-        value = event.value.strip()
+    def _submit_user_message(self, raw_text: str) -> None:
+        value = raw_text.strip()
         if not value:
             return
-        event.input.value = ""
-        event.input.disabled = True
+        inp = self.query_one("#user-input", ChatInput)
+        inp.clear()
+        self.disable_input()
         self.add_user_message(value)
         if self._bridge is not None:
             self._bridge.submit_input(value)
+
+    @on(ChatInput.Submitted, "#user-input")
+    def handle_input_submitted(self, event: ChatInput.Submitted) -> None:
+        """Forward user input to the session worker thread."""
+        self._submit_user_message(event.value)
+
+    @on(Button.Pressed, "#send-button")
+    def handle_send_button_pressed(self, _: Button.Pressed) -> None:
+        """Submit the current input when Send is clicked."""
+        inp = self.query_one("#user-input", ChatInput)
+        self._submit_user_message(inp.text)
 
     def action_quit(self) -> None:
         """Handle Ctrl+Q / Ctrl+C gracefully."""
