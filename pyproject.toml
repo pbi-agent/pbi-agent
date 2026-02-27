@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "prompt-toolkit>=3.0",
     "python-dotenv>=1.2.1",
-    "rich>=13.0",
+    "textual>=0.70.0",
     "websocket-client>=1.9.0",
 ]
 
