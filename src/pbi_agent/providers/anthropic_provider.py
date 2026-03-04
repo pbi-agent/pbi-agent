@@ -41,6 +41,14 @@ ANTHROPIC_VERSION = "2023-06-01"
 _BASH_TOOL_NAME = "bash"
 _TEXT_EDITOR_TOOL_NAME = "str_replace_based_edit_tool"
 
+# Map the CLI reasoning-effort values to Anthropic adaptive thinking effort.
+_EFFORT_MAP: dict[str, str] = {
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": "max",
+}
+
 
 class AnthropicProvider(Provider):
     """Provider backed by the Anthropic Messages HTTP API."""
@@ -124,7 +132,10 @@ class AnthropicProvider(Provider):
         - anything else → registered function tool handler
         """
         # The raw content blocks are stored in provider_data.
-        content_blocks: list[dict[str, Any]] = response.provider_data or []
+        pdata = response.provider_data or {}
+        content_blocks: list[dict[str, Any]] = (
+            pdata.get("content_blocks", []) if isinstance(pdata, dict) else pdata
+        )
         tool_use_blocks = [b for b in content_blocks if b.get("type") == "tool_use"]
 
         if not tool_use_blocks:
@@ -284,7 +295,13 @@ class AnthropicProvider(Provider):
             "cache_control": {"type": "ephemeral"},
             "tools": self._tools,
             "messages": self._messages,
+            "thinking": {"type": "adaptive"},
         }
+
+        # Map reasoning-effort to Anthropic effort level.
+        effort = _EFFORT_MAP.get(self._settings.reasoning_effort, "high")
+        body["output_config"] = {"effort": effort}
+
         if system_prompt:
             body["system"] = system_prompt
 
@@ -316,6 +333,14 @@ class AnthropicProvider(Provider):
 
                 result = self._parse_response(response_json)
                 display.wait_stop()
+
+                # Render thinking blocks (if any) before the main text.
+                pdata = result.provider_data or {}
+                if isinstance(pdata, dict):
+                    for thinking_text in pdata.get("thinking_parts", []):
+                        display.render_thinking(thinking_text)
+                    if pdata.get("has_redacted_thinking"):
+                        display.render_redacted_thinking()
 
                 # Render the text in one shot (no streaming).
                 if result.text:
@@ -404,12 +429,22 @@ class AnthropicProvider(Provider):
         content_blocks: list[dict[str, Any]] = response_json.get("content", [])
 
         text_parts: list[str] = []
+        thinking_parts: list[str] = []
+        has_redacted_thinking: bool = False
         function_calls: list[ToolCall] = []
 
         for block in content_blocks:
             block_type = block.get("type")
 
-            if block_type == "text":
+            if block_type == "thinking":
+                thinking_text = block.get("thinking", "")
+                if thinking_text:
+                    thinking_parts.append(thinking_text)
+
+            elif block_type == "redacted_thinking":
+                has_redacted_thinking = True
+
+            elif block_type == "text":
                 text = block.get("text", "")
                 if text:
                     text_parts.append(text)
@@ -460,8 +495,13 @@ class AnthropicProvider(Provider):
             ),
             function_calls=function_calls,
             # Store raw content blocks so execute_tool_calls can access the
-            # full tool_use data (including input parameters).
-            provider_data=content_blocks,
+            # full tool_use data (including input parameters), plus parsed
+            # thinking data for display.
+            provider_data={
+                "content_blocks": content_blocks,
+                "thinking_parts": thinking_parts,
+                "has_redacted_thinking": has_redacted_thinking,
+            },
         )
 
 

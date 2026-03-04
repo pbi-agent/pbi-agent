@@ -100,8 +100,11 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     ws_max_retries = args.ws_max_retries
     if ws_max_retries is None:
         ws_max_retries = int(os.getenv("PBI_AGENT_WS_MAX_RETRIES", "2"))
+    default_effort = "high" if provider == "anthropic" else "xhigh"
     reasoning_effort = (
-        args.reasoning_effort or os.getenv("PBI_AGENT_REASONING_EFFORT") or "xhigh"
+        args.reasoning_effort
+        or os.getenv("PBI_AGENT_REASONING_EFFORT")
+        or default_effort
     )
     compact_threshold = args.compact_threshold
     if compact_threshold is None:

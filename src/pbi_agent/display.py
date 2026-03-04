@@ -170,6 +170,14 @@ class ErrorMessage(Static):
     """Error message display."""
 
 
+class ThinkingBlock(Collapsible):
+    """Collapsible block for model thinking/reasoning content."""
+
+
+class ThinkingContent(MarkdownWidget):
+    """Markdown widget for thinking content within a collapsible."""
+
+
 class NoticeMessage(Static):
     """Notice/warning message."""
 
@@ -383,6 +391,29 @@ class Display:
         self._safe_call(
             self.app.mount_widget,
             AssistantMarkdown(text, id=mid),
+        )
+
+    def render_thinking(self, text: str) -> None:
+        """Render a thinking/reasoning block as a collapsible element."""
+        tid = self._next_id("thinking")
+        content_widget = ThinkingContent(text, id=f"{tid}-content")
+        block = ThinkingBlock(
+            content_widget,
+            title="Thinking\u2026",
+            collapsed=True,
+            id=tid,
+        )
+        self._safe_call(self.app.mount_widget, block)
+
+    def render_redacted_thinking(self) -> None:
+        """Render a notice for redacted (encrypted) thinking blocks."""
+        nid = self._next_id("redact")
+        self._safe_call(
+            self.app.mount_widget,
+            NoticeMessage(
+                "[dim]Some thinking was encrypted for safety reasons.[/dim]",
+                id=nid,
+            ),
         )
 
     def session_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:
@@ -639,6 +670,26 @@ class ChatApp(App):
     }
     ToolItem {
         padding-left: 2;
+    }
+
+    /* ---- thinking block ---- */
+    ThinkingBlock {
+        margin: 1 4;
+        padding: 0 1;
+        height: auto;
+        background: $boost;
+        border-left: thick $accent;
+    }
+    ThinkingBlock > CollapsibleTitle {
+        padding: 1 2;
+        color: $text-muted;
+    }
+    ThinkingBlock > Contents {
+        padding: 0 2;
+    }
+    ThinkingContent {
+        color: $text-muted;
+        padding: 0 1;
     }
 
     /* ---- usage summary ---- */
