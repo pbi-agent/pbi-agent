@@ -21874,3 +21874,81 @@ FileNotFoundError: [WinError 2] Le fichier spécifié est introuvable
 2026-03-04 18:44:55,338 DEBUG markdown_it.rules_block.heading: entering heading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
 2026-03-04 18:44:55,338 DEBUG markdown_it.rules_block.lheading: entering lheading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
 2026-03-04 18:44:55,338 DEBUG markdown_it.rules_block.paragraph: entering paragraph: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:55:48,523 DEBUG pbi_agent.log_config: Debug log file: C:\Users\nbensaid\workspace\oai-ws\pbi-agent-debug.log
+2026-03-04 18:55:48,523 INFO pbi_agent.cli: Debug log file: C:\Users\nbensaid\workspace\oai-ws\pbi-agent-debug.log
+2026-03-04 18:55:48,523 DEBUG pbi_agent.cli: Resolved settings: {'provider': 'anthropic', 'api_key': 'sk-p...pzwA', 'ws_url': 'wss://api.openai.com/v1/responses', 'model': 'gpt-5.3-codex', 'verbose': False, 'max_tool_workers': 4, 'ws_max_retries': 2, 'reasoning_effort': 'xhigh', 'compact_threshold': 150000, 'anthropic_api_key': 'sk-a...kAAA', 'anthropic_model': 'claude-sonnet-4-6', 'anthropic_max_tokens': 16384}
+2026-03-04 18:55:49,885 DEBUG asyncio: Using proactor: IocpProactor
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.code: entering code: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.fence: entering fence: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.blockquote: entering blockquote: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.hr: entering hr: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.list: entering list: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.reference: entering reference: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.html_block: entering html_block: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.heading: entering heading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.lheading: entering lheading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:01,787 DEBUG markdown_it.rules_block.paragraph: entering paragraph: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,073 DEBUG markdown_it.rules_block.code: entering code: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,073 DEBUG markdown_it.rules_block.fence: entering fence: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,073 DEBUG markdown_it.rules_block.blockquote: entering blockquote: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,075 DEBUG markdown_it.rules_block.hr: entering hr: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,075 DEBUG markdown_it.rules_block.list: entering list: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,075 DEBUG markdown_it.rules_block.reference: entering reference: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,075 DEBUG markdown_it.rules_block.html_block: entering html_block: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,075 DEBUG markdown_it.rules_block.heading: entering heading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,075 DEBUG markdown_it.rules_block.lheading: entering lheading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:11,075 DEBUG markdown_it.rules_block.paragraph: entering paragraph: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:23,807 DEBUG pbi_agent.log_config: Debug log file: C:\Users\nbensaid\workspace\oai-ws\pbi-agent-debug.log
+2026-03-04 18:56:23,807 INFO pbi_agent.cli: Debug log file: C:\Users\nbensaid\workspace\oai-ws\pbi-agent-debug.log
+2026-03-04 18:56:23,807 DEBUG pbi_agent.cli: Resolved settings: {'provider': 'openai', 'api_key': 'sk-p...pzwA', 'ws_url': 'wss://api.openai.com/v1/responses', 'model': 'gpt-5.3-codex', 'verbose': False, 'max_tool_workers': 4, 'ws_max_retries': 2, 'reasoning_effort': 'xhigh', 'compact_threshold': 150000, 'anthropic_api_key': 'sk-a...kAAA', 'anthropic_model': 'claude-opus-4-6', 'anthropic_max_tokens': 16384}
+2026-03-04 18:56:24,090 DEBUG asyncio: Using proactor: IocpProactor
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.code: entering code: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.fence: entering fence: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.blockquote: entering blockquote: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.hr: entering hr: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.list: entering list: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.reference: entering reference: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.html_block: entering html_block: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.heading: entering heading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.lheading: entering lheading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,147 DEBUG markdown_it.rules_block.paragraph: entering paragraph: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.code: entering code: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.fence: entering fence: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.blockquote: entering blockquote: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.hr: entering hr: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.list: entering list: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.reference: entering reference: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.html_block: entering html_block: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.heading: entering heading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,162 DEBUG markdown_it.rules_block.lheading: entering lheading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,163 DEBUG markdown_it.rules_block.paragraph: entering paragraph: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,165 DEBUG markdown_it.rules_block.code: entering code: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.fence: entering fence: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.blockquote: entering blockquote: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.hr: entering hr: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.list: entering list: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.reference: entering reference: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.html_block: entering html_block: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.heading: entering heading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.lheading: entering lheading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,166 DEBUG markdown_it.rules_block.paragraph: entering paragraph: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,168 DEBUG markdown_it.rules_block.code: entering code: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.fence: entering fence: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.blockquote: entering blockquote: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.hr: entering hr: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.list: entering list: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.reference: entering reference: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.html_block: entering html_block: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.heading: entering heading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.lheading: entering lheading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,169 DEBUG markdown_it.rules_block.paragraph: entering paragraph: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.code: entering code: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.fence: entering fence: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.blockquote: entering blockquote: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.hr: entering hr: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.list: entering list: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.reference: entering reference: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.html_block: entering html_block: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.heading: entering heading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.lheading: entering lheading: StateBlock(line=0,level=0,tokens=0), 0, 1, False
+2026-03-04 18:56:32,344 DEBUG markdown_it.rules_block.paragraph: entering paragraph: StateBlock(line=0,level=0,tokens=0), 0, 1, False

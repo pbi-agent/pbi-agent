@@ -430,16 +430,32 @@ class AnthropicProvider(Provider):
 
         # Parse usage
         usage_obj = response_json.get("usage", {})
-        input_tokens = int(usage_obj.get("input_tokens", 0) or 0)
+        base_input_tokens = int(usage_obj.get("input_tokens", 0) or 0)
         output_tokens = int(usage_obj.get("output_tokens", 0) or 0)
         cache_read_tokens = int(usage_obj.get("cache_read_input_tokens", 0) or 0)
+        cache_creation_tokens = int(
+            usage_obj.get("cache_creation_input_tokens", 0) or 0
+        )
+
+        # Break down cache creation by TTL (default is 5-minute).
+        cache_creation_obj = usage_obj.get("cache_creation", {})
+        if isinstance(cache_creation_obj, dict):
+            cache_1h = int(cache_creation_obj.get("ephemeral_1h_input_tokens", 0) or 0)
+        else:
+            cache_1h = 0
+        cache_5m = max(cache_creation_tokens - cache_1h, 0)
+
+        # Total input for display (base + cache reads + cache writes).
+        total_input = base_input_tokens + cache_read_tokens + cache_creation_tokens
 
         return CompletedResponse(
             response_id=response_json.get("id"),
             text="\n\n".join(text_parts).strip(),
             usage=TokenUsage(
-                input_tokens=input_tokens,
+                input_tokens=total_input,
                 cached_input_tokens=cache_read_tokens,
+                cache_write_tokens=cache_5m,
+                cache_write_1h_tokens=cache_1h,
                 output_tokens=output_tokens,
             ),
             function_calls=function_calls,

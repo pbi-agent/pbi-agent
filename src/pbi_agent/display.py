@@ -398,11 +398,15 @@ class Display:
         total = f"{usage.total_tokens:,}"
         inp = f"{usage.input_tokens:,}"
         cached = f"{usage.cached_input_tokens:,}"
+        cache_w = usage.cache_write_tokens + usage.cache_write_1h_tokens
         out = f"{usage.output_tokens:,}"
         cost = f"${usage.estimated_cost_usd:.3f}"
+        cache_detail = f"{cached} cached"
+        if cache_w:
+            cache_detail += f" [dim]\u00b7[/dim] {cache_w:,} cache-write"
         text = (
             f"[dim]{total} tokens[/dim]  "
-            f"({inp} in [dim]\u00b7[/dim] {cached} cached [dim]\u00b7[/dim] {out} out)"
+            f"({inp} in [dim]\u00b7[/dim] {cache_detail} [dim]\u00b7[/dim] {out} out)"
             f"  [dim]|[/dim]  {cost}"
             f"  [dim]|[/dim]  {time_str}"
         )
