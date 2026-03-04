@@ -134,7 +134,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         settings = resolve_settings(args)
         configure_logging(settings.verbose)
-        LOGGER.info("Debug log file: %s", Path.cwd() / "pbi-agent-debug.log")
         settings.validate()
     except ConfigError as exc:
         print(f"Error: {exc}", file=sys.stderr)

@@ -41,6 +41,7 @@ class TokenUsage:
     cache_write_tokens: int = 0
     cache_write_1h_tokens: int = 0
     output_tokens: int = 0
+    reasoning_tokens: int = 0
     model: str = ""
 
     @property
@@ -81,6 +82,7 @@ class TokenUsage:
         self.cache_write_tokens += other.cache_write_tokens
         self.cache_write_1h_tokens += other.cache_write_1h_tokens
         self.output_tokens += other.output_tokens
+        self.reasoning_tokens += other.reasoning_tokens
 
 
 @dataclass(slots=True)

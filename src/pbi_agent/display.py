@@ -435,9 +435,12 @@ class Display:
         cache_detail = f"{cached} cached"
         if cache_w:
             cache_detail += f" [dim]\u00b7[/dim] {cache_w:,} cache-write"
+        out_detail = f"{out} out"
+        if usage.reasoning_tokens:
+            out_detail += f" [dim]\u00b7[/dim] {usage.reasoning_tokens:,} reasoning"
         text = (
             f"[dim]{total} tokens[/dim]  "
-            f"({inp} in [dim]\u00b7[/dim] {cache_detail} [dim]\u00b7[/dim] {out} out)"
+            f"({inp} in [dim]\u00b7[/dim] {cache_detail} [dim]\u00b7[/dim] {out_detail})"
             f"  [dim]|[/dim]  {cost}"
             f"  [dim]|[/dim]  {time_str}"
         )

@@ -110,7 +110,7 @@ def build_response_create_payload(
             {"type": "compaction", "compact_threshold": compact_threshold}
         ],
     }
-    payload["reasoning"] = {"effort": reasoning_effort}
+    payload["reasoning"] = {"effort": reasoning_effort, "summary": "auto"}
     if previous_response_id:
         payload["previous_response_id"] = previous_response_id
     if instructions:
@@ -182,6 +182,7 @@ def parse_completed_response(
         else 0
     )
     cached_input_tokens = 0
+    reasoning_tokens = 0
     if isinstance(usage_obj, dict):
         input_details = usage_obj.get("input_tokens_details", {})
         if isinstance(input_details, dict):
@@ -191,6 +192,9 @@ def parse_completed_response(
                 )
                 or 0
             )
+        output_details = usage_obj.get("output_tokens_details", {})
+        if isinstance(output_details, dict):
+            reasoning_tokens = int(output_details.get("reasoning_tokens", 0) or 0)
 
     final_text = "".join(text_parts).strip() or "".join(streamed_text_parts).strip()
     return CompletedResponse(
@@ -200,6 +204,7 @@ def parse_completed_response(
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,
             output_tokens=output_tokens,
+            reasoning_tokens=reasoning_tokens,
         ),
         function_calls=function_calls,
         apply_patch_calls=apply_patch_calls,
