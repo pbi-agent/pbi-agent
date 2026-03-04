@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import shutil
@@ -13,7 +12,6 @@ from pathlib import Path
 from pbi_agent.config import ConfigError, Settings, resolve_settings
 from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
-from pbi_agent.tools.registry import get_tool_spec, get_tool_specs
 
 LOGGER = logging.getLogger(__name__)
 
@@ -163,24 +161,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Relative report directory to audit (default: current directory).",
     )
 
-    tools_parser = subparsers.add_parser(
-        "tools",
-        help="Inspect tool registry.",
-        formatter_class=CleanHelpFormatter,
-    )
-    tools_subparsers = tools_parser.add_subparsers(dest="tools_command", required=True)
-    tools_subparsers.add_parser(
-        "list",
-        help="List registered tools.",
-        formatter_class=CleanHelpFormatter,
-    )
-    describe_parser = tools_subparsers.add_parser(
-        "describe",
-        help="Describe one tool.",
-        formatter_class=CleanHelpFormatter,
-    )
-    describe_parser.add_argument("--name", required=True, help="Tool name.")
-
     init_parser = subparsers.add_parser(
         "init",
         help="Scaffold a new Power BI report project from the bundled template.",
@@ -211,9 +191,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(raw_argv)
 
     # ---- commands that don't need settings or the TUI ----
-
-    if args.command == "tools":
-        return _handle_tools_command(args)
 
     if args.command == "init":
         return _handle_init_command(args)
@@ -385,61 +362,6 @@ def _handle_web_command(args: argparse.Namespace, settings: Settings) -> int:
         print(f"Error: failed to launch textual serve: {exc}", file=sys.stderr)
         return 1
     return completed.returncode
-
-
-# ---------------------------------------------------------------------------
-# Non-TUI command handlers
-# ---------------------------------------------------------------------------
-
-
-_BUILTIN_TOOLS: dict[str, str] = {
-    "apply_patch": "Create, update, or delete files using v4a diff patches.",
-    "shell": "Execute shell commands in the workspace directory.",
-}
-
-
-def _brief(description: str) -> str:
-    """Return the first sentence or line of a description."""
-    first_line = description.split("\n", 1)[0].strip()
-    dot = first_line.find(". ")
-    if dot != -1:
-        return first_line[: dot + 1]
-    return first_line
-
-
-def _handle_tools_command(args: argparse.Namespace) -> int:
-    if args.tools_command == "list":
-        # Built-in tools
-        for name, desc in _BUILTIN_TOOLS.items():
-            print(f"  {name} (built-in): {desc}")
-        # Registered function tools
-        for tool in get_tool_specs():
-            print(f"  {tool.name}: {_brief(tool.description)}")
-        return 0
-
-    if args.tools_command == "describe":
-        # Check built-in tools first
-        if args.name in _BUILTIN_TOOLS:
-            print(f"name: {args.name}")
-            print("type: built-in")
-            print(f"description: {_BUILTIN_TOOLS[args.name]}")
-            return 0
-        # Check registered function tools
-        tool = get_tool_spec(args.name)
-        if tool is None:
-            all_names = list(_BUILTIN_TOOLS.keys()) + [t.name for t in get_tool_specs()]
-            print(f"Unknown tool: {args.name}")
-            print(f"Available: {', '.join(all_names)}")
-            return 1
-        print(f"name: {tool.name}")
-        print("type: function")
-        print(f"description: {tool.description}")
-        print(f"is_destructive: {tool.is_destructive}")
-        print("parameters_schema:")
-        print(json.dumps(tool.parameters_schema, indent=2))
-        return 0
-
-    return 1
 
 
 def _handle_init_command(args: argparse.Namespace) -> int:

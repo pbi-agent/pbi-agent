@@ -62,13 +62,6 @@ Scaffold a PBIP report template in the current directory:
 uv run pbi-agent init --dest . --force
 ```
 
-Inspect tool registry:
-
-```bash
-uv run pbi-agent tools list
-uv run pbi-agent tools describe --name skill_knowledge
-```
-
 Compatibility runner:
 
 ```bash
@@ -81,8 +74,6 @@ uv run python main.py --help
 - `chat`: interactive REPL loop.
 - `web [--host <host>] [--port <port>] [--dev] [--title <name>] [--url <public_url>]`: run the Textual web server and open the chat UI in a browser.
 - `audit [--report-dir <path>]`: runs built-in audit prompt and writes `AUDIT-REPORT.md` to the target report directory.
-- `tools list`: list built-in and function tools.
-- `tools describe --name <tool_name>`: print a tool definition.
 - `init [--dest <path>] [--force]`: copy bundled Power BI template assets.
 
 ## Configuration
