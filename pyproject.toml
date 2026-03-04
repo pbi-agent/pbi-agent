@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "python-dotenv>=1.2.1",
     "textual>=1.0.0",
+    "textual-dev>=1.8.0",
     "websocket-client>=1.9.0",
 ]
 

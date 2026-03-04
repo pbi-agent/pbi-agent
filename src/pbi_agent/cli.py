@@ -3,6 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import shutil
+import subprocess
 import sys
 
 from pathlib import Path
@@ -81,6 +84,37 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--prompt", required=True, help="User prompt.")
 
     subparsers.add_parser("chat", help="Run an interactive chat loop.")
+    web_parser = subparsers.add_parser(
+        "web",
+        help="Serve the chat UI in a browser via textual serve.",
+    )
+    web_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind the web server (default: 127.0.0.1).",
+    )
+    web_parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind the web server (default: 8000).",
+    )
+    web_parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Enable textual web dev mode.",
+    )
+    web_parser.add_argument(
+        "--title",
+        default=None,
+        help="Optional browser title shown by textual serve.",
+    )
+    web_parser.add_argument(
+        "--url",
+        default=None,
+        help="Optional public URL for reverse-proxy setups.",
+    )
+
     audit_parser = subparsers.add_parser(
         "audit",
         help="Run report audit mode and write AUDIT-REPORT.md.",
@@ -149,6 +183,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "audit":
         return _handle_audit_command(args, settings)
+
+    if args.command == "web":
+        return _handle_web_command(args, settings)
 
     parser.error("Unknown command.")
     return 1
@@ -223,6 +260,73 @@ def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
 
     print(f"Audit report written to {report_path}")
     return app.exit_code
+
+
+def _settings_env(settings: Settings) -> dict[str, str]:
+    env: dict[str, str] = {
+        "PBI_AGENT_PROVIDER": settings.provider,
+        "PBI_AGENT_WS_URL": settings.ws_url,
+        "PBI_AGENT_MODEL": settings.model,
+        "PBI_AGENT_REASONING_EFFORT": settings.reasoning_effort,
+        "PBI_AGENT_MAX_TOOL_WORKERS": str(settings.max_tool_workers),
+        "PBI_AGENT_WS_MAX_RETRIES": str(settings.ws_max_retries),
+        "PBI_AGENT_COMPACT_THRESHOLD": str(settings.compact_threshold),
+        "PBI_AGENT_ANTHROPIC_MODEL": settings.anthropic_model,
+        "PBI_AGENT_ANTHROPIC_MAX_TOKENS": str(settings.anthropic_max_tokens),
+    }
+    if settings.api_key:
+        env["OPENAI_API_KEY"] = settings.api_key
+    if settings.anthropic_api_key:
+        env["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
+    return env
+
+
+def _handle_web_command(args: argparse.Namespace, settings: Settings) -> int:
+    if args.port < 1 or args.port > 65535:
+        print("Error: --port must be between 1 and 65535.", file=sys.stderr)
+        return 2
+
+    textual_cli = shutil.which("textual")
+    if textual_cli is None:
+        print(
+            "Error: `textual` command not found. Install textual-dev in this "
+            "environment to use `pbi-agent web`.",
+            file=sys.stderr,
+        )
+        return 2
+
+    chat_command: list[str] = [sys.executable, "-m", "pbi_agent"]
+    if settings.verbose:
+        chat_command.append("--verbose")
+    chat_command.append("chat")
+
+    serve_cmd: list[str] = [
+        textual_cli,
+        "serve",
+        "--command",
+        "--host",
+        args.host,
+        "--port",
+        str(args.port),
+    ]
+    if args.dev:
+        serve_cmd.append("--dev")
+    if args.title:
+        serve_cmd.extend(["--title", args.title])
+    if args.url:
+        serve_cmd.extend(["--url", args.url])
+    serve_cmd.append(subprocess.list2cmdline(chat_command))
+
+    env = os.environ.copy()
+    env.update(_settings_env(settings))
+
+    print(f"Serving web UI on http://{args.host}:{args.port}")
+    try:
+        completed = subprocess.run(serve_cmd, env=env, check=False)
+    except OSError as exc:
+        print(f"Error: failed to launch textual serve: {exc}", file=sys.stderr)
+        return 1
+    return completed.returncode
 
 
 # ---------------------------------------------------------------------------

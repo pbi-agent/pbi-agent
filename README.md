@@ -42,6 +42,13 @@ Start interactive mode:
 uv run pbi-agent chat
 ```
 
+Serve the chat app in a browser:
+
+```bash
+uv run pbi-agent web
+uv run pbi-agent web --host 0.0.0.0 --port 8000 --dev
+```
+
 Run report audit mode (writes `AUDIT-REPORT.md`):
 
 ```bash
@@ -71,6 +78,7 @@ uv run python main.py --help
 
 - `run --prompt "..."`: single-turn request.
 - `chat`: interactive REPL loop.
+- `web [--host <host>] [--port <port>] [--dev] [--title <name>] [--url <public_url>]`: run the Textual web server and open the chat UI in a browser.
 - `audit [--report-dir <path>]`: runs built-in audit prompt and writes `AUDIT-REPORT.md` to the target report directory.
 - `tools list`: list built-in and function tools.
 - `tools describe --name <tool_name>`: print a tool definition.
@@ -93,7 +101,7 @@ Precedence: **CLI args > environment variables > defaults**.
 
 ### Environment variables
 
-- `OPENAI_API_KEY` (required for `run`, `chat`, `audit`)
+- `OPENAI_API_KEY` (required for `run`, `chat`, `web`, `audit`)
 - `PBI_AGENT_MODEL`
 - `PBI_AGENT_WS_URL`
 - `PBI_AGENT_REASONING_EFFORT`
