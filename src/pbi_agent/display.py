@@ -64,6 +64,53 @@ def _escape_markup_text(text: str) -> str:
     return text.replace("[", r"\[")
 
 
+def _status_markup(
+    *,
+    success: bool | None = None,
+    timed_out: bool = False,
+    exit_code: int | None = None,
+) -> str:
+    if timed_out:
+        return "[yellow]timeout[/yellow]"
+    if success is not None:
+        return "[green]done[/green]" if success else "[red]FAILED[/red]"
+    if exit_code == 0:
+        return "[green]done[/green]"
+    return f"[red]exit {exit_code}[/red]"
+
+
+def _to_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _tool_style_key(tool_name: str) -> str:
+    normalized = tool_name.strip().lower()
+    mapping = {
+        "shell": "shell",
+        "apply_patch": "apply-patch",
+        "skill_knowledge": "skill-knowledge",
+        "init_report": "init-report",
+    }
+    return mapping.get(normalized, "generic")
+
+
+def _tool_group_class(tool_name: str) -> str:
+    return f"tool-group-{_tool_style_key(tool_name)}"
+
+
+def _tool_item_class(tool_name: str) -> str:
+    return f"tool-call-{_tool_style_key(tool_name)}"
+
+
 # ---------------------------------------------------------------------------
 # Custom widgets
 # ---------------------------------------------------------------------------
@@ -156,6 +203,14 @@ class ToolGroup(Collapsible):
 
 class ToolHeader(Static):
     """Header for a tool group."""
+
+
+@dataclass(slots=True)
+class ToolGroupEntry:
+    """Renderable entry inside a tool group."""
+
+    text: str
+    classes: str = ""
 
 
 class ToolItem(Static):
@@ -263,7 +318,10 @@ class Display:
         self._current_msg_id: str | None = None
         self._msg_counter = 0
         self._pending_group_label: str = ""
-        self._pending_group_items: list[str] = []
+        self._pending_group_items: list[ToolGroupEntry] = []
+        self._pending_group_classes: str = ""
+        self._pending_function_count: int = 0
+        self._pending_function_names: set[str] = set()
         self._input_event = threading.Event()
         self._input_value = ""
         self._shutdown = threading.Event()
@@ -296,6 +354,30 @@ class Display:
         """Called from the UI thread when user submits input."""
         self._input_value = value
         self._input_event.set()
+
+    def _start_tool_group(self, label: str, *, classes: str = "") -> None:
+        self._pending_group_label = label
+        self._pending_group_items = []
+        self._pending_group_classes = classes
+
+    def _append_tool_line(self, text: str, *, classes: str = "") -> None:
+        self._pending_group_items.append(ToolGroupEntry(text=text, classes=classes))
+
+    def _update_function_group_context(self, tool_name: str) -> None:
+        """Promote tool name to the top-level group title when possible."""
+        normalized = tool_name.strip() or "function"
+        self._pending_function_names.add(normalized)
+        count = self._pending_function_count or max(1, len(self._pending_group_items))
+
+        if len(self._pending_function_names) == 1:
+            self._pending_group_label = (
+                normalized if count == 1 else f"{normalized} ({count} calls)"
+            )
+            self._pending_group_classes = _tool_group_class(normalized)
+            return
+
+        self._pending_group_label = f"Tool calls ({count})"
+        self._pending_group_classes = "tool-group-mixed"
 
     # -- lifecycle ----------------------------------------------------------
 
@@ -478,8 +560,10 @@ class Display:
 
     def shell_start(self, commands: list[str]) -> None:
         n = len(commands)
-        self._pending_group_label = f"Running {n} shell command{'s' if n != 1 else ''}"
-        self._pending_group_items = []
+        self._start_tool_group(
+            f"Running {n} shell command{'s' if n != 1 else ''}",
+            classes=_tool_group_class("shell"),
+        )
 
     def shell_command(
         self,
@@ -491,29 +575,28 @@ class Display:
         working_directory: str = ".",
         timeout_ms: int | str = "default",
     ) -> None:
-        cmd_short = _escape_markup_text(_shorten(command, 72))
-        if timed_out:
-            status = "[yellow]timeout[/yellow]"
-        elif exit_code == 0:
-            status = "[green]done[/green]"
-        else:
-            status = f"[red]exit {exit_code}[/red]"
-
-        meta = ""
-        if self.verbose:
-            meta = (
-                f"  [dim]({_escape_markup_text(call_id)}) "
-                f"wd={_escape_markup_text(str(working_directory))} "
-                f"timeout_ms={_escape_markup_text(str(timeout_ms))}[/dim]"
-            )
-        text = f"[dim]$[/dim] {cmd_short}  {status}{meta}"
-        self._pending_group_items.append(text)
+        status = _status_markup(timed_out=timed_out, exit_code=exit_code)
+        cmd_short = _escape_markup_text(_shorten(command, 96))
+        wd_safe = _escape_markup_text(str(working_directory))
+        timeout_safe = _escape_markup_text(str(timeout_ms))
+        detail_lines = [f"[dim]$[/dim] {cmd_short}  {status}"]
+        detail_lines.append(
+            f"[dim]wd:[/dim] {wd_safe}  [dim]timeout_ms:[/dim] {timeout_safe}"
+        )
+        if self.verbose and call_id:
+            detail_lines.append(f"[dim]call_id:[/dim] {_escape_markup_text(call_id)}")
+        self._append_tool_line(
+            "\n".join(detail_lines),
+            classes=_tool_item_class("shell"),
+        )
 
     # -- tool: apply_patch --------------------------------------------------
 
     def patch_start(self, count: int) -> None:
-        self._pending_group_label = f"Editing {count} file{'s' if count != 1 else ''}"
-        self._pending_group_items = []
+        self._start_tool_group(
+            f"Editing {count} file{'s' if count != 1 else ''}",
+            classes=_tool_group_class("apply_patch"),
+        )
 
     def patch_result(
         self,
@@ -526,24 +609,28 @@ class Display:
     ) -> None:
         operation_safe = _escape_markup_text(operation)
         path_safe = _escape_markup_text(path)
-        icon = "[green]done[/green]" if success else "[red]FAILED[/red]"
-        extra = ""
-        if self.verbose:
-            extra = f"  [dim]({_escape_markup_text(call_id)})[/dim]"
-            if detail:
-                extra += f"  [dim]{_escape_markup_text(_shorten(detail, 100))}[/dim]"
-        elif not success and detail:
-            extra = f"  [dim]{_escape_markup_text(_shorten(detail, 60))}[/dim]"
-        text = f"{operation_safe} [bold]{path_safe}[/bold]  {icon}{extra}"
-        self._pending_group_items.append(text)
+        status = _status_markup(success=success)
+        detail_lines = [f"{operation_safe} [bold]{path_safe}[/bold]  {status}"]
+        if detail:
+            detail_lines.append(
+                f"[dim]detail:[/dim] {_escape_markup_text(_shorten(detail, 320))}"
+            )
+        if self.verbose and call_id:
+            detail_lines.append(f"[dim]call_id:[/dim] {_escape_markup_text(call_id)}")
+        self._append_tool_line(
+            "\n".join(detail_lines),
+            classes=_tool_item_class("apply_patch"),
+        )
 
     # -- tool: function -----------------------------------------------------
 
     def function_start(self, count: int) -> None:
-        self._pending_group_label = (
-            f"Calling {count} function{'s' if count != 1 else ''}"
+        self._pending_function_count = count
+        self._pending_function_names = set()
+        self._start_tool_group(
+            f"Tool call{'s' if count != 1 else ''}",
+            classes="tool-group-generic",
         )
-        self._pending_group_items = []
 
     def function_result(
         self,
@@ -554,16 +641,57 @@ class Display:
         arguments: Any = None,
     ) -> None:
         name_safe = _escape_markup_text(name)
-        icon = "[green]done[/green]" if success else "[red]FAILED[/red]"
+        status = _status_markup(success=success)
+        args = _to_dict(arguments)
+        self._update_function_group_context(name)
+
+        if name == "shell":
+            command = str(args.get("command", "")).strip() or "<missing command>"
+            command_short = _escape_markup_text(_shorten(command, 96))
+            wd_safe = _escape_markup_text(str(args.get("working_directory", ".")))
+            timeout_safe = _escape_markup_text(str(args.get("timeout_ms", "default")))
+            lines = [
+                f"[dim]$[/dim] {command_short}  {status}",
+                f"[dim]wd:[/dim] {wd_safe}  [dim]timeout_ms:[/dim] {timeout_safe}",
+            ]
+            if self.verbose and call_id:
+                lines.append(f"[dim]call_id:[/dim] {_escape_markup_text(call_id)}")
+            self._append_tool_line(
+                "\n".join(lines),
+                classes=_tool_item_class(name),
+            )
+            return
+
+        if name == "apply_patch":
+            operation = _escape_markup_text(
+                str(args.get("operation_type", "<missing operation_type>"))
+            )
+            path = _escape_markup_text(str(args.get("path", "<missing path>")))
+            lines = [
+                f"{operation} [bold]{_shorten(path, 96)}[/bold]  {status}",
+            ]
+            raw_diff = args.get("diff")
+            if isinstance(raw_diff, str) and raw_diff.strip():
+                diff_preview = _escape_markup_text(_shorten(raw_diff.strip(), 600))
+                lines.append("[dim]diff:[/dim]")
+                lines.append(diff_preview)
+            if self.verbose and call_id:
+                lines.append(f"[dim]call_id:[/dim] {_escape_markup_text(call_id)}")
+            self._append_tool_line(
+                "\n".join(lines),
+                classes=_tool_item_class(name),
+            )
+            return
+
         if self.verbose:
             args_str = _escape_markup_text(_shorten(_compact_json(arguments), 120))
             text = (
-                f"{name_safe}()  {icon}  [dim]({_escape_markup_text(call_id)}) "
+                f"{name_safe}()  {status}  [dim]({_escape_markup_text(call_id)}) "
                 f"args={args_str}[/dim]"
             )
         else:
-            text = f"{name_safe}()  {icon}"
-        self._pending_group_items.append(text)
+            text = f"{name_safe}()  {status}"
+        self._append_tool_line(text, classes=_tool_item_class(name))
 
     # -- tool group end (shared) -------------------------------------------
 
@@ -576,9 +704,13 @@ class Display:
                 gid,
                 self._pending_group_label,
                 list(self._pending_group_items),
+                group_classes=self._pending_group_classes,
             )
         self._pending_group_label = ""
         self._pending_group_items = []
+        self._pending_group_classes = ""
+        self._pending_function_count = 0
+        self._pending_function_names = set()
 
     # -- retries / errors ---------------------------------------------------
 
@@ -697,7 +829,25 @@ class ChatApp(App):
         height: auto;
         background: $boost;
         border: none;
-        border-left: thick $success;
+        border-left: thick #6B7280;
+    }
+    ToolGroup.tool-group-generic {
+        border-left: thick #6B7280;
+    }
+    ToolGroup.tool-group-mixed {
+        border-left: thick #8B5CF6;
+    }
+    ToolGroup.tool-group-shell {
+        border-left: thick #3B82F6;
+    }
+    ToolGroup.tool-group-apply-patch {
+        border-left: thick #F97316;
+    }
+    ToolGroup.tool-group-skill-knowledge {
+        border-left: thick #22C55E;
+    }
+    ToolGroup.tool-group-init-report {
+        border-left: thick #06B6D4;
     }
     ToolGroup > CollapsibleTitle {
         padding: 1 2;
@@ -707,7 +857,25 @@ class ChatApp(App):
         padding: 0 2;
     }
     ToolItem {
+        background: $surface;
+        border: none;
         padding-left: 2;
+        margin: 0 0 1 0;
+    }
+    ToolItem.tool-call-generic {
+        background: #6B7280 10%;
+    }
+    ToolItem.tool-call-shell {
+        background: #3B82F6 14%;
+    }
+    ToolItem.tool-call-apply-patch {
+        background: #F97316 14%;
+    }
+    ToolItem.tool-call-skill-knowledge {
+        background: #22C55E 14%;
+    }
+    ToolItem.tool-call-init-report {
+        background: #06B6D4 14%;
     }
 
     /* ---- thinking block ---- */
@@ -717,7 +885,7 @@ class ChatApp(App):
         height: auto;
         background: $boost;
         border: none;
-        border-left: thick $accent;
+        border-left: thick #64748B;
     }
     ThinkingBlock > CollapsibleTitle {
         padding: 1 2;
@@ -938,11 +1106,22 @@ class ChatApp(App):
         send_btn.disabled = True
 
     async def mount_tool_group(
-        self, group_id: str, label: str, items: list[str]
+        self,
+        group_id: str,
+        label: str,
+        items: list[ToolGroupEntry],
+        *,
+        group_classes: str = "",
     ) -> None:
         """Mount a complete tool group with all items in one DOM operation."""
-        children = [ToolItem(text) for text in items]
-        group = ToolGroup(*children, title=label, collapsed=True, id=group_id)
+        children = [ToolItem(item.text, classes=item.classes) for item in items]
+        group = ToolGroup(
+            *children,
+            title=label,
+            collapsed=True,
+            id=group_id,
+            classes=group_classes,
+        )
         chat_log = self.query_one("#chat-log", VerticalScroll)
         await chat_log.mount(group)
         chat_log.scroll_end(animate=False)
