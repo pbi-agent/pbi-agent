@@ -321,11 +321,19 @@ def _handle_web_command(args: argparse.Namespace, settings: Settings) -> int:
         print("Error: --port must be between 1 and 65535.", file=sys.stderr)
         return 2
 
-    textual_cli = shutil.which("textual")
+    python_dir = Path(sys.executable).parent
+    textual_candidates = [
+        python_dir / "textual.exe",
+        python_dir / "textual.cmd",
+        python_dir / "textual",
+    ]
+    textual_cli = next((str(path) for path in textual_candidates if path.exists()), None)
+    if textual_cli is None:
+        textual_cli = shutil.which("textual")
     if textual_cli is None:
         print(
-            "Error: `textual` command not found. Install textual-dev in this "
-            "environment to use `pbi-agent web`.",
+            "Error: `textual` command not found in the current runtime. Install "
+            "textual-dev in this environment to use `pbi-agent web`.",
             file=sys.stderr,
         )
         return 2
