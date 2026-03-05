@@ -8,6 +8,7 @@ from typing import Any
 #   (base_input, cache_write_5m, cache_write_1h, cache_hit, output)
 _MODEL_PRICING: dict[str, tuple[float, float, float, float, float]] = {
     "gpt-5.3-codex": (1.75, 1.75, 1.75, 0.175, 14.00),
+    "gpt-5.4-2026-03-05": (2.5, 2.5, 2.5, 0.25, 15.00),
     "claude-opus-4-6": (5.00, 6.25, 10.00, 0.50, 25.00),
     "claude-sonnet-4-6": (3.00, 3.75, 6.00, 0.30, 15.00),
 }

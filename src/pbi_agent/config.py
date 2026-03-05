@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 DEFAULT_WS_URL = "wss://api.openai.com/v1/responses"
-DEFAULT_MODEL = "gpt-5.3-codex"
+DEFAULT_MODEL = "gpt-5.4-2026-03-05"
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-6"
 DEFAULT_ANTHROPIC_MAX_TOKENS = 16384
 
