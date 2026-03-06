@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -44,6 +45,12 @@ class TokenUsage:
     output_tokens: int = 0
     reasoning_tokens: int = 0
     model: str = ""
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock,
+        init=False,
+        repr=False,
+        compare=False,
+    )
 
     @property
     def non_cached_input_tokens(self) -> int:
@@ -78,12 +85,26 @@ class TokenUsage:
         )
 
     def add(self, other: "TokenUsage") -> None:
-        self.input_tokens += other.input_tokens
-        self.cached_input_tokens += other.cached_input_tokens
-        self.cache_write_tokens += other.cache_write_tokens
-        self.cache_write_1h_tokens += other.cache_write_1h_tokens
-        self.output_tokens += other.output_tokens
-        self.reasoning_tokens += other.reasoning_tokens
+        other_snapshot = other.snapshot()
+        with self._lock:
+            self.input_tokens += other_snapshot.input_tokens
+            self.cached_input_tokens += other_snapshot.cached_input_tokens
+            self.cache_write_tokens += other_snapshot.cache_write_tokens
+            self.cache_write_1h_tokens += other_snapshot.cache_write_1h_tokens
+            self.output_tokens += other_snapshot.output_tokens
+            self.reasoning_tokens += other_snapshot.reasoning_tokens
+
+    def snapshot(self) -> "TokenUsage":
+        with self._lock:
+            return TokenUsage(
+                input_tokens=self.input_tokens,
+                cached_input_tokens=self.cached_input_tokens,
+                cache_write_tokens=self.cache_write_tokens,
+                cache_write_1h_tokens=self.cache_write_1h_tokens,
+                output_tokens=self.output_tokens,
+                reasoning_tokens=self.reasoning_tokens,
+                model=self.model,
+            )
 
 
 @dataclass(slots=True)

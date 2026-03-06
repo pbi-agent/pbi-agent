@@ -1,162 +1,275 @@
-# oai-ws / pbi-agent
+# pbi-agent
 
-`pbi-agent` is a local CLI foundation for a Power BI editing agent built on the **OpenAI Responses WebSocket API**.
+**A local CLI agent that creates, edits, and audits Power BI reports through natural language.**
 
-The project includes:
-- a websocket session loop for Responses API,
-- local tool execution (including parallel tool calls),
-- a bundled PBIP template scaffold,
-- and a skill knowledge base for Power BI editing guidance.
+`pbi-agent` turns plain English into production-ready Power BI reports. Instead of clicking through dozens of menus, you describe what you need and the agent handles the rest: scaffolding projects, building visuals, writing DAX measures, and running best-practice audits -- all from your terminal.
 
-It is still a foundation project: it provides the runtime and extensibility points, not a full end-user Power BI product.
+## Why pbi-agent?
 
-## Requirements
+Power BI development involves a large amount of repetitive, manual work: creating report structures, configuring visuals, writing measures, and enforcing best practices. `pbi-agent` eliminates that friction by letting you express intent in natural language and delegating the implementation to an LLM-powered agent that understands the Power BI project format (PBIP) natively.
+
+**What this means for developer productivity:**
+
+- **Minutes instead of hours** -- Scaffold a complete report project, add pages, and wire up visuals in a single conversation rather than navigating menus and property panels.
+- **Consistent quality** -- The built-in audit engine checks 90+ rules across modeling, performance, security, and DAX quality, catching issues that manual reviews miss.
+- **Lower barrier to entry** -- Junior developers and analysts can produce well-structured reports without deep Power BI expertise; the agent encodes best practices into every action it takes.
+- **Repeatable workflows** -- Single-turn prompts (`pbi-agent run`) integrate into scripts and CI pipelines, making report generation and auditing automatable.
+
+## Use Cases
+
+### 1. Create a full dashboard from a data file
+
+Drop a CSV (or any flat file) into your workspace and let the agent do the rest. It analyzes the data, imports it into the semantic model, creates measures, and builds a complete dashboard -- no manual configuration required:
+
+```bash
+pbi-agent init --dest ./sales-dashboard
+pbi-agent chat
+# > "Here is sales_data.csv. Analyze the file, import it into the model,
+#    and build a dashboard with a revenue trend line chart, a top-10
+#    products bar chart, and KPI cards for total revenue, order count,
+#    and average order value."
+```
+
+The agent will:
+
+1. Inspect the CSV to understand columns, data types, and cardinality.
+2. Import the file into the semantic model as a new table.
+3. Create DAX measures (total revenue, order count, average order value, etc.).
+4. Build report pages with the requested visuals, properly bound to the model.
+
+From a single file and one prompt, you get a working Power BI report ready to open in Power BI Desktop.
+
+> **Demo:** See this workflow in action -- [watch the video](<!-- TODO: insert demo video URL -->).
+
+### 2. Edit an existing report
+
+Point the agent at an existing PBIP directory and describe the changes you need:
+
+```bash
+pbi-agent chat
+# > "On the Sales page, replace the table visual with a clustered bar chart
+#    grouped by product category. Add a slicer for fiscal year."
+```
+
+The agent reads the report definition files, applies the edits, and preserves existing configuration.
+
+### 3. Audit a report for issues
+
+Run a comprehensive best-practice audit that checks 90+ rules across seven domains:
+
+```bash
+pbi-agent audit --report-dir ./my-report
+```
+
+The audit covers:
+
+| Domain | What it checks |
+|---|---|
+| Structure & Star Schema | Table relationships, fact/dimension separation |
+| Modeling & Naming | Conventions, data types, calculated columns |
+| Performance | Query folding, cardinality, aggregation patterns |
+| Security | RLS configuration, data exposure risks |
+| DAX Quality | Measure patterns, CALCULATE usage, time intelligence |
+| Metadata & Documentation | Descriptions, display folders, formatting |
+| Anti-Patterns | Hidden fields, unused objects, dead code |
+
+Output is written to `AUDIT-REPORT.md` (detailed findings with severity scores and a letter grade) and `AUDIT-TODO.md` (a progress checklist you can track).
+
+### 4. Single-turn scripting
+
+Run one-off prompts for automation or CI integration:
+
+```bash
+pbi-agent run --prompt "List all measures in the semantic model that lack descriptions."
+```
+
+### 5. Browser-based chat
+
+Serve the chat UI in a browser for a richer experience:
+
+```bash
+pbi-agent web --port 8000
+```
+
+## Prerequisites
 
 - Python **3.12+**
-- `OPENAI_API_KEY` set in your environment (default provider)
-- `ANTHROPIC_API_KEY` required when using `--provider anthropic`
-- Recommended: [`uv`](https://github.com/astral-sh/uv)
+- [`uv`](https://docs.astral.sh/uv/) (recommended) or `pip`
+- An LLM API key (see [Configuration](#configuration) below)
 
-## Install
+### Installing uv
+
+**macOS / Linux:**
 
 ```bash
-uv sync
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-## CLI quick start
+**Windows (PowerShell):**
 
-Show top-level help:
-
-```bash
-uv run pbi-agent --help
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Run one prompt turn:
+## Installation
+
+### From PyPI (recommended)
+
+Install the CLI globally so it can be called from any directory:
 
 ```bash
-uv run pbi-agent run --prompt "Summarize available tools."
+uv tool install pbi-agent
 ```
 
-Start interactive mode:
+Verify the installation:
 
 ```bash
-uv run pbi-agent chat
+pbi-agent --help
 ```
 
-Serve the chat app in a browser:
+### From source
 
 ```bash
-uv run pbi-agent web
-uv run pbi-agent web --host 0.0.0.0 --port 8000 --dev
+git clone https://github.com/<your-org>/pbi-agent.git
+cd pbi-agent
+uv tool install --reinstall .
 ```
 
-Run report audit mode (writes `AUDIT-REPORT.md`):
+This installs `pbi-agent` globally from the local checkout. Use `--reinstall` to overwrite a previous installation.
+
+## Quick Start
+
+1. Set your API key:
 
 ```bash
-uv run pbi-agent audit
+export OPENAI_API_KEY="sk-..."
+# or, for Anthropic:
+export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-Scaffold a PBIP report template in the current directory:
+2. Scaffold a new report:
 
 ```bash
-uv run pbi-agent init --dest . --force
+pbi-agent init --dest ./my-report
 ```
 
-Compatibility runner:
+3. Start a conversation:
 
 ```bash
-uv run python main.py --help
+pbi-agent chat
 ```
 
 ## Commands
 
-- `run --prompt "..."`: single-turn request.
-- `chat`: interactive REPL loop.
-- `web [--host <host>] [--port <port>] [--dev] [--title <name>] [--url <public_url>]`: run the Textual web server and open the chat UI in a browser.
-- `audit [--report-dir <path>]`: runs built-in audit prompt and writes `AUDIT-REPORT.md` to the target report directory.
-- `init [--dest <path>] [--force]`: copy bundled Power BI template assets.
+| Command | Description |
+|---|---|
+| `run --prompt "..."` | Execute a single prompt turn and exit |
+| `chat` | Interactive REPL session |
+| `web` | Serve the chat UI in a browser |
+| `audit` | Run a best-practice audit, writes `AUDIT-REPORT.md` |
+| `init` | Scaffold a new PBIP report from the bundled template |
+| `tools list` | List all registered tools |
+| `tools describe --name <tool>` | Show a tool's schema |
 
 ## Configuration
 
-Precedence: **CLI args > environment variables > defaults**.
-
-### CLI options
-
-- `--openai-api-key`
-- `--anthropic-api-key`
-- `--model`
-- `--max-tokens`
-- `--ws-url`
-- `--reasoning-effort` (`low|medium|high|xhigh`)
-- `--max-tool-workers`
-- `--ws-max-retries`
-- `--compact-threshold`
-- `--verbose`
+**Precedence:** CLI flags > environment variables > defaults.
 
 ### Environment variables
 
-- `OPENAI_API_KEY` (required by default provider)
-- `ANTHROPIC_API_KEY` (required when `--provider anthropic`)
-- `PBI_AGENT_MODEL`
-- `PBI_AGENT_MAX_TOKENS`
-- `PBI_AGENT_WS_URL`
-- `PBI_AGENT_REASONING_EFFORT`
-- `PBI_AGENT_MAX_TOOL_WORKERS`
-- `PBI_AGENT_WS_MAX_RETRIES`
-- `PBI_AGENT_COMPACT_THRESHOLD`
+| Variable | Description | Default |
+|---|---|---|
+| `OPENAI_API_KEY` | OpenAI API key (required for the default provider) | -- |
+| `ANTHROPIC_API_KEY` | Anthropic API key (required with `--provider anthropic`) | -- |
+| `PBI_AGENT_PROVIDER` | LLM provider (`openai` or `anthropic`) | `openai` |
+| `PBI_AGENT_MODEL` | Model override | `gpt-5.4-2026-03-05` |
+| `PBI_AGENT_MAX_TOKENS` | Max output tokens | `16384` |
+| `PBI_AGENT_REASONING_EFFORT` | Reasoning effort (`low`, `medium`, `high`, `xhigh`) | `xhigh` |
+| `PBI_AGENT_MAX_TOOL_WORKERS` | Parallel tool execution threads | `4` |
+| `PBI_AGENT_WS_MAX_RETRIES` | Retry count for transient failures | `2` |
+| `PBI_AGENT_COMPACT_THRESHOLD` | Context compaction token threshold | `150000` |
+| `PBI_AGENT_WS_URL` | Custom WebSocket endpoint | `wss://api.openai.com/v1/responses` |
+| `PBI_AGENT_RESPONSES_URL` | Custom HTTP Responses endpoint | derived from WS URL |
 
-## Tool model
+You can also place these in a `.env` file in your project root.
 
-At runtime, the agent advertises:
+### CLI flags
 
-- built-in tool types: `shell`, `apply_patch`
-- function tools from `src/pbi_agent/tools/registry.py`
+All environment variables have corresponding CLI flags. Run `pbi-agent --help` for the full list:
 
-Current bundled function tools include:
+```bash
+pbi-agent --provider anthropic --model claude-opus-4-6 chat
+```
 
-- `skill_knowledge`: loads local Power BI skill docs from `src/pbi_agent/skills/`
-- `init_report`: scaffolds the bundled report template
+## How It Works
 
-Tool calls returned by the model are executed locally and fed back into the websocket session until completion.
+`pbi-agent` connects to the OpenAI Responses WebSocket API (or Anthropic Messages API) and runs an agentic loop:
 
-## Security notes
+1. Your prompt is sent alongside the agent's system instructions and tool definitions.
+2. The model responds with text, reasoning, or tool calls.
+3. Tool calls are executed locally in parallel (shell commands, file patches, skill lookups, template scaffolding).
+4. Tool results are fed back to the model for the next turn.
+5. The loop continues until the model produces a final text response.
 
-- The `shell` runtime is workspace-confined and blocks path traversal via `working_directory`.
-- Even with confinement, treat shell execution as powerful and use trusted workspaces.
+### Built-in tools
+
+| Tool | Description |
+|---|---|
+| `shell` | Execute shell commands (workspace-confined, blocks path traversal) |
+| `apply_patch` | Create, update, or delete files via V4A diffs |
+| `skill_knowledge` | Retrieve Power BI knowledge from the bundled skill library (14 topics) |
+| `init_report` | Scaffold the PBIP template into a target directory |
+
+### Knowledge base
+
+The agent ships with 14 Power BI skill documents covering visual types, TMDL modeling, theme branding, filter propagation, and more. The agent consults these automatically before creating or editing visuals, ensuring correct JSON schemas and best practices.
+
+## Security Notes
+
+- The `shell` tool is confined to the workspace directory and rejects path traversal attempts.
+- Even with confinement, treat shell execution as powerful. Only run the agent in trusted workspaces.
+- Never commit `.env` files containing API keys to version control.
 
 ## Development
 
-Lint and format:
-
 ```bash
+# Lint and format
 uvx ruff check . --fix && uvx ruff format .
+
+# Run the CLI from source
+uv run pbi-agent --help
 ```
 
-Project-specific bootstrap command:
+## Project Layout
 
-```bash
-uv run pbi-agent init --dest . --force
 ```
-
-## Project layout
-
-```text
 .
-├─ README.md
-├─ pyproject.toml
-├─ main.py
-└─ src/
-   └─ pbi_agent/
-      ├─ cli.py
-      ├─ config.py
-      ├─ agent/        # websocket protocol/session + runtimes
-      ├─ tools/        # function tool specs + handlers
-      ├─ skills/       # Power BI skill markdown knowledge base
-      └─ report/       # bundled PBIP template assets
+├── pyproject.toml
+├── main.py                     # Compatibility entry point
+└── src/pbi_agent/
+    ├── cli.py                  # CLI parser and command handlers
+    ├── config.py               # Settings resolution (CLI > env > defaults)
+    ├── display.py              # Textual TUI chat application
+    ├── agent/
+    │   ├── session.py          # Agentic loop (single-turn and chat)
+    │   ├── protocol.py         # WebSocket protocol handling
+    │   ├── ws_client.py        # WebSocket client
+    │   ├── tool_runtime.py     # Parallel tool execution engine
+    │   ├── system_prompt.py    # Agent persona and instructions
+    │   └── audit_prompt.py     # 90+ rule audit prompt builder
+    ├── providers/
+    │   ├── openai_provider.py  # OpenAI Responses WebSocket provider
+    │   └── anthropic_provider.py # Anthropic Messages HTTP provider
+    ├── tools/
+    │   ├── registry.py         # Tool registration and format conversion
+    │   ├── shell.py            # Shell command execution
+    │   ├── apply_patch.py      # V4A diff-based file operations
+    │   ├── skill_knowledge.py  # Skill document retrieval
+    │   └── init_report.py      # PBIP template scaffolding
+    ├── skills/                 # 14 Power BI skill markdown documents
+    └── report/                 # Bundled PBIP template assets
 ```
 
-## Current limits
+## License
 
-- No automated test suite is configured yet.
-- Foundation-level implementation focused on CLI/runtime scaffolding.
-- Sessions are in-memory.
+See [LICENSE](LICENSE) for details.

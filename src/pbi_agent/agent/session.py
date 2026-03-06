@@ -51,6 +51,7 @@ def run_single_turn(
             display=display,
             session_usage=session_usage,
         )
+        provider.settle(timeout_seconds=0.3)
         elapsed = time.monotonic() - session_start
         display.session_usage(session_usage, elapsed)
         return AgentOutcome(

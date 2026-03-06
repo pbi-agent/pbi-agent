@@ -7,8 +7,13 @@ server-side via ``previous_response_id``.
 
 from __future__ import annotations
 
+import json
 import logging
+import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Any
 
 from pbi_agent.agent.protocol import (
@@ -34,6 +39,8 @@ from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
 
 _log = logging.getLogger(__name__)
+_USAGE_REFRESH_DELAYS_SECS = (0.0, 0.2, 0.5)
+_RETRIEVE_TIMEOUT_SECS = 3.0
 
 
 class OpenAIProvider(Provider):
@@ -45,6 +52,9 @@ class OpenAIProvider(Provider):
         self._previous_response_id: str | None = None
         self._tools = get_openai_tool_definitions()
         self._instructions = get_system_prompt()
+        self._deferred_usage_refresh: dict[str, Any] | None = None
+        self._usage_refresh_lock = threading.Lock()
+        self._pending_usage_refreshes: list[threading.Event] = []
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -60,6 +70,24 @@ class OpenAIProvider(Provider):
         if self._ws is not None:
             self._ws.close()
             self._ws = None
+
+    def settle(self, *, timeout_seconds: float = 0.0) -> None:
+        if timeout_seconds <= 0:
+            return
+
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            with self._usage_refresh_lock:
+                pending = [
+                    evt for evt in self._pending_usage_refreshes if not evt.is_set()
+                ]
+            if not pending:
+                return
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            pending[0].wait(timeout=remaining)
 
     # -- request_turn --------------------------------------------------------
 
@@ -151,6 +179,7 @@ class OpenAIProvider(Provider):
         last_error: Exception | None = None
 
         for attempt in range(max_retries + 1):
+            self._deferred_usage_refresh = None
             if attempt > 0:
                 display.retry_notice(attempt, max_retries)
                 self._ws.reconnect()
@@ -162,6 +191,10 @@ class OpenAIProvider(Provider):
                     waiting_message=_waiting_message_for_input_items(input_items),
                 )
                 session_usage.add(response.usage)
+                self._start_deferred_usage_refresh(
+                    display=display,
+                    session_usage=session_usage,
+                )
                 return response
             except RateLimitError as exc:
                 if attempt >= max_retries:
@@ -222,8 +255,11 @@ class OpenAIProvider(Provider):
                 elif event_type == "response.completed":
                     if stream_output:
                         display.stream_end()
+                    response_obj = event.get("response", {})
+                    if not isinstance(response_obj, dict):
+                        response_obj = {}
                     response = parse_completed_response(
-                        event.get("response", {}), streamed_text_parts
+                        response_obj, streamed_text_parts
                     )
                     # If we captured reasoning summary via streaming, and
                     # the completed-response parser also extracted it from
@@ -234,6 +270,12 @@ class OpenAIProvider(Provider):
                         response.reasoning_summary = "".join(
                             streamed_summary_parts
                         ).strip()
+                    self._refresh_usage_if_needed(
+                        response,
+                        response_obj=response_obj,
+                        streamed_text_parts=streamed_text_parts,
+                        display=display,
+                    )
                     return response
                 elif event_type == "error":
                     raise parse_error_event(event)
@@ -241,6 +283,165 @@ class OpenAIProvider(Provider):
             if stream_output:
                 display.stream_abort()
             raise
+
+    def _refresh_usage_if_needed(
+        self,
+        response: CompletedResponse,
+        *,
+        response_obj: dict[str, Any],
+        streamed_text_parts: list[str],
+        display: Display,
+    ) -> None:
+        """Backfill usage when streamed ``response.completed`` reports zeros.
+
+        The streamed completion event can arrive with a zeroed ``usage`` block
+        even though the persisted response later contains the final token
+        counts. In that case, retrieve the completed response by ID and replace
+        only the usage fields if a populated payload becomes available.
+        """
+        if _has_usage(response.usage):
+            return
+
+        response_id = response.response_id
+        if not response_id:
+            _log.debug("response.completed reported zero usage and omitted response id")
+            display.debug("response.completed reported zero usage with no response id")
+            return
+
+        _log.debug(
+            "response.completed reported zero usage for %s: %s",
+            response_id,
+            response_obj.get("usage"),
+        )
+        display.debug(
+            f"response.completed reported zero usage for {response_id}; "
+            "retrieving final response in background"
+        )
+
+        self._deferred_usage_refresh = {
+            "response": response,
+            "response_id": response_id,
+            "initial_usage": response.usage.snapshot(),
+            "streamed_text_parts": list(streamed_text_parts),
+        }
+
+    def _start_deferred_usage_refresh(
+        self,
+        *,
+        display: Display,
+        session_usage: TokenUsage,
+    ) -> None:
+        refresh_request = self._deferred_usage_refresh
+        self._deferred_usage_refresh = None
+        if not refresh_request:
+            return
+
+        refresh_done = threading.Event()
+        with self._usage_refresh_lock:
+            self._pending_usage_refreshes.append(refresh_done)
+        thread = threading.Thread(
+            target=self._refresh_usage_background,
+            kwargs={
+                **refresh_request,
+                "display": display,
+                "session_usage": session_usage,
+                "refresh_done": refresh_done,
+            },
+            name=f"usage-refresh-{refresh_request['response_id']}",
+            daemon=True,
+        )
+        thread.start()
+
+    def _refresh_usage_background(
+        self,
+        *,
+        response: CompletedResponse,
+        response_id: str,
+        initial_usage: TokenUsage,
+        streamed_text_parts: list[str],
+        display: Display,
+        session_usage: TokenUsage,
+        refresh_done: threading.Event,
+    ) -> None:
+        try:
+            for delay in _USAGE_REFRESH_DELAYS_SECS:
+                if delay > 0:
+                    time.sleep(delay)
+
+                refreshed_obj = self._retrieve_response_object(response_id)
+                if not refreshed_obj:
+                    continue
+
+                refreshed = parse_completed_response(refreshed_obj, streamed_text_parts)
+                if not _has_usage(refreshed.usage):
+                    continue
+
+                usage_delta = _usage_delta(refreshed.usage, initial_usage)
+                response.usage = refreshed.usage
+                if not response.reasoning_summary and refreshed.reasoning_summary:
+                    response.reasoning_summary = refreshed.reasoning_summary
+                if _has_usage(usage_delta):
+                    session_usage.add(usage_delta)
+                    display.usage_refresh(session_usage)
+                _log.debug(
+                    "Recovered usage for %s via responses.retrieve: in=%s out=%s",
+                    response_id,
+                    response.usage.input_tokens,
+                    response.usage.output_tokens,
+                )
+                display.debug(
+                    f"recovered usage for {response_id}: "
+                    f"{response.usage.total_tokens:,} tokens"
+                )
+                return
+        except Exception:
+            _log.debug(
+                "responses.retrieve usage refresh failed for %s",
+                response_id,
+                exc_info=True,
+            )
+        else:
+            _log.debug(
+                "responses.retrieve did not yield non-zero usage for %s after retries",
+                response_id,
+            )
+            display.debug(
+                f"usage remained unavailable for {response_id} after retrieve retries"
+            )
+        finally:
+            refresh_done.set()
+            with self._usage_refresh_lock:
+                if refresh_done in self._pending_usage_refreshes:
+                    self._pending_usage_refreshes.remove(refresh_done)
+
+    def _retrieve_response_object(self, response_id: str) -> dict[str, Any] | None:
+        """Fetch a persisted response object via the HTTPS Responses API."""
+        url = _response_retrieve_url(self._settings.responses_url, response_id)
+        req = urllib.request.Request(
+            url,
+            headers={"Authorization": f"Bearer {self._settings.api_key}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=_RETRIEVE_TIMEOUT_SECS) as resp:
+                payload = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            _log.debug(
+                "responses.retrieve failed for %s with HTTP %s",
+                response_id,
+                exc.code,
+            )
+            return None
+        except urllib.error.URLError as exc:
+            _log.debug("responses.retrieve failed for %s: %s", response_id, exc)
+            return None
+
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            _log.debug("responses.retrieve returned invalid JSON for %s", response_id)
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +462,46 @@ def _find_function_call(calls: list, call_id: str):  # type: ignore[type-arg]
         if c.call_id == call_id:
             return c
     return None
+
+
+def _has_usage(usage: TokenUsage) -> bool:
+    return any(
+        value > 0
+        for value in (
+            usage.input_tokens,
+            usage.cached_input_tokens,
+            usage.cache_write_tokens,
+            usage.cache_write_1h_tokens,
+            usage.output_tokens,
+            usage.reasoning_tokens,
+        )
+    )
+
+
+def _response_retrieve_url(responses_url: str, response_id: str) -> str:
+    parsed = urllib.parse.urlsplit(responses_url)
+    path = f"{parsed.path.rstrip('/')}/{urllib.parse.quote(response_id, safe='')}"
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment)
+    )
+
+
+def _usage_delta(newer: TokenUsage, older: TokenUsage) -> TokenUsage:
+    return TokenUsage(
+        input_tokens=max(newer.input_tokens - older.input_tokens, 0),
+        cached_input_tokens=max(
+            newer.cached_input_tokens - older.cached_input_tokens,
+            0,
+        ),
+        cache_write_tokens=max(newer.cache_write_tokens - older.cache_write_tokens, 0),
+        cache_write_1h_tokens=max(
+            newer.cache_write_1h_tokens - older.cache_write_1h_tokens,
+            0,
+        ),
+        output_tokens=max(newer.output_tokens - older.output_tokens, 0),
+        reasoning_tokens=max(newer.reasoning_tokens - older.reasoning_tokens, 0),
+        model=newer.model or older.model,
+    )
 
 
 def _waiting_message_for_input_items(input_items: list[dict[str, Any]]) -> str:

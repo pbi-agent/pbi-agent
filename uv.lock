@@ -519,8 +519,8 @@ wheels = [
 ]
 
 [[package]]
-name = "oai-ws"
-version = "0.3.2"
+name = "pbi-agent"
+version = "0.3.4"
 source = { editable = "." }
 dependencies = [
     { name = "python-dotenv" },

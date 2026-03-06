@@ -64,6 +64,45 @@ def _escape_markup_text(text: str) -> str:
     return text.replace("[", r"\[")
 
 
+def _format_usage_summary(
+    usage: TokenUsage,
+    *,
+    elapsed_seconds: float | None = None,
+    label: str | None = None,
+) -> str:
+    total = f"{usage.total_tokens:,}"
+    inp = f"{usage.input_tokens:,}"
+    cached = f"{usage.cached_input_tokens:,}"
+    cache_w = usage.cache_write_tokens + usage.cache_write_1h_tokens
+    out = f"{usage.output_tokens:,}"
+    cost = f"${usage.estimated_cost_usd:.3f}"
+    cache_detail = f"{cached} cached"
+    if cache_w:
+        cache_detail += f" [dim]\u00b7[/dim] {cache_w:,} cache-write"
+    out_detail = f"{out} out"
+    if usage.reasoning_tokens:
+        out_detail += f" [dim]\u00b7[/dim] {usage.reasoning_tokens:,} reasoning"
+    parts = [
+        f"[dim]{total} tokens[/dim]  "
+        f"({inp} in [dim]\u00b7[/dim] {cache_detail} [dim]\u00b7[/dim] {out_detail})",
+        cost,
+    ]
+    if elapsed_seconds is not None:
+        total_secs = int(elapsed_seconds)
+        hours, remainder = divmod(total_secs, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        time_str = (
+            f"{hours}:{minutes:02d}:{seconds:02d}"
+            if hours > 0
+            else f"{minutes}:{seconds:02d}"
+        )
+        parts.append(time_str)
+    body = "  [dim]|[/dim]  ".join(parts)
+    if label:
+        return f"[dim]{label}[/dim]  {body}"
+    return body
+
+
 def _status_markup(
     *,
     success: bool | None = None,
@@ -527,33 +566,19 @@ class Display:
 
     def session_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:
         """Show cumulative session usage and estimated cost."""
-        total_secs = int(elapsed_seconds)
-        hours, remainder = divmod(total_secs, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        time_str = (
-            f"{hours}:{minutes:02d}:{seconds:02d}"
-            if hours > 0
-            else f"{minutes}:{seconds:02d}"
-        )
-        total = f"{usage.total_tokens:,}"
-        inp = f"{usage.input_tokens:,}"
-        cached = f"{usage.cached_input_tokens:,}"
-        cache_w = usage.cache_write_tokens + usage.cache_write_1h_tokens
-        out = f"{usage.output_tokens:,}"
-        cost = f"${usage.estimated_cost_usd:.3f}"
-        cache_detail = f"{cached} cached"
-        if cache_w:
-            cache_detail += f" [dim]\u00b7[/dim] {cache_w:,} cache-write"
-        out_detail = f"{out} out"
-        if usage.reasoning_tokens:
-            out_detail += f" [dim]\u00b7[/dim] {usage.reasoning_tokens:,} reasoning"
-        text = (
-            f"[dim]{total} tokens[/dim]  "
-            f"({inp} in [dim]\u00b7[/dim] {cache_detail} [dim]\u00b7[/dim] {out_detail})"
-            f"  [dim]|[/dim]  {cost}"
-            f"  [dim]|[/dim]  {time_str}"
+        usage_snapshot = usage.snapshot()
+        text = _format_usage_summary(
+            usage_snapshot,
+            elapsed_seconds=elapsed_seconds,
         )
         uid = self._next_id("usage")
+        self._safe_call(self.app.mount_widget, UsageSummary(text, id=uid))
+
+    def usage_refresh(self, usage: TokenUsage) -> None:
+        """Show a late usage correction from an async provider refresh."""
+        usage_snapshot = usage.snapshot()
+        text = _format_usage_summary(usage_snapshot, label="Usage updated")
+        uid = self._next_id("usage-refresh")
         self._safe_call(self.app.mount_widget, UsageSummary(text, id=uid))
 
     # -- tool: shell --------------------------------------------------------

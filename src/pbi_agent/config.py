@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import urllib.parse
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
 DEFAULT_WS_URL = "wss://api.openai.com/v1/responses"
+DEFAULT_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_MODEL = "gpt-5.4-2026-03-05"
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-6"
 DEFAULT_ANTHROPIC_MAX_TOKENS = 16384
@@ -20,6 +22,7 @@ class ConfigError(ValueError):
 class Settings:
     api_key: str
     ws_url: str = DEFAULT_WS_URL
+    responses_url: str = DEFAULT_RESPONSES_URL
     model: str = DEFAULT_MODEL
     verbose: bool = False
     max_tool_workers: int = 4
@@ -63,6 +66,7 @@ class Settings:
             "provider": self.provider,
             "api_key": redact_secret(self.api_key),
             "ws_url": self.ws_url,
+            "responses_url": self.responses_url,
             "model": self.model,
             "verbose": self.verbose,
             "max_tool_workers": self.max_tool_workers,
@@ -82,6 +86,17 @@ def redact_secret(value: str) -> str:
     return f"{value[:4]}...{value[-4:]}"
 
 
+def _default_responses_url(ws_url: str) -> str:
+    parsed = urllib.parse.urlsplit(ws_url)
+    scheme = {"ws": "http", "wss": "https"}.get(
+        parsed.scheme,
+        parsed.scheme or "https",
+    )
+    return urllib.parse.urlunsplit(
+        (scheme, parsed.netloc, parsed.path, parsed.query, "")
+    )
+
+
 def resolve_settings(args: argparse.Namespace) -> Settings:
     load_dotenv()
 
@@ -98,6 +113,10 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     )
     api_key = openai_api_key if provider == "openai" else anthropic_api_key
     ws_url = args.ws_url or os.getenv("PBI_AGENT_WS_URL") or DEFAULT_WS_URL
+    responses_url_override = getattr(args, "responses_url", None) or os.getenv(
+        "PBI_AGENT_RESPONSES_URL"
+    )
+    responses_url = responses_url_override or _default_responses_url(ws_url)
     model_override = args.model or os.getenv("PBI_AGENT_MODEL")
     model = model_override or DEFAULT_MODEL
     max_tool_workers = args.max_tool_workers
@@ -130,6 +149,7 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     return Settings(
         api_key=api_key,
         ws_url=ws_url,
+        responses_url=responses_url,
         model=model,
         verbose=bool(args.verbose),
         max_tool_workers=max_tool_workers,

@@ -43,6 +43,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--ws-url", help="Override Responses API websocket URL."
     )
     provider_group.add_argument(
+        "--responses-url",
+        help="Override OpenAI Responses HTTP API URL.",
+    )
+    provider_group.add_argument(
         "--openai-api-key",
         help="Override OPENAI_API_KEY.",
     )
@@ -301,6 +305,7 @@ def _settings_env(settings: Settings) -> dict[str, str]:
     env: dict[str, str] = {
         "PBI_AGENT_PROVIDER": settings.provider,
         "PBI_AGENT_WS_URL": settings.ws_url,
+        "PBI_AGENT_RESPONSES_URL": settings.responses_url,
         "PBI_AGENT_MODEL": selected_model,
         "PBI_AGENT_REASONING_EFFORT": settings.reasoning_effort,
         "PBI_AGENT_MAX_TOOL_WORKERS": str(settings.max_tool_workers),

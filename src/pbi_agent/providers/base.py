@@ -58,6 +58,9 @@ class Provider(ABC):
         to be passed back via :meth:`request_turn`.
         """
 
+    def settle(self, *, timeout_seconds: float = 0.0) -> None:
+        """Allow providers with background work to briefly flush it."""
+
     # -- context manager convenience ----------------------------------------
 
     def __enter__(self) -> Provider:
