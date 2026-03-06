@@ -121,18 +121,25 @@ def parse_completed_response(
 ) -> CompletedResponse:
     text_parts: list[str] = []
     reasoning_summary_parts: list[str] = []
+    reasoning_content_parts: list[str] = []
     function_calls: list[ToolCall] = []
 
     for item in response_obj.get("output", []):
         item_type = item.get("type")
 
         if item_type == "reasoning":
-            # Extract summary text(s) from the reasoning output item.
+            # Extract summary text(s) and detailed reasoning text(s) from the
+            # reasoning output item.
             for summary_entry in item.get("summary", []):
                 if summary_entry.get("type") == "summary_text":
                     summary_text = summary_entry.get("text", "")
                     if summary_text:
                         reasoning_summary_parts.append(summary_text)
+            for content_entry in item.get("content", []):
+                if content_entry.get("type") == "reasoning_text":
+                    reasoning_text = content_entry.get("text", "")
+                    if reasoning_text:
+                        reasoning_content_parts.append(reasoning_text)
         elif item_type == "message":
             for part in item.get("content", []):
                 if part.get("type") == "output_text":
@@ -183,11 +190,17 @@ def parse_completed_response(
             reasoning_tokens = int(output_details.get("reasoning_tokens", 0) or 0)
 
     final_text = "".join(text_parts).strip() or "".join(streamed_text_parts).strip()
-    reasoning_summary = "\n\n".join(reasoning_summary_parts).strip()
+    reasoning_summary = "\n\n".join(reasoning_summary_parts)
+    if not reasoning_summary.strip():
+        reasoning_summary = ""
+    reasoning_content = "\n\n".join(reasoning_content_parts)
+    if not reasoning_content.strip():
+        reasoning_content = ""
     return CompletedResponse(
         response_id=response_obj.get("id"),
         text=final_text,
         reasoning_summary=reasoning_summary,
+        reasoning_content=reasoning_content,
         usage=TokenUsage(
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,

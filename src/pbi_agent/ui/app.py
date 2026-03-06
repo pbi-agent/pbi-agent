@@ -21,6 +21,8 @@ from pbi_agent.ui.styles import CHAT_APP_CSS
 from pbi_agent.ui.widgets import (
     AssistantMarkdown,
     ChatInput,
+    ThinkingBlock,
+    ThinkingContent,
     ToolGroup,
     ToolGroupEntry,
     ToolItem,
@@ -180,6 +182,40 @@ class ChatApp(App):
         if widget is None:
             return
         await widget.update(text)
+        self._scroll_chat_end()
+
+    async def mount_thinking_block(
+        self,
+        block_id: str,
+        title: str,
+        text: str = "",
+    ) -> None:
+        block = ThinkingBlock(
+            ThinkingContent(text, id=f"{block_id}-content"),
+            title=title,
+            collapsed=True,
+            id=block_id,
+        )
+        await self._chat_log().mount(block)
+        self._scroll_chat_end()
+
+    async def update_thinking_block(
+        self,
+        block_id: str,
+        title: str,
+        text: str | None = None,
+    ) -> None:
+        block = self._query_optional(f"#{block_id}", ThinkingBlock)
+        content = self._query_optional(f"#{block_id}-content", ThinkingContent)
+        if block is None:
+            await self.mount_thinking_block(block_id, title, text or "")
+            return
+        block.title = title
+        if content is None:
+            self._scroll_chat_end()
+            return
+        if text is not None:
+            await content.update(text)
         self._scroll_chat_end()
 
     def update_usage_summary(self, widget_id: str, text: str) -> None:

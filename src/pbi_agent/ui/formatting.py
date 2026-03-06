@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from pbi_agent import __version__
@@ -15,6 +16,7 @@ TOOL_STYLE_MAP = {
     "init_report": "init-report",
 }
 REDACTED_THINKING_NOTICE = "[dim]Some thinking was encrypted for safety reasons.[/dim]"
+_MARKDOWN_DECORATION_RE = re.compile(r"[*_`~]+")
 
 
 def shorten(text: str, limit: int = 80) -> str:
@@ -33,6 +35,23 @@ def compact_json(value: Any) -> str:
 def escape_markup_text(text: str) -> str:
     """Escape literal '[' so dynamic values can't break Rich markup parsing."""
     return text.replace("[", r"\[")
+
+
+def format_reasoning_title(
+    summary: str, *, fallback: str = "Thinking...", limit: int = 96
+) -> str:
+    normalized = summary.strip()
+    if not normalized:
+        return fallback
+    normalized = next(
+        (line.strip() for line in normalized.splitlines() if line.strip()),
+        "",
+    )
+    if not normalized:
+        return fallback
+    normalized = _MARKDOWN_DECORATION_RE.sub("", normalized)
+    normalized = normalized.lstrip("#>- ")
+    return shorten(normalized, limit)
 
 
 def format_usage_summary(
@@ -126,6 +145,7 @@ __all__ = [
     "REDACTED_THINKING_NOTICE",
     "compact_json",
     "escape_markup_text",
+    "format_reasoning_title",
     "format_session_subtitle",
     "format_usage_summary",
     "shorten",

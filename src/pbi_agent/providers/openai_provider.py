@@ -234,6 +234,8 @@ class OpenAIProvider(Provider):
 
         streamed_text_parts: list[str] = []
         streamed_summary_parts: list[str] = []
+        streamed_reasoning_parts: list[str] = []
+        thinking_widget_id: str | None = None
         if stream_output:
             display.wait_start(waiting_message)
 
@@ -247,11 +249,39 @@ class OpenAIProvider(Provider):
                     if delta:
                         streamed_summary_parts.append(delta)
                 elif event_type == "response.reasoning_summary_text.done":
-                    # Summary streaming finished – render the complete
-                    # reasoning summary as a collapsible thinking block.
-                    summary_text = "".join(streamed_summary_parts).strip()
-                    if summary_text and stream_output:
-                        display.render_thinking(summary_text)
+                    summary_text = "".join(streamed_summary_parts)
+                    if summary_text.strip() and stream_output:
+                        thinking_widget_id = display.render_thinking(
+                            _reasoning_body_text("", summary_text),
+                            title=summary_text,
+                            replace_existing=True,
+                            widget_id=thinking_widget_id,
+                        )
+                elif event_type == "response.reasoning_text.delta":
+                    delta = event.get("delta", "")
+                    if delta:
+                        streamed_reasoning_parts.append(delta)
+                        summary_text = "".join(streamed_summary_parts)
+                        if summary_text.strip() and stream_output:
+                            thinking_widget_id = display.render_thinking(
+                                _reasoning_body_text(
+                                    "".join(streamed_reasoning_parts),
+                                    summary_text,
+                                ),
+                                title=summary_text,
+                                replace_existing=True,
+                                widget_id=thinking_widget_id,
+                            )
+                elif event_type == "response.reasoning_text.done":
+                    summary_text = "".join(streamed_summary_parts)
+                    reasoning_text = "".join(streamed_reasoning_parts)
+                    if summary_text.strip() and stream_output:
+                        thinking_widget_id = display.render_thinking(
+                            _reasoning_body_text(reasoning_text, summary_text),
+                            title=summary_text,
+                            replace_existing=True,
+                            widget_id=thinking_widget_id,
+                        )
                 elif event_type == "response.output_text.delta":
                     delta = event.get("delta", "")
                     if delta:
@@ -259,28 +289,38 @@ class OpenAIProvider(Provider):
                         if stream_output:
                             display.stream_delta(delta)
                 elif event_type == "response.completed":
-                    if stream_output:
-                        display.stream_end()
                     response_obj = event.get("response", {})
                     if not isinstance(response_obj, dict):
                         response_obj = {}
                     response = parse_completed_response(
                         response_obj, streamed_text_parts
                     )
-                    # If we captured reasoning summary via streaming, and
-                    # the completed-response parser also extracted it from
-                    # the full payload, the parser's version is canonical.
-                    # But if it's empty (e.g. the payload omitted it),
-                    # fall back to what we streamed.
-                    if not response.reasoning_summary and streamed_summary_parts:
-                        response.reasoning_summary = "".join(
-                            streamed_summary_parts
-                        ).strip()
+                    streamed_summary_text = "".join(streamed_summary_parts)
+                    if not response.reasoning_summary and streamed_summary_text.strip():
+                        response.reasoning_summary = streamed_summary_text
+                    streamed_reasoning_text = "".join(streamed_reasoning_parts)
+                    if (
+                        not response.reasoning_content
+                        and streamed_reasoning_text.strip()
+                    ):
+                        response.reasoning_content = streamed_reasoning_text
+                    if stream_output:
+                        summary_text = response.reasoning_summary
+                        reasoning_text = response.reasoning_content
+                        if summary_text.strip() or reasoning_text.strip():
+                            thinking_widget_id = display.render_thinking(
+                                _reasoning_body_text(reasoning_text, summary_text),
+                                title=summary_text or None,
+                                replace_existing=True,
+                                widget_id=thinking_widget_id,
+                            )
+                        display.stream_end()
                     self._refresh_usage_if_needed(
                         response,
                         response_obj=response_obj,
                         streamed_text_parts=streamed_text_parts,
                         display=display,
+                        thinking_widget_id=thinking_widget_id,
                     )
                     return response
                 elif event_type == "error":
@@ -297,6 +337,7 @@ class OpenAIProvider(Provider):
         response_obj: dict[str, Any],
         streamed_text_parts: list[str],
         display: Display,
+        thinking_widget_id: str | None,
     ) -> None:
         """Backfill usage when streamed ``response.completed`` reports zeros.
 
@@ -329,6 +370,7 @@ class OpenAIProvider(Provider):
             "response_id": response_id,
             "initial_usage": response.usage.snapshot(),
             "streamed_text_parts": list(streamed_text_parts),
+            "thinking_widget_id": thinking_widget_id,
         }
 
     def _start_deferred_usage_refresh(
@@ -367,6 +409,7 @@ class OpenAIProvider(Provider):
         response_id: str,
         initial_usage: TokenUsage,
         streamed_text_parts: list[str],
+        thinking_widget_id: str | None,
         display: Display,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
@@ -387,8 +430,22 @@ class OpenAIProvider(Provider):
 
                 usage_delta = _usage_delta(refreshed.usage, initial_usage)
                 response.usage = refreshed.usage
+                reasoning_updated = False
                 if not response.reasoning_summary and refreshed.reasoning_summary:
                     response.reasoning_summary = refreshed.reasoning_summary
+                    reasoning_updated = True
+                if not response.reasoning_content and refreshed.reasoning_content:
+                    response.reasoning_content = refreshed.reasoning_content
+                    reasoning_updated = True
+                if reasoning_updated:
+                    thinking_widget_id = display.render_thinking(
+                        _reasoning_body_text(
+                            response.reasoning_content,
+                            response.reasoning_summary,
+                        ),
+                        title=response.reasoning_summary or None,
+                        widget_id=thinking_widget_id,
+                    )
                 if _has_usage(usage_delta):
                     session_usage.add(usage_delta)
                     turn_usage.add(usage_delta)
@@ -472,6 +529,29 @@ def _find_function_call(calls: list, call_id: str):  # type: ignore[type-arg]
         if c.call_id == call_id:
             return c
     return None
+
+
+def _reasoning_body_text(reasoning_text: str, summary_text: str) -> str | None:
+    if reasoning_text.strip():
+        return reasoning_text
+    body = _summary_body_text(summary_text)
+    return body if body.strip() else None
+
+
+def _summary_body_text(summary_text: str) -> str:
+    lines = summary_text.splitlines()
+    first_non_empty_index = next(
+        (idx for idx, line in enumerate(lines) if line.strip()),
+        None,
+    )
+    if first_non_empty_index is None:
+        return ""
+    remaining_non_empty = any(
+        line.strip() for line in lines[first_non_empty_index + 1 :]
+    )
+    if not remaining_non_empty:
+        return ""
+    return "\n".join(lines[first_non_empty_index + 1 :]).lstrip("\r\n")
 
 
 def _has_usage(usage: TokenUsage) -> bool:

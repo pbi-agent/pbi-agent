@@ -16,6 +16,7 @@ from pbi_agent.ui.formatting import (
     REDACTED_THINKING_NOTICE,
     compact_json,
     escape_markup_text,
+    format_reasoning_title,
     format_session_subtitle,
     format_usage_summary,
     shorten,
@@ -28,8 +29,6 @@ from pbi_agent.ui.widgets import (
     AssistantMarkdown,
     ErrorMessage,
     NoticeMessage,
-    ThinkingBlock,
-    ThinkingContent,
     ToolGroupEntry,
     UsageSummary,
     WaitingIndicator,
@@ -119,6 +118,7 @@ class Display:
         self.verbose = verbose
         self._stream = _StreamState()
         self._waiting_widget_id: str | None = None
+        self._active_thinking_widget_id: str | None = None
         self._msg_counter = 0
         self._tool_group = _PendingToolGroup()
         self._input_event = threading.Event()
@@ -289,6 +289,7 @@ class Display:
     def wait_start(self, message: str = "model is processing your request...") -> None:
         if self._waiting_widget_id is not None:
             return
+        self._active_thinking_widget_id = None
         widget_id = self._next_id("think")
         self._waiting_widget_id = widget_id
         self._safe_call(
@@ -331,21 +332,44 @@ class Display:
         self.wait_stop()
         if self._stream.widget_id:
             self._safe_call(self.app.remove_widget, self._stream.widget_id)
+        if self._active_thinking_widget_id:
+            self._safe_call(self.app.remove_widget, self._active_thinking_widget_id)
+            self._active_thinking_widget_id = None
         self._stream.reset()
 
     def render_markdown(self, text: str) -> None:
         self._mount_markdown("md", text)
 
-    def render_thinking(self, text: str) -> None:
-        widget_id = self._next_id("thinking")
-        content_widget = ThinkingContent(text, id=f"{widget_id}-content")
-        block = ThinkingBlock(
-            content_widget,
-            title="Thinking\u2026",
-            collapsed=True,
-            id=widget_id,
+    def render_thinking(
+        self,
+        text: str | None = None,
+        *,
+        title: str | None = None,
+        replace_existing: bool = False,
+        widget_id: str | None = None,
+    ) -> str | None:
+        body = text if text is not None else None
+        summary = title or ""
+        has_body = body is not None and bool(body.strip())
+        if not has_body and not summary.strip():
+            return None
+
+        widget_title = format_reasoning_title(summary)
+        resolved_widget_id = widget_id
+        if resolved_widget_id is None and replace_existing:
+            resolved_widget_id = self._active_thinking_widget_id
+        if resolved_widget_id is None:
+            resolved_widget_id = self._next_id("thinking")
+        if replace_existing:
+            self._active_thinking_widget_id = resolved_widget_id
+
+        self._safe_call(
+            self.app.update_thinking_block,
+            resolved_widget_id,
+            widget_title,
+            body,
         )
-        self._safe_call(self.app.mount_widget, block)
+        return resolved_widget_id
 
     def render_redacted_thinking(self) -> None:
         self._mount_static_message(

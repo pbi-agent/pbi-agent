@@ -122,6 +122,8 @@ class CompletedResponse:
     function_calls: list[ToolCall] = field(default_factory=list)
     # Reasoning summary text extracted from OpenAI ``reasoning`` output items.
     reasoning_summary: str = ""
+    # Detailed reasoning text extracted from OpenAI ``reasoning.content`` items.
+    reasoning_content: str = ""
     # Provider-specific opaque data (e.g. raw Anthropic content blocks for
     # history replay).  The session layer never inspects this; only the
     # provider that created the response uses it.
