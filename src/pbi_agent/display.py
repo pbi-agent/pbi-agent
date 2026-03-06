@@ -103,6 +103,13 @@ def _format_usage_summary(
     return body
 
 
+def _format_session_subtitle(usage: TokenUsage) -> str:
+    return (
+        f"v{__version__} \u00b7 Session {usage.total_tokens:,} tokens "
+        f"\u00b7 ${usage.estimated_cost_usd:.3f}"
+    )
+
+
 def _status_markup(
     *,
     success: bool | None = None,
@@ -345,7 +352,7 @@ class Display:
     # Minimum interval (seconds) between Markdown widget updates during
     # streaming.  Each update re-parses the full accumulated text, so
     # throttling prevents O(n^2) Markdown rendering as messages grow.
-    _STREAM_THROTTLE_SECS: float = 0.05  # 50 ms
+    _STREAM_THROTTLE_SECS: float = 0.25  # 250 ms
 
     def __init__(self, app: ChatApp, *, verbose: bool = False) -> None:
         self.app = app
@@ -364,6 +371,8 @@ class Display:
         self._input_event = threading.Event()
         self._input_value = ""
         self._shutdown = threading.Event()
+        self._turn_usage_widgets: dict[int, tuple[TokenUsage, str, float]] = {}
+        self._turn_usage_lock = threading.Lock()
 
     # -- internal helpers ---------------------------------------------------
 
@@ -564,22 +573,44 @@ class Display:
             ),
         )
 
-    def session_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:
-        """Show cumulative session usage and estimated cost."""
+    def session_usage(self, usage: TokenUsage) -> None:
+        """Update the header with cumulative session usage."""
         usage_snapshot = usage.snapshot()
-        text = _format_usage_summary(
-            usage_snapshot,
-            elapsed_seconds=elapsed_seconds,
+        self._safe_call(
+            self.app.update_session_header,
+            _format_session_subtitle(usage_snapshot),
         )
-        uid = self._next_id("usage")
-        self._safe_call(self.app.mount_widget, UsageSummary(text, id=uid))
 
-    def usage_refresh(self, usage: TokenUsage) -> None:
-        """Show a late usage correction from an async provider refresh."""
-        usage_snapshot = usage.snapshot()
-        text = _format_usage_summary(usage_snapshot, label="Usage updated")
-        uid = self._next_id("usage-refresh")
+    def turn_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:
+        """Show usage for a single turn in the transcript."""
+        uid = self._next_id("usage")
+        with self._turn_usage_lock:
+            self._turn_usage_widgets[id(usage)] = (usage, uid, elapsed_seconds)
+        text = _format_usage_summary(
+            usage.snapshot(),
+            elapsed_seconds=elapsed_seconds,
+            label="Turn",
+        )
         self._safe_call(self.app.mount_widget, UsageSummary(text, id=uid))
+        self._refresh_turn_usage_widget(usage)
+
+    def usage_refresh(self, session_usage: TokenUsage, turn_usage: TokenUsage) -> None:
+        """Apply a late usage correction without adding extra transcript rows."""
+        self.session_usage(session_usage)
+        self._refresh_turn_usage_widget(turn_usage)
+
+    def _refresh_turn_usage_widget(self, usage: TokenUsage) -> None:
+        with self._turn_usage_lock:
+            target = self._turn_usage_widgets.get(id(usage))
+        if target is None:
+            return
+        _, widget_id, elapsed_seconds = target
+        text = _format_usage_summary(
+            usage.snapshot(),
+            elapsed_seconds=elapsed_seconds,
+            label="Turn",
+        )
+        self._safe_call(self.app.update_usage_summary, widget_id, text)
 
     # -- tool: shell --------------------------------------------------------
 
@@ -793,7 +824,7 @@ class ChatApp(App):
     """Textual TUI for PBI Agent."""
 
     TITLE = "PBI Agent"
-    SUB_TITLE = f"v{__version__}  \u00b7  Power BI Report Assistant"
+    SUB_TITLE = _format_session_subtitle(TokenUsage())
 
     CSS = """
     Screen {
@@ -1114,6 +1145,19 @@ class ChatApp(App):
             self.query_one("#chat-log", VerticalScroll).scroll_end(animate=False)
         except Exception:
             pass
+
+    def update_usage_summary(self, widget_id: str, text: str) -> None:
+        """Update the content of a usage summary widget."""
+        try:
+            widget = self.query_one(f"#{widget_id}", UsageSummary)
+            widget.update(text)
+            self.query_one("#chat-log", VerticalScroll).scroll_end(animate=False)
+        except Exception:
+            pass
+
+    def update_session_header(self, sub_title: str) -> None:
+        """Refresh the app header subtitle with session totals."""
+        self.sub_title = sub_title
 
     def enable_input(self) -> None:
         """Enable the input field and give it focus."""

@@ -34,6 +34,7 @@ class Provider(ABC):
         instructions: str | None = None,
         display: Display,
         session_usage: TokenUsage,
+        turn_usage: TokenUsage,
     ) -> CompletedResponse:
         """Send a turn and return the model response.
 

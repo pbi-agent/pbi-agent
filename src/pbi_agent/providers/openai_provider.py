@@ -99,6 +99,7 @@ class OpenAIProvider(Provider):
         instructions: str | None = None,
         display: Display,
         session_usage: TokenUsage,
+        turn_usage: TokenUsage,
     ) -> CompletedResponse:
         assert self._ws is not None, "Provider is not connected"
 
@@ -115,6 +116,7 @@ class OpenAIProvider(Provider):
             instructions=effective_instructions,
             display=display,
             session_usage=session_usage,
+            turn_usage=turn_usage,
         )
         self._previous_response_id = response.response_id
         return response
@@ -161,6 +163,7 @@ class OpenAIProvider(Provider):
         instructions: str | None,
         display: Display,
         session_usage: TokenUsage,
+        turn_usage: TokenUsage,
     ) -> CompletedResponse:
         assert self._ws is not None
 
@@ -191,9 +194,12 @@ class OpenAIProvider(Provider):
                     waiting_message=_waiting_message_for_input_items(input_items),
                 )
                 session_usage.add(response.usage)
+                turn_usage.add(response.usage)
+                display.session_usage(session_usage)
                 self._start_deferred_usage_refresh(
                     display=display,
                     session_usage=session_usage,
+                    turn_usage=turn_usage,
                 )
                 return response
             except RateLimitError as exc:
@@ -330,6 +336,7 @@ class OpenAIProvider(Provider):
         *,
         display: Display,
         session_usage: TokenUsage,
+        turn_usage: TokenUsage,
     ) -> None:
         refresh_request = self._deferred_usage_refresh
         self._deferred_usage_refresh = None
@@ -345,6 +352,7 @@ class OpenAIProvider(Provider):
                 **refresh_request,
                 "display": display,
                 "session_usage": session_usage,
+                "turn_usage": turn_usage,
                 "refresh_done": refresh_done,
             },
             name=f"usage-refresh-{refresh_request['response_id']}",
@@ -361,6 +369,7 @@ class OpenAIProvider(Provider):
         streamed_text_parts: list[str],
         display: Display,
         session_usage: TokenUsage,
+        turn_usage: TokenUsage,
         refresh_done: threading.Event,
     ) -> None:
         try:
@@ -382,7 +391,8 @@ class OpenAIProvider(Provider):
                     response.reasoning_summary = refreshed.reasoning_summary
                 if _has_usage(usage_delta):
                     session_usage.add(usage_delta)
-                    display.usage_refresh(session_usage)
+                    turn_usage.add(usage_delta)
+                    display.usage_refresh(session_usage, turn_usage)
                 _log.debug(
                     "Recovered usage for %s via responses.retrieve: in=%s out=%s",
                     response_id,

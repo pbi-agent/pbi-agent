@@ -35,7 +35,9 @@ def run_single_turn(
         settings.model if settings.provider == "openai" else settings.anthropic_model
     )
     session_usage = TokenUsage(model=model)
+    display.session_usage(session_usage)
     session_start = time.monotonic()
+    turn_usage = TokenUsage(model=model)
 
     provider = create_provider(settings)
     with provider:
@@ -43,6 +45,7 @@ def run_single_turn(
             user_message=prompt,
             display=display,
             session_usage=session_usage,
+            turn_usage=turn_usage,
         )
         response, had_tool_errors = _run_tool_iterations(
             provider=provider,
@@ -50,10 +53,12 @@ def run_single_turn(
             max_workers=settings.max_tool_workers,
             display=display,
             session_usage=session_usage,
+            turn_usage=turn_usage,
         )
         provider.settle(timeout_seconds=0.3)
         elapsed = time.monotonic() - session_start
-        display.session_usage(session_usage, elapsed)
+        display.turn_usage(turn_usage, elapsed)
+        display.session_usage(session_usage)
         return AgentOutcome(
             response_id=response.response_id,
             text=response.text,
@@ -72,6 +77,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
         settings.model if settings.provider == "openai" else settings.anthropic_model
     )
     session_usage = TokenUsage(model=model)
+    display.session_usage(session_usage)
     had_tool_errors = False
 
     provider = create_provider(settings)
@@ -84,12 +90,14 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
                 continue
 
             turn_start = time.monotonic()
+            turn_usage = TokenUsage(model=model)
             display.assistant_start()
 
             response = provider.request_turn(
                 user_message=user_input,
                 display=display,
                 session_usage=session_usage,
+                turn_usage=turn_usage,
             )
             response, loop_had_errors = _run_tool_iterations(
                 provider=provider,
@@ -97,10 +105,12 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
                 max_workers=settings.max_tool_workers,
                 display=display,
                 session_usage=session_usage,
+                turn_usage=turn_usage,
             )
             had_tool_errors = had_tool_errors or loop_had_errors
             elapsed = time.monotonic() - turn_start
-            display.session_usage(session_usage, elapsed)
+            display.turn_usage(turn_usage, elapsed)
+            display.session_usage(session_usage)
 
     return 4 if had_tool_errors else 0
 
@@ -117,6 +127,7 @@ def _run_tool_iterations(
     max_workers: int,
     display: Display,
     session_usage: TokenUsage,
+    turn_usage: TokenUsage,
 ) -> tuple:
     had_errors = False
 
@@ -147,6 +158,7 @@ def _run_tool_iterations(
                 tool_result_items=tool_result_items,
                 display=display,
                 session_usage=session_usage,
+                turn_usage=turn_usage,
             )
         except Exception:
             _log.exception("Follow-up request after tool execution failed")

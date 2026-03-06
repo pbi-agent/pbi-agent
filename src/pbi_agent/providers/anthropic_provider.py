@@ -73,6 +73,7 @@ class AnthropicProvider(Provider):
         instructions: str | None = None,
         display: Display,
         session_usage: TokenUsage,
+        turn_usage: TokenUsage,
     ) -> CompletedResponse:
         # Build the new message to append to history.
         if user_message is not None:
@@ -101,6 +102,8 @@ class AnthropicProvider(Provider):
             display=display,
         )
         session_usage.add(response.usage)
+        turn_usage.add(response.usage)
+        display.session_usage(session_usage)
         return response
 
     # -- execute_tool_calls --------------------------------------------------

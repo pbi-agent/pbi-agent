@@ -14,6 +14,7 @@ Power BI development involves a large amount of repetitive, manual work: creatin
 - **Consistent quality** -- The built-in audit engine checks 90+ rules across modeling, performance, security, and DAX quality, catching issues that manual reviews miss.
 - **Lower barrier to entry** -- Junior developers and analysts can produce well-structured reports without deep Power BI expertise; the agent encodes best practices into every action it takes.
 - **Repeatable workflows** -- Single-turn prompts (`pbi-agent run`) integrate into scripts and CI pipelines, making report generation and auditing automatable.
+- **Bring your own model** -- Works with **OpenAI** (GPT-5.4, default) and **Anthropic** (Claude Opus, Sonnet). Switch providers with a single flag (`--provider anthropic`).
 
 ## Use Cases
 
@@ -64,7 +65,7 @@ pbi-agent audit --report-dir ./my-report
 The audit covers:
 
 | Domain | What it checks |
-|---|---|
+| --- | --- |
 | Structure & Star Schema | Table relationships, fact/dimension separation |
 | Modeling & Naming | Conventions, data types, calculated columns |
 | Performance | Query folding, cardinality, aggregation patterns |
@@ -95,7 +96,9 @@ pbi-agent web --port 8000
 
 - Python **3.12+**
 - [`uv`](https://docs.astral.sh/uv/) (recommended) or `pip`
-- An LLM API key (see [Configuration](#configuration) below)
+- An API key for one of the supported LLM providers:
+  - **OpenAI** (default) -- requires `OPENAI_API_KEY`
+  - **Anthropic** -- requires `ANTHROPIC_API_KEY`, pass `--provider anthropic` to the CLI
 
 ### Installing uv
 
@@ -139,7 +142,11 @@ This installs `pbi-agent` globally from the local checkout. Use `--reinstall` to
 
 ## Quick Start
 
+> **Warning:** `pbi-agent` works directly on Power BI projects saved in **PBIP format** (Power BI Project). You must run the CLI from the directory that contains your `.pbip` project files, or scaffold a new one with `pbi-agent init`. Reports saved as `.pbix` are not supported -- save your report as a PBIP project from Power BI Desktop first (`File > Save as > Power BI Project`).
+
 1. Set your API key:
+
+**macOS / Linux:**
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -147,10 +154,24 @@ export OPENAI_API_KEY="sk-..."
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-2. Scaffold a new report:
+**Windows (PowerShell):**
+
+```powershell
+$env:OPENAI_API_KEY = "sk-..."
+# or, for Anthropic:
+$env:ANTHROPIC_API_KEY = "sk-ant-..."
+```
+
+You can also place these in a `.env` file in your project directory to avoid setting them every session.
+
+2. Navigate to your PBIP project directory (or scaffold a new one):
 
 ```bash
-pbi-agent init --dest ./my-report
+# Option A: start from an existing PBIP project
+cd /path/to/my-report
+
+# Option B: scaffold a new project in the current directory
+pbi-agent init --dest .
 ```
 
 3. Start a conversation:
@@ -162,7 +183,7 @@ pbi-agent chat
 ## Commands
 
 | Command | Description |
-|---|---|
+| --- | --- |
 | `run --prompt "..."` | Execute a single prompt turn and exit |
 | `chat` | Interactive REPL session |
 | `web` | Serve the chat UI in a browser |
@@ -178,7 +199,7 @@ pbi-agent chat
 ### Environment variables
 
 | Variable | Description | Default |
-|---|---|---|
+| --- | --- | --- |
 | `OPENAI_API_KEY` | OpenAI API key (required for the default provider) | -- |
 | `ANTHROPIC_API_KEY` | Anthropic API key (required with `--provider anthropic`) | -- |
 | `PBI_AGENT_PROVIDER` | LLM provider (`openai` or `anthropic`) | `openai` |
@@ -214,7 +235,7 @@ pbi-agent --provider anthropic --model claude-opus-4-6 chat
 ### Built-in tools
 
 | Tool | Description |
-|---|---|
+| --- | --- |
 | `shell` | Execute shell commands (workspace-confined, blocks path traversal) |
 | `apply_patch` | Create, update, or delete files via V4A diffs |
 | `skill_knowledge` | Retrieve Power BI knowledge from the bundled skill library (14 topics) |
