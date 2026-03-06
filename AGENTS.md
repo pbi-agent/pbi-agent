@@ -9,8 +9,6 @@ Provide a local CLI foundation for a Power BI editing agent over the OpenAI Resp
 ```bash
 # No automated test suite is configured in this repository.
 uv run pbi-agent --help
-uv run pbi-agent tools list
-uv run pbi-agent tools describe --name skill_knowledge
 ```
 
 ## Linting & Formatting

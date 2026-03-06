@@ -36,8 +36,8 @@ class GenericProvider(Provider):
     def connect(self) -> None:
         if not self._settings.api_key:
             raise ValueError(
-                "Missing generic provider API key. Set GENERIC_API_KEY in environment "
-                "or pass --generic-api-key."
+                "Missing API key. Set PBI_AGENT_API_KEY in environment or pass "
+                "--api-key."
             )
 
     def close(self) -> None:
@@ -118,11 +118,12 @@ class GenericProvider(Provider):
         messages.extend(self._messages)
 
         body: dict[str, Any] = {
-            "model": self._settings.model,
             "messages": messages,
             "tools": self._tools,
             "tool_choice": "auto",
         }
+        if _should_send_model(self._settings):
+            body["model"] = self._settings.model
 
         request_data = json.dumps(body).encode("utf-8")
         headers = {
@@ -199,27 +200,14 @@ class GenericProvider(Provider):
 
     def _parse_response(self, response_json: dict[str, Any]) -> CompletedResponse:
         choices = response_json.get("choices", [])
-        message = choices[0].get("message", {}) if choices else {}
+        first_choice = choices[0] if choices and isinstance(choices[0], dict) else {}
+        message = first_choice.get("message", {})
+        if not isinstance(message, dict):
+            message = {}
 
-        content = message.get("content")
-        text = content if isinstance(content, str) else ""
+        text = _extract_message_text(message.get("content"))
 
-        raw_tool_calls = message.get("tool_calls", []) or []
-        function_calls: list[ToolCall] = []
-        for call in raw_tool_calls:
-            function = call.get("function", {})
-            raw_args = function.get("arguments", "{}")
-            try:
-                arguments: dict[str, Any] | str | None = json.loads(raw_args)
-            except json.JSONDecodeError:
-                arguments = raw_args
-            function_calls.append(
-                ToolCall(
-                    call_id=str(call.get("id", "")),
-                    name=str(function.get("name", "")),
-                    arguments=arguments,
-                )
-            )
+        function_calls = _parse_tool_calls(message.get("tool_calls"))
 
         usage_obj = response_json.get("usage", {})
         prompt_tokens = int(usage_obj.get("prompt_tokens", 0) or 0)
@@ -238,9 +226,10 @@ class GenericProvider(Provider):
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 reasoning_tokens=reasoning_tokens,
+                model=_response_model_name(response_json),
             ),
             function_calls=function_calls,
-            provider_data={"assistant_message": message},
+            provider_data={"assistant_message": _normalize_assistant_message(message)},
         )
 
 
@@ -249,6 +238,142 @@ def _find_by_id(calls: list[ToolCall], call_id: str) -> ToolCall | None:
         if call.call_id == call_id:
             return call
     return None
+
+
+def _response_model_name(response_json: dict[str, Any]) -> str:
+    model = response_json.get("model")
+    return model if isinstance(model, str) else ""
+
+
+def _should_send_model(settings: Settings) -> bool:
+    return bool(settings.model)
+
+
+def _extract_message_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+
+    text_parts: list[str] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        part_type = str(part.get("type", "")).strip().lower()
+        text_value = part.get("text")
+        if isinstance(text_value, str) and part_type in {"text", "output_text"}:
+            text_parts.append(text_value)
+    return "".join(text_parts).strip()
+
+
+def _parse_tool_calls(raw_tool_calls: Any) -> list[ToolCall]:
+    if not isinstance(raw_tool_calls, list):
+        return []
+
+    function_calls: list[ToolCall] = []
+    for call in raw_tool_calls:
+        if not isinstance(call, dict):
+            continue
+        function = call.get("function", {})
+        if not isinstance(function, dict):
+            function = {}
+        raw_args = function.get("arguments", "{}")
+        if isinstance(raw_args, str):
+            try:
+                arguments: dict[str, Any] | str | None = json.loads(raw_args)
+            except json.JSONDecodeError:
+                arguments = raw_args
+        else:
+            arguments = raw_args
+        function_calls.append(
+            ToolCall(
+                call_id=str(call.get("id", "")),
+                name=str(function.get("name", "")),
+                arguments=arguments,
+            )
+        )
+    return function_calls
+
+
+def _normalize_assistant_message(message: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {"role": "assistant"}
+
+    content = message.get("content")
+    normalized_content = _normalize_message_content(content)
+    if normalized_content is not None:
+        normalized["content"] = normalized_content
+
+    normalized_tool_calls = _normalize_tool_calls(message.get("tool_calls"))
+    if normalized_tool_calls:
+        normalized["tool_calls"] = normalized_tool_calls
+
+    if "content" not in normalized and "tool_calls" not in normalized:
+        normalized["content"] = ""
+
+    return normalized
+
+
+def _normalize_message_content(content: Any) -> str | list[dict[str, str]] | None:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return None
+
+    normalized_parts: list[dict[str, str]] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+
+        part_type = str(part.get("type", "")).strip().lower()
+        if part_type in {"text", "output_text"}:
+            text_value = part.get("text")
+            if isinstance(text_value, str):
+                normalized_parts.append({"type": "text", "text": text_value})
+                continue
+
+        if part_type == "refusal":
+            refusal = part.get("refusal")
+            if isinstance(refusal, str):
+                normalized_parts.append({"type": "refusal", "refusal": refusal})
+
+    return normalized_parts or None
+
+
+def _normalize_tool_calls(raw_tool_calls: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_tool_calls, list):
+        return []
+
+    normalized_calls: list[dict[str, Any]] = []
+    for call in raw_tool_calls:
+        if not isinstance(call, dict):
+            continue
+
+        function = call.get("function", {})
+        if not isinstance(function, dict):
+            function = {}
+
+        name = str(function.get("name", "")).strip()
+        if not name:
+            continue
+
+        raw_arguments = function.get("arguments", "{}")
+        if isinstance(raw_arguments, str):
+            arguments = raw_arguments or "{}"
+        else:
+            arguments = json.dumps(raw_arguments)
+
+        normalized_calls.append(
+            {
+                "id": str(call.get("id", "")),
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": arguments,
+                },
+            }
+        )
+
+    return normalized_calls
 
 
 def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:

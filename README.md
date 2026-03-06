@@ -97,9 +97,9 @@ pbi-agent web --port 8000
 - Python **3.12+**
 - [`uv`](https://docs.astral.sh/uv/) (recommended) or `pip`
 - An API key for one of the supported LLM providers:
-  - **OpenAI** (default) -- requires `OPENAI_API_KEY`
-  - **Anthropic** -- requires `ANTHROPIC_API_KEY`, pass `--provider anthropic` to the CLI
-  - **Generic OpenAI-compatible** (e.g. OpenRouter) -- requires `GENERIC_API_KEY`, pass `--provider generic`
+  - Set `PBI_AGENT_API_KEY`
+  - Use `--provider anthropic` for Anthropic
+  - Use `--provider generic` for OpenAI-compatible gateways such as OpenRouter
 
 ### Installing uv
 
@@ -150,17 +150,13 @@ This installs `pbi-agent` globally from the local checkout. Use `--reinstall` to
 **macOS / Linux:**
 
 ```bash
-export OPENAI_API_KEY="sk-..."
-# or, for Anthropic:
-export ANTHROPIC_API_KEY="sk-ant-..."
+export PBI_AGENT_API_KEY="sk-..."
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-$env:OPENAI_API_KEY = "sk-..."
-# or, for Anthropic:
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
+$env:PBI_AGENT_API_KEY = "sk-..."
 ```
 
 You can also place these in a `.env` file in your project directory to avoid setting them every session.
@@ -201,11 +197,9 @@ pbi-agent chat
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | OpenAI API key (required for the default provider) | -- |
-| `ANTHROPIC_API_KEY` | Anthropic API key (required with `--provider anthropic`) | -- |
-| `GENERIC_API_KEY` | API key for generic OpenAI-compatible provider (required with `--provider generic`) | -- |
+| `PBI_AGENT_API_KEY` | API key for the selected provider | -- |
 | `PBI_AGENT_PROVIDER` | LLM provider (`openai`, `anthropic`, or `generic`) | `openai` |
-| `PBI_AGENT_MODEL` | Model override | `gpt-5.4-2026-03-05` |
+| `PBI_AGENT_MODEL` | Model override | `gpt-5.4-2026-03-05` for OpenAI, `claude-opus-4-6` for Anthropic, provider default for generic |
 | `PBI_AGENT_MAX_TOKENS` | Max output tokens | `16384` |
 | `PBI_AGENT_REASONING_EFFORT` | Reasoning effort (`low`, `medium`, `high`, `xhigh`) | `xhigh` |
 | `PBI_AGENT_MAX_TOOL_WORKERS` | Parallel tool execution threads | `4` |
@@ -215,6 +209,8 @@ pbi-agent chat
 | `PBI_AGENT_RESPONSES_URL` | Custom HTTP Responses endpoint | derived from WS URL |
 | `PBI_AGENT_GENERIC_API_URL` | Generic OpenAI-compatible Chat Completions endpoint | `https://openrouter.ai/api/v1/chat/completions` |
 
+Legacy provider-specific environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GENERIC_API_KEY`) are still accepted as fallbacks.
+
 You can also place these in a `.env` file in your project root.
 
 ### CLI flags
@@ -223,6 +219,12 @@ All environment variables have corresponding CLI flags. Run `pbi-agent --help` f
 
 ```bash
 pbi-agent --provider anthropic --model claude-opus-4-6 chat
+```
+
+For generic providers, omit `--model` to use the gateway default model selection, or pass one explicitly:
+
+```bash
+pbi-agent --provider generic --model openai/gpt-5-mini chat
 ```
 
 ## How It Works

@@ -13,6 +13,11 @@ DEFAULT_GENERIC_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "gpt-5.4-2026-03-05"
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-6"
 DEFAULT_ANTHROPIC_MAX_TOKENS = 16384
+LEGACY_PROVIDER_API_KEY_ENVS = {
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "generic": "GENERIC_API_KEY",
+}
 
 
 class ConfigError(ValueError):
@@ -42,18 +47,18 @@ class Settings:
             raise ConfigError("--provider must be one of: openai, anthropic, generic.")
         if self.provider == "openai" and not self.api_key:
             raise ConfigError(
-                "Missing OpenAI API key. Set OPENAI_API_KEY in environment or pass "
-                "--openai-api-key."
+                "Missing API key for provider 'openai'. Set PBI_AGENT_API_KEY in "
+                "environment or pass --api-key."
             )
         if self.provider == "anthropic" and not self.api_key:
             raise ConfigError(
-                "Missing Anthropic API key. Set ANTHROPIC_API_KEY in environment or "
-                "pass --anthropic-api-key."
+                "Missing API key for provider 'anthropic'. Set PBI_AGENT_API_KEY in "
+                "environment or pass --api-key."
             )
         if self.provider == "generic" and not self.api_key:
             raise ConfigError(
-                "Missing generic provider API key. Set GENERIC_API_KEY in "
-                "environment or pass --generic-api-key."
+                "Missing API key for provider 'generic'. Set PBI_AGENT_API_KEY in "
+                "environment or pass --api-key."
             )
         if self.max_tool_workers < 1:
             raise ConfigError("--max-tool-workers must be >= 1.")
@@ -113,21 +118,11 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
         getattr(args, "provider", None) or os.getenv("PBI_AGENT_PROVIDER") or "openai"
     )
 
-    openai_api_key = getattr(args, "openai_api_key", None) or os.getenv(
-        "OPENAI_API_KEY", ""
+    api_key = (
+        getattr(args, "api_key", None)
+        or os.getenv("PBI_AGENT_API_KEY", "")
+        or os.getenv(LEGACY_PROVIDER_API_KEY_ENVS.get(provider, ""), "")
     )
-    anthropic_api_key = getattr(args, "anthropic_api_key", None) or os.getenv(
-        "ANTHROPIC_API_KEY", ""
-    )
-    generic_api_key = getattr(args, "generic_api_key", None) or os.getenv(
-        "GENERIC_API_KEY", ""
-    )
-    if provider == "openai":
-        api_key = openai_api_key
-    elif provider == "anthropic":
-        api_key = anthropic_api_key
-    else:
-        api_key = generic_api_key
     ws_url = args.ws_url or os.getenv("PBI_AGENT_WS_URL") or DEFAULT_WS_URL
     responses_url_override = getattr(args, "responses_url", None) or os.getenv(
         "PBI_AGENT_RESPONSES_URL"
@@ -137,7 +132,7 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     )
     responses_url = responses_url_override or _default_responses_url(ws_url)
     model_override = args.model or os.getenv("PBI_AGENT_MODEL")
-    model = model_override or DEFAULT_MODEL
+    model = model_override or (DEFAULT_MODEL if provider != "generic" else "")
     max_tool_workers = args.max_tool_workers
     if max_tool_workers is None:
         max_tool_workers = int(os.getenv("PBI_AGENT_MAX_TOOL_WORKERS", "4"))

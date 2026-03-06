@@ -47,16 +47,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override OpenAI Responses HTTP API URL.",
     )
     provider_group.add_argument(
+        "--api-key",
+        dest="api_key",
+        help="Override PBI_AGENT_API_KEY.",
+    )
+    provider_group.add_argument(
         "--openai-api-key",
-        help="Override OPENAI_API_KEY.",
+        dest="api_key",
+        help=argparse.SUPPRESS,
     )
     provider_group.add_argument(
         "--anthropic-api-key",
-        help="Override ANTHROPIC_API_KEY.",
+        dest="api_key",
+        help=argparse.SUPPRESS,
     )
     provider_group.add_argument(
         "--generic-api-key",
-        help="Override GENERIC_API_KEY.",
+        dest="api_key",
+        help=argparse.SUPPRESS,
     )
     provider_group.add_argument(
         "--generic-api-url",
@@ -66,7 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     model_group = parser.add_argument_group("Model behavior")
     model_group.add_argument(
         "--model",
-        help="Override model name for the selected provider.",
+        help="Override model name for the selected provider; omit for generic provider default routing.",
     )
     model_group.add_argument(
         "--max-tokens",
@@ -312,6 +320,7 @@ def _settings_env(settings: Settings) -> dict[str, str]:
         selected_model = settings.anthropic_model
     env: dict[str, str] = {
         "PBI_AGENT_PROVIDER": settings.provider,
+        "PBI_AGENT_API_KEY": settings.api_key,
         "PBI_AGENT_WS_URL": settings.ws_url,
         "PBI_AGENT_RESPONSES_URL": settings.responses_url,
         "PBI_AGENT_GENERIC_API_URL": settings.generic_api_url,
@@ -322,13 +331,6 @@ def _settings_env(settings: Settings) -> dict[str, str]:
         "PBI_AGENT_COMPACT_THRESHOLD": str(settings.compact_threshold),
         "PBI_AGENT_MAX_TOKENS": str(settings.anthropic_max_tokens),
     }
-    if settings.api_key:
-        if settings.provider == "openai":
-            env["OPENAI_API_KEY"] = settings.api_key
-        elif settings.provider == "anthropic":
-            env["ANTHROPIC_API_KEY"] = settings.api_key
-        else:
-            env["GENERIC_API_KEY"] = settings.api_key
     return env
 
 
