@@ -23,7 +23,6 @@ Power BI development involves a large amount of repetitive, manual work: creatin
 Drop a CSV (or any flat file) into your workspace and let the agent do the rest. It analyzes the data, imports it into the semantic model, creates measures, and builds a complete dashboard -- no manual configuration required:
 
 ```bash
-pbi-agent init --dest ./sales-dashboard
 pbi-agent chat
 # > "Here is sales_data.csv. Analyze the file, import it into the model,
 #    and build a dashboard with a revenue trend line chart, a top-10
