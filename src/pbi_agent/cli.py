@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_group = parser.add_argument_group("Provider and API")
     provider_group.add_argument(
         "--provider",
-        choices=["openai", "anthropic"],
+        choices=["openai", "anthropic", "generic"],
         default=None,
         help="LLM provider backend (default: openai).",
     )
@@ -47,18 +47,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override OpenAI Responses HTTP API URL.",
     )
     provider_group.add_argument(
+        "--api-key",
+        dest="api_key",
+        help="Override PBI_AGENT_API_KEY.",
+    )
+    provider_group.add_argument(
         "--openai-api-key",
-        help="Override OPENAI_API_KEY.",
+        dest="api_key",
+        help=argparse.SUPPRESS,
     )
     provider_group.add_argument(
         "--anthropic-api-key",
-        help="Override ANTHROPIC_API_KEY.",
+        dest="api_key",
+        help=argparse.SUPPRESS,
+    )
+    provider_group.add_argument(
+        "--generic-api-key",
+        dest="api_key",
+        help=argparse.SUPPRESS,
+    )
+    provider_group.add_argument(
+        "--generic-api-url",
+        help="Override generic OpenAI-compatible Chat Completions URL.",
     )
 
     model_group = parser.add_argument_group("Model behavior")
     model_group.add_argument(
         "--model",
-        help="Override model name for the selected provider.",
+        help="Override model name for the selected provider; omit for generic provider default routing.",
     )
     model_group.add_argument(
         "--max-tokens",
@@ -236,8 +252,7 @@ def _handle_chat_command(settings: Settings) -> int:
     from pbi_agent.ui import ChatApp
 
     app = ChatApp(settings=settings, verbose=settings.verbose)
-    app.run()
-    return app.exit_code
+    return _run_app(app)
 
 
 def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:
@@ -249,8 +264,7 @@ def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:
         mode="run",
         prompt=args.prompt,
     )
-    app.run()
-    return app.exit_code
+    return _run_app(app)
 
 
 def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
@@ -283,7 +297,9 @@ def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
             f"AUDIT-REPORT.md."
         ),
     )
-    app.run()
+    exit_code = _run_app(app)
+    if app.fatal_error_message:
+        return exit_code
 
     report_path = report_dir / AUDIT_REPORT_FILENAME
     if not report_path.exists():
@@ -292,20 +308,41 @@ def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
             f"{AUDIT_REPORT_FILENAME} in {report_dir}",
             file=sys.stderr,
         )
-        return app.exit_code or 1
+        return exit_code or 1
 
     print(f"Audit report written to {report_path}")
-    return app.exit_code
+    return exit_code
+
+
+def _run_app(app: object) -> int:
+    app.run()
+    fatal_error_message = getattr(app, "fatal_error_message", None)
+    if isinstance(fatal_error_message, str) and fatal_error_message.strip():
+        _print_error(fatal_error_message)
+    exit_code = getattr(app, "exit_code", 0)
+    return exit_code if isinstance(exit_code, int) else 0
+
+
+def _print_error(message: str) -> None:
+    lines = [line for line in message.splitlines() if line.strip()]
+    if not lines:
+        print("Error.", file=sys.stderr)
+        return
+    print(f"Error: {lines[0]}", file=sys.stderr)
+    for line in lines[1:]:
+        print(line, file=sys.stderr)
 
 
 def _settings_env(settings: Settings) -> dict[str, str]:
-    selected_model = (
-        settings.model if settings.provider == "openai" else settings.anthropic_model
-    )
+    selected_model = settings.model
+    if settings.provider == "anthropic":
+        selected_model = settings.anthropic_model
     env: dict[str, str] = {
         "PBI_AGENT_PROVIDER": settings.provider,
+        "PBI_AGENT_API_KEY": settings.api_key,
         "PBI_AGENT_WS_URL": settings.ws_url,
         "PBI_AGENT_RESPONSES_URL": settings.responses_url,
+        "PBI_AGENT_GENERIC_API_URL": settings.generic_api_url,
         "PBI_AGENT_MODEL": selected_model,
         "PBI_AGENT_REASONING_EFFORT": settings.reasoning_effort,
         "PBI_AGENT_MAX_TOOL_WORKERS": str(settings.max_tool_workers),
@@ -313,11 +350,6 @@ def _settings_env(settings: Settings) -> dict[str, str]:
         "PBI_AGENT_COMPACT_THRESHOLD": str(settings.compact_threshold),
         "PBI_AGENT_MAX_TOKENS": str(settings.anthropic_max_tokens),
     }
-    if settings.api_key:
-        if settings.provider == "openai":
-            env["OPENAI_API_KEY"] = settings.api_key
-        else:
-            env["ANTHROPIC_API_KEY"] = settings.api_key
     return env
 
 

@@ -93,6 +93,8 @@ class TokenUsage:
             self.cache_write_1h_tokens += other_snapshot.cache_write_1h_tokens
             self.output_tokens += other_snapshot.output_tokens
             self.reasoning_tokens += other_snapshot.reasoning_tokens
+            if not self.model and other_snapshot.model:
+                self.model = other_snapshot.model
 
     def snapshot(self) -> "TokenUsage":
         with self._lock:

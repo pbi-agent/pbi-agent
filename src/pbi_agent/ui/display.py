@@ -562,7 +562,12 @@ class Display:
 
     def error(self, message: str) -> None:
         self.stream_abort()
-        self._mount_static_message("err", ErrorMessage, f"Error: {message}")
+        self._tool_group.reset()
+        self._mount_static_message(
+            "err",
+            ErrorMessage,
+            f"Error: {escape_markup_text(message)}",
+        )
 
     def debug(self, message: str) -> None:
         if self.verbose:

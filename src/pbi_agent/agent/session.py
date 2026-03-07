@@ -16,6 +16,12 @@ _log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def _selected_model(settings: Settings) -> str:
+    return (
+        settings.anthropic_model if settings.provider == "anthropic" else settings.model
+    )
+
+
 def run_single_turn(
     prompt: str,
     settings: Settings,
@@ -25,15 +31,11 @@ def run_single_turn(
 ) -> AgentOutcome:
     display.welcome(
         interactive=False,
-        model=settings.model
-        if settings.provider == "openai"
-        else settings.anthropic_model,
+        model=_selected_model(settings),
         reasoning_effort=settings.reasoning_effort,
         single_turn_hint=single_turn_hint,
     )
-    model = (
-        settings.model if settings.provider == "openai" else settings.anthropic_model
-    )
+    model = _selected_model(settings)
     session_usage = TokenUsage(model=model)
     display.session_usage(session_usage)
     session_start = time.monotonic()
@@ -68,14 +70,10 @@ def run_single_turn(
 
 def run_chat_loop(settings: Settings, display: Display) -> int:
     display.welcome(
-        model=settings.model
-        if settings.provider == "openai"
-        else settings.anthropic_model,
+        model=_selected_model(settings),
         reasoning_effort=settings.reasoning_effort,
     )
-    model = (
-        settings.model if settings.provider == "openai" else settings.anthropic_model
-    )
+    model = _selected_model(settings)
     session_usage = TokenUsage(model=model)
     display.session_usage(session_usage)
     had_tool_errors = False
@@ -92,7 +90,6 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
             turn_start = time.monotonic()
             turn_usage = TokenUsage(model=model)
             display.assistant_start()
-
             response = provider.request_turn(
                 user_message=user_input,
                 display=display,
@@ -107,6 +104,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
                 session_usage=session_usage,
                 turn_usage=turn_usage,
             )
+
             had_tool_errors = had_tool_errors or loop_had_errors
             elapsed = time.monotonic() - turn_start
             display.turn_usage(turn_usage, elapsed)

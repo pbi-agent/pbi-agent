@@ -9,7 +9,6 @@ All tools (including shell and apply_patch) are registered function tools
 """
 
 from __future__ import annotations
-
 import json
 import logging
 import time
@@ -56,8 +55,8 @@ class AnthropicProvider(Provider):
         # eagerly so errors surface early.
         if not self._settings.api_key:
             raise ValueError(
-                "Missing Anthropic API key. Set ANTHROPIC_API_KEY in environment or "
-                "pass --anthropic-api-key."
+                "Missing API key. Set PBI_AGENT_API_KEY in environment or pass "
+                "--api-key."
             )
 
     def close(self) -> None:

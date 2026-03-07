@@ -17,6 +17,7 @@ def create_provider(settings: Settings) -> Provider:
 
     - ``"openai"`` (default) → OpenAI Responses WebSocket provider
     - ``"anthropic"``        → Anthropic Messages HTTP provider
+    - ``"generic"``          → OpenAI-compatible Chat Completions HTTP provider
     """
     name = settings.provider.lower()
 
@@ -30,7 +31,14 @@ def create_provider(settings: Settings) -> Provider:
 
         return AnthropicProvider(settings)
 
-    raise ValueError(f"Unknown provider {name!r}. Supported: openai, anthropic.")
+    if name == "generic":
+        from pbi_agent.providers.generic_provider import GenericProvider
+
+        return GenericProvider(settings)
+
+    raise ValueError(
+        f"Unknown provider {name!r}. Supported: openai, anthropic, generic."
+    )
 
 
 __all__ = ["Provider", "create_provider"]

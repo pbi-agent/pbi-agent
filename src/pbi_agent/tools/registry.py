@@ -71,3 +71,20 @@ def get_anthropic_tool_definitions() -> list[dict[str, Any]]:
             }
         )
     return tools
+
+
+def get_openai_chat_tool_definitions() -> list[dict[str, Any]]:
+    """Return tool definitions in OpenAI Chat Completions format."""
+    tools: list[dict[str, Any]] = []
+    for spec in get_tool_specs():
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "parameters": spec.parameters_schema,
+                },
+            }
+        )
+    return tools
