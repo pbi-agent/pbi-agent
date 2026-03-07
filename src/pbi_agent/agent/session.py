@@ -57,7 +57,6 @@ def run_single_turn(
             session_usage=session_usage,
             turn_usage=turn_usage,
         )
-        provider.settle(timeout_seconds=0.3)
         elapsed = time.monotonic() - session_start
         display.turn_usage(turn_usage, elapsed)
         display.session_usage(session_usage)

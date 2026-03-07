@@ -203,10 +203,9 @@ A browser-based chat UI opens at `http://localhost:8000`. Start describing what 
 | `PBI_AGENT_MAX_TOKENS` | Max output tokens | `16384` |
 | `PBI_AGENT_REASONING_EFFORT` | Reasoning effort (`low`, `medium`, `high`, `xhigh`) | `xhigh` |
 | `PBI_AGENT_MAX_TOOL_WORKERS` | Parallel tool execution threads | `4` |
-| `PBI_AGENT_WS_MAX_RETRIES` | Retry count for transient failures | `2` |
+| `PBI_AGENT_MAX_RETRIES` | Retry count for transient failures | `2` |
 | `PBI_AGENT_COMPACT_THRESHOLD` | Context compaction token threshold | `150000` |
-| `PBI_AGENT_WS_URL` | Custom WebSocket endpoint | `wss://api.openai.com/v1/responses` |
-| `PBI_AGENT_RESPONSES_URL` | Custom HTTP Responses endpoint | derived from WS URL |
+| `PBI_AGENT_RESPONSES_URL` | Custom HTTP Responses endpoint | `https://api.openai.com/v1/responses` |
 | `PBI_AGENT_GENERIC_API_URL` | Generic OpenAI-compatible Chat Completions endpoint | `https://openrouter.ai/api/v1/chat/completions` |
 
 You can also place these in a `.env` file in your project root.
@@ -252,7 +251,7 @@ pbi-agent --provider generic --model z-ai/glm-5
 
 ## How It Works
 
-`pbi-agent` connects to the OpenAI Responses WebSocket API, xAI Responses HTTP API, Anthropic Messages API, or a generic OpenAI-compatible Chat Completions API and runs an agentic loop:
+`pbi-agent` connects to the OpenAI Responses HTTP API, xAI Responses HTTP API, Anthropic Messages API, or a generic OpenAI-compatible Chat Completions API and runs an agentic loop:
 
 1. Your prompt is sent alongside the agent's system instructions and tool definitions.
 2. The model responds with text, reasoning, or tool calls.
@@ -301,13 +300,11 @@ uv run pbi-agent --help
     ├── display.py              # Textual TUI chat application
     ├── agent/
     │   ├── session.py          # Agentic loop (single-turn and chat)
-    │   ├── protocol.py         # WebSocket protocol handling
-    │   ├── ws_client.py        # WebSocket client
     │   ├── tool_runtime.py     # Parallel tool execution engine
     │   ├── system_prompt.py    # Agent persona and instructions
     │   └── audit_prompt.py     # 90+ rule audit prompt builder
     ├── providers/
-    │   ├── openai_provider.py  # OpenAI Responses WebSocket provider
+    │   ├── openai_provider.py  # OpenAI Responses HTTP provider
     │   ├── anthropic_provider.py # Anthropic Messages HTTP provider
     │   └── generic_provider.py # Generic OpenAI-compatible Chat Completions HTTP provider
     ├── tools/

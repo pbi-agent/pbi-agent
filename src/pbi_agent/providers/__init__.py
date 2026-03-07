@@ -15,7 +15,7 @@ def create_provider(settings: Settings) -> Provider:
 
     The ``settings.provider`` field selects the backend:
 
-    - ``"openai"`` (default) → OpenAI Responses WebSocket provider
+    - ``"openai"`` (default) → OpenAI Responses HTTP provider
     - ``"xai"``              → xAI Responses HTTP provider
     - ``"anthropic"``        → Anthropic Messages HTTP provider
     - ``"generic"``          → OpenAI-compatible Chat Completions HTTP provider

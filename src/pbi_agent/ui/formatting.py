@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from pbi_agent import __version__
@@ -94,8 +95,9 @@ def format_usage_summary(
 
 
 def format_session_subtitle(usage: TokenUsage) -> str:
+    cwd = Path.cwd()
     return (
-        f"v{__version__} \u00b7 Session {usage.total_tokens:,} tokens "
+        f"v{__version__} \u00b7 {cwd} \u00b7 Session {usage.total_tokens:,} tokens "
         f"\u00b7 ${usage.estimated_cost_usd:.3f}"
     )
 

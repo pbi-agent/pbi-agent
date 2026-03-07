@@ -11,7 +11,7 @@ class Provider(ABC):
     """Abstract base for LLM providers.
 
     Each provider encapsulates:
-    - Transport (WebSocket, HTTP, etc.)
+    - Transport
     - Conversation history management
     - Tool definitions (provider-specific format)
     - Tool execution and result formatting
@@ -58,9 +58,6 @@ class Provider(ABC):
         *tool_result_items* are in the provider's native format, ready
         to be passed back via :meth:`request_turn`.
         """
-
-    def settle(self, *, timeout_seconds: float = 0.0) -> None:
-        """Allow providers with background work to briefly flush it."""
 
     # -- context manager convenience ----------------------------------------
 

@@ -201,7 +201,7 @@ class AnthropicProvider(Provider):
             "anthropic-version": ANTHROPIC_VERSION,
         }
 
-        max_retries = self._settings.ws_max_retries  # reuse the retry setting
+        max_retries = self._settings.max_retries
         last_error: Exception | None = None
 
         for attempt in range(max_retries + 1):

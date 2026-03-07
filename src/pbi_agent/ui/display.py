@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 import traceback
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -39,28 +38,6 @@ if TYPE_CHECKING:
     from pbi_agent.ui.app import ChatApp
 
 _log = logging.getLogger(__name__)
-
-
-@dataclass(slots=True)
-class _StreamState:
-    parts: list[str] = field(default_factory=list)
-    dirty: bool = False
-    last_flush: float = 0.0
-    widget_id: str | None = None
-
-    def append(self, delta: str) -> None:
-        self.parts.append(delta)
-        self.dirty = True
-
-    @property
-    def text(self) -> str:
-        return "".join(self.parts)
-
-    def reset(self) -> None:
-        self.parts.clear()
-        self.dirty = False
-        self.last_flush = 0.0
-        self.widget_id = None
 
 
 @dataclass(slots=True)
@@ -111,12 +88,9 @@ class _TurnUsageWidget:
 class Display:
     """Sync bridge between session code and the Textual App."""
 
-    _STREAM_THROTTLE_SECS: float = 0.25
-
     def __init__(self, app: ChatApp, *, verbose: bool = False) -> None:
         self.app = app
         self.verbose = verbose
-        self._stream = _StreamState()
         self._waiting_widget_id: str | None = None
         self._active_thinking_widget_id: str | None = None
         self._msg_counter = 0
@@ -301,41 +275,6 @@ class Display:
         if self._waiting_widget_id is not None:
             self._safe_call(self.app.remove_widget, self._waiting_widget_id)
             self._waiting_widget_id = None
-
-    def stream_delta(self, delta: str) -> None:
-        self.wait_stop()
-        self._stream.append(delta)
-
-        if self._stream.widget_id is None:
-            self._stream.widget_id = self._mount_markdown("assistant", "")
-            self._flush_stream()
-            return
-
-        if time.monotonic() - self._stream.last_flush >= self._STREAM_THROTTLE_SECS:
-            self._flush_stream()
-
-    def _flush_stream(self) -> None:
-        if not self._stream.dirty or self._stream.widget_id is None:
-            return
-        self._safe_call(
-            self.app.update_markdown, self._stream.widget_id, self._stream.text
-        )
-        self._stream.dirty = False
-        self._stream.last_flush = time.monotonic()
-
-    def stream_end(self) -> None:
-        self.wait_stop()
-        self._flush_stream()
-        self._stream.reset()
-
-    def stream_abort(self) -> None:
-        self.wait_stop()
-        if self._stream.widget_id:
-            self._safe_call(self.app.remove_widget, self._stream.widget_id)
-        if self._active_thinking_widget_id:
-            self._safe_call(self.app.remove_widget, self._active_thinking_widget_id)
-            self._active_thinking_widget_id = None
-        self._stream.reset()
 
     def render_markdown(self, text: str) -> None:
         self._mount_markdown("md", text)
@@ -542,7 +481,7 @@ class Display:
         self._mount_static_message(
             "notice",
             NoticeMessage,
-            f"Reconnecting\u2026 ({attempt}/{max_retries})",
+            f"Retrying\u2026 ({attempt}/{max_retries})",
         )
 
     def rate_limit_notice(
@@ -561,7 +500,10 @@ class Display:
         )
 
     def error(self, message: str) -> None:
-        self.stream_abort()
+        self.wait_stop()
+        if self._active_thinking_widget_id:
+            self._safe_call(self.app.remove_widget, self._active_thinking_widget_id)
+            self._active_thinking_widget_id = None
         self._tool_group.reset()
         self._mount_static_message(
             "err",

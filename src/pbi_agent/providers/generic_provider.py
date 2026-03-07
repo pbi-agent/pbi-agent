@@ -133,7 +133,7 @@ class GenericProvider(Provider):
             "User-Agent": f"pbi-agent/{__version__}",
         }
 
-        max_retries = self._settings.ws_max_retries
+        max_retries = self._settings.max_retries
         last_error: Exception | None = None
 
         for attempt in range(max_retries + 1):

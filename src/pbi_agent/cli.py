@@ -44,9 +44,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM provider backend (default: openai).",
     )
     provider_group.add_argument(
-        "--ws-url", help="Override Responses API websocket URL."
-    )
-    provider_group.add_argument(
         "--responses-url",
         help="Override Responses HTTP API URL.",
     )
@@ -106,11 +103,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum parallel workers for tool execution.",
     )
     runtime_group.add_argument(
-        "--ws-max-retries",
+        "--max-retries",
         type=int,
         default=None,
         help=(
-            "Maximum retries for transient websocket failures and rate-limit responses."
+            "Maximum retries for transient provider request failures and rate-limit responses."
         ),
     )
     runtime_group.add_argument(
@@ -404,13 +401,12 @@ def _settings_env(settings: Settings) -> dict[str, str]:
     env: dict[str, str] = {
         "PBI_AGENT_PROVIDER": settings.provider,
         "PBI_AGENT_API_KEY": settings.api_key,
-        "PBI_AGENT_WS_URL": settings.ws_url,
         "PBI_AGENT_RESPONSES_URL": settings.responses_url,
         "PBI_AGENT_GENERIC_API_URL": settings.generic_api_url,
         "PBI_AGENT_MODEL": selected_model,
         "PBI_AGENT_REASONING_EFFORT": settings.reasoning_effort,
         "PBI_AGENT_MAX_TOOL_WORKERS": str(settings.max_tool_workers),
-        "PBI_AGENT_WS_MAX_RETRIES": str(settings.ws_max_retries),
+        "PBI_AGENT_MAX_RETRIES": str(settings.max_retries),
         "PBI_AGENT_COMPACT_THRESHOLD": str(settings.compact_threshold),
         "PBI_AGENT_MAX_TOKENS": str(settings.anthropic_max_tokens),
     }

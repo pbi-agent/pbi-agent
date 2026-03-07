@@ -4,15 +4,9 @@ import json
 import urllib.request
 
 from pbi_agent.agent.system_prompt import get_system_prompt
-from pbi_agent.cli import build_parser
-from pbi_agent.config import (
-    DEFAULT_XAI_MODEL,
-    DEFAULT_XAI_RESPONSES_URL,
-    Settings,
-    resolve_settings,
-)
+from pbi_agent.config import DEFAULT_MODEL, DEFAULT_RESPONSES_URL, Settings
 from pbi_agent.models.messages import TokenUsage
-from pbi_agent.providers.xai_provider import XAIProvider
+from pbi_agent.providers.openai_provider import OpenAIProvider
 
 
 class _DisplayStub:
@@ -95,86 +89,56 @@ class _FakeHTTPResponse:
 def _make_settings(**overrides: object) -> Settings:
     defaults: dict[str, object] = {
         "api_key": "test-key",
-        "provider": "xai",
-        "responses_url": DEFAULT_XAI_RESPONSES_URL,
-        "model": DEFAULT_XAI_MODEL,
-        "reasoning_effort": "high",
+        "provider": "openai",
+        "responses_url": DEFAULT_RESPONSES_URL,
+        "model": DEFAULT_MODEL,
+        "reasoning_effort": "xhigh",
         "max_retries": 0,
+        "compact_threshold": 150000,
     }
     defaults.update(overrides)
     return Settings(**defaults)
 
 
-def test_resolve_settings_uses_xai_defaults(monkeypatch) -> None:
-    for name in (
-        "PBI_AGENT_PROVIDER",
-        "PBI_AGENT_API_KEY",
-        "PBI_AGENT_RESPONSES_URL",
-        "PBI_AGENT_MODEL",
-    ):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
-
-    parser = build_parser()
-    args = parser.parse_args(["--provider", "xai", "chat"])
-    settings = resolve_settings(args)
-
-    assert settings.provider == "xai"
-    assert settings.api_key == "xai-test-key"
-    assert settings.responses_url == DEFAULT_XAI_RESPONSES_URL
-    assert settings.model == DEFAULT_XAI_MODEL
-    assert settings.reasoning_effort == "high"
-    settings.validate()
-
-
-def test_xai_build_request_body_omits_unsupported_reasoning_effort() -> None:
-    provider = XAIProvider(_make_settings(model="grok-4-1-fast-reasoning"))
+def test_openai_build_request_body_uses_http_responses_shape() -> None:
+    provider = OpenAIProvider(_make_settings())
 
     body = provider._build_request_body(
         input_items=[{"role": "user", "content": "hello"}],
         instructions="be concise",
     )
 
+    assert body["model"] == DEFAULT_MODEL
     assert body["stream"] is False
+    assert body["store"] is True
     assert body["parallel_tool_calls"] is True
-    assert body["include"] == ["reasoning.encrypted_content"]
+    assert body["prompt_cache_retention"] == "24h"
+    assert body["context_management"] == [
+        {"type": "compaction", "compact_threshold": 150000}
+    ]
+    assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert body["input"] == [
         {"role": "system", "content": "be concise"},
         {"role": "user", "content": "hello"},
     ]
     assert "instructions" not in body
-    assert "reasoning" not in body
+    assert "previous_response_id" not in body
 
 
-def test_xai_build_request_body_maps_grok_3_mini_reasoning_effort() -> None:
-    provider = XAIProvider(
-        _make_settings(model="grok-3-mini", reasoning_effort="medium")
-    )
-
-    body = provider._build_request_body(
-        input_items=[{"role": "user", "content": "hello"}],
-        instructions="be concise",
-    )
-
-    assert body["reasoning"] == {"effort": "high"}
-    assert body["input"][0] == {"role": "system", "content": "be concise"}
-    assert "include" not in body
-
-
-def test_xai_parse_response_extracts_function_calls_and_encrypted_reasoning() -> None:
-    provider = XAIProvider(_make_settings())
+def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> None:
+    provider = OpenAIProvider(_make_settings())
 
     result = provider._parse_response(
         {
             "id": "resp_123",
-            "model": "grok-4-1-fast-reasoning",
+            "model": DEFAULT_MODEL,
             "usage": {
                 "input_tokens": 376,
                 "input_tokens_details": {"cached_tokens": 282},
                 "output_tokens": 233,
                 "output_tokens_details": {"reasoning_tokens": 207},
             },
-            "reasoning": {"effort": "medium", "summary": "detailed"},
+            "reasoning": {"effort": "xhigh", "summary": "auto"},
             "output": [
                 {
                     "id": "rs_123",
@@ -189,7 +153,6 @@ def test_xai_parse_response_extracts_function_calls_and_encrypted_reasoning() ->
                             "text": "Examined the request before deciding to call a tool.",
                         }
                     ],
-                    "encrypted_content": "encrypted-value",
                 },
                 {
                     "arguments": "{\"location\":\"San Francisco\"}",
@@ -209,11 +172,7 @@ def test_xai_parse_response_extracts_function_calls_and_encrypted_reasoning() ->
         result.reasoning_content
         == "Examined the request before deciding to call a tool."
     )
-    assert result.provider_data["encrypted_reasoning_content"] == ["encrypted-value"]
-    assert result.provider_data["reasoning"] == {
-        "effort": "medium",
-        "summary": "detailed",
-    }
+    assert result.provider_data["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert result.function_calls[0].call_id == "call_88263992"
     assert result.function_calls[0].name == "get_temperature"
     assert result.function_calls[0].arguments == {"location": "San Francisco"}
@@ -221,16 +180,16 @@ def test_xai_parse_response_extracts_function_calls_and_encrypted_reasoning() ->
     assert result.usage.cached_input_tokens == 282
     assert result.usage.output_tokens == 233
     assert result.usage.reasoning_tokens == 207
-    assert result.usage.model == "grok-4-1-fast-reasoning"
+    assert result.usage.model == DEFAULT_MODEL
 
 
-def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
+def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     requests: list[dict[str, object]] = []
     responses = iter(
         [
             {
                 "id": "resp_1",
-                "model": "grok-4-1-fast-reasoning",
+                "model": DEFAULT_MODEL,
                 "usage": {
                     "input_tokens": 10,
                     "input_tokens_details": {"cached_tokens": 0},
@@ -248,7 +207,7 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
             },
             {
                 "id": "resp_2",
-                "model": "grok-4-1-fast-reasoning",
+                "model": DEFAULT_MODEL,
                 "previous_response_id": "resp_1",
                 "usage": {
                     "input_tokens": 12,
@@ -261,7 +220,10 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
                         "type": "message",
                         "role": "assistant",
                         "content": [
-                            {"type": "output_text", "text": "The current temperature is 59F."}
+                            {
+                                "type": "output_text",
+                                "text": "The current temperature is 59F.",
+                            }
                         ],
                     }
                 ],
@@ -280,11 +242,11 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    provider = XAIProvider(_make_settings())
+    provider = OpenAIProvider(_make_settings())
     display = _DisplayStub()
-    session_usage = TokenUsage(model="grok-4-1-fast-reasoning")
+    session_usage = TokenUsage(model=DEFAULT_MODEL)
 
-    first_turn_usage = TokenUsage(model="grok-4-1-fast-reasoning")
+    first_turn_usage = TokenUsage(model=DEFAULT_MODEL)
     first = provider.request_turn(
         user_message="What is the temperature in San Francisco?",
         display=display,
@@ -292,7 +254,7 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
         turn_usage=first_turn_usage,
     )
 
-    second_turn_usage = TokenUsage(model="grok-4-1-fast-reasoning")
+    second_turn_usage = TokenUsage(model=DEFAULT_MODEL)
     second = provider.request_turn(
         tool_result_items=[
             {
@@ -312,10 +274,10 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
         {"role": "system", "content": get_system_prompt()},
         {"role": "user", "content": "What is the temperature in San Francisco?"},
     ]
-    assert "instructions" not in requests[0]
+    assert requests[0]["stream"] is False
+    assert requests[0]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert "previous_response_id" not in requests[0]
     assert requests[1]["previous_response_id"] == "resp_1"
-    assert "instructions" not in requests[1]
     assert requests[1]["input"] == [
         {
             "type": "function_call_output",
@@ -323,3 +285,4 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
             "output": '{"temperature":59}',
         }
     ]
+    assert requests[1]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
