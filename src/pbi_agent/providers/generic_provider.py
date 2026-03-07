@@ -12,6 +12,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from pbi_agent import __version__
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
@@ -126,8 +127,10 @@ class GenericProvider(Provider):
 
         request_data = json.dumps(body).encode("utf-8")
         headers = {
+            "Accept": "application/json",
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._settings.api_key}",
+            "User-Agent": f"pbi-agent/{__version__}",
         }
 
         max_retries = self._settings.ws_max_retries
