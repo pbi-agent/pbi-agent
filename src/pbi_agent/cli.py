@@ -213,6 +213,11 @@ def main(argv: list[str] | None = None) -> int:
         raw_argv = ["web"]
 
     args = parser.parse_args(raw_argv)
+    # If no subcommand was provided (e.g. only global options were given),
+    # default to the "web" command as documented.
+    if getattr(args, "command", None) is None:
+        raw_argv_with_default = list(raw_argv) + ["web"]
+        args = parser.parse_args(raw_argv_with_default)
 
     # ---- commands that don't need settings or the TUI ----
 
