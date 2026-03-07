@@ -5,7 +5,30 @@ Provide a local CLI foundation for a Power BI editing agent over the OpenAI Resp
 ## Running Tests
 
 ```bash
-uv run python -m unittest discover -s tests
+uv run pytest
+uv run pytest tests/test_cli.py
+uv run pytest tests/test_cli.py::DefaultWebCommandTests::test_main_defaults_to_web_for_global_options_only
+uv run pytest -m slow
+```
+
+## Adding Tests
+
+- Add new test modules under `tests/`.
+- Name test files `test_*.py` so pytest discovers them automatically.
+- Prefer pytest-style tests with plain `assert`; existing `unittest.TestCase` tests are still supported when needed.
+- Import package code directly from `pbi_agent`; pytest is configured to add `src/` to `sys.path`, so new tests should not manually modify `sys.path`.
+- Put shared fixtures in `tests/conftest.py` and use `@pytest.mark.parametrize(...)` for repeated input/output cases.
+- Register any new custom markers in `pyproject.toml` under `tool.pytest.ini_options.markers` before using them.
+
+Example:
+
+```python
+import pytest
+
+
+@pytest.mark.parametrize(("value", "expected"), [("abc", 3), ("", 0)])
+def test_string_length(value: str, expected: int) -> None:
+    assert len(value) == expected
 ```
 
 ## Linting & Formatting

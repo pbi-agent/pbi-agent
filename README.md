@@ -1,8 +1,16 @@
 # pbi-agent
 
-**A local CLI agent that creates, edits, and audits Power BI reports through natural language.**
+**A local agent that creates, edits, and audits Power BI reports through natural language.**
 
-`pbi-agent` turns plain English into production-ready Power BI reports. Instead of clicking through dozens of menus, you describe what you need and the agent handles the rest: scaffolding projects, building visuals, writing DAX measures, and running best-practice audits -- all from your terminal.
+`pbi-agent` turns plain English into production-ready Power BI reports. Instead of clicking through dozens of menus, you describe what you need and the agent handles the rest: scaffolding projects, building visuals, writing DAX measures, and running best-practice audits.
+
+**One command to get started:**
+
+```bash
+pbi-agent
+```
+
+That's it. Running `pbi-agent` with no arguments launches a browser-based chat UI on `http://localhost:8000` where you can start building reports immediately.
 
 ## Why pbi-agent?
 
@@ -20,15 +28,15 @@ Power BI development involves a large amount of repetitive, manual work: creatin
 
 ### 1. Create a full dashboard from a data file
 
-Drop a CSV (or any flat file) into your workspace and let the agent do the rest. It analyzes the data, imports it into the semantic model, creates measures, and builds a complete dashboard -- no manual configuration required:
+Drop a CSV (or any flat file) into your workspace and let the agent do the rest. It analyzes the data, imports it into the semantic model, creates measures, and builds a complete dashboard -- no manual configuration required.
+
+Start the agent and describe what you need:
 
 ```bash
-pbi-agent chat
-# > "Here is sales_data.csv. Analyze the file, import it into the model,
-#    and build a dashboard with a revenue trend line chart, a top-10
-#    products bar chart, and KPI cards for total revenue, order count,
-#    and average order value."
+pbi-agent
 ```
+
+> "Here is sales_data.csv. Analyze the file, import it into the model, and build a dashboard with a revenue trend line chart, a top-10 products bar chart, and KPI cards for total revenue, order count, and average order value."
 
 The agent will:
 
@@ -46,10 +54,10 @@ From a single file and one prompt, you get a working Power BI report ready to op
 Point the agent at an existing PBIP directory and describe the changes you need:
 
 ```bash
-pbi-agent chat
-# > "On the Sales page, replace the table visual with a clustered bar chart
-#    grouped by product category. Add a slicer for fiscal year."
+pbi-agent
 ```
+
+> "On the Sales page, replace the table visual with a clustered bar chart grouped by product category. Add a slicer for fiscal year."
 
 The agent reads the report definition files, applies the edits, and preserves existing configuration.
 
@@ -81,14 +89,6 @@ Run one-off prompts for automation or CI integration:
 
 ```bash
 pbi-agent run --prompt "List all measures in the semantic model that lack descriptions."
-```
-
-### 5. Browser-based chat
-
-Serve the chat UI in a browser for a richer experience:
-
-```bash
-pbi-agent web --port 8000
 ```
 
 ## Prerequisites
@@ -144,7 +144,7 @@ This installs `pbi-agent` globally from the local checkout. Use `--reinstall` to
 
 > **Warning:** `pbi-agent` works directly on Power BI projects saved in **PBIP format** (Power BI Project). You must run the CLI from the directory that contains your `.pbip` project files, or scaffold a new one with `pbi-agent init`. Reports saved as `.pbix` are not supported -- save your report as a PBIP project from Power BI Desktop first (`File > Save as > Power BI Project`).
 
-1. Set your API key:
+1. Set your API key (or place it in a `.env` file in your project directory):
 
 **macOS / Linux:**
 
@@ -158,8 +158,6 @@ export PBI_AGENT_API_KEY="sk-..."
 $env:PBI_AGENT_API_KEY = "sk-..."
 ```
 
-You can also place these in a `.env` file in your project directory to avoid setting them every session.
-
 2. Navigate to your PBIP project directory (or scaffold a new one):
 
 ```bash
@@ -170,23 +168,25 @@ cd /path/to/my-report
 pbi-agent init --dest .
 ```
 
-3. Start a conversation:
+3. Launch the agent:
 
 ```bash
-pbi-agent chat
+pbi-agent
 ```
+
+A browser-based chat UI opens at `http://localhost:8000`. Start describing what you need.
+
+> **Prefer a terminal?** Use `pbi-agent chat` for an interactive REPL, or `pbi-agent run --prompt "..."` for single-turn scripting.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
+| *(none)* or `web` | **Default.** Serve the browser-based chat UI (`http://localhost:8000`) |
+| `chat` | Interactive terminal REPL session |
 | `run --prompt "..."` | Execute a single prompt turn and exit |
-| `chat` | Interactive REPL session |
-| `web` | Serve the chat UI in a browser |
 | `audit` | Run a best-practice audit, writes `AUDIT-REPORT.md` |
-| `init` | Scaffold a new PBIP report from the bundled template |
-| `tools list` | List all registered tools |
-| `tools describe --name <tool>` | Show a tool's schema |
+| `init` | Scaffold a new PBIP report project from the bundled template |
 
 ## Configuration
 
@@ -208,22 +208,28 @@ pbi-agent chat
 | `PBI_AGENT_RESPONSES_URL` | Custom HTTP Responses endpoint | derived from WS URL |
 | `PBI_AGENT_GENERIC_API_URL` | Generic OpenAI-compatible Chat Completions endpoint | `https://openrouter.ai/api/v1/chat/completions` |
 
-Legacy provider-specific environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GENERIC_API_KEY`) are still accepted as fallbacks.
-
 You can also place these in a `.env` file in your project root.
 
 ### CLI flags
 
-All environment variables have corresponding CLI flags. Run `pbi-agent --help` for the full list:
+All environment variables have corresponding CLI flags. Run `pbi-agent --help` for the full list.
+
+By default, `pbi-agent` uses the **OpenAI** provider with **GPT-5.4** -- no flags needed:
 
 ```bash
-pbi-agent --provider anthropic --model claude-opus-4-6 chat
+pbi-agent
 ```
 
-For generic providers, omit `--model` to use the gateway default model selection, or pass one explicitly:
+To use **Anthropic**:
 
 ```bash
-pbi-agent --provider generic --model openai/gpt-5-mini chat
+pbi-agent --provider anthropic --model claude-opus-4-6
+```
+
+To use **OpenRouter** (or any OpenAI-compatible gateway) with a specific model:
+
+```bash
+pbi-agent --provider generic --model z-ai/glm-5
 ```
 
 ## How It Works
