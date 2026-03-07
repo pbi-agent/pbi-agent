@@ -27,8 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pbi-agent",
         description="Power BI editing coding agent (foundation v1).",
-        usage="%(prog)s [GLOBAL OPTIONS] <command> [COMMAND OPTIONS]",
-        epilog="Run `pbi-agent <command> --help` for command-specific options.",
+        usage="%(prog)s [GLOBAL OPTIONS] [<command>] [COMMAND OPTIONS]",
+        epilog=(
+            "Run `pbi-agent <command> --help` for command-specific options. "
+            "Defaults to `web` when no command is provided."
+        ),
         formatter_class=CleanHelpFormatter,
         allow_abbrev=False,
     )
@@ -120,7 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(
         dest="command",
-        required=True,
+        required=False,
         title="Commands",
         metavar="<command>",
     )
@@ -205,8 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_argv = sys.argv[1:] if argv is None else argv
     if not raw_argv:
-        parser.print_help()
-        return 0
+        raw_argv = ["web"]
 
     args = parser.parse_args(raw_argv)
 
