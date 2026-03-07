@@ -127,6 +127,8 @@ def build_parser() -> argparse.ArgumentParser:
         title="Commands",
         metavar="<command>",
     )
+    # Default to the "web" command when no subcommand is provided.
+    parser.set_defaults(command="web")
 
     run_parser = subparsers.add_parser(
         "run",
