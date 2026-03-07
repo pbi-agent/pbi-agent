@@ -1,0 +1,372 @@
+from __future__ import annotations
+
+import json
+import urllib.request
+
+from pbi_agent.agent.system_prompt import get_system_prompt
+from pbi_agent.agent.tool_runtime import ToolExecutionBatch
+from pbi_agent.config import DEFAULT_GENERIC_API_URL, Settings
+from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
+from pbi_agent.providers.generic_provider import GenericProvider
+from pbi_agent.tools.types import ToolResult
+
+
+def _make_settings(**overrides: object) -> Settings:
+    defaults: dict[str, object] = {
+        "api_key": "test-key",
+        "provider": "generic",
+        "generic_api_url": DEFAULT_GENERIC_API_URL,
+        "model": "",
+        "max_retries": 1,
+    }
+    defaults.update(overrides)
+    return Settings(**defaults)
+
+
+def test_generic_parse_response_normalizes_assistant_message_and_tool_calls() -> None:
+    provider = GenericProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "chatcmpl_123",
+            "model": "openrouter/auto",
+            "usage": {
+                "prompt_tokens": 21,
+                "completion_tokens": 8,
+                "completion_tokens_details": {"reasoning_tokens": 3},
+            },
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {"type": "text", "text": "First line. "},
+                            {"type": "output_text", "text": "Second line."},
+                            {"type": "refusal", "refusal": "policy block"},
+                        ],
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "shell",
+                                    "arguments": '{"command":"pwd"}',
+                                },
+                            },
+                            {
+                                "id": "call_2",
+                                "type": "function",
+                                "function": {
+                                    "name": "init_report",
+                                    "arguments": {"dest": "."},
+                                },
+                            },
+                        ],
+                    }
+                }
+            ],
+        }
+    )
+
+    assert result.response_id == "chatcmpl_123"
+    assert result.text == "First line. Second line."
+    assert result.function_calls == [
+        ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
+        ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+    ]
+    assert result.usage.input_tokens == 21
+    assert result.usage.output_tokens == 8
+    assert result.usage.reasoning_tokens == 3
+    assert result.usage.model == "openrouter/auto"
+
+    assistant_message = result.provider_data["assistant_message"]
+    assert assistant_message["role"] == "assistant"
+    assert assistant_message["content"] == [
+        {"type": "text", "text": "First line. "},
+        {"type": "text", "text": "Second line."},
+        {"type": "refusal", "refusal": "policy block"},
+    ]
+    assert [item["id"] for item in assistant_message["tool_calls"]] == [
+        "call_1",
+        "call_2",
+    ]
+    assert json.loads(assistant_message["tool_calls"][0]["function"]["arguments"]) == {
+        "command": "pwd"
+    }
+    assert json.loads(assistant_message["tool_calls"][1]["function"]["arguments"]) == {
+        "dest": "."
+    }
+
+
+def test_generic_request_turn_preserves_history_and_tool_results(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    responses = iter(
+        [
+            {
+                "id": "chatcmpl_1",
+                "model": "openrouter/auto",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 2,
+                    "completion_tokens_details": {"reasoning_tokens": 1},
+                },
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Let me check.",
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "shell",
+                                        "arguments": '{"command":"pwd"}',
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ],
+            },
+            {
+                "id": "chatcmpl_2",
+                "model": "openrouter/auto",
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 5,
+                    "completion_tokens_details": {"reasoning_tokens": 0},
+                },
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "You are in /workspace.",
+                        }
+                    }
+                ],
+            },
+        ]
+    )
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return make_http_response(next(responses))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GenericProvider(_make_settings())
+    session_usage = TokenUsage()
+
+    first = provider.request_turn(
+        user_message="Where am I?",
+        display=display_spy,
+        session_usage=session_usage,
+        turn_usage=TokenUsage(),
+    )
+    second = provider.request_turn(
+        tool_result_items=[
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": '{"ok": true, "result": "/workspace"}',
+            }
+        ],
+        display=display_spy,
+        session_usage=session_usage,
+        turn_usage=TokenUsage(),
+    )
+
+    assert first.response_id == "chatcmpl_1"
+    assert second.response_id == "chatcmpl_2"
+    assert requests[0] == {
+        "messages": [
+            {"role": "system", "content": get_system_prompt()},
+            {"role": "user", "content": "Where am I?"},
+        ],
+        "tools": provider._tools,
+        "tool_choice": "auto",
+    }
+    assert requests[1] == {
+        "messages": [
+            {"role": "system", "content": get_system_prompt()},
+            {"role": "user", "content": "Where am I?"},
+            {
+                "role": "assistant",
+                "content": "Let me check.",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "shell",
+                            "arguments": '{"command":"pwd"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": '{"ok": true, "result": "/workspace"}',
+            },
+        ],
+        "tools": provider._tools,
+        "tool_choice": "auto",
+    }
+    assert display_spy.markdown_calls == ["Let me check.", "You are in /workspace."]
+    assert display_spy.session_usage_snapshots[-1].input_tokens == 22
+    assert display_spy.session_usage_snapshots[-1].output_tokens == 7
+    assert display_spy.session_usage_snapshots[-1].reasoning_tokens == 1
+
+
+def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
+    monkeypatch,
+    display_spy,
+) -> None:
+    provider = GenericProvider(_make_settings())
+    response = CompletedResponse(
+        response_id="chatcmpl_1",
+        text="",
+        function_calls=[
+            ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
+            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+        ],
+    )
+    batch = ToolExecutionBatch(
+        results=[
+            ToolResult(
+                call_id="call_1",
+                output_json='{"ok": true, "result": "/workspace"}',
+            ),
+            ToolResult(
+                call_id="call_2",
+                output_json=(
+                    '{"ok": false, "error": {"type": "tool_execution_failed", '
+                    '"message": "boom"}}'
+                ),
+                is_error=True,
+            ),
+        ],
+        had_errors=True,
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.generic_provider._execute_tool_calls",
+        lambda calls, max_workers: batch,
+    )
+
+    tool_result_items, had_errors = provider.execute_tool_calls(
+        response,
+        max_workers=2,
+        display=display_spy,
+    )
+
+    assert had_errors is True
+    assert tool_result_items == [
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": '{"ok": true, "result": "/workspace"}',
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_2",
+            "content": (
+                '{"ok": false, "error": {"type": "tool_execution_failed", '
+                '"message": "boom"}}'
+            ),
+        },
+    ]
+    assert display_spy.function_counts == [2]
+    assert display_spy.function_results == [
+        {
+            "name": "shell",
+            "success": True,
+            "call_id": "call_1",
+            "arguments": {"command": "pwd"},
+        },
+        {
+            "name": "init_report",
+            "success": False,
+            "call_id": "call_2",
+            "arguments": {"dest": "."},
+        },
+    ]
+    assert display_spy.tool_group_end_count == 1
+
+
+def test_generic_request_turn_retries_after_rate_limit(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    waits: list[float] = []
+    response_payload = {
+        "id": "chatcmpl_retry",
+        "model": "openrouter/my-model",
+        "usage": {
+            "prompt_tokens": 6,
+            "completion_tokens": 4,
+            "completion_tokens_details": {"reasoning_tokens": 0},
+        },
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Recovered.",
+                }
+            }
+        ],
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            raise make_http_error(
+                url=DEFAULT_GENERIC_API_URL,
+                code=429,
+                body='{"error":"slow down"}',
+                headers={"Retry-After": "0.25"},
+            )
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.generic_provider.time.sleep",
+        lambda seconds: waits.append(seconds),
+    )
+
+    provider = GenericProvider(
+        _make_settings(model="openrouter/my-model", max_retries=1)
+    )
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert requests[0]["model"] == "openrouter/my-model"
+    assert requests[1]["model"] == "openrouter/my-model"
+    assert waits == [0.25]
+    assert display_spy.rate_limit_notices == [(0.25, 1, 1)]
+    assert display_spy.retry_notices == [(1, 1)]

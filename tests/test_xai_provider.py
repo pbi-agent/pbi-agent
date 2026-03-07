@@ -4,6 +4,7 @@ import json
 import urllib.request
 
 from pbi_agent.agent.system_prompt import get_system_prompt
+from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     DEFAULT_XAI_MODEL,
@@ -11,8 +12,9 @@ from pbi_agent.config import (
     Settings,
     resolve_settings,
 )
-from pbi_agent.models.messages import TokenUsage
+from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.xai_provider import XAIProvider
+from pbi_agent.tools.types import ToolResult
 
 
 class _DisplayStub:
@@ -192,7 +194,7 @@ def test_xai_parse_response_extracts_function_calls_and_encrypted_reasoning() ->
                     "encrypted_content": "encrypted-value",
                 },
                 {
-                    "arguments": "{\"location\":\"San Francisco\"}",
+                    "arguments": '{"location":"San Francisco"}',
                     "call_id": "call_88263992",
                     "name": "get_temperature",
                     "type": "function_call",
@@ -239,7 +241,7 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
                 },
                 "output": [
                     {
-                        "arguments": "{\"location\":\"San Francisco\"}",
+                        "arguments": '{"location":"San Francisco"}',
                         "call_id": "call_1",
                         "name": "get_temperature",
                         "type": "function_call",
@@ -261,7 +263,10 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
                         "type": "message",
                         "role": "assistant",
                         "content": [
-                            {"type": "output_text", "text": "The current temperature is 59F."}
+                            {
+                                "type": "output_text",
+                                "text": "The current temperature is 59F.",
+                            }
                         ],
                     }
                 ],
@@ -323,3 +328,169 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
             "output": '{"temperature":59}',
         }
     ]
+
+
+def test_xai_execute_tool_calls_returns_function_call_outputs(
+    monkeypatch,
+    display_spy,
+) -> None:
+    provider = XAIProvider(_make_settings())
+    response = CompletedResponse(
+        response_id="resp_1",
+        text="",
+        function_calls=[
+            ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
+            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+        ],
+    )
+    batch = ToolExecutionBatch(
+        results=[
+            ToolResult(
+                call_id="call_1",
+                output_json='{"ok": true, "result": "/workspace"}',
+            ),
+            ToolResult(
+                call_id="call_2",
+                output_json=(
+                    '{"ok": false, "error": {"type": "tool_execution_failed", '
+                    '"message": "boom"}}'
+                ),
+                is_error=True,
+            ),
+        ],
+        had_errors=True,
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.xai_provider._execute_tool_calls",
+        lambda calls, max_workers: batch,
+    )
+
+    tool_result_items, had_errors = provider.execute_tool_calls(
+        response,
+        max_workers=2,
+        display=display_spy,
+    )
+
+    assert had_errors is True
+    assert tool_result_items == [
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"ok": true, "result": "/workspace"}',
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "call_2",
+            "output": (
+                '{"ok": false, "error": {"type": "tool_execution_failed", '
+                '"message": "boom"}}'
+            ),
+        },
+    ]
+    assert display_spy.function_counts == [2]
+    assert display_spy.function_results == [
+        {
+            "name": "shell",
+            "success": True,
+            "call_id": "call_1",
+            "arguments": {"command": "pwd"},
+        },
+        {
+            "name": "init_report",
+            "success": False,
+            "call_id": "call_2",
+            "arguments": {"dest": "."},
+        },
+    ]
+    assert display_spy.tool_group_end_count == 1
+
+
+def test_xai_request_turn_retries_after_rate_limit_and_renders_reasoning(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    waits: list[float] = []
+    response_payload = {
+        "id": "resp_retry",
+        "model": DEFAULT_XAI_MODEL,
+        "usage": {
+            "input_tokens": 6,
+            "input_tokens_details": {"cached_tokens": 1},
+            "output_tokens": 4,
+            "output_tokens_details": {"reasoning_tokens": 2},
+        },
+        "reasoning": {"effort": "high", "summary": "detailed"},
+        "output": [
+            {
+                "type": "reasoning",
+                "summary": [
+                    {"type": "summary_text", "text": "Planned a response"},
+                ],
+                "content": [
+                    {
+                        "type": "reasoning_text",
+                        "text": "Checked the request before answering.",
+                    }
+                ],
+                "encrypted_content": "encrypted-value",
+            },
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Recovered."}],
+            },
+        ],
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            raise make_http_error(
+                url=DEFAULT_XAI_RESPONSES_URL,
+                code=429,
+                body='{"error":"slow down"}',
+                headers={"Retry-After": "0.25"},
+            )
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.xai_provider.time.sleep",
+        lambda seconds: waits.append(seconds),
+    )
+
+    provider = XAIProvider(_make_settings(max_retries=1))
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_XAI_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_XAI_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert waits == [0.25]
+    assert display_spy.wait_messages == ["analyzing your request..."]
+    assert display_spy.retry_notices == [(1, 1)]
+    assert display_spy.rate_limit_notices == [(0.25, 1, 1)]
+    assert display_spy.thinking_calls == [
+        {
+            "text": "Checked the request before answering.",
+            "title": "Planned a response",
+            "replace_existing": False,
+            "widget_id": None,
+        }
+    ]
+    assert display_spy.markdown_calls == ["Recovered."]
+    assert display_spy.session_usage_snapshots[-1].input_tokens == 6
+    assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 1
+    assert display_spy.session_usage_snapshots[-1].output_tokens == 4

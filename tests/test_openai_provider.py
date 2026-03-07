@@ -4,9 +4,11 @@ import json
 import urllib.request
 
 from pbi_agent.agent.system_prompt import get_system_prompt
+from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import DEFAULT_MODEL, DEFAULT_RESPONSES_URL, Settings
-from pbi_agent.models.messages import TokenUsage
+from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.openai_provider import OpenAIProvider
+from pbi_agent.tools.types import ToolResult
 
 
 class _DisplayStub:
@@ -155,7 +157,7 @@ def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> 
                     ],
                 },
                 {
-                    "arguments": "{\"location\":\"San Francisco\"}",
+                    "arguments": '{"location":"San Francisco"}',
                     "call_id": "call_88263992",
                     "name": "get_temperature",
                     "type": "function_call",
@@ -198,7 +200,7 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
                 },
                 "output": [
                     {
-                        "arguments": "{\"location\":\"San Francisco\"}",
+                        "arguments": '{"location":"San Francisco"}',
                         "call_id": "call_1",
                         "name": "get_temperature",
                         "type": "function_call",
@@ -286,3 +288,207 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
         }
     ]
     assert requests[1]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
+
+
+def test_openai_execute_tool_calls_returns_function_call_outputs(
+    monkeypatch,
+    display_spy,
+) -> None:
+    provider = OpenAIProvider(_make_settings())
+    response = CompletedResponse(
+        response_id="resp_1",
+        text="",
+        function_calls=[
+            ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
+            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+        ],
+    )
+    batch = ToolExecutionBatch(
+        results=[
+            ToolResult(
+                call_id="call_1",
+                output_json='{"ok": true, "result": "/workspace"}',
+            ),
+            ToolResult(
+                call_id="call_2",
+                output_json=(
+                    '{"ok": false, "error": {"type": "tool_execution_failed", '
+                    '"message": "boom"}}'
+                ),
+                is_error=True,
+            ),
+        ],
+        had_errors=True,
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider._execute_tool_calls",
+        lambda calls, max_workers: batch,
+    )
+
+    tool_result_items, had_errors = provider.execute_tool_calls(
+        response,
+        max_workers=2,
+        display=display_spy,
+    )
+
+    assert had_errors is True
+    assert tool_result_items == [
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"ok": true, "result": "/workspace"}',
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "call_2",
+            "output": (
+                '{"ok": false, "error": {"type": "tool_execution_failed", '
+                '"message": "boom"}}'
+            ),
+        },
+    ]
+    assert display_spy.function_counts == [2]
+    assert display_spy.function_results == [
+        {
+            "name": "shell",
+            "success": True,
+            "call_id": "call_1",
+            "arguments": {"command": "pwd"},
+        },
+        {
+            "name": "init_report",
+            "success": False,
+            "call_id": "call_2",
+            "arguments": {"dest": "."},
+        },
+    ]
+    assert display_spy.tool_group_end_count == 1
+
+
+def test_openai_request_turn_retries_after_rate_limit_and_renders_reasoning(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    waits: list[float] = []
+    response_payload = {
+        "id": "resp_retry",
+        "model": DEFAULT_MODEL,
+        "usage": {
+            "input_tokens": 6,
+            "input_tokens_details": {"cached_tokens": 1},
+            "output_tokens": 4,
+            "output_tokens_details": {"reasoning_tokens": 2},
+        },
+        "reasoning": {"effort": "xhigh", "summary": "auto"},
+        "output": [
+            {
+                "type": "reasoning",
+                "summary": [
+                    {"type": "summary_text", "text": "Planned a response"},
+                ],
+                "content": [
+                    {
+                        "type": "reasoning_text",
+                        "text": "Checked the request before answering.",
+                    }
+                ],
+            },
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Recovered."}],
+            },
+        ],
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            raise make_http_error(
+                url=DEFAULT_RESPONSES_URL,
+                code=429,
+                body='{"error":"slow down"}',
+                headers={"Retry-After": "0.25"},
+            )
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider.time.sleep",
+        lambda seconds: waits.append(seconds),
+    )
+
+    provider = OpenAIProvider(_make_settings(max_retries=1))
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert waits == [0.25]
+    assert display_spy.wait_messages == ["analyzing your request..."]
+    assert display_spy.retry_notices == [(1, 1)]
+    assert display_spy.rate_limit_notices == [(0.25, 1, 1)]
+    assert display_spy.thinking_calls == [
+        {
+            "text": "Checked the request before answering.",
+            "title": "Planned a response",
+            "replace_existing": False,
+            "widget_id": None,
+        }
+    ]
+    assert display_spy.markdown_calls == ["Recovered."]
+    assert display_spy.session_usage_snapshots[-1].input_tokens == 6
+    assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 1
+    assert display_spy.session_usage_snapshots[-1].output_tokens == 4
+
+
+def test_openai_request_turn_raises_for_failed_response_payload(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        return make_http_response(
+            {
+                "status": "failed",
+                "error": {
+                    "code": "server_error",
+                    "message": "Upstream processing failed.",
+                },
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = OpenAIProvider(_make_settings())
+
+    try:
+        provider.request_turn(
+            user_message="hello",
+            display=display_spy,
+            session_usage=TokenUsage(model=DEFAULT_MODEL),
+            turn_usage=TokenUsage(model=DEFAULT_MODEL),
+        )
+    except RuntimeError as exc:
+        assert str(exc) == (
+            "OpenAI response failed (server_error): Upstream processing failed."
+        )
+    else:
+        raise AssertionError("Expected RuntimeError for failed OpenAI response")
