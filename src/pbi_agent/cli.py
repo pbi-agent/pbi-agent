@@ -252,8 +252,7 @@ def _handle_chat_command(settings: Settings) -> int:
     from pbi_agent.ui import ChatApp
 
     app = ChatApp(settings=settings, verbose=settings.verbose)
-    app.run()
-    return app.exit_code
+    return _run_app(app)
 
 
 def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:
@@ -265,8 +264,7 @@ def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:
         mode="run",
         prompt=args.prompt,
     )
-    app.run()
-    return app.exit_code
+    return _run_app(app)
 
 
 def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
@@ -299,7 +297,9 @@ def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
             f"AUDIT-REPORT.md."
         ),
     )
-    app.run()
+    exit_code = _run_app(app)
+    if app.fatal_error_message:
+        return exit_code
 
     report_path = report_dir / AUDIT_REPORT_FILENAME
     if not report_path.exists():
@@ -308,10 +308,29 @@ def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
             f"{AUDIT_REPORT_FILENAME} in {report_dir}",
             file=sys.stderr,
         )
-        return app.exit_code or 1
+        return exit_code or 1
 
     print(f"Audit report written to {report_path}")
-    return app.exit_code
+    return exit_code
+
+
+def _run_app(app: object) -> int:
+    app.run()
+    fatal_error_message = getattr(app, "fatal_error_message", None)
+    if isinstance(fatal_error_message, str) and fatal_error_message.strip():
+        _print_error(fatal_error_message)
+    exit_code = getattr(app, "exit_code", 0)
+    return exit_code if isinstance(exit_code, int) else 0
+
+
+def _print_error(message: str) -> None:
+    lines = [line for line in message.splitlines() if line.strip()]
+    if not lines:
+        print("Error.", file=sys.stderr)
+        return
+    print(f"Error: {lines[0]}", file=sys.stderr)
+    for line in lines[1:]:
+        print(line, file=sys.stderr)
 
 
 def _settings_env(settings: Settings) -> dict[str, str]:

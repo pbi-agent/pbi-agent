@@ -15,6 +15,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Footer, Header
 
 from pbi_agent.models.messages import TokenUsage
+from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.ui.display import Display
 from pbi_agent.ui.formatting import format_session_subtitle
 from pbi_agent.ui.styles import CHAT_APP_CSS
@@ -64,6 +65,7 @@ class ChatApp(App):
         self._single_turn_hint = single_turn_hint
         self._bridge: Display | None = None
         self.exit_code: int = 0
+        self.fatal_error_message: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -157,7 +159,7 @@ class ChatApp(App):
             pass
         except Exception as exc:
             _log.exception("Session worker crashed")
-            display.error(str(exc))
+            self.fatal_error_message = format_user_facing_error(exc)
             self.exit_code = 1
         finally:
             try:

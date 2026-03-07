@@ -9,7 +9,6 @@ All tools (including shell and apply_patch) are registered function tools
 """
 
 from __future__ import annotations
-
 import json
 import logging
 import time

@@ -90,7 +90,6 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
             turn_start = time.monotonic()
             turn_usage = TokenUsage(model=model)
             display.assistant_start()
-
             response = provider.request_turn(
                 user_message=user_input,
                 display=display,
@@ -105,6 +104,7 @@ def run_chat_loop(settings: Settings, display: Display) -> int:
                 session_usage=session_usage,
                 turn_usage=turn_usage,
             )
+
             had_tool_errors = had_tool_errors or loop_had_errors
             elapsed = time.monotonic() - turn_start
             display.turn_usage(turn_usage, elapsed)
