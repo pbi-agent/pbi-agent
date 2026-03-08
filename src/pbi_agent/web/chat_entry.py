@@ -32,9 +32,19 @@ def _watch_parent_process(parent_pid: int) -> None:
         return
 
     while True:
-        if os.getppid() != parent_pid:
+        if not _parent_process_exists(parent_pid):
             os._exit(0)
         time.sleep(0.5)
+
+
+def _parent_process_exists(parent_pid: int) -> bool:
+    try:
+        os.kill(parent_pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _watch_parent_process_windows(parent_pid: int) -> None:
