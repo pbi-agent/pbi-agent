@@ -1,6 +1,6 @@
 [project]
 name = "pbi-agent"
-version = "0.0.5"
+version = "0.0.6"
 description = "Multi-provider LLM CLI agent for editing Power BI reports"
 readme = "README.md"
 license = "MIT"
@@ -21,11 +21,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pbi_agent"]
 
-# Include all non-Python template files bundled under pbi_agent/report/.
-[tool.hatch.build.targets.wheel.force-include]
-"src/pbi_agent/agent/AUDIT-TODO.md" = "pbi_agent/agent/AUDIT-TODO.md"
-"src/pbi_agent/web/templates" = "pbi_agent/web/templates"
-"src/pbi_agent/web/static" = "pbi_agent/web/static"
+# Non-Python files inside packages are included automatically when they are
+# tracked by git (hatchling default behaviour).  Only add force-include
+# entries for assets that live *outside* the packages listed above.
 
 [tool.uv]
 default-groups = ["dev"]
