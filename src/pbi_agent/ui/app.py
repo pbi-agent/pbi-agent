@@ -75,7 +75,7 @@ class ChatApp(App):
             ChatInput(
                 placeholder=(
                     "Type your message\u2026  "
-                    "(Enter: newline, Ctrl+S: send, Ctrl+Q: quit)"
+                    "(Enter: newline, Ctrl+Enter/Ctrl+S: send, Ctrl+Q: quit)"
                 ),
                 id="user-input",
                 disabled=True,

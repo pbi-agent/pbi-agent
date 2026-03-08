@@ -134,7 +134,7 @@ class NoticeMessage(Static):
 
 
 class ChatInput(TextArea):
-    """Multiline input that auto-grows and submits on Ctrl+S."""
+    """Multiline input that auto-grows and submits on Ctrl+S or Ctrl+Enter."""
 
     BASE_HEIGHT = 3
     MAX_HEIGHT = 20
@@ -174,7 +174,8 @@ class ChatInput(TextArea):
         self._restart_blink()
         if self.read_only:
             return
-        if event.key == "ctrl+s" or "ctrl+s" in event.aliases:
+        _submit_keys = {"ctrl+s", "ctrl+enter"}
+        if event.key in _submit_keys or _submit_keys & set(event.aliases):
             event.stop()
             event.prevent_default()
             self.post_message(self.Submitted(self, self.text))
