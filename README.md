@@ -1,4 +1,22 @@
-# pbi-agent
+<div align="center">
+
+```
+              ████
+              ████
+        ████  ████
+        ████  ████
+  ████  ████  ████
+  ████  ████  ████
+```
+
+# PBI AGENT
+
+*Transform data into decisions.*
+
+[![Publish Python Package](https://github.com/nasirus/pbi-agent/actions/workflows/publish.yml/badge.svg)](https://github.com/nasirus/pbi-agent/actions/workflows/publish.yml)
+[![Create GitHub Release](https://github.com/nasirus/pbi-agent/actions/workflows/release.yml/badge.svg)](https://github.com/nasirus/pbi-agent/actions/workflows/release.yml)
+
+</div>
 
 **A local agent that creates, edits, and audits Power BI reports through natural language.**
 
