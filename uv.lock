@@ -538,7 +538,7 @@ wheels = [
 
 [[package]]
 name = "pbi-agent"
-version = "0.0.2"
+version = "0.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "python-dotenv" },

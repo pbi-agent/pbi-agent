@@ -24,6 +24,8 @@ packages = ["src/pbi_agent"]
 # Include all non-Python template files bundled under pbi_agent/report/.
 [tool.hatch.build.targets.wheel.force-include]
 "src/pbi_agent/agent/AUDIT-TODO.md" = "pbi_agent/agent/AUDIT-TODO.md"
+"src/pbi_agent/web/templates" = "pbi_agent/web/templates"
+"src/pbi_agent/web/static" = "pbi_agent/web/static"
 
 [tool.uv]
 default-groups = ["dev"]

@@ -3,11 +3,14 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import shutil
+import socket
 import subprocess
 import sys
+import time
+import webbrowser
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pbi_agent.config import ConfigError, Settings, resolve_settings
 from pbi_agent.init_command import init_report
@@ -418,34 +421,16 @@ def _handle_web_command(args: argparse.Namespace, settings: Settings) -> int:
         print("Error: --port must be between 1 and 65535.", file=sys.stderr)
         return 2
 
-    python_dir = Path(sys.executable).parent
-    textual_candidates = [
-        python_dir / "textual.exe",
-        python_dir / "textual.cmd",
-        python_dir / "textual",
-    ]
-    textual_cli = next(
-        (str(path) for path in textual_candidates if path.exists()), None
-    )
-    if textual_cli is None:
-        textual_cli = shutil.which("textual")
-    if textual_cli is None:
-        print(
-            "Error: `textual` command not found in the current runtime. Install "
-            "textual-dev in this environment to use `pbi-agent web`.",
-            file=sys.stderr,
-        )
-        return 2
-
     chat_command: list[str] = [sys.executable, "-m", "pbi_agent"]
     if settings.verbose:
         chat_command.append("--verbose")
     chat_command.append("chat")
 
     serve_cmd: list[str] = [
-        textual_cli,
-        "serve",
-        "--command",
+        sys.executable,
+        "-m",
+        "pbi_agent.web.serve",
+        subprocess.list2cmdline(chat_command),
         "--host",
         args.host,
         "--port",
@@ -457,18 +442,91 @@ def _handle_web_command(args: argparse.Namespace, settings: Settings) -> int:
         serve_cmd.extend(["--title", args.title])
     if args.url:
         serve_cmd.extend(["--url", args.url])
-    serve_cmd.append(subprocess.list2cmdline(chat_command))
 
     env = os.environ.copy()
     env.update(_settings_env(settings))
 
-    print(f"Serving web UI on http://{args.host}:{args.port}")
+    browser_url = _browser_target_url(args)
+    print(f"Serving web UI on {browser_url}")
     try:
-        completed = subprocess.run(serve_cmd, env=env, check=False)
+        process = subprocess.Popen(serve_cmd, env=env, **_web_server_popen_kwargs())
     except OSError as exc:
-        print(f"Error: failed to launch textual serve: {exc}", file=sys.stderr)
+        print(f"Error: failed to launch web server: {exc}", file=sys.stderr)
         return 1
-    return completed.returncode
+
+    try:
+        if _wait_for_web_server(args.host, args.port):
+            if not webbrowser.open(browser_url):
+                LOGGER.warning("Failed to open browser for %s", browser_url)
+        else:
+            LOGGER.warning(
+                "Timed out waiting for the web server to start before opening %s",
+                browser_url,
+            )
+
+        return process.wait()
+    except KeyboardInterrupt:
+        _shutdown_web_server(process)
+        return 130
+
+
+def _browser_target_url(args: argparse.Namespace) -> str:
+    if args.url:
+        parsed = urlparse(args.url)
+        if parsed.scheme:
+            return args.url
+        return f"http://{args.url}"
+
+    host = args.host
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+    elif host == "::":
+        host = "::1"
+
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"http://{host}:{args.port}"
+
+
+def _wait_for_web_server(host: str, port: int, timeout_seconds: float = 10.0) -> bool:
+    connect_host = host
+    if host == "0.0.0.0":
+        connect_host = "127.0.0.1"
+    elif host == "::":
+        connect_host = "::1"
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((connect_host, port), timeout=0.2):
+                return True
+        except OSError:
+            time.sleep(0.1)
+    return False
+
+
+def _web_server_popen_kwargs() -> dict[str, object]:
+    # Keep the web server in the same console/session so terminal Ctrl+C reaches
+    # both the parent CLI and the child web server process.
+    return {}
+
+
+def _shutdown_web_server(
+    process: subprocess.Popen[object], timeout_seconds: float = 5.0
+) -> None:
+    if process.poll() is not None:
+        return
+
+    try:
+        process.terminate()
+    except OSError:
+        return
+
+    try:
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=timeout_seconds)
 
 
 def _handle_init_command(args: argparse.Namespace) -> int:
