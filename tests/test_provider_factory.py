@@ -6,6 +6,7 @@ from pbi_agent.config import Settings
 from pbi_agent.providers import create_provider
 from pbi_agent.providers.anthropic_provider import AnthropicProvider
 from pbi_agent.providers.generic_provider import GenericProvider
+from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.providers.xai_provider import XAIProvider
 
@@ -15,6 +16,7 @@ from pbi_agent.providers.xai_provider import XAIProvider
     [
         ("openai", OpenAIProvider),
         ("xai", XAIProvider),
+        ("google", GoogleProvider),
         ("anthropic", AnthropicProvider),
         ("generic", GenericProvider),
     ],

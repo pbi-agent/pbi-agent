@@ -44,13 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
     provider_group = parser.add_argument_group("Provider and API")
     provider_group.add_argument(
         "--provider",
-        choices=["openai", "xai", "anthropic", "generic"],
+        choices=["openai", "xai", "google", "anthropic", "generic"],
         default=None,
         help="LLM provider backend (default: openai).",
     )
     provider_group.add_argument(
         "--responses-url",
-        help="Override Responses HTTP API URL.",
+        help="Override the provider HTTP API URL (Responses or Interactions).",
     )
     provider_group.add_argument(
         "--api-key",
@@ -64,6 +64,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     provider_group.add_argument(
         "--xai-api-key",
+        dest="api_key",
+        help=argparse.SUPPRESS,
+    )
+    provider_group.add_argument(
+        "--google-api-key",
         dest="api_key",
         help=argparse.SUPPRESS,
     )

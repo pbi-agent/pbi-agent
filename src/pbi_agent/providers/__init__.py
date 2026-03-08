@@ -17,6 +17,7 @@ def create_provider(settings: Settings) -> Provider:
 
     - ``"openai"`` (default) → OpenAI Responses HTTP provider
     - ``"xai"``              → xAI Responses HTTP provider
+    - ``"google"``           → Google Gemini Interactions HTTP provider
     - ``"anthropic"``        → Anthropic Messages HTTP provider
     - ``"generic"``          → OpenAI-compatible Chat Completions HTTP provider
     """
@@ -32,6 +33,11 @@ def create_provider(settings: Settings) -> Provider:
 
         return XAIProvider(settings)
 
+    if name == "google":
+        from pbi_agent.providers.google_provider import GoogleProvider
+
+        return GoogleProvider(settings)
+
     if name == "anthropic":
         from pbi_agent.providers.anthropic_provider import AnthropicProvider
 
@@ -43,7 +49,7 @@ def create_provider(settings: Settings) -> Provider:
         return GenericProvider(settings)
 
     raise ValueError(
-        f"Unknown provider {name!r}. Supported: openai, xai, anthropic, generic."
+        f"Unknown provider {name!r}. Supported: openai, xai, google, anthropic, generic."
     )
 
 

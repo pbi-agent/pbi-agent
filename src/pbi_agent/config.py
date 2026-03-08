@@ -8,14 +8,19 @@ from dotenv import load_dotenv
 
 DEFAULT_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_XAI_RESPONSES_URL = "https://api.x.ai/v1/responses"
+DEFAULT_GOOGLE_INTERACTIONS_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/interactions"
+)
 DEFAULT_GENERIC_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "gpt-5.4-2026-03-05"
 DEFAULT_XAI_MODEL = "grok-4-1-fast-reasoning"
+DEFAULT_GOOGLE_MODEL = "gemini-3.1-flash-lite-preview"
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-6"
 DEFAULT_ANTHROPIC_MAX_TOKENS = 16384
 PROVIDER_API_KEY_ENVS = {
     "openai": "OPENAI_API_KEY",
     "xai": "XAI_API_KEY",
+    "google": "GEMINI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "generic": "GENERIC_API_KEY",
 }
@@ -43,9 +48,9 @@ class Settings:
     anthropic_max_tokens: int = DEFAULT_ANTHROPIC_MAX_TOKENS
 
     def validate(self) -> None:
-        if self.provider not in {"openai", "xai", "anthropic", "generic"}:
+        if self.provider not in {"openai", "xai", "google", "anthropic", "generic"}:
             raise ConfigError(
-                "--provider must be one of: openai, xai, anthropic, generic."
+                "--provider must be one of: openai, xai, google, anthropic, generic."
             )
         if self.provider == "openai" and not self.api_key:
             raise ConfigError(
@@ -55,6 +60,11 @@ class Settings:
         if self.provider == "xai" and not self.api_key:
             raise ConfigError(
                 "Missing API key for provider 'xai'. Set PBI_AGENT_API_KEY in "
+                "environment or pass --api-key."
+            )
+        if self.provider == "google" and not self.api_key:
+            raise ConfigError(
+                "Missing API key for provider 'google'. Set PBI_AGENT_API_KEY in "
                 "environment or pass --api-key."
             )
         if self.provider == "anthropic" and not self.api_key:
@@ -108,6 +118,8 @@ def redact_secret(value: str) -> str:
 def _default_responses_url(provider: str) -> str:
     if provider == "xai":
         return DEFAULT_XAI_RESPONSES_URL
+    if provider == "google":
+        return DEFAULT_GOOGLE_INTERACTIONS_URL
     return DEFAULT_RESPONSES_URL
 
 
@@ -116,6 +128,8 @@ def _default_model(provider: str) -> str:
         return ""
     if provider == "xai":
         return DEFAULT_XAI_MODEL
+    if provider == "google":
+        return DEFAULT_GOOGLE_MODEL
     return DEFAULT_MODEL
 
 

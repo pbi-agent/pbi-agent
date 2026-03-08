@@ -44,6 +44,8 @@ class TokenUsage:
     cache_write_1h_tokens: int = 0
     output_tokens: int = 0
     reasoning_tokens: int = 0
+    tool_use_tokens: int = 0
+    provider_total_tokens: int = 0
     model: str = ""
     _lock: threading.Lock = field(
         default_factory=threading.Lock,
@@ -71,6 +73,8 @@ class TokenUsage:
 
     @property
     def total_tokens(self) -> int:
+        if self.provider_total_tokens > 0:
+            return self.provider_total_tokens
         return self.input_tokens + self.output_tokens
 
     @property
@@ -93,6 +97,8 @@ class TokenUsage:
             self.cache_write_1h_tokens += other_snapshot.cache_write_1h_tokens
             self.output_tokens += other_snapshot.output_tokens
             self.reasoning_tokens += other_snapshot.reasoning_tokens
+            self.tool_use_tokens += other_snapshot.tool_use_tokens
+            self.provider_total_tokens += other_snapshot.provider_total_tokens
             if not self.model and other_snapshot.model:
                 self.model = other_snapshot.model
 
@@ -105,6 +111,8 @@ class TokenUsage:
                 cache_write_1h_tokens=self.cache_write_1h_tokens,
                 output_tokens=self.output_tokens,
                 reasoning_tokens=self.reasoning_tokens,
+                tool_use_tokens=self.tool_use_tokens,
+                provider_total_tokens=self.provider_total_tokens,
                 model=self.model,
             )
 

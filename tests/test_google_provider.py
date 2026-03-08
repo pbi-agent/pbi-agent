@@ -1,0 +1,525 @@
+from __future__ import annotations
+
+import json
+import urllib.request
+
+from pbi_agent.agent.system_prompt import get_system_prompt
+from pbi_agent.agent.tool_runtime import ToolExecutionBatch
+from pbi_agent.cli import build_parser
+from pbi_agent.config import (
+    DEFAULT_GOOGLE_INTERACTIONS_URL,
+    DEFAULT_GOOGLE_MODEL,
+    Settings,
+    resolve_settings,
+)
+from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
+from pbi_agent.providers.google_provider import GoogleProvider
+from pbi_agent.tools.types import ToolResult
+
+
+class _FakeHTTPResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+
+def _make_settings(**overrides: object) -> Settings:
+    defaults: dict[str, object] = {
+        "api_key": "test-key",
+        "provider": "google",
+        "responses_url": DEFAULT_GOOGLE_INTERACTIONS_URL,
+        "model": DEFAULT_GOOGLE_MODEL,
+        "reasoning_effort": "xhigh",
+        "max_retries": 0,
+        "anthropic_max_tokens": 16384,
+    }
+    defaults.update(overrides)
+    return Settings(**defaults)
+
+
+def test_resolve_settings_uses_google_defaults(monkeypatch) -> None:
+    for name in (
+        "PBI_AGENT_PROVIDER",
+        "PBI_AGENT_API_KEY",
+        "PBI_AGENT_RESPONSES_URL",
+        "PBI_AGENT_MODEL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
+
+    parser = build_parser()
+    args = parser.parse_args(["--provider", "google", "chat"])
+    settings = resolve_settings(args)
+
+    assert settings.provider == "google"
+    assert settings.api_key == "gemini-test-key"
+    assert settings.responses_url == DEFAULT_GOOGLE_INTERACTIONS_URL
+    assert settings.model == DEFAULT_GOOGLE_MODEL
+    assert settings.reasoning_effort == "high"
+    settings.validate()
+
+
+def test_google_build_request_body_uses_interactions_shape() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    body = provider._build_request_body(
+        input_value="hello",
+        instructions="be concise",
+    )
+
+    assert body["model"] == DEFAULT_GOOGLE_MODEL
+    assert body["input"] == "hello"
+    assert body["stream"] is False
+    assert body["store"] is True
+    assert body["system_instruction"] == "be concise"
+    assert body["generation_config"] == {
+        "thinking_level": "high",
+        "thinking_summaries": "auto",
+        "max_output_tokens": 16384,
+    }
+    assert "previous_interaction_id" not in body
+
+
+def test_google_provider_normalizes_empty_required_lists_in_tool_schemas() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    init_report_tool = next(
+        tool for tool in provider._tools if tool["name"] == "init_report"
+    )
+
+    assert "required" not in init_report_tool["parameters"]
+
+
+def test_google_parse_response_extracts_function_calls_thoughts_and_usage() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_123",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "requires_action",
+            "usage": {
+                "total_input_tokens": 376,
+                "total_cached_tokens": 12,
+                "total_output_tokens": 33,
+                "total_thought_tokens": 207,
+                "total_tool_use_tokens": 50,
+                "total_tokens": 666,
+            },
+            "outputs": [
+                {
+                    "type": "thought",
+                    "signature": "sig_123",
+                    "summary": [
+                        {
+                            "type": "text",
+                            "text": "Examined the request before deciding to call a tool.",
+                        }
+                    ],
+                },
+                {
+                    "type": "function_call",
+                    "id": "call_88263992",
+                    "name": "get_temperature",
+                    "arguments": {"location": "San Francisco"},
+                },
+            ],
+        }
+    )
+
+    assert result.response_id == "int_123"
+    assert result.text == ""
+    assert (
+        result.reasoning_content
+        == "Examined the request before deciding to call a tool."
+    )
+    assert result.provider_data["status"] == "requires_action"
+    assert result.provider_data["thought_signatures"] == ["sig_123"]
+    assert result.function_calls[0].call_id == "call_88263992"
+    assert result.function_calls[0].name == "get_temperature"
+    assert result.function_calls[0].arguments == {"location": "San Francisco"}
+    assert result.usage.input_tokens == 376
+    assert result.usage.cached_input_tokens == 12
+    assert result.usage.output_tokens == 33
+    assert result.usage.reasoning_tokens == 207
+    assert result.usage.tool_use_tokens == 50
+    assert result.usage.provider_total_tokens == 666
+    assert result.usage.total_tokens == 666
+    assert result.usage.model == DEFAULT_GOOGLE_MODEL
+
+
+def test_google_request_turn_reuses_previous_interaction_id(monkeypatch) -> None:
+    requests: list[dict[str, object]] = []
+    responses = iter(
+        [
+            {
+                "id": "int_1",
+                "model": DEFAULT_GOOGLE_MODEL,
+                "status": "requires_action",
+                "usage": {
+                    "total_input_tokens": 10,
+                    "total_cached_tokens": 0,
+                    "total_output_tokens": 3,
+                    "total_thought_tokens": 2,
+                },
+                "outputs": [
+                    {
+                        "type": "function_call",
+                        "id": "call_1",
+                        "name": "get_temperature",
+                        "arguments": {"location": "San Francisco"},
+                    }
+                ],
+            },
+            {
+                "id": "int_2",
+                "model": DEFAULT_GOOGLE_MODEL,
+                "status": "completed",
+                "usage": {
+                    "total_input_tokens": 12,
+                    "total_cached_tokens": 0,
+                    "total_output_tokens": 4,
+                    "total_thought_tokens": 1,
+                },
+                "outputs": [
+                    {
+                        "type": "text",
+                        "text": "The current temperature is 59F.",
+                    }
+                ],
+            },
+        ]
+    )
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return _FakeHTTPResponse(next(responses))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GoogleProvider(_make_settings())
+    display = _DisplayStub()
+    session_usage = TokenUsage(model=DEFAULT_GOOGLE_MODEL)
+
+    first_turn_usage = TokenUsage(model=DEFAULT_GOOGLE_MODEL)
+    first = provider.request_turn(
+        user_message="What is the temperature in San Francisco?",
+        display=display,
+        session_usage=session_usage,
+        turn_usage=first_turn_usage,
+    )
+
+    second_turn_usage = TokenUsage(model=DEFAULT_GOOGLE_MODEL)
+    second = provider.request_turn(
+        tool_result_items=[
+            {
+                "type": "function_result",
+                "name": "get_temperature",
+                "call_id": "call_1",
+                "result": '{"temperature":59}',
+            }
+        ],
+        display=display,
+        session_usage=session_usage,
+        turn_usage=second_turn_usage,
+    )
+
+    assert first.response_id == "int_1"
+    assert second.response_id == "int_2"
+    assert requests[0]["input"] == "What is the temperature in San Francisco?"
+    assert requests[0]["system_instruction"] == get_system_prompt()
+    assert requests[0]["generation_config"] == {
+        "thinking_level": "high",
+        "thinking_summaries": "auto",
+        "max_output_tokens": 16384,
+    }
+    assert "previous_interaction_id" not in requests[0]
+    assert requests[1]["previous_interaction_id"] == "int_1"
+    assert requests[1]["system_instruction"] == get_system_prompt()
+    assert requests[1]["input"] == [
+        {
+            "type": "function_result",
+            "name": "get_temperature",
+            "call_id": "call_1",
+            "result": '{"temperature":59}',
+        }
+    ]
+
+
+def test_google_execute_tool_calls_returns_function_results(
+    monkeypatch,
+    display_spy,
+) -> None:
+    provider = GoogleProvider(_make_settings())
+    response = CompletedResponse(
+        response_id="int_1",
+        text="",
+        function_calls=[
+            ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
+            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+        ],
+    )
+    batch = ToolExecutionBatch(
+        results=[
+            ToolResult(
+                call_id="call_1",
+                output_json='{"ok": true, "result": "/workspace"}',
+            ),
+            ToolResult(
+                call_id="call_2",
+                output_json=(
+                    '{"ok": false, "error": {"type": "tool_execution_failed", '
+                    '"message": "boom"}}'
+                ),
+                is_error=True,
+            ),
+        ],
+        had_errors=True,
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.google_provider._execute_tool_calls",
+        lambda calls, max_workers: batch,
+    )
+
+    tool_result_items, had_errors = provider.execute_tool_calls(
+        response,
+        max_workers=2,
+        display=display_spy,
+    )
+
+    assert had_errors is True
+    assert tool_result_items == [
+        {
+            "type": "function_result",
+            "name": "shell",
+            "call_id": "call_1",
+            "result": '{"ok": true, "result": "/workspace"}',
+        },
+        {
+            "type": "function_result",
+            "name": "init_report",
+            "call_id": "call_2",
+            "result": (
+                '{"ok": false, "error": {"type": "tool_execution_failed", '
+                '"message": "boom"}}'
+            ),
+            "is_error": True,
+        },
+    ]
+    assert display_spy.function_counts == [2]
+    assert display_spy.function_results == [
+        {
+            "name": "shell",
+            "success": True,
+            "call_id": "call_1",
+            "arguments": {"command": "pwd"},
+        },
+        {
+            "name": "init_report",
+            "success": False,
+            "call_id": "call_2",
+            "arguments": {"dest": "."},
+        },
+    ]
+    assert display_spy.tool_group_end_count == 1
+
+
+def test_google_request_turn_retries_after_rate_limit_and_renders_thinking(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    waits: list[float] = []
+    response_payload = {
+        "id": "int_retry",
+        "model": DEFAULT_GOOGLE_MODEL,
+        "status": "completed",
+        "usage": {
+            "total_input_tokens": 6,
+            "total_cached_tokens": 1,
+            "total_output_tokens": 4,
+            "total_thought_tokens": 2,
+            "total_tool_use_tokens": 3,
+            "total_tokens": 15,
+        },
+        "outputs": [
+            {
+                "type": "thought",
+                "signature": "sig_retry",
+                "summary": [{"type": "text", "text": "Checked the request first."}],
+            },
+            {
+                "type": "text",
+                "text": "Recovered.",
+            },
+        ],
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            raise make_http_error(
+                url=DEFAULT_GOOGLE_INTERACTIONS_URL,
+                code=429,
+                body='{"error":{"message":"slow down"}}',
+                headers={"Retry-After": "0.25"},
+            )
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.google_provider.time.sleep",
+        lambda seconds: waits.append(seconds),
+    )
+
+    provider = GoogleProvider(_make_settings(max_retries=1))
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert waits == [0.25]
+    assert display_spy.wait_messages == ["analyzing your request..."]
+    assert display_spy.retry_notices == [(1, 1)]
+    assert display_spy.rate_limit_notices == [(0.25, 1, 1)]
+    assert display_spy.thinking_calls == [
+        {
+            "text": "Checked the request first.",
+            "title": None,
+            "replace_existing": False,
+            "widget_id": None,
+        }
+    ]
+    assert display_spy.markdown_calls == ["Recovered."]
+    assert display_spy.session_usage_snapshots[-1].input_tokens == 6
+    assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 1
+    assert display_spy.session_usage_snapshots[-1].output_tokens == 4
+    assert display_spy.session_usage_snapshots[-1].tool_use_tokens == 3
+    assert display_spy.session_usage_snapshots[-1].total_tokens == 15
+
+
+def test_google_request_turn_raises_for_failed_response_payload(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        return make_http_response(
+            {
+                "status": "failed",
+                "error": {
+                    "code": "internal",
+                    "message": "Upstream processing failed.",
+                },
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GoogleProvider(_make_settings())
+
+    try:
+        provider.request_turn(
+            user_message="hello",
+            display=display_spy,
+            session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+            turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        )
+    except RuntimeError as exc:
+        assert str(exc) == (
+            "Google interaction failed (internal): Upstream processing failed."
+        )
+    else:
+        raise AssertionError("Expected RuntimeError for failed Google interaction")
+
+
+class _DisplayStub:
+    def wait_start(self, message: str = "") -> None:
+        self.last_wait_message = message
+
+    def wait_stop(self) -> None:
+        pass
+
+    def retry_notice(self, attempt: int, max_retries: int) -> None:
+        self.retry = (attempt, max_retries)
+
+    def rate_limit_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.rate_limit = (wait_seconds, attempt, max_retries)
+
+    def session_usage(self, usage: TokenUsage) -> None:
+        self.session_usage_snapshot = usage.snapshot()
+
+    def render_thinking(
+        self,
+        text: str | None = None,
+        *,
+        title: str | None = None,
+        replace_existing: bool = False,
+        widget_id: str | None = None,
+    ) -> str | None:
+        self.thinking = {
+            "text": text,
+            "title": title,
+            "replace_existing": replace_existing,
+            "widget_id": widget_id,
+        }
+        return widget_id
+
+    def render_markdown(self, text: str) -> None:
+        self.markdown = text
+
+    def function_start(self, count: int) -> None:
+        self.function_count = count
+
+    def function_result(
+        self,
+        *,
+        name: str,
+        success: bool,
+        call_id: str,
+        arguments: object,
+    ) -> None:
+        self.last_function_result = {
+            "name": name,
+            "success": success,
+            "call_id": call_id,
+            "arguments": arguments,
+        }
+
+    def tool_group_end(self) -> None:
+        self.tool_group_closed = True

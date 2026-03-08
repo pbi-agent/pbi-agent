@@ -73,6 +73,8 @@ def format_usage_summary(
     out_detail = f"{out} out"
     if usage.reasoning_tokens:
         out_detail += f" [dim]\u00b7[/dim] {usage.reasoning_tokens:,} reasoning"
+    if usage.tool_use_tokens:
+        out_detail += f" [dim]\u00b7[/dim] {usage.tool_use_tokens:,} tool-use"
     parts = [
         f"[dim]{total} tokens[/dim]  "
         f"({inp} in [dim]\u00b7[/dim] {cache_detail} [dim]\u00b7[/dim] {out_detail})",

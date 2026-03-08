@@ -36,7 +36,7 @@ Power BI development involves a large amount of repetitive, manual work: creatin
 - **Consistent quality** -- The built-in audit engine checks 90+ rules across modeling, performance, security, and DAX quality, catching issues that manual reviews miss.
 - **Lower barrier to entry** -- Junior developers and analysts can produce well-structured reports without deep Power BI expertise; the agent encodes best practices into every action it takes.
 - **Repeatable workflows** -- Single-turn prompts (`pbi-agent run`) integrate into scripts and CI pipelines, making report generation and auditing automatable.
-- **Bring your own model** -- Works with **OpenAI** (GPT-5.4, default), **xAI** (`grok-4-1-fast-reasoning`), and **Anthropic** (Claude Opus, Sonnet). Switch providers with a single flag (`--provider xai` or `--provider anthropic`).
+- **Bring your own model** -- Works with **OpenAI**, **xAI**, **Google Gemini**, **Anthropic** or any OpenAI-compatible model like **OpenRouter**.
 
 ## Use Cases
 
@@ -112,6 +112,7 @@ pbi-agent run --prompt "List all measures in the semantic model that lack descri
 - An API key for one of the supported LLM providers:
   - Set `PBI_AGENT_API_KEY`
   - Use `--provider xai` for xAI
+  - Use `--provider google` for Google Gemini
   - Use `--provider anthropic` for Anthropic
   - Use `--provider generic` for OpenAI-compatible gateways such as OpenRouter
 
@@ -212,14 +213,14 @@ A browser-based chat UI opens at `http://localhost:8000`. Start describing what 
 | Variable | Description | Default |
 | --- | --- | --- |
 | `PBI_AGENT_API_KEY` | API key for the selected provider | -- |
-| `PBI_AGENT_PROVIDER` | LLM provider (`openai`, `xai`, `anthropic`, or `generic`) | `openai` |
-| `PBI_AGENT_MODEL` | Model override | `gpt-5.4-2026-03-05` for OpenAI, `grok-4-1-fast-reasoning` for xAI, `claude-opus-4-6` for Anthropic, provider default for generic |
+| `PBI_AGENT_PROVIDER` | LLM provider (`openai`, `xai`, `google`, `anthropic`, or `generic`) | `openai` |
+| `PBI_AGENT_MODEL` | Model override | `gpt-5.4-2026-03-05` for OpenAI, `grok-4-1-fast-reasoning` for xAI, `gemini-3-flash-preview` for Google, `claude-opus-4-6` for Anthropic, provider default for generic |
 | `PBI_AGENT_MAX_TOKENS` | Max output tokens | `16384` |
 | `PBI_AGENT_REASONING_EFFORT` | Reasoning effort (`low`, `medium`, `high`, `xhigh`) | `xhigh` |
 | `PBI_AGENT_MAX_TOOL_WORKERS` | Parallel tool execution threads | `4` |
 | `PBI_AGENT_MAX_RETRIES` | Retry count for transient failures | `2` |
 | `PBI_AGENT_COMPACT_THRESHOLD` | Context compaction token threshold | `150000` |
-| `PBI_AGENT_RESPONSES_URL` | Custom HTTP Responses endpoint | `https://api.openai.com/v1/responses` |
+| `PBI_AGENT_RESPONSES_URL` | Custom provider HTTP endpoint | `https://api.openai.com/v1/responses` for OpenAI, `https://api.x.ai/v1/responses` for xAI, `https://generativelanguage.googleapis.com/v1beta/interactions` for Google |
 | `PBI_AGENT_GENERIC_API_URL` | Generic OpenAI-compatible Chat Completions endpoint | `https://openrouter.ai/api/v1/chat/completions` |
 
 You can also place these in a `.env` file in your project root.
@@ -230,6 +231,7 @@ If you already have a provider-specific API key in your environment, `pbi-agent`
 | --- | --- |
 | OpenAI | `OPENAI_API_KEY` |
 | xAI | `XAI_API_KEY` |
+| Google | `GEMINI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 | Generic | `GENERIC_API_KEY` |
 
@@ -257,6 +259,12 @@ To use **xAI**:
 pbi-agent --provider xai --model grok-4-1-fast-reasoning
 ```
 
+To use **Google Gemini** through the Interactions API:
+
+```bash
+pbi-agent --provider google --model gemini-3-flash-preview
+```
+
 To use **OpenRouter** (or any OpenAI-compatible gateway) with a specific model:
 
 ```bash
@@ -265,7 +273,7 @@ pbi-agent --provider generic --model z-ai/glm-5
 
 ## How It Works
 
-`pbi-agent` connects to the OpenAI Responses HTTP API, xAI Responses HTTP API, Anthropic Messages API, or a generic OpenAI-compatible Chat Completions API and runs an agentic loop:
+`pbi-agent` connects to the OpenAI Responses HTTP API, xAI Responses HTTP API, Google Gemini Interactions API, Anthropic Messages API, or a generic OpenAI-compatible Chat Completions API and runs an agentic loop:
 
 1. Your prompt is sent alongside the agent's system instructions and tool definitions.
 2. The model responds with text, reasoning, or tool calls.
@@ -319,6 +327,7 @@ uv run pbi-agent --help
     │   └── audit_prompt.py     # 90+ rule audit prompt builder
     ├── providers/
     │   ├── openai_provider.py  # OpenAI Responses HTTP provider
+    │   ├── google_provider.py  # Google Gemini Interactions HTTP provider
     │   ├── anthropic_provider.py # Anthropic Messages HTTP provider
     │   └── generic_provider.py # Generic OpenAI-compatible Chat Completions HTTP provider
     ├── tools/
