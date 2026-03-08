@@ -1,13 +1,13 @@
 <div align="center">
 
-```
+<pre style="display: inline-block; text-align: left; margin: 0 auto;">
               ████
               ████
         ████  ████
         ████  ████
   ████  ████  ████
   ████  ████  ████
-```
+</pre>
 
 # PBI AGENT
 
