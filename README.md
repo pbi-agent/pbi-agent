@@ -1,15 +1,6 @@
 <div align="center">
 
-<p align="center">
-<code>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;████<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;████<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;████&nbsp;&nbsp;████<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;████&nbsp;&nbsp;████<br>
-&nbsp;&nbsp;████&nbsp;&nbsp;████&nbsp;&nbsp;████<br>
-&nbsp;&nbsp;████&nbsp;&nbsp;████&nbsp;&nbsp;████
-</code>
-</p>
+<img src="assets/logo.svg" alt="PBI Agent logo" width="120">
 
 # PBI AGENT
 

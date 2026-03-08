@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <!-- Power BI style logo – three ascending rounded bars -->
+  <!-- Tall bar (right) -->
+  <rect x="70" y="10" width="30" height="100" rx="6" fill="#F2C811"/>
+  <!-- Medium bar (center) -->
+  <rect x="35" y="35" width="30" height="75" rx="6" fill="#F2C811"/>
+  <!-- Short bar (left) -->
+  <rect x="0"  y="60" width="30" height="50"  rx="6" fill="#F2C811"/>
+</svg>
