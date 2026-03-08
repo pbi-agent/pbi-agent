@@ -65,7 +65,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 patch("pbi_agent.config.load_dotenv"),
                 patch("sys.stderr", stderr),
             ):
-                rc = cli.main(["--provider", "google", "chat"])
+                rc = cli.main(["--provider", "google", "console"])
 
         self.assertEqual(rc, 2)
         self.assertIn("Missing API key for provider 'google'", stderr.getvalue())

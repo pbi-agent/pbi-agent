@@ -7,7 +7,7 @@ from unittest.mock import patch
 from pbi_agent.web import chat_entry
 
 
-def test_run_starts_watchdog_and_launches_chat() -> None:
+def test_run_starts_watchdog_and_launches_console() -> None:
     with (
         patch("pbi_agent.web.chat_entry._start_parent_watchdog") as mock_watchdog,
         patch("pbi_agent.web.chat_entry.main", return_value=7) as mock_main,
@@ -16,7 +16,7 @@ def test_run_starts_watchdog_and_launches_chat() -> None:
 
     assert rc == 7
     mock_watchdog.assert_called_once_with(4321)
-    mock_main.assert_called_once_with(["--verbose", "chat"])
+    mock_main.assert_called_once_with(["--verbose", "console"])
 
 
 def test_watch_parent_process_uses_pid_existence_check_on_posix() -> None:

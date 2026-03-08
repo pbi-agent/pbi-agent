@@ -9,7 +9,7 @@ from pbi_agent.cli import main
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="pbi-agent web chat entrypoint")
+    parser = argparse.ArgumentParser(description="pbi-agent web console entrypoint")
     parser.add_argument("--parent-pid", type=int, required=True)
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args(argv)
@@ -74,7 +74,7 @@ def run(argv: list[str] | None = None) -> int:
     cli_argv: list[str] = []
     if args.verbose:
         cli_argv.append("--verbose")
-    cli_argv.append("chat")
+    cli_argv.append("console")
     return main(cli_argv)
 
 

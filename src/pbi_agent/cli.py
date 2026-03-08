@@ -149,13 +149,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--prompt", required=True, help="User prompt.")
 
     subparsers.add_parser(
-        "chat",
-        help="Run an interactive chat loop.",
+        "console",
+        help="Run an interactive terminal session.",
         formatter_class=CleanHelpFormatter,
     )
     web_parser = subparsers.add_parser(
         "web",
-        help="Serve the chat UI in a browser via textual serve.",
+        help="Serve the browser interface via textual serve.",
         formatter_class=CleanHelpFormatter,
     )
     web_parser.add_argument(
@@ -301,8 +301,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return _handle_run_command(args, settings)
 
-    if args.command == "chat":
-        return _handle_chat_command(settings)
+    if args.command == "console":
+        return _handle_console_command(settings)
 
     if args.command == "audit":
         return _handle_audit_command(args, settings)
@@ -319,7 +319,7 @@ def main(argv: list[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _handle_chat_command(settings: Settings) -> int:
+def _handle_console_command(settings: Settings) -> int:
     from pbi_agent.ui import ChatApp
 
     app = ChatApp(settings=settings, verbose=settings.verbose)

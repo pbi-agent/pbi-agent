@@ -24,7 +24,7 @@
 pbi-agent
 ```
 
-That's it. Running `pbi-agent` with no arguments launches a browser-based chat UI on `http://localhost:8000` where you can start building reports immediately.
+That's it. Running `pbi-agent` with no arguments launches the browser interface on `http://localhost:8000` where you can start building reports immediately.
 
 ## Why pbi-agent?
 
@@ -190,16 +190,16 @@ pbi-agent init --dest .
 pbi-agent
 ```
 
-A browser-based chat UI opens at `http://localhost:8000`. Start describing what you need.
+A browser interface opens at `http://localhost:8000`. Start describing what you need.
 
-> **Prefer a terminal?** Use `pbi-agent chat` for an interactive REPL, or `pbi-agent run --prompt "..."` for single-turn scripting.
+> **Prefer a terminal?** Use `pbi-agent console` for an interactive terminal session, or `pbi-agent run --prompt "..."` for single-turn execution.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
-| *(none)* or `web` | **Default.** Serve the browser-based chat UI (`http://localhost:8000`) |
-| `chat` | Interactive terminal REPL session |
+| *(none)* or `web` | **Default.** Serve the browser interface (`http://localhost:8000`) |
+| `console` | Interactive terminal interface |
 | `run --prompt "..."` | Execute a single prompt turn and exit |
 | `audit` | Run a best-practice audit, writes `AUDIT-REPORT.md` |
 | `init` | Scaffold a new PBIP report project from the bundled template |
@@ -308,36 +308,6 @@ uvx ruff check . --fix && uvx ruff format .
 
 # Run the CLI from source
 uv run pbi-agent --help
-```
-
-## Project Layout
-
-```
-.
-├── pyproject.toml
-├── main.py                     # Compatibility entry point
-└── src/pbi_agent/
-    ├── cli.py                  # CLI parser and command handlers
-    ├── config.py               # Settings resolution (CLI > env > defaults)
-    ├── display.py              # Textual TUI chat application
-    ├── agent/
-    │   ├── session.py          # Agentic loop (single-turn and chat)
-    │   ├── tool_runtime.py     # Parallel tool execution engine
-    │   ├── system_prompt.py    # Agent persona and instructions
-    │   └── audit_prompt.py     # 90+ rule audit prompt builder
-    ├── providers/
-    │   ├── openai_provider.py  # OpenAI Responses HTTP provider
-    │   ├── google_provider.py  # Google Gemini Interactions HTTP provider
-    │   ├── anthropic_provider.py # Anthropic Messages HTTP provider
-    │   └── generic_provider.py # Generic OpenAI-compatible Chat Completions HTTP provider
-    ├── tools/
-    │   ├── registry.py         # Tool registration and format conversion
-    │   ├── shell.py            # Shell command execution
-    │   ├── apply_patch.py      # V4A diff-based file operations
-    │   ├── skill_knowledge.py  # Skill document retrieval
-    │   └── init_report.py      # PBIP template scaffolding
-    ├── skills/                 # 14 Power BI skill markdown documents
-    └── report/                 # Bundled PBIP template assets
 ```
 
 ## License

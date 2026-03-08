@@ -118,7 +118,7 @@ def test_resolve_settings_uses_xai_defaults(monkeypatch) -> None:
     monkeypatch.setenv("XAI_API_KEY", "xai-test-key")
 
     parser = build_parser()
-    args = parser.parse_args(["--provider", "xai", "chat"])
+    args = parser.parse_args(["--provider", "xai", "console"])
     settings = resolve_settings(args)
 
     assert settings.provider == "xai"

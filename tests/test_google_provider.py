@@ -59,7 +59,7 @@ def test_resolve_settings_uses_google_defaults(monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
 
     parser = build_parser()
-    args = parser.parse_args(["--provider", "google", "chat"])
+    args = parser.parse_args(["--provider", "google", "console"])
     settings = resolve_settings(args)
 
     assert settings.provider == "google"
