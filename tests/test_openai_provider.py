@@ -3,9 +3,15 @@ from __future__ import annotations
 import json
 import urllib.request
 
+from pbi_agent.cli import build_parser
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
-from pbi_agent.config import DEFAULT_MODEL, DEFAULT_RESPONSES_URL, Settings
+from pbi_agent.config import (
+    DEFAULT_MODEL,
+    DEFAULT_RESPONSES_URL,
+    Settings,
+    resolve_settings,
+)
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.tools.types import ToolResult
@@ -100,6 +106,29 @@ def _make_settings(**overrides: object) -> Settings:
     }
     defaults.update(overrides)
     return Settings(**defaults)
+
+
+def test_resolve_settings_uses_openai_xhigh_default(monkeypatch) -> None:
+    for name in (
+        "PBI_AGENT_PROVIDER",
+        "PBI_AGENT_API_KEY",
+        "PBI_AGENT_RESPONSES_URL",
+        "PBI_AGENT_MODEL",
+        "PBI_AGENT_REASONING_EFFORT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
+
+    parser = build_parser()
+    args = parser.parse_args(["--provider", "openai", "console"])
+    settings = resolve_settings(args)
+
+    assert settings.provider == "openai"
+    assert settings.api_key == "openai-test-key"
+    assert settings.responses_url == DEFAULT_RESPONSES_URL
+    assert settings.model == DEFAULT_MODEL
+    assert settings.reasoning_effort == "xhigh"
+    settings.validate()
 
 
 def test_openai_build_request_body_uses_http_responses_shape() -> None:

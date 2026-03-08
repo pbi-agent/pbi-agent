@@ -102,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--reasoning-effort",
         choices=["low", "medium", "high", "xhigh"],
         default=None,
-        help="Set model reasoning effort (default: medium).",
+        help="Set model reasoning effort (default: xhigh for OpenAI; high for other providers).",
     )
 
     runtime_group = parser.add_argument_group("Runtime and resilience")

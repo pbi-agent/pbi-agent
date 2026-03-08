@@ -151,7 +151,7 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     max_retries = args.max_retries
     if max_retries is None:
         max_retries = int(os.getenv("PBI_AGENT_MAX_RETRIES", "2"))
-    default_effort = "high" if provider in {"anthropic", "xai"} else "high"
+    default_effort = "xhigh" if provider == "openai" else "high"
     reasoning_effort = (
         args.reasoning_effort
         or os.getenv("PBI_AGENT_REASONING_EFFORT")
