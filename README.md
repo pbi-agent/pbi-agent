@@ -6,8 +6,8 @@
 
 *Transform data into decisions.*
 
-[![Publish](https://img.shields.io/github/actions/workflow/status/nasirus/pbi-agent/publish.yml?label=publish)](https://github.com/nasirus/pbi-agent/actions/workflows/publish.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/nasirus/pbi-agent/release.yml?label=release)](https://github.com/nasirus/pbi-agent/actions/workflows/release.yml)
+[![Publish](https://github.com/nasirus/pbi-agent/actions/workflows/publish.yml/badge.svg)](https://github.com/nasirus/pbi-agent/actions/workflows/publish.yml)
+[![Release](https://github.com/nasirus/pbi-agent/actions/workflows/release.yml/badge.svg)](https://github.com/nasirus/pbi-agent/actions/workflows/release.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-gold)](LICENSE)
 
