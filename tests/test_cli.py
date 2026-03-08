@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import os
 import sys
 import unittest
@@ -53,6 +54,24 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(args.port, 9001)
         self.assertEqual(settings.api_key, "test-key")
 
+    def test_main_reports_google_specific_api_key_guidance(self) -> None:
+        stderr = io.StringIO()
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PBI_AGENT_API_KEY", None)
+            os.environ.pop("GEMINI_API_KEY", None)
+
+            with (
+                patch("pbi_agent.config.load_dotenv"),
+                patch("sys.stderr", stderr),
+            ):
+                rc = cli.main(["--provider", "google", "chat"])
+
+        self.assertEqual(rc, 2)
+        self.assertIn("Missing API key for provider 'google'", stderr.getvalue())
+        self.assertIn("GEMINI_API_KEY", stderr.getvalue())
+        self.assertIn("--google-api-key", stderr.getvalue())
+
     def test_argv_with_default_command_keeps_root_help(self) -> None:
         parser = cli.build_parser()
 
@@ -85,7 +104,9 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         with (
             patch("pbi_agent.cli._start_browser_open_thread") as mock_browser_thread,
-            patch("pbi_agent.cli._create_web_server", return_value=server) as mock_server,
+            patch(
+                "pbi_agent.cli._create_web_server", return_value=server
+            ) as mock_server,
         ):
             rc = cli._handle_web_command(args, settings)
 
@@ -170,6 +191,7 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 130)
         server.serve.assert_called_once_with(debug=False)
+
 
 if __name__ == "__main__":
     unittest.main()

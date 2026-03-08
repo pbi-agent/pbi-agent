@@ -15,7 +15,7 @@ from typing import Any
 from pbi_agent import __version__
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
-from pbi_agent.config import Settings
+from pbi_agent.config import Settings, missing_api_key_message
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
@@ -41,10 +41,7 @@ class GoogleProvider(Provider):
 
     def connect(self) -> None:
         if not self._settings.api_key:
-            raise ValueError(
-                "Missing API key. Set PBI_AGENT_API_KEY in environment or pass "
-                "--api-key."
-            )
+            raise ValueError(missing_api_key_message("google"))
 
     def close(self) -> None:
         pass

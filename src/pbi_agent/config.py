@@ -30,6 +30,19 @@ class ConfigError(ValueError):
     """Raised when required runtime configuration is invalid."""
 
 
+def missing_api_key_message(provider: str) -> str:
+    if provider == "google":
+        return (
+            "Missing API key for provider 'google'. Set GEMINI_API_KEY (or "
+            "PBI_AGENT_API_KEY) in environment, or pass --google-api-key "
+            "(or --api-key)."
+        )
+    return (
+        f"Missing API key for provider '{provider}'. Set PBI_AGENT_API_KEY in "
+        "environment or pass --api-key."
+    )
+
+
 @dataclass(slots=True)
 class Settings:
     api_key: str
@@ -52,31 +65,8 @@ class Settings:
             raise ConfigError(
                 "--provider must be one of: openai, xai, google, anthropic, generic."
             )
-        if self.provider == "openai" and not self.api_key:
-            raise ConfigError(
-                "Missing API key for provider 'openai'. Set PBI_AGENT_API_KEY in "
-                "environment or pass --api-key."
-            )
-        if self.provider == "xai" and not self.api_key:
-            raise ConfigError(
-                "Missing API key for provider 'xai'. Set PBI_AGENT_API_KEY in "
-                "environment or pass --api-key."
-            )
-        if self.provider == "google" and not self.api_key:
-            raise ConfigError(
-                "Missing API key for provider 'google'. Set PBI_AGENT_API_KEY in "
-                "environment or pass --api-key."
-            )
-        if self.provider == "anthropic" and not self.api_key:
-            raise ConfigError(
-                "Missing API key for provider 'anthropic'. Set PBI_AGENT_API_KEY in "
-                "environment or pass --api-key."
-            )
-        if self.provider == "generic" and not self.api_key:
-            raise ConfigError(
-                "Missing API key for provider 'generic'. Set PBI_AGENT_API_KEY in "
-                "environment or pass --api-key."
-            )
+        if not self.api_key:
+            raise ConfigError(missing_api_key_message(self.provider))
         if self.max_tool_workers < 1:
             raise ConfigError("--max-tool-workers must be >= 1.")
         if self.max_retries < 0:

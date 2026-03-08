@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import urllib.request
 
+import pytest
+
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
+    ConfigError,
     DEFAULT_GOOGLE_INTERACTIONS_URL,
     DEFAULT_GOOGLE_MODEL,
     Settings,
@@ -65,6 +68,26 @@ def test_resolve_settings_uses_google_defaults(monkeypatch) -> None:
     assert settings.model == DEFAULT_GOOGLE_MODEL
     assert settings.reasoning_effort == "high"
     settings.validate()
+
+
+def test_google_settings_validate_mentions_google_specific_api_key_sources() -> None:
+    settings = _make_settings(api_key="")
+
+    with pytest.raises(ConfigError) as excinfo:
+        settings.validate()
+
+    assert "GEMINI_API_KEY" in str(excinfo.value)
+    assert "--google-api-key" in str(excinfo.value)
+
+
+def test_google_provider_connect_mentions_google_specific_api_key_sources() -> None:
+    provider = GoogleProvider(_make_settings(api_key=""))
+
+    with pytest.raises(ValueError) as excinfo:
+        provider.connect()
+
+    assert "GEMINI_API_KEY" in str(excinfo.value)
+    assert "--google-api-key" in str(excinfo.value)
 
 
 def test_google_build_request_body_uses_interactions_shape() -> None:
