@@ -52,60 +52,27 @@ uv run pbi-agent init --dest . --force
 
 ## Code Review
 
-Every pull request must be reviewed before merging. The following guidelines ensure
-consistent quality across the project.
+Every pull request must be reviewed before merging. Reviewers should verify the
+following:
 
-### Test Coverage Requirements
-
-- **Every new feature must include tests.** A feature PR without corresponding tests
-  should not be approved.
-- **Every bug fix must add a regression test** that fails without the fix and passes
-  with it.
-- **Modifications to existing behaviour require updating the affected tests.** If a
-  change causes existing tests to fail, update those tests so they reflect the new
-  expected behaviour rather than deleting them.
-- Do not remove or weaken existing tests unless the tested functionality itself has
-  been intentionally removed.
-
-### What Reviewers Check
-
-1. **Tests pass** – `uv run pytest` must exit cleanly. CI enforces this via the
-   `tests.yml` workflow.
-2. **Lint / format** – `uvx ruff check .` and `uvx ruff format --check .` must
-   report no issues.
-3. **Test quality** – new tests should follow the conventions listed in
-   *Adding Tests* above:
-   - Placed under `tests/` with a `test_*.py` filename.
-   - Prefer pytest-style `assert` statements over `unittest` assertions for new
-     tests.
-   - Use `@pytest.mark.parametrize` for input/output variations.
-   - Shared fixtures live in `tests/conftest.py`.
-   - Custom markers are registered in `pyproject.toml` before use.
-4. **Provider coverage** – changes touching a provider (OpenAI, xAI, Anthropic,
-   Google, Generic) must include or update the matching `test_<provider>_provider.py`
-   module.
-5. **Tool coverage** – new or modified tools under `src/pbi_agent/tools/` must have
-   tests in the corresponding `test_<tool>.py` file.
-6. **No regressions in bundled assets** – changes to files under
-   `src/pbi_agent/report/` or `src/pbi_agent/skills/` should be validated by
-   `test_init_command.py` and `test_skill_knowledge_tool.py`.
-7. **Security** – PRs must not introduce secrets, credentials, or new network calls
-   without review. All HTTP communication goes through `urllib.request`.
-8. **Minimal scope** – each PR should address a single concern. Unrelated changes
-   should be split into separate PRs.
-
-### Writing Good Tests for This Project
-
-- **Mock HTTP calls** – use the `make_http_response` and `make_http_error` fixtures
-  from `conftest.py` to simulate provider responses without hitting real APIs.
-- **Use `DisplaySpy`** – capture display output through the `display_spy` fixture
-  instead of asserting on stdout.
-- **Isolate the file system** – use `tmp_path` (pytest built-in) for tests that
-  create or modify files, as shown in `test_init_command.py`.
-- **Mark slow / integration tests** – decorate with `@pytest.mark.slow` or
-  `@pytest.mark.integration` so the default test run stays fast.
-- **Keep tests focused** – each test should verify one behaviour. Use descriptive
-  names that explain the scenario and expected outcome.
+1. **Correctness** – the implementation solves the stated problem and handles edge
+   cases. Actively look for logic errors, off-by-one mistakes, and missing error
+   handling.
+2. **Clarity & simplicity** – code is easy to read and no more complex than
+   necessary. Prefer small functions, descriptive names, and straightforward control
+   flow.
+3. **Performance** – avoid unnecessary allocations, redundant loops, or blocking
+   calls that could degrade responsiveness. All HTTP communication must go through
+   `urllib.request`.
+4. **Test coverage** – every new feature includes tests and every bug fix adds a
+   regression test. Changes to existing behaviour update the affected tests rather
+   than removing them. Follow the conventions in *Adding Tests* above.
+5. **Provider & tool coverage** – provider changes update the matching
+   `test_<provider>_provider.py`; tool changes update `test_<tool>.py`.
+6. **Lint & CI green** – `uv run pytest`, `uvx ruff check .`, and
+   `uvx ruff format --check .` must all pass.
+7. **Security** – no secrets, credentials, or unreviewed network calls.
+8. **Minimal scope** – one concern per PR; unrelated changes go in separate PRs.
 
 ## Key Constraints
 
