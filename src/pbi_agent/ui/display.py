@@ -199,6 +199,36 @@ class Display:
         self._append_call_id(lines, call_id)
         return "\n".join(lines)
 
+    def _format_skill_knowledge_item(
+        self,
+        skills: list[str],
+        *,
+        status: str,
+        call_id: str = "",
+    ) -> str:
+        skill_list = ", ".join(skills) if skills else "<none>"
+        lines = [
+            f"[dim]skills:[/dim] {escape_markup_text(shorten(skill_list, 120))}  {status}",
+        ]
+        self._append_call_id(lines, call_id)
+        return "\n".join(lines)
+
+    def _format_init_report_item(
+        self,
+        dest: str,
+        *,
+        status: str,
+        call_id: str = "",
+        force: bool = False,
+    ) -> str:
+        lines = [
+            f"[bold]{escape_markup_text(dest)}[/bold]  {status}",
+        ]
+        if force:
+            lines.append("[dim]force:[/dim] true")
+        self._append_call_id(lines, call_id)
+        return "\n".join(lines)
+
     def _format_generic_function_item(
         self,
         name: str,
@@ -208,7 +238,12 @@ class Display:
         arguments: Any = None,
     ) -> str:
         name_safe = escape_markup_text(name)
+        args = to_dict(arguments)
         if not self.verbose:
+            if args:
+                summary = escape_markup_text(shorten(compact_json(args), 80))
+                lines = [f"{name_safe}()  {status}", f"[dim]{summary}[/dim]"]
+                return "\n".join(lines)
             return f"{name_safe}()  {status}"
 
         detail_bits: list[str] = []
@@ -450,6 +485,31 @@ class Display:
                     call_id=call_id,
                     diff=raw_diff if isinstance(raw_diff, str) else "",
                     shorten_path=True,
+                ),
+            )
+            return
+
+        if name == "skill_knowledge":
+            raw_skills = args.get("skills", [])
+            skills = raw_skills if isinstance(raw_skills, list) else [str(raw_skills)]
+            self._append_tool_line(
+                name,
+                self._format_skill_knowledge_item(
+                    skills,
+                    status=status,
+                    call_id=call_id,
+                ),
+            )
+            return
+
+        if name == "init_report":
+            self._append_tool_line(
+                name,
+                self._format_init_report_item(
+                    str(args.get("dest", ".")),
+                    status=status,
+                    call_id=call_id,
+                    force=bool(args.get("force", False)),
                 ),
             )
             return
