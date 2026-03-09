@@ -50,6 +50,30 @@ uvx ruff check . --fix && uvx ruff format .
 uv run pbi-agent init --dest . --force
 ```
 
+## Code Review
+
+Every pull request must be reviewed before merging. Reviewers should verify the
+following:
+
+1. **Correctness** – the implementation solves the stated problem and handles edge
+   cases. Actively look for logic errors, off-by-one mistakes, and missing error
+   handling.
+2. **Clarity & simplicity** – code is easy to read and no more complex than
+   necessary. Prefer small functions, descriptive names, and straightforward control
+   flow.
+3. **Performance** – avoid unnecessary allocations, redundant loops, or blocking
+   calls that could degrade responsiveness. All HTTP communication must go through
+   `urllib.request`.
+4. **Test coverage** – every new feature includes tests and every bug fix adds a
+   regression test. Changes to existing behaviour update the affected tests rather
+   than removing them. Follow the conventions in *Adding Tests* above.
+5. **Provider & tool coverage** – provider changes update the matching
+   `test_<provider>_provider.py`; tool changes update `test_<tool>.py`.
+6. **Lint & CI green** – `uv run pytest`, `uvx ruff check .`, and
+   `uvx ruff format --check .` must all pass.
+7. **Security** – no secrets, credentials, or unreviewed network calls.
+8. **Minimal scope** – one concern per PR; unrelated changes go in separate PRs.
+
 ## Key Constraints
 
 - Keep bundled PBIP template assets under `src/pbi_agent/report/`; packaging relies on `tool.hatch.build.targets.wheel.force-include`.
