@@ -9,6 +9,7 @@ Use `slicer` visual patterns with synced filters (`syncGroup`), clear container 
 - Optional `query.sortDefinition` for date fields.
 - Add `syncGroup` so filters stay consistent across hidden/visible pages.
 - `syncGroup.groupName` must represent one field only. Do not reuse same group name for different fields.
+- Use either `objects.header` or `visualContainerObjects.title` for slicer labeling, but not both in the same visual.
 
 ## Common Modes
 
@@ -20,6 +21,7 @@ Use `slicer` visual patterns with synced filters (`syncGroup`), clear container 
 
 - Header and mode:
   - `objects.header.show = false` in most pages for a cleaner filter row.
+  - If a visible label is needed, enable either header or title, never both.
   - Date slicers use `mode = 'Between'`.
   - Entity/system slicers use `mode = 'Dropdown'`.
 - Date slider color:
@@ -40,6 +42,7 @@ Use `slicer` visual patterns with synced filters (`syncGroup`), clear container 
 - Keep filter order stable across pages (typically date, then site, then system).
 - Keep slicer size/position consistent so users build muscle memory.
 - Use one sync group per field and reuse it globally to avoid filter drift.
+- Avoid duplicate labeling chrome: choose header or title based on layout needs, and disable the other.
 - For Between slicers, optional `startDate`/`endDate` can set intentional default windows.
 - For long dropdown lists, keep slicer width sufficient and prefer searchable dropdown behavior.
 - Use this size by default to prevent cropping: "height": 88, "width": 228.
