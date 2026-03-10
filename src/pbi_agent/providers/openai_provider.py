@@ -82,7 +82,10 @@ class OpenAIProvider(Provider):
                 title=result.reasoning_summary or None,
             )
 
-        if result.text:
+        if result.assistant_messages:
+            for message in result.assistant_messages:
+                display.render_markdown(message)
+        elif result.text:
             display.render_markdown(result.text)
 
         return result
@@ -227,6 +230,7 @@ class OpenAIProvider(Provider):
 
     def _parse_response(self, response_json: dict[str, Any]) -> CompletedResponse:
         text_parts: list[str] = []
+        assistant_messages: list[str] = []
         reasoning_summary_parts: list[str] = []
         reasoning_content_parts: list[str] = []
         function_calls: list[ToolCall] = []
@@ -253,6 +257,7 @@ class OpenAIProvider(Provider):
                             reasoning_content_parts.append(reasoning_text)
 
             elif item_type == "message":
+                message_parts: list[str] = []
                 for part in item.get("content", []):
                     if not isinstance(part, dict):
                         continue
@@ -260,6 +265,10 @@ class OpenAIProvider(Provider):
                         text = part.get("text", "")
                         if text:
                             text_parts.append(text)
+                            message_parts.append(text)
+                message_text = "".join(message_parts).strip()
+                if message_text:
+                    assistant_messages.append(message_text)
 
             elif item_type == "function_call":
                 function_calls.append(_parse_function_call(item))
@@ -302,6 +311,7 @@ class OpenAIProvider(Provider):
         return CompletedResponse(
             response_id=response_json.get("id"),
             text=text,
+            assistant_messages=assistant_messages,
             usage=TokenUsage(
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_input_tokens,
