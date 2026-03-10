@@ -1,6 +1,6 @@
 # composite_model_entity_query_guardrails
 
-Use this skill when creating/editing a PBIP semantic model (especially CSV imports) to prevent:
+Use this skill when creating/editing a PBIP semantic model with CSV imports
 
 **Model validation failed. A composite model cannot be used with entity based query sources.**
 
