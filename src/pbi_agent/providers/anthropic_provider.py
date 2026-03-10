@@ -19,10 +19,10 @@ from typing import Any
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
-from pbi_agent.ui import Display
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_anthropic_tool_definitions
+from pbi_agent.ui.display_protocol import DisplayProtocol
 
 _log = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class AnthropicProvider(Provider):
         user_message: str | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
         instructions: str | None = None,
-        display: Display,
+        display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
     ) -> CompletedResponse:
@@ -112,7 +112,7 @@ class AnthropicProvider(Provider):
         response: CompletedResponse,
         *,
         max_workers: int,
-        display: Display,
+        display: DisplayProtocol,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute all tool calls in the response.
 
@@ -171,7 +171,7 @@ class AnthropicProvider(Provider):
         self,
         *,
         system_prompt: str | None,
-        display: Display,
+        display: DisplayProtocol,
     ) -> CompletedResponse:
         """Send the current messages to the Anthropic Messages API and return
         a parsed ``CompletedResponse``."""

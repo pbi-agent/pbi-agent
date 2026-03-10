@@ -22,7 +22,7 @@ from pbi_agent.config import Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
-from pbi_agent.ui import Display
+from pbi_agent.ui.display_protocol import DisplayProtocol
 
 _REQUEST_TIMEOUT_SECS = 3600.0
 
@@ -52,7 +52,7 @@ class OpenAIProvider(Provider):
         user_message: str | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
         instructions: str | None = None,
-        display: Display,
+        display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
     ) -> CompletedResponse:
@@ -95,7 +95,7 @@ class OpenAIProvider(Provider):
         response: CompletedResponse,
         *,
         max_workers: int,
-        display: Display,
+        display: DisplayProtocol,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -120,7 +120,7 @@ class OpenAIProvider(Provider):
         *,
         input_items: list[dict[str, Any]],
         instructions: str,
-        display: Display,
+        display: DisplayProtocol,
     ) -> CompletedResponse:
         display.wait_start(_waiting_message_for_input_items(input_items))
 
@@ -190,8 +190,7 @@ class OpenAIProvider(Provider):
         display.wait_stop()
         if last_error is not None:
             raise RuntimeError(
-                f"OpenAI request failed after {max_retries + 1} attempts: "
-                f"{last_error}"
+                f"OpenAI request failed after {max_retries + 1} attempts: {last_error}"
             ) from last_error
         raise RuntimeError("OpenAI request failed after retries.")
 

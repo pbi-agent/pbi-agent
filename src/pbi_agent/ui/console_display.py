@@ -1,14 +1,11 @@
-"""Synchronous display bridge for the Textual chat UI."""
+"""Console-oriented display bridge for single-turn CLI modes."""
 
 from __future__ import annotations
 
-import logging
-import threading
-import traceback
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any, TextIO
 
-from textual.widgets import Static
+from rich.console import Console
+from rich.markdown import Markdown
 
 from pbi_agent.models.messages import TokenUsage
 from pbi_agent.ui.display_protocol import DisplayProtocol, PendingToolGroup
@@ -25,90 +22,25 @@ from pbi_agent.ui.formatting import (
     tool_group_class,
     tool_item_class,
 )
-from pbi_agent.ui.widgets import (
-    AssistantMarkdown,
-    ErrorMessage,
-    NoticeMessage,
-    ToolGroupEntry,
-    UsageSummary,
-    WaitingIndicator,
-    WelcomeBanner,
-)
-
-if TYPE_CHECKING:
-    from pbi_agent.ui.app import ChatApp
-
-_log = logging.getLogger(__name__)
 
 
-@dataclass(slots=True)
-class _TurnUsageWidget:
-    widget_id: str
-    elapsed_seconds: float
+class ConsoleDisplay(DisplayProtocol):
+    """Sync stdout/stderr display for headless single-turn execution."""
 
-
-class Display(DisplayProtocol):
-    """Sync bridge between session code and the Textual App."""
-
-    def __init__(self, app: ChatApp, *, verbose: bool = False) -> None:
-        self.app = app
-        self.verbose = verbose
-        self._waiting_widget_id: str | None = None
-        self._active_thinking_widget_id: str | None = None
-        self._msg_counter = 0
-        self._tool_group = PendingToolGroup()
-        self._input_event = threading.Event()
-        self._input_value = ""
-        self._shutdown = threading.Event()
-        self._turn_usage_widgets: dict[int, _TurnUsageWidget] = {}
-        self._turn_usage_lock = threading.Lock()
-
-    def _next_id(self, prefix: str = "w") -> str:
-        self._msg_counter += 1
-        return f"{prefix}-{self._msg_counter}"
-
-    def _safe_call(self, callback: Any, *args: Any, **kwargs: Any) -> Any:
-        try:
-            return self.app.call_from_thread(callback, *args, **kwargs)
-        except Exception:
-            _log.debug(
-                "_safe_call failed for %s: %s",
-                getattr(callback, "__name__", callback),
-                traceback.format_exc(),
-            )
-            return None
-
-    def _mount_static_message(
+    def __init__(
         self,
-        prefix: str,
-        widget_cls: type[Static],
-        text: str,
         *,
-        classes: str = "",
-    ) -> str:
-        widget_id = self._next_id(prefix)
-        kwargs: dict[str, Any] = {"id": widget_id}
-        if classes:
-            kwargs["classes"] = classes
-        self._safe_call(self.app.mount_widget, widget_cls(text, **kwargs))
-        return widget_id
-
-    def _mount_markdown(self, prefix: str, text: str) -> str:
-        widget_id = self._next_id(prefix)
-        self._safe_call(self.app.mount_widget, AssistantMarkdown(text, id=widget_id))
-        return widget_id
-
-    def _start_tool_group(
-        self,
-        label: str,
-        *,
-        classes: str = "",
-        function_count: int = 0,
+        verbose: bool = False,
+        stdout: TextIO | None = None,
+        stderr: TextIO | None = None,
     ) -> None:
-        self._tool_group.start(label, classes=classes, function_count=function_count)
-
-    def _append_tool_line(self, tool_name: str, text: str) -> None:
-        self._tool_group.add_item(text, classes=tool_item_class(tool_name))
+        self.verbose = verbose
+        self._console = Console(file=stdout)
+        self._error_console = Console(file=stderr, stderr=True)
+        self._tool_group = PendingToolGroup()
+        self._thinking_counter = 0
+        self._latest_session_subtitle: str | None = None
+        self._usage_section_open = False
 
     def _append_call_id(self, lines: list[str], call_id: str) -> None:
         if self.verbose and call_id:
@@ -183,9 +115,7 @@ class Display(DisplayProtocol):
         call_id: str = "",
         force: bool = False,
     ) -> str:
-        lines = [
-            f"[bold]{escape_markup_text(dest)}[/bold]  {status}",
-        ]
+        lines = [f"[bold]{escape_markup_text(dest)}[/bold]  {status}"]
         if force:
             lines.append("[dim]force:[/dim] true")
         self._append_call_id(lines, call_id)
@@ -204,8 +134,7 @@ class Display(DisplayProtocol):
         if not self.verbose:
             if args:
                 summary = escape_markup_text(shorten(compact_json(args), 80))
-                lines = [f"{name_safe}()  {status}", f"[dim]{summary}[/dim]"]
-                return "\n".join(lines)
+                return "\n".join([f"{name_safe}()  {status}", f"[dim]{summary}[/dim]"])
             return f"{name_safe}()  {status}"
 
         detail_bits: list[str] = []
@@ -216,13 +145,30 @@ class Display(DisplayProtocol):
         )
         return f"{name_safe}()  {status}  [dim]{' '.join(detail_bits)}[/dim]"
 
+    def _start_tool_group(
+        self,
+        label: str,
+        *,
+        classes: str = "",
+        function_count: int = 0,
+    ) -> None:
+        self._tool_group.start(label, classes=classes, function_count=function_count)
+
+    def _append_tool_line(self, tool_name: str, text: str) -> None:
+        self._tool_group.add_item(text, classes=tool_item_class(tool_name))
+
+    def _print_tool_item(self, text: str) -> None:
+        lines = text.splitlines() or [text]
+        for index, line in enumerate(lines):
+            prefix = "  - " if index == 0 else "    "
+            self._console.print(f"{prefix}{line}")
+
     def request_shutdown(self) -> None:
-        self._shutdown.set()
-        self._input_event.set()
+        return None
 
     def submit_input(self, value: str) -> None:
-        self._input_value = value
-        self._input_event.set()
+        del value
+        return None
 
     def welcome(
         self,
@@ -232,49 +178,30 @@ class Display(DisplayProtocol):
         reasoning_effort: str | None = None,
         single_turn_hint: str | None = None,
     ) -> None:
-        self._safe_call(
-            self.app.mount_widget,
-            WelcomeBanner(
-                interactive=interactive,
-                model=model,
-                reasoning_effort=reasoning_effort,
-                single_turn_hint=single_turn_hint,
-            ),
-        )
+        mode = "interactive" if interactive else "single-turn"
+        parts = [f"[bold]PBI Agent[/bold] ({escape_markup_text(mode)})"]
+        if model:
+            parts.append(f"model: {escape_markup_text(model)}")
+        if reasoning_effort:
+            parts.append(f"reasoning: {escape_markup_text(reasoning_effort)}")
+        self._console.print(" | ".join(parts))
+        if single_turn_hint:
+            self._console.print(f"[dim]{escape_markup_text(single_turn_hint)}[/dim]")
 
     def user_prompt(self) -> str:
-        self._input_event.clear()
-        self._safe_call(self.app.enable_input)
-        while True:
-            if self._input_event.wait(timeout=0.5):
-                break
-            if self._shutdown.is_set():
-                return "exit"
-        if self._shutdown.is_set():
-            return "exit"
-        return self._input_value
+        raise RuntimeError("ConsoleDisplay does not support interactive user input.")
 
     def assistant_start(self) -> None:
-        """Compatibility hook kept for the session/provider interface."""
+        return None
 
     def wait_start(self, message: str = "model is processing your request...") -> None:
-        if self._waiting_widget_id is not None:
-            return
-        self._active_thinking_widget_id = None
-        widget_id = self._next_id("think")
-        self._waiting_widget_id = widget_id
-        self._safe_call(
-            self.app.mount_widget,
-            WaitingIndicator(message=message, id=widget_id),
-        )
+        self._console.print(f"[dim]... {escape_markup_text(message)}[/dim]")
 
     def wait_stop(self) -> None:
-        if self._waiting_widget_id is not None:
-            self._safe_call(self.app.remove_widget, self._waiting_widget_id)
-            self._waiting_widget_id = None
+        return None
 
     def render_markdown(self, text: str) -> None:
-        self._mount_markdown("md", text)
+        self._console.print(Markdown(text))
 
     def render_thinking(
         self,
@@ -284,70 +211,51 @@ class Display(DisplayProtocol):
         replace_existing: bool = False,
         widget_id: str | None = None,
     ) -> str | None:
+        del replace_existing
         body = text if text is not None else None
         summary = title or ""
         has_body = body is not None and bool(body.strip())
         if not has_body and not summary.strip():
             return None
 
-        widget_title = format_reasoning_title(summary)
         resolved_widget_id = widget_id
-        if resolved_widget_id is None and replace_existing:
-            resolved_widget_id = self._active_thinking_widget_id
         if resolved_widget_id is None:
-            resolved_widget_id = self._next_id("thinking")
-        if replace_existing:
-            self._active_thinking_widget_id = resolved_widget_id
+            self._thinking_counter += 1
+            resolved_widget_id = f"thinking-{self._thinking_counter}"
 
-        self._safe_call(
-            self.app.update_thinking_block,
-            resolved_widget_id,
-            widget_title,
-            body,
+        self._console.print(
+            f"[italic dim]{escape_markup_text(format_reasoning_title(summary))}[/italic dim]"
         )
+        if body:
+            self._console.print(f"[dim]{escape_markup_text(body)}[/dim]")
         return resolved_widget_id
 
     def render_redacted_thinking(self) -> None:
-        self._mount_static_message(
-            "redact",
-            NoticeMessage,
-            REDACTED_THINKING_NOTICE,
-        )
+        self._console.print(REDACTED_THINKING_NOTICE)
 
     def session_usage(self, usage: TokenUsage) -> None:
-        self._safe_call(
-            self.app.update_session_header, format_session_subtitle(usage.snapshot())
-        )
+        self._latest_session_subtitle = format_session_subtitle(usage.snapshot())
+        if self._usage_section_open and self._latest_session_subtitle:
+            self._console.print(self._latest_session_subtitle)
+            self._usage_section_open = False
 
     def turn_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:
-        usage_text = format_usage_summary(
-            usage.snapshot(),
-            elapsed_seconds=elapsed_seconds,
-            label="Turn",
-        )
-        widget_id = self._mount_static_message("usage", UsageSummary, usage_text)
-        with self._turn_usage_lock:
-            self._turn_usage_widgets[id(usage)] = _TurnUsageWidget(
-                widget_id=widget_id,
+        self._console.print()
+        self._console.print("[bold]Usage[/bold]")
+        self._console.print(
+            format_usage_summary(
+                usage.snapshot(),
                 elapsed_seconds=elapsed_seconds,
+                label="Turn",
             )
-        self._refresh_turn_usage_widget(usage)
+        )
+        self._usage_section_open = True
 
     def usage_refresh(self, session_usage: TokenUsage, turn_usage: TokenUsage) -> None:
-        self.session_usage(session_usage)
-        self._refresh_turn_usage_widget(turn_usage)
-
-    def _refresh_turn_usage_widget(self, usage: TokenUsage) -> None:
-        with self._turn_usage_lock:
-            target = self._turn_usage_widgets.get(id(usage))
-        if target is None:
-            return
-        text = format_usage_summary(
-            usage.snapshot(),
-            elapsed_seconds=target.elapsed_seconds,
-            label="Turn",
+        self._latest_session_subtitle = format_session_subtitle(
+            session_usage.snapshot()
         )
-        self._safe_call(self.app.update_usage_summary, target.widget_id, text)
+        del turn_usage
 
     def shell_start(self, commands: list[str]) -> None:
         count = len(commands)
@@ -488,26 +396,16 @@ class Display(DisplayProtocol):
 
     def tool_group_end(self) -> None:
         if self._tool_group.items:
-            group_id = self._next_id("tg")
-            self._safe_call(
-                self.app.mount_tool_group,
-                group_id,
-                self._tool_group.label,
-                [
-                    ToolGroupEntry(text=item.text, classes=item.classes)
-                    for item in self._tool_group.items
-                ],
-                group_classes=self._tool_group.classes,
+            self._console.print(
+                f"[bold]{escape_markup_text(self._tool_group.label)}[/bold]"
             )
+            for item in self._tool_group.items:
+                self._print_tool_item(item.text)
         self._tool_group.reset()
 
     def retry_notice(self, attempt: int, max_retries: int) -> None:
         self.wait_stop()
-        self._mount_static_message(
-            "notice",
-            NoticeMessage,
-            f"Retrying\u2026 ({attempt}/{max_retries})",
-        )
+        self._console.print(f"[yellow]Retrying... ({attempt}/{max_retries})[/yellow]")
 
     def rate_limit_notice(
         self,
@@ -518,32 +416,19 @@ class Display(DisplayProtocol):
     ) -> None:
         self.wait_stop()
         wait_display = f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
-        self._mount_static_message(
-            "notice",
-            NoticeMessage,
-            f"Rate limit reached. Retrying in {wait_display}s ({attempt}/{max_retries})",
+        self._console.print(
+            "[yellow]Rate limit reached. "
+            f"Retrying in {wait_display}s ({attempt}/{max_retries})[/yellow]"
         )
 
     def error(self, message: str) -> None:
         self.wait_stop()
-        if self._active_thinking_widget_id:
-            self._safe_call(self.app.remove_widget, self._active_thinking_widget_id)
-            self._active_thinking_widget_id = None
         self._tool_group.reset()
-        self._mount_static_message(
-            "err",
-            ErrorMessage,
-            f"Error: {escape_markup_text(message)}",
-        )
+        self._error_console.print(f"[red]Error: {escape_markup_text(message)}[/red]")
 
     def debug(self, message: str) -> None:
         if self.verbose:
-            self._mount_static_message(
-                "dbg",
-                Static,
-                f"[dim]{message}[/dim]",
-                classes="debug-msg",
-            )
+            self._console.print(f"[dim]{escape_markup_text(message)}[/dim]")
 
 
-__all__ = ["Display"]
+__all__ = ["ConsoleDisplay"]
