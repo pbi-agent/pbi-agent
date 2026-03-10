@@ -16,9 +16,9 @@ from pbi_agent.ui.formatting import (
     REDACTED_THINKING_NOTICE,
     compact_json,
     escape_markup_text,
-    format_reasoning_title,
     format_session_subtitle,
     format_usage_summary,
+    resolve_reasoning_panel,
     shorten,
     status_markup,
     to_dict,
@@ -284,13 +284,11 @@ class Display(DisplayProtocol):
         replace_existing: bool = False,
         widget_id: str | None = None,
     ) -> str | None:
-        body = text if text is not None else None
         summary = title or ""
-        has_body = body is not None and bool(body.strip())
-        if not has_body and not summary.strip():
+        body, widget_title = resolve_reasoning_panel(text, summary)
+        if body is None and not summary.strip():
             return None
 
-        widget_title = format_reasoning_title(summary)
         resolved_widget_id = widget_id
         if resolved_widget_id is None and replace_existing:
             resolved_widget_id = self._active_thinking_widget_id

@@ -7,6 +7,7 @@ from typing import Any, TextIO
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.text import Text
 from rich.tree import Tree
 
 from pbi_agent.models.messages import TokenUsage
@@ -15,9 +16,9 @@ from pbi_agent.ui.formatting import (
     REDACTED_THINKING_NOTICE,
     compact_json,
     escape_markup_text,
-    format_reasoning_title,
     format_session_subtitle,
     format_usage_summary,
+    resolve_reasoning_panel,
     shorten,
     status_markup,
     to_dict,
@@ -257,10 +258,9 @@ class ConsoleDisplay(DisplayProtocol):
     ) -> str | None:
         self._stop_spinner()
         del replace_existing
-        body = text if text is not None else None
         summary = title or ""
-        has_body = body is not None and bool(body.strip())
-        if not has_body and not summary.strip():
+        body, display_title = resolve_reasoning_panel(text, summary)
+        if body is None and not summary.strip():
             return None
 
         resolved_widget_id = widget_id
@@ -268,11 +268,10 @@ class ConsoleDisplay(DisplayProtocol):
             self._thinking_counter += 1
             resolved_widget_id = f"thinking-{self._thinking_counter}"
 
-        display_title = format_reasoning_title(summary)
-        content = escape_markup_text(body) if body else ""
+        content = Markdown(body) if body else Text("...", style="dim")
         self._console.print(
             Panel(
-                f"[dim]{content}[/dim]" if content else "[dim]...[/dim]",
+                content,
                 title=f"[italic]{escape_markup_text(display_title)}[/italic]",
                 title_align="left",
                 border_style="dim",

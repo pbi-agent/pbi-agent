@@ -18,6 +18,7 @@ TOOL_STYLE_MAP = {
 }
 REDACTED_THINKING_NOTICE = "[dim]Some thinking was encrypted for safety reasons.[/dim]"
 _MARKDOWN_DECORATION_RE = re.compile(r"[*_`~]+")
+_ELLIPSIS_ONLY_RE = re.compile(r"^[.\u2026\s]+$")
 
 
 def shorten(text: str, limit: int = 80) -> str:
@@ -53,6 +54,36 @@ def format_reasoning_title(
     normalized = _MARKDOWN_DECORATION_RE.sub("", normalized)
     normalized = normalized.lstrip("#>- ")
     return shorten(normalized, limit)
+
+
+def resolve_reasoning_body(text: str | None, summary: str | None) -> str | None:
+    normalized_body = text.strip() if text is not None else ""
+    if normalized_body and not _ELLIPSIS_ONLY_RE.fullmatch(normalized_body):
+        return text
+
+    normalized_summary = summary.strip() if summary is not None else ""
+    if normalized_summary:
+        return normalized_summary
+
+    if normalized_body:
+        return text
+    return None
+
+
+def resolve_reasoning_panel(
+    text: str | None,
+    summary: str | None,
+    *,
+    fallback_title: str = "Thinking...",
+) -> tuple[str | None, str]:
+    normalized_summary = summary.strip() if summary is not None else ""
+    body = resolve_reasoning_body(text, summary)
+    if body is None:
+        return None, format_reasoning_title(normalized_summary, fallback=fallback_title)
+
+    using_summary_as_body = bool(normalized_summary) and body == normalized_summary
+    title_text = fallback_title if using_summary_as_body else normalized_summary
+    return body, format_reasoning_title(title_text, fallback=fallback_title)
 
 
 def format_usage_summary(
@@ -152,6 +183,8 @@ __all__ = [
     "format_reasoning_title",
     "format_session_subtitle",
     "format_usage_summary",
+    "resolve_reasoning_body",
+    "resolve_reasoning_panel",
     "shorten",
     "status_markup",
     "to_dict",

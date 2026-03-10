@@ -121,3 +121,41 @@ def test_session_subtitle_shown_after_multiple_turns() -> None:
     assert "Usage" in output
     assert "Turn" in output
     assert "Session 11 tokens" in output
+
+
+def test_render_thinking_uses_title_as_body_when_text_missing() -> None:
+    display, stdout, _ = _display()
+    summary = (
+        "I need to summarize the content, possibly mentioning if there are any "
+        "continuities present. I'm also checking whether the hidden tail survives."
+    )
+
+    display.render_thinking(title=summary)
+
+    output = stdout.getvalue()
+    assert "Thinking..." in output
+    assert "hidden tail survives." in output
+
+
+def test_render_thinking_uses_title_as_body_when_text_is_ellipsis() -> None:
+    display, stdout, _ = _display()
+    summary = (
+        "I need to summarize the content, possibly mentioning if there are any "
+        "continuities present. I'm also checking whether the fallback beats dots."
+    )
+
+    display.render_thinking("...", title=summary)
+
+    output = stdout.getvalue()
+    assert "Thinking..." in output
+    assert "fallback beats dots." in output
+
+
+def test_render_thinking_renders_markdown_content() -> None:
+    display, stdout, _ = _display()
+
+    display.render_thinking("This has **bold** text.")
+
+    output = stdout.getvalue()
+    assert "bold" in output
+    assert "**bold**" not in output
