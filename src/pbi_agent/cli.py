@@ -327,24 +327,20 @@ def _handle_console_command(settings: Settings) -> int:
 
 
 def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:
-    from pbi_agent.ui import ChatApp
-
-    app = ChatApp(
-        settings=settings,
-        verbose=settings.verbose,
-        mode="run",
+    return _run_single_turn_command(
         prompt=args.prompt,
+        settings=settings,
     )
-    return _run_app(app)
 
 
 def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
+    from pbi_agent.agent.error_formatting import format_user_facing_error
     from pbi_agent.agent.audit_prompt import (
         AUDIT_REPORT_FILENAME,
         AUDIT_TODO_FILENAME,
         build_audit_prompt,
+        copy_audit_todo,
     )
-    from pbi_agent.ui import ChatApp
 
     report_dir_input = args.report_dir or Path(".")
     report_dir = (Path.cwd() / report_dir_input).resolve()
@@ -356,20 +352,28 @@ def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
         print(f"Error: Report path is not a directory: {report_dir}", file=sys.stderr)
         return 1
 
-    app = ChatApp(
-        settings=settings,
-        verbose=settings.verbose,
-        mode="audit",
-        prompt=build_audit_prompt(),
-        audit_report_dir=report_dir,
-        single_turn_hint=(
-            f"Audit mode: Evaluating report and writing "
-            f"{AUDIT_TODO_FILENAME} progress tracker and "
-            f"AUDIT-REPORT.md."
-        ),
-    )
-    exit_code = _run_app(app)
-    if app.fatal_error_message:
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(report_dir)
+        copy_audit_todo(report_dir)
+        exit_code = _run_single_turn_command(
+            prompt=build_audit_prompt(),
+            settings=settings,
+            single_turn_hint=(
+                f"Audit mode: Evaluating report and writing "
+                f"{AUDIT_TODO_FILENAME} progress tracker and "
+                f"{AUDIT_REPORT_FILENAME}."
+            ),
+        )
+    except KeyboardInterrupt:
+        return 130
+    except Exception as exc:
+        _print_error(format_user_facing_error(exc))
+        return 1
+    finally:
+        os.chdir(original_cwd)
+
+    if exit_code in {1, 130}:
         return exit_code
 
     report_path = report_dir / AUDIT_REPORT_FILENAME
@@ -383,6 +387,34 @@ def _handle_audit_command(args: argparse.Namespace, settings: Settings) -> int:
 
     print(f"Audit report written to {report_path}")
     return exit_code
+
+
+def _run_single_turn_command(
+    *,
+    prompt: str,
+    settings: Settings,
+    single_turn_hint: str | None = None,
+) -> int:
+    from pbi_agent.agent.error_formatting import format_user_facing_error
+    from pbi_agent.agent.session import run_single_turn
+    from pbi_agent.ui.console_display import ConsoleDisplay
+
+    display = ConsoleDisplay(verbose=settings.verbose)
+
+    try:
+        outcome = run_single_turn(
+            prompt,
+            settings,
+            display,
+            single_turn_hint=single_turn_hint,
+        )
+    except KeyboardInterrupt:
+        return 130
+    except Exception as exc:
+        _print_error(format_user_facing_error(exc))
+        return 1
+
+    return 4 if outcome.tool_errors else 0
 
 
 def _run_app(app: object) -> int:

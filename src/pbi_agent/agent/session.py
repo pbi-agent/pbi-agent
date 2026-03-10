@@ -4,9 +4,9 @@ import logging
 import time
 
 from pbi_agent.config import Settings
-from pbi_agent.ui import Display
 from pbi_agent.models.messages import AgentOutcome, TokenUsage
 from pbi_agent.providers import create_provider
+from pbi_agent.ui.display_protocol import DisplayProtocol
 
 _log = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def _selected_model(settings: Settings) -> str:
 def run_single_turn(
     prompt: str,
     settings: Settings,
-    display: Display,
+    display: DisplayProtocol,
     *,
     single_turn_hint: str | None = None,
 ) -> AgentOutcome:
@@ -67,7 +67,7 @@ def run_single_turn(
         )
 
 
-def run_chat_loop(settings: Settings, display: Display) -> int:
+def run_chat_loop(settings: Settings, display: DisplayProtocol) -> int:
     display.welcome(
         model=_selected_model(settings),
         reasoning_effort=settings.reasoning_effort,
@@ -122,7 +122,7 @@ def _run_tool_iterations(
     provider,
     response,
     max_workers: int,
-    display: Display,
+    display: DisplayProtocol,
     session_usage: TokenUsage,
     turn_usage: TokenUsage,
 ) -> tuple:

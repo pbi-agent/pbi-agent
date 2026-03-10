@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import os
 import sys
+import tempfile
 import unittest
 
 from pathlib import Path
@@ -191,6 +192,65 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 130)
         server.serve.assert_called_once_with(debug=False)
+
+    def test_handle_run_command_uses_console_single_turn_path(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["run", "--prompt", "Inspect the report"])
+        settings = self._settings()
+        outcome = Mock(tool_errors=False)
+
+        with (
+            patch(
+                "pbi_agent.agent.session.run_single_turn", return_value=outcome
+            ) as mock_run,
+            patch("pbi_agent.ui.console_display.ConsoleDisplay") as mock_display_cls,
+        ):
+            rc = cli._handle_run_command(args, settings)
+
+        self.assertEqual(rc, 0)
+        mock_display_cls.assert_called_once_with(verbose=False)
+        mock_run.assert_called_once_with(
+            "Inspect the report",
+            settings,
+            mock_display_cls.return_value,
+            single_turn_hint=None,
+        )
+
+    def test_handle_audit_command_uses_direct_single_turn_path(self) -> None:
+        parser = cli.build_parser()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            report_dir = Path(tmpdir)
+            args = parser.parse_args(["audit", "--report-dir", str(report_dir)])
+            settings = self._settings()
+            (report_dir / "AUDIT-REPORT.md").write_text("# Audit\n", encoding="utf-8")
+
+            with (
+                patch(
+                    "pbi_agent.agent.audit_prompt.copy_audit_todo",
+                    return_value=report_dir / "AUDIT-TODO.md",
+                ) as mock_copy,
+                patch(
+                    "pbi_agent.agent.audit_prompt.build_audit_prompt",
+                    return_value="audit prompt",
+                ),
+                patch(
+                    "pbi_agent.cli._run_single_turn_command",
+                    return_value=0,
+                ) as mock_run_single_turn,
+            ):
+                rc = cli._handle_audit_command(args, settings)
+
+        self.assertEqual(rc, 0)
+        mock_copy.assert_called_once_with(report_dir)
+        mock_run_single_turn.assert_called_once_with(
+            prompt="audit prompt",
+            settings=settings,
+            single_turn_hint=(
+                "Audit mode: Evaluating report and writing "
+                "AUDIT-TODO.md progress tracker and "
+                "AUDIT-REPORT.md."
+            ),
+        )
 
 
 if __name__ == "__main__":

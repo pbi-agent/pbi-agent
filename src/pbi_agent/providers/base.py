@@ -3,8 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from pbi_agent.ui import Display
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
+from pbi_agent.ui.display_protocol import DisplayProtocol
 
 
 class Provider(ABC):
@@ -32,7 +32,7 @@ class Provider(ABC):
         user_message: str | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
         instructions: str | None = None,
-        display: Display,
+        display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
     ) -> CompletedResponse:
@@ -50,7 +50,7 @@ class Provider(ABC):
         response: CompletedResponse,
         *,
         max_workers: int,
-        display: Display,
+        display: DisplayProtocol,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute every tool call present in *response*.
 

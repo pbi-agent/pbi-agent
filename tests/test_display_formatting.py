@@ -134,6 +134,39 @@ class TestFormatGenericFunctionItem:
         assert "args=" in result
 
 
+class TestRenderThinking:
+    def test_missing_body_uses_summary_text(self) -> None:
+        app = MagicMock()
+        display = Display(app)
+        summary = (
+            "I need to summarize the content, possibly mentioning if there are any "
+            "continuities present. This full text should reach the widget body."
+        )
+
+        display.render_thinking(title=summary)
+
+        assert app.call_from_thread.call_count == 1
+        _, widget_id, widget_title, widget_body = app.call_from_thread.call_args.args
+        assert widget_id == "thinking-1"
+        assert widget_title == "Thinking..."
+        assert widget_body == summary
+
+    def test_ellipsis_body_uses_summary_text(self) -> None:
+        app = MagicMock()
+        display = Display(app)
+        summary = (
+            "I need to summarize the content, possibly mentioning if there are any "
+            "continuities present. This should replace ellipsis-only content."
+        )
+
+        display.render_thinking("...", title=summary)
+
+        assert app.call_from_thread.call_count == 1
+        _, _, widget_title, widget_body = app.call_from_thread.call_args.args
+        assert widget_title == "Thinking..."
+        assert widget_body == summary
+
+
 # -- function_result routing -------------------------------------------------
 
 
