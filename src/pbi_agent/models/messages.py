@@ -128,6 +128,7 @@ class ToolCall:
 class CompletedResponse:
     response_id: str | None
     text: str
+    assistant_messages: list[str] = field(default_factory=list)
     usage: TokenUsage = field(default_factory=TokenUsage)
     function_calls: list[ToolCall] = field(default_factory=list)
     # Reasoning summary text extracted from OpenAI ``reasoning`` output items.

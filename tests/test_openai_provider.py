@@ -214,6 +214,42 @@ def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> 
     assert result.usage.model == DEFAULT_MODEL
 
 
+def test_openai_parse_response_preserves_distinct_assistant_messages() -> None:
+    provider = OpenAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_multi",
+            "model": DEFAULT_MODEL,
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": "First update."},
+                    ],
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "shell",
+                    "arguments": '{"command":"pwd"}',
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": "Second update."},
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert result.assistant_messages == ["First update.", "Second update."]
+    assert result.text == "First update.Second update."
+
+
 def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     requests: list[dict[str, object]] = []
     responses = iter(
@@ -482,6 +518,68 @@ def test_openai_request_turn_retries_after_rate_limit_and_renders_reasoning(
     assert display_spy.session_usage_snapshots[-1].input_tokens == 6
     assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 1
     assert display_spy.session_usage_snapshots[-1].output_tokens == 4
+
+
+def test_openai_request_turn_renders_intermediate_assistant_messages(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        return make_http_response(
+            {
+                "id": "resp_intermediate",
+                "model": DEFAULT_MODEL,
+                "usage": {
+                    "input_tokens": 5,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 7,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                },
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "output_text", "text": "Let me check that."}
+                        ],
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "arguments": '{"command":"pwd"}',
+                    },
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "output_text", "text": "I found the path."}
+                        ],
+                    },
+                ],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = OpenAIProvider(_make_settings())
+    response = provider.request_turn(
+        user_message="where am i?",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert response.assistant_messages == ["Let me check that.", "I found the path."]
+    assert display_spy.markdown_calls == ["Let me check that.", "I found the path."]
+    assert response.function_calls == [
+        ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"})
+    ]
 
 
 def test_openai_request_turn_raises_for_failed_response_payload(

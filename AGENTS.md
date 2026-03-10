@@ -50,6 +50,12 @@ uvx ruff check . --fix && uvx ruff format .
 uv run pbi-agent init --dest . --force
 ```
 
+## Docs
+
+- Documentation lives in `docs/` and is built with VitePress.
+- Keep the GitHub Pages base path as `/pbi-agent/` in `docs/.vitepress/config.ts`.
+- Validate docs changes with `npx vitepress build docs` or `npm run docs:build`.
+
 ## Code Review
 
 Every pull request must be reviewed before merging. Reviewers should verify the
