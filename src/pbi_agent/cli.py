@@ -14,7 +14,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pbi_agent.config import ConfigError, Settings, resolve_settings
+from pbi_agent.config import ConfigError, Settings, resolve_settings, save_internal_config
 from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
 
@@ -297,6 +297,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     LOGGER.debug("Resolved settings: %s", settings.redacted())
+    try:
+        save_internal_config(settings)
+    except OSError as exc:
+        LOGGER.warning("Unable to persist internal config: %s", exc)
 
     if args.command == "run":
         return _handle_run_command(args, settings)

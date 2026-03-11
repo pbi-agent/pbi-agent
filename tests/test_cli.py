@@ -32,7 +32,10 @@ class DefaultWebCommandTests(unittest.TestCase):
         )
 
     def test_main_defaults_to_web_for_global_options_only(self) -> None:
-        with patch("pbi_agent.cli._handle_web_command", return_value=17) as mock_web:
+        with (
+            patch("pbi_agent.cli._handle_web_command", return_value=17) as mock_web,
+            patch("pbi_agent.cli.save_internal_config") as mock_save,
+        ):
             rc = cli.main(["--api-key", "test-key"])
 
         self.assertEqual(rc, 17)
@@ -41,6 +44,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(args.host, "127.0.0.1")
         self.assertEqual(args.port, 8000)
         self.assertEqual(settings.api_key, "test-key")
+        mock_save.assert_called_once_with(settings)
 
     def test_main_inserts_web_before_web_specific_flags(self) -> None:
         with patch("pbi_agent.cli._handle_web_command", return_value=23) as mock_web:
