@@ -226,6 +226,84 @@ class DefaultWebCommandTests(unittest.TestCase):
             single_turn_hint=None,
         )
 
+    def test_handle_run_command_scopes_to_requested_project_dir(self) -> None:
+        parser = cli.build_parser()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = Path.cwd()
+            root_dir = Path(tmpdir).resolve()
+            project_dir = root_dir / "report-a"
+            project_dir.mkdir()
+            args = parser.parse_args(
+                [
+                    "run",
+                    "--prompt",
+                    "Inspect the report",
+                    "--project-dir",
+                    str(project_dir),
+                ]
+            )
+            settings = self._settings()
+            seen_cwds: list[Path] = []
+
+            def fake_run_single_turn(
+                prompt: str,
+                runtime_settings,
+                display,
+                *,
+                single_turn_hint: str | None = None,
+            ) -> Mock:
+                del prompt, runtime_settings, display, single_turn_hint
+                seen_cwds.append(Path.cwd())
+                return Mock(tool_errors=False)
+
+            try:
+                os.chdir(root_dir)
+                with (
+                    patch(
+                        "pbi_agent.agent.session.run_single_turn",
+                        side_effect=fake_run_single_turn,
+                    ) as mock_run,
+                    patch(
+                        "pbi_agent.ui.console_display.ConsoleDisplay"
+                    ) as mock_display_cls,
+                ):
+                    rc = cli._handle_run_command(args, settings)
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen_cwds, [project_dir])
+        self.assertEqual(Path.cwd(), original_cwd)
+        mock_display_cls.assert_called_once_with(verbose=False)
+        mock_run.assert_called_once()
+
+    def test_handle_run_command_rejects_missing_project_dir(self) -> None:
+        parser = cli.build_parser()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = Path.cwd()
+            root_dir = Path(tmpdir).resolve()
+            args = parser.parse_args(
+                [
+                    "run",
+                    "--prompt",
+                    "Inspect the report",
+                    "--project-dir",
+                    "missing-project",
+                ]
+            )
+            settings = self._settings()
+            stderr = io.StringIO()
+
+            try:
+                os.chdir(root_dir)
+                with patch("sys.stderr", stderr):
+                    rc = cli._handle_run_command(args, settings)
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(rc, 1)
+        self.assertIn("Project directory does not exist", stderr.getvalue())
+
     def test_handle_audit_command_uses_direct_single_turn_path(self) -> None:
         parser = cli.build_parser()
         with tempfile.TemporaryDirectory() as tmpdir:

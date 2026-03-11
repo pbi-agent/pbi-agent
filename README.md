@@ -105,6 +105,7 @@ Run one-off prompts for automation or CI integration:
 
 ```bash
 pbi-agent run --prompt "List all measures in the semantic model that lack descriptions."
+pbi-agent run --project-dir ./my-report --prompt "Summarize the model and list missing descriptions."
 ```
 
 ## Prerequisites
@@ -300,7 +301,7 @@ The agent ships with 14 Power BI skill documents covering visual types, TMDL mod
 
 ## Security Notes
 
-- The `shell` tool is confined to the workspace directory and rejects path traversal attempts.
+- The `shell` tool is confined to the active workspace directory and rejects path traversal attempts. Use `pbi-agent run --project-dir <path>` to scope single-turn execution to a specific project folder.
 - Even with confinement, treat shell execution as powerful. Only run the agent in trusted workspaces.
 - Never commit `.env` files containing API keys to version control.
 
