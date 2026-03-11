@@ -251,7 +251,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 display,
                 *,
                 single_turn_hint: str | None = None,
-            ) -> Mock:
+            ) -> object:
                 del prompt, runtime_settings, display, single_turn_hint
                 seen_cwds.append(Path.cwd())
                 return Mock(tool_errors=False)

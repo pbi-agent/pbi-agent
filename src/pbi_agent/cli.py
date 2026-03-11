@@ -338,8 +338,7 @@ def _handle_console_command(settings: Settings) -> int:
 
 
 def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:
-    project_dir_input = args.project_dir or Path(".")
-    project_dir = (Path.cwd() / project_dir_input).resolve()
+    project_dir = (Path.cwd() / args.project_dir).resolve()
 
     if not project_dir.exists():
         print(
