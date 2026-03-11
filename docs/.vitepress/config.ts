@@ -102,7 +102,7 @@ export default defineConfig({
     ],
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2026 Nasir Ben Said'
+      copyright: 'Copyright © 2026 pbi-agent contributors'
     }
   }
 })
