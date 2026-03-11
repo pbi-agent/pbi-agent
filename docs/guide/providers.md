@@ -7,9 +7,9 @@ outline: [2, 3]
 
 # Provider Configuration
 
-Provider selection resolves in this order: `--provider`, then `PBI_AGENT_PROVIDER`, then the default `openai`.
+Provider selection resolves in this order: `--provider`, then `PBI_AGENT_PROVIDER`, then the last-used provider from internal config, then the default `openai`.
 
-API key resolution resolves in this order: `--api-key`, then `PBI_AGENT_API_KEY`, then the provider-specific fallback environment variable.
+For provider-scoped settings such as API key, model, retry limits, and token limits, resolution prefers CLI flags, then environment variables, then the saved config for the selected provider, then provider defaults. API keys still fall back to the provider-specific environment variable before saved config.
 
 ## Provider Matrix
 

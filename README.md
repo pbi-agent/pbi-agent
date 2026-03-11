@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="src/pbi_agent/web/static/favicon.svg" alt="PBI Agent logo" width="120">
+<img src="src/pbi_agent/web/static/favicon.png" alt="PBI Agent logo" width="120">
 
 # PBI AGENT
 
@@ -25,6 +25,8 @@ pbi-agent
 ```
 
 That's it. Running `pbi-agent` with no arguments launches the browser interface on `http://localhost:8000` where you can start building reports immediately.
+
+Documentation: [Docs Site](https://nasirus.github.io/pbi-agent/)
 
 ## Why pbi-agent?
 
@@ -206,7 +208,9 @@ A browser interface opens at `http://localhost:8000`. Start describing what you 
 
 ## Configuration
 
-**Precedence:** CLI flags > environment variables > defaults.
+**Precedence:** CLI flags > environment variables > saved provider-scoped internal config > provider defaults.
+
+`pbi-agent` persists the last-used settings per provider in an internal config file and reuses them when matching CLI flags and environment variables are absent.
 
 ### Environment variables
 
@@ -214,7 +218,7 @@ A browser interface opens at `http://localhost:8000`. Start describing what you 
 | --- | --- | --- |
 | `PBI_AGENT_API_KEY` | API key for the selected provider | -- |
 | `PBI_AGENT_PROVIDER` | LLM provider (`openai`, `xai`, `google`, `anthropic`, or `generic`) | `openai` |
-| `PBI_AGENT_MODEL` | Model override | `gpt-5.4-2026-03-05` for OpenAI, `grok-4-1-fast-reasoning` for xAI, `gemini-3-flash-preview` for Google, `claude-opus-4-6` for Anthropic, provider default for generic |
+| `PBI_AGENT_MODEL` | Model override | `gpt-5.4-2026-03-05` for OpenAI, `grok-4-1-fast-reasoning` for xAI, `gemini-3.1-flash-lite-preview` for Google, `claude-opus-4-6` for Anthropic, provider default for generic |
 | `PBI_AGENT_MAX_TOKENS` | Max output tokens | `16384` |
 | `PBI_AGENT_REASONING_EFFORT` | Reasoning effort (`low`, `medium`, `high`, `xhigh`) | `xhigh` |
 | `PBI_AGENT_MAX_TOOL_WORKERS` | Parallel tool execution threads | `4` |
@@ -262,7 +266,7 @@ pbi-agent --provider xai --model grok-4-1-fast-reasoning
 To use **Google Gemini** through the Interactions API:
 
 ```bash
-pbi-agent --provider google --model gemini-3-flash-preview
+pbi-agent --provider google --model gemini-3.1-flash-lite-preview
 ```
 
 To use **OpenRouter** (or any OpenAI-compatible gateway) with a specific model:

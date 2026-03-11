@@ -210,6 +210,7 @@ class XAIProvider(Provider):
 
         body: dict[str, Any] = {
             "model": self._settings.model,
+            "max_output_tokens": self._settings.max_tokens,
             "input": request_input_items,
             "tools": self._tools,
             "parallel_tool_calls": True,

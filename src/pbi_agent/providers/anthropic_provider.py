@@ -178,8 +178,8 @@ class AnthropicProvider(Provider):
         display.wait_start("waiting for Anthropic response...")
 
         body: dict[str, Any] = {
-            "model": self._settings.anthropic_model,
-            "max_tokens": self._settings.anthropic_max_tokens,
+            "model": self._settings.model,
+            "max_tokens": self._settings.max_tokens,
             "cache_control": {"type": "ephemeral"},
             "tools": self._tools,
             "messages": self._messages,

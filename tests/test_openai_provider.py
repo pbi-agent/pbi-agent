@@ -7,6 +7,7 @@ from pbi_agent.cli import build_parser
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import (
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     DEFAULT_RESPONSES_URL,
     Settings,
@@ -100,6 +101,7 @@ def _make_settings(**overrides: object) -> Settings:
         "provider": "openai",
         "responses_url": DEFAULT_RESPONSES_URL,
         "model": DEFAULT_MODEL,
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "reasoning_effort": "xhigh",
         "max_retries": 0,
         "compact_threshold": 150000,
@@ -140,6 +142,7 @@ def test_openai_build_request_body_uses_http_responses_shape() -> None:
     )
 
     assert body["model"] == DEFAULT_MODEL
+    assert body["max_output_tokens"] == DEFAULT_MAX_TOKENS
     assert body["stream"] is False
     assert body["store"] is True
     assert body["parallel_tool_calls"] is True

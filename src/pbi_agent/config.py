@@ -19,7 +19,7 @@ DEFAULT_MODEL = "gpt-5.4-2026-03-05"
 DEFAULT_XAI_MODEL = "grok-4-1-fast-reasoning"
 DEFAULT_GOOGLE_MODEL = "gemini-3.1-flash-lite-preview"
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-6"
-DEFAULT_ANTHROPIC_MAX_TOKENS = 16384
+DEFAULT_MAX_TOKENS = 16384
 PROVIDER_API_KEY_ENVS = {
     "openai": "OPENAI_API_KEY",
     "xai": "XAI_API_KEY",
@@ -53,6 +53,7 @@ class Settings:
     api_key: str
     responses_url: str = DEFAULT_RESPONSES_URL
     model: str = DEFAULT_MODEL
+    max_tokens: int = DEFAULT_MAX_TOKENS
     verbose: bool = False
     max_tool_workers: int = 4
     max_retries: int = 3
@@ -61,9 +62,6 @@ class Settings:
     # Provider selection
     provider: str = "openai"
     generic_api_url: str = DEFAULT_GENERIC_API_URL
-    # Anthropic-specific
-    anthropic_model: str = DEFAULT_ANTHROPIC_MODEL
-    anthropic_max_tokens: int = DEFAULT_ANTHROPIC_MAX_TOKENS
 
     def validate(self) -> None:
         if self.provider not in {"openai", "xai", "google", "anthropic", "generic"}:
@@ -82,7 +80,7 @@ class Settings:
             )
         if self.compact_threshold < 1:
             raise ConfigError("--compact-threshold must be >= 1.")
-        if self.anthropic_max_tokens < 1:
+        if self.max_tokens < 1:
             raise ConfigError("--max-tokens must be >= 1.")
 
     def redacted(self) -> dict[str, str | int | bool]:
@@ -91,13 +89,12 @@ class Settings:
             "api_key": redact_secret(self.api_key),
             "responses_url": self.responses_url,
             "model": self.model,
+            "max_tokens": self.max_tokens,
             "verbose": self.verbose,
             "max_tool_workers": self.max_tool_workers,
             "max_retries": self.max_retries,
             "reasoning_effort": self.reasoning_effort,
             "compact_threshold": self.compact_threshold,
-            "anthropic_model": self.anthropic_model,
-            "anthropic_max_tokens": self.anthropic_max_tokens,
             "generic_api_url": self.generic_api_url,
         }
 
@@ -163,9 +160,9 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
         or _config_string(provider_config, "responses_url")
         or _default_responses_url(provider)
     )
-    model_override = (
-        args.model or os.getenv("PBI_AGENT_MODEL") or _config_string(provider_config, "model")
-    )
+    model_override = args.model or os.getenv("PBI_AGENT_MODEL")
+    if not model_override:
+        model_override = _config_string(provider_config, "model")
     model = model_override or _default_model(provider)
     max_tool_workers = args.max_tool_workers
     if max_tool_workers is None:
@@ -196,45 +193,30 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
             )
         )
 
-    # Anthropic settings
-    anthropic_model = (
-        args.model
-        or os.getenv("PBI_AGENT_MODEL")
-        or _config_string(provider_config, "anthropic_model")
-        or model
-        or DEFAULT_ANTHROPIC_MODEL
-    )
     max_tokens_raw = getattr(args, "max_tokens", None)
 
     if max_tokens_raw is None:
-        anthropic_max_tokens = int(
+        max_tokens = int(
             os.getenv(
                 "PBI_AGENT_MAX_TOKENS",
-                str(
-                    _config_int(
-                        provider_config,
-                        "anthropic_max_tokens",
-                        DEFAULT_ANTHROPIC_MAX_TOKENS,
-                    )
-                ),
+                str(_config_int(provider_config, "max_tokens", DEFAULT_MAX_TOKENS)),
             )
         )
     else:
-        anthropic_max_tokens = int(max_tokens_raw)
+        max_tokens = int(max_tokens_raw)
 
     return Settings(
         api_key=api_key,
         responses_url=responses_url,
         generic_api_url=generic_api_url or DEFAULT_GENERIC_API_URL,
         model=model,
+        max_tokens=max_tokens,
         verbose=bool(args.verbose),
         max_tool_workers=max_tool_workers,
         max_retries=max_retries,
         reasoning_effort=reasoning_effort,
         compact_threshold=compact_threshold,
         provider=provider,
-        anthropic_model=anthropic_model,
-        anthropic_max_tokens=anthropic_max_tokens,
     )
 
 
@@ -247,12 +229,11 @@ def save_internal_config(settings: Settings) -> None:
         "responses_url": settings.responses_url,
         "generic_api_url": settings.generic_api_url,
         "model": settings.model,
+        "max_tokens": settings.max_tokens,
         "reasoning_effort": settings.reasoning_effort,
         "max_tool_workers": settings.max_tool_workers,
         "max_retries": settings.max_retries,
         "compact_threshold": settings.compact_threshold,
-        "anthropic_model": settings.anthropic_model,
-        "anthropic_max_tokens": settings.anthropic_max_tokens,
     }
     data["providers"] = providers
     data["last_used_provider"] = settings.provider

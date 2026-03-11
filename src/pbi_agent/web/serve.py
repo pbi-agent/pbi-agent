@@ -19,7 +19,7 @@ from textual_serve.server import Server
 
 _WEB_DIR = Path(__file__).resolve().parent
 _TEMPLATES_DIR = str(_WEB_DIR / "templates")
-_FAVICON_PATH = _WEB_DIR / "static" / "favicon.svg"
+_FAVICON_PATH = _WEB_DIR / "static" / "favicon.png"
 
 
 class _FaviconServer(Server):

@@ -94,8 +94,7 @@ def test_resolve_settings_uses_saved_anthropic_model(monkeypatch, tmp_path: Path
             api_key="anthropic-saved-key",
             provider="anthropic",
             responses_url=DEFAULT_RESPONSES_URL,
-            model="claude-opus-4-6",
-            anthropic_model="claude-sonnet-4-5",
+            model="claude-sonnet-4-5",
             reasoning_effort="high",
         )
     )
@@ -106,8 +105,7 @@ def test_resolve_settings_uses_saved_anthropic_model(monkeypatch, tmp_path: Path
     settings = resolve_settings(args)
 
     assert settings.provider == "anthropic"
-    assert settings.model == "claude-opus-4-6"
-    assert settings.anthropic_model == "claude-sonnet-4-5"
+    assert settings.model == "claude-sonnet-4-5"
 
 
 def test_save_internal_config_persists_by_provider_and_last_used(monkeypatch, tmp_path: Path) -> None:

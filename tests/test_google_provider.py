@@ -12,6 +12,7 @@ from pbi_agent.config import (
     ConfigError,
     DEFAULT_GOOGLE_INTERACTIONS_URL,
     DEFAULT_GOOGLE_MODEL,
+    DEFAULT_MAX_TOKENS,
     Settings,
     resolve_settings,
 )
@@ -40,9 +41,9 @@ def _make_settings(**overrides: object) -> Settings:
         "provider": "google",
         "responses_url": DEFAULT_GOOGLE_INTERACTIONS_URL,
         "model": DEFAULT_GOOGLE_MODEL,
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "reasoning_effort": "xhigh",
         "max_retries": 0,
-        "anthropic_max_tokens": 16384,
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -106,7 +107,7 @@ def test_google_build_request_body_uses_interactions_shape() -> None:
     assert body["generation_config"] == {
         "thinking_level": "high",
         "thinking_summaries": "auto",
-        "max_output_tokens": 16384,
+        "max_output_tokens": DEFAULT_MAX_TOKENS,
     }
     assert "previous_interaction_id" not in body
 

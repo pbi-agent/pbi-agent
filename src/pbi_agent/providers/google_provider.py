@@ -219,7 +219,7 @@ class GoogleProvider(Provider):
                     "high",
                 ),
                 "thinking_summaries": "auto",
-                "max_output_tokens": self._settings.anthropic_max_tokens,
+                "max_output_tokens": self._settings.max_tokens,
             },
         }
         if instructions:

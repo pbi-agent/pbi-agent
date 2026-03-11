@@ -17,9 +17,7 @@ _log = logging.getLogger(__name__)
 
 
 def _selected_model(settings: Settings) -> str:
-    return (
-        settings.anthropic_model if settings.provider == "anthropic" else settings.model
-    )
+    return settings.model
 
 
 def run_single_turn(

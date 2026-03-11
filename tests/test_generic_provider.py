@@ -5,7 +5,7 @@ import urllib.request
 
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
-from pbi_agent.config import DEFAULT_GENERIC_API_URL, Settings
+from pbi_agent.config import DEFAULT_GENERIC_API_URL, DEFAULT_MAX_TOKENS, Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.generic_provider import GenericProvider
 from pbi_agent.tools.types import ToolResult
@@ -17,6 +17,7 @@ def _make_settings(**overrides: object) -> Settings:
         "provider": "generic",
         "generic_api_url": DEFAULT_GENERIC_API_URL,
         "model": "",
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "max_retries": 1,
     }
     defaults.update(overrides)
@@ -193,6 +194,7 @@ def test_generic_request_turn_preserves_history_and_tool_results(
             {"role": "system", "content": get_system_prompt()},
             {"role": "user", "content": "Where am I?"},
         ],
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "tools": provider._tools,
         "tool_choice": "auto",
     }
@@ -220,6 +222,7 @@ def test_generic_request_turn_preserves_history_and_tool_results(
                 "content": '{"ok": true, "result": "/workspace"}',
             },
         ],
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "tools": provider._tools,
         "tool_choice": "auto",
     }

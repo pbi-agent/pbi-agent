@@ -121,6 +121,7 @@ class GenericProvider(Provider):
             "messages": messages,
             "tools": self._tools,
             "tool_choice": "auto",
+            "max_tokens": self._settings.max_tokens,
         }
         if _should_send_model(self._settings):
             body["model"] = self._settings.model

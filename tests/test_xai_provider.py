@@ -7,6 +7,7 @@ from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
+    DEFAULT_MAX_TOKENS,
     DEFAULT_XAI_MODEL,
     DEFAULT_XAI_RESPONSES_URL,
     Settings,
@@ -100,6 +101,7 @@ def _make_settings(**overrides: object) -> Settings:
         "provider": "xai",
         "responses_url": DEFAULT_XAI_RESPONSES_URL,
         "model": DEFAULT_XAI_MODEL,
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "reasoning_effort": "high",
         "max_retries": 0,
     }
@@ -137,6 +139,7 @@ def test_xai_build_request_body_omits_unsupported_reasoning_effort() -> None:
         instructions="be concise",
     )
 
+    assert body["max_output_tokens"] == DEFAULT_MAX_TOKENS
     assert body["stream"] is False
     assert body["parallel_tool_calls"] is True
     assert body["include"] == ["reasoning.encrypted_content"]
@@ -158,6 +161,7 @@ def test_xai_build_request_body_maps_grok_3_mini_reasoning_effort() -> None:
         instructions="be concise",
     )
 
+    assert body["max_output_tokens"] == DEFAULT_MAX_TOKENS
     assert body["reasoning"] == {"effort": "high"}
     assert body["input"][0] == {"role": "system", "content": "be concise"}
     assert "include" not in body

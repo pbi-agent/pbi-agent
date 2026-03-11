@@ -23,12 +23,11 @@ class DefaultWebCommandTests(unittest.TestCase):
             responses_url="https://api.openai.com/v1/responses",
             generic_api_url="https://openrouter.ai/api/v1/chat/completions",
             model="gpt-5",
-            anthropic_model="claude-sonnet-4-5",
+            max_tokens=16384,
             reasoning_effort="medium",
             max_tool_workers=4,
             max_retries=3,
             compact_threshold=150000,
-            anthropic_max_tokens=16384,
         )
 
     def test_main_defaults_to_web_for_global_options_only(self) -> None:
@@ -93,6 +92,13 @@ class DefaultWebCommandTests(unittest.TestCase):
         args = parser.parse_args(["web", "--url", "demo.example.com/app"])
 
         self.assertEqual(cli._browser_target_url(args), "http://demo.example.com/app")
+
+    def test_parser_accepts_max_tokens_flag(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["--max-tokens", "2048", "console"])
+
+        self.assertEqual(args.max_tokens, 2048)
 
     def test_web_chat_command_uses_parent_pid_wrapper(self) -> None:
         command = cli._web_chat_command(self._settings(verbose=True), parent_pid=4321)

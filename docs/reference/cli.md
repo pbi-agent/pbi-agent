@@ -20,11 +20,11 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--provider` | `PBI_AGENT_PROVIDER` | `openai` | LLM provider backend: `openai`, `xai`, `google`, `anthropic`, or `generic`. |
 | `--api-key` | `PBI_AGENT_API_KEY` | none | Shared API key override. If unset, provider-specific fallback env vars are checked. |
 | `--model` | `PBI_AGENT_MODEL` | per-provider | Model override for the selected provider. Generic omits `model` when this is unset. |
-| `--max-tokens` | `PBI_AGENT_MAX_TOKENS` | `16384` | Max output tokens for providers that currently use an explicit token limit, namely Anthropic and Google. |
+| `--max-tokens` | `PBI_AGENT_MAX_TOKENS` | `16384` | Max output tokens for the selected provider. |
 | `--reasoning-effort` | `PBI_AGENT_REASONING_EFFORT` | `xhigh` for OpenAI; `high` otherwise | Requested reasoning effort: `low`, `medium`, `high`, or `xhigh`. |
 | `--max-tool-workers` | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum parallel workers for tool execution. |
-| `--max-retries` | `PBI_AGENT_MAX_RETRIES` | `2` | Maximum retries for transient provider failures and rate limits. |
-| `--compact-threshold` | `PBI_AGENT_COMPACT_THRESHOLD` | `150000` | Context compaction threshold sent to OpenAI. The current parser default means the env var is effectively shadowed unless the CLI behavior changes. |
+| `--max-retries` | `PBI_AGENT_MAX_RETRIES` | `3` | Maximum retries for transient provider failures and rate limits. |
+| `--compact-threshold` | `PBI_AGENT_COMPACT_THRESHOLD` | `150000` | Context compaction threshold sent to OpenAI. |
 | `--responses-url` | `PBI_AGENT_RESPONSES_URL` | provider-specific | Override the Responses or Interactions endpoint for OpenAI, xAI, or Google. Ignored by Anthropic and Generic. |
 | `--generic-api-url` | `PBI_AGENT_GENERIC_API_URL` | `https://openrouter.ai/api/v1/chat/completions` | Override the OpenAI-compatible Chat Completions endpoint used by the Generic backend. |
 | `--verbose` | none | `false` | Enable verbose logging. |

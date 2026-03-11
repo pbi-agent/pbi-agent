@@ -6,8 +6,8 @@ import urllib.request
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import (
-    DEFAULT_ANTHROPIC_MAX_TOKENS,
     DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_MAX_TOKENS,
     Settings,
 )
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
@@ -19,10 +19,10 @@ def _make_settings(**overrides: object) -> Settings:
     defaults: dict[str, object] = {
         "api_key": "test-key",
         "provider": "anthropic",
+        "model": DEFAULT_ANTHROPIC_MODEL,
+        "max_tokens": DEFAULT_MAX_TOKENS,
         "reasoning_effort": "xhigh",
         "max_retries": 1,
-        "anthropic_model": DEFAULT_ANTHROPIC_MODEL,
-        "anthropic_max_tokens": DEFAULT_ANTHROPIC_MAX_TOKENS,
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -148,7 +148,7 @@ def test_anthropic_request_turn_preserves_history_and_wraps_tool_results(
     assert first.response_id == "msg_1"
     assert second.response_id == "msg_2"
     assert requests[0]["model"] == DEFAULT_ANTHROPIC_MODEL
-    assert requests[0]["max_tokens"] == DEFAULT_ANTHROPIC_MAX_TOKENS
+    assert requests[0]["max_tokens"] == DEFAULT_MAX_TOKENS
     assert requests[0]["thinking"] == {"type": "adaptive"}
     assert requests[0]["output_config"] == {"effort": "max"}
     assert requests[0]["system"] == get_system_prompt()
