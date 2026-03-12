@@ -162,6 +162,40 @@ def test_shell_handle_returns_error_payload_for_subprocess_failure(
     assert result["error"] == "Shell execution failed: boom"
 
 
+def test_shell_handle_bounds_large_stdout_and_stderr(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    stdout = f"stdout-start-{'a' * (shell_tool.MAX_OUTPUT_CHARS + 50)}-stdout-end"
+    stderr = f"stderr-start-{'b' * (shell_tool.MAX_OUTPUT_CHARS + 50)}-stderr-end"
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        del args, kwargs
+        return subprocess.CompletedProcess(
+            args="python",
+            returncode=0,
+            stdout=stdout.encode("utf-8"),
+            stderr=stderr.encode("utf-8"),
+        )
+
+    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
+
+    result = shell_tool.handle({"command": "python"}, ToolContext())
+
+    assert result["exit_code"] == 0
+    assert result["stdout_truncated"] is True
+    assert result["stderr_truncated"] is True
+    assert len(result["stdout"]) <= shell_tool.MAX_OUTPUT_CHARS
+    assert len(result["stderr"]) <= shell_tool.MAX_OUTPUT_CHARS
+    assert result["stdout"].startswith("stdout-start-")
+    assert result["stdout"].endswith("-stdout-end")
+    assert result["stderr"].startswith("stderr-start-")
+    assert result["stderr"].endswith("-stderr-end")
+    assert "chars omitted" in result["stdout"]
+    assert "chars omitted" in result["stderr"]
+
+
 def test_resolve_working_directory_rejects_workspace_escape(tmp_path: Path) -> None:
     outside = tmp_path.parent
 
