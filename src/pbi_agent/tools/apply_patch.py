@@ -12,14 +12,15 @@ from pathlib import Path
 from typing import Any
 
 from pbi_agent.tools.apply_diff import apply_diff
+from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 SPEC = ToolSpec(
     name="apply_patch",
     description=(
-        "Apply a file operation (create, update, or delete) using V4A diff "
-        "format. Use this tool to create new files, edit existing files via "
-        "diffs, or delete files in the workspace."
+        "Apply a file operation (create, update, or delete) using V4A diff format. "
+        "Use this tool to create new files, edit existing files via diffs, "
+        "or delete files in the workspace."
     ),
     parameters_schema={
         "type": "object",
@@ -86,7 +87,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     except Exception as exc:
         return {
             "status": "failed",
-            "error": str(exc),
+            "error": bound_output(str(exc))[0],
         }
 
 

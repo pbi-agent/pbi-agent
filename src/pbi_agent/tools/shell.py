@@ -12,9 +12,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from pbi_agent.tools.output import MAX_OUTPUT_CHARS as DEFAULT_MAX_OUTPUT_CHARS
+from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 MAX_TIMEOUT_MS = 120_000
+MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
 
 SPEC = ToolSpec(
     name="shell",
@@ -74,27 +77,31 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             shell=True,
             timeout=(timeout_ms / 1000.0),
         )
-        stdout = _decode_output(completed.stdout)
-        stderr = _decode_output(completed.stderr)
         return {
-            "stdout": stdout,
-            "stderr": stderr,
+            **_build_output_payload(
+                stdout=_decode_output(completed.stdout),
+                stderr=_decode_output(completed.stderr),
+            ),
             "exit_code": completed.returncode,
         }
     except subprocess.TimeoutExpired as exc:
         return {
-            "stdout": _decode_output(exc.stdout),
-            "stderr": _decode_output(exc.stderr),
+            **_build_output_payload(
+                stdout=_decode_output(exc.stdout),
+                stderr=_decode_output(exc.stderr),
+            ),
             "exit_code": None,
             "timed_out": True,
             "error": f"Command timed out after {timeout_ms}ms.",
         }
     except Exception as exc:
+        stderr, stderr_truncated = bound_output(str(exc))
         return {
             "stdout": "",
-            "stderr": str(exc),
+            "stderr": stderr,
             "exit_code": 1,
             "error": f"Shell execution failed: {exc}",
+            **({"stderr_truncated": True} if stderr_truncated else {}),
         }
 
 
@@ -143,3 +150,17 @@ def _decode_output(value: bytes | str | None) -> str:
     if isinstance(value, str):
         return value
     return value.decode("utf-8", errors="replace")
+
+
+def _build_output_payload(*, stdout: str, stderr: str) -> dict[str, Any]:
+    bounded_stdout, stdout_truncated = bound_output(stdout)
+    bounded_stderr, stderr_truncated = bound_output(stderr)
+    payload: dict[str, Any] = {
+        "stdout": bounded_stdout,
+        "stderr": bounded_stderr,
+    }
+    if stdout_truncated:
+        payload["stdout_truncated"] = True
+    if stderr_truncated:
+        payload["stderr_truncated"] = True
+    return payload

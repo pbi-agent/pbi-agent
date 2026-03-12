@@ -59,6 +59,8 @@ Apply one file operation at a time with a V4A diff payload.
 The `apply_patch` tool is different from this coding environment's patch helper. Inside `pbi-agent`, it is a provider-agnostic function tool backed by `pbi_agent.tools.apply_diff`.
 :::
 
+Tool output is capped to a bounded result that preserves both the beginning and end of long output while marking omitted content.
+
 ## `skill_knowledge`
 
 Load Power BI skill markdown from the bundled knowledge base.

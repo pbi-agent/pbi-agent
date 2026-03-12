@@ -14,7 +14,12 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pbi_agent.config import ConfigError, Settings, resolve_settings, save_internal_config
+from pbi_agent.config import (
+    ConfigError,
+    Settings,
+    resolve_settings,
+    save_internal_config,
+)
 from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
 

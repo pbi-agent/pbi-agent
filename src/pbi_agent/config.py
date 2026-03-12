@@ -152,9 +152,11 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     responses_url_override = getattr(args, "responses_url", None) or os.getenv(
         "PBI_AGENT_RESPONSES_URL"
     )
-    generic_api_url = getattr(args, "generic_api_url", None) or os.getenv(
-        "PBI_AGENT_GENERIC_API_URL"
-    ) or _config_string(provider_config, "generic_api_url")
+    generic_api_url = (
+        getattr(args, "generic_api_url", None)
+        or os.getenv("PBI_AGENT_GENERIC_API_URL")
+        or _config_string(provider_config, "generic_api_url")
+    )
     responses_url = (
         responses_url_override
         or _config_string(provider_config, "responses_url")
@@ -175,7 +177,10 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
     max_retries = args.max_retries
     if max_retries is None:
         max_retries = int(
-            os.getenv("PBI_AGENT_MAX_RETRIES", str(_config_int(provider_config, "max_retries", 3)))
+            os.getenv(
+                "PBI_AGENT_MAX_RETRIES",
+                str(_config_int(provider_config, "max_retries", 3)),
+            )
         )
     default_effort = "xhigh" if provider == "openai" else "high"
     reasoning_effort = (

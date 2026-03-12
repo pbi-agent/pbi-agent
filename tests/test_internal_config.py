@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pbi_agent.config as config_module
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     DEFAULT_RESPONSES_URL,
@@ -11,7 +12,10 @@ from pbi_agent.config import (
 )
 
 
-def test_resolve_settings_uses_saved_provider_when_none_specified(monkeypatch, tmp_path: Path) -> None:
+def test_resolve_settings_uses_saved_provider_when_none_specified(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
     internal_config = tmp_path / "internal-config.json"
     monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(internal_config))
     for name in (
@@ -47,7 +51,10 @@ def test_resolve_settings_uses_saved_provider_when_none_specified(monkeypatch, t
     assert settings.compact_threshold == 123456
 
 
-def test_resolve_settings_uses_saved_generic_api_url(monkeypatch, tmp_path: Path) -> None:
+def test_resolve_settings_uses_saved_generic_api_url(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
     internal_config = tmp_path / "internal-config.json"
     monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(internal_config))
     for name in (
@@ -78,7 +85,10 @@ def test_resolve_settings_uses_saved_generic_api_url(monkeypatch, tmp_path: Path
     assert settings.generic_api_url == "https://example.test/v1/chat/completions"
 
 
-def test_resolve_settings_uses_saved_anthropic_model(monkeypatch, tmp_path: Path) -> None:
+def test_resolve_settings_uses_saved_anthropic_model(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
     internal_config = tmp_path / "internal-config.json"
     monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(internal_config))
     for name in (
@@ -108,7 +118,9 @@ def test_resolve_settings_uses_saved_anthropic_model(monkeypatch, tmp_path: Path
     assert settings.model == "claude-sonnet-4-5"
 
 
-def test_save_internal_config_persists_by_provider_and_last_used(monkeypatch, tmp_path: Path) -> None:
+def test_save_internal_config_persists_by_provider_and_last_used(
+    monkeypatch, tmp_path: Path
+) -> None:
     internal_config = tmp_path / "internal-config.json"
     monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(internal_config))
 

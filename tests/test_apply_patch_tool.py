@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+
 from pbi_agent.tools import apply_patch as apply_patch_tool
+from pbi_agent.tools.output import MAX_OUTPUT_CHARS
 from pbi_agent.tools.types import ToolContext
 
 
@@ -90,3 +92,25 @@ def test_apply_patch_handle_validates_required_arguments() -> None:
     assert unsupported_operation == {
         "error": "Unsupported operation_type 'rename_file'."
     }
+
+
+def test_apply_patch_handle_bounds_long_error_output(monkeypatch) -> None:
+    def raise_long_error(path: Path, diff: str | None) -> None:
+        raise ValueError(f"start-{'x' * (MAX_OUTPUT_CHARS + 200)}-end")
+
+    monkeypatch.setattr(apply_patch_tool, "_create_file", raise_long_error)
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "create_file",
+            "path": "notes/example.txt",
+            "diff": "+hello",
+        },
+        ToolContext(),
+    )
+
+    assert result["status"] == "failed"
+    assert len(result["error"]) <= MAX_OUTPUT_CHARS
+    assert result["error"].startswith("start-")
+    assert result["error"].endswith("-end")
+    assert "chars omitted" in result["error"]
