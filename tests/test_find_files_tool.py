@@ -40,6 +40,8 @@ def test_find_files_supports_relative_path_globs(
     monkeypatch.chdir(tmp_path)
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    (tmp_path / "docs" / "nested").mkdir()
+    (tmp_path / "docs" / "nested" / "deep.md").write_text("# Deep\n", encoding="utf-8")
     (tmp_path / "notes.md").write_text("# Notes\n", encoding="utf-8")
 
     result = find_files_tool.handle(
@@ -48,6 +50,27 @@ def test_find_files_supports_relative_path_globs(
     )
 
     assert result["entries"] == [{"path": "docs/guide.md", "type": "file"}]
+
+
+def test_find_files_supports_globstar_for_zero_or_more_path_segments(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    (tmp_path / "docs" / "nested").mkdir()
+    (tmp_path / "docs" / "nested" / "deep.md").write_text("# Deep\n", encoding="utf-8")
+
+    result = find_files_tool.handle(
+        {"path": ".", "glob": "docs/**/*.md", "recursive": True},
+        ToolContext(),
+    )
+
+    assert result["entries"] == [
+        {"path": "docs/guide.md", "type": "file"},
+        {"path": "docs/nested/deep.md", "type": "file"},
+    ]
 
 
 def test_find_files_limits_results(

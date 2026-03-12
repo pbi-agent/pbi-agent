@@ -3,6 +3,7 @@ from __future__ import annotations
 import fnmatch
 import os
 from collections import deque
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -195,8 +196,35 @@ def _matches_entry(
     match_relative_path: bool,
 ) -> bool:
     if match_relative_path:
-        return fnmatch.fnmatch(relative_workspace_path(root, path), glob_pattern)
+        return _match_relative_path(relative_workspace_path(root, path), glob_pattern)
     return fnmatch.fnmatch(name, glob_pattern)
+
+
+def _match_relative_path(relative_path: str, glob_pattern: str) -> bool:
+    path_parts = tuple(part for part in relative_path.split("/") if part)
+    pattern_parts = tuple(part for part in glob_pattern.split("/") if part)
+
+    @lru_cache(maxsize=None)
+    def _matches(path_index: int, pattern_index: int) -> bool:
+        if pattern_index == len(pattern_parts):
+            return path_index == len(path_parts)
+
+        pattern_part = pattern_parts[pattern_index]
+        if pattern_part == "**":
+            return _matches(path_index, pattern_index + 1) or (
+                path_index < len(path_parts)
+                and _matches(path_index + 1, pattern_index)
+            )
+
+        if path_index >= len(path_parts):
+            return False
+
+        if not fnmatch.fnmatchcase(path_parts[path_index], pattern_part):
+            return False
+
+        return _matches(path_index + 1, pattern_index + 1)
+
+    return _matches(0, 0)
 
 
 def _build_entry(root: Path, path: Path) -> dict[str, Any]:
