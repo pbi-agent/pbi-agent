@@ -33,6 +33,26 @@ _EFFORT_MAP: dict[str, str] = {
     "high": "high",
     "xhigh": "high",
 }
+_HTTP_ERROR_TYPES: dict[int, str] = {
+    400: "invalid_request_error",
+    401: "authentication_error",
+    403: "permission_error",
+    404: "not_found_error",
+    405: "invalid_request_error",
+    415: "invalid_request_error",
+    422: "invalid_request_error",
+    429: "rate_limit_error",
+}
+_HTTP_ERROR_MESSAGES: dict[int, str] = {
+    400: "Request body or URL contains invalid input.",
+    401: "No authorization header or an invalid authorization token was provided.",
+    403: "API key or team lacks permission to perform this action.",
+    404: "The requested model or endpoint could not be found.",
+    405: "HTTP method is not allowed for this endpoint.",
+    415: "Request body is missing or Content-Type is not application/json.",
+    422: "Request body contains an invalid field format.",
+    429: "Too many requests. Reduce request rate or increase your rate limit.",
+}
 
 
 class XAIProvider(Provider):
@@ -143,6 +163,7 @@ class XAIProvider(Provider):
 
         max_retries = self._settings.max_retries
         last_error: Exception | None = None
+        last_error_message: str | None = None
 
         for attempt in range(max_retries + 1):
             if attempt > 0:
@@ -163,12 +184,15 @@ class XAIProvider(Provider):
                 return result
             except urllib.error.HTTPError as exc:
                 error_body = _read_error_body(exc)
+                error_payload = _normalize_http_error(exc, error_body)
                 if exc.code == 429:
                     if attempt >= max_retries:
                         display.wait_stop()
                         raise RuntimeError(
-                            f"xAI rate limit exceeded after {max_retries + 1} "
-                            f"attempts: {error_body}"
+                            _format_error_message(
+                                f"xAI rate limit exceeded after {max_retries + 1} attempts",
+                                error_payload,
+                            )
                         ) from exc
                     wait = _extract_retry_after(exc, attempt)
                     display.rate_limit_notice(
@@ -181,18 +205,28 @@ class XAIProvider(Provider):
 
                 if exc.code >= 500:
                     last_error = exc
+                    last_error_message = _format_error_message(
+                        f"xAI request failed after {max_retries + 1} attempts",
+                        error_payload,
+                    )
                     continue
 
                 display.wait_stop()
                 raise RuntimeError(
-                    f"xAI Responses API error {exc.code}: {error_body}"
+                    _format_error_message(
+                        f"xAI Responses API error {exc.code}",
+                        error_payload,
+                    )
                 ) from exc
             except urllib.error.URLError as exc:
                 last_error = exc
+                last_error_message = None
                 continue
 
         display.wait_stop()
         if last_error is not None:
+            if last_error_message:
+                raise RuntimeError(last_error_message) from last_error
             raise RuntimeError(
                 f"xAI request failed after {max_retries + 1} attempts: {last_error}"
             ) from last_error
@@ -402,6 +436,73 @@ def _read_error_body(exc: urllib.error.HTTPError) -> str:
         return exc.read().decode("utf-8", errors="replace")
     except Exception:
         return ""
+
+
+def _normalize_http_error(
+    exc: urllib.error.HTTPError,
+    error_body: str,
+) -> dict[str, Any]:
+    payload = _parse_error_payload(error_body)
+    error_type = _HTTP_ERROR_TYPES.get(exc.code)
+    message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
+    request_id = _request_id_from_headers(exc)
+
+    if payload is not None:
+        payload_request_id = payload.get("request_id")
+        if isinstance(payload_request_id, str) and payload_request_id.strip():
+            request_id = payload_request_id.strip()
+
+        error_value = payload.get("error")
+        if isinstance(error_value, dict):
+            payload_type = error_value.get("type")
+            if isinstance(payload_type, str) and payload_type.strip():
+                error_type = payload_type.strip()
+            payload_message = error_value.get("message")
+            if isinstance(payload_message, str) and payload_message.strip():
+                message = payload_message.strip()
+        elif isinstance(error_value, str) and error_value.strip():
+            message = error_value.strip()
+
+    if error_type is None:
+        if 400 <= exc.code < 500:
+            error_type = "invalid_request_error"
+        else:
+            error_type = "api_error"
+
+    return {
+        "type": "error",
+        "status": exc.code,
+        "error": {
+            "type": error_type,
+            "message": message,
+        },
+        **({"request_id": request_id} if request_id else {}),
+    }
+
+
+def _parse_error_payload(error_body: str) -> dict[str, Any] | None:
+    stripped = error_body.strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
+    if not exc.headers:
+        return None
+    for header_name in ("request-id", "x-request-id"):
+        request_id = exc.headers.get(header_name)
+        if isinstance(request_id, str) and request_id.strip():
+            return request_id.strip()
+    return None
+
+
+def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
+    return f"{prefix}: {json.dumps(error_payload, sort_keys=True)}"
 
 
 def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:

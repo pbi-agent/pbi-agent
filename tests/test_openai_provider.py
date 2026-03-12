@@ -37,6 +37,15 @@ class _DisplayStub:
     ) -> None:
         self.rate_limit = (wait_seconds, attempt, max_retries)
 
+    def overload_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.overload = (wait_seconds, attempt, max_retries)
+
     def session_usage(self, usage: TokenUsage) -> None:
         self.session_usage_snapshot = usage.snapshot()
 
@@ -521,6 +530,72 @@ def test_openai_request_turn_retries_after_rate_limit_and_renders_reasoning(
     assert display_spy.session_usage_snapshots[-1].input_tokens == 6
     assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 1
     assert display_spy.session_usage_snapshots[-1].output_tokens == 4
+
+
+def test_openai_request_turn_retries_when_api_is_overloaded(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    waits: list[float] = []
+    response_payload = {
+        "id": "resp_retry",
+        "model": DEFAULT_MODEL,
+        "usage": {
+            "input_tokens": 6,
+            "input_tokens_details": {"cached_tokens": 1},
+            "output_tokens": 4,
+            "output_tokens_details": {"reasoning_tokens": 2},
+        },
+        "reasoning": {"effort": "xhigh", "summary": "auto"},
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Recovered."}],
+            },
+        ],
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            raise make_http_error(
+                url=DEFAULT_RESPONSES_URL,
+                code=503,
+                body='{"error":{"message":"The engine is currently overloaded, please try again later"}}',
+                headers={"Retry-After": "0.25"},
+            )
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider.time.sleep",
+        lambda seconds: waits.append(seconds),
+    )
+
+    provider = OpenAIProvider(_make_settings(max_retries=1))
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert waits == [1.25]
+    assert display_spy.overload_notices == [(1.25, 1, 1)]
+    assert display_spy.rate_limit_notices == []
+    assert display_spy.retry_notices == [(1, 1)]
+    assert display_spy.markdown_calls == ["Recovered."]
 
 
 def test_openai_request_turn_renders_intermediate_assistant_messages(

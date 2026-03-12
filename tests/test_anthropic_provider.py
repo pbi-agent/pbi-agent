@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import urllib.request
 
+import pytest
+
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import (
@@ -320,5 +322,81 @@ def test_anthropic_request_turn_retries_when_api_is_overloaded(
     assert response.text == "Recovered."
     assert len(requests) == 2
     assert waits == [3.0]
-    assert display_spy.rate_limit_notices == [(3.0, 1, 1)]
+    assert display_spy.overload_notices == [(3.0, 1, 1)]
+    assert display_spy.rate_limit_notices == []
     assert display_spy.retry_notices == [(1, 1)]
+
+
+def test_anthropic_request_turn_preserves_error_type_and_request_id(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del request, timeout
+        raise make_http_error(
+            url=ANTHROPIC_API_URL,
+            code=404,
+            body=(
+                '{"type":"error","error":{"type":"not_found_error",'
+                '"message":"The requested resource could not be found."},'
+                '"request_id":"req_404"}'
+            ),
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = AnthropicProvider(_make_settings(max_retries=0))
+
+    with pytest.raises(RuntimeError) as exc_info:
+        provider.request_turn(
+            user_message="hello",
+            display=display_spy,
+            session_usage=TokenUsage(),
+            turn_usage=TokenUsage(),
+        )
+
+    assert str(exc_info.value) == (
+        'Anthropic API error 404: {"error": {"message": "The requested resource '
+        'could not be found.", "type": "not_found_error"}, "request_id": '
+        '"req_404", "status": 404, "type": "error"}'
+    )
+
+
+def test_anthropic_request_turn_uses_request_id_header_for_413_errors(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del request, timeout
+        raise make_http_error(
+            url=ANTHROPIC_API_URL,
+            code=413,
+            body="<html>Request Entity Too Large</html>",
+            headers={"request-id": "req_413"},
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = AnthropicProvider(_make_settings(max_retries=0))
+
+    with pytest.raises(RuntimeError) as exc_info:
+        provider.request_turn(
+            user_message="hello",
+            display=display_spy,
+            session_usage=TokenUsage(),
+            turn_usage=TokenUsage(),
+        )
+
+    assert str(exc_info.value) == (
+        'Anthropic API error 413: {"error": {"message": "Request exceeds the '
+        'maximum allowed number of bytes.", "type": "request_too_large"}, '
+        '"request_id": "req_413", "status": 413, "type": "error"}'
+    )

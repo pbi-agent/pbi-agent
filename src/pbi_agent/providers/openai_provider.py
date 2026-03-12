@@ -25,6 +25,16 @@ from pbi_agent.tools.registry import get_openai_tool_definitions
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
 _REQUEST_TIMEOUT_SECS = 3600.0
+_HTTP_ERROR_TYPES = {
+    429: "rate_limit_error",
+    500: "server_error",
+    503: "server_error",
+}
+_HTTP_ERROR_MESSAGES = {
+    429: "Rate limit reached.",
+    500: "The server had an error while processing your request.",
+    503: "The engine is currently overloaded, please try again later.",
+}
 
 
 class OpenAIProvider(Provider):
@@ -138,6 +148,7 @@ class OpenAIProvider(Provider):
 
         max_retries = self._settings.max_retries
         last_error: Exception | None = None
+        last_error_message: str | None = None
 
         for attempt in range(max_retries + 1):
             if attempt > 0:
@@ -159,12 +170,17 @@ class OpenAIProvider(Provider):
                 return result
             except urllib.error.HTTPError as exc:
                 error_body = _read_error_body(exc)
+                error_payload = _normalize_http_error(exc, error_body)
+
+                # Rate limiting
                 if exc.code == 429:
                     if attempt >= max_retries:
                         display.wait_stop()
                         raise RuntimeError(
-                            f"OpenAI rate limit exceeded after {max_retries + 1} "
-                            f"attempts: {error_body}"
+                            _format_error_message(
+                                f"OpenAI rate limit exceeded after {max_retries + 1} attempts",
+                                error_payload,
+                            )
                         ) from exc
                     wait = _extract_retry_after(exc, attempt)
                     display.rate_limit_notice(
@@ -175,13 +191,38 @@ class OpenAIProvider(Provider):
                     time.sleep(wait)
                     continue
 
-                if exc.code >= 500:
-                    last_error = exc
+                # Overloaded (503)
+                if exc.code == 503:
+                    if attempt >= max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            _format_error_message(
+                                f"OpenAI API overloaded after {max_retries + 1} attempts",
+                                error_payload,
+                            )
+                        ) from exc
+                    wait = _extract_retry_after(exc, attempt)
+                    display.overload_notice(
+                        wait_seconds=wait,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    time.sleep(wait)
                     continue
 
+                # Server errors (5xx) -- retry
+                if exc.code >= 500:
+                    last_error = exc
+                    last_error_message = _format_error_message(
+                        "OpenAI Responses API error",
+                        error_payload,
+                    )
+                    continue
+
+                # Client errors (4xx) -- don't retry
                 display.wait_stop()
                 raise RuntimeError(
-                    f"OpenAI Responses API error {exc.code}: {error_body}"
+                    _format_error_message("OpenAI Responses API error", error_payload)
                 ) from exc
             except urllib.error.URLError as exc:
                 last_error = exc
@@ -190,7 +231,8 @@ class OpenAIProvider(Provider):
         display.wait_stop()
         if last_error is not None:
             raise RuntimeError(
-                f"OpenAI request failed after {max_retries + 1} attempts: {last_error}"
+                last_error_message
+                or f"OpenAI request failed after {max_retries + 1} attempts: {last_error}"
             ) from last_error
         raise RuntimeError("OpenAI request failed after retries.")
 
@@ -402,6 +444,72 @@ def _read_error_body(exc: urllib.error.HTTPError) -> str:
         return exc.read().decode("utf-8", errors="replace")
     except Exception:
         return ""
+
+
+def _normalize_http_error(
+    exc: urllib.error.HTTPError,
+    error_body: str,
+) -> dict[str, Any]:
+    payload = _parse_error_payload(error_body)
+    error_type = _HTTP_ERROR_TYPES.get(exc.code)
+    message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
+    request_id = _request_id_from_headers(exc)
+
+    if payload is not None:
+        payload_request_id = payload.get("request_id")
+        if isinstance(payload_request_id, str) and payload_request_id.strip():
+            request_id = payload_request_id.strip()
+
+        error_value = payload.get("error")
+        if isinstance(error_value, dict):
+            payload_type = error_value.get("type")
+            if isinstance(payload_type, str) and payload_type.strip():
+                error_type = payload_type.strip()
+            payload_message = error_value.get("message")
+            if isinstance(payload_message, str) and payload_message.strip():
+                message = payload_message.strip()
+        elif isinstance(error_value, str) and error_value.strip():
+            message = error_value.strip()
+
+    if error_type is None:
+        if 400 <= exc.code < 500:
+            error_type = "invalid_request_error"
+        else:
+            error_type = "api_error"
+
+    return {
+        "type": "error",
+        "status": exc.code,
+        "error": {
+            "type": error_type,
+            "message": message,
+        },
+        **({"request_id": request_id} if request_id else {}),
+    }
+
+
+def _parse_error_payload(error_body: str) -> dict[str, Any] | None:
+    stripped = error_body.strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
+    if not exc.headers:
+        return None
+    request_id = exc.headers.get("x-request-id") or exc.headers.get("request-id")
+    if isinstance(request_id, str) and request_id.strip():
+        return request_id.strip()
+    return None
+
+
+def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
+    return f"{prefix}: {json.dumps(error_payload, sort_keys=True)}"
 
 
 def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:

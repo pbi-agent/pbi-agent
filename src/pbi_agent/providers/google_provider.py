@@ -29,6 +29,26 @@ _THINKING_LEVEL_MAP: dict[str, str] = {
     "xhigh": "high",
 }
 
+_HTTP_ERROR_TYPES: dict[int, str] = {
+    400: "invalid_argument",
+    403: "permission_denied",
+    404: "not_found",
+    429: "resource_exhausted",
+    500: "internal",
+    503: "unavailable",
+    504: "deadline_exceeded",
+}
+
+_HTTP_ERROR_MESSAGES: dict[int, str] = {
+    400: "The request body is malformed.",
+    403: "Your API key doesn't have the required permissions.",
+    404: "The requested resource wasn't found.",
+    429: "You've exceeded the rate limit.",
+    500: "An unexpected error occurred on Google's side.",
+    503: "The service may be temporarily overloaded or down.",
+    504: "The service is unable to finish processing within the deadline.",
+}
+
 
 class GoogleProvider(Provider):
     """Provider backed by the Gemini Interactions HTTP API."""
@@ -145,6 +165,7 @@ class GoogleProvider(Provider):
 
         max_retries = self._settings.max_retries
         last_error: Exception | None = None
+        last_error_message: str | None = None
 
         for attempt in range(max_retries + 1):
             if attempt > 0:
@@ -166,12 +187,15 @@ class GoogleProvider(Provider):
                 return result
             except urllib.error.HTTPError as exc:
                 error_body = _read_error_body(exc)
+                error_payload = _normalize_http_error(exc, error_body)
                 if exc.code == 429:
                     if attempt >= max_retries:
                         display.wait_stop()
                         raise RuntimeError(
-                            f"Google rate limit exceeded after {max_retries + 1} "
-                            f"attempts: {error_body}"
+                            _format_error_message(
+                                f"Google rate limit exceeded after {max_retries + 1} attempts",
+                                error_payload,
+                            )
                         ) from exc
                     wait = _extract_retry_after(exc, attempt)
                     display.rate_limit_notice(
@@ -182,20 +206,48 @@ class GoogleProvider(Provider):
                     time.sleep(wait)
                     continue
 
+                if exc.code == 503:
+                    if attempt >= max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            _format_error_message(
+                                f"Google API overloaded after {max_retries + 1} attempts",
+                                error_payload,
+                            )
+                        ) from exc
+                    wait = min(2.0 * (2**attempt), 30.0) + 1.0
+                    display.overload_notice(
+                        wait_seconds=wait,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    time.sleep(wait)
+                    continue
+
                 if exc.code >= 500:
                     last_error = exc
+                    last_error_message = _format_error_message(
+                        f"Google request failed after {max_retries + 1} attempts",
+                        error_payload,
+                    )
                     continue
 
                 display.wait_stop()
                 raise RuntimeError(
-                    f"Google Interactions API error {exc.code}: {error_body}"
+                    _format_error_message(
+                        f"Google Interactions API error {exc.code}",
+                        error_payload,
+                    )
                 ) from exc
             except urllib.error.URLError as exc:
                 last_error = exc
+                last_error_message = None
                 continue
 
         display.wait_stop()
         if last_error is not None:
+            if last_error_message:
+                raise RuntimeError(last_error_message) from last_error
             raise RuntimeError(
                 f"Google request failed after {max_retries + 1} attempts: {last_error}"
             ) from last_error
@@ -400,6 +452,72 @@ def _read_error_body(exc: urllib.error.HTTPError) -> str:
         return exc.read().decode("utf-8", errors="replace")
     except Exception:
         return ""
+
+
+def _normalize_http_error(
+    exc: urllib.error.HTTPError,
+    error_body: str,
+) -> dict[str, Any]:
+    payload = _parse_error_payload(error_body)
+    error_type = _HTTP_ERROR_TYPES.get(exc.code)
+    message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
+    request_id = _request_id_from_headers(exc)
+
+    if payload is not None:
+        error_value = payload.get("error")
+        if isinstance(error_value, dict):
+            payload_type = error_value.get("status")
+            if isinstance(payload_type, str) and payload_type.strip():
+                error_type = payload_type.strip().lower()
+            payload_message = error_value.get("message")
+            if isinstance(payload_message, str) and payload_message.strip():
+                message = payload_message.strip()
+            payload_request_id = error_value.get("request_id")
+            if isinstance(payload_request_id, str) and payload_request_id.strip():
+                request_id = payload_request_id.strip()
+
+    if error_type is None:
+        if 400 <= exc.code < 500:
+            error_type = "invalid_argument"
+        else:
+            error_type = "internal"
+
+    normalized: dict[str, Any] = {
+        "type": "error",
+        "status": exc.code,
+        "error": {
+            "type": error_type,
+            "message": message,
+        },
+    }
+    if request_id:
+        normalized["request_id"] = request_id
+    return normalized
+
+
+def _parse_error_payload(error_body: str) -> dict[str, Any] | None:
+    stripped = error_body.strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
+    if not exc.headers:
+        return None
+    for header in ("x-request-id", "request-id", "x-goog-request-id"):
+        request_id = exc.headers.get(header)
+        if isinstance(request_id, str) and request_id.strip():
+            return request_id.strip()
+    return None
+
+
+def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
+    return f"{prefix}: {json.dumps(error_payload, sort_keys=True)}"
 
 
 def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:

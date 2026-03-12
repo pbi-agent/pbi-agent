@@ -447,6 +447,107 @@ def test_google_request_turn_retries_after_rate_limit_and_renders_thinking(
     assert display_spy.session_usage_snapshots[-1].total_tokens == 15
 
 
+def test_google_request_turn_retries_when_api_is_overloaded(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+    make_http_response,
+) -> None:
+    waits: list[float] = []
+    requests: list[dict[str, object]] = []
+    response_payload = {
+        "id": "int_retry",
+        "model": DEFAULT_GOOGLE_MODEL,
+        "status": "completed",
+        "usage": {
+            "total_input_tokens": 6,
+            "total_cached_tokens": 0,
+            "total_output_tokens": 4,
+        },
+        "outputs": [{"type": "text", "text": "Recovered."}],
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            raise make_http_error(
+                url=DEFAULT_GOOGLE_INTERACTIONS_URL,
+                code=503,
+                body=(
+                    '{"error":{"status":"UNAVAILABLE","message":"The service is '
+                    'temporarily running out of capacity."}}'
+                ),
+            )
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.google_provider.time.sleep",
+        lambda seconds: waits.append(seconds),
+    )
+
+    provider = GoogleProvider(_make_settings(max_retries=1))
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert waits == [3.0]
+    assert display_spy.overload_notices == [(3.0, 1, 1)]
+    assert display_spy.rate_limit_notices == []
+    assert display_spy.retry_notices == [(1, 1)]
+
+
+def test_google_request_turn_preserves_gemini_error_type_and_request_id(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        raise make_http_error(
+            url=DEFAULT_GOOGLE_INTERACTIONS_URL,
+            code=400,
+            body=(
+                '{"error":{"status":"FAILED_PRECONDITION","message":"Gemini API '
+                'free tier is not available in your country. Please enable billing '
+                'on your project in Google AI Studio."}}'
+            ),
+            headers={"x-request-id": "req_gemini_precondition"},
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GoogleProvider(_make_settings(max_retries=0))
+
+    with pytest.raises(RuntimeError) as exc_info:
+        provider.request_turn(
+            user_message="hello",
+            display=display_spy,
+            session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+            turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        )
+
+    assert str(exc_info.value) == (
+        'Google Interactions API error 400: {"error": {"message": "Gemini API '
+        'free tier is not available in your country. Please enable billing on '
+        'your project in Google AI Studio.", "type": "failed_precondition"}, '
+        '"request_id": "req_gemini_precondition", "status": 400, "type": "error"}'
+    )
+
+
 def test_google_request_turn_raises_for_failed_response_payload(
     monkeypatch,
     display_spy,

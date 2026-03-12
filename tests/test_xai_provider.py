@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import urllib.request
 
+import pytest
+
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.cli import build_parser
@@ -498,3 +500,78 @@ def test_xai_request_turn_retries_after_rate_limit_and_renders_reasoning(
     assert display_spy.session_usage_snapshots[-1].input_tokens == 6
     assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 1
     assert display_spy.session_usage_snapshots[-1].output_tokens == 4
+
+
+def test_xai_request_turn_preserves_error_type_and_request_id(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del request, timeout
+        raise make_http_error(
+            url=DEFAULT_XAI_RESPONSES_URL,
+            code=404,
+            body=(
+                '{"error":{"type":"not_found_error","message":"The requested '
+                'model or endpoint could not be found."},"request_id":"req_404"}'
+            ),
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = XAIProvider(_make_settings(max_retries=0))
+
+    with pytest.raises(RuntimeError) as exc_info:
+        provider.request_turn(
+            user_message="hello",
+            display=display_spy,
+            session_usage=TokenUsage(),
+            turn_usage=TokenUsage(),
+        )
+
+    assert str(exc_info.value) == (
+        'xAI Responses API error 404: {"error": {"message": "The requested '
+        'model or endpoint could not be found.", "type": "not_found_error"}, '
+        '"request_id": "req_404", "status": 404, "type": "error"}'
+    )
+
+
+def test_xai_request_turn_uses_request_id_header_for_non_json_errors(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del request, timeout
+        raise make_http_error(
+            url=DEFAULT_XAI_RESPONSES_URL,
+            code=415,
+            body="<html>Unsupported Media Type</html>",
+            headers={"x-request-id": "req_415"},
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = XAIProvider(_make_settings(max_retries=0))
+
+    with pytest.raises(RuntimeError) as exc_info:
+        provider.request_turn(
+            user_message="hello",
+            display=display_spy,
+            session_usage=TokenUsage(),
+            turn_usage=TokenUsage(),
+        )
+
+    assert str(exc_info.value) == (
+        'xAI Responses API error 415: {"error": {"message": "Request body is '
+        'missing or Content-Type is not application/json.", "type": '
+        '"invalid_request_error"}, "request_id": "req_415", "status": 415, '
+        '"type": "error"}'
+    )
