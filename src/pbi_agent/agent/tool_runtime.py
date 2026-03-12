@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
@@ -8,6 +10,8 @@ from typing import Any
 from pbi_agent.models.messages import ToolCall
 from pbi_agent.tools.registry import get_tool_handler
 from pbi_agent.tools.types import ToolContext, ToolResult
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -57,15 +61,31 @@ def to_function_call_output_items(results: list[ToolResult]) -> list[dict[str, A
 
 
 def _execute_one_tool_call(call: ToolCall) -> ToolResult:
+    start = time.monotonic()
+    _log.debug("Starting tool call %s (%s)", call.call_id, call.name)
     handler = get_tool_handler(call.name)
     if handler is None:
-        return _error_result(
+        result = _error_result(
             call, "unknown_tool", f"Tool '{call.name}' is not registered."
         )
+        _log.debug(
+            "Finished tool call %s (%s) in %.3fs with error",
+            call.call_id,
+            call.name,
+            time.monotonic() - start,
+        )
+        return result
 
     args_or_error = _normalize_arguments(call.arguments)
     if isinstance(args_or_error, str):
-        return _error_result(call, "invalid_arguments", args_or_error)
+        result = _error_result(call, "invalid_arguments", args_or_error)
+        _log.debug(
+            "Finished tool call %s (%s) in %.3fs with error",
+            call.call_id,
+            call.name,
+            time.monotonic() - start,
+        )
+        return result
 
     try:
         output = handler(args_or_error, ToolContext())
@@ -73,11 +93,26 @@ def _execute_one_tool_call(call: ToolCall) -> ToolResult:
             payload = {"ok": True, "result": output}
         else:
             payload = {"ok": True, "result": output}
-        return ToolResult(
+        result = ToolResult(
             call_id=call.call_id, output_json=json.dumps(payload), is_error=False
         )
+        _log.debug(
+            "Finished tool call %s (%s) in %.3fs",
+            call.call_id,
+            call.name,
+            time.monotonic() - start,
+        )
+        return result
     except Exception as exc:
-        return _error_result(call, "tool_execution_failed", str(exc))
+        result = _error_result(call, "tool_execution_failed", str(exc))
+        _log.debug(
+            "Finished tool call %s (%s) in %.3fs with exception: %s",
+            call.call_id,
+            call.name,
+            time.monotonic() - start,
+            exc,
+        )
+        return result
 
 
 def _normalize_arguments(

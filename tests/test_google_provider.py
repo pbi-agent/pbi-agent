@@ -546,8 +546,6 @@ def test_google_request_turn_preserves_gemini_error_type_and_request_id(
         'your project in Google AI Studio.", "type": "failed_precondition"}, '
         '"request_id": "req_gemini_precondition", "status": 400, "type": "error"}'
     )
-
-
 def test_google_request_turn_raises_for_failed_response_payload(
     monkeypatch,
     display_spy,
@@ -605,6 +603,15 @@ class _DisplayStub:
         max_retries: int,
     ) -> None:
         self.rate_limit = (wait_seconds, attempt, max_retries)
+
+    def overload_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.overload = (wait_seconds, attempt, max_retries)
 
     def session_usage(self, usage: TokenUsage) -> None:
         self.session_usage_snapshot = usage.snapshot()

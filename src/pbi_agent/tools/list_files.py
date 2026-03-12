@@ -7,7 +7,6 @@ from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 from pbi_agent.tools.workspace_access import DEFAULT_MAX_ENTRIES
 from pbi_agent.tools.workspace_access import iter_directory_entries
-from pbi_agent.tools.workspace_access import matches_glob
 from pbi_agent.tools.workspace_access import normalize_positive_int
 from pbi_agent.tools.workspace_access import relative_workspace_path
 from pbi_agent.tools.workspace_access import resolve_safe_path
@@ -16,7 +15,8 @@ SPEC = ToolSpec(
     name="list_files",
     description=(
         "List files and directories within the workspace. "
-        "Use this for safe cross-platform file discovery instead of shell commands."
+        "Use this for general directory listing only. "
+        "For filename or glob searches, use find_files instead."
     ),
     parameters_schema={
         "type": "object",
@@ -32,13 +32,6 @@ SPEC = ToolSpec(
                 "type": "boolean",
                 "description": "Whether to traverse subdirectories recursively.",
                 "default": True,
-            },
-            "glob": {
-                "type": "string",
-                "description": (
-                    "Optional glob filter. Match against the entry name unless the "
-                    "pattern includes a path separator."
-                ),
             },
             "max_entries": {
                 "type": "integer",
@@ -61,7 +54,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             arguments.get("max_entries"),
             default=DEFAULT_MAX_ENTRIES,
         )
-        glob_pattern = arguments.get("glob")
 
         if not target_path.exists():
             return {"error": f"path not found: {target_path}"}
@@ -90,8 +82,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                 resolved_candidate.relative_to(root)
             except ValueError:
                 continue
-            if not matches_glob(root, resolved_candidate, glob_pattern):
-                continue
             if len(matching_entries) >= max_entries:
                 entries_truncated = True
                 break
@@ -104,7 +94,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         result: dict[str, Any] = {
             "path": relative_workspace_path(root, target_path),
             "recursive": bool(recursive),
-            "glob": glob_pattern,
             "entries": matching_entries,
             "returned_entries": len(matching_entries),
             "has_more": entries_truncated,

@@ -6,7 +6,7 @@ from pbi_agent.tools import list_files as list_files_tool
 from pbi_agent.tools.types import ToolContext
 
 
-def test_list_files_handles_recursive_listing_and_glob_filter(
+def test_list_files_handles_recursive_listing(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -18,20 +18,21 @@ def test_list_files_handles_recursive_listing_and_glob_filter(
     (tmp_path / "README.md").write_text("hello\n", encoding="utf-8")
 
     result = list_files_tool.handle(
-        {"path": ".", "recursive": True, "glob": "*.md"},
+        {"path": ".", "recursive": True},
         ToolContext(),
     )
 
     assert result["path"] == "."
     assert result["recursive"] is True
-    assert result["glob"] == "*.md"
-    assert result["returned_entries"] == 2
-    assert result["total_entries"] == 2
+    assert result["returned_entries"] == 5
+    assert result["total_entries"] == 5
     assert result["has_more"] is False
-    assert result["total_entries"] == 2
     assert result["entries"] == [
+        {"path": "docs", "type": "directory"},
+        {"path": "src", "type": "directory"},
         {"path": "README.md", "type": "file"},
         {"path": "docs/guide.md", "type": "file"},
+        {"path": "src/app.py", "type": "file"},
     ]
 
 
