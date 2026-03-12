@@ -15,6 +15,7 @@ TOOL_STYLE_MAP = {
     "apply_patch": "apply-patch",
     "skill_knowledge": "skill-knowledge",
     "init_report": "init-report",
+    "find_files": "find-files",
     "list_files": "list-files",
     "search_files": "search-files",
     "read_file": "read-file",

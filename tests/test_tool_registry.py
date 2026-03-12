@@ -9,6 +9,7 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "init_report",
         "shell",
         "apply_patch",
+        "find_files",
         "list_files",
         "search_files",
         "read_file",

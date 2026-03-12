@@ -32,6 +32,7 @@ _TOOL_ICONS: dict[str, str] = {
     "apply-patch": "\u25a0",  # ■
     "skill-knowledge": "\u25c6",  # ◆
     "init-report": "\u2605",  # ★
+    "find-files": "\U0001f5ce",  # 🗎
     "list-files": "\u2630",  # ☰
     "search-files": "\u2315",  # ⌕
     "read-file": "\u2610",  # ☐
@@ -43,6 +44,7 @@ _TOOL_BORDER_STYLES: dict[str, str] = {
     "apply-patch": "#F97316",
     "skill-knowledge": "green",
     "init-report": "cyan",
+    "find-files": "#22C55E",
     "list-files": "#818CF8",
     "search-files": "#EC4899",
     "read-file": "#EAB308",
@@ -171,18 +173,39 @@ class ConsoleDisplay(DisplayProtocol):
         status: str,
         call_id: str = "",
         recursive: bool = True,
-        glob_pattern: str = "",
         max_entries: int | str = 200,
+    ) -> str:
+        flags: list[str] = []
+        if recursive:
+            flags.append("recursive")
+        flags.append(f"max={max_entries}")
+        flag_str = "  ".join(f"[dim]{f}[/dim]" for f in flags)
+        lines = [
+            f"[#818CF8]\u2630[/#818CF8] [bold]{escape_markup_text(shorten(path, 96))}[/bold]  {status}",
+            flag_str,
+        ]
+        self._append_call_id(lines, call_id)
+        return "\n".join(lines)
+
+    def _format_find_files_item(
+        self,
+        path: str,
+        *,
+        status: str,
+        call_id: str = "",
+        recursive: bool = True,
+        glob_pattern: str = "",
+        max_results: int | str = 200,
     ) -> str:
         flags: list[str] = []
         if recursive:
             flags.append("recursive")
         if glob_pattern:
             flags.append(f"glob={escape_markup_text(shorten(glob_pattern, 40))}")
-        flags.append(f"max={max_entries}")
+        flags.append(f"max={max_results}")
         flag_str = "  ".join(f"[dim]{f}[/dim]" for f in flags)
         lines = [
-            f"[#818CF8]\u2630[/#818CF8] [bold]{escape_markup_text(shorten(path, 96))}[/bold]  {status}",
+            f"[#22C55E]\U0001f5ce[/#22C55E] [bold]{escape_markup_text(shorten(path, 96))}[/bold]  {status}",
             flag_str,
         ]
         self._append_call_id(lines, call_id)
@@ -540,8 +563,21 @@ class ConsoleDisplay(DisplayProtocol):
                     status=status,
                     call_id=call_id,
                     recursive=bool(args.get("recursive", True)),
-                    glob_pattern=str(args.get("glob", "")),
                     max_entries=args.get("max_entries", 200),
+                ),
+            )
+            return
+
+        if name == "find_files":
+            self._append_tool_line(
+                name,
+                self._format_find_files_item(
+                    str(args.get("path", ".")),
+                    status=status,
+                    call_id=call_id,
+                    recursive=bool(args.get("recursive", True)),
+                    glob_pattern=str(args.get("glob", "")),
+                    max_results=args.get("max_results", 200),
                 ),
             )
             return

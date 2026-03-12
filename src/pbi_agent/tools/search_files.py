@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
@@ -135,19 +135,18 @@ def _iter_candidate_files(
     root: Path,
     target_path: Path,
     glob_pattern: str | None,
-) -> list[Path]:
+) -> Iterator[Path]:
     if not target_path.exists():
         raise FileNotFoundError(f"path not found: {target_path}")
 
     if target_path.is_file():
         if matches_glob(root, target_path, glob_pattern):
-            return [target_path]
-        return []
+            yield target_path
+        return
 
     if not target_path.is_dir():
         raise ValueError(f"path is not a regular file or directory: {target_path}")
 
-    files: list[Path] = []
     for candidate in iter_directory_entries(target_path, recursive=True):
         resolved_candidate = candidate.resolve(strict=False)
         try:
@@ -158,8 +157,7 @@ def _iter_candidate_files(
             continue
         if not matches_glob(root, resolved_candidate, glob_pattern):
             continue
-        files.append(resolved_candidate)
-    return files
+        yield resolved_candidate
 
 
 def _bound_match_fields(match: dict[str, Any]) -> dict[str, Any]:
