@@ -17,11 +17,11 @@ def test_read_file_returns_requested_line_window(tmp_path: Path, monkeypatch) ->
 
     assert result == {
         "path": "notes.txt",
-        "encoding": "utf-8",
         "start_line": 2,
         "end_line": 3,
         "total_lines": 4,
         "content": "two\nthree\n",
+        "has_more_lines": True,
         "windowed": True,
     }
 
@@ -33,8 +33,8 @@ def test_read_file_auto_detects_utf16_bom(tmp_path: Path, monkeypatch) -> None:
     result = read_file_tool.handle({"path": "utf16.txt"}, ToolContext())
 
     assert result["path"] == "utf16.txt"
-    assert result["encoding"] == "utf-16"
     assert result["content"] == "hello\nworld\n"
+    assert result["has_more_lines"] is False
     assert "windowed" not in result
 
 
@@ -74,3 +74,20 @@ def test_read_file_rejects_binary_files(tmp_path: Path, monkeypatch) -> None:
     result = read_file_tool.handle({"path": "blob.bin"}, ToolContext())
 
     assert "binary file is not supported" in result["error"]
+
+
+def test_read_file_reports_empty_files_with_zero_range(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "empty.txt").write_text("", encoding="utf-8")
+
+    result = read_file_tool.handle({"path": "empty.txt"}, ToolContext())
+
+    assert result == {
+        "path": "empty.txt",
+        "start_line": 0,
+        "end_line": 0,
+        "total_lines": 0,
+        "content": "",
+        "has_more_lines": False,
+        "empty": True,
+    }

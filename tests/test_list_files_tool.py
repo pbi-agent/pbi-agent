@@ -25,6 +25,9 @@ def test_list_files_handles_recursive_listing_and_glob_filter(
     assert result["path"] == "."
     assert result["recursive"] is True
     assert result["glob"] == "*.md"
+    assert result["returned_entries"] == 2
+    assert result["total_entries"] == 2
+    assert result["has_more"] is False
     assert result["total_entries"] == 2
     assert result["entries"] == [
         {"path": "README.md", "type": "file"},
@@ -43,8 +46,10 @@ def test_list_files_limits_entry_count(tmp_path: Path, monkeypatch) -> None:
     )
 
     assert len(result["entries"]) == 2
-    assert result["total_entries"] == 3
+    assert result["returned_entries"] == 2
+    assert result["has_more"] is True
     assert result["entries_truncated"] is True
+    assert "total_entries" not in result
 
 
 def test_list_files_rejects_paths_outside_workspace(

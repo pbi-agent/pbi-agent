@@ -33,13 +33,11 @@ def test_search_files_finds_matches_and_skips_binary_files(
             "path": "notes/one.txt",
             "line_number": 2,
             "line": "needle here",
-            "encoding": "utf-8",
         },
         {
             "path": "notes/two.md",
             "line_number": 1,
             "line": "needle again",
-            "encoding": "utf-8",
         }
     ]
 

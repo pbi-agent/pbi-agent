@@ -73,6 +73,9 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                 "path": relative_workspace_path(root, target_path),
                 "recursive": False,
                 "entries": [entry],
+                "returned_entries": 1,
+                "total_entries": 1,
+                "has_more": False,
                 **({"path_truncated": True} if path_truncated else {}),
             }
 
@@ -80,7 +83,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             return {"error": f"path is not a regular file or directory: {target_path}"}
 
         matching_entries: list[dict[str, Any]] = []
-        total_entries = 0
+        entries_truncated = False
         for candidate in iter_directory_entries(target_path, recursive=bool(recursive)):
             resolved_candidate = candidate.resolve(strict=False)
             try:
@@ -89,23 +92,28 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                 continue
             if not matches_glob(root, resolved_candidate, glob_pattern):
                 continue
-            total_entries += 1
             if len(matching_entries) >= max_entries:
-                continue
+                entries_truncated = True
+                break
             entry = _build_entry(root, resolved_candidate)
             bounded_entry, path_truncated = _bound_entry_path(entry)
             if path_truncated:
                 bounded_entry["path_truncated"] = True
             matching_entries.append(bounded_entry)
 
-        return {
+        result: dict[str, Any] = {
             "path": relative_workspace_path(root, target_path),
             "recursive": bool(recursive),
             "glob": glob_pattern,
             "entries": matching_entries,
-            "total_entries": total_entries,
-            **({"entries_truncated": True} if total_entries > len(matching_entries) else {}),
+            "returned_entries": len(matching_entries),
+            "has_more": entries_truncated,
         }
+        if entries_truncated:
+            result["entries_truncated"] = True
+        else:
+            result["total_entries"] = len(matching_entries)
+        return result
     except Exception as exc:
         return {"error": bound_output(str(exc))[0]}
 

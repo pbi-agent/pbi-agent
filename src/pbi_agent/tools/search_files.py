@@ -10,7 +10,7 @@ from pbi_agent.tools.workspace_access import DEFAULT_MAX_MATCHES
 from pbi_agent.tools.workspace_access import iter_directory_entries
 from pbi_agent.tools.workspace_access import matches_glob
 from pbi_agent.tools.workspace_access import normalize_positive_int
-from pbi_agent.tools.workspace_access import read_text_file
+from pbi_agent.tools.workspace_access import open_text_file
 from pbi_agent.tools.workspace_access import relative_workspace_path
 from pbi_agent.tools.workspace_access import resolve_safe_path
 
@@ -81,35 +81,34 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         for candidate in _iter_candidate_files(root, target_path, glob_pattern):
             searched_files += 1
             try:
-                content, detected_encoding = read_text_file(candidate)
+                with open_text_file(candidate) as text_handle:
+                    for line_number, line in enumerate(text_handle, start=1):
+                        line_text = line.rstrip("\r\n")
+                        if not matcher(line_text):
+                            continue
+                        match = {
+                            "path": relative_workspace_path(root, candidate),
+                            "line_number": line_number,
+                            "line": line_text,
+                        }
+                        bounded_match = _bound_match_fields(match)
+                        matches.append(bounded_match)
+                        if len(matches) >= max_matches:
+                            return {
+                                "pattern": pattern,
+                                "path": relative_workspace_path(root, target_path),
+                                "glob": glob_pattern,
+                                "regex": regex_enabled,
+                                "matches": matches,
+                                "searched_files": searched_files,
+                                "skipped_binary_files": skipped_binary_files,
+                                "matches_truncated": True,
+                            }
             except ValueError as exc:
                 if str(exc).startswith("binary file is not supported:"):
                     skipped_binary_files += 1
                     continue
                 raise
-
-            for line_number, line in enumerate(content.splitlines(), start=1):
-                if not matcher(line):
-                    continue
-                match = {
-                    "path": relative_workspace_path(root, candidate),
-                    "line_number": line_number,
-                    "line": line,
-                    "encoding": detected_encoding,
-                }
-                bounded_match = _bound_match_fields(match)
-                matches.append(bounded_match)
-                if len(matches) >= max_matches:
-                    return {
-                        "pattern": pattern,
-                        "path": relative_workspace_path(root, target_path),
-                        "glob": glob_pattern,
-                        "regex": regex_enabled,
-                        "matches": matches,
-                        "searched_files": searched_files,
-                        "skipped_binary_files": skipped_binary_files,
-                        "matches_truncated": True,
-                    }
 
         return {
             "pattern": pattern,

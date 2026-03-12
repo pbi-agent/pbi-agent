@@ -7,7 +7,7 @@ from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 from pbi_agent.tools.workspace_access import DEFAULT_MAX_LINES
 from pbi_agent.tools.workspace_access import normalize_positive_int
-from pbi_agent.tools.workspace_access import read_text_file
+from pbi_agent.tools.workspace_access import open_text_file
 from pbi_agent.tools.workspace_access import relative_workspace_path
 from pbi_agent.tools.workspace_access import resolve_safe_path
 
@@ -67,25 +67,36 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         if not target_path.is_file():
             return {"error": f"path is not a file: {target_path}"}
 
-        content, detected_encoding = read_text_file(target_path, encoding=str(encoding))
-        lines = content.splitlines(keepends=True)
-        line_count = len(lines)
-        start_index = min(start_line - 1, line_count)
-        end_index = min(start_index + max_lines, line_count)
-        selected = "".join(lines[start_index:end_index])
+        selected_lines: list[str] = []
+        line_count = 0
+        with open_text_file(target_path, encoding=str(encoding)) as text_handle:
+            for line_count, line in enumerate(text_handle, start=1):
+                if line_count < start_line:
+                    continue
+                if len(selected_lines) < max_lines:
+                    selected_lines.append(line)
+
+        selected = "".join(selected_lines)
         bounded_content, content_truncated = bound_output(
             selected, limit=MAX_READ_FILE_OUTPUT_CHARS
         )
+        returned_start_line = start_line if selected_lines else 0
+        returned_end_line = (
+            returned_start_line + len(selected_lines) - 1 if selected_lines else 0
+        )
+        has_more_lines = returned_end_line < line_count if returned_end_line else False
 
         result: dict[str, Any] = {
             "path": relative_workspace_path(root, target_path),
-            "encoding": detected_encoding,
-            "start_line": start_index + 1 if line_count else 1,
-            "end_line": end_index,
+            "start_line": returned_start_line,
+            "end_line": returned_end_line,
             "total_lines": line_count,
             "content": bounded_content,
+            "has_more_lines": has_more_lines,
         }
-        if start_index > 0 or end_index < line_count:
+        if line_count == 0:
+            result["empty"] = True
+        if start_line > 1 or has_more_lines:
             result["windowed"] = True
         if content_truncated:
             result["content_truncated"] = True

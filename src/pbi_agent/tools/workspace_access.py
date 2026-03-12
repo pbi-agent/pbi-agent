@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import codecs
 import fnmatch
 import locale
 import os
+from contextlib import contextmanager
+from io import TextIOWrapper
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, TextIO
 
 DEFAULT_MAX_ENTRIES = 200
 DEFAULT_MAX_LINES = 200
@@ -79,26 +82,76 @@ def matches_glob(root: Path, path: Path, pattern: str | None) -> bool:
     return fnmatch.fnmatch(path.name, normalized_pattern)
 
 
-def read_text_file(path: Path, *, encoding: str = "auto") -> tuple[str, str]:
-    raw_bytes = path.read_bytes()
-    normalized_encoding = (
-        encoding.strip().lower() if isinstance(encoding, str) and encoding.strip() else "auto"
-    )
+@contextmanager
+def open_text_file(
+    path: Path,
+    *,
+    encoding: str = "auto",
+) -> Iterator[TextIO]:
+    normalized_encoding = _normalize_encoding_name(encoding)
 
-    bom_encoding = _detect_bom_encoding(raw_bytes)
+    with path.open("rb") as raw_handle:
+        detected_encoding = _detect_text_encoding(
+            raw_handle,
+            normalized_encoding=normalized_encoding,
+            original_encoding=encoding,
+            path=path,
+        )
+        raw_handle.seek(0)
+        try:
+            with TextIOWrapper(
+                raw_handle,
+                encoding=detected_encoding,
+                newline="",
+            ) as text_handle:
+                yield text_handle
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                _decode_failure_message(
+                    original_encoding=encoding,
+                    detected_encoding=detected_encoding,
+                )
+            ) from exc
+
+
+def read_text_file(path: Path, *, encoding: str = "auto") -> tuple[str, str]:
+    with open_text_file(path, encoding=encoding) as text_handle:
+        return text_handle.read(), text_handle.encoding
+
+
+def _normalize_encoding_name(encoding: str) -> str:
+    return encoding.strip().lower() if isinstance(encoding, str) and encoding.strip() else "auto"
+
+
+def _detect_text_encoding(
+    raw_handle,
+    *,
+    normalized_encoding: str,
+    original_encoding: str,
+    path: Path,
+) -> str:
+    sample = raw_handle.read(4096)
+
     if normalized_encoding == "auto":
+        bom_encoding = _detect_bom_encoding(sample)
         if bom_encoding is not None:
-            return raw_bytes.decode(bom_encoding), bom_encoding
-        if _is_probably_binary(raw_bytes):
+            return bom_encoding
+        if _is_probably_binary(sample):
             raise ValueError(f"binary file is not supported: {path}")
-        return _decode_with_fallbacks(raw_bytes)
+        return _decode_with_fallbacks(sample)[1]
 
     try:
-        return raw_bytes.decode(normalized_encoding), normalized_encoding
+        codecs.lookup(normalized_encoding)
     except LookupError as exc:
-        raise ValueError(f"unknown encoding: {encoding}") from exc
-    except UnicodeDecodeError as exc:
-        raise ValueError(f"failed to decode file with encoding '{encoding}'") from exc
+        raise ValueError(f"unknown encoding: {original_encoding}") from exc
+    return normalized_encoding
+
+
+def _decode_failure_message(*, original_encoding: str, detected_encoding: str) -> str:
+    normalized_original = _normalize_encoding_name(original_encoding)
+    if normalized_original == "auto":
+        return f"failed to decode file with detected encoding '{detected_encoding}'"
+    return f"failed to decode file with encoding '{original_encoding}'"
 
 
 def _decode_with_fallbacks(raw_bytes: bytes) -> tuple[str, str]:
