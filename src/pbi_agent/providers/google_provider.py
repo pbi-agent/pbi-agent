@@ -182,6 +182,22 @@ class GoogleProvider(Provider):
                     time.sleep(wait)
                     continue
 
+                if exc.code == 503:
+                    if attempt >= max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            f"Google API overloaded after {max_retries + 1} attempts: "
+                            f"{error_body}"
+                        ) from exc
+                    wait = min(2.0 * (2**attempt), 30.0) + 1.0
+                    display.overload_notice(
+                        wait_seconds=wait,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    time.sleep(wait)
+                    continue
+
                 if exc.code >= 500:
                     last_error = exc
                     continue

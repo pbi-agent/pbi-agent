@@ -175,6 +175,22 @@ class OpenAIProvider(Provider):
                     time.sleep(wait)
                     continue
 
+                if exc.code == 503:
+                    if attempt >= max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            f"OpenAI API overloaded after {max_retries + 1} attempts: "
+                            f"{error_body}"
+                        ) from exc
+                    wait = _extract_retry_after(exc, attempt)
+                    display.overload_notice(
+                        wait_seconds=wait,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    time.sleep(wait)
+                    continue
+
                 if exc.code >= 500:
                     last_error = exc
                     continue

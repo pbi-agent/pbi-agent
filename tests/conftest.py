@@ -18,6 +18,7 @@ class DisplaySpy:
         self.wait_stop_calls = 0
         self.retry_notices: list[tuple[int, int]] = []
         self.rate_limit_notices: list[tuple[float, int, int]] = []
+        self.overload_notices: list[tuple[float, int, int]] = []
         self.session_usage_snapshots: list[TokenUsage] = []
         self.thinking_calls: list[dict[str, object | None]] = []
         self.redacted_thinking_calls = 0
@@ -43,6 +44,15 @@ class DisplaySpy:
         max_retries: int,
     ) -> None:
         self.rate_limit_notices.append((wait_seconds, attempt, max_retries))
+
+    def overload_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.overload_notices.append((wait_seconds, attempt, max_retries))
 
     def session_usage(self, usage: TokenUsage) -> None:
         self.session_usage_snapshots.append(usage.snapshot())

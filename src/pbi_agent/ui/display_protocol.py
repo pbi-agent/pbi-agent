@@ -145,6 +145,14 @@ class DisplayProtocol(Protocol):
         max_retries: int,
     ) -> None: ...
 
+    def overload_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None: ...
+
     def error(self, message: str) -> None: ...
 
     def debug(self, message: str) -> None: ...

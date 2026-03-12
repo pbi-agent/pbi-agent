@@ -518,6 +518,21 @@ class Display(DisplayProtocol):
             f"Rate limit reached. Retrying in {wait_display}s ({attempt}/{max_retries})",
         )
 
+    def overload_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.wait_stop()
+        wait_display = f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
+        self._mount_static_message(
+            "notice",
+            NoticeMessage,
+            f"Provider overloaded. Retrying in {wait_display}s ({attempt}/{max_retries})",
+        )
+
     def error(self, message: str) -> None:
         self.wait_stop()
         if self._active_thinking_widget_id:

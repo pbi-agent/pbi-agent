@@ -623,6 +623,20 @@ class ConsoleDisplay(DisplayProtocol):
             f"Retrying in {wait_display}s ({attempt}/{max_retries})[/yellow]"
         )
 
+    def overload_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.wait_stop()
+        wait_display = f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
+        self._console.print(
+            "[yellow]Provider overloaded. "
+            f"Retrying in {wait_display}s ({attempt}/{max_retries})[/yellow]"
+        )
+
     def error(self, message: str) -> None:
         self.wait_stop()
         self._tool_group.reset()

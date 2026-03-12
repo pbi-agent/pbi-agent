@@ -39,6 +39,14 @@ def test_error_outputs_to_stderr() -> None:
     assert "Error: boom" in stderr.getvalue()
 
 
+def test_overload_notice_outputs_to_stdout() -> None:
+    display, stdout, _ = _display()
+
+    display.overload_notice(wait_seconds=3.0, attempt=1, max_retries=2)
+
+    assert "Provider overloaded. Retrying in 3s (1/2)" in stdout.getvalue()
+
+
 def test_tool_group_end_prints_tool_summary_lines() -> None:
     display, stdout, _ = _display()
 
