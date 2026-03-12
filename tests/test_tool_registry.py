@@ -4,7 +4,15 @@ from pbi_agent.tools import registry
 
 
 def test_registry_exposes_expected_built_in_tools() -> None:
-    expected = {"skill_knowledge", "init_report", "shell", "apply_patch"}
+    expected = {
+        "skill_knowledge",
+        "init_report",
+        "shell",
+        "apply_patch",
+        "list_files",
+        "search_files",
+        "read_file",
+    }
 
     assert expected.issubset({spec.name for spec in registry.get_tool_specs()})
     assert expected.issubset(

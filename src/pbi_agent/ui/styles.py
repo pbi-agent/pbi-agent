@@ -79,6 +79,15 @@ ToolGroup.tool-group-skill-knowledge {
 ToolGroup.tool-group-init-report {
     border-left: thick #06B6D4;
 }
+ToolGroup.tool-group-list-files {
+    border-left: thick #818CF8;
+}
+ToolGroup.tool-group-search-files {
+    border-left: thick #EC4899;
+}
+ToolGroup.tool-group-read-file {
+    border-left: thick #EAB308;
+}
 ToolGroup > CollapsibleTitle {
     padding: 1 2;
     color: $text-muted;
@@ -106,6 +115,15 @@ ToolItem.tool-call-skill-knowledge {
 }
 ToolItem.tool-call-init-report {
     background: #06B6D4 14%;
+}
+ToolItem.tool-call-list-files {
+    background: #818CF8 14%;
+}
+ToolItem.tool-call-search-files {
+    background: #EC4899 14%;
+}
+ToolItem.tool-call-read-file {
+    background: #EAB308 14%;
 }
 
 /* ---- thinking block ---- */

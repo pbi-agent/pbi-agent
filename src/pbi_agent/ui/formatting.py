@@ -15,6 +15,9 @@ TOOL_STYLE_MAP = {
     "apply_patch": "apply-patch",
     "skill_knowledge": "skill-knowledge",
     "init_report": "init-report",
+    "list_files": "list-files",
+    "search_files": "search-files",
+    "read_file": "read-file",
 }
 REDACTED_THINKING_NOTICE = "[dim]Some thinking was encrypted for safety reasons.[/dim]"
 _MARKDOWN_DECORATION_RE = re.compile(r"[*_`~]+")

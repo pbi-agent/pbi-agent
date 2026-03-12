@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from pbi_agent.tools.output import bound_output
+from pbi_agent.tools.types import ToolContext, ToolSpec
+from pbi_agent.tools.workspace_access import DEFAULT_MAX_ENTRIES
+from pbi_agent.tools.workspace_access import iter_directory_entries
+from pbi_agent.tools.workspace_access import matches_glob
+from pbi_agent.tools.workspace_access import normalize_positive_int
+from pbi_agent.tools.workspace_access import relative_workspace_path
+from pbi_agent.tools.workspace_access import resolve_safe_path
+
+SPEC = ToolSpec(
+    name="list_files",
+    description=(
+        "List files and directories within the workspace. "
+        "Use this for safe cross-platform file discovery instead of shell commands."
+    ),
+    parameters_schema={
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": (
+                    "Directory or file path relative to the workspace root "
+                    "(or absolute within workspace). Defaults to '.'."
+                ),
+            },
+            "recursive": {
+                "type": "boolean",
+                "description": "Whether to traverse subdirectories recursively.",
+                "default": True,
+            },
+            "glob": {
+                "type": "string",
+                "description": (
+                    "Optional glob filter. Match against the entry name unless the "
+                    "pattern includes a path separator."
+                ),
+            },
+            "max_entries": {
+                "type": "integer",
+                "description": "Maximum number of entries to return. Defaults to 200.",
+            },
+        },
+        "additionalProperties": False,
+    },
+)
+
+
+def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    del context
+    root = Path.cwd().resolve()
+
+    try:
+        target_path = resolve_safe_path(root, arguments.get("path"))
+        recursive = arguments.get("recursive", True)
+        max_entries = normalize_positive_int(
+            arguments.get("max_entries"),
+            default=DEFAULT_MAX_ENTRIES,
+        )
+        glob_pattern = arguments.get("glob")
+
+        if not target_path.exists():
+            return {"error": f"path not found: {target_path}"}
+
+        if target_path.is_file():
+            entry = _build_entry(root, target_path)
+            entry, path_truncated = _bound_entry_path(entry)
+            return {
+                "path": relative_workspace_path(root, target_path),
+                "recursive": False,
+                "entries": [entry],
+                **({"path_truncated": True} if path_truncated else {}),
+            }
+
+        if not target_path.is_dir():
+            return {"error": f"path is not a regular file or directory: {target_path}"}
+
+        matching_entries: list[dict[str, Any]] = []
+        total_entries = 0
+        for candidate in iter_directory_entries(target_path, recursive=bool(recursive)):
+            resolved_candidate = candidate.resolve(strict=False)
+            try:
+                resolved_candidate.relative_to(root)
+            except ValueError:
+                continue
+            if not matches_glob(root, resolved_candidate, glob_pattern):
+                continue
+            total_entries += 1
+            if len(matching_entries) >= max_entries:
+                continue
+            entry = _build_entry(root, resolved_candidate)
+            bounded_entry, path_truncated = _bound_entry_path(entry)
+            if path_truncated:
+                bounded_entry["path_truncated"] = True
+            matching_entries.append(bounded_entry)
+
+        return {
+            "path": relative_workspace_path(root, target_path),
+            "recursive": bool(recursive),
+            "glob": glob_pattern,
+            "entries": matching_entries,
+            "total_entries": total_entries,
+            **({"entries_truncated": True} if total_entries > len(matching_entries) else {}),
+        }
+    except Exception as exc:
+        return {"error": bound_output(str(exc))[0]}
+
+
+def _build_entry(root: Path, path: Path) -> dict[str, Any]:
+    entry_type = "directory" if path.is_dir() else "file"
+    return {
+        "path": relative_workspace_path(root, path),
+        "type": entry_type,
+    }
+
+
+def _bound_entry_path(entry: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    bounded_path, truncated = bound_output(str(entry["path"]))
+    return {
+        **entry,
+        "path": bounded_path,
+    }, truncated

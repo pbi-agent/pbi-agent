@@ -32,8 +32,31 @@ _TOOL_ICONS: dict[str, str] = {
     "apply-patch": "\u25a0",  # ■
     "skill-knowledge": "\u25c6",  # ◆
     "init-report": "\u2605",  # ★
+    "list-files": "\u2630",  # ☰
+    "search-files": "\u2315",  # ⌕
+    "read-file": "\u2610",  # ☐
     "generic": "\u2022",  # •
 }
+
+_TOOL_BORDER_STYLES: dict[str, str] = {
+    "shell": "blue",
+    "apply-patch": "#F97316",
+    "skill-knowledge": "green",
+    "init-report": "cyan",
+    "list-files": "#818CF8",
+    "search-files": "#EC4899",
+    "read-file": "#EAB308",
+    "mixed": "#8B5CF6",
+    "generic": "blue",
+}
+
+
+def _safe_positive_int(value: int | str, *, default: int) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return default
+    return normalized if normalized > 0 else default
 
 
 class ConsoleDisplay(DisplayProtocol):
@@ -138,6 +161,73 @@ class ConsoleDisplay(DisplayProtocol):
         lines = [f"[bold]{escape_markup_text(dest)}[/bold]  {status}"]
         if force:
             lines.append("[dim]force:[/dim] true")
+        self._append_call_id(lines, call_id)
+        return "\n".join(lines)
+
+    def _format_list_files_item(
+        self,
+        path: str,
+        *,
+        status: str,
+        call_id: str = "",
+        recursive: bool = True,
+        glob_pattern: str = "",
+        max_entries: int | str = 200,
+    ) -> str:
+        flags: list[str] = []
+        if recursive:
+            flags.append("recursive")
+        if glob_pattern:
+            flags.append(f"glob={escape_markup_text(shorten(glob_pattern, 40))}")
+        flags.append(f"max={max_entries}")
+        flag_str = "  ".join(f"[dim]{f}[/dim]" for f in flags)
+        lines = [
+            f"[#818CF8]\u2630[/#818CF8] [bold]{escape_markup_text(shorten(path, 96))}[/bold]  {status}",
+            flag_str,
+        ]
+        self._append_call_id(lines, call_id)
+        return "\n".join(lines)
+
+    def _format_search_files_item(
+        self,
+        pattern: str,
+        *,
+        status: str,
+        call_id: str = "",
+        path: str = ".",
+        glob_pattern: str = "",
+        regex: bool = False,
+        max_matches: int | str = 100,
+    ) -> str:
+        mode = "[dim]regex[/dim]" if regex else "[dim]literal[/dim]"
+        lines = [
+            f"[#EC4899]\u2315[/#EC4899] [bold]{escape_markup_text(shorten(pattern, 80))}[/bold]  {mode}  {status}",
+            f"[dim]path:[/dim] {escape_markup_text(shorten(path, 60))}  [dim]max:[/dim] {max_matches}",
+        ]
+        if glob_pattern:
+            lines.append(
+                f"[dim]glob:[/dim] {escape_markup_text(shorten(glob_pattern, 60))}"
+            )
+        self._append_call_id(lines, call_id)
+        return "\n".join(lines)
+
+    def _format_read_file_item(
+        self,
+        path: str,
+        *,
+        status: str,
+        call_id: str = "",
+        start_line: int | str = 1,
+        max_lines: int | str = 200,
+        encoding: str = "auto",
+    ) -> str:
+        normalized_start = _safe_positive_int(start_line, default=1)
+        normalized_max = _safe_positive_int(max_lines, default=200)
+        lines = [
+            f"[#EAB308]\u2610[/#EAB308] [bold]{escape_markup_text(shorten(path, 96))}[/bold]  {status}",
+            f"[dim]lines:[/dim] {normalized_start}\u2013{normalized_start + normalized_max - 1}"
+            f"  [dim]encoding:[/dim] {escape_markup_text(encoding)}",
+        ]
         self._append_call_id(lines, call_id)
         return "\n".join(lines)
 
@@ -442,6 +532,49 @@ class ConsoleDisplay(DisplayProtocol):
             )
             return
 
+        if name == "list_files":
+            self._append_tool_line(
+                name,
+                self._format_list_files_item(
+                    str(args.get("path", ".")),
+                    status=status,
+                    call_id=call_id,
+                    recursive=bool(args.get("recursive", True)),
+                    glob_pattern=str(args.get("glob", "")),
+                    max_entries=args.get("max_entries", 200),
+                ),
+            )
+            return
+
+        if name == "search_files":
+            self._append_tool_line(
+                name,
+                self._format_search_files_item(
+                    str(args.get("pattern", "<missing pattern>")),
+                    status=status,
+                    call_id=call_id,
+                    path=str(args.get("path", ".")),
+                    glob_pattern=str(args.get("glob", "")),
+                    regex=bool(args.get("regex", False)),
+                    max_matches=args.get("max_matches", 100),
+                ),
+            )
+            return
+
+        if name == "read_file":
+            self._append_tool_line(
+                name,
+                self._format_read_file_item(
+                    str(args.get("path", "<missing path>")),
+                    status=status,
+                    call_id=call_id,
+                    start_line=args.get("start_line", 1),
+                    max_lines=args.get("max_lines", 200),
+                    encoding=str(args.get("encoding", "auto")),
+                ),
+            )
+            return
+
         self._append_tool_line(
             name,
             self._format_generic_function_item(
@@ -461,13 +594,14 @@ class ConsoleDisplay(DisplayProtocol):
         label = self._tool_group.label
         style_key = self._tool_group.classes.replace("tool-group-", "")
         icon = _TOOL_ICONS.get(style_key, _TOOL_ICONS["generic"])
+        border = _TOOL_BORDER_STYLES.get(style_key, _TOOL_BORDER_STYLES["generic"])
 
         tree = Tree(f"[bold]{icon} {escape_markup_text(label)}[/bold]")
         for item in self._tool_group.items:
             tree.add(item.text)
 
         self._console.print(
-            Panel(tree, border_style="blue", padding=(0, 1), expand=True)
+            Panel(tree, border_style=border, padding=(0, 1), expand=True)
         )
         self._tool_group.reset()
 
