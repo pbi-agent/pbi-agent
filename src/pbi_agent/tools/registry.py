@@ -10,6 +10,7 @@ _REGISTRY: dict[str, tuple[ToolSpec, ToolHandler]] = {}
 from pbi_agent.tools.skill_knowledge import SPEC as _sk_spec, handle as _sk_handle  # noqa: E402
 from pbi_agent.tools.init_report import SPEC as _ir_spec, handle as _ir_handle  # noqa: E402
 from pbi_agent.tools.shell import SPEC as _sh_spec, handle as _sh_handle  # noqa: E402
+from pbi_agent.tools.python_exec import SPEC as _pe_spec, handle as _pe_handle  # noqa: E402
 from pbi_agent.tools.apply_patch import SPEC as _ap_spec, handle as _ap_handle  # noqa: E402
 from pbi_agent.tools.find_files import SPEC as _ff_spec, handle as _ff_handle  # noqa: E402
 from pbi_agent.tools.list_files import SPEC as _lf_spec, handle as _lf_handle  # noqa: E402
@@ -19,6 +20,7 @@ from pbi_agent.tools.read_file import SPEC as _rf_spec, handle as _rf_handle  # 
 _REGISTRY[_sk_spec.name] = (_sk_spec, _sk_handle)
 _REGISTRY[_ir_spec.name] = (_ir_spec, _ir_handle)
 _REGISTRY[_sh_spec.name] = (_sh_spec, _sh_handle)
+_REGISTRY[_pe_spec.name] = (_pe_spec, _pe_handle)
 _REGISTRY[_ap_spec.name] = (_ap_spec, _ap_handle)
 _REGISTRY[_ff_spec.name] = (_ff_spec, _ff_handle)
 _REGISTRY[_lf_spec.name] = (_lf_spec, _lf_handle)

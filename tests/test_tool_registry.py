@@ -8,6 +8,7 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "skill_knowledge",
         "init_report",
         "shell",
+        "python_exec",
         "apply_patch",
         "find_files",
         "list_files",
