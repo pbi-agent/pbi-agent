@@ -211,20 +211,6 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(monkeypatch) 
     assert result == {
         "status": "completed",
         "final_output": "child complete",
-        "response_id": "resp_child",
-        "reasoning_effort": "medium",
-        "usage": {
-            "input_tokens": 4,
-            "cached_input_tokens": 0,
-            "cache_write_tokens": 0,
-            "cache_write_1h_tokens": 0,
-            "output_tokens": 2,
-            "reasoning_tokens": 0,
-            "tool_use_tokens": 0,
-            "provider_total_tokens": 0,
-            "total_tokens": 6,
-            "model": "gpt-5",
-        },
     }
     assert parent_display.sub_agent_calls == [
         {

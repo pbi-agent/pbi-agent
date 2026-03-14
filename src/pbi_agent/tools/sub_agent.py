@@ -41,8 +41,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                 "type": "invalid_arguments",
                 "message": "'task_instruction' must be a non-empty string.",
             },
-            "reasoning_effort": "low",
-            "usage": {},
         }
 
     reasoning_effort = arguments.get("reasoning_effort", "low")
@@ -68,8 +66,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                 "type": "nested_sub_agent_disabled",
                 "message": "Nested sub-agent runs are disabled in this version.",
             },
-            "reasoning_effort": reasoning_effort,
-            "usage": {},
         }
 
     if any(value is None for value in (settings, display, session_usage, turn_usage)):
@@ -79,8 +75,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                 "type": "invalid_runtime_context",
                 "message": "sub_agent requires runtime settings, display, and usage context.",
             },
-            "reasoning_effort": reasoning_effort,
-            "usage": {},
         }
 
     from pbi_agent.agent.session import run_sub_agent_task

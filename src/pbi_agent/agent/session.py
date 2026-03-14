@@ -35,22 +35,6 @@ def _selected_model(settings: Settings) -> str:
     return settings.model
 
 
-def usage_to_dict(usage: TokenUsage) -> dict[str, int | str]:
-    snapshot = usage.snapshot()
-    return {
-        "input_tokens": snapshot.input_tokens,
-        "cached_input_tokens": snapshot.cached_input_tokens,
-        "cache_write_tokens": snapshot.cache_write_tokens,
-        "cache_write_1h_tokens": snapshot.cache_write_1h_tokens,
-        "output_tokens": snapshot.output_tokens,
-        "reasoning_tokens": snapshot.reasoning_tokens,
-        "tool_use_tokens": snapshot.tool_use_tokens,
-        "provider_total_tokens": snapshot.provider_total_tokens,
-        "total_tokens": snapshot.total_tokens,
-        "model": snapshot.model,
-    }
-
-
 def run_single_turn(
     prompt: str,
     settings: Settings,
@@ -205,24 +189,16 @@ def run_sub_agent_task(
             elapsed = time.monotonic() - started_at
             child_display.turn_usage(child_turn_usage, elapsed)
             child_display.finish_sub_agent(status="completed")
-            result: dict[str, Any] = {
+            return {
                 "status": "completed",
                 "final_output": response.text,
-                "response_id": response.response_id,
-                "reasoning_effort": reasoning_effort,
-                "usage": usage_to_dict(child_session_usage),
             }
-            if had_tool_errors:
-                result["tool_errors"] = True
-            return result
     except SubAgentRunError as exc:
         child_display.error(exc.message)
         child_display.finish_sub_agent(status="failed")
         return {
             "status": "failed",
             "error": {"type": exc.error_type, "message": exc.message},
-            "reasoning_effort": reasoning_effort,
-            "usage": usage_to_dict(child_session_usage),
         }
     except Exception as exc:
         message = str(exc) or exc.__class__.__name__
@@ -231,8 +207,6 @@ def run_sub_agent_task(
         return {
             "status": "failed",
             "error": {"type": "sub_agent_failed", "message": message},
-            "reasoning_effort": reasoning_effort,
-            "usage": usage_to_dict(child_session_usage),
         }
     finally:
         parent_session_usage.add_sub_agent(child_session_usage)
