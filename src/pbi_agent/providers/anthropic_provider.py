@@ -84,6 +84,9 @@ class AnthropicProvider(Provider):
     def close(self) -> None:
         pass
 
+    def reset_conversation(self) -> None:
+        self._messages.clear()
+
     # -- request_turn --------------------------------------------------------
 
     def request_turn(

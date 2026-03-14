@@ -26,6 +26,10 @@ class Provider(ABC):
         """Tear down the connection / session."""
 
     @abstractmethod
+    def reset_conversation(self) -> None:
+        """Clear any provider-side conversation state for a fresh chat."""
+
+    @abstractmethod
     def request_turn(
         self,
         *,

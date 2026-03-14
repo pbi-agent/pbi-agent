@@ -259,7 +259,7 @@ class ChatApp(App):
         self._chat_log().mount(UserMessage(text))
         self._scroll_chat_end()
 
-    def _reset_chat_view(self) -> None:
+    def reset_chat_view(self) -> None:
         self._chat_log().remove_children()
         self._status_row().remove_children()
         inp = self._chat_input()
@@ -287,8 +287,6 @@ class ChatApp(App):
         self._submit_user_message(self._chat_input().text)
 
     async def action_new_chat(self) -> None:
-        self._reset_chat_view()
-        self.enable_input()
         if self._bridge is not None:
             self._bridge.request_new_chat()
 

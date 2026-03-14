@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pbi_agent.agent.session import run_chat_loop, run_single_turn
+from pbi_agent.agent.session import NEW_CHAT_SENTINEL, run_chat_loop, run_single_turn
 from pbi_agent.config import DEFAULT_MODEL, Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 
@@ -11,6 +11,7 @@ class _DisplaySpy:
         self.session_usage_calls: list[TokenUsage] = []
         self.turn_usage_calls: list[tuple[TokenUsage, float]] = []
         self.debug_messages: list[str] = []
+        self.reset_chat_calls = 0
 
     def welcome(
         self,
@@ -37,6 +38,9 @@ class _DisplaySpy:
 
     def debug(self, message: str) -> None:
         self.debug_messages.append(message)
+
+    def reset_chat(self) -> None:
+        self.reset_chat_calls += 1
 
 
 class _ProviderStub:
@@ -213,12 +217,16 @@ class _ChatDisplaySpy(_DisplaySpy):
 class _ChatProviderStub:
     def __init__(self) -> None:
         self.request_messages: list[str | None] = []
+        self.reset_calls = 0
 
     def __enter__(self) -> _ChatProviderStub:
         return self
 
     def __exit__(self, *_: object) -> None:
         return None
+
+    def reset_conversation(self) -> None:
+        self.reset_calls += 1
 
     def request_turn(
         self,
@@ -244,9 +252,9 @@ class _ChatProviderStub:
 
 def test_run_chat_loop_resets_welcome_and_usage_on_new_chat(monkeypatch) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy(["hello", "__new_chat__", "quit"])
+    display = _ChatDisplaySpy(["hello", NEW_CHAT_SENTINEL, "after reset", "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
-    monotonic_values = iter([5.0, 6.5])
+    monotonic_values = iter([5.0, 6.5, 10.0, 11.0])
 
     monkeypatch.setattr(
         "pbi_agent.agent.session.create_provider",
@@ -260,9 +268,11 @@ def test_run_chat_loop_resets_welcome_and_usage_on_new_chat(monkeypatch) -> None
     exit_code = run_chat_loop(settings, display)
 
     assert exit_code == 0
-    assert provider.request_messages == ["hello"]
+    assert provider.request_messages == ["hello", "after reset"]
+    assert provider.reset_calls == 1
     assert len(display.welcome_calls) == 2
     assert display.welcome_calls[0]["interactive"] is True
     assert display.welcome_calls[1]["interactive"] is True
-    assert [usage.total_tokens for usage in display.session_usage_calls] == [0, 3, 0]
-    assert display.assistant_start_calls == 1
+    assert [usage.total_tokens for usage in display.session_usage_calls] == [0, 3, 0, 3]
+    assert display.reset_chat_calls == 1
+    assert display.assistant_start_calls == 2

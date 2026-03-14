@@ -66,6 +66,9 @@ class GoogleProvider(Provider):
     def close(self) -> None:
         pass
 
+    def reset_conversation(self) -> None:
+        self._previous_interaction_id = None
+
     def request_turn(
         self,
         *,

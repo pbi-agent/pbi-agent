@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import threading
 from unittest.mock import MagicMock
 
+from pbi_agent.agent.session import NEW_CHAT_SENTINEL
 from pbi_agent.ui.display import Display
 
 
@@ -165,6 +167,21 @@ class TestRenderThinking:
         _, _, widget_title, widget_body = app.call_from_thread.call_args.args
         assert widget_title == "Thinking..."
         assert widget_body == summary
+
+
+class TestInteractiveInputQueue:
+    def test_new_chat_request_queued_before_prompt_is_preserved(self) -> None:
+        display = _make_display()
+        result: list[str] = []
+
+        display.request_new_chat()
+
+        worker = threading.Thread(target=lambda: result.append(display.user_prompt()))
+        worker.start()
+        worker.join(timeout=1)
+
+        assert not worker.is_alive()
+        assert result == [NEW_CHAT_SENTINEL]
 
 
 # -- function_result routing -------------------------------------------------

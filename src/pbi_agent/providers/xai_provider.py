@@ -74,6 +74,9 @@ class XAIProvider(Provider):
     def close(self) -> None:
         pass
 
+    def reset_conversation(self) -> None:
+        self._previous_response_id = None
+
     def request_turn(
         self,
         *,

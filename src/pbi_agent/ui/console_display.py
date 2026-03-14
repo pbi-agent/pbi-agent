@@ -267,7 +267,7 @@ class ConsoleDisplay(DisplayProtocol):
         capture_result: bool = False,
     ) -> str:
         first_line = next(
-            (l.strip() for l in code.splitlines() if l.strip()), "<empty>"
+            (line.strip() for line in code.splitlines() if line.strip()), "<empty>"
         )
         flags: list[str] = [
             f"[dim]wd:[/dim] {escape_markup_text(str(working_directory))}",
@@ -330,6 +330,17 @@ class ConsoleDisplay(DisplayProtocol):
     def submit_input(self, value: str) -> None:
         del value
         return None
+
+    def request_new_chat(self) -> None:
+        raise RuntimeError(
+            "ConsoleDisplay does not support interactive new-chat requests."
+        )
+
+    def reset_chat(self) -> None:
+        self._stop_spinner()
+        self._tool_group.reset()
+        self._usage_section_open = False
+        self._turn_count = 0
 
     def welcome(
         self,

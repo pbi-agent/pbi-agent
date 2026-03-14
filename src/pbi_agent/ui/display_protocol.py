@@ -63,6 +63,8 @@ class DisplayProtocol(Protocol):
 
     def request_new_chat(self) -> None: ...
 
+    def reset_chat(self) -> None: ...
+
     def welcome(
         self,
         *,

@@ -43,6 +43,9 @@ class GenericProvider(Provider):
     def close(self) -> None:
         pass
 
+    def reset_conversation(self) -> None:
+        self._messages.clear()
+
     def request_turn(
         self,
         *,

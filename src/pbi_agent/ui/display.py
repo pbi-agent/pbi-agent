@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 import traceback
 from dataclasses import dataclass
@@ -58,7 +59,7 @@ class Display(DisplayProtocol):
         self._msg_counter = 0
         self._tool_group = PendingToolGroup()
         self._input_event = threading.Event()
-        self._input_value = ""
+        self._input_queue: queue.Queue[str] = queue.Queue()
         self._shutdown = threading.Event()
         self._turn_usage_widgets: dict[int, _TurnUsageWidget] = {}
         self._turn_usage_lock = threading.Lock()
@@ -247,12 +248,22 @@ class Display(DisplayProtocol):
         self._input_event.set()
 
     def submit_input(self, value: str) -> None:
-        self._input_value = value
+        self._input_queue.put(value)
         self._input_event.set()
 
     def request_new_chat(self) -> None:
-        self._input_value = "__new_chat__"
+        from pbi_agent.agent.session import NEW_CHAT_SENTINEL
+
+        self._input_queue.put(NEW_CHAT_SENTINEL)
         self._input_event.set()
+
+    def reset_chat(self) -> None:
+        self._waiting_widget_id = None
+        self._active_thinking_widget_id = None
+        self._tool_group.reset()
+        with self._turn_usage_lock:
+            self._turn_usage_widgets.clear()
+        self._safe_call(self.app.reset_chat_view)
 
     def welcome(
         self,
@@ -273,16 +284,19 @@ class Display(DisplayProtocol):
         )
 
     def user_prompt(self) -> str:
-        self._input_event.clear()
-        self._safe_call(self.app.enable_input)
         while True:
-            if self._input_event.wait(timeout=0.5):
-                break
             if self._shutdown.is_set():
                 return "exit"
-        if self._shutdown.is_set():
-            return "exit"
-        return self._input_value
+            try:
+                value = self._input_queue.get_nowait()
+            except queue.Empty:
+                self._safe_call(self.app.enable_input)
+                self._input_event.wait(timeout=0.5)
+                self._input_event.clear()
+                continue
+            if self._input_queue.empty():
+                self._input_event.clear()
+            return value
 
     def assistant_start(self) -> None:
         """Compatibility hook kept for the session/provider interface."""
