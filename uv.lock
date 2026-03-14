@@ -575,7 +575,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastexcel", specifier = ">=0.19.0" },
+    { name = "fastexcel", specifier = "==0.19.0" },
     { name = "polars", specifier = "==1.39.0" },
     { name = "pypdf", specifier = "==6.8.0" },
     { name = "python-dotenv", specifier = "==1.2.2" },
