@@ -66,19 +66,27 @@ def run_single_turn(
 
 
 def run_chat_loop(settings: Settings, display: DisplayProtocol) -> int:
-    display.welcome(
-        model=_selected_model(settings),
-        reasoning_effort=settings.reasoning_effort,
-    )
     model = _selected_model(settings)
-    session_usage = TokenUsage(model=model)
-    display.session_usage(session_usage)
+
+    def _reset_session() -> TokenUsage:
+        display.welcome(
+            model=model,
+            reasoning_effort=settings.reasoning_effort,
+        )
+        new_usage = TokenUsage(model=model)
+        display.session_usage(new_usage)
+        return new_usage
+
+    session_usage = _reset_session()
     had_tool_errors = False
 
     provider = create_provider(settings)
     with provider:
         while True:
             user_input = display.user_prompt().strip()
+            if user_input == "__new_chat__":
+                session_usage = _reset_session()
+                continue
             if user_input.lower() in {"exit", "quit"}:
                 break
             if not user_input:

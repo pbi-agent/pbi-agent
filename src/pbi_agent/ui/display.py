@@ -202,7 +202,7 @@ class Display(DisplayProtocol):
         capture_result: bool = False,
     ) -> str:
         first_line = next(
-            (l.strip() for l in code.splitlines() if l.strip()), "<empty>"
+            (line.strip() for line in code.splitlines() if line.strip()), "<empty>"
         )
         flags: list[str] = [
             f"[dim]wd:[/dim] {escape_markup_text(str(working_directory))}",
@@ -248,6 +248,10 @@ class Display(DisplayProtocol):
 
     def submit_input(self, value: str) -> None:
         self._input_value = value
+        self._input_event.set()
+
+    def request_new_chat(self) -> None:
+        self._input_value = "__new_chat__"
         self._input_event.set()
 
     def welcome(

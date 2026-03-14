@@ -61,6 +61,8 @@ class DisplayProtocol(Protocol):
 
     def submit_input(self, value: str) -> None: ...
 
+    def request_new_chat(self) -> None: ...
+
     def welcome(
         self,
         *,

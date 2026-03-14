@@ -42,6 +42,7 @@ class ChatApp(App):
     SUB_TITLE = format_session_subtitle(TokenUsage())
     CSS = CHAT_APP_CSS
     BINDINGS = [
+        Binding("ctrl+r", "new_chat", "New Chat", show=True),
         Binding("ctrl+q", "quit", "Quit", show=True),
         Binding("ctrl+c", "quit", "Quit", show=False),
     ]
@@ -258,6 +259,13 @@ class ChatApp(App):
         self._chat_log().mount(UserMessage(text))
         self._scroll_chat_end()
 
+    def _reset_chat_view(self) -> None:
+        self._chat_log().remove_children()
+        self._status_row().remove_children()
+        inp = self._chat_input()
+        inp.clear()
+        inp.reset_height()
+
     def _submit_user_message(self, raw_text: str) -> None:
         value = raw_text.strip()
         if not value:
@@ -277,6 +285,12 @@ class ChatApp(App):
     @on(Button.Pressed, "#send-button")
     def handle_send_button_pressed(self, _: Button.Pressed) -> None:
         self._submit_user_message(self._chat_input().text)
+
+    async def action_new_chat(self) -> None:
+        self._reset_chat_view()
+        self.enable_input()
+        if self._bridge is not None:
+            self._bridge.request_new_chat()
 
     async def action_quit(self) -> None:
         if self._bridge is not None:
