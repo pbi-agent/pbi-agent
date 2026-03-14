@@ -33,7 +33,7 @@ CLI
 | Provider | Sends synchronous HTTP requests to the selected API shape and normalizes tool calls and text output. |
 | Agent Session | Runs interactive chat, single-turn execution, or audit mode. |
 | Tool Runtime | Executes requested tools serially or in parallel based on `--max-tool-workers`. |
-| Tools | Exposes `shell`, `apply_patch`, `skill_knowledge`, and `init_report`. |
+| Tools | Exposes `shell`, `python_exec`, `apply_patch`, `skill_knowledge`, and `init_report`. |
 
 ## Supported Providers
 

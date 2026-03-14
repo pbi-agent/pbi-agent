@@ -36,6 +36,7 @@ _TOOL_ICONS: dict[str, str] = {
     "list-files": "\u2630",  # ☰
     "search-files": "\u2315",  # ⌕
     "read-file": "\u2610",  # ☐
+    "python-exec": "\u2699",  # ⚙
     "generic": "\u2022",  # •
 }
 
@@ -48,6 +49,7 @@ _TOOL_BORDER_STYLES: dict[str, str] = {
     "list-files": "#818CF8",
     "search-files": "#EC4899",
     "read-file": "#EAB308",
+    "python-exec": "#A855F7",
     "mixed": "#8B5CF6",
     "generic": "blue",
 }
@@ -250,6 +252,32 @@ class ConsoleDisplay(DisplayProtocol):
             f"[#EAB308]\u2610[/#EAB308] [bold]{escape_markup_text(shorten(path, 96))}[/bold]  {status}",
             f"[dim]lines:[/dim] {normalized_start}\u2013{normalized_start + normalized_max - 1}"
             f"  [dim]encoding:[/dim] {escape_markup_text(encoding)}",
+        ]
+        self._append_call_id(lines, call_id)
+        return "\n".join(lines)
+
+    def _format_python_exec_item(
+        self,
+        code: str,
+        *,
+        status: str,
+        call_id: str = "",
+        working_directory: str = ".",
+        timeout_seconds: int | str = 30,
+        capture_result: bool = False,
+    ) -> str:
+        first_line = next(
+            (l.strip() for l in code.splitlines() if l.strip()), "<empty>"
+        )
+        flags: list[str] = [
+            f"[dim]wd:[/dim] {escape_markup_text(str(working_directory))}",
+            f"[dim]timeout:[/dim] {escape_markup_text(str(timeout_seconds))}s",
+        ]
+        if capture_result:
+            flags.append("[dim]capture_result[/dim]")
+        lines = [
+            f"[#A855F7]\u2699[/#A855F7] [bold]{escape_markup_text(shorten(first_line, 96))}[/bold]  {status}",
+            "  ".join(flags),
         ]
         self._append_call_id(lines, call_id)
         return "\n".join(lines)
@@ -607,6 +635,20 @@ class ConsoleDisplay(DisplayProtocol):
                     start_line=args.get("start_line", 1),
                     max_lines=args.get("max_lines", 200),
                     encoding=str(args.get("encoding", "auto")),
+                ),
+            )
+            return
+
+        if name == "python_exec":
+            self._append_tool_line(
+                name,
+                self._format_python_exec_item(
+                    str(args.get("code", "")),
+                    status=status,
+                    call_id=call_id,
+                    working_directory=str(args.get("working_directory", ".")),
+                    timeout_seconds=args.get("timeout_seconds", 30),
+                    capture_result=bool(args.get("capture_result", False)),
                 ),
             )
             return

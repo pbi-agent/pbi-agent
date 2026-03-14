@@ -20,7 +20,6 @@ def test_shell_handle_runs_command_with_workspace_defaults(
         command: str,
         *,
         cwd: str,
-        env: dict[str, str],
         capture_output: bool,
         text: bool,
         shell: bool,
@@ -34,7 +33,6 @@ def test_shell_handle_runs_command_with_workspace_defaults(
                 "text": text,
                 "shell": shell,
                 "timeout": timeout,
-                "env_has_path": "PATH" in env,
             }
         )
         return subprocess.CompletedProcess(
@@ -61,7 +59,6 @@ def test_shell_handle_runs_command_with_workspace_defaults(
             "text": False,
             "shell": True,
             "timeout": shell_tool.MAX_TIMEOUT_MS / 1000.0,
-            "env_has_path": True,
         }
     ]
 
@@ -79,13 +76,12 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
         command: str,
         *,
         cwd: str,
-        env: dict[str, str],
         capture_output: bool,
         text: bool,
         shell: bool,
         timeout: float,
     ) -> subprocess.CompletedProcess[bytes]:
-        del env, capture_output, text, shell
+        del capture_output, text, shell
         seen["command"] = command
         seen["cwd"] = cwd
         seen["timeout"] = timeout

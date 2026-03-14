@@ -3,6 +3,15 @@ from __future__ import annotations
 MAX_OUTPUT_CHARS = 1_000
 
 
+def decode_output(value: bytes | str | None) -> str:
+    """Decode subprocess output bytes to a string."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return value.decode("utf-8", errors="replace")
+
+
 def bound_output(text: str, *, limit: int = MAX_OUTPUT_CHARS) -> tuple[str, bool]:
     """Bound text output while preserving both the beginning and the end."""
     if len(text) <= limit:

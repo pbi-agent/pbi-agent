@@ -88,6 +88,9 @@ ToolGroup.tool-group-search-files {
 ToolGroup.tool-group-read-file {
     border-left: thick #EAB308;
 }
+ToolGroup.tool-group-python-exec {
+    border-left: thick #A855F7;
+}
 ToolGroup > CollapsibleTitle {
     padding: 1 2;
     color: $text-muted;
@@ -124,6 +127,9 @@ ToolItem.tool-call-search-files {
 }
 ToolItem.tool-call-read-file {
     background: #EAB308 14%;
+}
+ToolItem.tool-call-python-exec {
+    background: #A855F7 14%;
 }
 
 /* ---- thinking block ---- */

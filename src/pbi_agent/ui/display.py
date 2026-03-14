@@ -191,6 +191,32 @@ class Display(DisplayProtocol):
         self._append_call_id(lines, call_id)
         return "\n".join(lines)
 
+    def _format_python_exec_item(
+        self,
+        code: str,
+        *,
+        status: str,
+        call_id: str = "",
+        working_directory: str = ".",
+        timeout_seconds: int | str = 30,
+        capture_result: bool = False,
+    ) -> str:
+        first_line = next(
+            (l.strip() for l in code.splitlines() if l.strip()), "<empty>"
+        )
+        flags: list[str] = [
+            f"[dim]wd:[/dim] {escape_markup_text(str(working_directory))}",
+            f"[dim]timeout:[/dim] {escape_markup_text(str(timeout_seconds))}s",
+        ]
+        if capture_result:
+            flags.append("[dim]capture_result[/dim]")
+        lines = [
+            f"[#A855F7]\u2699[/#A855F7] [bold]{escape_markup_text(shorten(first_line, 96))}[/bold]  {status}",
+            "  ".join(flags),
+        ]
+        self._append_call_id(lines, call_id)
+        return "\n".join(lines)
+
     def _format_generic_function_item(
         self,
         name: str,
@@ -466,6 +492,20 @@ class Display(DisplayProtocol):
                     status=status,
                     call_id=call_id,
                     force=bool(args.get("force", False)),
+                ),
+            )
+            return
+
+        if name == "python_exec":
+            self._append_tool_line(
+                name,
+                self._format_python_exec_item(
+                    str(args.get("code", "")),
+                    status=status,
+                    call_id=call_id,
+                    working_directory=str(args.get("working_directory", ".")),
+                    timeout_seconds=args.get("timeout_seconds", 30),
+                    capture_result=bool(args.get("capture_result", False)),
                 ),
             )
             return

@@ -7,13 +7,12 @@ through the normal tool registry and execution pipeline.
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from pbi_agent.tools.output import MAX_OUTPUT_CHARS as DEFAULT_MAX_OUTPUT_CHARS
-from pbi_agent.tools.output import bound_output
+from pbi_agent.tools.output import bound_output, decode_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 MAX_TIMEOUT_MS = 120_000
@@ -71,7 +70,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         completed = subprocess.run(
             command,
             cwd=str(working_directory),
-            env=dict(os.environ),
             capture_output=True,
             text=False,
             shell=True,
@@ -79,16 +77,16 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         )
         return {
             **_build_output_payload(
-                stdout=_decode_output(completed.stdout),
-                stderr=_decode_output(completed.stderr),
+                stdout=decode_output(completed.stdout),
+                stderr=decode_output(completed.stderr),
             ),
             "exit_code": completed.returncode,
         }
     except subprocess.TimeoutExpired as exc:
         return {
             **_build_output_payload(
-                stdout=_decode_output(exc.stdout),
-                stderr=_decode_output(exc.stderr),
+                stdout=decode_output(exc.stdout),
+                stderr=decode_output(exc.stderr),
             ),
             "exit_code": None,
             "timed_out": True,
@@ -142,14 +140,6 @@ def _normalize_timeout_ms(raw_timeout: Any) -> int:
     if raw_timeout < 1:
         return MAX_TIMEOUT_MS
     return min(raw_timeout, MAX_TIMEOUT_MS)
-
-
-def _decode_output(value: bytes | str | None) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return value.decode("utf-8", errors="replace")
 
 
 def _build_output_payload(*, stdout: str, stderr: str) -> dict[str, Any]:
