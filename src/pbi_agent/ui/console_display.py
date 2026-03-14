@@ -37,6 +37,7 @@ _TOOL_ICONS: dict[str, str] = {
     "search-files": "\u2315",  # ⌕
     "read-file": "\u2610",  # ☐
     "python-exec": "\u2699",  # ⚙
+    "sub-agent": "\u25c9",  # ◉
     "generic": "\u2022",  # •
 }
 
@@ -50,6 +51,7 @@ _TOOL_BORDER_STYLES: dict[str, str] = {
     "search-files": "#EC4899",
     "read-file": "#EAB308",
     "python-exec": "#A855F7",
+    "sub-agent": "#F59E0B",
     "mixed": "#8B5CF6",
     "generic": "blue",
 }
@@ -341,6 +343,21 @@ class ConsoleDisplay(DisplayProtocol):
         self._tool_group.reset()
         self._usage_section_open = False
         self._turn_count = 0
+
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> DisplayProtocol:
+        return _ConsoleSubAgentDisplay(
+            parent=self,
+            task_instruction=task_instruction,
+            reasoning_effort=reasoning_effort,
+        )
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        del status
 
     def welcome(
         self,
@@ -734,6 +751,364 @@ class ConsoleDisplay(DisplayProtocol):
     def debug(self, message: str) -> None:
         if self.verbose:
             self._console.print(f"[dim]{escape_markup_text(message)}[/dim]")
+
+
+class _ConsoleSubAgentDisplay(DisplayProtocol):
+    def __init__(
+        self,
+        *,
+        parent: ConsoleDisplay,
+        task_instruction: str,
+        reasoning_effort: str | None,
+    ) -> None:
+        self.parent = parent
+        self.verbose = parent.verbose
+        self._task_instruction = task_instruction
+        self._reasoning_effort = reasoning_effort
+        self._tool_group = PendingToolGroup()
+        self.parent._stop_spinner()
+        self.parent._console.print(
+            Panel(
+                self._title("running"),
+                border_style=_TOOL_BORDER_STYLES["sub-agent"],
+                expand=True,
+                padding=(0, 1),
+            )
+        )
+
+    def _title(self, status: str) -> str:
+        summary = shorten(self._task_instruction.strip() or "sub-agent task", 72)
+        title = f"sub_agent \u00b7 {summary} \u00b7 {status}"
+        if self._reasoning_effort:
+            title += f" \u00b7 {self._reasoning_effort}"
+        return title
+
+    def _print_section(self, label: str, body: str) -> None:
+        self.parent._console.print(
+            Panel(
+                body,
+                title=label,
+                title_align="left",
+                border_style=_TOOL_BORDER_STYLES["sub-agent"],
+                expand=True,
+                padding=(0, 1),
+            )
+        )
+
+    def request_shutdown(self) -> None:
+        return None
+
+    def submit_input(self, value: str) -> None:
+        del value
+
+    def request_new_chat(self) -> None:
+        raise RuntimeError("Sub-agent display does not support interactive chat.")
+
+    def reset_chat(self) -> None:
+        return None
+
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> DisplayProtocol:
+        del task_instruction, reasoning_effort
+        return self
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        self.parent._console.print(
+            f"[bold #F59E0B]{escape_markup_text(self._title(status))}[/bold #F59E0B]"
+        )
+
+    def welcome(
+        self,
+        *,
+        interactive: bool = True,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+        single_turn_hint: str | None = None,
+    ) -> None:
+        del interactive, model, reasoning_effort, single_turn_hint
+
+    def user_prompt(self) -> str:
+        raise RuntimeError("Sub-agent display does not support user input.")
+
+    def assistant_start(self) -> None:
+        return None
+
+    def wait_start(self, message: str = "model is processing your request...") -> None:
+        self.parent._console.print(
+            f"[dim]sub-agent: {escape_markup_text(message)}[/dim]"
+        )
+
+    def wait_stop(self) -> None:
+        return None
+
+    def render_markdown(self, text: str) -> None:
+        self.parent._console.print(Markdown(text))
+
+    def render_thinking(
+        self,
+        text: str | None = None,
+        *,
+        title: str | None = None,
+        replace_existing: bool = False,
+        widget_id: str | None = None,
+    ) -> str | None:
+        del replace_existing, widget_id
+        body, display_title = resolve_reasoning_panel(text, title or "")
+        if body is None and not (title or "").strip():
+            return None
+        content = Markdown(body) if body else Text("...", style="dim")
+        self.parent._console.print(
+            Panel(
+                content,
+                title=f"[italic]{escape_markup_text(display_title)}[/italic]",
+                title_align="left",
+                border_style="dim",
+                padding=(0, 1),
+            )
+        )
+        return "sub-agent-thinking"
+
+    def render_redacted_thinking(self) -> None:
+        self.parent._console.print(REDACTED_THINKING_NOTICE)
+
+    def session_usage(self, usage: TokenUsage) -> None:
+        del usage
+
+    def turn_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:
+        summary = format_usage_summary(
+            usage.snapshot(),
+            elapsed_seconds=elapsed_seconds,
+            label="Sub-agent",
+        )
+        self.parent._console.print(
+            Panel(
+                summary,
+                title="[bold]Usage[/bold]",
+                title_align="left",
+                border_style="dim",
+                expand=True,
+                padding=(0, 1),
+            )
+        )
+
+    def shell_start(self, commands: list[str]) -> None:
+        self._tool_group.start(
+            f"Running {len(commands)} shell command{'s' if len(commands) != 1 else ''}",
+            classes=tool_group_class("shell"),
+        )
+
+    def shell_command(
+        self,
+        command: str,
+        exit_code: int | None,
+        timed_out: bool,
+        *,
+        call_id: str = "",
+        working_directory: str = ".",
+        timeout_ms: int | str = "default",
+    ) -> None:
+        self._tool_group.add_item(
+            self.parent._format_shell_tool_item(
+                command,
+                status=status_markup(timed_out=timed_out, exit_code=exit_code),
+                call_id=call_id,
+                working_directory=working_directory,
+                timeout_ms=timeout_ms,
+            ),
+            classes=tool_item_class("shell"),
+        )
+
+    def patch_start(self, count: int) -> None:
+        self._tool_group.start(
+            f"Editing {count} file{'s' if count != 1 else ''}",
+            classes=tool_group_class("apply_patch"),
+        )
+
+    def patch_result(
+        self,
+        path: str,
+        operation: str,
+        success: bool,
+        *,
+        call_id: str = "",
+        detail: str = "",
+    ) -> None:
+        self._tool_group.add_item(
+            self.parent._format_patch_tool_item(
+                path,
+                operation,
+                status=status_markup(success=success),
+                call_id=call_id,
+                detail=detail,
+            ),
+            classes=tool_item_class("apply_patch"),
+        )
+
+    def function_start(self, count: int) -> None:
+        self._tool_group.start(
+            f"Tool call{'s' if count != 1 else ''}",
+            classes="tool-group-generic",
+            function_count=count,
+        )
+
+    def function_result(
+        self,
+        name: str,
+        success: bool,
+        *,
+        call_id: str = "",
+        arguments: Any = None,
+    ) -> None:
+        status = status_markup(success=success)
+        args = to_dict(arguments)
+        self._tool_group.update_for_function(name)
+        if name == "shell":
+            command = str(args.get("command", "")).strip() or "<missing command>"
+            text = self.parent._format_shell_tool_item(
+                command,
+                status=status,
+                call_id=call_id,
+                working_directory=str(args.get("working_directory", ".")),
+                timeout_ms=args.get("timeout_ms", "default"),
+            )
+        elif name == "apply_patch":
+            raw_diff = args.get("diff")
+            text = self.parent._format_patch_tool_item(
+                str(args.get("path", "<missing path>")),
+                str(args.get("operation_type", "<missing operation_type>")),
+                status=status,
+                call_id=call_id,
+                diff=raw_diff if isinstance(raw_diff, str) else "",
+                shorten_path=True,
+            )
+        elif name == "skill_knowledge":
+            raw_skills = args.get("skills", [])
+            skills = raw_skills if isinstance(raw_skills, list) else [str(raw_skills)]
+            text = self.parent._format_skill_knowledge_item(
+                skills,
+                status=status,
+                call_id=call_id,
+            )
+        elif name == "init_report":
+            text = self.parent._format_init_report_item(
+                str(args.get("dest", ".")),
+                status=status,
+                call_id=call_id,
+                force=bool(args.get("force", False)),
+            )
+        elif name == "list_files":
+            text = self.parent._format_list_files_item(
+                str(args.get("path", ".")),
+                status=status,
+                call_id=call_id,
+                recursive=bool(args.get("recursive", True)),
+                max_entries=args.get("max_entries", 200),
+            )
+        elif name == "find_files":
+            text = self.parent._format_find_files_item(
+                str(args.get("path", ".")),
+                status=status,
+                call_id=call_id,
+                recursive=bool(args.get("recursive", True)),
+                glob_pattern=str(args.get("glob", "")),
+                max_results=args.get("max_results", 200),
+            )
+        elif name == "search_files":
+            text = self.parent._format_search_files_item(
+                str(args.get("pattern", "<missing pattern>")),
+                status=status,
+                call_id=call_id,
+                path=str(args.get("path", ".")),
+                glob_pattern=str(args.get("glob", "")),
+                regex=bool(args.get("regex", False)),
+                max_matches=args.get("max_matches", 100),
+            )
+        elif name == "read_file":
+            text = self.parent._format_read_file_item(
+                str(args.get("path", "<missing path>")),
+                status=status,
+                call_id=call_id,
+                start_line=args.get("start_line", 1),
+                max_lines=args.get("max_lines", 200),
+                encoding=str(args.get("encoding", "auto")),
+            )
+        elif name == "python_exec":
+            text = self.parent._format_python_exec_item(
+                str(args.get("code", "")),
+                status=status,
+                call_id=call_id,
+                working_directory=str(args.get("working_directory", ".")),
+                timeout_seconds=args.get("timeout_seconds", 30),
+                capture_result=bool(args.get("capture_result", False)),
+            )
+        else:
+            text = self.parent._format_generic_function_item(
+                name,
+                status=status,
+                call_id=call_id,
+                arguments=arguments,
+            )
+        self._tool_group.add_item(text, classes=tool_item_class(name))
+
+    def tool_group_end(self) -> None:
+        if not self._tool_group.items:
+            self._tool_group.reset()
+            return
+        label = self._tool_group.label
+        style_key = self._tool_group.classes.replace("tool-group-", "")
+        icon = _TOOL_ICONS.get(style_key, _TOOL_ICONS["generic"])
+        border = _TOOL_BORDER_STYLES.get(style_key, _TOOL_BORDER_STYLES["generic"])
+        tree = Tree(f"[bold]{icon} {escape_markup_text(label)}[/bold]")
+        for item in self._tool_group.items:
+            tree.add(item.text)
+        self.parent._console.print(
+            Panel(tree, border_style=border, padding=(0, 1), expand=True)
+        )
+        self._tool_group.reset()
+
+    def retry_notice(self, attempt: int, max_retries: int) -> None:
+        self.parent._console.print(
+            f"[yellow]Retrying... ({attempt}/{max_retries})[/yellow]"
+        )
+
+    def rate_limit_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        wait_display = f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
+        self.parent._console.print(
+            "[yellow]Rate limit reached. "
+            f"Retrying in {wait_display}s ({attempt}/{max_retries})[/yellow]"
+        )
+
+    def overload_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        wait_display = f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
+        self.parent._console.print(
+            "[yellow]Provider overloaded. "
+            f"Retrying in {wait_display}s ({attempt}/{max_retries})[/yellow]"
+        )
+
+    def error(self, message: str) -> None:
+        self.parent._error_console.print(
+            f"[red]Error: {escape_markup_text(message)}[/red]"
+        )
+
+    def debug(self, message: str) -> None:
+        if self.verbose:
+            self.parent._console.print(f"[dim]{escape_markup_text(message)}[/dim]")
 
 
 __all__ = ["ConsoleDisplay"]

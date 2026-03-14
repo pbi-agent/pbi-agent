@@ -22,6 +22,7 @@ from pbi_agent.config import Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_anthropic_tool_definitions
+from pbi_agent.tools.types import ToolContext
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
 _log = logging.getLogger(__name__)
@@ -63,12 +64,22 @@ _HTTP_ERROR_MESSAGES: dict[int, str] = {
 class AnthropicProvider(Provider):
     """Provider backed by the Anthropic Messages HTTP API."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+    ) -> None:
         self._settings = settings
-        self._tools = get_anthropic_tool_definitions()
-        self._system_prompt = get_system_prompt()
+        self._tools = get_anthropic_tool_definitions(excluded_names=excluded_tools)
+        self._system_prompt = system_prompt or get_system_prompt()
         # Client-side conversation history — full messages list.
         self._messages: list[dict[str, Any]] = []
+
+    @property
+    def settings(self) -> Settings:
+        return self._settings
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -138,6 +149,9 @@ class AnthropicProvider(Provider):
         *,
         max_workers: int,
         display: DisplayProtocol,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        sub_agent_depth: int = 0,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute all tool calls in the response.
 
@@ -165,19 +179,34 @@ class AnthropicProvider(Provider):
             for b in tool_use_blocks
         ]
 
-        display.function_start(len(fn_calls))
-        batch = _execute_tool_calls(fn_calls, max_workers=max_workers)
+        displayable_calls = [call for call in fn_calls if call.name != "sub_agent"]
+        if displayable_calls:
+            display.function_start(len(displayable_calls))
+        batch = _execute_tool_calls(
+            fn_calls,
+            max_workers=max_workers,
+            context=ToolContext(
+                metadata={
+                    "settings": self._settings,
+                    "display": display,
+                    "session_usage": session_usage,
+                    "turn_usage": turn_usage,
+                    "sub_agent_depth": sub_agent_depth,
+                }
+            ),
+        )
         had_errors = batch.had_errors
 
         tool_result_items: list[dict[str, Any]] = []
         for result in batch.results:
             call = _find_by_id(fn_calls, result.call_id)
-            display.function_result(
-                name=call.name if call else "unknown",
-                success=not result.is_error,
-                call_id=result.call_id,
-                arguments=call.arguments if call else None,
-            )
+            if not (call and call.name == "sub_agent"):
+                display.function_result(
+                    name=call.name if call else "unknown",
+                    success=not result.is_error,
+                    call_id=result.call_id,
+                    arguments=call.arguments if call else None,
+                )
             tool_result_items.append(
                 {
                     "type": "tool_result",
@@ -186,7 +215,8 @@ class AnthropicProvider(Provider):
                     **({"is_error": True} if result.is_error else {}),
                 }
             )
-        display.tool_group_end()
+        if displayable_calls:
+            display.tool_group_end()
 
         return tool_result_items, had_errors
 

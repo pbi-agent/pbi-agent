@@ -19,6 +19,18 @@ from pbi_agent.tools.types import ToolResult
 
 
 class _DisplayStub:
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> _DisplayStub:
+        del task_instruction, reasoning_effort
+        return self
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        del status
+
     def wait_start(self, message: str = "") -> None:
         self.last_wait_message = message
 
@@ -166,6 +178,12 @@ def test_openai_build_request_body_uses_http_responses_shape() -> None:
     ]
     assert "instructions" not in body
     assert "previous_response_id" not in body
+
+
+def test_openai_provider_can_exclude_sub_agent_tool() -> None:
+    provider = OpenAIProvider(_make_settings(), excluded_tools={"sub_agent"})
+
+    assert "sub_agent" not in {tool["name"] for tool in provider._tools}
 
 
 def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> None:
@@ -400,13 +418,15 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
 
     monkeypatch.setattr(
         "pbi_agent.providers.openai_provider._execute_tool_calls",
-        lambda calls, max_workers: batch,
+        lambda calls, max_workers, context=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(
         response,
         max_workers=2,
         display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
     )
 
     assert had_errors is True
@@ -441,6 +461,58 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
         },
     ]
     assert display_spy.tool_group_end_count == 1
+
+
+def test_openai_execute_tool_calls_skips_generic_display_for_sub_agent(
+    monkeypatch,
+    display_spy,
+) -> None:
+    provider = OpenAIProvider(_make_settings())
+    response = CompletedResponse(
+        response_id="resp_1",
+        text="",
+        function_calls=[
+            ToolCall(
+                call_id="call_1",
+                name="sub_agent",
+                arguments={"task_instruction": "Inspect the repo"},
+            )
+        ],
+    )
+    batch = ToolExecutionBatch(
+        results=[
+            ToolResult(
+                call_id="call_1",
+                output_json='{"ok": true, "result": {"status":"completed"}}',
+            )
+        ],
+        had_errors=False,
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider._execute_tool_calls",
+        lambda calls, max_workers, context=None: batch,
+    )
+
+    tool_result_items, had_errors = provider.execute_tool_calls(
+        response,
+        max_workers=1,
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert had_errors is False
+    assert display_spy.function_counts == []
+    assert display_spy.function_results == []
+    assert display_spy.tool_group_end_count == 0
+    assert tool_result_items == [
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"ok": true, "result": {"status":"completed"}}',
+        }
+    ]
 
 
 def test_openai_request_turn_retries_after_rate_limit_and_renders_reasoning(

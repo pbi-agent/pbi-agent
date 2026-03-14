@@ -316,13 +316,15 @@ def test_google_execute_tool_calls_returns_function_results(
 
     monkeypatch.setattr(
         "pbi_agent.providers.google_provider._execute_tool_calls",
-        lambda calls, max_workers: batch,
+        lambda calls, max_workers, context=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(
         response,
         max_workers=2,
         display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
     )
 
     assert had_errors is True
@@ -522,7 +524,7 @@ def test_google_request_turn_preserves_gemini_error_type_and_request_id(
             code=400,
             body=(
                 '{"error":{"status":"FAILED_PRECONDITION","message":"Gemini API '
-                'free tier is not available in your country. Please enable billing '
+                "free tier is not available in your country. Please enable billing "
                 'on your project in Google AI Studio."}}'
             ),
             headers={"x-request-id": "req_gemini_precondition"},
@@ -542,10 +544,12 @@ def test_google_request_turn_preserves_gemini_error_type_and_request_id(
 
     assert str(exc_info.value) == (
         'Google Interactions API error 400: {"error": {"message": "Gemini API '
-        'free tier is not available in your country. Please enable billing on '
+        "free tier is not available in your country. Please enable billing on "
         'your project in Google AI Studio.", "type": "failed_precondition"}, '
         '"request_id": "req_gemini_precondition", "status": 400, "type": "error"}'
     )
+
+
 def test_google_request_turn_raises_for_failed_response_payload(
     monkeypatch,
     display_spy,
@@ -586,6 +590,18 @@ def test_google_request_turn_raises_for_failed_response_payload(
 
 
 class _DisplayStub:
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> _DisplayStub:
+        del task_instruction, reasoning_effort
+        return self
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        del status
+
     def wait_start(self, message: str = "") -> None:
         self.last_wait_message = message
 

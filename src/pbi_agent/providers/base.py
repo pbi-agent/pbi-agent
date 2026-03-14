@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from pbi_agent.config import Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
@@ -55,6 +56,9 @@ class Provider(ABC):
         *,
         max_workers: int,
         display: DisplayProtocol,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        sub_agent_depth: int = 0,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute every tool call present in *response*.
 
@@ -62,6 +66,11 @@ class Provider(ABC):
         *tool_result_items* are in the provider's native format, ready
         to be passed back via :meth:`request_turn`.
         """
+
+    @property
+    @abstractmethod
+    def settings(self) -> Settings:
+        """Return the provider runtime settings."""
 
     # -- context manager convenience ----------------------------------------
 

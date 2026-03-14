@@ -24,12 +24,13 @@ def execute_tool_calls(
     calls: list[ToolCall],
     *,
     max_workers: int,
+    context: ToolContext | None = None,
 ) -> ToolExecutionBatch:
     if not calls:
         return ToolExecutionBatch(results=[], had_errors=False)
 
     if len(calls) == 1 or max_workers == 1:
-        results = [_execute_one_tool_call(call) for call in calls]
+        results = [_execute_one_tool_call(call, context=context) for call in calls]
         return ToolExecutionBatch(
             results=results, had_errors=any(r.is_error for r in results)
         )
@@ -38,7 +39,7 @@ def execute_tool_calls(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures: dict[Future[ToolResult], int] = {}
         for idx, call in enumerate(calls):
-            futures[executor.submit(_execute_one_tool_call, call)] = idx
+            futures[executor.submit(_execute_one_tool_call, call, context)] = idx
         for future, idx in futures.items():
             results[idx] = future.result()
 
@@ -60,7 +61,10 @@ def to_function_call_output_items(results: list[ToolResult]) -> list[dict[str, A
     ]
 
 
-def _execute_one_tool_call(call: ToolCall) -> ToolResult:
+def _execute_one_tool_call(
+    call: ToolCall,
+    context: ToolContext | None = None,
+) -> ToolResult:
     start = time.monotonic()
     _log.debug("Starting tool call %s (%s)", call.call_id, call.name)
     handler = get_tool_handler(call.name)
@@ -88,7 +92,7 @@ def _execute_one_tool_call(call: ToolCall) -> ToolResult:
         return result
 
     try:
-        output = handler(args_or_error, ToolContext())
+        output = handler(args_or_error, context or ToolContext())
         if isinstance(output, str):
             payload = {"ok": True, "result": output}
         else:

@@ -22,6 +22,7 @@ from pbi_agent.config import Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
+from pbi_agent.tools.types import ToolContext
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
 _REQUEST_TIMEOUT_SECS = 3600.0
@@ -58,11 +59,21 @@ _HTTP_ERROR_MESSAGES: dict[int, str] = {
 class XAIProvider(Provider):
     """Provider backed by xAI's synchronous Responses HTTP API."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+    ) -> None:
         self._settings = settings
-        self._tools = get_openai_tool_definitions()
-        self._instructions = get_system_prompt()
+        self._tools = get_openai_tool_definitions(excluded_names=excluded_tools)
+        self._instructions = system_prompt or get_system_prompt()
         self._previous_response_id: str | None = None
+
+    @property
+    def settings(self) -> Settings:
+        return self._settings
 
     def connect(self) -> None:
         if not self._settings.api_key:
@@ -124,22 +135,44 @@ class XAIProvider(Provider):
         *,
         max_workers: int,
         display: DisplayProtocol,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        sub_agent_depth: int = 0,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
 
-        display.function_start(len(response.function_calls))
-        batch = _execute_tool_calls(response.function_calls, max_workers=max_workers)
+        displayable_calls = [
+            call for call in response.function_calls if call.name != "sub_agent"
+        ]
+        if displayable_calls:
+            display.function_start(len(displayable_calls))
+        batch = _execute_tool_calls(
+            response.function_calls,
+            max_workers=max_workers,
+            context=ToolContext(
+                metadata={
+                    "settings": self._settings,
+                    "display": display,
+                    "session_usage": session_usage,
+                    "turn_usage": turn_usage,
+                    "sub_agent_depth": sub_agent_depth,
+                }
+            ),
+        )
 
         for result in batch.results:
             call = _find_by_id(response.function_calls, result.call_id)
+            if call and call.name == "sub_agent":
+                continue
             display.function_result(
                 name=call.name if call else "unknown",
                 success=not result.is_error,
                 call_id=result.call_id,
                 arguments=call.arguments if call else None,
             )
-        display.tool_group_end()
+        if displayable_calls:
+            display.tool_group_end()
 
         return to_function_call_output_items(batch.results), batch.had_errors
 

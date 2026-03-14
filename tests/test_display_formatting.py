@@ -256,3 +256,24 @@ class TestFunctionResultRouting:
         text = d._tool_group.items[0].text
         assert "/tmp/file.txt" in text
         assert "create" in text
+
+
+def test_begin_sub_agent_mounts_nested_block_and_child_widgets() -> None:
+    app = MagicMock()
+    display = Display(app)
+
+    sub_display = display.begin_sub_agent(
+        task_instruction="Inspect source files for TODOs",
+        reasoning_effort="low",
+    )
+    sub_display.render_markdown("Found one TODO.")
+    sub_display.finish_sub_agent(status="completed")
+
+    first_call = app.call_from_thread.call_args_list[0]
+    assert first_call.args[0] == app.mount_sub_agent_block
+    assert "sub_agent" in first_call.args[2]
+    assert "Inspect source files for TODOs" in first_call.args[2]
+
+    callbacks = [call.args[0] for call in app.call_from_thread.call_args_list]
+    assert app.mount_widget_in_container in callbacks
+    assert app.update_sub_agent_title in callbacks

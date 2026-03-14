@@ -20,6 +20,7 @@ TOOL_STYLE_MAP = {
     "search_files": "search-files",
     "read_file": "read-file",
     "python_exec": "python-exec",
+    "sub_agent": "sub-agent",
 }
 REDACTED_THINKING_NOTICE = "[dim]Some thinking was encrypted for safety reasons.[/dim]"
 _MARKDOWN_DECORATION_RE = re.compile(r"[*_`~]+")
@@ -116,6 +117,11 @@ def format_usage_summary(
         f"({inp} in [dim]\u00b7[/dim] {cache_detail} [dim]\u00b7[/dim] {out_detail})",
         cost,
     ]
+    if usage.sub_agent_total_tokens:
+        parts.append(
+            f"[dim]main:[/dim] {usage.main_agent_total_tokens:,}  "
+            f"[dim]sub-agent:[/dim] {usage.sub_agent_total_tokens:,}"
+        )
     if elapsed_seconds is not None:
         total_secs = int(elapsed_seconds)
         hours, remainder = divmod(total_secs, 3600)
@@ -134,10 +140,16 @@ def format_usage_summary(
 
 def format_session_subtitle(usage: TokenUsage) -> str:
     cwd = Path.cwd()
-    return (
+    subtitle = (
         f"v{__version__} \u00b7 {cwd} \u00b7 Session {usage.total_tokens:,} tokens "
         f"\u00b7 ${usage.estimated_cost_usd:.3f}"
     )
+    if usage.sub_agent_total_tokens:
+        subtitle += (
+            f" \u00b7 main {usage.main_agent_total_tokens:,}"
+            f" \u00b7 sub-agent {usage.sub_agent_total_tokens:,}"
+        )
+    return subtitle
 
 
 def status_markup(

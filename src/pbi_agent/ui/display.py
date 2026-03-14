@@ -30,7 +30,11 @@ from pbi_agent.ui.widgets import (
     AssistantMarkdown,
     ErrorMessage,
     NoticeMessage,
+    ThinkingBlock,
+    ThinkingContent,
+    ToolGroup,
     ToolGroupEntry,
+    ToolItem,
     UsageSummary,
     WaitingIndicator,
     WelcomeBanner,
@@ -288,6 +292,21 @@ class Display(DisplayProtocol):
         with self._turn_usage_lock:
             self._turn_usage_widgets.clear()
         self._safe_call(self.app.reset_chat_view)
+
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> DisplayProtocol:
+        return _SubAgentDisplay(
+            parent=self,
+            task_instruction=task_instruction,
+            reasoning_effort=reasoning_effort,
+        )
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        del status
 
     def welcome(
         self,
@@ -634,6 +653,427 @@ class Display(DisplayProtocol):
         if self._active_thinking_widget_id:
             self._safe_call(self.app.remove_widget, self._active_thinking_widget_id)
             self._active_thinking_widget_id = None
+        self._tool_group.reset()
+        self._mount_static_message(
+            "err",
+            ErrorMessage,
+            f"Error: {escape_markup_text(message)}",
+        )
+
+    def debug(self, message: str) -> None:
+        if self.verbose:
+            self._mount_static_message(
+                "dbg",
+                Static,
+                f"[dim]{message}[/dim]",
+                classes="debug-msg",
+            )
+
+
+class _SubAgentDisplay(DisplayProtocol):
+    def __init__(
+        self,
+        *,
+        parent: Display,
+        task_instruction: str,
+        reasoning_effort: str | None,
+    ) -> None:
+        self.parent = parent
+        self.verbose = parent.verbose
+        self._task_instruction = task_instruction
+        self._reasoning_effort = reasoning_effort
+        self._tool_group = PendingToolGroup()
+        self._waiting_widget_id: str | None = None
+        self._active_thinking_widget_id: str | None = None
+        self._counter = 0
+        self._block_id = parent._next_id("subagent")
+        self._body_id = f"{self._block_id}-body"
+        self.parent._safe_call(
+            self.parent.app.mount_sub_agent_block,
+            self._block_id,
+            self._title("running"),
+            body_id=self._body_id,
+        )
+
+    def _title(self, status: str) -> str:
+        summary = shorten(self._task_instruction.strip() or "sub-agent task", 72)
+        title = f"sub_agent \u00b7 {summary} \u00b7 {status}"
+        if self._reasoning_effort:
+            title += f" \u00b7 {self._reasoning_effort}"
+        return title
+
+    def _next_id(self, prefix: str) -> str:
+        self._counter += 1
+        return f"{self._block_id}-{prefix}-{self._counter}"
+
+    def _mount_widget(self, widget: Static) -> None:
+        self.parent._safe_call(
+            self.parent.app.mount_widget_in_container,
+            self._body_id,
+            widget,
+        )
+
+    def _mount_static_message(
+        self,
+        prefix: str,
+        widget_cls: type[Static],
+        text: str,
+        *,
+        classes: str = "",
+    ) -> str:
+        widget_id = self._next_id(prefix)
+        kwargs: dict[str, Any] = {"id": widget_id}
+        if classes:
+            kwargs["classes"] = classes
+        self._mount_widget(widget_cls(text, **kwargs))
+        return widget_id
+
+    def _start_tool_group(
+        self,
+        label: str,
+        *,
+        classes: str = "",
+        function_count: int = 0,
+    ) -> None:
+        self._tool_group.start(label, classes=classes, function_count=function_count)
+
+    def _append_tool_line(self, tool_name: str, text: str) -> None:
+        self._tool_group.add_item(text, classes=tool_item_class(tool_name))
+
+    def request_shutdown(self) -> None:
+        return None
+
+    def submit_input(self, value: str) -> None:
+        del value
+
+    def request_new_chat(self) -> None:
+        raise RuntimeError("Sub-agent display does not support interactive chat.")
+
+    def reset_chat(self) -> None:
+        return None
+
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> DisplayProtocol:
+        del task_instruction, reasoning_effort
+        return self
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        self.wait_stop()
+        self.parent._safe_call(
+            self.parent.app.update_sub_agent_title,
+            self._block_id,
+            self._title(status),
+        )
+
+    def welcome(
+        self,
+        *,
+        interactive: bool = True,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+        single_turn_hint: str | None = None,
+    ) -> None:
+        del interactive, model, reasoning_effort, single_turn_hint
+
+    def user_prompt(self) -> str:
+        raise RuntimeError("Sub-agent display does not support user input.")
+
+    def assistant_start(self) -> None:
+        return None
+
+    def wait_start(self, message: str = "model is processing your request...") -> None:
+        if self._waiting_widget_id is not None:
+            return
+        self._active_thinking_widget_id = None
+        widget_id = self._next_id("wait")
+        self._waiting_widget_id = widget_id
+        self._mount_widget(WaitingIndicator(message=message, id=widget_id))
+
+    def wait_stop(self) -> None:
+        if self._waiting_widget_id is not None:
+            self.parent._safe_call(
+                self.parent.app.remove_widget, self._waiting_widget_id
+            )
+            self._waiting_widget_id = None
+
+    def render_markdown(self, text: str) -> None:
+        widget_id = self._next_id("md")
+        self._mount_widget(AssistantMarkdown(text, id=widget_id))
+
+    def render_thinking(
+        self,
+        text: str | None = None,
+        *,
+        title: str | None = None,
+        replace_existing: bool = False,
+        widget_id: str | None = None,
+    ) -> str | None:
+        summary = title or ""
+        body, widget_title = resolve_reasoning_panel(text, summary)
+        if body is None and not summary.strip():
+            return None
+
+        resolved_widget_id = widget_id
+        if resolved_widget_id is None and replace_existing:
+            resolved_widget_id = self._active_thinking_widget_id
+        if resolved_widget_id is None:
+            resolved_widget_id = self._next_id("thinking")
+        if replace_existing:
+            self._active_thinking_widget_id = resolved_widget_id
+
+        existing = self.parent.app._query_optional(f"#{resolved_widget_id}")
+        if existing is None:
+            self._mount_widget(
+                ThinkingBlock(
+                    ThinkingContent(body or "", id=f"{resolved_widget_id}-content"),
+                    title=widget_title,
+                    collapsed=True,
+                    id=resolved_widget_id,
+                )
+            )
+            return resolved_widget_id
+
+        self.parent._safe_call(
+            self.parent.app.update_thinking_block,
+            resolved_widget_id,
+            widget_title,
+            body,
+        )
+        return resolved_widget_id
+
+    def render_redacted_thinking(self) -> None:
+        self._mount_static_message("redact", NoticeMessage, REDACTED_THINKING_NOTICE)
+
+    def session_usage(self, usage: TokenUsage) -> None:
+        del usage
+
+    def turn_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:
+        usage_text = format_usage_summary(
+            usage.snapshot(),
+            elapsed_seconds=elapsed_seconds,
+            label="Sub-agent",
+        )
+        self._mount_static_message("usage", UsageSummary, usage_text)
+
+    def shell_start(self, commands: list[str]) -> None:
+        self._start_tool_group(
+            f"Running {len(commands)} shell command{'s' if len(commands) != 1 else ''}",
+            classes=tool_group_class("shell"),
+        )
+
+    def shell_command(
+        self,
+        command: str,
+        exit_code: int | None,
+        timed_out: bool,
+        *,
+        call_id: str = "",
+        working_directory: str = ".",
+        timeout_ms: int | str = "default",
+    ) -> None:
+        self._append_tool_line(
+            "shell",
+            self.parent._format_shell_tool_item(
+                command,
+                status=status_markup(timed_out=timed_out, exit_code=exit_code),
+                call_id=call_id,
+                working_directory=working_directory,
+                timeout_ms=timeout_ms,
+            ),
+        )
+
+    def patch_start(self, count: int) -> None:
+        self._start_tool_group(
+            f"Editing {count} file{'s' if count != 1 else ''}",
+            classes=tool_group_class("apply_patch"),
+        )
+
+    def patch_result(
+        self,
+        path: str,
+        operation: str,
+        success: bool,
+        *,
+        call_id: str = "",
+        detail: str = "",
+    ) -> None:
+        self._append_tool_line(
+            "apply_patch",
+            self.parent._format_patch_tool_item(
+                path,
+                operation,
+                status=status_markup(success=success),
+                call_id=call_id,
+                detail=detail,
+            ),
+        )
+
+    def function_start(self, count: int) -> None:
+        self._start_tool_group(
+            f"Tool call{'s' if count != 1 else ''}",
+            classes="tool-group-generic",
+            function_count=count,
+        )
+
+    def function_result(
+        self,
+        name: str,
+        success: bool,
+        *,
+        call_id: str = "",
+        arguments: Any = None,
+    ) -> None:
+        status = status_markup(success=success)
+        args = to_dict(arguments)
+        self._tool_group.update_for_function(name)
+        if name == "shell":
+            command = str(args.get("command", "")).strip() or "<missing command>"
+            self._append_tool_line(
+                name,
+                self.parent._format_shell_tool_item(
+                    command,
+                    status=status,
+                    call_id=call_id,
+                    working_directory=str(args.get("working_directory", ".")),
+                    timeout_ms=args.get("timeout_ms", "default"),
+                ),
+            )
+            return
+        if name == "apply_patch":
+            raw_diff = args.get("diff")
+            self._append_tool_line(
+                name,
+                self.parent._format_patch_tool_item(
+                    str(args.get("path", "<missing path>")),
+                    str(args.get("operation_type", "<missing operation_type>")),
+                    status=status,
+                    call_id=call_id,
+                    diff=raw_diff if isinstance(raw_diff, str) else "",
+                    shorten_path=True,
+                ),
+            )
+            return
+        if name == "skill_knowledge":
+            raw_skills = args.get("skills", [])
+            skills = raw_skills if isinstance(raw_skills, list) else [str(raw_skills)]
+            self._append_tool_line(
+                name,
+                self.parent._format_skill_knowledge_item(
+                    skills,
+                    status=status,
+                    call_id=call_id,
+                ),
+            )
+            return
+        if name == "init_report":
+            self._append_tool_line(
+                name,
+                self.parent._format_init_report_item(
+                    str(args.get("dest", ".")),
+                    status=status,
+                    call_id=call_id,
+                    force=bool(args.get("force", False)),
+                ),
+            )
+            return
+        if name == "find_files":
+            self._append_tool_line(
+                name,
+                self.parent._format_find_files_item(
+                    str(args.get("path", ".")),
+                    status=status,
+                    call_id=call_id,
+                    recursive=bool(args.get("recursive", True)),
+                    glob_pattern=str(args.get("glob", "")),
+                    max_results=args.get("max_results", 200),
+                ),
+            )
+            return
+        if name == "python_exec":
+            self._append_tool_line(
+                name,
+                self.parent._format_python_exec_item(
+                    str(args.get("code", "")),
+                    status=status,
+                    call_id=call_id,
+                    working_directory=str(args.get("working_directory", ".")),
+                    timeout_seconds=args.get("timeout_seconds", 30),
+                    capture_result=bool(args.get("capture_result", False)),
+                ),
+            )
+            return
+        self._append_tool_line(
+            name,
+            self.parent._format_generic_function_item(
+                name,
+                status=status,
+                call_id=call_id,
+                arguments=arguments,
+            ),
+        )
+
+    def tool_group_end(self) -> None:
+        if not self._tool_group.items:
+            self._tool_group.reset()
+            return
+        group_id = self._next_id("tg")
+        group = ToolGroup(
+            *[
+                ToolItem(item.text, classes=item.classes)
+                for item in self._tool_group.items
+            ],
+            title=self._tool_group.label,
+            collapsed=True,
+            id=group_id,
+            classes=self._tool_group.classes,
+        )
+        self._mount_widget(group)
+        self._tool_group.reset()
+
+    def retry_notice(self, attempt: int, max_retries: int) -> None:
+        self.wait_stop()
+        self._mount_static_message(
+            "notice",
+            NoticeMessage,
+            f"Retrying\u2026 ({attempt}/{max_retries})",
+        )
+
+    def rate_limit_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.wait_stop()
+        wait_display = f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
+        self._mount_static_message(
+            "notice",
+            NoticeMessage,
+            f"Rate limit reached. Retrying in {wait_display}s ({attempt}/{max_retries})",
+        )
+
+    def overload_notice(
+        self,
+        *,
+        wait_seconds: float,
+        attempt: int,
+        max_retries: int,
+    ) -> None:
+        self.wait_stop()
+        wait_display = f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
+        self._mount_static_message(
+            "notice",
+            NoticeMessage,
+            f"Provider overloaded. Retrying in {wait_display}s ({attempt}/{max_retries})",
+        )
+
+    def error(self, message: str) -> None:
+        self.wait_stop()
         self._tool_group.reset()
         self._mount_static_message(
             "err",

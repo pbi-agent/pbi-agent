@@ -21,6 +21,18 @@ from pbi_agent.tools.types import ToolResult
 
 
 class _DisplayStub:
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> _DisplayStub:
+        del task_instruction, reasoning_effort
+        return self
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        del status
+
     def wait_start(self, message: str = "") -> None:
         self.last_wait_message = message
 
@@ -369,13 +381,15 @@ def test_xai_execute_tool_calls_returns_function_call_outputs(
 
     monkeypatch.setattr(
         "pbi_agent.providers.xai_provider._execute_tool_calls",
-        lambda calls, max_workers: batch,
+        lambda calls, max_workers, context=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(
         response,
         max_workers=2,
         display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_XAI_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_XAI_MODEL),
     )
 
     assert had_errors is True

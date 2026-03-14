@@ -238,6 +238,28 @@ def test_execute_tool_calls_serializes_tabular_read_file_output(
     assert payload["ok"] is True
     assert payload["result"]["shape"] == {"rows": 2, "columns": 2}
     assert (
-        payload["result"]["preview"]
-        == "ordered_at,value\n2025-01-01,1\n2025-01-02,2\n"
+        payload["result"]["preview"] == "ordered_at,value\n2025-01-01,1\n2025-01-02,2\n"
     )
+
+
+def test_execute_tool_calls_passes_runtime_context_to_handler(monkeypatch) -> None:
+    seen_metadata: dict[str, object] = {}
+
+    def fake_handler(
+        arguments: dict[str, object],
+        context: ToolContext,
+    ) -> dict[str, object]:
+        del arguments
+        seen_metadata.update(context.metadata)
+        return {"ok": True}
+
+    monkeypatch.setattr(tool_runtime, "get_tool_handler", lambda name: fake_handler)
+
+    batch = tool_runtime.execute_tool_calls(
+        [ToolCall(call_id="call_1", name="shell", arguments={})],
+        max_workers=1,
+        context=ToolContext(metadata={"sub_agent_depth": 1, "mode": "child"}),
+    )
+
+    assert batch.had_errors is False
+    assert seen_metadata == {"sub_agent_depth": 1, "mode": "child"}

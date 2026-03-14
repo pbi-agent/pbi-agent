@@ -14,6 +14,7 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "list_files",
         "search_files",
         "read_file",
+        "sub_agent",
     }
 
     assert expected.issubset({spec.name for spec in registry.get_tool_specs()})

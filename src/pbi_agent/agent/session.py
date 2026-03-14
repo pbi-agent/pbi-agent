@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 import time
+from typing import Any
 
+from pbi_agent.agent.system_prompt import get_sub_agent_system_prompt
 from pbi_agent.config import Settings
 from pbi_agent.models.messages import AgentOutcome, TokenUsage
 from pbi_agent.providers import create_provider
@@ -11,6 +14,17 @@ from pbi_agent.ui.display_protocol import DisplayProtocol
 _log = logging.getLogger(__name__)
 
 NEW_CHAT_SENTINEL = "__new_chat__"
+SUB_AGENT_MAX_REQUESTS = 12
+SUB_AGENT_MAX_ELAPSED_SECONDS = 300.0
+SUB_AGENT_DISABLED_TOOLS = {"sub_agent"}
+
+
+class SubAgentRunError(RuntimeError):
+    def __init__(self, error_type: str, message: str) -> None:
+        super().__init__(message)
+        self.error_type = error_type
+        self.message = message
+
 
 # ---------------------------------------------------------------------------
 # Public entry-points
@@ -19,6 +33,22 @@ NEW_CHAT_SENTINEL = "__new_chat__"
 
 def _selected_model(settings: Settings) -> str:
     return settings.model
+
+
+def usage_to_dict(usage: TokenUsage) -> dict[str, int | str]:
+    snapshot = usage.snapshot()
+    return {
+        "input_tokens": snapshot.input_tokens,
+        "cached_input_tokens": snapshot.cached_input_tokens,
+        "cache_write_tokens": snapshot.cache_write_tokens,
+        "cache_write_1h_tokens": snapshot.cache_write_1h_tokens,
+        "output_tokens": snapshot.output_tokens,
+        "reasoning_tokens": snapshot.reasoning_tokens,
+        "tool_use_tokens": snapshot.tool_use_tokens,
+        "provider_total_tokens": snapshot.provider_total_tokens,
+        "total_tokens": snapshot.total_tokens,
+        "model": snapshot.model,
+    }
 
 
 def run_single_turn(
@@ -48,7 +78,7 @@ def run_single_turn(
             session_usage=session_usage,
             turn_usage=turn_usage,
         )
-        response, had_tool_errors = _run_tool_iterations(
+        response, had_tool_errors, _ = _run_tool_iterations(
             provider=provider,
             response=response,
             max_workers=settings.max_tool_workers,
@@ -106,7 +136,7 @@ def run_chat_loop(settings: Settings, display: DisplayProtocol) -> int:
                 session_usage=session_usage,
                 turn_usage=turn_usage,
             )
-            response, loop_had_errors = _run_tool_iterations(
+            response, loop_had_errors, _ = _run_tool_iterations(
                 provider=provider,
                 response=response,
                 max_workers=settings.max_tool_workers,
@@ -123,6 +153,93 @@ def run_chat_loop(settings: Settings, display: DisplayProtocol) -> int:
     return 4 if had_tool_errors else 0
 
 
+def run_sub_agent_task(
+    task_instruction: str,
+    settings: Settings,
+    display: DisplayProtocol,
+    *,
+    reasoning_effort: str = "low",
+    parent_session_usage: TokenUsage,
+    parent_turn_usage: TokenUsage,
+    sub_agent_depth: int = 0,
+) -> dict[str, Any]:
+    child_settings = replace(settings, reasoning_effort=reasoning_effort)
+    child_display = display.begin_sub_agent(
+        task_instruction=task_instruction,
+        reasoning_effort=reasoning_effort,
+    )
+    child_session_usage = TokenUsage(model=_selected_model(child_settings))
+    child_turn_usage = TokenUsage(model=_selected_model(child_settings))
+    child_display.session_usage(child_session_usage)
+    started_at = time.monotonic()
+    request_count = 0
+
+    try:
+        provider = create_provider(
+            child_settings,
+            system_prompt=get_sub_agent_system_prompt(),
+            excluded_tools=SUB_AGENT_DISABLED_TOOLS,
+        )
+        with provider:
+            _raise_if_sub_agent_timed_out(started_at)
+            response = provider.request_turn(
+                user_message=task_instruction,
+                display=child_display,
+                session_usage=child_session_usage,
+                turn_usage=child_turn_usage,
+            )
+            request_count += 1
+            response, had_tool_errors, request_count = _run_tool_iterations(
+                provider=provider,
+                response=response,
+                max_workers=child_settings.max_tool_workers,
+                display=child_display,
+                session_usage=child_session_usage,
+                turn_usage=child_turn_usage,
+                sub_agent_depth=sub_agent_depth + 1,
+                max_requests=SUB_AGENT_MAX_REQUESTS,
+                request_count=request_count,
+                started_at=started_at,
+                max_elapsed_seconds=SUB_AGENT_MAX_ELAPSED_SECONDS,
+            )
+            elapsed = time.monotonic() - started_at
+            child_display.turn_usage(child_turn_usage, elapsed)
+            child_display.finish_sub_agent(status="completed")
+            result: dict[str, Any] = {
+                "status": "completed",
+                "final_output": response.text,
+                "response_id": response.response_id,
+                "reasoning_effort": reasoning_effort,
+                "usage": usage_to_dict(child_session_usage),
+            }
+            if had_tool_errors:
+                result["tool_errors"] = True
+            return result
+    except SubAgentRunError as exc:
+        child_display.error(exc.message)
+        child_display.finish_sub_agent(status="failed")
+        return {
+            "status": "failed",
+            "error": {"type": exc.error_type, "message": exc.message},
+            "reasoning_effort": reasoning_effort,
+            "usage": usage_to_dict(child_session_usage),
+        }
+    except Exception as exc:
+        message = str(exc) or exc.__class__.__name__
+        child_display.error(message)
+        child_display.finish_sub_agent(status="failed")
+        return {
+            "status": "failed",
+            "error": {"type": "sub_agent_failed", "message": message},
+            "reasoning_effort": reasoning_effort,
+            "usage": usage_to_dict(child_session_usage),
+        }
+    finally:
+        parent_session_usage.add_sub_agent(child_session_usage)
+        parent_turn_usage.add_sub_agent(child_turn_usage)
+        display.session_usage(parent_session_usage)
+
+
 # ---------------------------------------------------------------------------
 # Tool iteration loop
 # ---------------------------------------------------------------------------
@@ -136,10 +253,20 @@ def _run_tool_iterations(
     display: DisplayProtocol,
     session_usage: TokenUsage,
     turn_usage: TokenUsage,
+    sub_agent_depth: int = 0,
+    max_requests: int | None = None,
+    request_count: int = 0,
+    started_at: float | None = None,
+    max_elapsed_seconds: float | None = None,
 ) -> tuple:
     had_errors = False
 
     while response.has_tool_calls:
+        if started_at is not None and max_elapsed_seconds is not None:
+            _raise_if_sub_agent_timed_out(
+                started_at,
+                max_elapsed_seconds=max_elapsed_seconds,
+            )
         display.debug("model requested tool execution")
         _log.debug(
             "Executing tool iteration: %d function call(s)",
@@ -151,6 +278,9 @@ def _run_tool_iterations(
                 response,
                 max_workers=max_workers,
                 display=display,
+                session_usage=session_usage,
+                turn_usage=turn_usage,
+                sub_agent_depth=sub_agent_depth,
             )
         except Exception:
             _log.exception("Tool execution failed inside provider.execute_tool_calls")
@@ -161,6 +291,15 @@ def _run_tool_iterations(
             _log.debug("No tool_result_items returned; stopping tool loop")
             break
 
+        if max_requests is not None and request_count >= max_requests:
+            raise SubAgentRunError(
+                "request_limit_exceeded",
+                (
+                    "Sub-agent exceeded the maximum provider request limit "
+                    f"({max_requests})."
+                ),
+            )
+
         try:
             response = provider.request_turn(
                 tool_result_items=tool_result_items,
@@ -168,8 +307,22 @@ def _run_tool_iterations(
                 session_usage=session_usage,
                 turn_usage=turn_usage,
             )
+            request_count += 1
         except Exception:
             _log.exception("Follow-up request after tool execution failed")
             raise
 
-    return response, had_errors
+    return response, had_errors, request_count
+
+
+def _raise_if_sub_agent_timed_out(
+    started_at: float,
+    *,
+    max_elapsed_seconds: float = SUB_AGENT_MAX_ELAPSED_SECONDS,
+) -> None:
+    elapsed = time.monotonic() - started_at
+    if elapsed > max_elapsed_seconds:
+        raise SubAgentRunError(
+            "timeout",
+            (f"Sub-agent exceeded the wall-clock limit ({int(max_elapsed_seconds)}s)."),
+        )

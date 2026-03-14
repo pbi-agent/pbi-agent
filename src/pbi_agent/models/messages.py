@@ -46,6 +46,14 @@ class TokenUsage:
     reasoning_tokens: int = 0
     tool_use_tokens: int = 0
     provider_total_tokens: int = 0
+    sub_agent_input_tokens: int = 0
+    sub_agent_cached_input_tokens: int = 0
+    sub_agent_cache_write_tokens: int = 0
+    sub_agent_cache_write_1h_tokens: int = 0
+    sub_agent_output_tokens: int = 0
+    sub_agent_reasoning_tokens: int = 0
+    sub_agent_tool_use_tokens: int = 0
+    sub_agent_provider_total_tokens: int = 0
     model: str = ""
     _lock: threading.Lock = field(
         default_factory=threading.Lock,
@@ -89,7 +97,24 @@ class TokenUsage:
         )
 
     def add(self, other: "TokenUsage") -> None:
-        other_snapshot = other.snapshot()
+        self._add_snapshot(other.snapshot(), as_sub_agent=False)
+
+    def add_sub_agent(self, other: "TokenUsage") -> None:
+        self._add_snapshot(other.snapshot(), as_sub_agent=True)
+
+    @property
+    def sub_agent_total_tokens(self) -> int:
+        if self.sub_agent_provider_total_tokens > 0:
+            return self.sub_agent_provider_total_tokens
+        return self.sub_agent_input_tokens + self.sub_agent_output_tokens
+
+    @property
+    def main_agent_total_tokens(self) -> int:
+        return max(self.total_tokens - self.sub_agent_total_tokens, 0)
+
+    def _add_snapshot(
+        self, other_snapshot: "TokenUsage", *, as_sub_agent: bool
+    ) -> None:
         with self._lock:
             self.input_tokens += other_snapshot.input_tokens
             self.cached_input_tokens += other_snapshot.cached_input_tokens
@@ -99,6 +124,19 @@ class TokenUsage:
             self.reasoning_tokens += other_snapshot.reasoning_tokens
             self.tool_use_tokens += other_snapshot.tool_use_tokens
             self.provider_total_tokens += other_snapshot.provider_total_tokens
+            if as_sub_agent:
+                self.sub_agent_input_tokens += other_snapshot.input_tokens
+                self.sub_agent_cached_input_tokens += other_snapshot.cached_input_tokens
+                self.sub_agent_cache_write_tokens += other_snapshot.cache_write_tokens
+                self.sub_agent_cache_write_1h_tokens += (
+                    other_snapshot.cache_write_1h_tokens
+                )
+                self.sub_agent_output_tokens += other_snapshot.output_tokens
+                self.sub_agent_reasoning_tokens += other_snapshot.reasoning_tokens
+                self.sub_agent_tool_use_tokens += other_snapshot.tool_use_tokens
+                self.sub_agent_provider_total_tokens += (
+                    other_snapshot.provider_total_tokens
+                )
             if not self.model and other_snapshot.model:
                 self.model = other_snapshot.model
 
@@ -113,6 +151,14 @@ class TokenUsage:
                 reasoning_tokens=self.reasoning_tokens,
                 tool_use_tokens=self.tool_use_tokens,
                 provider_total_tokens=self.provider_total_tokens,
+                sub_agent_input_tokens=self.sub_agent_input_tokens,
+                sub_agent_cached_input_tokens=self.sub_agent_cached_input_tokens,
+                sub_agent_cache_write_tokens=self.sub_agent_cache_write_tokens,
+                sub_agent_cache_write_1h_tokens=self.sub_agent_cache_write_1h_tokens,
+                sub_agent_output_tokens=self.sub_agent_output_tokens,
+                sub_agent_reasoning_tokens=self.sub_agent_reasoning_tokens,
+                sub_agent_tool_use_tokens=self.sub_agent_tool_use_tokens,
+                sub_agent_provider_total_tokens=self.sub_agent_provider_total_tokens,
                 model=self.model,
             )
 

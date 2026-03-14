@@ -16,6 +16,7 @@ from pbi_agent.tools.find_files import SPEC as _ff_spec, handle as _ff_handle  #
 from pbi_agent.tools.list_files import SPEC as _lf_spec, handle as _lf_handle  # noqa: E402
 from pbi_agent.tools.search_files import SPEC as _sf_spec, handle as _sf_handle  # noqa: E402
 from pbi_agent.tools.read_file import SPEC as _rf_spec, handle as _rf_handle  # noqa: E402
+from pbi_agent.tools.sub_agent import SPEC as _sa_spec, handle as _sa_handle  # noqa: E402
 
 _REGISTRY[_sk_spec.name] = (_sk_spec, _sk_handle)
 _REGISTRY[_ir_spec.name] = (_ir_spec, _ir_handle)
@@ -26,10 +27,12 @@ _REGISTRY[_ff_spec.name] = (_ff_spec, _ff_handle)
 _REGISTRY[_lf_spec.name] = (_lf_spec, _lf_handle)
 _REGISTRY[_sf_spec.name] = (_sf_spec, _sf_handle)
 _REGISTRY[_rf_spec.name] = (_rf_spec, _rf_handle)
+_REGISTRY[_sa_spec.name] = (_sa_spec, _sa_handle)
 
 
-def get_tool_specs() -> list[ToolSpec]:
-    return [item[0] for item in _REGISTRY.values()]
+def get_tool_specs(*, excluded_names: set[str] | None = None) -> list[ToolSpec]:
+    excluded = excluded_names or set()
+    return [item[0] for name, item in _REGISTRY.items() if name not in excluded]
 
 
 def get_tool_handler(name: str) -> ToolHandler | None:
@@ -46,14 +49,16 @@ def get_tool_spec(name: str) -> ToolSpec | None:
     return entry[0]
 
 
-def get_openai_tool_definitions() -> list[dict[str, Any]]:
+def get_openai_tool_definitions(
+    *, excluded_names: set[str] | None = None
+) -> list[dict[str, Any]]:
     """Return tool definitions in OpenAI Responses API format.
 
     All tools are now registered function tools — no provider-specific
     native types.
     """
     tools: list[dict[str, Any]] = []
-    for spec in get_tool_specs():
+    for spec in get_tool_specs(excluded_names=excluded_names):
         tools.append(
             {
                 "type": "function",
@@ -65,14 +70,16 @@ def get_openai_tool_definitions() -> list[dict[str, Any]]:
     return tools
 
 
-def get_anthropic_tool_definitions() -> list[dict[str, Any]]:
+def get_anthropic_tool_definitions(
+    *, excluded_names: set[str] | None = None
+) -> list[dict[str, Any]]:
     """Return tool definitions in Anthropic Messages API format.
 
     All tools are now registered function tools — no provider-specific
     native types.
     """
     tools: list[dict[str, Any]] = []
-    for spec in get_tool_specs():
+    for spec in get_tool_specs(excluded_names=excluded_names):
         tools.append(
             {
                 "name": spec.name,
@@ -83,10 +90,12 @@ def get_anthropic_tool_definitions() -> list[dict[str, Any]]:
     return tools
 
 
-def get_openai_chat_tool_definitions() -> list[dict[str, Any]]:
+def get_openai_chat_tool_definitions(
+    *, excluded_names: set[str] | None = None
+) -> list[dict[str, Any]]:
     """Return tool definitions in OpenAI Chat Completions format."""
     tools: list[dict[str, Any]] = []
-    for spec in get_tool_specs():
+    for spec in get_tool_specs(excluded_names=excluded_names):
         tools.append(
             {
                 "type": "function",

@@ -265,13 +265,15 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
 
     monkeypatch.setattr(
         "pbi_agent.providers.generic_provider._execute_tool_calls",
-        lambda calls, max_workers: batch,
+        lambda calls, max_workers, context=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(
         response,
         max_workers=2,
         display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
     )
 
     assert had_errors is True

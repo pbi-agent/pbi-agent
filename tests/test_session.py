@@ -42,6 +42,18 @@ class _DisplaySpy:
     def reset_chat(self) -> None:
         self.reset_chat_calls += 1
 
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> _DisplaySpy:
+        del task_instruction, reasoning_effort
+        return self
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        del status
+
 
 class _ProviderStub:
     def __init__(self) -> None:
@@ -109,8 +121,11 @@ class _ProviderStub:
         *,
         max_workers: int,
         display,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        sub_agent_depth: int = 0,
     ) -> tuple[list[dict[str, object]], bool]:
-        del display
+        del display, session_usage, turn_usage, sub_agent_depth
         self.execute_calls.append(
             {
                 "response_id": response.response_id,

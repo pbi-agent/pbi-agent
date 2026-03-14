@@ -65,6 +65,15 @@ class DisplayProtocol(Protocol):
 
     def reset_chat(self) -> None: ...
 
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> "DisplayProtocol": ...
+
+    def finish_sub_agent(self, *, status: str) -> None: ...
+
     def welcome(
         self,
         *,

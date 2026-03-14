@@ -24,6 +24,7 @@ from pbi_agent.ui.widgets import (
     ChatInput,
     ThinkingBlock,
     ThinkingContent,
+    SubAgentBlock,
     ToolGroup,
     ToolGroupEntry,
     ToolItem,
@@ -175,6 +176,15 @@ class ChatApp(App):
         await self._chat_log().mount(widget)
         self._scroll_chat_end()
 
+    async def mount_widget_in_container(
+        self, container_id: str, widget: Widget
+    ) -> None:
+        container = self._query_optional(f"#{container_id}", Widget)
+        if container is None:
+            return
+        await container.mount(widget)
+        self._scroll_chat_end()
+
     def remove_widget(self, widget_id: str) -> None:
         widget = self._query_optional(f"#{widget_id}")
         if widget is not None:
@@ -253,6 +263,30 @@ class ChatApp(App):
             classes=group_classes,
         )
         await self._chat_log().mount(group)
+        self._scroll_chat_end()
+
+    async def mount_sub_agent_block(
+        self,
+        block_id: str,
+        title: str,
+        *,
+        body_id: str,
+    ) -> None:
+        block = SubAgentBlock(
+            Vertical(id=body_id),
+            title=title,
+            collapsed=True,
+            id=block_id,
+            classes="tool-group-sub-agent",
+        )
+        await self._chat_log().mount(block)
+        self._scroll_chat_end()
+
+    def update_sub_agent_title(self, block_id: str, title: str) -> None:
+        block = self._query_optional(f"#{block_id}", SubAgentBlock)
+        if block is None:
+            return
+        block.title = title
         self._scroll_chat_end()
 
     def add_user_message(self, text: str) -> None:

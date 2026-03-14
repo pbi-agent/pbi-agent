@@ -189,3 +189,20 @@ def test_render_thinking_renders_markdown_content() -> None:
     output = stdout.getvalue()
     assert "bold" in output
     assert "**bold**" not in output
+
+
+def test_sub_agent_section_renders_summary_status_and_logs() -> None:
+    display, stdout, _ = _display()
+
+    sub_display = display.begin_sub_agent(
+        task_instruction="Inspect the workspace and summarize key files.",
+        reasoning_effort="low",
+    )
+    sub_display.render_markdown("Child result")
+    sub_display.finish_sub_agent(status="completed")
+
+    output = stdout.getvalue()
+    assert "sub_agent" in output
+    assert "Inspect the workspace" in output
+    assert "Child result" in output
+    assert "completed" in output

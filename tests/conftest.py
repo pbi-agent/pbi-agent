@@ -27,6 +27,18 @@ class DisplaySpy:
         self.function_results: list[dict[str, object]] = []
         self.tool_group_end_count = 0
 
+    def begin_sub_agent(
+        self,
+        *,
+        task_instruction: str,
+        reasoning_effort: str | None = None,
+    ) -> DisplaySpy:
+        del task_instruction, reasoning_effort
+        return self
+
+    def finish_sub_agent(self, *, status: str) -> None:
+        del status
+
     def wait_start(self, message: str = "") -> None:
         self.wait_messages.append(message)
 

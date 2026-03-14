@@ -101,6 +101,10 @@ class ToolGroup(Collapsible):
     """Collapsible container for tool execution items."""
 
 
+class SubAgentBlock(Collapsible):
+    """Collapsible container for nested sub-agent output."""
+
+
 @dataclass(slots=True)
 class ToolGroupEntry:
     """Renderable entry inside a tool group."""
@@ -188,6 +192,7 @@ __all__ = [
     "ChatInput",
     "ErrorMessage",
     "NoticeMessage",
+    "SubAgentBlock",
     "ThinkingBlock",
     "ThinkingContent",
     "ToolGroup",
