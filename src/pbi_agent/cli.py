@@ -572,7 +572,7 @@ def _start_browser_open_thread(host: str, port: int, browser_url: str) -> None:
 
 def _open_browser_when_ready(host: str, port: int, browser_url: str) -> None:
     if _wait_for_web_server(host, port):
-        if not webbrowser.open(browser_url):
+        if not _open_browser_url(browser_url):
             LOGGER.warning("Failed to open browser for %s", browser_url)
         return
 
@@ -580,6 +580,52 @@ def _open_browser_when_ready(host: str, port: int, browser_url: str) -> None:
         "Timed out waiting for the web server to start before opening %s",
         browser_url,
     )
+
+
+def _open_browser_url(browser_url: str) -> bool:
+    if os.environ.get("BROWSER"):
+        return webbrowser.open(browser_url)
+
+    if _is_wsl_environment() and _open_url_in_windows_browser(browser_url):
+        return True
+
+    return webbrowser.open(browser_url)
+
+
+def _is_wsl_environment() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+
+    try:
+        return "microsoft" in Path("/proc/sys/kernel/osrelease").read_text(
+            encoding="utf-8"
+        ).lower()
+    except OSError:
+        return False
+
+
+def _open_url_in_windows_browser(browser_url: str) -> bool:
+    commands = (
+        ["explorer.exe", browser_url],
+        ["cmd.exe", "/c", "start", "", browser_url],
+    )
+
+    for command in commands:
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            continue
+
+        time.sleep(0.1)
+        return_code = process.poll()
+        if return_code is None or return_code == 0:
+            return True
+
+    return False
 
 
 def _web_chat_command(settings: Settings, *, parent_pid: int) -> str:

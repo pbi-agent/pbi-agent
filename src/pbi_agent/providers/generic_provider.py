@@ -248,6 +248,7 @@ class GenericProvider(Provider):
         usage_obj = response_json.get("usage", {})
         prompt_tokens = int(usage_obj.get("prompt_tokens", 0) or 0)
         completion_tokens = int(usage_obj.get("completion_tokens", 0) or 0)
+        total_tokens = int(usage_obj.get("total_tokens", 0) or 0)
         completion_details = usage_obj.get("completion_tokens_details", {})
         reasoning_tokens = (
             int(completion_details.get("reasoning_tokens", 0) or 0)
@@ -262,6 +263,7 @@ class GenericProvider(Provider):
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 reasoning_tokens=reasoning_tokens,
+                context_tokens=total_tokens or (prompt_tokens + completion_tokens),
                 model=_response_model_name(response_json),
             ),
             function_calls=function_calls,

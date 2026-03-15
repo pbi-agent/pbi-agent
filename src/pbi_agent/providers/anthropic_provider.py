@@ -441,6 +441,7 @@ class AnthropicProvider(Provider):
                 cache_write_tokens=cache_5m,
                 cache_write_1h_tokens=cache_1h,
                 output_tokens=output_tokens,
+                context_tokens=total_input + output_tokens,
             ),
             function_calls=function_calls,
             # Store raw content blocks so execute_tool_calls can access the

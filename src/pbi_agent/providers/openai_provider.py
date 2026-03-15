@@ -351,6 +351,7 @@ class OpenAIProvider(Provider):
         usage_obj = response_json.get("usage", {})
         input_tokens = int(_usage_value(usage_obj, "input_tokens"))
         output_tokens = int(_usage_value(usage_obj, "output_tokens"))
+        total_tokens = int(_usage_value(usage_obj, "total_tokens"))
         input_details = usage_obj.get("input_tokens_details", {})
         output_details = usage_obj.get("output_tokens_details", {})
 
@@ -392,6 +393,7 @@ class OpenAIProvider(Provider):
                 cached_input_tokens=cached_input_tokens,
                 output_tokens=output_tokens,
                 reasoning_tokens=reasoning_tokens,
+                context_tokens=total_tokens or (input_tokens + output_tokens),
                 model=_response_model_name(response_json),
             ),
             function_calls=function_calls,

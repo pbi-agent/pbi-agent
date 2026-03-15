@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from pbi_agent import __version__
-from pbi_agent.models.messages import TokenUsage
+from pbi_agent.models.messages import TokenUsage, context_window_for_model
 
 TOOL_STYLE_MAP = {
     "shell": "shell",
@@ -167,18 +167,43 @@ def format_usage_summary(
     return body
 
 
-def format_session_subtitle(usage: TokenUsage) -> str:
+def format_session_subtitle(
+    usage: TokenUsage,
+    *,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+) -> str:
     cwd = Path.cwd()
-    subtitle = (
-        f"v{__version__} \u00b7 {cwd} \u00b7 Session {usage.total_tokens:,} tokens "
-        f"\u00b7 ${usage.estimated_cost_usd:.3f}"
-    )
+    session_model = model or usage.model
+    parts: list[str] = []
+    if session_model:
+        model_label = session_model
+        if reasoning_effort:
+            model_label += f" ({reasoning_effort})"
+        parts.append(model_label)
+    elif reasoning_effort:
+        parts.append(reasoning_effort)
+    parts.append(f"v{__version__}")
+    parts.append(cwd.name or str(cwd))
+    tokens = usage.total_tokens
+    cost = usage.estimated_cost_usd
     if usage.sub_agent_total_tokens:
-        subtitle += (
-            f" \u00b7 main {usage.main_agent_total_tokens:,}"
-            f" \u00b7 sub-agent {usage.sub_agent_total_tokens:,}"
+        parts.append(
+            f"{tokens:,} tok (main {usage.main_agent_total_tokens:,}"
+            f" / sub {usage.sub_agent_total_tokens:,})"
         )
-    return subtitle
+    else:
+        parts.append(f"{tokens:,} tok")
+    if usage.context_tokens:
+        ctx_model = session_model or usage.model
+        ctx_window = context_window_for_model(ctx_model) if ctx_model else 0
+        if ctx_window:
+            pct = min(usage.context_tokens / ctx_window * 100, 100)
+            parts.append(f"ctx {pct:.0f}%")
+        else:
+            parts.append(f"ctx {usage.context_tokens:,}")
+    parts.append(f"${cost:.3f}")
+    return " \u00b7 ".join(parts)
 
 
 def status_markup(

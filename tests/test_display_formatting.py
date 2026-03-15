@@ -6,6 +6,7 @@ import threading
 from unittest.mock import MagicMock
 
 from pbi_agent.agent.session import NEW_CHAT_SENTINEL
+from pbi_agent.models.messages import TokenUsage
 from pbi_agent.ui.display import Display
 from pbi_agent.ui.formatting import (
     format_generic_function_item,
@@ -178,6 +179,18 @@ class TestInteractiveInputQueue:
 
         assert not worker.is_alive()
         assert result == [NEW_CHAT_SENTINEL]
+
+
+def test_session_usage_updates_header_with_model_and_effort() -> None:
+    app = MagicMock()
+    display = Display(app, model="gpt-5.4-2026-03-05", reasoning_effort="xhigh")
+
+    display.session_usage(TokenUsage(input_tokens=8, output_tokens=3, model="gpt-5.4-2026-03-05"))
+
+    callback, subtitle = app.call_from_thread.call_args.args
+    assert callback == app.update_session_header
+    assert "gpt-5.4-2026-03-05 (xhigh)" in subtitle
+    assert "11 tok" in subtitle
 
 
 # -- function_result routing -------------------------------------------------

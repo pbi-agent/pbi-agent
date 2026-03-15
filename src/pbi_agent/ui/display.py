@@ -52,9 +52,18 @@ class _TurnUsageWidget:
 class Display(DisplayProtocol):
     """Sync bridge between session code and the Textual App."""
 
-    def __init__(self, app: ChatApp, *, verbose: bool = False) -> None:
+    def __init__(
+        self,
+        app: ChatApp,
+        *,
+        verbose: bool = False,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+    ) -> None:
         self.app = app
         self.verbose = verbose
+        self._model = model
+        self._reasoning_effort = reasoning_effort
         self._waiting_widget_id: str | None = None
         self._active_thinking_widget_id: str | None = None
         self._msg_counter = 0
@@ -244,7 +253,12 @@ class Display(DisplayProtocol):
 
     def session_usage(self, usage: TokenUsage) -> None:
         self._safe_call(
-            self.app.update_session_header, format_session_subtitle(usage.snapshot())
+            self.app.update_session_header,
+            format_session_subtitle(
+                usage.snapshot(),
+                model=self._model,
+                reasoning_effort=self._reasoning_effort,
+            ),
         )
 
     def turn_usage(self, usage: TokenUsage, elapsed_seconds: float) -> None:

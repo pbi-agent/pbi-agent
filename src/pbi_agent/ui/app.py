@@ -60,6 +60,11 @@ class ChatApp(App):
     ) -> None:
         super().__init__()
         self._settings = settings
+        self.sub_title = format_session_subtitle(
+            TokenUsage(model=settings.model),
+            model=settings.model,
+            reasoning_effort=settings.reasoning_effort,
+        )
         self._verbose = verbose
         self._mode = mode
         self._prompt = prompt
@@ -88,7 +93,12 @@ class ChatApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        self._bridge = Display(app=self, verbose=self._verbose)
+        self._bridge = Display(
+            app=self,
+            verbose=self._verbose,
+            model=self._settings.model,
+            reasoning_effort=self._settings.reasoning_effort,
+        )
         self._run_session()
 
     def _chat_log(self) -> VerticalScroll:

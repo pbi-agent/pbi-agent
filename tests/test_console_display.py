@@ -150,7 +150,7 @@ def test_session_subtitle_shown_after_multiple_turns() -> None:
     output = stdout.getvalue()
     assert "Usage" in output
     assert "Turn" in output
-    assert "Session 11 tokens" in output
+    assert "11 tok" in output
 
 
 def test_render_thinking_uses_title_as_body_when_text_missing() -> None:

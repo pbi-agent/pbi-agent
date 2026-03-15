@@ -172,6 +172,7 @@ class DefaultWebCommandTests(unittest.TestCase):
     def test_open_browser_when_ready_opens_browser_by_default(self) -> None:
         with (
             patch("pbi_agent.cli._wait_for_web_server", return_value=True),
+            patch("pbi_agent.cli._is_wsl_environment", return_value=False),
             patch("pbi_agent.cli.webbrowser.open", return_value=True) as mock_open,
         ):
             cli._open_browser_when_ready("127.0.0.1", 9001, "http://127.0.0.1:9001")
@@ -181,11 +182,99 @@ class DefaultWebCommandTests(unittest.TestCase):
     def test_open_browser_when_ready_continues_when_browser_open_fails(self) -> None:
         with (
             patch("pbi_agent.cli._wait_for_web_server", return_value=True),
+            patch("pbi_agent.cli._is_wsl_environment", return_value=False),
             patch("pbi_agent.cli.webbrowser.open", return_value=False) as mock_open,
         ):
             cli._open_browser_when_ready("127.0.0.1", 9001, "http://127.0.0.1:9001")
 
         mock_open.assert_called_once_with("http://127.0.0.1:9001")
+
+    def test_open_browser_when_ready_uses_windows_browser_opener_on_wsl(self) -> None:
+        with (
+            patch("pbi_agent.cli._wait_for_web_server", return_value=True),
+            patch("pbi_agent.cli._is_wsl_environment", return_value=True),
+            patch.dict(os.environ, {}, clear=False),
+            patch(
+                "pbi_agent.cli._open_url_in_windows_browser", return_value=True
+            ) as mock_windows_open,
+            patch("pbi_agent.cli.webbrowser.open", return_value=True) as mock_open,
+        ):
+            os.environ.pop("BROWSER", None)
+            cli._open_browser_when_ready("127.0.0.1", 9001, "http://127.0.0.1:9001")
+
+        mock_windows_open.assert_called_once_with("http://127.0.0.1:9001")
+        mock_open.assert_not_called()
+
+    def test_open_browser_when_ready_respects_explicit_browser_env_on_wsl(self) -> None:
+        with (
+            patch("pbi_agent.cli._wait_for_web_server", return_value=True),
+            patch("pbi_agent.cli._is_wsl_environment", return_value=True),
+            patch.dict(os.environ, {"BROWSER": "custom-browser"}, clear=False),
+            patch(
+                "pbi_agent.cli._open_url_in_windows_browser", return_value=True
+            ) as mock_windows_open,
+            patch("pbi_agent.cli.webbrowser.open", return_value=True) as mock_open,
+        ):
+            cli._open_browser_when_ready("127.0.0.1", 9001, "http://127.0.0.1:9001")
+
+        mock_windows_open.assert_not_called()
+        mock_open.assert_called_once_with("http://127.0.0.1:9001")
+
+    def test_open_browser_when_ready_falls_back_to_standard_open_on_wsl(self) -> None:
+        with (
+            patch("pbi_agent.cli._wait_for_web_server", return_value=True),
+            patch("pbi_agent.cli._is_wsl_environment", return_value=True),
+            patch.dict(os.environ, {}, clear=False),
+            patch(
+                "pbi_agent.cli._open_url_in_windows_browser", return_value=False
+            ) as mock_windows_open,
+            patch("pbi_agent.cli.webbrowser.open", return_value=True) as mock_open,
+        ):
+            os.environ.pop("BROWSER", None)
+            cli._open_browser_when_ready("127.0.0.1", 9001, "http://127.0.0.1:9001")
+
+        mock_windows_open.assert_called_once_with("http://127.0.0.1:9001")
+        mock_open.assert_called_once_with("http://127.0.0.1:9001")
+
+    def test_open_url_in_windows_browser_uses_first_successful_command(self) -> None:
+        process = Mock()
+        process.poll.return_value = 0
+
+        with patch("pbi_agent.cli.subprocess.Popen", return_value=process) as mock_popen:
+            opened = cli._open_url_in_windows_browser("http://127.0.0.1:9001")
+
+        self.assertTrue(opened)
+        mock_popen.assert_called_once_with(
+            ["explorer.exe", "http://127.0.0.1:9001"],
+            stdout=cli.subprocess.DEVNULL,
+            stderr=cli.subprocess.DEVNULL,
+        )
+
+    def test_open_url_in_windows_browser_falls_back_to_cmd(self) -> None:
+        process = Mock()
+        process.poll.return_value = 0
+
+        with patch(
+            "pbi_agent.cli.subprocess.Popen",
+            side_effect=[OSError("missing"), process],
+        ) as mock_popen:
+            opened = cli._open_url_in_windows_browser("http://127.0.0.1:9001")
+
+        self.assertTrue(opened)
+        self.assertEqual(mock_popen.call_count, 2)
+        self.assertEqual(
+            mock_popen.call_args_list[1].args[0],
+            ["cmd.exe", "/c", "start", "", "http://127.0.0.1:9001"],
+        )
+
+    def test_open_url_in_windows_browser_returns_false_when_all_commands_fail(self) -> None:
+        with patch(
+            "pbi_agent.cli.subprocess.Popen",
+            side_effect=[OSError("missing"), OSError("missing")],
+        ):
+            opened = cli._open_url_in_windows_browser("http://127.0.0.1:9001")
+
+        self.assertFalse(opened)
 
     def test_handle_web_command_ctrl_c_exits_cleanly(self) -> None:
         parser = cli.build_parser()

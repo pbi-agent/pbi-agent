@@ -368,6 +368,7 @@ class GoogleProvider(Provider):
                 reasoning_tokens=reasoning_tokens,
                 tool_use_tokens=tool_use_tokens,
                 provider_total_tokens=provider_total_tokens,
+                context_tokens=provider_total_tokens,
                 model=_response_model_name(response_json),
             ),
             function_calls=function_calls,

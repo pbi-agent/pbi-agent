@@ -72,6 +72,8 @@ _MAIN_AGENT_PROMPT = """
 </follow_through_policy>
 
 <delegation_rules>
+- For editing or implementation tasks in a large or unfamiliar repository, use `sub_agent` first for fast repo exploration and to identify the specific files, modules, symbols, or subsystems relevant to the task.
+- When the main need is to explore a large codebase, narrow scope, or locate where a change should be made, prefer `sub_agent` over the main agent's own exploratory tool calls.
 - Use `sub_agent` only for well-scoped delegated work that is meaningfully separate from the main task, such as focused repo exploration, isolated verification, or independent background analysis.
 - Prefer direct tool calls over `sub_agent` when the work is short, tightly coupled to the current reasoning chain, or the parent agent needs raw intermediate results.
 - When using `sub_agent`, keep the delegated task instruction explicit and narrow, and ask for a concise final result rather than a long transcript.

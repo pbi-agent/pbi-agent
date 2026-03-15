@@ -5,6 +5,26 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+# Context window sizes per model (in tokens).
+_MODEL_CONTEXT_WINDOW: dict[str, int] = {
+    "gpt-5.3-codex": 1_047_576,
+    "gpt-5.4-2026-03-05": 1_047_576,
+    "claude-opus-4-6": 200_000,
+    "claude-sonnet-4-6": 200_000,
+}
+_DEFAULT_CONTEXT_WINDOW: int = 200_000
+
+
+def context_window_for_model(model: str) -> int:
+    """Return the context window size for *model*."""
+    if model in _MODEL_CONTEXT_WINDOW:
+        return _MODEL_CONTEXT_WINDOW[model]
+    for key, size in _MODEL_CONTEXT_WINDOW.items():
+        if model.startswith(key):
+            return size
+    return _DEFAULT_CONTEXT_WINDOW
+
+
 # Pricing per 1M tokens:
 #   (base_input, cache_write_5m, cache_write_1h, cache_hit, output)
 _MODEL_PRICING: dict[str, tuple[float, float, float, float, float]] = {
@@ -54,6 +74,7 @@ class TokenUsage:
     sub_agent_reasoning_tokens: int = 0
     sub_agent_tool_use_tokens: int = 0
     sub_agent_provider_total_tokens: int = 0
+    context_tokens: int = 0
     model: str = ""
     _lock: threading.Lock = field(
         default_factory=threading.Lock,
@@ -137,6 +158,8 @@ class TokenUsage:
                 self.sub_agent_provider_total_tokens += (
                     other_snapshot.provider_total_tokens
                 )
+            if other_snapshot.context_tokens and not as_sub_agent:
+                self.context_tokens = other_snapshot.context_tokens
             if not self.model and other_snapshot.model:
                 self.model = other_snapshot.model
 
@@ -159,6 +182,7 @@ class TokenUsage:
                 sub_agent_reasoning_tokens=self.sub_agent_reasoning_tokens,
                 sub_agent_tool_use_tokens=self.sub_agent_tool_use_tokens,
                 sub_agent_provider_total_tokens=self.sub_agent_provider_total_tokens,
+                context_tokens=self.context_tokens,
                 model=self.model,
             )
 

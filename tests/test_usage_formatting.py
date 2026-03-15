@@ -20,8 +20,9 @@ def test_format_session_subtitle_includes_sub_agent_breakdown() -> None:
     usage = TokenUsage(input_tokens=7, output_tokens=0, model="gpt-5")
     usage.add_sub_agent(TokenUsage(input_tokens=2, output_tokens=1, model="gpt-5"))
 
-    subtitle = format_session_subtitle(usage)
+    subtitle = format_session_subtitle(usage, reasoning_effort="xhigh")
 
-    assert "Session 10 tokens" in subtitle
+    assert "gpt-5 (xhigh)" in subtitle
+    assert "10 tok" in subtitle
     assert "main 7" in subtitle
-    assert "sub-agent 3" in subtitle
+    assert "sub 3" in subtitle
