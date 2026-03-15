@@ -30,6 +30,32 @@ features:
 Running `pbi-agent` without a command defaults to `pbi-agent web`, so a bare invocation launches the browser UI.
 :::
 
+### 1. Install uv
+
+macOS / Linux:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### 2. Install pbi-agent
+
+```bash
+uv tool install pbi-agent
+```
+
+::: warning
+If this is your first `uv tool install`, reload your shell before running `pbi-agent` or the command may not be on your `PATH` yet.
+:::
+
+### 3. Run pbi-agent
+
 ```bash
 uv run pbi-agent --api-key "$OPENAI_API_KEY"
 ```
