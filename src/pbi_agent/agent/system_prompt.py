@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 _SHARED_PROMPT = """
 You are pbi-agent, a local CLI coding agent for creating, auditing, and editing Power BI PBIP projects.
 
@@ -111,10 +114,57 @@ _SUB_AGENT_PROMPT = """
 SYSTEM_PROMPT = f"{_SHARED_PROMPT}\n\n{_MAIN_AGENT_PROMPT}"
 SUB_AGENT_SYSTEM_PROMPT = f"{_SHARED_PROMPT}\n\n{_SUB_AGENT_PROMPT}"
 
+_MAX_PROJECT_RULES_BYTES = 1_000_000  # 1 MB
+
+
+def _warn_project_rules(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def load_project_rules(cwd: Path | None = None) -> str | None:
+    """Read an optional ``AGENTS.md`` file from *cwd* (default: CWD).
+
+    Returns the file content, or ``None`` when the file is absent, empty,
+    or unreadable.
+    """
+    target = (cwd or Path.cwd()) / "AGENTS.md"
+
+    try:
+        size = target.stat().st_size
+    except FileNotFoundError:
+        return None
+    except OSError:
+        _warn_project_rules("AGENTS.md found but unreadable due to permissions.")
+        return None
+
+    if size > _MAX_PROJECT_RULES_BYTES:
+        _warn_project_rules("AGENTS.md exceeds 1 MB; content will be truncated.")
+
+    try:
+        with target.open("rb") as fh:
+            raw_content = fh.read(_MAX_PROJECT_RULES_BYTES)
+    except OSError:
+        _warn_project_rules("AGENTS.md found but unreadable due to permissions.")
+        return None
+
+    content = raw_content.decode("utf-8", errors="replace").strip()
+    if not content:
+        return None
+
+    return content
+
+
+def _append_project_rules(base_prompt: str) -> str:
+    """Append ``<project_rules>`` section if ``AGENTS.md`` is present."""
+    rules = load_project_rules()
+    if rules is None:
+        return base_prompt
+    return f"{base_prompt}\n\n<project_rules>\n{rules}\n</project_rules>"
+
 
 def get_system_prompt() -> str:
-    return SYSTEM_PROMPT
+    return _append_project_rules(SYSTEM_PROMPT)
 
 
 def get_sub_agent_system_prompt() -> str:
-    return SUB_AGENT_SYSTEM_PROMPT
+    return _append_project_rules(SUB_AGENT_SYSTEM_PROMPT)
