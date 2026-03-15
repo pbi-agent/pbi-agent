@@ -19,6 +19,7 @@ TOOL_STYLE_MAP = {
     "list_files": "list-files",
     "search_files": "search-files",
     "read_file": "read-file",
+    "read_web_url": "read-web-url",
     "python_exec": "python-exec",
     "sub_agent": "sub-agent",
 }
@@ -31,6 +32,7 @@ TOOL_ICONS: dict[str, str] = {
     "list-files": "\u2630",  # ☰
     "search-files": "\u2315",  # ⌕
     "read-file": "\u2610",  # ☐
+    "read-web-url": "\U0001f310",  # 🌐
     "python-exec": "\u2699",  # ⚙
     "sub-agent": "\u25c9",  # ◉
     "generic": "\u2022",  # •
@@ -45,6 +47,7 @@ TOOL_BORDER_STYLES: dict[str, str] = {
     "list-files": "#818CF8",
     "search-files": "#EC4899",
     "read-file": "#EAB308",
+    "read-web-url": "#06B6D4",
     "python-exec": "#A855F7",
     "sub-agent": "#F59E0B",
     "mixed": "#8B5CF6",
@@ -298,9 +301,7 @@ def format_patch_tool_item(
         f"[bold]{escape_markup_text(display_path)}[/bold]  {status}",
     ]
     if detail:
-        lines.append(
-            f"[dim]detail:[/dim] {escape_markup_text(shorten(detail, 320))}"
-        )
+        lines.append(f"[dim]detail:[/dim] {escape_markup_text(shorten(detail, 320))}")
     if diff.strip():
         lines.extend(
             [
@@ -486,6 +487,20 @@ def format_read_file_item(
     return "\n".join(lines)
 
 
+def format_read_web_url_item(
+    url: str,
+    *,
+    verbose: bool = False,
+    status: str,
+    call_id: str = "",
+) -> str:
+    lines = [
+        f"[#06B6D4]\U0001f310[/#06B6D4] [bold]{escape_markup_text(shorten(url, 96))}[/bold]  {status}",
+    ]
+    _append_verbose_call_id(lines, call_id, verbose)
+    return "\n".join(lines)
+
+
 def format_wait_seconds(wait_seconds: float) -> str:
     """Format wait seconds for display: ``1.50`` → ``'1.5'``, ``2.00`` → ``'2'``."""
     return f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
@@ -551,7 +566,10 @@ def route_function_result(
         raw_skills = args.get("skills", [])
         skills = raw_skills if isinstance(raw_skills, list) else [str(raw_skills)]
         return name, format_skill_knowledge_item(
-            skills, verbose=verbose, status=status, call_id=call_id,
+            skills,
+            verbose=verbose,
+            status=status,
+            call_id=call_id,
         )
 
     if name == "init_report":
@@ -618,8 +636,20 @@ def route_function_result(
             encoding=str(args.get("encoding", "auto")),
         )
 
+    if name == "read_web_url":
+        return name, format_read_web_url_item(
+            str(args.get("url", "<missing url>")),
+            verbose=verbose,
+            status=status,
+            call_id=call_id,
+        )
+
     return name, format_generic_function_item(
-        name, verbose=verbose, status=status, call_id=call_id, arguments=arguments,
+        name,
+        verbose=verbose,
+        status=status,
+        call_id=call_id,
+        arguments=arguments,
     )
 
 
@@ -636,6 +666,7 @@ __all__ = [
     "format_patch_tool_item",
     "format_python_exec_item",
     "format_read_file_item",
+    "format_read_web_url_item",
     "format_reasoning_title",
     "format_search_files_item",
     "format_session_subtitle",

@@ -91,6 +91,9 @@ ToolGroup.tool-group-search-files {
 ToolGroup.tool-group-read-file {
     border-left: thick #EAB308;
 }
+ToolGroup.tool-group-read-web-url {
+    border-left: thick #06B6D4;
+}
 ToolGroup.tool-group-python-exec {
     border-left: thick #A855F7;
 }
@@ -136,6 +139,9 @@ ToolItem.tool-call-search-files {
 }
 ToolItem.tool-call-read-file {
     background: #EAB308 14%;
+}
+ToolItem.tool-call-read-web-url {
+    background: #06B6D4 14%;
 }
 ToolItem.tool-call-python-exec {
     background: #A855F7 14%;

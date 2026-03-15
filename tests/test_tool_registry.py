@@ -14,6 +14,7 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "list_files",
         "search_files",
         "read_file",
+        "read_web_url",
         "sub_agent",
     }
 

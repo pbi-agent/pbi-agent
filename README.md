@@ -295,6 +295,7 @@ pbi-agent --provider generic --model z-ai/glm-5
 | `apply_patch` | Create, update, or delete files via V4A diffs |
 | `skill_knowledge` | Retrieve Power BI knowledge from the bundled skill library (14 topics) |
 | `init_report` | Scaffold the PBIP template into a target directory |
+| `read_web_url` | Fetch a public URL through markdown.new and return bounded Markdown content |
 
 ### Knowledge base
 

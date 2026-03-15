@@ -20,6 +20,7 @@ All providers expose the same built-in tools through the shared tool registry.
 | `list_files` | no | List files and directories in the workspace, optionally recursively. |
 | `search_files` | no | Search text file contents for a string or regex pattern. |
 | `read_file` | no | Read a text file with optional line ranges. |
+| `read_web_url` | no | Fetch a public web page through markdown.new and return Markdown. |
 
 ## `shell`
 
@@ -161,6 +162,22 @@ List directory contents when you need a general workspace inventory instead of a
   "max_entries": 50
 }
 ```
+
+## `read_web_url`
+
+Fetch a public web page through `markdown.new` and return bounded Markdown content.
+
+| Parameter | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `url` | `string` | yes | Absolute `http` or `https` URL to convert. |
+
+```json
+{
+  "url": "https://example.com"
+}
+```
+
+This v1 wrapper uses `markdown.new` defaults only. It does not yet expose `method` or `retain_images`.
 
 ## Parallel Tool Execution
 

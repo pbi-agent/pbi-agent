@@ -101,6 +101,23 @@ def test_read_file_tool_summary_tolerates_invalid_line_arguments() -> None:
     assert "FAILED" in output
 
 
+def test_read_web_url_tool_summary_shows_requested_url() -> None:
+    display, stdout, _ = _display()
+
+    display.function_start(1)
+    display.function_result(
+        "read_web_url",
+        True,
+        arguments={"url": "https://example.com/guide"},
+    )
+    display.tool_group_end()
+
+    output = stdout.getvalue()
+    assert "read_web_url" in output
+    assert "https://example.com/guide" in output
+    assert "done" in output
+
+
 def test_user_prompt_raises_runtime_error() -> None:
     display, _, _ = _display()
 

@@ -16,6 +16,7 @@ from pbi_agent.tools.find_files import SPEC as _ff_spec, handle as _ff_handle  #
 from pbi_agent.tools.list_files import SPEC as _lf_spec, handle as _lf_handle  # noqa: E402
 from pbi_agent.tools.search_files import SPEC as _sf_spec, handle as _sf_handle  # noqa: E402
 from pbi_agent.tools.read_file import SPEC as _rf_spec, handle as _rf_handle  # noqa: E402
+from pbi_agent.tools.read_web_url import SPEC as _rwu_spec, handle as _rwu_handle  # noqa: E402
 from pbi_agent.tools.sub_agent import SPEC as _sa_spec, handle as _sa_handle  # noqa: E402
 
 _REGISTRY[_sk_spec.name] = (_sk_spec, _sk_handle)
@@ -27,6 +28,7 @@ _REGISTRY[_ff_spec.name] = (_ff_spec, _ff_handle)
 _REGISTRY[_lf_spec.name] = (_lf_spec, _lf_handle)
 _REGISTRY[_sf_spec.name] = (_sf_spec, _sf_handle)
 _REGISTRY[_rf_spec.name] = (_rf_spec, _rf_handle)
+_REGISTRY[_rwu_spec.name] = (_rwu_spec, _rwu_handle)
 _REGISTRY[_sa_spec.name] = (_sa_spec, _sa_handle)
 
 
