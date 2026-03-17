@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 import os
 import re
 from pathlib import Path
@@ -8,6 +7,7 @@ from typing import Any, Callable, Iterator
 
 from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
+from pbi_agent.tools.workspace_filters import build_glob_matcher
 from pbi_agent.tools.workspace_filters import should_skip_directory_name
 from pbi_agent.tools.workspace_access import DEFAULT_MAX_MATCHES
 from pbi_agent.tools.workspace_access import normalize_positive_int
@@ -75,7 +75,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     try:
         target_path = resolve_safe_path(root, arguments.get("path"))
         matcher = _build_matcher(pattern, regex_enabled)
-        glob_matcher = _build_glob_matcher(glob_pattern)
+        glob_matcher = build_glob_matcher(glob_pattern)
         matches: list[dict[str, Any]] = []
 
         for candidate, relative_path in _iter_candidate_files(
@@ -174,55 +174,3 @@ def _bound_match_fields(match: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _build_glob_matcher(glob_pattern: str | None) -> Callable[[str, str], bool]:
-    if not isinstance(glob_pattern, str) or not glob_pattern.strip():
-        return lambda relative_path, name: True
-
-    normalized_pattern = glob_pattern.replace("\\", "/").strip()
-    if "/" in normalized_pattern:
-        pattern_parts = tuple(part for part in normalized_pattern.split("/") if part)
-        return (
-            lambda relative_path, name: _match_relative_path(relative_path, pattern_parts)
-        )
-    return lambda relative_path, name: fnmatch.fnmatch(name, normalized_pattern)
-
-
-def _match_relative_path(relative_path: str, pattern_parts: tuple[str, ...]) -> bool:
-    path_parts = tuple(part for part in relative_path.split("/") if part)
-    return _match_path_parts(path_parts, pattern_parts, 0, 0)
-
-
-def _match_path_parts(
-    path_parts: tuple[str, ...],
-    pattern_parts: tuple[str, ...],
-    path_index: int,
-    pattern_index: int,
-) -> bool:
-    while True:
-        if pattern_index == len(pattern_parts):
-            return path_index == len(path_parts)
-
-        pattern_part = pattern_parts[pattern_index]
-        if pattern_part == "**":
-            return _match_globstar(path_parts, pattern_parts, path_index, pattern_index + 1)
-
-        if path_index >= len(path_parts):
-            return False
-
-        if not fnmatch.fnmatchcase(path_parts[path_index], pattern_part):
-            return False
-
-        path_index += 1
-        pattern_index += 1
-
-
-def _match_globstar(
-    path_parts: tuple[str, ...],
-    pattern_parts: tuple[str, ...],
-    path_index: int,
-    next_pattern_index: int,
-) -> bool:
-    for next_path_index in range(path_index, len(path_parts) + 1):
-        if _match_path_parts(path_parts, pattern_parts, next_path_index, next_pattern_index):
-            return True
-    return False

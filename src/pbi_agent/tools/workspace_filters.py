@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from pathlib import Path
+import fnmatch
+from typing import Callable
 
-SKIP_DIRECTORY_NAMES = frozenset(
-    {
+# All entries are stored case-folded so that the lookup in
+# ``should_skip_directory_name`` (which also case-folds its argument) works
+# correctly for mixed-case names like "CVS" or "DerivedData".
+SKIP_DIRECTORY_NAMES: frozenset[str] = frozenset(
+    name.casefold()
+    for name in {
+        # -- Version control ---------------------------------------------------
         ".git",
         ".hg",
         ".svn",
@@ -12,13 +18,10 @@ SKIP_DIRECTORY_NAMES = frozenset(
         "_darcs",
         ".fossil",
         ".jj",
+        # -- Python ------------------------------------------------------------
         "__pycache__",
         ".venv",
         "venv",
-        "env",
-        ".virtualenv",
-        "virtualenv",
-        ".direnv",
         "site-packages",
         ".mypy_cache",
         ".pytest_cache",
@@ -30,18 +33,16 @@ SKIP_DIRECTORY_NAMES = frozenset(
         ".pytype",
         ".pyre",
         ".pyright",
-        ".pants.d",
-        ".pants.workdir",
+        "__pypackages__",
+        ".ipynb_checkpoints",
         ".pixi",
         ".conda",
         ".mamba",
         ".pdm-build",
         ".pdm-python",
-        "__pypackages__",
-        "wheels",
-        "sdist",
-        ".benchmarks",
-        ".ipynb_checkpoints",
+        ".pants.d",
+        ".pants.workdir",
+        # -- JavaScript / Node -------------------------------------------------
         "node_modules",
         "bower_components",
         "jspm_packages",
@@ -50,8 +51,11 @@ SKIP_DIRECTORY_NAMES = frozenset(
         ".parcel-cache",
         ".turbo",
         ".nx",
+        ".npm",
+        ".pnpm-store",
         ".angular",
         ".svelte-kit",
+        "__sapper__",
         ".rush",
         ".lerna",
         ".deno",
@@ -61,8 +65,8 @@ SKIP_DIRECTORY_NAMES = frozenset(
         ".vite",
         ".esbuild",
         ".swc",
-        "__sapper__",
         ".expo",
+        # -- Java / JVM --------------------------------------------------------
         ".gradle",
         ".m2",
         ".mvn",
@@ -70,113 +74,65 @@ SKIP_DIRECTORY_NAMES = frozenset(
         ".metals",
         ".bloop",
         ".bsp",
-        "classes",
-        "test-classes",
-        "generated-sources",
-        "generated-test-sources",
-        "bin",
-        "obj",
-        "packages",
+        # -- .NET --------------------------------------------------------------
         ".nuget",
-        "BundleArtifacts",
-        "TestResults",
-        "vendor",
-        ".go",
+        # -- Rust --------------------------------------------------------------
         ".cargo",
+        # -- Ruby --------------------------------------------------------------
         ".bundle",
         "sorbet",
-        "storage",
-        ".build",
-        "DerivedData",
-        "Pods",
-        "Carthage",
-        "xcuserdata",
-        ".dart_tool",
-        ".pub-cache",
-        ".flutter-plugins",
-        ".flutter-plugins-dependencies",
+        # -- C / C++ -----------------------------------------------------------
         "CMakeFiles",
         "cmake-build-debug",
         "cmake-build-release",
-        "CMakeScripts",
-        "_deps",
         ".ccache",
-        "compile_commands",
-        "build-aux",
         "autom4te.cache",
+        # -- Bazel -------------------------------------------------------------
         "bazel-bin",
         "bazel-out",
         "bazel-testlogs",
         "bazel-genfiles",
         ".bazel",
         "_bazel_cache",
+        # -- Swift / iOS -------------------------------------------------------
+        ".build",
+        "DerivedData",
+        "Pods",
+        "Carthage",
+        "xcuserdata",
+        # -- Dart / Flutter ----------------------------------------------------
+        ".dart_tool",
+        ".pub-cache",
+        ".flutter-plugins",
+        ".flutter-plugins-dependencies",
+        # -- Haskell -----------------------------------------------------------
+        ".stack-work",
+        "dist-newstyle",
+        # -- Elixir ------------------------------------------------------------
+        ".elixir_ls",
+        # -- Zig ---------------------------------------------------------------
+        "zig-cache",
+        "zig-out",
+        # -- R -----------------------------------------------------------------
         "renv",
         "packrat",
         ".Rproj.user",
-        "_build",
-        "deps",
-        ".elixir_ls",
-        ".stack-work",
-        "dist-newstyle",
-        "zig-cache",
-        "zig-out",
+        # -- IDE / Editor ------------------------------------------------------
         ".idea",
         ".vscode",
         ".vs",
         ".eclipse",
-        ".settings",
-        ".project",
-        ".classpath",
         ".fleet",
-        ".devcontainer",
         ".zed",
         ".cursor",
-        ".helix",
-        ".vim",
-        ".nvim",
-        ".emacs.d",
-        ".spyproject",
-        "dist",
-        "build",
-        "out",
-        "target",
-        "output",
-        "release",
-        "debug",
-        "artifacts",
-        "publish",
-        "lib-cov",
-        "_site",
-        "public",
+        # -- Framework build outputs -------------------------------------------
         ".next",
         ".nuxt",
         ".output",
         "storybook-static",
         ".docusaurus",
         ".astro",
-        ".vercel",
-        ".netlify",
-        ".amplify",
-        ".firebase",
-        "htmlcov",
-        ".nyc_output",
-        "coverage",
-        "lcov-report",
-        "test-results",
-        "test-reports",
-        "allure-results",
-        "allure-report",
-        "mochawesome-report",
-        "cypress",
-        "playwright-report",
-        ".playwright",
-        ".cache",
-        ".sass-cache",
-        ".eslintcache",
-        ".stylelintcache",
-        ".prettiercache",
-        ".npm",
-        ".pnpm-store",
+        # -- Infrastructure / deploy -------------------------------------------
         ".terraform",
         ".terragrunt-cache",
         ".serverless",
@@ -184,298 +140,97 @@ SKIP_DIRECTORY_NAMES = frozenset(
         ".pulumi",
         ".vagrant",
         ".molecule",
-        ".docker",
-        "_docs",
-        "site",
-        "javadoc",
-        "apidoc",
-        "typedoc",
-        "doxygen",
-        "mlruns",
-        "wandb",
-        ".dvc",
-        "outputs",
-        "lightning_logs",
-        "checkpoints",
-        "tensorboard_logs",
-        "tb_logs",
-        "runs",
-        "datasets",
-        "data",
-        "tmp",
-        "temp",
-        "logs",
-        "log",
+        ".vercel",
+        ".netlify",
+        ".amplify",
+        ".firebase",
+        # -- Coverage ----------------------------------------------------------
+        "htmlcov",
+        ".nyc_output",
+        # -- Caches ------------------------------------------------------------
+        ".cache",
+        ".sass-cache",
+        ".eslintcache",
+        ".stylelintcache",
+        ".prettiercache",
+        # -- Temp / OS ---------------------------------------------------------
         ".tmp",
         ".temp",
-        "scratch",
         "$RECYCLE.BIN",
         "System Volume Information",
-        ".github",
-        ".gitlab",
-        ".circleci",
-        ".husky",
-        ".changeset",
-        "snap",
-        "fixtures",
-        "third_party",
-        "3rdparty",
-        "external",
-        "generated",
-        "gen",
-        "codegen",
-        "proto",
-        "migrations",
     }
 )
-
-SKIP_FILE_SUFFIXES = frozenset(
-    {
-        ".lock",
-        ".min.js",
-        ".min.css",
-        ".map",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".ico",
-        ".svg",
-        ".bmp",
-        ".webp",
-        ".tiff",
-        ".tif",
-        ".avif",
-        ".heic",
-        ".heif",
-        ".psd",
-        ".ai",
-        ".eps",
-        ".sketch",
-        ".fig",
-        ".xcf",
-        ".raw",
-        ".cr2",
-        ".nef",
-        ".dng",
-        ".icns",
-        ".cur",
-        ".woff",
-        ".woff2",
-        ".ttf",
-        ".eot",
-        ".otf",
-        ".mp3",
-        ".wav",
-        ".ogg",
-        ".flac",
-        ".aac",
-        ".wma",
-        ".m4a",
-        ".opus",
-        ".mid",
-        ".midi",
-        ".mp4",
-        ".avi",
-        ".mov",
-        ".mkv",
-        ".webm",
-        ".wmv",
-        ".flv",
-        ".m4v",
-        ".mpg",
-        ".mpeg",
-        ".3gp",
-        ".ts",
-        ".zip",
-        ".tar",
-        ".gz",
-        ".bz2",
-        ".xz",
-        ".7z",
-        ".rar",
-        ".cab",
-        ".tgz",
-        ".tbz2",
-        ".lz",
-        ".lzma",
-        ".lz4",
-        ".zst",
-        ".zstd",
-        ".iso",
-        ".dmg",
-        ".img",
-        ".deb",
-        ".rpm",
-        ".apk",
-        ".msi",
-        ".pkg",
-        ".cpio",
-        ".ar",
-        ".exe",
-        ".dll",
-        ".so",
-        ".dylib",
-        ".o",
-        ".a",
-        ".obj",
-        ".lib",
-        ".pdb",
-        ".ko",
-        ".elf",
-        ".com",
-        ".sys",
-        ".drv",
-        ".out",
-        ".exp",
-        ".ilk",
-        ".wasm",
-        ".class",
-        ".jar",
-        ".war",
-        ".ear",
-        ".jmod",
-        ".hprof",
-        ".nupkg",
-        ".snupkg",
-        ".suo",
-        ".test",
-        ".rlib",
-        ".rmeta",
-        ".pyc",
-        ".pyo",
-        ".pyd",
-        ".egg",
-        ".egg-info",
-        ".whl",
-        ".gem",
-        ".xcarchive",
-        ".ipa",
-        ".dSYM",
-        ".snap",
-        ".pdf",
-        ".doc",
-        ".docx",
-        ".xls",
-        ".xlsx",
-        ".pptx",
-        ".ppt",
-        ".odt",
-        ".ods",
-        ".odp",
-        ".odg",
-        ".rtf",
-        ".pages",
-        ".numbers",
-        ".keynote",
-        ".epub",
-        ".mobi",
-        ".sqlite",
-        ".sqlite3",
-        ".db",
-        ".mdb",
-        ".accdb",
-        ".dbf",
-        ".ldf",
-        ".mdf",
-        ".frm",
-        ".ibd",
-        ".myd",
-        ".myi",
-        ".rdb",
-        ".dump",
-        ".pkl",
-        ".pickle",
-        ".joblib",
-        ".onnx",
-        ".pt",
-        ".pth",
-        ".safetensors",
-        ".pb",
-        ".tflite",
-        ".mlmodel",
-        ".mlpackage",
-        ".gguf",
-        ".ggml",
-        ".bin",
-        ".npy",
-        ".npz",
-        ".h5",
-        ".hdf5",
-        ".parquet",
-        ".arrow",
-        ".feather",
-        ".orc",
-        ".avro",
-        ".tfrecord",
-        ".recordio",
-        ".idx",
-        ".msgpack",
-        ".bson",
-        ".tmp",
-        ".temp",
-        ".bak",
-        ".orig",
-        ".swp",
-        ".swo",
-        ".swn",
-        ".~",
-        ".log",
-        ".pbix",
-        ".pbit",
-        ".twb",
-        ".twbx",
-        ".tds",
-        ".tdsx",
-        ".qvw",
-        ".qvd",
-        ".pem",
-        ".key",
-        ".crt",
-        ".cer",
-        ".p12",
-        ".pfx",
-        ".jks",
-        ".keystore",
-        ".truststore",
-        ".p7b",
-        ".p7c",
-        ".der",
-        ".vmdk",
-        ".vdi",
-        ".vhd",
-        ".vhdx",
-        ".qcow2",
-        ".ipynb",
-        ".chunk.js",
-        ".bundle.js",
-        ".lcov",
-        ".gcov",
-        ".gcda",
-        ".gcno",
-        ".profraw",
-        ".profdata",
-        ".coverage",
-        ".dat",
-        ".data",
-        ".cache",
-        ".manifest",
-        ".ds_store",
-        ".lnk",
-        ".desktop",
-    }
-)
-
-ENV_FILE_PREFIX = ".env."
-ENV_FILE_NAME = ".env"
 
 
 def should_skip_directory_name(name: str) -> bool:
     return name.casefold() in SKIP_DIRECTORY_NAMES
 
 
-def should_skip_file(path: Path) -> bool:
-    name = path.name.casefold()
-    if name == ENV_FILE_NAME or name.startswith(ENV_FILE_PREFIX):
-        return True
-    return any(name.endswith(suffix) for suffix in SKIP_FILE_SUFFIXES)
+# ---------------------------------------------------------------------------
+# Shared glob matching
+# ---------------------------------------------------------------------------
+
+
+def build_glob_matcher(glob_pattern: str | None) -> Callable[[str, str], bool]:
+    """Return a ``(relative_path, name) -> bool`` predicate for *glob_pattern*.
+
+    When *glob_pattern* is ``None`` or blank the returned matcher accepts
+    everything.
+    """
+    if not isinstance(glob_pattern, str) or not glob_pattern.strip():
+        return lambda relative_path, name: True
+
+    normalized_pattern = glob_pattern.replace("\\", "/").strip()
+    if "/" in normalized_pattern:
+        pattern_parts = tuple(part for part in normalized_pattern.split("/") if part)
+        return lambda relative_path, name: _match_relative_path(
+            relative_path, pattern_parts
+        )
+    return lambda relative_path, name: fnmatch.fnmatch(name, normalized_pattern)
+
+
+def _match_relative_path(
+    relative_path: str, pattern_parts: tuple[str, ...]
+) -> bool:
+    path_parts = tuple(part for part in relative_path.split("/") if part)
+    return _match_path_parts(path_parts, pattern_parts, 0, 0)
+
+
+def _match_path_parts(
+    path_parts: tuple[str, ...],
+    pattern_parts: tuple[str, ...],
+    path_index: int,
+    pattern_index: int,
+) -> bool:
+    while True:
+        if pattern_index == len(pattern_parts):
+            return path_index == len(path_parts)
+
+        pattern_part = pattern_parts[pattern_index]
+        if pattern_part == "**":
+            return _match_globstar(
+                path_parts, pattern_parts, path_index, pattern_index + 1
+            )
+
+        if path_index >= len(path_parts):
+            return False
+
+        if not fnmatch.fnmatchcase(path_parts[path_index], pattern_part):
+            return False
+
+        path_index += 1
+        pattern_index += 1
+
+
+def _match_globstar(
+    path_parts: tuple[str, ...],
+    pattern_parts: tuple[str, ...],
+    path_index: int,
+    next_pattern_index: int,
+) -> bool:
+    for next_path_index in range(path_index, len(path_parts) + 1):
+        if _match_path_parts(
+            path_parts, pattern_parts, next_path_index, next_pattern_index
+        ):
+            return True
+    return False
