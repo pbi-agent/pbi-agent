@@ -182,7 +182,28 @@ def _extract_docx_text(path: Path) -> str:
             f"unable to read docx file: {path.name} is unreadable or corrupt"
         ) from exc
 
-    return "\n".join(paragraph.text for paragraph in document.paragraphs)
+    parts: list[str] = []
+
+    for block in document.iter_inner_content():
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
+
+        if isinstance(block, Paragraph):
+            parts.append(block.text)
+        elif isinstance(block, Table):
+            for row in block.rows:
+                parts.append("\t".join(cell.text for cell in row.cells))
+
+    for section in document.sections:
+        for header_footer in (section.header, section.footer):
+            if header_footer.is_linked_to_previous:
+                continue
+            for paragraph in header_footer.paragraphs:
+                text = paragraph.text.strip()
+                if text:
+                    parts.append(text)
+
+    return "\n".join(parts)
 
 
 def _summarize_dataframe(dataframe: Any) -> dict[str, Any]:

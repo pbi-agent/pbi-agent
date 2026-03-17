@@ -190,6 +190,53 @@ def test_read_file_extracts_docx_text(tmp_path: Path, monkeypatch) -> None:
     }
 
 
+def test_read_file_extracts_docx_tables(tmp_path: Path, monkeypatch) -> None:
+    pytest.importorskip("docx")
+    monkeypatch.chdir(tmp_path)
+
+    from docx import Document
+
+    docx_path = tmp_path / "report.docx"
+    document = Document()
+    document.add_paragraph("Summary")
+    table = document.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "City"
+    table.cell(0, 1).text = "Sales"
+    table.cell(1, 0).text = "Seattle"
+    table.cell(1, 1).text = "100"
+    document.add_paragraph("End")
+    document.save(docx_path)
+
+    result = read_file_tool.handle({"path": "report.docx"}, ToolContext())
+
+    assert result["content"] == "Summary\nCity\tSales\nSeattle\t100\nEnd"
+
+
+def test_read_file_extracts_docx_headers_and_footers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    pytest.importorskip("docx")
+    monkeypatch.chdir(tmp_path)
+
+    from docx import Document
+
+    docx_path = tmp_path / "report.docx"
+    document = Document()
+    section = document.sections[0]
+    section.header.is_linked_to_previous = False
+    section.header.paragraphs[0].text = "Company Inc."
+    section.footer.is_linked_to_previous = False
+    section.footer.paragraphs[0].text = "Page 1"
+    document.add_paragraph("Body text")
+    document.save(docx_path)
+
+    result = read_file_tool.handle({"path": "report.docx"}, ToolContext())
+
+    assert "Body text" in result["content"]
+    assert "Company Inc." in result["content"]
+    assert "Page 1" in result["content"]
+
+
 def test_read_file_does_not_truncate_docx_content(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "report.docx").write_bytes(b"placeholder")
