@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import fnmatch
+import os
 import re
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
+from pbi_agent.tools.workspace_filters import should_skip_directory_name
 from pbi_agent.tools.workspace_access import DEFAULT_MAX_MATCHES
-from pbi_agent.tools.workspace_access import iter_directory_entries
-from pbi_agent.tools.workspace_access import matches_glob
 from pbi_agent.tools.workspace_access import normalize_positive_int
 from pbi_agent.tools.workspace_access import open_text_file
 from pbi_agent.tools.workspace_access import relative_workspace_path
@@ -74,12 +75,14 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     try:
         target_path = resolve_safe_path(root, arguments.get("path"))
         matcher = _build_matcher(pattern, regex_enabled)
+        glob_matcher = _build_glob_matcher(glob_pattern)
         matches: list[dict[str, Any]] = []
-        searched_files = 0
-        skipped_binary_files = 0
 
-        for candidate in _iter_candidate_files(root, target_path, glob_pattern):
-            searched_files += 1
+        for candidate, relative_path in _iter_candidate_files(
+            root,
+            target_path,
+            glob_matcher,
+        ):
             try:
                 with open_text_file(candidate) as text_handle:
                     for line_number, line in enumerate(text_handle, start=1):
@@ -87,7 +90,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                         if not matcher(line_text):
                             continue
                         match = {
-                            "path": relative_workspace_path(root, candidate),
+                            "path": relative_path,
                             "line_number": line_number,
                             "line": line_text,
                         }
@@ -95,29 +98,16 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                         matches.append(bounded_match)
                         if len(matches) >= max_matches:
                             return {
-                                "pattern": pattern,
-                                "path": relative_workspace_path(root, target_path),
-                                "glob": glob_pattern,
-                                "regex": regex_enabled,
                                 "matches": matches,
-                                "searched_files": searched_files,
-                                "skipped_binary_files": skipped_binary_files,
                                 "matches_truncated": True,
                             }
             except ValueError as exc:
                 if str(exc).startswith("binary file is not supported:"):
-                    skipped_binary_files += 1
                     continue
                 raise
 
         return {
-            "pattern": pattern,
-            "path": relative_workspace_path(root, target_path),
-            "glob": glob_pattern,
-            "regex": regex_enabled,
             "matches": matches,
-            "searched_files": searched_files,
-            "skipped_binary_files": skipped_binary_files,
         }
     except Exception as exc:
         return {"error": bound_output(str(exc))[0]}
@@ -134,30 +124,39 @@ def _build_matcher(pattern: str, regex_enabled: bool) -> Any:
 def _iter_candidate_files(
     root: Path,
     target_path: Path,
-    glob_pattern: str | None,
-) -> Iterator[Path]:
+    glob_matcher: Callable[[str, str], bool],
+) -> Iterator[tuple[Path, str]]:
     if not target_path.exists():
         raise FileNotFoundError(f"path not found: {target_path}")
 
     if target_path.is_file():
-        if matches_glob(root, target_path, glob_pattern):
-            yield target_path
+        relative_path = relative_workspace_path(root, target_path)
+        if glob_matcher(relative_path, target_path.name):
+            yield target_path, relative_path
         return
 
     if not target_path.is_dir():
         raise ValueError(f"path is not a regular file or directory: {target_path}")
 
-    for candidate in iter_directory_entries(target_path, recursive=True):
-        resolved_candidate = candidate.resolve(strict=False)
-        try:
-            resolved_candidate.relative_to(root)
-        except ValueError:
-            continue
-        if not resolved_candidate.is_file():
-            continue
-        if not matches_glob(root, resolved_candidate, glob_pattern):
-            continue
-        yield resolved_candidate
+    for current_root, dirnames, filenames in os.walk(
+        target_path,
+        topdown=True,
+        followlinks=False,
+    ):
+        dirnames[:] = [
+            dirname
+            for dirname in sorted(dirnames, key=str.casefold)
+            if not should_skip_directory_name(dirname)
+        ]
+        filenames.sort(key=str.casefold)
+
+        current = Path(current_root)
+        for filename in filenames:
+            candidate = current / filename
+            relative_path = candidate.relative_to(root).as_posix()
+            if not glob_matcher(relative_path, filename):
+                continue
+            yield candidate, relative_path
 
 
 def _bound_match_fields(match: dict[str, Any]) -> dict[str, Any]:
@@ -173,3 +172,57 @@ def _bound_match_fields(match: dict[str, Any]) -> dict[str, Any]:
     if line_truncated:
         payload["line_truncated"] = True
     return payload
+
+
+def _build_glob_matcher(glob_pattern: str | None) -> Callable[[str, str], bool]:
+    if not isinstance(glob_pattern, str) or not glob_pattern.strip():
+        return lambda relative_path, name: True
+
+    normalized_pattern = glob_pattern.replace("\\", "/").strip()
+    if "/" in normalized_pattern:
+        pattern_parts = tuple(part for part in normalized_pattern.split("/") if part)
+        return (
+            lambda relative_path, name: _match_relative_path(relative_path, pattern_parts)
+        )
+    return lambda relative_path, name: fnmatch.fnmatch(name, normalized_pattern)
+
+
+def _match_relative_path(relative_path: str, pattern_parts: tuple[str, ...]) -> bool:
+    path_parts = tuple(part for part in relative_path.split("/") if part)
+    return _match_path_parts(path_parts, pattern_parts, 0, 0)
+
+
+def _match_path_parts(
+    path_parts: tuple[str, ...],
+    pattern_parts: tuple[str, ...],
+    path_index: int,
+    pattern_index: int,
+) -> bool:
+    while True:
+        if pattern_index == len(pattern_parts):
+            return path_index == len(path_parts)
+
+        pattern_part = pattern_parts[pattern_index]
+        if pattern_part == "**":
+            return _match_globstar(path_parts, pattern_parts, path_index, pattern_index + 1)
+
+        if path_index >= len(path_parts):
+            return False
+
+        if not fnmatch.fnmatchcase(path_parts[path_index], pattern_part):
+            return False
+
+        path_index += 1
+        pattern_index += 1
+
+
+def _match_globstar(
+    path_parts: tuple[str, ...],
+    pattern_parts: tuple[str, ...],
+    path_index: int,
+    next_pattern_index: int,
+) -> bool:
+    for next_path_index in range(path_index, len(path_parts) + 1):
+        if _match_path_parts(path_parts, pattern_parts, next_path_index, next_pattern_index):
+            return True
+    return False

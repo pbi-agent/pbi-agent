@@ -25,12 +25,6 @@ def test_search_files_finds_matches_and_skips_binary_files(
         ToolContext(),
     )
 
-    assert result["pattern"] == "needle"
-    assert result["path"] == "notes"
-    assert result["glob"] is None
-    assert result["regex"] is False
-    assert result["searched_files"] == 3
-    assert result["skipped_binary_files"] == 1
     assert result["matches"] == [
         {
             "path": "notes/one.txt",
@@ -93,12 +87,10 @@ def test_search_files_stops_after_max_matches_without_exhausting_candidates(
     first.write_text("needle here\n", encoding="utf-8")
     second.write_text("needle there\n", encoding="utf-8")
 
-    def fake_iter_candidate_files(
-        root: Path, target_path: Path, glob_pattern: str | None
-    ):
-        del root, target_path, glob_pattern
-        yield first
-        yield second
+    def fake_iter_candidate_files(root: Path, target_path: Path, glob_matcher):
+        del root, target_path, glob_matcher
+        yield first, "first.txt"
+        yield second, "second.txt"
 
     @contextmanager
     def fake_open_text_file(path: Path, *, encoding: str = "auto"):
@@ -119,11 +111,64 @@ def test_search_files_stops_after_max_matches_without_exhausting_candidates(
     )
 
     assert result["matches_truncated"] is True
-    assert result["searched_files"] == 1
     assert result["matches"] == [
         {
             "path": "first.txt",
             "line_number": 1,
             "line": "needle here",
+        }
+    ]
+
+
+def test_search_files_does_not_echo_input_parameters(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "one.txt").write_text("needle here\n", encoding="utf-8")
+
+    result = search_files_tool.handle(
+        {
+            "pattern": "needle",
+            "path": "notes",
+            "glob": "*.txt",
+            "regex": False,
+            "max_matches": 20,
+        },
+        ToolContext(),
+    )
+
+    assert "pattern" not in result
+    assert "path" not in result
+    assert "glob" not in result
+    assert "regex" not in result
+    assert "searched_files" not in result
+    assert "skipped_binary_files" not in result
+
+
+def test_search_files_skips_filtered_directories_during_recursive_search(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("needle in src\n", encoding="utf-8")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "ignored.py").write_text(
+        "needle in venv\n",
+        encoding="utf-8",
+    )
+
+    result = search_files_tool.handle(
+        {"pattern": "needle", "path": ".", "glob": "*.py", "max_matches": 10},
+        ToolContext(),
+    )
+
+    assert result["matches"] == [
+        {
+            "path": "src/app.py",
+            "line_number": 1,
+            "line": "needle in src",
         }
     ]
