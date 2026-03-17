@@ -15,7 +15,6 @@ TOOL_STYLE_MAP = {
     "apply_patch": "apply-patch",
     "skill_knowledge": "skill-knowledge",
     "init_report": "init-report",
-    "find_files": "find-files",
     "list_files": "list-files",
     "search_files": "search-files",
     "read_file": "read-file",
@@ -28,7 +27,6 @@ TOOL_ICONS: dict[str, str] = {
     "apply-patch": "\u25a0",  # ■
     "skill-knowledge": "\u25c6",  # ◆
     "init-report": "\u2605",  # ★
-    "find-files": "\U0001f5ce",  # 🗎
     "list-files": "\u2630",  # ☰
     "search-files": "\u2315",  # ⌕
     "read-file": "\u2610",  # ☐
@@ -43,7 +41,6 @@ TOOL_BORDER_STYLES: dict[str, str] = {
     "apply-patch": "#F97316",
     "skill-knowledge": "green",
     "init-report": "cyan",
-    "find-files": "#22C55E",
     "list-files": "#818CF8",
     "search-files": "#EC4899",
     "read-file": "#EAB308",
@@ -343,31 +340,6 @@ def format_init_report_item(
     return "\n".join(lines)
 
 
-def format_find_files_item(
-    path: str,
-    *,
-    verbose: bool = False,
-    status: str,
-    call_id: str = "",
-    recursive: bool = True,
-    glob_pattern: str = "",
-    max_results: int | str = 200,
-) -> str:
-    flags: list[str] = []
-    if recursive:
-        flags.append("recursive")
-    if glob_pattern:
-        flags.append(f"glob={escape_markup_text(shorten(glob_pattern, 40))}")
-    flags.append(f"max={max_results}")
-    flag_str = "  ".join(f"[dim]{f}[/dim]" for f in flags)
-    lines = [
-        f"[#22C55E]\U0001f5ce[/#22C55E] [bold]{escape_markup_text(shorten(path, 96))}[/bold]  {status}",
-        flag_str,
-    ]
-    _append_verbose_call_id(lines, call_id, verbose)
-    return "\n".join(lines)
-
-
 def format_python_exec_item(
     code: str,
     *,
@@ -427,11 +399,17 @@ def format_list_files_item(
     status: str,
     call_id: str = "",
     recursive: bool = True,
+    glob_pattern: str = "",
+    entry_type: str = "all",
     max_entries: int | str = 200,
 ) -> str:
     flags: list[str] = []
     if recursive:
         flags.append("recursive")
+    if glob_pattern:
+        flags.append(f"glob={escape_markup_text(shorten(glob_pattern, 40))}")
+    if entry_type != "all":
+        flags.append(f"type={escape_markup_text(entry_type)}")
     flags.append(f"max={max_entries}")
     flag_str = "  ".join(f"[dim]{f}[/dim]" for f in flags)
     lines = [
@@ -581,17 +559,6 @@ def route_function_result(
             force=bool(args.get("force", False)),
         )
 
-    if name == "find_files":
-        return name, format_find_files_item(
-            str(args.get("path", ".")),
-            verbose=verbose,
-            status=status,
-            call_id=call_id,
-            recursive=bool(args.get("recursive", True)),
-            glob_pattern=str(args.get("glob", "")),
-            max_results=args.get("max_results", 200),
-        )
-
     if name == "python_exec":
         return name, format_python_exec_item(
             str(args.get("code", "")),
@@ -610,6 +577,8 @@ def route_function_result(
             status=status,
             call_id=call_id,
             recursive=bool(args.get("recursive", True)),
+            glob_pattern=str(args.get("glob", "")),
+            entry_type=str(args.get("entry_type", "all")),
             max_entries=args.get("max_entries", 200),
         )
 
@@ -659,7 +628,6 @@ __all__ = [
     "TOOL_ICONS",
     "compact_json",
     "escape_markup_text",
-    "format_find_files_item",
     "format_generic_function_item",
     "format_init_report_item",
     "format_list_files_item",

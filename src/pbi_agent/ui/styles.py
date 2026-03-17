@@ -79,9 +79,6 @@ ToolGroup.tool-group-skill-knowledge {
 ToolGroup.tool-group-init-report {
     border-left: thick #06B6D4;
 }
-ToolGroup.tool-group-find-files {
-    border-left: thick #22C55E;
-}
 ToolGroup.tool-group-list-files {
     border-left: thick #818CF8;
 }
@@ -127,9 +124,6 @@ ToolItem.tool-call-skill-knowledge {
 }
 ToolItem.tool-call-init-report {
     background: #06B6D4 14%;
-}
-ToolItem.tool-call-find-files {
-    background: #22C55E 14%;
 }
 ToolItem.tool-call-list-files {
     background: #818CF8 14%;
