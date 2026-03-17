@@ -12,7 +12,7 @@ All providers expose the same built-in tools through the shared tool registry.
 | Tool | Destructive | Purpose |
 | --- | --- | --- |
 | `shell` | yes | Run a shell command in the workspace and return stdout, stderr, and exit code. |
-| `python_exec` | yes | Run trusted local Python code with the same interpreter/environment as the CLI and optionally capture a structured `result`. |
+| `python_exec` | yes | Run trusted local Python code with the same interpreter/environment as the CLI, including `polars`, `pypdf`, and `python-docx`, and optionally capture a structured `result`. |
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `skill_knowledge` | no | Load bundled Power BI skill markdown from the local knowledge base. |
 | `init_report` | no | Scaffold the bundled PBIP template into a destination directory. |
@@ -69,7 +69,7 @@ Tool output is capped to a bounded result that preserves both the beginning and 
 
 ## `python_exec`
 
-Execute trusted local Python snippets in a subprocess using the same Python interpreter and environment variables as the CLI process.
+Execute trusted local Python snippets in a subprocess using the same Python interpreter and environment variables as the CLI process. This includes installed libraries such as `polars` for data manipulation and `pypdf` plus `python-docx` for PDF or DOCX analysis.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -88,7 +88,7 @@ Execute trusted local Python snippets in a subprocess using the same Python inte
 ```
 
 ::: danger
-`python_exec` is trusted local execution, not a sandbox. Executed code can read and write files the CLI can access, import installed packages from the active Python environment, and make any Python standard-library or package calls available to that interpreter. The subprocess boundary is for runtime stability and timeout enforcement, not for security isolation.
+`python_exec` is trusted local execution, not a sandbox. Executed code can read and write files the CLI can access, import installed packages from the active Python environment, including `polars`, `pypdf`, and `python-docx`, and make any Python standard-library or package calls available to that interpreter. The subprocess boundary is for runtime stability and timeout enforcement, not for security isolation.
 :::
 
 ## `skill_knowledge`

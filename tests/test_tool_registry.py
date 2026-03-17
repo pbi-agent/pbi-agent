@@ -36,3 +36,12 @@ def test_registry_exposes_expected_built_in_tools() -> None:
 def test_registry_returns_none_for_unknown_tool() -> None:
     assert registry.get_tool_handler("missing_tool") is None
     assert registry.get_tool_spec("missing_tool") is None
+
+
+def test_python_exec_tool_description_mentions_installed_analysis_libraries() -> None:
+    spec = registry.get_tool_spec("python_exec")
+
+    assert spec is not None
+    assert "`polars`" in spec.description
+    assert "`pypdf`" in spec.description
+    assert "`python-docx`" in spec.description

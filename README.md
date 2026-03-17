@@ -291,7 +291,7 @@ pbi-agent --provider generic --model z-ai/glm-5
 | Tool | Description |
 | --- | --- |
 | `shell` | Execute shell commands (workspace-confined, blocks path traversal) |
-| `python_exec` | Execute trusted local Python snippets with the same interpreter/environment as the CLI |
+| `python_exec` | Execute trusted local Python snippets with the same interpreter/environment as the CLI, including `polars`, `pypdf`, and `python-docx` |
 | `apply_patch` | Create, update, or delete files via V4A diffs |
 | `skill_knowledge` | Retrieve Power BI knowledge from the bundled skill library (14 topics) |
 | `init_report` | Scaffold the PBIP template into a target directory |
@@ -304,7 +304,7 @@ The agent ships with 14 Power BI skill documents covering visual types, TMDL mod
 ## Security Notes
 
 - The `shell` tool is confined to the active workspace directory and rejects path traversal attempts. Use `pbi-agent run --project-dir <path>` to scope single-turn execution to a specific project folder.
-- The `python_exec` tool runs trusted local Python in a subprocess using the same interpreter/environment as the CLI. It is not a sandbox: executed code can read and write files the CLI can access and import installed packages from the active environment.
+- The `python_exec` tool runs trusted local Python in a subprocess using the same interpreter/environment as the CLI. It is not a sandbox: executed code can read and write files the CLI can access and import installed packages from the active environment, including `polars`, `pypdf`, and `python-docx`.
 - Even with confinement, treat shell execution as powerful. Only run the agent in trusted workspaces.
 - Never commit `.env` files containing API keys to version control.
 

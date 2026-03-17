@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -185,6 +187,54 @@ def test_read_file_extracts_docx_text(tmp_path: Path, monkeypatch) -> None:
     assert result == {
         "path": "report.docx",
         "content": "Quarterly report\nRevenue grew 12%",
+    }
+
+
+def test_read_file_does_not_truncate_docx_content(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "report.docx").write_bytes(b"placeholder")
+    full_text = "Quarterly report\n" + (
+        "Revenue grew 12%. " * read_file_tool.MAX_READ_FILE_OUTPUT_CHARS
+    )
+    monkeypatch.setattr(read_file_tool, "_extract_docx_text", lambda path: full_text)
+
+    result = read_file_tool.handle({"path": "report.docx"}, ToolContext())
+
+    assert result == {
+        "path": "report.docx",
+        "content": full_text,
+    }
+
+
+def test_read_file_does_not_truncate_pdf_content(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    pdf_path = tmp_path / "report.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4")
+    full_text = "Quarterly report\n" + (
+        "Revenue grew 12%. " * read_file_tool.MAX_READ_FILE_OUTPUT_CHARS
+    )
+
+    fake_pypdf = ModuleType("pypdf")
+
+    class FakePdfReader:
+        def __init__(self, path: str) -> None:
+            assert path == str(pdf_path)
+            self.pages = [SimpleNamespace(extract_text=lambda: full_text)]
+            self.metadata = SimpleNamespace(title="Quarterly Report", author="Agent")
+
+    fake_pypdf.PdfReader = FakePdfReader
+    monkeypatch.setitem(sys.modules, "pypdf", fake_pypdf)
+
+    result = read_file_tool.handle({"path": "report.pdf"}, ToolContext())
+
+    assert result == {
+        "path": "report.pdf",
+        "content": full_text,
+        "metadata": {
+            "pages": 1,
+            "title": "Quarterly Report",
+            "author": "Agent",
+        },
     }
 
 

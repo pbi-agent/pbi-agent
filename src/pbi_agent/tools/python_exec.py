@@ -25,8 +25,10 @@ SPEC = ToolSpec(
     description=(
         "Execute trusted local Python code in a subprocess using the same "
         "interpreter and environment as the CLI. Commands run inside the "
-        "workspace directory by default and can optionally return a structured "
-        "top-level `result` value."
+        "workspace directory by default, can use installed packages such as "
+        "`polars` for data manipulation plus `pypdf` and `python-docx` for "
+        "document analysis, and can optionally return a structured top-level "
+        "`result` value."
     ),
     parameters_schema={
         "type": "object",

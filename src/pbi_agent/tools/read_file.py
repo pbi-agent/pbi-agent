@@ -163,16 +163,11 @@ def _handle_excel_workbook(root: Path, target_path: Path) -> dict[str, Any]:
 
 def _handle_docx_file(root: Path, target_path: Path) -> dict[str, Any]:
     full_text = _extract_docx_text(target_path)
-    bounded_text, was_truncated = bound_output(
-        full_text, limit=MAX_READ_FILE_OUTPUT_CHARS
-    )
 
     result: dict[str, Any] = {
         "path": relative_workspace_path(root, target_path),
-        "content": bounded_text,
+        "content": full_text,
     }
-    if was_truncated:
-        result["content_truncated"] = True
     return result
 
 
@@ -526,9 +521,6 @@ def _handle_pdf_file(root: Path, target_path: Path) -> dict[str, Any]:
     reader = PdfReader(str(target_path))
     page_text = [page.extract_text() or "" for page in reader.pages]
     full_text = "\n".join(page_text)
-    bounded_text, was_truncated = bound_output(
-        full_text, limit=MAX_READ_FILE_OUTPUT_CHARS
-    )
 
     metadata: dict[str, Any] = {"pages": len(reader.pages)}
     if reader.metadata:
@@ -539,9 +531,7 @@ def _handle_pdf_file(root: Path, target_path: Path) -> dict[str, Any]:
 
     result: dict[str, Any] = {
         "path": relative_workspace_path(root, target_path),
-        "content": bounded_text,
+        "content": full_text,
         "metadata": metadata,
     }
-    if was_truncated:
-        result["content_truncated"] = True
     return result

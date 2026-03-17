@@ -123,3 +123,9 @@ def test_get_sub_agent_system_prompt_without_agents_md(tmp_path, monkeypatch):
     prompt = get_sub_agent_system_prompt()
     assert prompt == SUB_AGENT_SYSTEM_PROMPT
     assert "<project_rules>" not in prompt
+
+
+def test_system_prompt_mentions_python_exec_data_libraries() -> None:
+    assert "`polars`" in SYSTEM_PROMPT
+    assert "`pypdf`" in SYSTEM_PROMPT
+    assert "`python-docx`" in SYSTEM_PROMPT
