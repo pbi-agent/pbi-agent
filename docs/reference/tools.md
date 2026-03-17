@@ -16,8 +16,7 @@ All providers expose the same built-in tools through the shared tool registry.
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `skill_knowledge` | no | Load bundled Power BI skill markdown from the local knowledge base. |
 | `init_report` | no | Scaffold the bundled PBIP template into a destination directory. |
-| `find_files` | no | Fast file-only glob finder for locating files like `README*`, `*.md`, or `docs/**/*.md`. |
-| `list_files` | no | List files and directories in the workspace, optionally recursively. |
+| `list_files` | no | List files and directories in the workspace, with optional glob and type filtering. |
 | `search_files` | no | Search text file contents for a string or regex pattern. |
 | `read_file` | no | Read a text file with optional line ranges. |
 | `read_web_url` | no | Fetch a public web page through markdown.new and return Markdown. |
@@ -125,40 +124,24 @@ Programmatically scaffold the bundled PBIP template.
 }
 ```
 
-## `find_files`
-
-Locate files by glob pattern without listing directories.
-
-| Parameter | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `glob` | `string` | yes | File glob. Match against the file name unless the pattern includes a path separator. |
-| `path` | `string` | no | Directory or file path relative to the workspace root. Defaults to `"."`. |
-| `recursive` | `boolean` | no | Traverse subdirectories when `true`. Defaults to `true`. |
-| `max_results` | `integer` | no | Maximum number of files to return. Defaults to `200`. |
-
-```json
-{
-  "path": ".",
-  "glob": "README*",
-  "recursive": true,
-  "max_results": 5
-}
-```
-
 ## `list_files`
 
-List directory contents when you need a general workspace inventory instead of a name-based file search.
+List directory contents for general workspace discovery, or narrow results by glob and entry type for targeted lookups.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `path` | `string` | no | Directory or file path relative to the workspace root. Defaults to `"."`. |
 | `recursive` | `boolean` | no | Traverse subdirectories when `true`. Defaults to `true`. |
+| `glob` | `string` | no | Optional glob filter. Match against the entry name unless the pattern includes a path separator. |
+| `entry_type` | `string` | no | One of `all`, `file`, or `directory`. Defaults to `all`. |
 | `max_entries` | `integer` | no | Maximum number of entries to return. Defaults to `200`. |
 
 ```json
 {
   "path": ".",
   "recursive": true,
+  "glob": "docs/**/*.md",
+  "entry_type": "file",
   "max_entries": 50
 }
 ```

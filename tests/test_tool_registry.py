@@ -10,7 +10,6 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "shell",
         "python_exec",
         "apply_patch",
-        "find_files",
         "list_files",
         "search_files",
         "read_file",
