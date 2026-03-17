@@ -22,10 +22,6 @@ def test_list_files_handles_recursive_listing(
         ToolContext(),
     )
 
-    assert result["path"] == "."
-    assert result["recursive"] is True
-    assert result["glob"] is None
-    assert result["entry_type"] == "all"
     assert result["returned_entries"] == 5
     assert result["total_entries"] == 5
     assert result["has_more"] is False
@@ -70,14 +66,36 @@ def test_list_files_supports_file_only_name_globs(
         ToolContext(),
     )
 
-    assert result["glob"] == "README*"
-    assert result["entry_type"] == "file"
     assert result["returned_entries"] == 2
     assert result["total_entries"] == 2
     assert result["entries"] == [
         {"path": "README.md", "type": "file"},
         {"path": "docs/README-guide.md", "type": "file"},
     ]
+
+
+def test_list_files_does_not_echo_input_parameters(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "README.md").write_text("hello\n", encoding="utf-8")
+
+    result = list_files_tool.handle(
+        {
+            "path": ".",
+            "recursive": True,
+            "glob": "README.md",
+            "entry_type": "file",
+            "max_entries": 20,
+        },
+        ToolContext(),
+    )
+
+    assert "path" not in result
+    assert "recursive" not in result
+    assert "glob" not in result
+    assert "entry_type" not in result
 
 
 def test_list_files_supports_relative_path_globs(
@@ -123,6 +141,26 @@ def test_list_files_supports_globstar_for_zero_or_more_path_segments(
         {"path": "docs/guide.md", "type": "file"},
         {"path": "docs/nested/deep.md", "type": "file"},
     ]
+
+
+def test_list_files_skips_filtered_directories_during_recursive_listing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("print('hi')\n", encoding="utf-8")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "ignored.py").write_text("print('skip')\n", encoding="utf-8")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "ignored.pyc").write_bytes(b"cached")
+
+    result = list_files_tool.handle(
+        {"path": ".", "recursive": True, "entry_type": "file", "max_entries": 20},
+        ToolContext(),
+    )
+
+    assert result["entries"] == [{"path": "src/app.py", "type": "file"}]
 
 
 def test_list_files_limits_filtered_results(

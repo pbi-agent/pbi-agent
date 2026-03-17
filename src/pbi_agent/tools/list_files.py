@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import fnmatch
-from functools import lru_cache
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterator
 
 from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
+from pbi_agent.tools.workspace_filters import should_skip_directory_name
 from pbi_agent.tools.workspace_access import DEFAULT_MAX_ENTRIES
-from pbi_agent.tools.workspace_access import iter_directory_entries
 from pbi_agent.tools.workspace_access import normalize_positive_int
 from pbi_agent.tools.workspace_access import relative_workspace_path
 from pbi_agent.tools.workspace_access import resolve_safe_path
@@ -17,7 +17,8 @@ SPEC = ToolSpec(
     name="list_files",
     description=(
         "List files and directories within the workspace, with optional glob and "
-        "type filtering for targeted filename or path lookups."
+        "type filtering for targeted filename or path lookups. Recursive listings "
+        "skip common generated and dependency directories."
     ),
     parameters_schema={
         "type": "object",
@@ -73,6 +74,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             return {
                 "error": "'entry_type' must be one of: all, file, directory."
             }
+        matcher = _build_glob_matcher(glob_pattern)
         max_entries = normalize_positive_int(
             arguments.get("max_entries"),
             default=DEFAULT_MAX_ENTRIES,
@@ -82,22 +84,19 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             return {"error": f"path not found: {target_path}"}
 
         if target_path.is_file():
-            entry = _build_entry(root, target_path)
+            relative_path = relative_workspace_path(root, target_path)
+            entry = _build_entry(relative_path, "file")
             entries: list[dict[str, Any]] = []
-            path_truncated = False
-            if _matches_filters(root, target_path, glob_pattern, entry_type):
+            if _matches_filters(relative_path, target_path.name, "file", matcher, entry_type):
                 entry, path_truncated = _bound_entry_path(entry)
+                if path_truncated:
+                    entry["path_truncated"] = True
                 entries.append(entry)
             return {
-                "path": relative_workspace_path(root, target_path),
-                "recursive": False,
-                "glob": glob_pattern,
-                "entry_type": entry_type,
                 "entries": entries,
                 "returned_entries": len(entries),
                 "total_entries": len(entries),
                 "has_more": False,
-                **({"path_truncated": True} if path_truncated else {}),
             }
 
         if not target_path.is_dir():
@@ -105,28 +104,29 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
 
         matching_entries: list[dict[str, Any]] = []
         entries_truncated = False
-        for candidate in iter_directory_entries(target_path, recursive=bool(recursive)):
-            resolved_candidate = candidate.resolve(strict=False)
-            try:
-                resolved_candidate.relative_to(root)
-            except ValueError:
-                continue
-            if not _matches_filters(root, resolved_candidate, glob_pattern, entry_type):
+        for relative_path, name, candidate_type in _iter_entries(
+            root,
+            target_path,
+            recursive=bool(recursive),
+        ):
+            if not _matches_filters(
+                relative_path,
+                name,
+                candidate_type,
+                matcher,
+                entry_type,
+            ):
                 continue
             if len(matching_entries) >= max_entries:
                 entries_truncated = True
                 break
-            entry = _build_entry(root, resolved_candidate)
+            entry = _build_entry(relative_path, candidate_type)
             bounded_entry, path_truncated = _bound_entry_path(entry)
             if path_truncated:
                 bounded_entry["path_truncated"] = True
             matching_entries.append(bounded_entry)
 
         result: dict[str, Any] = {
-            "path": relative_workspace_path(root, target_path),
-            "recursive": bool(recursive),
-            "glob": glob_pattern,
-            "entry_type": entry_type,
             "entries": matching_entries,
             "returned_entries": len(matching_entries),
             "has_more": entries_truncated,
@@ -140,10 +140,9 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         return {"error": bound_output(str(exc))[0]}
 
 
-def _build_entry(root: Path, path: Path) -> dict[str, Any]:
-    entry_type = "directory" if path.is_dir() else "file"
+def _build_entry(relative_path: str, entry_type: str) -> dict[str, Any]:
     return {
-        "path": relative_workspace_path(root, path),
+        "path": relative_path,
         "type": entry_type,
     }
 
@@ -177,42 +176,49 @@ def _normalize_entry_type(raw_value: Any) -> str | None:
 
 
 def _matches_filters(
-    root: Path,
-    path: Path,
-    glob_pattern: str | None,
+    relative_path: str,
+    name: str,
+    candidate_type: str,
+    matcher: Callable[[str, str], bool],
     entry_type: str,
 ) -> bool:
-    if entry_type == "file" and not path.is_file():
+    if entry_type == "file" and candidate_type != "file":
         return False
-    if entry_type == "directory" and not path.is_dir():
+    if entry_type == "directory" and candidate_type != "directory":
         return False
+    return matcher(relative_path, name)
+
+
+def _build_glob_matcher(glob_pattern: str | None) -> Callable[[str, str], bool]:
     if glob_pattern is None:
-        return True
-    return _matches_glob(root, path, glob_pattern)
+        return lambda relative_path, name: True
 
-
-def _matches_glob(root: Path, path: Path, glob_pattern: str) -> bool:
     normalized_pattern = glob_pattern.replace("\\", "/")
     if "/" in normalized_pattern:
-        return _match_relative_path(relative_workspace_path(root, path), normalized_pattern)
-    return fnmatch.fnmatch(path.name, normalized_pattern)
+        pattern_parts = tuple(part for part in normalized_pattern.split("/") if part)
+        return lambda relative_path, name: _match_relative_path(relative_path, pattern_parts)
+    return lambda relative_path, name: fnmatch.fnmatch(name, normalized_pattern)
 
 
-def _match_relative_path(relative_path: str, glob_pattern: str) -> bool:
+def _match_relative_path(relative_path: str, pattern_parts: tuple[str, ...]) -> bool:
     path_parts = tuple(part for part in relative_path.split("/") if part)
-    pattern_parts = tuple(part for part in glob_pattern.split("/") if part)
 
-    @lru_cache(maxsize=None)
-    def _matches(path_index: int, pattern_index: int) -> bool:
+    return _match_path_parts(path_parts, pattern_parts, 0, 0)
+
+
+def _match_path_parts(
+    path_parts: tuple[str, ...],
+    pattern_parts: tuple[str, ...],
+    path_index: int,
+    pattern_index: int,
+) -> bool:
+    while True:
         if pattern_index == len(pattern_parts):
             return path_index == len(path_parts)
 
         pattern_part = pattern_parts[pattern_index]
         if pattern_part == "**":
-            return _matches(path_index, pattern_index + 1) or (
-                path_index < len(path_parts)
-                and _matches(path_index + 1, pattern_index)
-            )
+            return _match_globstar(path_parts, pattern_parts, path_index, pattern_index + 1)
 
         if path_index >= len(path_parts):
             return False
@@ -220,6 +226,64 @@ def _match_relative_path(relative_path: str, glob_pattern: str) -> bool:
         if not fnmatch.fnmatchcase(path_parts[path_index], pattern_part):
             return False
 
-        return _matches(path_index + 1, pattern_index + 1)
+        path_index += 1
+        pattern_index += 1
 
-    return _matches(0, 0)
+
+def _match_globstar(
+    path_parts: tuple[str, ...],
+    pattern_parts: tuple[str, ...],
+    path_index: int,
+    next_pattern_index: int,
+) -> bool:
+    for next_path_index in range(path_index, len(path_parts) + 1):
+        if _match_path_parts(path_parts, pattern_parts, next_path_index, next_pattern_index):
+            return True
+    return False
+
+
+def _iter_entries(
+    root: Path,
+    target_path: Path,
+    *,
+    recursive: bool,
+) -> Iterator[tuple[str, str, str]]:
+    if not recursive:
+        with os.scandir(target_path) as scan:
+            entries = sorted(scan, key=lambda entry: entry.name.casefold())
+            for entry in entries:
+                candidate_type = _entry_type_from_dir_entry(entry)
+                if candidate_type is None:
+                    continue
+                relative_path = (target_path / entry.name).relative_to(root).as_posix()
+                yield relative_path, entry.name, candidate_type
+        return
+
+    for current_root, dirnames, filenames in os.walk(
+        target_path,
+        topdown=True,
+        followlinks=False,
+    ):
+        dirnames[:] = [
+            dirname
+            for dirname in sorted(dirnames, key=str.casefold)
+            if not should_skip_directory_name(dirname)
+        ]
+        filenames.sort(key=str.casefold)
+        current = Path(current_root)
+
+        for dirname in dirnames:
+            relative_path = (current / dirname).relative_to(root).as_posix()
+            yield relative_path, dirname, "directory"
+
+        for filename in filenames:
+            relative_path = (current / filename).relative_to(root).as_posix()
+            yield relative_path, filename, "file"
+
+
+def _entry_type_from_dir_entry(entry: os.DirEntry[str]) -> str | None:
+    if entry.is_dir(follow_symlinks=False):
+        return "directory"
+    if entry.is_file(follow_symlinks=False):
+        return "file"
+    return None

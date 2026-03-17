@@ -126,7 +126,7 @@ Programmatically scaffold the bundled PBIP template.
 
 ## `list_files`
 
-List directory contents for general workspace discovery, or narrow results by glob and entry type for targeted lookups.
+List directory contents for general workspace discovery, or narrow results by glob and entry type for targeted lookups. Recursive listings skip common generated and dependency directories such as `.git`, `.venv`, `node_modules`, and caches.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
