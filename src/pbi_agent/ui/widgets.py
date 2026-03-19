@@ -168,12 +168,12 @@ class SessionSidebar(Vertical):
 
 
 class ChatInput(TextArea):
-    """Multiline input that auto-grows and submits on Ctrl+S or Ctrl+Enter."""
+    """Multiline input that auto-grows and submits on Ctrl+S."""
 
     BASE_HEIGHT = 3
     MAX_HEIGHT = 20
     _CHROME_HEIGHT = 2
-    _SUBMIT_KEYS = {"ctrl+s", "ctrl+enter"}
+    _SUBMIT_KEYS = {"ctrl+s"}
 
     @dataclass
     class Submitted(Message):

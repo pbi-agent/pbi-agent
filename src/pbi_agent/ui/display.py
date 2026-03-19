@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from textual.widgets import Static
 
 from pbi_agent.models.messages import TokenUsage
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.ui.display_protocol import DisplayProtocol, PendingToolGroup
 from pbi_agent.ui.formatting import (
     REDACTED_THINKING_NOTICE,
@@ -441,6 +442,13 @@ class Display(DisplayProtocol):
                 f"[dim]{message}[/dim]",
                 classes="debug-msg",
             )
+
+    def replay_history(self, messages: list[MessageRecord]) -> None:
+        for msg in messages:
+            if msg.role == "user":
+                self._safe_call(self.app.add_user_message, msg.content)
+            elif msg.role == "assistant":
+                self._mount_markdown("history", msg.content)
 
 
 __all__ = ["Display"]

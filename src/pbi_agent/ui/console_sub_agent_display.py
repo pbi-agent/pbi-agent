@@ -10,6 +10,7 @@ from rich.text import Text
 from rich.tree import Tree
 
 from pbi_agent.models.messages import TokenUsage
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.ui.display_protocol import DisplayProtocol, PendingToolGroup
 from pbi_agent.ui.formatting import (
     REDACTED_THINKING_NOTICE,
@@ -304,3 +305,6 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
     def debug(self, message: str) -> None:
         if self.verbose:
             self.parent._console.print(f"[dim]{escape_markup_text(message)}[/dim]")
+
+    def replay_history(self, messages: list[MessageRecord]) -> None:
+        del messages

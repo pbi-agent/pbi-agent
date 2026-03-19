@@ -11,6 +11,7 @@ from rich.text import Text
 from rich.tree import Tree
 
 from pbi_agent.models.messages import TokenUsage
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.ui.display_protocol import DisplayProtocol, PendingToolGroup
 from pbi_agent.ui.formatting import (
     REDACTED_THINKING_NOTICE,
@@ -372,6 +373,21 @@ class ConsoleDisplay(DisplayProtocol):
     def debug(self, message: str) -> None:
         if self.verbose:
             self._console.print(f"[dim]{escape_markup_text(message)}[/dim]")
+
+    def replay_history(self, messages: list[MessageRecord]) -> None:
+        for msg in messages:
+            if msg.role == "user":
+                self._console.print(
+                    Panel(
+                        escape_markup_text(msg.content),
+                        title="[bold]You[/bold]",
+                        title_align="left",
+                        border_style="blue",
+                        padding=(0, 1),
+                    )
+                )
+            elif msg.role == "assistant":
+                self._console.print(Markdown(msg.content))
 
 
 __all__ = ["ConsoleDisplay"]

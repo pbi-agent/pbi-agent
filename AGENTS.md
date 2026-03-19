@@ -82,3 +82,4 @@ Precedence: CLI flags > `PBI_AGENT_*` env vars > provider-specific env vars (e.g
 - Workspace confinement: `shell` tool rejects path traversal; all file tools validate paths against workspace boundaries.
 - `python_exec` runs trusted local Python — it is not a sandbox.
 - `uvx ruff check .`, `uvx ruff format --check .`, and `uv run pytest` must all pass before merging.
+- **No migration or backward-compatibility logic.** The project is in early development — do not add schema migrations, version checks, deprecation shims, or any other backward-compatibility code. When something changes, just change it directly.

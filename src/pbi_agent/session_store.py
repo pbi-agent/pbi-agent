@@ -31,14 +31,16 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_directory ON sessions(directory);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
-"""
 
-_MIGRATION_COLUMNS = [
-    ("total_tokens", "INTEGER NOT NULL DEFAULT 0"),
-    ("input_tokens", "INTEGER NOT NULL DEFAULT 0"),
-    ("output_tokens", "INTEGER NOT NULL DEFAULT 0"),
-    ("cost_usd", "REAL NOT NULL DEFAULT 0.0"),
-]
+CREATE TABLE IF NOT EXISTS messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT NOT NULL REFERENCES sessions(session_id),
+    role        TEXT NOT NULL,
+    content     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, id);
+"""
 
 
 @dataclass(slots=True)
@@ -55,6 +57,15 @@ class SessionRecord:
     cost_usd: float
     created_at: str
     updated_at: str
+
+
+@dataclass(slots=True)
+class MessageRecord:
+    id: int
+    session_id: str
+    role: str
+    content: str
+    created_at: str
 
 
 def _db_path() -> Path:
@@ -82,7 +93,6 @@ class SessionStore:
         self._lock = threading.Lock()
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
-        self._migrate()
 
     def __enter__(self) -> SessionStore:
         return self
@@ -92,19 +102,6 @@ class SessionStore:
 
     def close(self) -> None:
         self._conn.close()
-
-    def _migrate(self) -> None:
-        """Add columns that may be missing in older databases."""
-        existing = {
-            row[1]
-            for row in self._conn.execute("PRAGMA table_info(sessions)").fetchall()
-        }
-        for col_name, col_def in _MIGRATION_COLUMNS:
-            if col_name not in existing:
-                self._conn.execute(
-                    f"ALTER TABLE sessions ADD COLUMN {col_name} {col_def}"
-                )
-        self._conn.commit()
 
     def create_session(
         self,
@@ -180,3 +177,23 @@ class SessionStore:
             (limit,),
         ).fetchall()
         return [SessionRecord(**dict(r)) for r in rows]
+
+    def add_message(
+        self, session_id: str, role: str, content: str,
+    ) -> int:
+        now = _now_iso()
+        with self._lock:
+            cursor = self._conn.execute(
+                "INSERT INTO messages (session_id, role, content, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (session_id, role, content, now),
+            )
+            self._conn.commit()
+        return cursor.lastrowid  # type: ignore[return-value]
+
+    def list_messages(self, session_id: str) -> list[MessageRecord]:
+        rows = self._conn.execute(
+            "SELECT * FROM messages WHERE session_id = ? ORDER BY id ASC",
+            (session_id,),
+        ).fetchall()
+        return [MessageRecord(**dict(r)) for r in rows]

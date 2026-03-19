@@ -67,8 +67,11 @@ def run_single_turn(
         rec = store.get_session(resume_session_id)
         if rec and rec.previous_id:
             provider.set_previous_response_id(rec.previous_id)
+        _restore_session_usage(store, resume_session_id, session_usage, display)
+        _replay_session_history(store, resume_session_id, display)
 
     with provider:
+        _add_message(store, session_id, "user", prompt)
         response = provider.request_turn(
             user_message=prompt,
             display=display,
@@ -83,6 +86,7 @@ def run_single_turn(
             session_usage=session_usage,
             turn_usage=turn_usage,
         )
+        _add_message(store, session_id, "assistant", response.text)
         _update_session_after_turn(store, session_id, response.response_id, session_usage)
         elapsed = time.monotonic() - session_start
         display.turn_usage(turn_usage, elapsed)
@@ -102,9 +106,8 @@ def run_chat_loop(
     resume_session_id: str | None = None,
 ) -> int:
     model = _selected_model(settings)
-    store, session_id = _open_session_store(
-        settings, resume_session_id=resume_session_id,
-    )
+    store = _open_store(settings)
+    session_id: str | None = resume_session_id
     title_set = bool(resume_session_id)
 
     def _reset_session(*, clear_display: bool = False) -> TokenUsage:
@@ -127,6 +130,8 @@ def run_chat_loop(
         rec = store.get_session(resume_session_id)
         if rec and rec.previous_id:
             provider.set_previous_response_id(rec.previous_id)
+        _restore_session_usage(store, resume_session_id, session_usage, display)
+        _replay_session_history(store, resume_session_id, display)
 
     with provider:
         while True:
@@ -135,7 +140,7 @@ def run_chat_loop(
                 provider.reset_conversation()
                 session_usage = _reset_session(clear_display=True)
                 had_tool_errors = False
-                store, session_id = _open_session_store(settings)
+                session_id = None
                 title_set = False
                 continue
             if user_input.startswith(RESUME_SESSION_PREFIX):
@@ -149,16 +154,24 @@ def run_chat_loop(
                         provider.set_previous_response_id(rec.previous_id)
                     session_id = resume_id
                     title_set = True
+                    _restore_session_usage(store, resume_id, session_usage, display)
+                    _replay_session_history(store, resume_id, display)
                 continue
             if user_input.lower() in {"exit", "quit"}:
                 break
             if not user_input:
                 continue
 
-            if not title_set:
+            if session_id is None:
+                session_id = _create_session(
+                    store, settings, title=user_input[:80],
+                )
+                title_set = True
+            elif not title_set:
                 _update_session_title(store, session_id, user_input[:80])
                 title_set = True
 
+            _add_message(store, session_id, "user", user_input)
             turn_start = time.monotonic()
             turn_usage = TokenUsage(model=model)
             display.assistant_start()
@@ -177,6 +190,7 @@ def run_chat_loop(
                 turn_usage=turn_usage,
             )
 
+            _add_message(store, session_id, "assistant", response.text)
             _update_session_after_turn(store, session_id, response.response_id, session_usage)
             had_tool_errors = had_tool_errors or loop_had_errors
             elapsed = time.monotonic() - turn_start
@@ -357,26 +371,47 @@ def _raise_if_sub_agent_timed_out(
 # ---------------------------------------------------------------------------
 
 
+def _open_store(settings: Settings) -> SessionStore | None:
+    try:
+        return SessionStore()
+    except Exception:
+        _log.warning("Failed to open session store", exc_info=True)
+        return None
+
+
+def _create_session(
+    store: SessionStore | None,
+    settings: Settings,
+    *,
+    title: str = "",
+) -> str | None:
+    if store is None:
+        return None
+    try:
+        return store.create_session(
+            directory=os.getcwd(),
+            provider=settings.provider,
+            model=settings.model,
+            title=title,
+        )
+    except Exception:
+        _log.warning("Failed to create session", exc_info=True)
+        return None
+
+
 def _open_session_store(
     settings: Settings,
     *,
     resume_session_id: str | None = None,
     title: str = "",
 ) -> tuple[SessionStore | None, str | None]:
-    try:
-        store = SessionStore()
-        if resume_session_id:
-            return store, resume_session_id
-        sid = store.create_session(
-            directory=os.getcwd(),
-            provider=settings.provider,
-            model=settings.model,
-            title=title,
-        )
-        return store, sid
-    except Exception:
-        _log.warning("Failed to open session store", exc_info=True)
+    store = _open_store(settings)
+    if store is None:
         return None, None
+    if resume_session_id:
+        return store, resume_session_id
+    sid = _create_session(store, settings, title=title)
+    return store, sid
 
 
 def _update_session_after_turn(
@@ -410,6 +445,52 @@ def _update_session_title(
         store.update_session(session_id, title=title)
     except Exception:
         _log.warning("Failed to update session title", exc_info=True)
+
+
+def _add_message(
+    store: SessionStore | None, session_id: str | None, role: str, content: str,
+) -> None:
+    if store is None or session_id is None:
+        return
+    try:
+        store.add_message(session_id, role, content)
+    except Exception:
+        _log.warning("Failed to add message to session store", exc_info=True)
+
+
+def _restore_session_usage(
+    store: SessionStore | None,
+    session_id: str | None,
+    session_usage: TokenUsage,
+    display: DisplayProtocol,
+) -> None:
+    if store is None or session_id is None:
+        return
+    try:
+        rec = store.get_session(session_id)
+        if rec and (rec.input_tokens or rec.output_tokens):
+            session_usage.add(TokenUsage(
+                input_tokens=rec.input_tokens,
+                output_tokens=rec.output_tokens,
+                provider_total_tokens=rec.total_tokens,
+                model=session_usage.model,
+            ))
+            display.session_usage(session_usage)
+    except Exception:
+        _log.warning("Failed to restore session usage", exc_info=True)
+
+
+def _replay_session_history(
+    store: SessionStore | None, session_id: str | None, display: DisplayProtocol,
+) -> None:
+    if store is None or session_id is None:
+        return
+    try:
+        messages = store.list_messages(session_id)
+        if messages:
+            display.replay_history(messages)
+    except Exception:
+        _log.warning("Failed to replay session history", exc_info=True)
 
 
 def _close_store(store: SessionStore | None) -> None:

@@ -139,3 +139,50 @@ def test_usage_accumulates_across_updates(tmp_path) -> None:
     # The store overwrites (not accumulates) — session.py passes cumulative session_usage
     assert rec.total_tokens == 300
     assert rec.cost_usd == pytest.approx(0.03)
+
+
+def test_add_and_list_messages(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session("/w", "openai", "gpt-5", "msg test")
+        store.add_message(sid, "user", "Hello")
+        store.add_message(sid, "assistant", "Hi there!")
+        store.add_message(sid, "user", "How are you?")
+
+        msgs = store.list_messages(sid)
+
+    assert len(msgs) == 3
+    assert msgs[0].role == "user"
+    assert msgs[0].content == "Hello"
+    assert msgs[1].role == "assistant"
+    assert msgs[1].content == "Hi there!"
+    assert msgs[2].role == "user"
+    assert msgs[2].content == "How are you?"
+    # Ordered by id ASC
+    assert msgs[0].id < msgs[1].id < msgs[2].id
+
+
+def test_messages_scoped_to_session(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        s1 = store.create_session("/w", "openai", "gpt-5", "s1")
+        s2 = store.create_session("/w", "openai", "gpt-5", "s2")
+        store.add_message(s1, "user", "msg for s1")
+        store.add_message(s2, "user", "msg for s2")
+        store.add_message(s2, "assistant", "reply for s2")
+
+        msgs1 = store.list_messages(s1)
+        msgs2 = store.list_messages(s2)
+
+    assert len(msgs1) == 1
+    assert msgs1[0].content == "msg for s1"
+    assert len(msgs2) == 2
+
+
+def test_list_messages_empty_session(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session("/w", "openai", "gpt-5", "empty")
+        msgs = store.list_messages(sid)
+
+    assert msgs == []

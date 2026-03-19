@@ -42,6 +42,9 @@ class _DisplaySpy:
     def reset_chat(self) -> None:
         self.reset_chat_calls += 1
 
+    def replay_history(self, messages) -> None:
+        pass
+
     def begin_sub_agent(
         self,
         *,
