@@ -5,6 +5,15 @@ Screen {
     background: $surface;
 }
 
+/* ---- layout ---- */
+#chat-body {
+    height: 1fr;
+}
+#chat-main {
+    width: 1fr;
+    height: 1fr;
+}
+
 /* ---- chat log ---- */
 #chat-log {
     height: 1fr;
@@ -219,6 +228,28 @@ NoticeMessage {
 .debug-msg {
     color: $text-muted;
     margin: 0 4;
+}
+
+/* ---- session sidebar ---- */
+#session-sidebar {
+    width: 30;
+    height: 1fr;
+    background: $boost;
+    border-right: thick $primary;
+    display: none;
+    overflow-y: auto;
+}
+#session-sidebar.visible {
+    display: block;
+}
+.session-list-item {
+    padding: 1 1;
+    margin: 0 0 1 0;
+    background: $surface;
+}
+.session-list-item:hover {
+    background: $primary 15%;
+    border-left: thick $accent;
 }
 
 /* ---- input ---- */

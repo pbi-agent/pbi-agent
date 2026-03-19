@@ -8,6 +8,7 @@ from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import DEFAULT_GENERIC_API_URL, DEFAULT_MAX_TOKENS, Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.generic_provider import GenericProvider
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.types import ToolResult
 
 
@@ -230,6 +231,83 @@ def test_generic_request_turn_preserves_history_and_tool_results(
     assert display_spy.session_usage_snapshots[-1].input_tokens == 22
     assert display_spy.session_usage_snapshots[-1].output_tokens == 7
     assert display_spy.session_usage_snapshots[-1].reasoning_tokens == 1
+
+
+def test_generic_restore_messages_reuses_persisted_history(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return make_http_response(
+            {
+                "id": "chatcmpl_3",
+                "model": "openrouter/auto",
+                "usage": {
+                    "prompt_tokens": 11,
+                    "completion_tokens": 4,
+                    "completion_tokens_details": {"reasoning_tokens": 0},
+                },
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Follow-up answer.",
+                        }
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GenericProvider(_make_settings())
+    provider.restore_messages(
+        [
+            MessageRecord(
+                id=1,
+                session_id="session-1",
+                role="user",
+                content="Original question",
+                created_at="2026-03-19T10:00:00+00:00",
+            ),
+            MessageRecord(
+                id=2,
+                session_id="session-1",
+                role="assistant",
+                content="Original answer",
+                created_at="2026-03-19T10:00:01+00:00",
+            ),
+        ]
+    )
+
+    provider.request_turn(
+        user_message="Follow-up question",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert requests[0] == {
+        "messages": [
+            {"role": "system", "content": get_system_prompt()},
+            {"role": "user", "content": "Original question"},
+            {"role": "assistant", "content": "Original answer"},
+            {"role": "user", "content": "Follow-up question"},
+        ],
+        "max_tokens": DEFAULT_MAX_TOKENS,
+        "tools": provider._tools,
+        "tool_choice": "auto",
+    }
+    assert display_spy.markdown_calls == ["Follow-up answer."]
 
 
 def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(

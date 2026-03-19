@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import os
+
+import pytest
+
 from pbi_agent.agent.session import NEW_CHAT_SENTINEL, run_chat_loop, run_single_turn
 from pbi_agent.config import DEFAULT_MODEL, Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
+from pbi_agent.session_store import SessionStore
 
 
 class _DisplaySpy:
@@ -41,6 +46,9 @@ class _DisplaySpy:
 
     def reset_chat(self) -> None:
         self.reset_chat_calls += 1
+
+    def replay_history(self, messages) -> None:
+        pass
 
     def begin_sub_agent(
         self,
@@ -291,3 +299,51 @@ def test_run_chat_loop_resets_welcome_and_usage_on_new_chat(monkeypatch) -> None
     assert [usage.total_tokens for usage in display.session_usage_calls] == [0, 3, 0, 3]
     assert display.reset_chat_calls == 1
     assert display.assistant_start_calls == 2
+
+
+def test_run_chat_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> None:
+    class _FailingProvider:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def reset_conversation(self) -> None:
+            return None
+
+        def request_turn(
+            self,
+            *,
+            user_message: str | None = None,
+            tool_result_items: list[dict[str, object]] | None = None,
+            instructions: str | None = None,
+            display,
+            session_usage: TokenUsage,
+            turn_usage: TokenUsage,
+        ) -> CompletedResponse:
+            del (
+                user_message,
+                tool_result_items,
+                instructions,
+                display,
+                session_usage,
+                turn_usage,
+            )
+            raise RuntimeError("boom")
+
+    display = _ChatDisplaySpy(["hello"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.create_provider",
+        lambda runtime_settings: _FailingProvider(),
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        run_chat_loop(settings, display)
+
+    with SessionStore() as store:
+        sessions = store.list_sessions(os.getcwd(), limit=10)
+        assert len(sessions) == 1
+        assert store.list_messages(sessions[0].session_id) == []

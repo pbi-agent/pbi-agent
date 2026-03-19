@@ -22,6 +22,8 @@ from pbi_agent.ui.styles import CHAT_APP_CSS
 from pbi_agent.ui.widgets import (
     AssistantMarkdown,
     ChatInput,
+    SessionListItem,
+    SessionSidebar,
     ThinkingBlock,
     ThinkingContent,
     SubAgentBlock,
@@ -44,6 +46,7 @@ class ChatApp(App):
     CSS = CHAT_APP_CSS
     BINDINGS = [
         Binding("ctrl+r", "new_chat", "New Chat", show=True),
+        Binding("ctrl+b", "toggle_sidebar", "Sessions", show=True),
         Binding("ctrl+q", "quit", "Quit", show=True),
         Binding("ctrl+c", "quit", "Quit", show=False),
     ]
@@ -57,6 +60,7 @@ class ChatApp(App):
         prompt: str | None = None,
         audit_report_dir: Path | None = None,
         single_turn_hint: str | None = None,
+        resume_session_id: str | None = None,
     ) -> None:
         super().__init__()
         self._settings = settings
@@ -70,19 +74,27 @@ class ChatApp(App):
         self._prompt = prompt
         self._audit_report_dir = audit_report_dir
         self._single_turn_hint = single_turn_hint
+        self._resume_session_id = resume_session_id
         self._bridge: Display | None = None
         self.exit_code: int = 0
         self.fatal_error_message: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield VerticalScroll(id="chat-log")
-        yield Vertical(id="status-row")
+        yield Horizontal(
+            SessionSidebar(id="session-sidebar"),
+            Vertical(
+                VerticalScroll(id="chat-log"),
+                Vertical(id="status-row"),
+                id="chat-main",
+            ),
+            id="chat-body",
+        )
         yield Horizontal(
             ChatInput(
                 placeholder=(
                     "Type your message\u2026  "
-                    "(Enter: newline, Ctrl+Enter/Ctrl+S: send, Ctrl+Q: quit)"
+                    "(Enter: newline, Ctrl+S: send, Ctrl+Q: quit)"
                 ),
                 id="user-input",
                 disabled=True,
@@ -153,7 +165,11 @@ class ChatApp(App):
         from pbi_agent.agent.session import run_chat_loop
 
         if self._mode == "chat":
-            return run_chat_loop(self._settings, display)
+            return run_chat_loop(
+                self._settings,
+                display,
+                resume_session_id=self._resume_session_id,
+            )
         if self._mode == "audit":
             self._prepare_audit_mode()
         if self._mode in {"run", "audit"}:
@@ -333,6 +349,42 @@ class ChatApp(App):
     async def action_new_chat(self) -> None:
         if self._bridge is not None:
             self._bridge.request_new_chat()
+
+    async def action_toggle_sidebar(self) -> None:
+        sidebar = self.query_one("#session-sidebar", SessionSidebar)
+        if sidebar.has_class("visible"):
+            sidebar.remove_class("visible")
+        else:
+            sidebar.add_class("visible")
+            self._populate_sidebar(sidebar)
+
+    def _populate_sidebar(self, sidebar: SessionSidebar) -> None:
+        try:
+            from pbi_agent.session_store import SessionStore
+
+            with SessionStore() as store:
+                sessions = store.list_sessions(
+                    os.getcwd(),
+                    limit=30,
+                    provider=self._settings.provider,
+                )
+            items = []
+            for s in sessions:
+                title = s.title or "(untitled)"
+                if len(title) > 24:
+                    title = title[:21] + "..."
+                updated = s.updated_at[:10]
+                items.append(
+                    (s.session_id, f"{title}\n[dim]{s.provider} · {updated}[/dim]")
+                )
+            sidebar.refresh_sessions(items)
+        except Exception:
+            _log.debug("Failed to populate session sidebar", exc_info=True)
+
+    @on(SessionListItem.Clicked)
+    def handle_session_clicked(self, event: SessionListItem.Clicked) -> None:
+        if self._bridge is not None:
+            self._bridge.request_resume_session(event.session_id)
 
     async def action_quit(self) -> None:
         if self._bridge is not None:

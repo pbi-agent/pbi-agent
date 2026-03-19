@@ -14,6 +14,7 @@ from pbi_agent.config import (
 )
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
 from pbi_agent.providers.anthropic_provider import ANTHROPIC_API_URL, AnthropicProvider
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.types import ToolResult
 
 
@@ -185,6 +186,76 @@ def test_anthropic_request_turn_preserves_history_and_wraps_tool_results(
     assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 3
     assert display_spy.session_usage_snapshots[-1].cache_write_tokens == 3
     assert display_spy.session_usage_snapshots[-1].cache_write_1h_tokens == 2
+
+
+def test_anthropic_restore_messages_reuses_persisted_history(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return make_http_response(
+            {
+                "id": "msg_3",
+                "content": [{"type": "text", "text": "Follow-up answer."}],
+                "usage": {
+                    "input_tokens": 8,
+                    "output_tokens": 3,
+                },
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = AnthropicProvider(_make_settings())
+    provider.restore_messages(
+        [
+            MessageRecord(
+                id=1,
+                session_id="session-1",
+                role="user",
+                content="Original question",
+                created_at="2026-03-19T10:00:00+00:00",
+            ),
+            MessageRecord(
+                id=2,
+                session_id="session-1",
+                role="assistant",
+                content="Original answer",
+                created_at="2026-03-19T10:00:01+00:00",
+            ),
+        ]
+    )
+
+    provider.request_turn(
+        user_message="Follow-up question",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert requests[0]["messages"] == [
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "Original question"}],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Original answer"}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "text", "text": "Follow-up question"}],
+        },
+    ]
 
 
 def test_anthropic_execute_tool_calls_returns_tool_result_blocks(

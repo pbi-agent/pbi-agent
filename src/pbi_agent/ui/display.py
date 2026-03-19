@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from textual.widgets import Static
 
 from pbi_agent.models.messages import TokenUsage
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.ui.display_protocol import DisplayProtocol, PendingToolGroup
 from pbi_agent.ui.formatting import (
     REDACTED_THINKING_NOTICE,
@@ -133,6 +134,12 @@ class Display(DisplayProtocol):
         from pbi_agent.agent.session import NEW_CHAT_SENTINEL
 
         self._input_queue.put(NEW_CHAT_SENTINEL)
+        self._input_event.set()
+
+    def request_resume_session(self, session_id: str) -> None:
+        from pbi_agent.agent.session import RESUME_SESSION_PREFIX
+
+        self._input_queue.put(f"{RESUME_SESSION_PREFIX}{session_id}")
         self._input_event.set()
 
     def reset_chat(self) -> None:
@@ -435,6 +442,13 @@ class Display(DisplayProtocol):
                 f"[dim]{message}[/dim]",
                 classes="debug-msg",
             )
+
+    def replay_history(self, messages: list[MessageRecord]) -> None:
+        for msg in messages:
+            if msg.role == "user":
+                self._safe_call(self.app.add_user_message, msg.content)
+            elif msg.role == "assistant":
+                self._mount_markdown("history", msg.content)
 
 
 __all__ = ["Display"]
