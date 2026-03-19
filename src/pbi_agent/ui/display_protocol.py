@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from pbi_agent.models.messages import TokenUsage
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.ui.formatting import tool_group_class
 
 
@@ -169,6 +170,8 @@ class DisplayProtocol(Protocol):
     def error(self, message: str) -> None: ...
 
     def debug(self, message: str) -> None: ...
+
+    def replay_history(self, messages: list[MessageRecord]) -> None: ...
 
 
 __all__ = ["DisplayProtocol", "PendingToolGroup", "PendingToolGroupItem"]

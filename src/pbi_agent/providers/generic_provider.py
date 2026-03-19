@@ -18,6 +18,7 @@ from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_cal
 from pbi_agent.config import Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
 from pbi_agent.providers.base import Provider
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.registry import get_openai_chat_tool_definitions
 from pbi_agent.tools.types import ToolContext
 from pbi_agent.ui.display_protocol import DisplayProtocol
@@ -56,6 +57,13 @@ class GenericProvider(Provider):
 
     def reset_conversation(self) -> None:
         self._messages.clear()
+
+    def restore_messages(self, messages: list[MessageRecord]) -> None:
+        self._messages = [
+            {"role": message.role, "content": message.content}
+            for message in messages
+            if message.role in {"user", "assistant"} and message.content
+        ]
 
     def request_turn(
         self,

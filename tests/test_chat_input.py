@@ -36,17 +36,6 @@ async def test_ctrl_s_submits() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ctrl_enter_submits() -> None:
-    """Ctrl+Enter should emit ChatInput.Submitted."""
-    app = ChatInputApp()
-    async with app.run_test() as pilot:
-        ci = app.query_one("#ci", ChatInput)
-        ci.insert("hello from ctrl+enter")
-        await pilot.press("ctrl+enter")
-        assert app.submitted_values == ["hello from ctrl+enter"]
-
-
-@pytest.mark.asyncio
 async def test_plain_enter_does_not_submit() -> None:
     """Plain Enter should NOT emit ChatInput.Submitted (it inserts a newline)."""
     app = ChatInputApp()

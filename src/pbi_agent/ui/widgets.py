@@ -137,13 +137,43 @@ class NoticeMessage(Static):
     """Notice/warning message."""
 
 
+class SessionListItem(Static):
+    """A single session entry in the sidebar."""
+
+    @dataclass
+    class Clicked(Message):
+        """Emitted when a session item is clicked."""
+
+        session_id: str
+
+    def __init__(self, session_id: str, text: str, **kwargs: Any) -> None:
+        super().__init__(text, **kwargs)
+        self._session_id = session_id
+
+    def on_click(self) -> None:
+        self.post_message(self.Clicked(session_id=self._session_id))
+
+
+class SessionSidebar(Vertical):
+    """Collapsible sidebar listing past sessions."""
+
+    def refresh_sessions(self, items: list[tuple[str, str]]) -> None:
+        """Replace sidebar content with new session items.
+
+        *items* is a list of ``(session_id, display_text)`` tuples.
+        """
+        self.remove_children()
+        for sid, text in items:
+            self.mount(SessionListItem(sid, text, classes="session-list-item"))
+
+
 class ChatInput(TextArea):
-    """Multiline input that auto-grows and submits on Ctrl+S or Ctrl+Enter."""
+    """Multiline input that auto-grows and submits on Ctrl+S."""
 
     BASE_HEIGHT = 3
     MAX_HEIGHT = 20
     _CHROME_HEIGHT = 2
-    _SUBMIT_KEYS = {"ctrl+s", "ctrl+enter"}
+    _SUBMIT_KEYS = {"ctrl+s"}
 
     @dataclass
     class Submitted(Message):
@@ -192,6 +222,8 @@ __all__ = [
     "ChatInput",
     "ErrorMessage",
     "NoticeMessage",
+    "SessionListItem",
+    "SessionSidebar",
     "SubAgentBlock",
     "ThinkingBlock",
     "ThinkingContent",

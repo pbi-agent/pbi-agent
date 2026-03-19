@@ -5,6 +5,7 @@ from typing import Any
 
 from pbi_agent.config import Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
 
@@ -71,6 +72,14 @@ class Provider(ABC):
     @abstractmethod
     def settings(self) -> Settings:
         """Return the provider runtime settings."""
+
+    # -- session resume -------------------------------------------------------
+
+    def set_previous_response_id(self, response_id: str | None) -> None:
+        """Set conversation continuation ID for session resume. No-op by default."""
+
+    def restore_messages(self, messages: list[MessageRecord]) -> None:
+        """Restore persisted conversation messages for client-side history providers."""
 
     # -- context manager convenience ----------------------------------------
 

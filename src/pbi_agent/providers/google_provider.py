@@ -70,6 +70,9 @@ class GoogleProvider(Provider):
     def settings(self) -> Settings:
         return self._settings
 
+    def set_previous_response_id(self, response_id: str | None) -> None:
+        self._previous_interaction_id = response_id
+
     def connect(self) -> None:
         if not self._settings.api_key:
             raise ValueError(missing_api_key_message("google"))
