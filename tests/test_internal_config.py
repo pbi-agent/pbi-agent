@@ -250,6 +250,7 @@ def test_save_internal_config_persists_by_provider_and_last_used(
             provider="openai",
             responses_url=DEFAULT_RESPONSES_URL,
             model="gpt-5.4-2026-03-05",
+            sub_agent_model="gpt-5.4-mini",
             reasoning_effort="xhigh",
         )
     )
@@ -267,4 +268,5 @@ def test_save_internal_config_persists_by_provider_and_last_used(
 
     assert '"last_used_provider": "xai"' in content
     assert '"openai": {' in content
+    assert '"sub_agent_model": "gpt-5.4-mini"' in content
     assert '"xai": {' in content

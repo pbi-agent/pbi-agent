@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pbi_agent.models.messages import TokenUsage
 from pbi_agent.ui.formatting import format_session_subtitle, format_usage_summary
 
@@ -26,3 +28,23 @@ def test_format_session_subtitle_includes_sub_agent_breakdown() -> None:
     assert "10 tok" in subtitle
     assert "main 7" in subtitle
     assert "sub 3" in subtitle
+
+
+def test_estimated_cost_uses_sub_agent_model_pricing() -> None:
+    usage = TokenUsage(model="gpt-5.4-2026-03-05")
+    usage.add(
+        TokenUsage(
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            model="gpt-5.4-2026-03-05",
+        )
+    )
+    usage.add_sub_agent(
+        TokenUsage(
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            model="gpt-5.3-codex",
+        )
+    )
+
+    assert usage.estimated_cost_usd == pytest.approx(33.25)
