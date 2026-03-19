@@ -135,51 +135,75 @@ class SessionStore:
         output_tokens: int | None = None,
         cost_usd: float | None = None,
     ) -> None:
-        now = _now_iso()
+        clauses: list[str] = []
+        params: list[object] = []
+        if previous_id is not None:
+            clauses.append("previous_id = ?")
+            params.append(previous_id)
+        if title is not None:
+            clauses.append("title = ?")
+            params.append(title)
+        if total_tokens is not None:
+            clauses += [
+                "total_tokens = ?",
+                "input_tokens = ?",
+                "output_tokens = ?",
+                "cost_usd = ?",
+            ]
+            params += [
+                total_tokens,
+                input_tokens or 0,
+                output_tokens or 0,
+                cost_usd or 0.0,
+            ]
+        if not clauses:
+            return
+        clauses.append("updated_at = ?")
+        params.append(_now_iso())
+        params.append(session_id)
+        sql = f"UPDATE sessions SET {', '.join(clauses)} WHERE session_id = ?"
         with self._lock:
-            if previous_id is not None:
-                self._conn.execute(
-                    "UPDATE sessions SET previous_id = ?, updated_at = ? WHERE session_id = ?",
-                    (previous_id, now, session_id),
-                )
-            if title is not None:
-                self._conn.execute(
-                    "UPDATE sessions SET title = ?, updated_at = ? WHERE session_id = ?",
-                    (title, now, session_id),
-                )
-            if total_tokens is not None:
-                self._conn.execute(
-                    "UPDATE sessions SET total_tokens = ?, input_tokens = ?, "
-                    "output_tokens = ?, cost_usd = ?, updated_at = ? WHERE session_id = ?",
-                    (total_tokens, input_tokens or 0, output_tokens or 0,
-                     cost_usd or 0.0, now, session_id),
-                )
+            self._conn.execute(sql, params)
             self._conn.commit()
 
     def get_session(self, session_id: str) -> SessionRecord | None:
-        row = self._conn.execute(
-            "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+            ).fetchone()
         if row is None:
             return None
         return SessionRecord(**dict(row))
 
-    def list_sessions(self, directory: str, limit: int = 20) -> list[SessionRecord]:
-        rows = self._conn.execute(
-            "SELECT * FROM sessions WHERE directory = ? ORDER BY updated_at DESC LIMIT ?",
-            (directory, limit),
-        ).fetchall()
+    def list_sessions(
+        self,
+        directory: str,
+        limit: int = 20,
+        provider: str | None = None,
+    ) -> list[SessionRecord]:
+        if provider:
+            sql = "SELECT * FROM sessions WHERE directory = ? AND provider = ? ORDER BY updated_at DESC LIMIT ?"
+            params: tuple[object, ...] = (directory, provider, limit)
+        else:
+            sql = "SELECT * FROM sessions WHERE directory = ? ORDER BY updated_at DESC LIMIT ?"
+            params = (directory, limit)
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
         return [SessionRecord(**dict(r)) for r in rows]
 
     def list_all_sessions(self, limit: int = 20) -> list[SessionRecord]:
-        rows = self._conn.execute(
-            "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [SessionRecord(**dict(r)) for r in rows]
 
     def add_message(
-        self, session_id: str, role: str, content: str,
+        self,
+        session_id: str,
+        role: str,
+        content: str,
     ) -> int:
         now = _now_iso()
         with self._lock:
@@ -192,8 +216,9 @@ class SessionStore:
         return cursor.lastrowid  # type: ignore[return-value]
 
     def list_messages(self, session_id: str) -> list[MessageRecord]:
-        rows = self._conn.execute(
-            "SELECT * FROM messages WHERE session_id = ? ORDER BY id ASC",
-            (session_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM messages WHERE session_id = ? ORDER BY id ASC",
+                (session_id,),
+            ).fetchall()
         return [MessageRecord(**dict(r)) for r in rows]

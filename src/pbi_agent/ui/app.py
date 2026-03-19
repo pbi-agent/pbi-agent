@@ -363,12 +363,11 @@ class ChatApp(App):
             from pbi_agent.session_store import SessionStore
 
             with SessionStore() as store:
-                sessions = store.list_sessions(os.getcwd(), limit=30)
-            sessions = [
-                session
-                for session in sessions
-                if session.provider == self._settings.provider
-            ]
+                sessions = store.list_sessions(
+                    os.getcwd(),
+                    limit=30,
+                    provider=self._settings.provider,
+                )
             items = []
             for s in sessions:
                 title = s.title or "(untitled)"

@@ -23,6 +23,7 @@ from pbi_agent.config import (
 )
 from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
+from pbi_agent.session_store import SessionRecord
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_COMMAND = "web"
@@ -337,12 +338,12 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_sessions_command(args)
 
     if args.command == "open":
-        session = _load_session_record(args.session_id)
-        if session is None:
+        _open_session = _load_session_record(args.session_id)
+        if _open_session is None:
             return 1
-        args.provider = session.provider
+        args.provider = _open_session.provider
         if not args.model:
-            args.model = session.model
+            args.model = _open_session.model
 
     # ---- resolve settings for interactive/session commands ----
 
@@ -367,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_console_command(settings)
 
     if args.command == "open":
-        return _handle_open_command(args, settings)
+        return _handle_open_command(args, settings, _open_session)
 
     if args.command == "audit":
         return _handle_audit_command(args, settings)
@@ -760,11 +761,11 @@ def _handle_sessions_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_open_command(args: argparse.Namespace, settings: Settings) -> int:
-    session = _load_session_record(args.session_id)
-    if session is None:
-        return 1
-
+def _handle_open_command(
+    args: argparse.Namespace,
+    settings: Settings,
+    session: SessionRecord,
+) -> int:
     from pbi_agent.ui import ChatApp
 
     app = ChatApp(

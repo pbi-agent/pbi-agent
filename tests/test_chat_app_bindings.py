@@ -66,10 +66,13 @@ def test_populate_sidebar_filters_sessions_to_active_provider(monkeypatch) -> No
         def __exit__(self, *_args):
             return None
 
-        def list_sessions(self, directory: str, limit: int = 30):
+        def list_sessions(
+            self, directory: str, limit: int = 30, provider: str | None = None
+        ):
             assert directory == "/workspace"
             assert limit == 30
-            return sessions
+            assert provider == "openai"
+            return [s for s in sessions if s.provider == provider]
 
     class FakeSidebar:
         def __init__(self) -> None:

@@ -474,58 +474,6 @@ def _add_message(
         _log.warning("Failed to add message to session store", exc_info=True)
 
 
-def _restore_session_usage(
-    store: SessionStore | None,
-    session_id: str | None,
-    session_usage: TokenUsage,
-    display: DisplayProtocol,
-) -> None:
-    if store is None or session_id is None:
-        return
-    try:
-        rec = store.get_session(session_id)
-        if rec and (rec.input_tokens or rec.output_tokens):
-            session_usage.add(
-                TokenUsage(
-                    input_tokens=rec.input_tokens,
-                    output_tokens=rec.output_tokens,
-                    provider_total_tokens=rec.total_tokens,
-                    model=session_usage.model,
-                )
-            )
-            display.session_usage(session_usage)
-    except Exception:
-        _log.warning("Failed to restore session usage", exc_info=True)
-
-
-def _restore_provider_history(
-    provider: Any,
-    store: SessionStore | None,
-    session_id: str | None,
-) -> None:
-    if store is None or session_id is None:
-        return
-    try:
-        provider.restore_messages(store.list_messages(session_id))
-    except Exception:
-        _log.warning("Failed to restore provider history", exc_info=True)
-
-
-def _replay_session_history(
-    store: SessionStore | None,
-    session_id: str | None,
-    display: DisplayProtocol,
-) -> None:
-    if store is None or session_id is None:
-        return
-    try:
-        messages = store.list_messages(session_id)
-        if messages:
-            display.replay_history(messages)
-    except Exception:
-        _log.warning("Failed to replay session history", exc_info=True)
-
-
 def _resume_session(
     *,
     provider: Any,
@@ -540,11 +488,25 @@ def _resume_session(
         rec = store.get_session(session_id)
         if rec and rec.previous_id:
             provider.set_previous_response_id(rec.previous_id)
+        if rec and (rec.input_tokens or rec.output_tokens):
+            session_usage.add(
+                TokenUsage(
+                    input_tokens=rec.input_tokens,
+                    output_tokens=rec.output_tokens,
+                    provider_total_tokens=rec.total_tokens,
+                    model=session_usage.model,
+                )
+            )
+            display.session_usage(session_usage)
     except Exception:
-        _log.warning("Failed to restore previous response id", exc_info=True)
-    _restore_provider_history(provider, store, session_id)
-    _restore_session_usage(store, session_id, session_usage, display)
-    _replay_session_history(store, session_id, display)
+        _log.warning("Failed to restore session state", exc_info=True)
+    try:
+        messages = store.list_messages(session_id)
+        if messages:
+            provider.restore_messages(messages)
+            display.replay_history(messages)
+    except Exception:
+        _log.warning("Failed to restore session history", exc_info=True)
 
 
 def _close_store(store: SessionStore | None) -> None:

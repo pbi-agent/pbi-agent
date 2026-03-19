@@ -508,11 +508,13 @@ class DefaultWebCommandTests(unittest.TestCase):
                 rc = cli.main(["open", "--session-id", session_id])
 
         self.assertEqual(rc, 41)
-        args, settings = mock_open.call_args.args
+        args, settings, session = mock_open.call_args.args
         self.assertEqual(args.session_id, session_id)
         self.assertEqual(settings.provider, "xai")
         self.assertEqual(settings.model, "grok-4")
         self.assertEqual(settings.responses_url, DEFAULT_XAI_RESPONSES_URL)
+        self.assertEqual(session.session_id, session_id)
+        self.assertEqual(session.provider, "xai")
 
 
 if __name__ == "__main__":
