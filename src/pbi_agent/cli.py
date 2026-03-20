@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import logging
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -32,14 +33,21 @@ DEFAULT_COMMAND = "web"
 class CleanHelpFormatter(argparse.HelpFormatter):
     """Tune help layout for clearer row-based CLI output."""
 
+    MIN_WIDTH = 100
+    MAX_WIDTH = 120
+    MAX_HELP_POSITION = 42
+
     def __init__(self, prog: str) -> None:
-        super().__init__(prog, max_help_position=36, width=100)
+        terminal_width = shutil.get_terminal_size(fallback=(self.MAX_WIDTH, 24)).columns
+        help_width = min(max(terminal_width, self.MIN_WIDTH), self.MAX_WIDTH)
+        help_position = min(self.MAX_HELP_POSITION, max(30, (help_width // 3) + 2))
+        super().__init__(prog, max_help_position=help_position, width=help_width)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pbi-agent",
-        description="Power BI editing coding agent (foundation v1).",
+        description="Local CLI agent for creating, auditing, and editing Power BI PBIP reports.",
         usage="%(prog)s [GLOBAL OPTIONS] [<command>] [COMMAND OPTIONS]",
         epilog=(
             "Run `pbi-agent <command> --help` for command-specific options. "
@@ -52,12 +60,16 @@ def build_parser() -> argparse.ArgumentParser:
     provider_group.add_argument(
         "--provider",
         choices=["openai", "xai", "google", "anthropic", "generic"],
+        metavar="PROVIDER",
         default=None,
-        help="LLM provider backend (default: openai).",
+        help=(
+            "Provider backend: openai, xai, google, anthropic, or generic "
+            "(default: openai)."
+        ),
     )
     provider_group.add_argument(
         "--responses-url",
-        help="Override the provider HTTP API URL (Responses or Interactions).",
+        help="Override the provider API URL (Responses or Interactions).",
     )
     provider_group.add_argument(
         "--api-key",
@@ -91,18 +103,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     provider_group.add_argument(
         "--generic-api-url",
-        help="Override generic OpenAI-compatible Chat Completions URL.",
+        help="Override the generic OpenAI-compatible Chat Completions URL.",
     )
 
     model_group = parser.add_argument_group("Model behavior")
     model_group.add_argument(
         "--model",
-        help="Override model name for the selected provider; omit for generic provider default routing.",
+        help="Override the provider model; omit this for generic default routing.",
     )
     model_group.add_argument(
         "--sub-agent-model",
         dest="sub_agent_model",
-        help="Override the model used by sub_agent; defaults to --model when unset.",
+        help="Override the sub_agent model; defaults to --model.",
     )
     model_group.add_argument(
         "--max-tokens",
@@ -114,14 +126,16 @@ def build_parser() -> argparse.ArgumentParser:
     model_group.add_argument(
         "--reasoning-effort",
         choices=["low", "medium", "high", "xhigh"],
+        metavar="LEVEL",
         default=None,
-        help="Set model reasoning effort (default: xhigh for OpenAI; high for other providers).",
+        help="Reasoning effort: low, medium, high, or xhigh.",
     )
     model_group.add_argument(
         "--service-tier",
         choices=list(OPENAI_SERVICE_TIERS),
+        metavar="TIER",
         default=None,
-        help="OpenAI service tier for request processing (OpenAI provider only).",
+        help="OpenAI service tier: auto, default, flex, or priority.",
     )
 
     runtime_group = parser.add_argument_group("Runtime and resilience")
@@ -135,9 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-retries",
         type=int,
         default=None,
-        help=(
-            "Maximum retries for transient provider request failures and rate-limit responses."
-        ),
+        help="Maximum retries for transient failures and rate-limit responses.",
     )
     runtime_group.add_argument(
         "--compact-threshold",
@@ -160,11 +172,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="<command>",
     )
 
-    run_parser = subparsers.add_parser(
-        "run",
-        help="Run a single prompt turn.",
-        formatter_class=CleanHelpFormatter,
-    )
+    def add_command_parser(name: str, help_text: str) -> argparse.ArgumentParser:
+        return subparsers.add_parser(
+            name,
+            prog=f"pbi-agent {name}",
+            description=help_text,
+            help=help_text,
+            formatter_class=CleanHelpFormatter,
+        )
+
+    run_parser = add_command_parser("run", "Run a single prompt turn.")
     run_parser.add_argument("--prompt", required=True, help="User prompt.")
     run_parser.add_argument(
         "--project-dir",
@@ -173,16 +190,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Relative project directory to scope tool execution to (default: current directory).",
     )
 
-    subparsers.add_parser(
-        "console",
-        help="Run an interactive terminal session.",
-        formatter_class=CleanHelpFormatter,
-    )
-    web_parser = subparsers.add_parser(
-        "web",
-        help="Serve the browser interface via textual serve.",
-        formatter_class=CleanHelpFormatter,
-    )
+    add_command_parser("console", "Run an interactive terminal session.")
+    web_parser = add_command_parser("web", "Serve the browser interface.")
     web_parser.add_argument(
         "--host",
         default="127.0.0.1",
@@ -210,10 +219,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional public URL for reverse-proxy setups.",
     )
 
-    audit_parser = subparsers.add_parser(
-        "audit",
-        help="Run report audit mode and write AUDIT-REPORT.md.",
-        formatter_class=CleanHelpFormatter,
+    audit_parser = add_command_parser(
+        "audit", "Audit a report and write AUDIT-REPORT.md."
     )
     audit_parser.add_argument(
         "--report-dir",
@@ -222,10 +229,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Relative report directory to audit (default: current directory).",
     )
 
-    sessions_parser = subparsers.add_parser(
-        "sessions",
-        help="List past sessions for the current directory.",
-        formatter_class=CleanHelpFormatter,
+    sessions_parser = add_command_parser(
+        "sessions", "List past sessions for the current directory."
     )
     sessions_parser.add_argument(
         "--limit",
@@ -239,21 +244,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show sessions from all directories, not just the current one.",
     )
 
-    open_parser = subparsers.add_parser(
-        "open",
-        help="Resume a previous session by ID.",
-        formatter_class=CleanHelpFormatter,
-    )
+    open_parser = add_command_parser("open", "Resume a previous session by ID.")
     open_parser.add_argument(
         "--session-id",
         required=True,
         help="Session ID to resume.",
     )
 
-    init_parser = subparsers.add_parser(
-        "init",
-        help="Scaffold a new Power BI report project from the bundled template.",
-        formatter_class=CleanHelpFormatter,
+    init_parser = add_command_parser(
+        "init", "Create a report project from the bundled template."
     )
     init_parser.add_argument(
         "--dest",

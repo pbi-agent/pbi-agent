@@ -86,6 +86,39 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(cli._argv_with_default_command(parser, ["--help"]), ["--help"])
 
+    def test_root_help_keeps_long_options_and_descriptions_on_single_rows(self) -> None:
+        with patch(
+            "pbi_agent.cli.shutil.get_terminal_size",
+            return_value=os.terminal_size((120, 40)),
+        ):
+            parser = cli.build_parser()
+            help_text = parser.format_help()
+
+        self.assertIn(
+            "--provider PROVIDER                    Provider backend:", help_text
+        )
+        self.assertNotIn("--provider PROVIDER\n", help_text)
+        self.assertIn("--generic-api-url GENERIC_API_URL", help_text)
+        self.assertNotIn("--generic-api-url GENERIC_API_URL\n", help_text)
+        self.assertIn(
+            "--compact-threshold COMPACT_THRESHOLD  Context compaction token threshold",
+            help_text,
+        )
+        self.assertNotIn("--compact-threshold COMPACT_THRESHOLD\n", help_text)
+
+    def test_subcommand_help_uses_clean_subcommand_prog(self) -> None:
+        parser = cli.build_parser()
+        subparsers = next(
+            action
+            for action in parser._actions
+            if isinstance(action, argparse._SubParsersAction)
+        )
+        web_help = subparsers.choices["web"].format_help()
+
+        self.assertIn("usage: pbi-agent web [-h] [--host HOST] [--port PORT]", web_help)
+        self.assertNotIn("[GLOBAL OPTIONS] [<command>] [COMMAND OPTIONS] web", web_help)
+        self.assertIn("Serve the browser interface.", web_help)
+
     def test_browser_target_url_uses_loopback_for_wildcard_bind(self) -> None:
         parser = cli.build_parser()
         args = parser.parse_args(["web", "--host", "0.0.0.0", "--port", "9001"])

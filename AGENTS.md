@@ -6,6 +6,28 @@ This file provides guidance to Coding Agent when working with code in this repos
 
 **pbi-agent** is a local CLI agent for creating, auditing, and editing Power BI PBIP reports through natural language. It supports multiple LLM providers (OpenAI, xAI, Google Gemini, Anthropic, and OpenAI-compatible gateways) using synchronous HTTP via `urllib.request`. The default branch is `master`.
 
+## GitHub
+
+Use the `gh` CLI for all GitHub interactions — never construct API URLs manually or use `curl` against the GitHub API.
+
+```bash
+# View a PR (description, status, checks)
+gh pr view <number>
+
+# View an issue
+gh issue view <number>
+
+# List PRs or issues
+gh pr list
+gh issue list
+
+# View PR comments
+gh pr view <number> --comments
+
+# View PR diff
+gh pr diff <number>
+```
+
 ## Common Commands
 
 ```bash
