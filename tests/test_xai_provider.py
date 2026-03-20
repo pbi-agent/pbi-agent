@@ -15,7 +15,12 @@ from pbi_agent.config import (
     Settings,
     resolve_settings,
 )
-from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
+from pbi_agent.models.messages import (
+    CompletedResponse,
+    TokenUsage,
+    ToolCall,
+    WebSearchSource,
+)
 from pbi_agent.providers.xai_provider import XAIProvider
 from pbi_agent.tools.types import ToolResult
 
@@ -94,6 +99,9 @@ class _DisplayStub:
 
     def tool_group_end(self) -> None:
         self.tool_group_closed = True
+
+    def web_search_sources(self, sources: list[WebSearchSource]) -> None:
+        self.last_web_search_sources = list(sources)
 
 
 class _FakeHTTPResponse:
@@ -590,3 +598,99 @@ def test_xai_request_turn_uses_request_id_header_for_non_json_errors(
         '"invalid_request_error"}, "request_id": "req_415", "status": 415, '
         '"type": "error"}'
     )
+
+
+def test_xai_web_search_tool_included_when_enabled() -> None:
+    provider = XAIProvider(_make_settings(web_search=True))
+    assert {"type": "web_search"} in provider._tools
+
+
+def test_xai_web_search_tool_excluded_when_disabled() -> None:
+    provider = XAIProvider(_make_settings(web_search=False))
+    assert {"type": "web_search"} not in provider._tools
+
+
+def test_xai_parse_response_extracts_web_search_sources() -> None:
+    provider = XAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_ws",
+            "model": DEFAULT_XAI_MODEL,
+            "usage": {
+                "input_tokens": 50,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": 20,
+                "output_tokens_details": {"reasoning_tokens": 0},
+            },
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "id": "ws_1",
+                    "status": "completed",
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Here is the answer.",
+                            "annotations": [
+                                {
+                                    "type": "url_citation",
+                                    "title": "Example Article",
+                                    "url": "https://example.com/article",
+                                },
+                                {
+                                    "type": "url_citation",
+                                    "title": "Another Source",
+                                    "url": "https://example.com/another",
+                                },
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert result.text == "Here is the answer."
+    assert len(result.web_search_sources) == 2
+    assert result.web_search_sources[0].title == "Example Article"
+    assert result.web_search_sources[0].url == "https://example.com/article"
+    assert result.web_search_sources[1].title == "Another Source"
+
+
+def test_xai_web_search_call_not_in_function_calls() -> None:
+    provider = XAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_ws2",
+            "model": DEFAULT_XAI_MODEL,
+            "usage": {
+                "input_tokens": 10,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": 5,
+                "output_tokens_details": {"reasoning_tokens": 0},
+            },
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "id": "ws_1",
+                    "status": "completed",
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": "Done."},
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert result.function_calls == []
+    assert not result.has_tool_calls

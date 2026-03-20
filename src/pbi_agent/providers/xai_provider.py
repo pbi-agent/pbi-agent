@@ -24,6 +24,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
@@ -73,6 +74,8 @@ class XAIProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tools = get_openai_tool_definitions(excluded_names=excluded_tools)
+        if settings.web_search:
+            self._tools.append({"type": "web_search"})
         self._instructions = system_prompt or get_system_prompt()
         self._previous_response_id: str | None = None
 
@@ -140,6 +143,9 @@ class XAIProvider(Provider):
 
         if result.text:
             display.render_markdown(result.text)
+
+        if result.web_search_sources:
+            display.web_search_sources(result.web_search_sources)
 
         return result
 
@@ -320,6 +326,7 @@ class XAIProvider(Provider):
         reasoning_content_parts: list[str] = []
         encrypted_reasoning_parts: list[str] = []
         function_calls: list[ToolCall] = []
+        web_search_sources: list[WebSearchSource] = []
 
         output_items = response_json.get("output", [])
         if not isinstance(output_items, list):
@@ -354,9 +361,22 @@ class XAIProvider(Provider):
                         text = part.get("text", "")
                         if text:
                             text_parts.append(text)
+                        for annotation in part.get("annotations", []):
+                            if not isinstance(annotation, dict):
+                                continue
+                            if annotation.get("type") == "url_citation":
+                                web_search_sources.append(
+                                    WebSearchSource(
+                                        title=str(annotation.get("title", "")),
+                                        url=str(annotation.get("url", "")),
+                                    )
+                                )
 
             elif item_type == "function_call":
                 function_calls.append(_parse_function_call(item))
+
+            elif item_type == "web_search_call":
+                pass  # Server-side; no client action needed
 
         usage_obj = response_json.get("usage", {})
         input_tokens = int(_usage_value(usage_obj, "input_tokens"))
@@ -406,7 +426,19 @@ class XAIProvider(Provider):
                 "encrypted_reasoning_content": encrypted_reasoning_parts,
                 "reasoning": response_json.get("reasoning"),
             },
+            web_search_sources=_deduplicate_sources(web_search_sources),
         )
+
+
+def _deduplicate_sources(sources: list[WebSearchSource]) -> list[WebSearchSource]:
+    """Remove duplicate web search sources by URL."""
+    seen: set[str] = set()
+    unique: list[WebSearchSource] = []
+    for source in sources:
+        if source.url and source.url not in seen:
+            seen.add(source.url)
+            unique.append(source)
+    return unique
 
 
 def _build_user_input_item(prompt: str) -> dict[str, Any]:

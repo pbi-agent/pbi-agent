@@ -321,6 +321,15 @@ class UserTurnInput:
 
 
 @dataclass(slots=True)
+class WebSearchSource:
+    """A single citation/source returned by a provider's native web search."""
+
+    title: str
+    url: str
+    snippet: str = ""
+
+
+@dataclass(slots=True)
 class CompletedResponse:
     response_id: str | None
     text: str
@@ -335,6 +344,8 @@ class CompletedResponse:
     # history replay).  The session layer never inspects this; only the
     # provider that created the response uses it.
     provider_data: Any = None
+    # Web search citations returned by the provider's native search tool.
+    web_search_sources: list[WebSearchSource] = field(default_factory=list)
 
     @property
     def has_tool_calls(self) -> bool:

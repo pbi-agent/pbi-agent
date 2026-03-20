@@ -604,3 +604,94 @@ def test_anthropic_execute_tool_calls_serializes_image_attachments(
             ],
         }
     ]
+
+
+def test_anthropic_web_search_tool_included_when_enabled() -> None:
+    provider = AnthropicProvider(_make_settings(web_search=True))
+    web_tool = {"type": "web_search", "name": "web_search_20250305"}
+    assert web_tool in provider._tools
+
+
+def test_anthropic_web_search_tool_excluded_when_disabled() -> None:
+    provider = AnthropicProvider(_make_settings(web_search=False))
+    tool_types = [t.get("type") for t in provider._tools]
+    assert "web_search" not in tool_types
+
+
+def test_anthropic_parse_response_extracts_web_search_sources() -> None:
+    provider = AnthropicProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "msg_ws",
+            "content": [
+                {
+                    "type": "server_tool_use",
+                    "id": "srvtoolu_1",
+                    "name": "web_search_20250305",
+                    "input": {"query": "test query"},
+                },
+                {
+                    "type": "web_search_tool_result",
+                    "tool_use_id": "srvtoolu_1",
+                    "content": [
+                        {
+                            "type": "web_search_result",
+                            "title": "Example Page",
+                            "url": "https://example.com/page",
+                            "page_snippet": "A snippet from the page.",
+                        },
+                        {
+                            "type": "web_search_result",
+                            "title": "Another Page",
+                            "url": "https://example.com/another",
+                            "page_snippet": "Another snippet.",
+                        },
+                    ],
+                },
+                {"type": "text", "text": "Here is the answer."},
+            ],
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 30,
+            },
+        }
+    )
+
+    assert result.text == "Here is the answer."
+    assert len(result.web_search_sources) == 2
+    assert result.web_search_sources[0].title == "Example Page"
+    assert result.web_search_sources[0].url == "https://example.com/page"
+    assert result.web_search_sources[0].snippet == "A snippet from the page."
+    assert result.web_search_sources[1].title == "Another Page"
+
+
+def test_anthropic_server_tool_use_not_in_function_calls() -> None:
+    provider = AnthropicProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "msg_ws2",
+            "content": [
+                {
+                    "type": "server_tool_use",
+                    "id": "srvtoolu_1",
+                    "name": "web_search_20250305",
+                    "input": {"query": "test"},
+                },
+                {
+                    "type": "web_search_tool_result",
+                    "tool_use_id": "srvtoolu_1",
+                    "content": [],
+                },
+                {"type": "text", "text": "Done."},
+            ],
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 5,
+            },
+        }
+    )
+
+    assert result.function_calls == []
+    assert not result.has_tool_calls

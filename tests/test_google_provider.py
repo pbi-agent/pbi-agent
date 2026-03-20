@@ -22,6 +22,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.tools.types import ToolResult
@@ -679,6 +680,9 @@ class _DisplayStub:
     def tool_group_end(self) -> None:
         self.tool_group_closed = True
 
+    def web_search_sources(self, sources: list[WebSearchSource]) -> None:
+        self.last_web_search_sources = list(sources)
+
 
 def test_google_request_turn_serializes_user_input_images(monkeypatch) -> None:
     requests: list[dict[str, object]] = []
@@ -797,3 +801,109 @@ def test_google_execute_tool_calls_serializes_image_attachments(
             ],
         }
     ]
+
+
+def test_google_web_search_tool_included_when_enabled() -> None:
+    provider = GoogleProvider(_make_settings(web_search=True))
+    assert {"google_search": {}} in provider._tools
+
+
+def test_google_web_search_tool_excluded_when_disabled() -> None:
+    provider = GoogleProvider(_make_settings(web_search=False))
+    assert {"google_search": {}} not in provider._tools
+
+
+def test_google_parse_response_extracts_grounding_sources() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_ws",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "usage": {
+                "total_input_tokens": 50,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 20,
+                "total_thought_tokens": 0,
+            },
+            "outputs": [
+                {"type": "text", "text": "Here is the answer."},
+            ],
+            "groundingMetadata": {
+                "groundingChunks": [
+                    {
+                        "web": {
+                            "uri": "https://example.com/page",
+                            "title": "Example Page",
+                        }
+                    },
+                    {
+                        "web": {
+                            "uri": "https://example.com/another",
+                            "title": "Another Page",
+                        }
+                    },
+                ]
+            },
+        }
+    )
+
+    assert result.text == "Here is the answer."
+    assert len(result.web_search_sources) == 2
+    assert result.web_search_sources[0].title == "Example Page"
+    assert result.web_search_sources[0].url == "https://example.com/page"
+    assert result.web_search_sources[1].title == "Another Page"
+    assert result.web_search_sources[1].url == "https://example.com/another"
+
+
+def test_google_grounding_sources_deduplicates_by_url() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_dedup",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "usage": {
+                "total_input_tokens": 10,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 5,
+            },
+            "outputs": [{"type": "text", "text": "Answer."}],
+            "groundingMetadata": {
+                "groundingChunks": [
+                    {"web": {"uri": "https://example.com/same", "title": "Page A"}},
+                    {
+                        "web": {
+                            "uri": "https://example.com/same",
+                            "title": "Page A again",
+                        }
+                    },
+                ]
+            },
+        }
+    )
+
+    assert len(result.web_search_sources) == 1
+    assert result.web_search_sources[0].url == "https://example.com/same"
+
+
+def test_google_parse_response_no_grounding_metadata() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_no_ground",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "usage": {
+                "total_input_tokens": 10,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 5,
+            },
+            "outputs": [{"type": "text", "text": "No grounding."}],
+        }
+    )
+
+    assert result.web_search_sources == []

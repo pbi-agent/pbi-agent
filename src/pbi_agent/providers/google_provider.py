@@ -22,6 +22,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
@@ -69,6 +70,8 @@ class GoogleProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tools = _google_tool_definitions(excluded_names=excluded_tools)
+        if settings.web_search:
+            self._tools.append({"google_search": {}})
         self._instructions = system_prompt or get_system_prompt()
         self._previous_interaction_id: str | None = None
 
@@ -131,6 +134,9 @@ class GoogleProvider(Provider):
 
         if result.text:
             display.render_markdown(result.text)
+
+        if result.web_search_sources:
+            display.web_search_sources(result.web_search_sources)
 
         return result
 
@@ -363,6 +369,8 @@ class GoogleProvider(Provider):
                     )
                 )
 
+        web_search_sources = _extract_grounding_sources(response_json)
+
         usage_obj = response_json.get("usage", {})
         input_tokens = int(_usage_value(usage_obj, "total_input_tokens"))
         cached_input_tokens = int(_usage_value(usage_obj, "total_cached_tokens"))
@@ -392,7 +400,39 @@ class GoogleProvider(Provider):
                 "status": response_json.get("status"),
                 "thought_signatures": thought_signatures,
             },
+            web_search_sources=web_search_sources,
         )
+
+
+def _extract_grounding_sources(
+    response_json: dict[str, Any],
+) -> list[WebSearchSource]:
+    """Extract web search sources from Google's groundingMetadata."""
+    metadata = response_json.get("groundingMetadata")
+    if not isinstance(metadata, dict):
+        return []
+    chunks = metadata.get("groundingChunks", [])
+    if not isinstance(chunks, list):
+        return []
+    seen: set[str] = set()
+    sources: list[WebSearchSource] = []
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
+            continue
+        web = chunk.get("web")
+        if not isinstance(web, dict):
+            continue
+        url = str(web.get("uri", ""))
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        sources.append(
+            WebSearchSource(
+                title=str(web.get("title", "")),
+                url=url,
+            )
+        )
+    return sources
 
 
 def _find_by_id(calls: list[ToolCall], call_id: str) -> ToolCall | None:

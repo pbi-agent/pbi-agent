@@ -22,6 +22,7 @@ TOOL_STYLE_MAP = {
     "read_web_url": "read-web-url",
     "python_exec": "python-exec",
     "sub_agent": "sub-agent",
+    "web_search": "web-search",
 }
 TOOL_ICONS: dict[str, str] = {
     "shell": "\u25b6",  # ▶
@@ -35,6 +36,7 @@ TOOL_ICONS: dict[str, str] = {
     "read-web-url": "\U0001f310",  # 🌐
     "python-exec": "\u2699",  # ⚙
     "sub-agent": "\u25c9",  # ◉
+    "web-search": "\U0001f50d",  # 🔍
     "generic": "\u2022",  # •
 }
 
@@ -50,6 +52,7 @@ TOOL_BORDER_STYLES: dict[str, str] = {
     "read-web-url": "#06B6D4",
     "python-exec": "#A855F7",
     "sub-agent": "#F59E0B",
+    "web-search": "#10B981",
     "mixed": "#8B5CF6",
     "generic": "blue",
 }
@@ -531,6 +534,41 @@ def format_read_web_url_item(
     return "\n".join(lines)
 
 
+def format_web_search_sources_item(
+    sources: list[dict[str, str]],
+    *,
+    verbose: bool = False,
+    status: str = "",
+) -> str:
+    """Format web search source citations for display."""
+    if not sources:
+        return f"[#10B981]\U0001f50d[/#10B981] [dim]no sources[/dim]  {status}"
+    count = len(sources)
+    header = (
+        f"[#10B981]\U0001f50d[/#10B981] [bold]web search[/bold]"
+        f"  [dim]{count} source{'s' if count != 1 else ''}[/dim]  {status}"
+    )
+    if not verbose:
+        lines = [header]
+        for src in sources[:5]:
+            title = escape_markup_text(shorten(src.get("title", ""), 60))
+            url = escape_markup_text(shorten(src.get("url", ""), 60))
+            lines.append(f"  [dim]\u2022[/dim] {title}  [dim]{url}[/dim]")
+        if count > 5:
+            lines.append(f"  [dim]\u2026 and {count - 5} more[/dim]")
+        return "\n".join(lines)
+    lines = [header]
+    for src in sources:
+        title = escape_markup_text(shorten(src.get("title", ""), 80))
+        url = escape_markup_text(src.get("url", ""))
+        lines.append(f"  [dim]\u2022[/dim] {title}")
+        lines.append(f"    [dim]{url}[/dim]")
+        snippet = src.get("snippet", "")
+        if snippet:
+            lines.append(f"    [dim]{escape_markup_text(shorten(snippet, 200))}[/dim]")
+    return "\n".join(lines)
+
+
 def format_wait_seconds(wait_seconds: float) -> str:
     """Format wait seconds for display: ``1.50`` → ``'1.5'``, ``2.00`` → ``'2'``."""
     return f"{wait_seconds:.2f}".rstrip("0").rstrip(".")
@@ -665,6 +703,15 @@ def route_function_result(
             call_id=call_id,
         )
 
+    if name == "web_search":
+        raw_sources = args.get("sources", [])
+        sources = raw_sources if isinstance(raw_sources, list) else []
+        return name, format_web_search_sources_item(
+            sources,
+            verbose=verbose,
+            status=status,
+        )
+
     return name, format_generic_function_item(
         name,
         verbose=verbose,
@@ -695,6 +742,7 @@ __all__ = [
     "format_shell_tool_item",
     "format_skill_knowledge_item",
     "format_usage_summary",
+    "format_web_search_sources_item",
     "format_wait_seconds",
     "resolve_reasoning_body",
     "resolve_reasoning_panel",

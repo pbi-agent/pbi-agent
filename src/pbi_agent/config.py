@@ -65,6 +65,7 @@ class Settings:
     provider: str = "openai"
     generic_api_url: str = DEFAULT_GENERIC_API_URL
     service_tier: str | None = None
+    web_search: bool = True
 
     def validate(self) -> None:
         if self.provider not in {"openai", "xai", "google", "anthropic", "generic"}:
@@ -111,6 +112,7 @@ class Settings:
             "compact_threshold": self.compact_threshold,
             "generic_api_url": self.generic_api_url,
             "service_tier": self.service_tier,
+            "web_search": self.web_search,
         }
 
 
@@ -236,6 +238,15 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
         or _config_string(provider_config, "service_tier")
     )
 
+    no_web_search = getattr(args, "no_web_search", False)
+    web_search_env = os.getenv("PBI_AGENT_WEB_SEARCH")
+    if no_web_search:
+        web_search = False
+    elif web_search_env is not None:
+        web_search = web_search_env.lower() not in ("0", "false", "no")
+    else:
+        web_search = _config_bool(provider_config, "web_search", True)
+
     return Settings(
         api_key=api_key,
         responses_url=responses_url,
@@ -250,6 +261,7 @@ def resolve_settings(args: argparse.Namespace) -> Settings:
         compact_threshold=compact_threshold,
         provider=provider,
         service_tier=service_tier,
+        web_search=web_search,
     )
 
 
@@ -269,6 +281,7 @@ def save_internal_config(settings: Settings) -> None:
         "max_retries": settings.max_retries,
         "compact_threshold": settings.compact_threshold,
         "service_tier": settings.service_tier,
+        "web_search": settings.web_search,
     }
     data["providers"] = providers
     data["last_used_provider"] = settings.provider
@@ -324,5 +337,12 @@ def _config_string(provider_config: dict[str, Any], key: str) -> str | None:
 def _config_int(provider_config: dict[str, Any], key: str, fallback: int) -> int:
     value = provider_config.get(key)
     if isinstance(value, int):
+        return value
+    return fallback
+
+
+def _config_bool(provider_config: dict[str, Any], key: str, fallback: bool) -> bool:
+    value = provider_config.get(key)
+    if isinstance(value, bool):
         return value
     return fallback

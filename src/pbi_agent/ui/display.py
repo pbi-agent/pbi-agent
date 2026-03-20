@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from textual.widgets import Static
 
-from pbi_agent.models.messages import TokenUsage
+from pbi_agent.models.messages import TokenUsage, WebSearchSource
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.ui.display_protocol import DisplayProtocol, PendingToolGroup
 from pbi_agent.ui.formatting import (
@@ -23,6 +23,7 @@ from pbi_agent.ui.formatting import (
     format_shell_tool_item,
     format_usage_summary,
     format_wait_seconds,
+    format_web_search_sources_item,
     resolve_reasoning_panel,
     route_function_result,
     status_markup,
@@ -452,6 +453,20 @@ class Display(DisplayProtocol):
                 f"[dim]{message}[/dim]",
                 classes="debug-msg",
             )
+
+    def web_search_sources(self, sources: list[WebSearchSource]) -> None:
+        if not sources:
+            return
+        source_dicts = [
+            {"title": s.title, "url": s.url, "snippet": s.snippet} for s in sources
+        ]
+        text = format_web_search_sources_item(source_dicts, verbose=self.verbose)
+        self._start_tool_group(
+            "web search",
+            classes=tool_group_class("web_search"),
+        )
+        self._append_tool_line("web_search", text)
+        self.tool_group_end()
 
     def replay_history(self, messages: list[MessageRecord]) -> None:
         for msg in messages:

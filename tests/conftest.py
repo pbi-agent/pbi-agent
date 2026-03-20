@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 import pytest
 
-from pbi_agent.models.messages import TokenUsage
+from pbi_agent.models.messages import TokenUsage, WebSearchSource
 
 
 class DisplaySpy:
@@ -26,6 +26,7 @@ class DisplaySpy:
         self.function_counts: list[int] = []
         self.function_results: list[dict[str, object]] = []
         self.tool_group_end_count = 0
+        self.web_search_sources_calls: list[list[WebSearchSource]] = []
 
     def begin_sub_agent(
         self,
@@ -116,6 +117,9 @@ class DisplaySpy:
 
     def tool_group_end(self) -> None:
         self.tool_group_end_count += 1
+
+    def web_search_sources(self, sources: list[WebSearchSource]) -> None:
+        self.web_search_sources_calls.append(list(sources))
 
 
 class FakeHTTPResponse:

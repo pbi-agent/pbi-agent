@@ -19,6 +19,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.tools.types import ToolResult
@@ -107,6 +108,9 @@ class _DisplayStub:
 
     def tool_group_end(self) -> None:
         self.tool_group_closed = True
+
+    def web_search_sources(self, sources: list[WebSearchSource]) -> None:
+        self.last_web_search_sources = list(sources)
 
 
 class _FakeHTTPResponse:
@@ -212,7 +216,9 @@ def test_openai_build_request_body_omits_service_tier_when_none() -> None:
 def test_openai_provider_can_exclude_sub_agent_tool() -> None:
     provider = OpenAIProvider(_make_settings(), excluded_tools={"sub_agent"})
 
-    assert "sub_agent" not in {tool["name"] for tool in provider._tools}
+    assert "sub_agent" not in {
+        tool["name"] for tool in provider._tools if "name" in tool
+    }
 
 
 def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> None:
@@ -912,3 +918,144 @@ def test_openai_execute_tool_calls_serializes_image_attachments(
             ],
         }
     ]
+
+
+def test_openai_web_search_tool_included_when_enabled() -> None:
+    provider = OpenAIProvider(_make_settings(web_search=True))
+    assert {"type": "web_search_preview"} in provider._tools
+
+
+def test_openai_web_search_tool_excluded_when_disabled() -> None:
+    provider = OpenAIProvider(_make_settings(web_search=False))
+    assert {"type": "web_search_preview"} not in provider._tools
+
+
+def test_openai_parse_response_extracts_web_search_sources() -> None:
+    provider = OpenAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_ws",
+            "model": DEFAULT_MODEL,
+            "usage": {
+                "input_tokens": 50,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": 20,
+                "output_tokens_details": {"reasoning_tokens": 0},
+            },
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "id": "ws_1",
+                    "status": "completed",
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Here is the answer.",
+                            "annotations": [
+                                {
+                                    "type": "url_citation",
+                                    "title": "Example Article",
+                                    "url": "https://example.com/article",
+                                },
+                                {
+                                    "type": "url_citation",
+                                    "title": "Another Source",
+                                    "url": "https://example.com/another",
+                                },
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert result.text == "Here is the answer."
+    assert len(result.web_search_sources) == 2
+    assert result.web_search_sources[0].title == "Example Article"
+    assert result.web_search_sources[0].url == "https://example.com/article"
+    assert result.web_search_sources[1].title == "Another Source"
+    assert result.web_search_sources[1].url == "https://example.com/another"
+
+
+def test_openai_web_search_call_not_in_function_calls() -> None:
+    provider = OpenAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_ws2",
+            "model": DEFAULT_MODEL,
+            "usage": {
+                "input_tokens": 10,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": 5,
+                "output_tokens_details": {"reasoning_tokens": 0},
+            },
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "id": "ws_1",
+                    "status": "completed",
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": "Done."},
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert result.function_calls == []
+    assert not result.has_tool_calls
+
+
+def test_openai_web_search_sources_deduplicates_by_url() -> None:
+    provider = OpenAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_dedup",
+            "model": DEFAULT_MODEL,
+            "usage": {
+                "input_tokens": 10,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens": 5,
+                "output_tokens_details": {"reasoning_tokens": 0},
+            },
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Answer.",
+                            "annotations": [
+                                {
+                                    "type": "url_citation",
+                                    "title": "Same Page",
+                                    "url": "https://example.com/same",
+                                },
+                                {
+                                    "type": "url_citation",
+                                    "title": "Same Page (again)",
+                                    "url": "https://example.com/same",
+                                },
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert len(result.web_search_sources) == 1
+    assert result.web_search_sources[0].url == "https://example.com/same"

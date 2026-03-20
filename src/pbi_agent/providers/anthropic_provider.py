@@ -25,6 +25,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.session_store import MessageRecord
@@ -80,6 +81,8 @@ class AnthropicProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tools = get_anthropic_tool_definitions(excluded_names=excluded_tools)
+        if settings.web_search:
+            self._tools.append({"type": "web_search", "name": "web_search_20250305"})
         self._system_prompt = system_prompt or get_system_prompt()
         # Client-side conversation history — full messages list.
         self._messages: list[dict[str, Any]] = []
@@ -309,6 +312,9 @@ class AnthropicProvider(Provider):
                 if result.text:
                     display.render_markdown(result.text)
 
+                if result.web_search_sources:
+                    display.web_search_sources(result.web_search_sources)
+
                 # Append the assistant's response to conversation history so
                 # subsequent turns include it.
                 self._messages.append(
@@ -406,6 +412,7 @@ class AnthropicProvider(Provider):
         thinking_parts: list[str] = []
         has_redacted_thinking: bool = False
         function_calls: list[ToolCall] = []
+        web_search_sources: list[WebSearchSource] = []
 
         for block in content_blocks:
             block_type = block.get("type")
@@ -432,6 +439,22 @@ class AnthropicProvider(Provider):
                         arguments=block.get("input"),
                     )
                 )
+
+            elif block_type == "server_tool_use":
+                pass  # Server-side web search invocation; no client action
+
+            elif block_type == "web_search_tool_result":
+                for entry in block.get("content", []):
+                    if not isinstance(entry, dict):
+                        continue
+                    if entry.get("type") == "web_search_result":
+                        web_search_sources.append(
+                            WebSearchSource(
+                                title=str(entry.get("title", "")),
+                                url=str(entry.get("url", "")),
+                                snippet=str(entry.get("page_snippet", "")),
+                            )
+                        )
 
         # Parse usage
         usage_obj = response_json.get("usage", {})
@@ -473,12 +496,24 @@ class AnthropicProvider(Provider):
                 "thinking_parts": thinking_parts,
                 "has_redacted_thinking": has_redacted_thinking,
             },
+            web_search_sources=_deduplicate_sources(web_search_sources),
         )
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _deduplicate_sources(sources: list[WebSearchSource]) -> list[WebSearchSource]:
+    """Remove duplicate web search sources by URL."""
+    seen: set[str] = set()
+    unique: list[WebSearchSource] = []
+    for source in sources:
+        if source.url and source.url not in seen:
+            seen.add(source.url)
+            unique.append(source)
+    return unique
 
 
 def _find_by_id(calls: list[ToolCall], call_id: str) -> ToolCall | None:
