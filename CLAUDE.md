@@ -20,7 +20,7 @@ uv run pytest tests/test_cli.py::DefaultWebCommandTests::test_main_defaults_to_w
 uv run pytest -m slow
 
 # Lint and format
-uvx ruff check . --fix && uvx ruff format .
+uv run ruff check . --fix && uv run ruff format .
 
 # Build
 uv build

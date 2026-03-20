@@ -12,16 +12,18 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widget import Widget
-from textual.widgets import Button, Footer, Header
+from textual.widgets import Button, Footer
 
 from pbi_agent.models.messages import TokenUsage
 from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.ui.display import Display
-from pbi_agent.ui.formatting import format_session_subtitle
+from pbi_agent.ui.formatting import format_session_subtitle_parts
 from pbi_agent.ui.styles import CHAT_APP_CSS
 from pbi_agent.ui.widgets import (
     AssistantMarkdown,
     ChatInput,
+    SessionHeader,
+    SessionHeaderContext,
     SessionListItem,
     SessionSidebar,
     ThinkingBlock,
@@ -42,7 +44,7 @@ class ChatApp(App):
     """Textual TUI for PBI Agent."""
 
     TITLE = "PBI Agent"
-    SUB_TITLE = format_session_subtitle(TokenUsage())
+    SUB_TITLE = format_session_subtitle_parts(TokenUsage())[0]
     CSS = CHAT_APP_CSS
     BINDINGS = [
         Binding("ctrl+r", "new_chat", "New Chat", show=True),
@@ -64,7 +66,7 @@ class ChatApp(App):
     ) -> None:
         super().__init__()
         self._settings = settings
-        self.sub_title = format_session_subtitle(
+        self.sub_title, self._initial_context_label = format_session_subtitle_parts(
             TokenUsage(model=settings.model),
             model=settings.model,
             reasoning_effort=settings.reasoning_effort,
@@ -80,7 +82,7 @@ class ChatApp(App):
         self.fatal_error_message: str | None = None
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield SessionHeader(context_label=self._initial_context_label)
         yield Horizontal(
             SessionSidebar(id="session-sidebar"),
             Vertical(
@@ -264,8 +266,20 @@ class ChatApp(App):
         widget.update(text)
         self._scroll_chat_end()
 
-    def update_session_header(self, sub_title: str) -> None:
+    def update_session_header(
+        self,
+        sub_title: str,
+        *,
+        context_label: str | None = None,
+        tooltip: str | None = None,
+    ) -> None:
         self.sub_title = sub_title
+        context_widget = self._query_optional(
+            "#session-header-context",
+            SessionHeaderContext,
+        )
+        if context_widget is not None:
+            context_widget.set_context(context_label, tooltip=tooltip)
 
     def enable_input(self) -> None:
         self._set_input_enabled(True)

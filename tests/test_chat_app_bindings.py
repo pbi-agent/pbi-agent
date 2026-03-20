@@ -1,6 +1,11 @@
+from unittest.mock import MagicMock
+
+import pytest
+
 from pbi_agent.session_store import SessionRecord
 from pbi_agent.config import Settings
 from pbi_agent.ui.app import ChatApp
+from pbi_agent.ui.widgets import SessionHeaderContext
 
 
 def test_chat_app_exposes_new_chat_binding() -> None:
@@ -18,6 +23,70 @@ def test_chat_app_initializes_header_with_model_and_effort() -> None:
     )
 
     assert "gpt-5.4-2026-03-05 (xhigh)" in app.sub_title
+
+
+def test_update_session_header_scopes_tooltip_to_context_widget() -> None:
+    app = ChatApp(settings=Settings(api_key="test-key", model="gpt-5.4-2026-03-05"))
+    context_widget = MagicMock(spec=SessionHeaderContext)
+
+    def query(selector, widget_type=None):
+        del widget_type
+        if selector == "#session-header-context":
+            return context_widget
+        return None
+
+    app._query_optional = query  # type: ignore[method-assign]
+
+    app.update_session_header(
+        "gpt-5.4-2026-03-05 \u00b7 v0.0.0 \u00b7 oai-ws \u00b7 11 tok \u00b7 $0.001",
+        context_label="ctx 37%",
+        tooltip="Context tokens: 100,000",
+    )
+
+    context_widget.set_context.assert_called_once_with(
+        "ctx 37%",
+        tooltip="Context tokens: 100,000",
+    )
+
+
+@pytest.mark.asyncio
+async def test_context_widget_is_visible_when_header_updates(monkeypatch) -> None:
+    monkeypatch.setattr(ChatApp, "_run_session", lambda self: None)
+    app = ChatApp(settings=Settings(api_key="test-key", model="gpt-5.4-2026-03-05"))
+
+    async with app.run_test() as pilot:
+        app.update_session_header(
+            "gpt-5.4-2026-03-05 \u00b7 v0.0.0 \u00b7 oai-ws \u00b7 11 tok",
+            context_label="ctx 37%",
+            tooltip="Context tokens: 100,000",
+        )
+        await pilot.pause()
+        context_widget = app.query_one("#session-header-context", SessionHeaderContext)
+
+        assert context_widget.display is True
+        assert str(context_widget.render()) == "ctx 37%"
+        assert context_widget.tooltip == "Context tokens: 100,000"
+
+
+@pytest.mark.asyncio
+async def test_context_widget_receives_hover(monkeypatch) -> None:
+    monkeypatch.setattr(ChatApp, "_run_session", lambda self: None)
+    app = ChatApp(settings=Settings(api_key="test-key", model="gpt-5.4-2026-03-05"))
+
+    async with app.run_test() as pilot:
+        app.update_session_header(
+            "gpt-5.4-2026-03-05 \u00b7 v0.0.0 \u00b7 oai-ws \u00b7 11 tok",
+            context_label="ctx 37%",
+            tooltip="Context tokens: 100,000",
+        )
+        await pilot.pause()
+        context_widget = app.query_one("#session-header-context", SessionHeaderContext)
+
+        hovered = await pilot.hover(context_widget, offset=(1, 0))
+        await pilot.pause()
+
+        assert hovered is True
+        assert context_widget.mouse_hover is True
 
 
 def test_populate_sidebar_filters_sessions_to_active_provider(monkeypatch) -> None:

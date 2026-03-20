@@ -173,6 +173,37 @@ def format_session_subtitle(
     model: str | None = None,
     reasoning_effort: str | None = None,
 ) -> str:
+    main_subtitle, context_label = format_session_subtitle_parts(
+        usage,
+        model=model,
+        reasoning_effort=reasoning_effort,
+    )
+    if context_label:
+        return f"{main_subtitle} \u00b7 {context_label}"
+    return main_subtitle
+
+
+def _context_utilization(
+    usage: TokenUsage, model: str | None
+) -> tuple[int, float | None]:
+    """Return ``(ctx_window, pct)`` for *usage*.
+
+    *pct* is ``None`` when the context window is unknown.
+    """
+    ctx_model = model or usage.model
+    ctx_window = context_window_for_model(ctx_model) if ctx_model else 0
+    pct: float | None = None
+    if ctx_window:
+        pct = min(usage.context_tokens / ctx_window * 100, 100)
+    return ctx_window, pct
+
+
+def format_session_subtitle_parts(
+    usage: TokenUsage,
+    *,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+) -> tuple[str, str | None]:
     cwd = Path.cwd()
     session_model = model or usage.model
     parts: list[str] = []
@@ -194,16 +225,34 @@ def format_session_subtitle(
         )
     else:
         parts.append(f"{tokens:,} tok")
+    context_label: str | None = None
     if usage.context_tokens:
-        ctx_model = session_model or usage.model
-        ctx_window = context_window_for_model(ctx_model) if ctx_model else 0
-        if ctx_window:
-            pct = min(usage.context_tokens / ctx_window * 100, 100)
-            parts.append(f"ctx {pct:.0f}%")
+        ctx_window, pct = _context_utilization(usage, session_model)
+        if ctx_window and pct is not None:
+            context_label = f"ctx {pct:.0f}%"
         else:
-            parts.append(f"ctx {usage.context_tokens:,}")
+            context_label = f"ctx {usage.context_tokens:,}"
     parts.append(f"${cost:.3f}")
-    return " \u00b7 ".join(parts)
+    return " \u00b7 ".join(parts), context_label
+
+
+def format_context_tooltip(
+    usage: TokenUsage,
+    *,
+    model: str | None = None,
+) -> str | None:
+    """Build a tooltip string showing context token details.
+
+    Returns ``None`` when there is no context information to display.
+    """
+    if not usage.context_tokens:
+        return None
+    ctx_window, pct = _context_utilization(usage, model)
+    lines = [f"Context tokens: {usage.context_tokens:,}"]
+    if ctx_window and pct is not None:
+        lines.append(f"Context window: {ctx_window:,}")
+        lines.append(f"Utilization: {pct:.1f}%")
+    return "\n".join(lines)
 
 
 def status_markup(
@@ -628,6 +677,7 @@ __all__ = [
     "TOOL_ICONS",
     "compact_json",
     "escape_markup_text",
+    "format_context_tooltip",
     "format_generic_function_item",
     "format_init_report_item",
     "format_list_files_item",
@@ -638,6 +688,7 @@ __all__ = [
     "format_reasoning_title",
     "format_search_files_item",
     "format_session_subtitle",
+    "format_session_subtitle_parts",
     "format_shell_tool_item",
     "format_skill_knowledge_item",
     "format_usage_summary",
