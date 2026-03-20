@@ -55,8 +55,9 @@ class _DisplaySpy:
         *,
         task_instruction: str,
         reasoning_effort: str | None = None,
+        name: str = "sub_agent",
     ) -> _DisplaySpy:
-        del task_instruction, reasoning_effort
+        del task_instruction, reasoning_effort, name
         return self
 
     def finish_sub_agent(self, *, status: str) -> None:

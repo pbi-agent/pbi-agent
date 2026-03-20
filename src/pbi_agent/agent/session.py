@@ -233,9 +233,12 @@ def run_sub_agent_task(
         model=_selected_sub_agent_model(settings),
         reasoning_effort=reasoning_effort,
     )
+    from pbi_agent.ui.names import pick_deity_name
+
     child_display = display.begin_sub_agent(
         task_instruction=task_instruction,
         reasoning_effort=reasoning_effort,
+        name=pick_deity_name(),
     )
     _child_tier = child_settings.service_tier or ""
     child_session_usage = TokenUsage(

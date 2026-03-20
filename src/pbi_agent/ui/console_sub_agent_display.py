@@ -42,11 +42,13 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         parent: ConsoleDisplay,
         task_instruction: str,
         reasoning_effort: str | None,
+        name: str = "sub_agent",
     ) -> None:
         self.parent = parent
         self.verbose = parent.verbose
         self._task_instruction = task_instruction
         self._reasoning_effort = reasoning_effort
+        self._name = name
         self._tool_group = PendingToolGroup()
         self.parent._stop_spinner()
         self.parent._console.print(
@@ -59,8 +61,8 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         )
 
     def _title(self, status: str) -> str:
-        summary = shorten(self._task_instruction.strip() or "sub-agent task", 72)
-        title = f"sub_agent \u00b7 {summary} \u00b7 {status}"
+        summary = shorten(self._task_instruction.strip() or "task", 72)
+        title = f"{self._name} \u00b7 {summary} \u00b7 {status}"
         if self._reasoning_effort:
             title += f" \u00b7 {self._reasoning_effort}"
         return title
@@ -84,8 +86,9 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         *,
         task_instruction: str,
         reasoning_effort: str | None = None,
+        name: str = "sub_agent",
     ) -> DisplayProtocol:
-        del task_instruction, reasoning_effort
+        del task_instruction, reasoning_effort, name
         return self
 
     def finish_sub_agent(self, *, status: str) -> None:
@@ -113,7 +116,7 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
 
     def wait_start(self, message: str = "model is processing your request...") -> None:
         self.parent._console.print(
-            f"[dim]sub-agent: {escape_markup_text(message)}[/dim]"
+            f"[dim]{escape_markup_text(self._name)}: {escape_markup_text(message)}[/dim]"
         )
 
     def wait_stop(self) -> None:
@@ -156,7 +159,7 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         summary = format_usage_summary(
             usage.snapshot(),
             elapsed_seconds=elapsed_seconds,
-            label="Sub-agent",
+            label=self._name,
         )
         self.parent._console.print(
             Panel(

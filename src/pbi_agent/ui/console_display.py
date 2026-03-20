@@ -98,6 +98,7 @@ class ConsoleDisplay(DisplayProtocol):
         *,
         task_instruction: str,
         reasoning_effort: str | None = None,
+        name: str = "sub_agent",
     ) -> DisplayProtocol:
         from pbi_agent.ui.console_sub_agent_display import ConsoleSubAgentDisplay
 
@@ -105,6 +106,7 @@ class ConsoleDisplay(DisplayProtocol):
             parent=self,
             task_instruction=task_instruction,
             reasoning_effort=reasoning_effort,
+            name=name,
         )
 
     def finish_sub_agent(self, *, status: str) -> None:

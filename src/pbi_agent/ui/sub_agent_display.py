@@ -50,11 +50,13 @@ class SubAgentDisplay(DisplayProtocol):
         parent: Display,
         task_instruction: str,
         reasoning_effort: str | None,
+        name: str = "sub_agent",
     ) -> None:
         self.parent = parent
         self.verbose = parent.verbose
         self._task_instruction = task_instruction
         self._reasoning_effort = reasoning_effort
+        self._name = name
         self._tool_group = PendingToolGroup()
         self._waiting_widget_id: str | None = None
         self._active_thinking_widget_id: str | None = None
@@ -69,8 +71,8 @@ class SubAgentDisplay(DisplayProtocol):
         )
 
     def _title(self, status: str) -> str:
-        summary = shorten(self._task_instruction.strip() or "sub-agent task", 72)
-        title = f"sub_agent \u00b7 {summary} \u00b7 {status}"
+        summary = shorten(self._task_instruction.strip() or "task", 72)
+        title = f"{self._name} \u00b7 {summary} \u00b7 {status}"
         if self._reasoning_effort:
             title += f" \u00b7 {self._reasoning_effort}"
         return title
@@ -135,8 +137,9 @@ class SubAgentDisplay(DisplayProtocol):
         *,
         task_instruction: str,
         reasoning_effort: str | None = None,
+        name: str = "sub_agent",
     ) -> DisplayProtocol:
-        del task_instruction, reasoning_effort
+        del task_instruction, reasoning_effort, name
         return self
 
     def finish_sub_agent(self, *, status: str) -> None:
@@ -235,7 +238,7 @@ class SubAgentDisplay(DisplayProtocol):
         usage_text = format_usage_summary(
             usage.snapshot(),
             elapsed_seconds=elapsed_seconds,
-            label="Sub-agent",
+            label=self._name,
         )
         self._mount_static_message("usage", UsageSummary, usage_text)
 

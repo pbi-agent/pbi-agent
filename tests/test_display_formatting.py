@@ -282,13 +282,14 @@ def test_begin_sub_agent_mounts_nested_block_and_child_widgets() -> None:
     sub_display = display.begin_sub_agent(
         task_instruction="Inspect source files for TODOs",
         reasoning_effort="low",
+        name="Hermes",
     )
     sub_display.render_markdown("Found one TODO.")
     sub_display.finish_sub_agent(status="completed")
 
     first_call = app.call_from_thread.call_args_list[0]
     assert first_call.args[0] == app.mount_sub_agent_block
-    assert "sub_agent" in first_call.args[2]
+    assert "Hermes" in first_call.args[2]
     assert "Inspect source files for TODOs" in first_call.args[2]
 
     callbacks = [call.args[0] for call in app.call_from_thread.call_args_list]
@@ -310,6 +311,7 @@ def test_sub_agent_render_thinking_queries_via_call_from_thread() -> None:
     sub_display = display.begin_sub_agent(
         task_instruction="Inspect source files for TODOs",
         reasoning_effort="low",
+        name="Hermes",
     )
     sub_display.render_thinking("Reasoning details", title="Thinking")
 

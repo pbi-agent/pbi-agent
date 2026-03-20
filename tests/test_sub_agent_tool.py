@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import ANY
+
 import pytest
 
 from pbi_agent.agent.session import run_sub_agent_task
@@ -18,8 +20,9 @@ class _ChildDisplay:
         *,
         task_instruction: str,
         reasoning_effort: str | None = None,
+        name: str = "sub_agent",
     ) -> _ChildDisplay:
-        del task_instruction, reasoning_effort
+        del task_instruction, reasoning_effort, name
         return self
 
     def finish_sub_agent(self, *, status: str) -> None:
@@ -108,11 +111,13 @@ class _ParentDisplay:
         *,
         task_instruction: str,
         reasoning_effort: str | None = None,
+        name: str = "sub_agent",
     ) -> _ChildDisplay:
         self.sub_agent_calls.append(
             {
                 "task_instruction": task_instruction,
                 "reasoning_effort": reasoning_effort,
+                "name": name,
             }
         )
         return self.child_display
@@ -232,6 +237,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
         {
             "task_instruction": "Summarize the repo structure",
             "reasoning_effort": "medium",
+            "name": ANY,
         }
     ]
     assert parent_display.child_display.finished_statuses == ["completed"]

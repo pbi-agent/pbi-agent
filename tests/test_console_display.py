@@ -214,12 +214,13 @@ def test_sub_agent_section_renders_summary_status_and_logs() -> None:
     sub_display = display.begin_sub_agent(
         task_instruction="Inspect the workspace and summarize key files.",
         reasoning_effort="low",
+        name="Athena",
     )
     sub_display.render_markdown("Child result")
     sub_display.finish_sub_agent(status="completed")
 
     output = stdout.getvalue()
-    assert "sub_agent" in output
+    assert "Athena" in output
     assert "Inspect the workspace" in output
     assert "Child result" in output
     assert "completed" in output
