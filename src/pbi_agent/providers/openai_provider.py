@@ -25,6 +25,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
@@ -56,6 +57,8 @@ class OpenAIProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tools = get_openai_tool_definitions(excluded_names=excluded_tools)
+        if settings.web_search:
+            self._tools.append({"type": "web_search"})
         self._instructions = system_prompt or get_system_prompt()
         self._previous_response_id: str | None = None
 
@@ -119,11 +122,31 @@ class OpenAIProvider(Provider):
                 title=result.reasoning_summary or None,
             )
 
-        if result.assistant_messages:
-            for message in result.assistant_messages:
-                display.render_markdown(message)
-        elif result.text:
-            display.render_markdown(result.text)
+        display_items = result.provider_data.get("display_items")
+        if isinstance(display_items, list):
+            for item in display_items:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type")
+                if item_type == "message":
+                    text = item.get("text")
+                    if isinstance(text, str) and text:
+                        display.render_markdown(text)
+                elif item_type == "web_search_call":
+                    _display_web_search_result(
+                        display,
+                        item.get("sources", []),
+                        queries=item.get("queries", []),
+                    )
+        else:
+            if result.assistant_messages:
+                for message in result.assistant_messages:
+                    display.render_markdown(message)
+            elif result.text:
+                display.render_markdown(result.text)
+
+            if result.had_web_search_call or result.web_search_sources:
+                _display_web_search_result(display, result.web_search_sources)
 
         return result
 
@@ -324,6 +347,9 @@ class OpenAIProvider(Provider):
         reasoning_summary_parts: list[str] = []
         reasoning_content_parts: list[str] = []
         function_calls: list[ToolCall] = []
+        web_search_sources: list[WebSearchSource] = []
+        had_web_search_call = False
+        display_items: list[dict[str, Any]] = []
 
         output_items = response_json.get("output", [])
         if not isinstance(output_items, list):
@@ -356,12 +382,42 @@ class OpenAIProvider(Provider):
                         if text:
                             text_parts.append(text)
                             message_parts.append(text)
+                        for annotation in part.get("annotations", []):
+                            if not isinstance(annotation, dict):
+                                continue
+                            if annotation.get("type") == "url_citation":
+                                web_search_sources.append(
+                                    WebSearchSource(
+                                        title=str(annotation.get("title", "")),
+                                        url=str(annotation.get("url", "")),
+                                    )
+                                )
                 message_text = "".join(message_parts).strip()
                 if message_text:
                     assistant_messages.append(message_text)
+                    display_items.append({"type": "message", "text": message_text})
 
             elif item_type == "function_call":
                 function_calls.append(_parse_function_call(item))
+
+            elif item_type == "web_search_call":
+                had_web_search_call = True
+                item_sources = _extract_web_search_sources(item)
+                web_search_sources.extend(item_sources)
+                display_items.append(
+                    {
+                        "type": "web_search_call",
+                        "queries": _extract_web_search_queries(item),
+                        "sources": [
+                            {
+                                "title": source.title,
+                                "url": source.url,
+                                "snippet": source.snippet,
+                            }
+                            for source in item_sources
+                        ],
+                    }
+                )
 
         usage_obj = response_json.get("usage", {})
         input_tokens = int(_usage_value(usage_obj, "input_tokens"))
@@ -414,7 +470,12 @@ class OpenAIProvider(Provider):
             function_calls=function_calls,
             reasoning_summary=reasoning_summary,
             reasoning_content=reasoning_content,
-            provider_data={"reasoning": response_json.get("reasoning")},
+            provider_data={
+                "reasoning": response_json.get("reasoning"),
+                "display_items": display_items,
+            },
+            web_search_sources=web_search_sources,
+            had_web_search_call=had_web_search_call,
         )
 
 
@@ -430,6 +491,7 @@ def _build_user_input_item(user_input: UserTurnInput) -> dict[str, Any]:
             {
                 "type": "input_image",
                 "image_url": data_url_for_image(image),
+                "detail": "original",
             }
         )
     return {"role": "user", "content": content}
@@ -478,6 +540,75 @@ def _find_by_id(calls: list[ToolCall], call_id: str) -> ToolCall | None:
         if call.call_id == call_id:
             return call
     return None
+
+
+def _extract_web_search_sources(item: dict[str, Any]) -> list[WebSearchSource]:
+    action = item.get("action")
+    if not isinstance(action, dict):
+        return []
+
+    raw_sources = action.get("sources")
+    if not isinstance(raw_sources, list):
+        return []
+
+    sources: list[WebSearchSource] = []
+    for source in raw_sources:
+        if not isinstance(source, dict):
+            continue
+        url = str(source.get("url", "")).strip()
+        if not url:
+            continue
+        title = str(source.get("title", "")).strip() or url
+        snippet = str(source.get("snippet", "")).strip()
+        sources.append(
+            WebSearchSource(
+                title=title,
+                url=url,
+                snippet=snippet,
+            )
+        )
+    return sources
+
+
+def _extract_web_search_queries(item: dict[str, Any]) -> list[str]:
+    action = item.get("action")
+    if not isinstance(action, dict):
+        return []
+
+    raw_queries = action.get("queries")
+    if isinstance(raw_queries, list):
+        return [str(query).strip() for query in raw_queries if str(query).strip()]
+
+    raw_query = action.get("query")
+    if isinstance(raw_query, str) and raw_query.strip():
+        return [raw_query.strip()]
+
+    return []
+
+
+def _display_web_search_result(
+    display: DisplayProtocol,
+    sources: list[WebSearchSource] | list[dict[str, Any]],
+    *,
+    queries: list[str] | None = None,
+) -> None:
+    normalized_sources = [
+        source
+        if isinstance(source, dict)
+        else {"title": source.title, "url": source.url, "snippet": source.snippet}
+        for source in sources
+    ]
+    display.function_start(1)
+    display.function_result(
+        name="web_search",
+        success=True,
+        call_id="",
+        arguments={
+            "queries": list(queries or []),
+            "sources": normalized_sources,
+        },
+    )
+    display.tool_group_end()
 
 
 def _raise_if_response_failed(response_json: dict[str, Any]) -> None:

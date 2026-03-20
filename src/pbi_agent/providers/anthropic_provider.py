@@ -25,6 +25,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.session_store import MessageRecord
@@ -80,6 +81,8 @@ class AnthropicProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tools = get_anthropic_tool_definitions(excluded_names=excluded_tools)
+        if settings.web_search:
+            self._tools.append(_anthropic_web_search_tool(settings.model))
         self._system_prompt = system_prompt or get_system_prompt()
         # Client-side conversation history — full messages list.
         self._messages: list[dict[str, Any]] = []
@@ -257,12 +260,12 @@ class AnthropicProvider(Provider):
             "cache_control": {"type": "ephemeral"},
             "tools": self._tools,
             "messages": self._messages,
-            "thinking": {"type": "adaptive"},
         }
 
-        # Map reasoning-effort to Anthropic effort level.
-        effort = _EFFORT_MAP.get(self._settings.reasoning_effort, "high")
-        body["output_config"] = {"effort": effort}
+        if _supports_adaptive_thinking(self._settings.model):
+            body["thinking"] = {"type": "adaptive"}
+            effort = _EFFORT_MAP.get(self._settings.reasoning_effort, "high")
+            body["output_config"] = {"effort": effort}
 
         if system_prompt:
             body["system"] = system_prompt
@@ -305,9 +308,28 @@ class AnthropicProvider(Provider):
                     if pdata.get("has_redacted_thinking"):
                         display.render_redacted_thinking()
 
-                # Render the text in one shot (no streaming).
-                if result.text:
-                    display.render_markdown(result.text)
+                display_items = pdata.get("display_items", [])
+                if isinstance(display_items, list) and display_items:
+                    for item in display_items:
+                        if not isinstance(item, dict):
+                            continue
+                        item_type = item.get("type")
+                        if item_type == "text":
+                            text = item.get("text")
+                            if isinstance(text, str) and text:
+                                display.render_markdown(text)
+                        elif item_type == "web_search":
+                            _display_web_search_result(
+                                display,
+                                item.get("sources", []),
+                                queries=item.get("queries", []),
+                            )
+                else:
+                    if result.text:
+                        display.render_markdown(result.text)
+
+                    if result.web_search_sources:
+                        display.web_search_sources(result.web_search_sources)
 
                 # Append the assistant's response to conversation history so
                 # subsequent turns include it.
@@ -406,6 +428,9 @@ class AnthropicProvider(Provider):
         thinking_parts: list[str] = []
         has_redacted_thinking: bool = False
         function_calls: list[ToolCall] = []
+        web_search_sources: list[WebSearchSource] = []
+        display_items: list[dict[str, Any]] = []
+        pending_web_search_queries: dict[str, list[str]] = {}
 
         for block in content_blocks:
             block_type = block.get("type")
@@ -422,6 +447,7 @@ class AnthropicProvider(Provider):
                 text = block.get("text", "")
                 if text:
                     text_parts.append(text)
+                    display_items.append({"type": "text", "text": text})
 
             elif block_type == "tool_use":
                 name = block.get("name", "")
@@ -431,6 +457,42 @@ class AnthropicProvider(Provider):
                         name=name,
                         arguments=block.get("input"),
                     )
+                )
+
+            elif block_type == "server_tool_use":
+                if str(block.get("name", "")).startswith("web_search"):
+                    pending_web_search_queries[block.get("id", "")] = (
+                        _extract_anthropic_web_search_queries(block)
+                    )
+
+            elif block_type == "web_search_tool_result":
+                sources_for_block: list[dict[str, str]] = []
+                for entry in block.get("content", []):
+                    if not isinstance(entry, dict):
+                        continue
+                    if entry.get("type") == "web_search_result":
+                        source = WebSearchSource(
+                            title=str(entry.get("title", "")),
+                            url=str(entry.get("url", "")),
+                            snippet=str(entry.get("page_snippet", "")),
+                        )
+                        web_search_sources.append(source)
+                        sources_for_block.append(
+                            {
+                                "title": source.title,
+                                "url": source.url,
+                                "snippet": source.snippet,
+                            }
+                        )
+                display_items.append(
+                    {
+                        "type": "web_search",
+                        "queries": pending_web_search_queries.get(
+                            str(block.get("tool_use_id", "")),
+                            [],
+                        ),
+                        "sources": sources_for_block,
+                    }
                 )
 
         # Parse usage
@@ -472,7 +534,9 @@ class AnthropicProvider(Provider):
                 "content_blocks": content_blocks,
                 "thinking_parts": thinking_parts,
                 "has_redacted_thinking": has_redacted_thinking,
+                "display_items": display_items,
             },
+            web_search_sources=web_search_sources,
         )
 
 
@@ -515,6 +579,50 @@ def _anthropic_image_block(image: ImageAttachment) -> dict[str, Any]:
             "data": image.data_base64,
         },
     }
+
+
+def _extract_anthropic_web_search_queries(block: dict[str, Any]) -> list[str]:
+    raw_input = block.get("input")
+    if not isinstance(raw_input, dict):
+        return []
+    raw_query = raw_input.get("query")
+    if isinstance(raw_query, str) and raw_query.strip():
+        return [raw_query.strip()]
+    return []
+
+
+def _supports_adaptive_thinking(model: str) -> bool:
+    normalized = model.strip().lower()
+    return not normalized.startswith("claude-haiku")
+
+
+def _anthropic_web_search_tool(model: str) -> dict[str, Any]:
+    tool: dict[str, Any] = {
+        "type": "web_search_20260209",
+        "name": "web_search",
+    }
+    if model.strip().lower().startswith("claude-haiku"):
+        tool["allowed_callers"] = ["direct"]
+    return tool
+
+
+def _display_web_search_result(
+    display: DisplayProtocol,
+    sources: list[dict[str, Any]],
+    *,
+    queries: list[str] | None = None,
+) -> None:
+    display.function_start(1)
+    display.function_result(
+        name="web_search",
+        success=True,
+        call_id="",
+        arguments={
+            "queries": list(queries or []),
+            "sources": list(sources),
+        },
+    )
+    display.tool_group_end()
 
 
 def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:

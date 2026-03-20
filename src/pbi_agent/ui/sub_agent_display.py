@@ -6,7 +6,7 @@ from typing import Any
 
 from textual.widgets import Static
 
-from pbi_agent.models.messages import TokenUsage
+from pbi_agent.models.messages import TokenUsage, WebSearchSource
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.ui.display_protocol import DisplayProtocol, PendingToolGroup
 from pbi_agent.ui.formatting import (
@@ -397,6 +397,9 @@ class SubAgentDisplay(DisplayProtocol):
                 f"[dim]{message}[/dim]",
                 classes="debug-msg",
             )
+
+    def web_search_sources(self, sources: list[WebSearchSource]) -> None:
+        del sources
 
     def replay_history(self, messages: list[MessageRecord]) -> None:
         del messages

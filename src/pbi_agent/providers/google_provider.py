@@ -22,6 +22,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
@@ -69,6 +70,8 @@ class GoogleProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tools = _google_tool_definitions(excluded_names=excluded_tools)
+        if settings.web_search:
+            self._tools.append({"type": "google_search"})
         self._instructions = system_prompt or get_system_prompt()
         self._previous_interaction_id: str | None = None
 
@@ -129,8 +132,31 @@ class GoogleProvider(Provider):
                 title=result.reasoning_summary or None,
             )
 
-        if result.text:
-            display.render_markdown(result.text)
+        display_items = result.provider_data.get("display_items")
+        if isinstance(display_items, list) and display_items:
+            for item in display_items:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type")
+                if item_type == "text":
+                    text = item.get("text")
+                    if isinstance(text, str) and text:
+                        display.render_markdown(text)
+                elif item_type == "google_search_result":
+                    _display_web_search_result(
+                        display,
+                        item.get("sources", []),
+                        queries=item.get("queries", []),
+                    )
+        else:
+            if result.web_search_sources:
+                _display_web_search_result(
+                    display,
+                    result.web_search_sources,
+                    queries=result.provider_data.get("web_search_queries", []),
+                )
+            if result.text:
+                display.render_markdown(result.text)
 
         return result
 
@@ -331,6 +357,9 @@ class GoogleProvider(Provider):
         thought_summary_parts: list[str] = []
         thought_signatures: list[str] = []
         function_calls: list[ToolCall] = []
+        display_items: list[dict[str, Any]] = []
+        saw_google_search_result = False
+        pending_google_search_queries: dict[str, list[str]] = {}
 
         output_items = response_json.get("outputs", [])
         if not isinstance(output_items, list):
@@ -345,6 +374,7 @@ class GoogleProvider(Provider):
                 text = item.get("text", "")
                 if isinstance(text, str) and text:
                     text_parts.append(text)
+                    display_items.append({"type": "text", "text": text})
 
             elif item_type == "thought":
                 summary_text = _extract_thought_summary_text(item.get("summary"))
@@ -362,6 +392,47 @@ class GoogleProvider(Provider):
                         arguments=item.get("arguments"),
                     )
                 )
+            elif item_type == "google_search_call":
+                call_id = str(item.get("id", ""))
+                if call_id:
+                    pending_google_search_queries[call_id] = (
+                        _extract_google_search_call_queries(item)
+                    )
+            elif item_type == "google_search_result":
+                saw_google_search_result = True
+                display_items.append(
+                    {
+                        "type": "google_search_result",
+                        "queries": pending_google_search_queries.get(
+                            str(item.get("call_id", "")),
+                            _extract_google_search_queries(item, response_json),
+                        ),
+                        "sources": _extract_google_search_result_sources(
+                            item,
+                            response_json,
+                        ),
+                    }
+                )
+
+        web_search_queries = _extract_google_search_queries(None, response_json)
+        web_search_sources = _extract_google_search_sources(response_json)
+        if web_search_sources and not saw_google_search_result:
+            insert_at = next(
+                (
+                    index
+                    for index, item in enumerate(display_items)
+                    if isinstance(item, dict) and item.get("type") == "text"
+                ),
+                len(display_items),
+            )
+            display_items.insert(
+                insert_at,
+                {
+                    "type": "google_search_result",
+                    "queries": web_search_queries,
+                    "sources": web_search_sources,
+                },
+            )
 
         usage_obj = response_json.get("usage", {})
         input_tokens = int(_usage_value(usage_obj, "total_input_tokens"))
@@ -391,8 +462,193 @@ class GoogleProvider(Provider):
             provider_data={
                 "status": response_json.get("status"),
                 "thought_signatures": thought_signatures,
+                "display_items": display_items,
+                "web_search_queries": web_search_queries,
             },
+            web_search_sources=web_search_sources,
         )
+
+
+def _extract_google_search_sources(
+    response_json: dict[str, Any],
+) -> list[WebSearchSource]:
+    """Extract web search sources from Google Interactions and grounding metadata."""
+    sources: list[WebSearchSource] = []
+
+    output_items = response_json.get("outputs", [])
+    if isinstance(output_items, list):
+        for item in output_items:
+            if not isinstance(item, dict) or item.get("type") != "google_search_result":
+                continue
+            sources.extend(_extract_google_search_result_sources(item, response_json))
+
+    if sources:
+        return sources
+
+    sources.extend(_extract_google_text_annotation_sources(response_json))
+    if sources:
+        return sources
+
+    metadata = _extract_google_grounding_metadata(response_json)
+    if not metadata:
+        return []
+    chunks = metadata.get("groundingChunks", [])
+    if not isinstance(chunks, list):
+        return []
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
+            continue
+        web = chunk.get("web")
+        if not isinstance(web, dict):
+            continue
+        url = str(web.get("uri", ""))
+        if not url:
+            continue
+        sources.append(
+            WebSearchSource(
+                title=str(web.get("title", "")),
+                url=url,
+            )
+        )
+    return sources
+
+
+def _extract_google_search_result_sources(
+    item: dict[str, Any],
+    response_json: dict[str, Any],
+) -> list[WebSearchSource]:
+    results = item.get("result", [])
+    sources: list[WebSearchSource] = []
+    if isinstance(results, list):
+        for entry in results:
+            if not isinstance(entry, dict):
+                continue
+            url = str(entry.get("url", ""))
+            if not url:
+                continue
+            sources.append(
+                WebSearchSource(
+                    title=str(entry.get("title", "")),
+                    url=url,
+                )
+            )
+    if sources:
+        return sources
+    return _extract_google_text_annotation_sources(response_json)
+
+
+def _extract_google_text_annotation_sources(
+    response_json: dict[str, Any],
+) -> list[WebSearchSource]:
+    output_items = response_json.get("outputs", [])
+    if not isinstance(output_items, list):
+        return []
+    sources: list[WebSearchSource] = []
+    for item in output_items:
+        if not isinstance(item, dict) or item.get("type") != "text":
+            continue
+        annotations = item.get("annotations", [])
+        if not isinstance(annotations, list):
+            continue
+        for annotation in annotations:
+            if not isinstance(annotation, dict):
+                continue
+            if annotation.get("type") != "url_citation":
+                continue
+            url = str(annotation.get("url", ""))
+            if not url:
+                continue
+            sources.append(
+                WebSearchSource(
+                    title=str(annotation.get("title", "")),
+                    url=url,
+                )
+            )
+    return sources
+    return sources
+
+
+def _extract_google_grounding_metadata(
+    response_json: dict[str, Any],
+) -> dict[str, Any] | None:
+    metadata = response_json.get("groundingMetadata")
+    if isinstance(metadata, dict):
+        return metadata
+
+    candidates = response_json.get("candidates")
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            metadata = candidate.get("groundingMetadata")
+            if isinstance(metadata, dict):
+                return metadata
+
+    output_items = response_json.get("outputs", [])
+    if isinstance(output_items, list):
+        for item in output_items:
+            if not isinstance(item, dict):
+                continue
+            metadata = item.get("groundingMetadata")
+            if isinstance(metadata, dict):
+                return metadata
+
+    return None
+
+
+def _extract_google_search_queries(
+    item: dict[str, Any] | None,
+    response_json: dict[str, Any],
+) -> list[str]:
+    if isinstance(item, dict):
+        raw_queries = item.get("web_search_queries") or item.get("webSearchQueries")
+        if isinstance(raw_queries, list):
+            queries = [str(query).strip() for query in raw_queries if str(query).strip()]
+            if queries:
+                return queries
+
+    metadata = _extract_google_grounding_metadata(response_json)
+    if not metadata:
+        return []
+    raw_queries = metadata.get("webSearchQueries", [])
+    if not isinstance(raw_queries, list):
+        return []
+    return [str(query).strip() for query in raw_queries if str(query).strip()]
+
+
+def _extract_google_search_call_queries(item: dict[str, Any]) -> list[str]:
+    arguments = item.get("arguments")
+    if not isinstance(arguments, dict):
+        return []
+    raw_queries = arguments.get("queries", [])
+    if not isinstance(raw_queries, list):
+        return []
+    return [str(query).strip() for query in raw_queries if str(query).strip()]
+
+
+def _display_web_search_result(
+    display: DisplayProtocol,
+    sources: list[WebSearchSource] | list[dict[str, Any]],
+    *,
+    queries: list[str] | None = None,
+) -> None:
+    normalized_sources = [
+        source
+        if isinstance(source, dict)
+        else {"title": source.title, "url": source.url, "snippet": source.snippet}
+        for source in (sources or [])
+    ]
+    display.function_start(1)
+    display.function_result(
+        name="web_search",
+        success=True,
+        call_id="",
+        arguments={
+            "sources": normalized_sources,
+            "queries": list(queries or []),
+        },
+    )
+    display.tool_group_end()
 
 
 def _find_by_id(calls: list[ToolCall], call_id: str) -> ToolCall | None:

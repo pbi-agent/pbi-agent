@@ -137,6 +137,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="OpenAI service tier: auto, default, flex, or priority.",
     )
+    model_group.add_argument(
+        "--no-web-search",
+        dest="no_web_search",
+        action="store_true",
+        default=False,
+        help="Disable the provider's native web search tool.",
+    )
 
     runtime_group = parser.add_argument_group("Runtime and resilience")
     runtime_group.add_argument(

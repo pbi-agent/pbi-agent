@@ -7,8 +7,10 @@ history is managed server-side via ``previous_response_id``.
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -24,6 +26,7 @@ from pbi_agent.models.messages import (
     TokenUsage,
     ToolCall,
     UserTurnInput,
+    WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.registry import get_openai_tool_definitions
@@ -73,6 +76,8 @@ class XAIProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tools = get_openai_tool_definitions(excluded_names=excluded_tools)
+        if settings.web_search:
+            self._tools.append({"type": "web_search"})
         self._instructions = system_prompt or get_system_prompt()
         self._previous_response_id: str | None = None
 
@@ -138,8 +143,28 @@ class XAIProvider(Provider):
                 title=result.reasoning_summary or None,
             )
 
-        if result.text:
-            display.render_markdown(result.text)
+        display_items = result.provider_data.get("display_items")
+        if isinstance(display_items, list) and display_items:
+            for item in display_items:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type")
+                if item_type == "message":
+                    text = item.get("text")
+                    if isinstance(text, str) and text:
+                        display.render_markdown(text)
+                elif item_type == "web_search_call":
+                    _display_web_search_result(
+                        display,
+                        item.get("sources", []),
+                        queries=item.get("queries", []),
+                    )
+        else:
+            if result.text:
+                display.render_markdown(result.text)
+
+            if result.had_web_search_call or result.web_search_sources:
+                _display_web_search_result(display, result.web_search_sources)
 
         return result
 
@@ -320,6 +345,10 @@ class XAIProvider(Provider):
         reasoning_content_parts: list[str] = []
         encrypted_reasoning_parts: list[str] = []
         function_calls: list[ToolCall] = []
+        web_search_sources: list[WebSearchSource] = []
+        had_web_search_call = False
+        display_items: list[dict[str, Any]] = []
+        last_web_search_index: int | None = None
 
         output_items = response_json.get("output", [])
         if not isinstance(output_items, list):
@@ -347,6 +376,8 @@ class XAIProvider(Provider):
                             reasoning_content_parts.append(reasoning_text)
 
             elif item_type == "message":
+                message_text_parts: list[str] = []
+                message_annotation_sources: list[WebSearchSource] = []
                 for part in item.get("content", []):
                     if not isinstance(part, dict):
                         continue
@@ -354,9 +385,82 @@ class XAIProvider(Provider):
                         text = part.get("text", "")
                         if text:
                             text_parts.append(text)
+                            message_text_parts.append(text)
+                        for annotation in part.get("annotations", []):
+                            if not isinstance(annotation, dict):
+                                continue
+                            if annotation.get("type") == "url_citation":
+                                source = _annotation_web_search_source(annotation)
+                                if source is not None:
+                                    message_annotation_sources.append(source)
+                if message_annotation_sources:
+                    if last_web_search_index is None:
+                        display_items.append(
+                            {
+                                "type": "web_search_call",
+                                "queries": [],
+                                "sources": _serialize_web_search_sources(
+                                    message_annotation_sources
+                                ),
+                            }
+                        )
+                        last_web_search_index = len(display_items) - 1
+                    else:
+                        existing_sources = _deserialize_web_search_sources(
+                            display_items[last_web_search_index].get("sources", [])
+                        )
+                        display_items[last_web_search_index]["sources"] = (
+                            _serialize_web_search_sources(
+                                _merge_web_search_sources(
+                                    existing_sources,
+                                    message_annotation_sources,
+                                )
+                            )
+                        )
+                    web_search_sources = _merge_web_search_sources(
+                        web_search_sources,
+                        message_annotation_sources,
+                    )
+                message_text = "".join(message_text_parts).strip()
+                if message_text:
+                    display_items.append({"type": "message", "text": message_text})
 
             elif item_type == "function_call":
                 function_calls.append(_parse_function_call(item))
+
+            elif item_type == "web_search_call":
+                had_web_search_call = True
+                item_sources = _extract_web_search_sources(item)
+                item_queries = _extract_web_search_queries(item)
+                web_search_sources = _merge_web_search_sources(
+                    web_search_sources,
+                    item_sources,
+                )
+                if (
+                    last_web_search_index is not None
+                    and last_web_search_index == len(display_items) - 1
+                    and display_items[last_web_search_index].get("type")
+                    == "web_search_call"
+                    and display_items[last_web_search_index].get("queries", [])
+                    == item_queries
+                ):
+                    existing_sources = _deserialize_web_search_sources(
+                        display_items[last_web_search_index].get("sources", [])
+                    )
+                    display_items[last_web_search_index]["sources"] = (
+                        _serialize_web_search_sources(
+                            _merge_web_search_sources(existing_sources, item_sources)
+                        )
+                    )
+                else:
+                    display_items.append(
+                        {
+                            "type": "web_search_call",
+                            "queries": item_queries,
+                            "sources": _serialize_web_search_sources(item_sources),
+                        }
+                    )
+                    last_web_search_index = len(display_items) - 1
 
         usage_obj = response_json.get("usage", {})
         input_tokens = int(_usage_value(usage_obj, "input_tokens"))
@@ -405,7 +509,10 @@ class XAIProvider(Provider):
             provider_data={
                 "encrypted_reasoning_content": encrypted_reasoning_parts,
                 "reasoning": response_json.get("reasoning"),
+                "display_items": display_items,
             },
+            web_search_sources=web_search_sources,
+            had_web_search_call=had_web_search_call,
         )
 
 
@@ -458,10 +565,180 @@ def _find_by_id(calls: list[ToolCall], call_id: str) -> ToolCall | None:
     return None
 
 
-def _response_include(model: str) -> list[str]:
-    if any(model.startswith(prefix) for prefix in _ENCRYPTED_REASONING_MODELS):
-        return ["reasoning.encrypted_content"]
+def _extract_web_search_sources(item: dict[str, Any]) -> list[WebSearchSource]:
+    action = item.get("action")
+    if not isinstance(action, dict):
+        return []
+
+    raw_sources = action.get("sources")
+    if not isinstance(raw_sources, list):
+        return []
+
+    sources: list[WebSearchSource] = []
+    for source in raw_sources:
+        if not isinstance(source, dict):
+            continue
+        url = str(source.get("url", "")).strip()
+        if not url:
+            continue
+        title = _normalize_web_search_source_title(
+            str(source.get("title", "")),
+            url,
+        )
+        snippet = str(source.get("snippet", "")).strip()
+        sources.append(
+            WebSearchSource(
+                title=title,
+                url=url,
+                snippet=snippet,
+            )
+        )
+    return sources
+
+
+def _display_web_search_result(
+    display: DisplayProtocol,
+    sources: list[WebSearchSource] | list[dict[str, str]],
+    *,
+    queries: list[str] | None = None,
+) -> None:
+    display.function_start(1)
+    display.function_result(
+        name="web_search",
+        success=True,
+        call_id="",
+        arguments={
+            "queries": [query for query in (queries or []) if query],
+            "sources": (
+                sources
+                if sources and isinstance(sources[0], dict)
+                else [
+                    {
+                        "title": source.title,
+                        "url": source.url,
+                        "snippet": source.snippet,
+                    }
+                    for source in sources
+                ]
+            ),
+        },
+    )
+    display.tool_group_end()
+
+
+def _extract_web_search_queries(item: dict[str, Any]) -> list[str]:
+    action = item.get("action")
+    if not isinstance(action, dict):
+        return []
+
+    raw_queries = action.get("queries")
+    if isinstance(raw_queries, list):
+        return [str(query).strip() for query in raw_queries if str(query).strip()]
+
+    raw_query = action.get("query")
+    if isinstance(raw_query, str) and raw_query.strip():
+        return [raw_query.strip()]
     return []
+
+
+def _annotation_web_search_source(
+    annotation: dict[str, Any],
+) -> WebSearchSource | None:
+    url = str(annotation.get("url", "")).strip()
+    if not url:
+        return None
+    return WebSearchSource(
+        title=_normalize_web_search_source_title(str(annotation.get("title", "")), url),
+        url=url,
+    )
+
+
+def _normalize_web_search_source_title(title: str, url: str) -> str:
+    stripped = title.strip()
+    if stripped and not _is_placeholder_web_search_title(stripped):
+        return stripped
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.netloc.strip().removeprefix("www.")
+    return host or url
+
+
+def _is_placeholder_web_search_title(title: str) -> bool:
+    stripped = title.strip()
+    if not stripped:
+        return True
+    return re.fullmatch(r"\[?\d+\]?", stripped) is not None
+
+
+def _merge_web_search_sources(
+    existing: list[WebSearchSource],
+    incoming: list[WebSearchSource],
+) -> list[WebSearchSource]:
+    merged: list[WebSearchSource] = []
+    by_url: dict[str, int] = {}
+
+    for source in [*existing, *incoming]:
+        url = source.url.strip()
+        if not url:
+            continue
+        normalized = WebSearchSource(
+            title=_normalize_web_search_source_title(source.title, url),
+            url=url,
+            snippet=source.snippet.strip(),
+        )
+        index = by_url.get(url)
+        if index is None:
+            by_url[url] = len(merged)
+            merged.append(normalized)
+            continue
+        current = merged[index]
+        current_title = _normalize_web_search_source_title(current.title, url)
+        new_title = _normalize_web_search_source_title(normalized.title, url)
+        merged[index] = WebSearchSource(
+            title=current_title if not _is_placeholder_web_search_title(current_title) else new_title,
+            url=url,
+            snippet=current.snippet or normalized.snippet,
+        )
+
+    return merged
+
+
+def _serialize_web_search_sources(
+    sources: list[WebSearchSource],
+) -> list[dict[str, str]]:
+    return [
+        {"title": source.title, "url": source.url, "snippet": source.snippet}
+        for source in sources
+    ]
+
+
+def _deserialize_web_search_sources(raw_sources: Any) -> list[WebSearchSource]:
+    if not isinstance(raw_sources, list):
+        return []
+    sources: list[WebSearchSource] = []
+    for source in raw_sources:
+        if not isinstance(source, dict):
+            continue
+        url = str(source.get("url", "")).strip()
+        if not url:
+            continue
+        sources.append(
+            WebSearchSource(
+                title=_normalize_web_search_source_title(
+                    str(source.get("title", "")),
+                    url,
+                ),
+                url=url,
+                snippet=str(source.get("snippet", "")).strip(),
+            )
+        )
+    return sources
+
+
+def _response_include(model: str) -> list[str]:
+    include = ["web_search_call.action.sources"]
+    if any(model.startswith(prefix) for prefix in _ENCRYPTED_REASONING_MODELS):
+        include.append("reasoning.encrypted_content")
+    return include
 
 
 def _reasoning_request(model: str, effort: str) -> dict[str, Any]:

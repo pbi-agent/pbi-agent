@@ -12,6 +12,7 @@ from pbi_agent.ui.formatting import (
     format_generic_function_item,
     format_init_report_item,
     format_skill_knowledge_item,
+    format_web_search_sources_item,
 )
 
 
@@ -137,6 +138,51 @@ class TestFormatGenericFunctionItem:
         )
         assert "call_id=call_99" in result
         assert "args=" in result
+
+
+class TestFormatWebSearchSourcesItem:
+    def test_includes_queries_when_present(self) -> None:
+        result = format_web_search_sources_item(
+            [{"title": "BTC", "url": "https://example.com/btc", "snippet": ""}],
+            queries=["finance: BTC"],
+            status="[green]done[/green]",
+        )
+        assert "queries:" in result
+        assert "finance: BTC" in result
+        assert "web search" not in result
+        assert "🔍" not in result
+
+    def test_no_sources_still_shows_queries(self) -> None:
+        result = format_web_search_sources_item(
+            [],
+            queries=["finance: BTC"],
+            status="[green]done[/green]",
+        )
+        assert "no sources" in result
+        assert "finance: BTC" in result
+
+    def test_queries_render_before_source_summary(self) -> None:
+        result = format_web_search_sources_item(
+            [{"title": "BTC", "url": "https://example.com/btc", "snippet": ""}],
+            queries=["finance: BTC"],
+            status="[green]done[/green]",
+        )
+        assert result.index("queries:") < result.index("1 source")
+
+    def test_compact_sources_use_separate_url_line(self) -> None:
+        result = format_web_search_sources_item(
+            [
+                {
+                    "title": "CoinMarketCap",
+                    "url": "https://example.com/btc",
+                    "snippet": "",
+                }
+            ],
+            status="[green]done[/green]",
+        )
+        assert "[dim]•[/dim] CoinMarketCap" in result
+        assert "https://example.com/btc" in result
+        assert "CoinMarketCap  [dim]https://example.com/btc[/dim]" not in result
 
 
 class TestRenderThinking:

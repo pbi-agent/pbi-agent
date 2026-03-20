@@ -193,6 +193,47 @@ def test_anthropic_request_turn_preserves_history_and_wraps_tool_results(
     assert display_spy.session_usage_snapshots[-1].cache_write_1h_tokens == 2
 
 
+def test_anthropic_request_turn_omits_adaptive_thinking_for_haiku_models(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return make_http_response(
+            {
+                "id": "msg_haiku",
+                "content": [{"type": "text", "text": "Bitcoin is $1."}],
+                "usage": {
+                    "input_tokens": 8,
+                    "output_tokens": 3,
+                },
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = AnthropicProvider(
+        _make_settings(model="claude-haiku-4-5", reasoning_effort="low")
+    )
+    provider.request_turn(
+        user_message="check bitcoin price",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert "thinking" not in requests[0]
+    assert "output_config" not in requests[0]
+
+
 def test_anthropic_restore_messages_reuses_persisted_history(
     monkeypatch,
     display_spy,
@@ -603,4 +644,246 @@ def test_anthropic_execute_tool_calls_serializes_image_attachments(
                 },
             ],
         }
+    ]
+
+
+def test_anthropic_web_search_tool_included_when_enabled() -> None:
+    provider = AnthropicProvider(_make_settings(web_search=True))
+    web_tool = {"type": "web_search_20260209", "name": "web_search"}
+    assert web_tool in provider._tools
+
+
+def test_anthropic_web_search_tool_uses_direct_callers_for_haiku_models() -> None:
+    provider = AnthropicProvider(
+        _make_settings(web_search=True, model="claude-haiku-4-5")
+    )
+    assert {
+        "type": "web_search_20260209",
+        "name": "web_search",
+        "allowed_callers": ["direct"],
+    } in provider._tools
+
+
+def test_anthropic_web_search_tool_excluded_when_disabled() -> None:
+    provider = AnthropicProvider(_make_settings(web_search=False))
+    tool_types = [t.get("type") for t in provider._tools]
+    assert "web_search_20260209" not in tool_types
+
+
+def test_anthropic_parse_response_extracts_web_search_sources() -> None:
+    provider = AnthropicProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "msg_ws",
+            "content": [
+                {
+                    "type": "server_tool_use",
+                    "id": "srvtoolu_1",
+                    "name": "web_search_20250305",
+                    "input": {"query": "test query"},
+                },
+                {
+                    "type": "web_search_tool_result",
+                    "tool_use_id": "srvtoolu_1",
+                    "content": [
+                        {
+                            "type": "web_search_result",
+                            "title": "Example Page",
+                            "url": "https://example.com/page",
+                            "page_snippet": "A snippet from the page.",
+                        },
+                        {
+                            "type": "web_search_result",
+                            "title": "Another Page",
+                            "url": "https://example.com/another",
+                            "page_snippet": "Another snippet.",
+                        },
+                    ],
+                },
+                {"type": "text", "text": "Here is the answer."},
+            ],
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 30,
+            },
+        }
+    )
+
+    assert result.text == "Here is the answer."
+    assert len(result.web_search_sources) == 2
+    assert result.web_search_sources[0].title == "Example Page"
+    assert result.web_search_sources[0].url == "https://example.com/page"
+    assert result.web_search_sources[0].snippet == "A snippet from the page."
+    assert result.web_search_sources[1].title == "Another Page"
+    assert result.provider_data["display_items"] == [
+        {
+            "type": "web_search",
+            "queries": ["test query"],
+            "sources": [
+                {
+                    "title": "Example Page",
+                    "url": "https://example.com/page",
+                    "snippet": "A snippet from the page.",
+                },
+                {
+                    "title": "Another Page",
+                    "url": "https://example.com/another",
+                    "snippet": "Another snippet.",
+                },
+            ],
+        },
+        {"type": "text", "text": "Here is the answer."},
+    ]
+
+
+def test_anthropic_web_search_sources_preserve_duplicate_urls() -> None:
+    provider = AnthropicProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "msg_ws_dup",
+            "content": [
+                {
+                    "type": "web_search_tool_result",
+                    "tool_use_id": "srvtoolu_1",
+                    "content": [
+                        {
+                            "type": "web_search_result",
+                            "title": "Same Page",
+                            "url": "https://example.com/same",
+                            "page_snippet": "First snippet.",
+                        },
+                        {
+                            "type": "web_search_result",
+                            "title": "Same Page Again",
+                            "url": "https://example.com/same",
+                            "page_snippet": "Second snippet.",
+                        },
+                    ],
+                },
+                {"type": "text", "text": "Answer."},
+            ],
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 5,
+            },
+        }
+    )
+
+    assert len(result.web_search_sources) == 2
+    assert result.web_search_sources[0].url == "https://example.com/same"
+    assert result.web_search_sources[1].url == "https://example.com/same"
+
+
+def test_anthropic_server_tool_use_not_in_function_calls() -> None:
+    provider = AnthropicProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "msg_ws2",
+            "content": [
+                {
+                    "type": "server_tool_use",
+                    "id": "srvtoolu_1",
+                    "name": "web_search_20250305",
+                    "input": {"query": "test"},
+                },
+                {
+                    "type": "web_search_tool_result",
+                    "tool_use_id": "srvtoolu_1",
+                    "content": [],
+                },
+                {"type": "text", "text": "Done."},
+            ],
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 5,
+            },
+        }
+    )
+
+    assert result.function_calls == []
+
+
+def test_anthropic_request_turn_preserves_web_search_order_from_content_blocks(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    events: list[tuple[str, object]] = []
+
+    original_render_markdown = display_spy.render_markdown
+    original_function_result = display_spy.function_result
+
+    def capture_markdown(text: str) -> None:
+        events.append(("message", text))
+        original_render_markdown(text)
+
+    def capture_function_result(
+        *,
+        name: str,
+        success: bool,
+        call_id: str,
+        arguments: object,
+    ) -> None:
+        events.append(("tool", name))
+        original_function_result(
+            name=name,
+            success=success,
+            call_id=call_id,
+            arguments=arguments,
+        )
+
+    display_spy.render_markdown = capture_markdown
+    display_spy.function_result = capture_function_result
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del request, timeout
+        return make_http_response(
+            {
+                "id": "msg_ws_order",
+                "content": [
+                    {"type": "text", "text": "I'll search for the current Bitcoin price."},
+                    {
+                        "type": "server_tool_use",
+                        "id": "srvtoolu_1",
+                        "name": "web_search",
+                        "input": {"query": "bitcoin price"},
+                    },
+                    {
+                        "type": "web_search_tool_result",
+                        "tool_use_id": "srvtoolu_1",
+                        "content": [
+                            {
+                                "type": "web_search_result",
+                                "title": "BTC",
+                                "url": "https://example.com/btc",
+                                "page_snippet": "Bitcoin price now.",
+                            }
+                        ],
+                    },
+                    {"type": "text", "text": "Bitcoin is $1."},
+                ],
+                "usage": {"input_tokens": 8, "output_tokens": 3},
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = AnthropicProvider(_make_settings(model="claude-haiku-4-5"))
+    provider.request_turn(
+        user_message="check bitcoin price",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert events == [
+        ("message", "I'll search for the current Bitcoin price."),
+        ("tool", "web_search"),
+        ("message", "Bitcoin is $1."),
     ]
