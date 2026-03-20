@@ -44,13 +44,19 @@ class TestFormatSkillKnowledgeItem:
 
     def test_verbose_includes_call_id(self) -> None:
         result = format_skill_knowledge_item(
-            ["card_visual"], verbose=True, status="[green]done[/green]", call_id="call_42"
+            ["card_visual"],
+            verbose=True,
+            status="[green]done[/green]",
+            call_id="call_42",
         )
         assert "call_42" in result
 
     def test_non_verbose_omits_call_id(self) -> None:
         result = format_skill_knowledge_item(
-            ["card_visual"], verbose=False, status="[green]done[/green]", call_id="call_42"
+            ["card_visual"],
+            verbose=False,
+            status="[green]done[/green]",
+            call_id="call_42",
         )
         assert "call_42" not in result
 
@@ -185,7 +191,9 @@ def test_session_usage_updates_header_with_model_and_effort() -> None:
     app = MagicMock()
     display = Display(app, model="gpt-5.4-2026-03-05", reasoning_effort="xhigh")
 
-    display.session_usage(TokenUsage(input_tokens=8, output_tokens=3, model="gpt-5.4-2026-03-05"))
+    display.session_usage(
+        TokenUsage(input_tokens=8, output_tokens=3, model="gpt-5.4-2026-03-05")
+    )
 
     callback, subtitle = app.call_from_thread.call_args.args
     assert callback == app.update_session_header

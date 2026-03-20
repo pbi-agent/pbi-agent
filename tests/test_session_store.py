@@ -131,8 +131,12 @@ def test_usage_accumulates_across_updates(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:
         sid = store.create_session("/w", "openai", "gpt-5", "accum")
-        store.update_session(sid, total_tokens=100, input_tokens=60, output_tokens=40, cost_usd=0.01)
-        store.update_session(sid, total_tokens=300, input_tokens=180, output_tokens=120, cost_usd=0.03)
+        store.update_session(
+            sid, total_tokens=100, input_tokens=60, output_tokens=40, cost_usd=0.01
+        )
+        store.update_session(
+            sid, total_tokens=300, input_tokens=180, output_tokens=120, cost_usd=0.03
+        )
         rec = store.get_session(sid)
 
     assert rec is not None

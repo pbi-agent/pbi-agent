@@ -172,5 +172,3 @@ def _bound_match_fields(match: dict[str, Any]) -> dict[str, Any]:
     if line_truncated:
         payload["line_truncated"] = True
     return payload
-
-

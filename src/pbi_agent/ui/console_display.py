@@ -309,9 +309,12 @@ class ConsoleDisplay(DisplayProtocol):
     ) -> None:
         self._tool_group.update_for_function(name)
         tool_name, text = route_function_result(
-            name, verbose=self.verbose, bold_command=True,
+            name,
+            verbose=self.verbose,
+            bold_command=True,
             status=status_markup(success=success),
-            call_id=call_id, arguments=arguments,
+            call_id=call_id,
+            arguments=arguments,
         )
         self._append_tool_line(tool_name, text)
 

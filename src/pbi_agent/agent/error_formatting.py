@@ -123,7 +123,9 @@ def format_user_facing_error(exc: BaseException) -> str:
     if error_type == "not_found":
         parts = ["Requested resource was not found."]
         _append_detail(parts, detail)
-        parts.append("Check the request resource identifiers, model name, and API version.")
+        parts.append(
+            "Check the request resource identifiers, model name, and API version."
+        )
         return _finalize_message(parts, request_id=request_id)
 
     if error_type == "request_too_large":
@@ -167,7 +169,9 @@ def format_user_facing_error(exc: BaseException) -> str:
     if error_type == "internal":
         parts = ["Provider error."]
         _append_detail(parts, detail)
-        parts.append("Reduce the prompt/context size or retry with another Gemini model.")
+        parts.append(
+            "Reduce the prompt/context size or retry with another Gemini model."
+        )
         return _finalize_message(parts, request_id=request_id)
 
     if error_type == "unavailable":
@@ -214,7 +218,10 @@ def _extract_structured_error(message: str) -> _StructuredErrorInfo:
         payload_type = error_value.get("type")
         if isinstance(payload_type, str) and payload_type.strip():
             error_type = payload_type.strip()
-        elif isinstance(error_value.get("status"), str) and error_value.get("status").strip():
+        elif (
+            isinstance(error_value.get("status"), str)
+            and error_value.get("status").strip()
+        ):
             error_type = error_value.get("status").strip().lower()
         payload_message = error_value.get("message")
         if isinstance(payload_message, str) and payload_message.strip():

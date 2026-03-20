@@ -45,8 +45,7 @@ SPEC = ToolSpec(
             "entry_type": {
                 "type": "string",
                 "description": (
-                    "Limit results to files, directories, or both. "
-                    "Defaults to 'all'."
+                    "Limit results to files, directories, or both. Defaults to 'all'."
                 ),
                 "enum": ["all", "file", "directory"],
                 "default": "all",
@@ -71,9 +70,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         glob_pattern = _normalize_glob_pattern(arguments.get("glob"))
         entry_type = _normalize_entry_type(arguments.get("entry_type"))
         if entry_type is None:
-            return {
-                "error": "'entry_type' must be one of: all, file, directory."
-            }
+            return {"error": "'entry_type' must be one of: all, file, directory."}
         matcher = build_glob_matcher(glob_pattern)
         max_entries = normalize_positive_int(
             arguments.get("max_entries"),
@@ -87,7 +84,9 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             relative_path = relative_workspace_path(root, target_path)
             entry = _build_entry(relative_path, "file")
             entries: list[dict[str, Any]] = []
-            if _matches_filters(relative_path, target_path.name, "file", matcher, entry_type):
+            if _matches_filters(
+                relative_path, target_path.name, "file", matcher, entry_type
+            ):
                 entry, path_truncated = _bound_entry_path(entry)
                 if path_truncated:
                     entry["path_truncated"] = True

@@ -85,6 +85,8 @@ def _validate_url(url: str) -> str | None:
     if not parsed.netloc:
         return "'url' must be an absolute http or https URL."
     return None
+
+
 def _format_http_error(exc: urllib.error.HTTPError) -> str:
     detail = ""
     try:

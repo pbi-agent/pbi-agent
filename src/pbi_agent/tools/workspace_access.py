@@ -35,7 +35,9 @@ def resolve_safe_path(root: Path, raw_path: Any, *, default: str = ".") -> Path:
     try:
         resolved.relative_to(root)
     except ValueError as exc:
-        raise ValueError(f"path outside workspace is not allowed: {path_value}") from exc
+        raise ValueError(
+            f"path outside workspace is not allowed: {path_value}"
+        ) from exc
 
     return resolved
 
@@ -61,7 +63,9 @@ def iter_directory_entries(path: Path, *, recursive: bool) -> Iterator[Path]:
             yield entry
         return
 
-    for current_root, dirnames, filenames in os.walk(path, topdown=True, followlinks=False):
+    for current_root, dirnames, filenames in os.walk(
+        path, topdown=True, followlinks=False
+    ):
         dirnames.sort(key=str.casefold)
         filenames.sort(key=str.casefold)
         current = Path(current_root)
@@ -120,7 +124,11 @@ def read_text_file(path: Path, *, encoding: str = "auto") -> tuple[str, str]:
 
 
 def _normalize_encoding_name(encoding: str) -> str:
-    return encoding.strip().lower() if isinstance(encoding, str) and encoding.strip() else "auto"
+    return (
+        encoding.strip().lower()
+        if isinstance(encoding, str) and encoding.strip()
+        else "auto"
+    )
 
 
 def _detect_text_encoding(
@@ -194,8 +202,6 @@ def _is_probably_binary(raw_bytes: bytes) -> bool:
         return True
 
     suspicious = sum(
-        1
-        for value in sample
-        if value < 32 and value not in _TEXT_CONTROL_BYTES
+        1 for value in sample if value < 32 and value not in _TEXT_CONTROL_BYTES
     )
     return suspicious / len(sample) > 0.3

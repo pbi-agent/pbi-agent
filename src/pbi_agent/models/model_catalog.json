@@ -1,0 +1,23 @@
+{
+  "models": {
+    "gpt-5.3-codex": {
+      "context_window": 1047576,
+      "pricing": { "input": 1.75, "cache_write_5m": 1.75, "cache_write_1h": 1.75, "cache_hit": 0.175, "output": 14.00 }
+    },
+    "gpt-5.4-2026-03-05": {
+      "context_window": 1047576,
+      "pricing": { "input": 2.5, "cache_write_5m": 2.5, "cache_write_1h": 2.5, "cache_hit": 0.25, "output": 15.00 }
+    },
+    "claude-opus-4-6": {
+      "context_window": 200000,
+      "pricing": { "input": 5.00, "cache_write_5m": 6.25, "cache_write_1h": 10.00, "cache_hit": 0.50, "output": 25.00 }
+    },
+    "claude-sonnet-4-6": {
+      "context_window": 200000,
+      "pricing": { "input": 3.00, "cache_write_5m": 3.75, "cache_write_1h": 6.00, "cache_hit": 0.30, "output": 15.00 }
+    }
+  },
+  "defaults": {
+    "context_window": 200000
+  }
+}

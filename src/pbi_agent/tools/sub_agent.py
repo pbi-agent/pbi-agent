@@ -46,7 +46,10 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         }
 
     reasoning_effort = arguments.get("reasoning_effort", "low")
-    if not isinstance(reasoning_effort, str) or reasoning_effort not in _REASONING_EFFORT_VALUES:
+    if (
+        not isinstance(reasoning_effort, str)
+        or reasoning_effort not in _REASONING_EFFORT_VALUES
+    ):
         reasoning_effort = "low"
 
     settings = context.settings

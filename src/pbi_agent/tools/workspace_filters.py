@@ -189,9 +189,7 @@ def build_glob_matcher(glob_pattern: str | None) -> Callable[[str, str], bool]:
     return lambda relative_path, name: fnmatch.fnmatch(name, normalized_pattern)
 
 
-def _match_relative_path(
-    relative_path: str, pattern_parts: tuple[str, ...]
-) -> bool:
+def _match_relative_path(relative_path: str, pattern_parts: tuple[str, ...]) -> bool:
     path_parts = tuple(part for part in relative_path.split("/") if part)
     return _match_path_parts(path_parts, pattern_parts, 0, 0)
 

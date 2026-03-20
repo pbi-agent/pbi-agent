@@ -244,9 +244,12 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
     ) -> None:
         self._tool_group.update_for_function(name)
         tool_name, text = route_function_result(
-            name, verbose=self.verbose, bold_command=True,
+            name,
+            verbose=self.verbose,
+            bold_command=True,
             status=status_markup(success=success),
-            call_id=call_id, arguments=arguments,
+            call_id=call_id,
+            arguments=arguments,
         )
         self._tool_group.add_item(text, classes=tool_item_class(tool_name))
 

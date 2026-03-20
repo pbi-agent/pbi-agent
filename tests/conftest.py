@@ -145,9 +145,7 @@ def isolate_internal_config_path(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
 
 @pytest.fixture(autouse=True)
 def isolate_session_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    monkeypatch.setenv(
-        "PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db")
-    )
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
 
 
 @pytest.fixture
