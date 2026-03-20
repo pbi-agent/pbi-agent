@@ -71,7 +71,7 @@ class GoogleProvider(Provider):
         self._settings = settings
         self._tools = _google_tool_definitions(excluded_names=excluded_tools)
         if settings.web_search:
-            self._tools.append({"google_search": {}})
+            self._tools.append({"type": "google_search"})
         self._instructions = system_prompt or get_system_prompt()
         self._previous_interaction_id: str | None = None
 

@@ -805,12 +805,12 @@ def test_google_execute_tool_calls_serializes_image_attachments(
 
 def test_google_web_search_tool_included_when_enabled() -> None:
     provider = GoogleProvider(_make_settings(web_search=True))
-    assert {"google_search": {}} in provider._tools
+    assert {"type": "google_search"} in provider._tools
 
 
 def test_google_web_search_tool_excluded_when_disabled() -> None:
     provider = GoogleProvider(_make_settings(web_search=False))
-    assert {"google_search": {}} not in provider._tools
+    assert {"type": "google_search"} not in provider._tools
 
 
 def test_google_parse_response_extracts_grounding_sources() -> None:
