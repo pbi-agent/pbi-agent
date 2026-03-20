@@ -566,7 +566,8 @@ def format_web_search_sources_item(
         for src in sources[:5]:
             title = escape_markup_text(shorten(src.get("title", ""), 60))
             url = escape_markup_text(shorten(src.get("url", ""), 60))
-            lines.append(f"  [dim]\u2022[/dim] {title}  [dim]{url}[/dim]")
+            lines.append(f"  [dim]\u2022[/dim] {title}")
+            lines.append(f"    [dim]{url}[/dim]")
         if count > 5:
             lines.append(f"  [dim]\u2026 and {count - 5} more[/dim]")
         return "\n".join(lines)

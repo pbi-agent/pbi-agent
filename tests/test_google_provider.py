@@ -597,6 +597,9 @@ def test_google_request_turn_raises_for_failed_response_payload(
 
 
 class _DisplayStub:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, object]] = []
+
     def begin_sub_agent(
         self,
         *,
@@ -658,9 +661,11 @@ class _DisplayStub:
 
     def render_markdown(self, text: str) -> None:
         self.markdown = text
+        self.events.append(("markdown", text))
 
     def function_start(self, count: int) -> None:
         self.function_count = count
+        self.events.append(("function_start", count))
 
     def function_result(
         self,
@@ -676,12 +681,15 @@ class _DisplayStub:
             "call_id": call_id,
             "arguments": arguments,
         }
+        self.events.append(("function_result", self.last_function_result))
 
     def tool_group_end(self) -> None:
         self.tool_group_closed = True
+        self.events.append(("tool_group_end", None))
 
     def web_search_sources(self, sources: list[WebSearchSource]) -> None:
         self.last_web_search_sources = list(sources)
+        self.events.append(("web_search_sources", list(sources)))
 
 
 def test_google_request_turn_serializes_user_input_images(monkeypatch) -> None:
@@ -855,6 +863,51 @@ def test_google_parse_response_extracts_grounding_sources() -> None:
     assert result.web_search_sources[0].url == "https://example.com/page"
     assert result.web_search_sources[1].title == "Another Page"
     assert result.web_search_sources[1].url == "https://example.com/another"
+    assert result.provider_data["web_search_queries"] == []
+
+
+def test_google_parse_response_extracts_queries_from_grounding_metadata() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_ws_queries",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "usage": {
+                "total_input_tokens": 50,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 20,
+                "total_thought_tokens": 0,
+            },
+            "outputs": [{"type": "text", "text": "Here is the answer."}],
+            "groundingMetadata": {
+                "webSearchQueries": ["bitcoin live price", "BTC USD"],
+                "groundingChunks": [
+                    {
+                        "web": {
+                            "uri": "https://example.com/page",
+                            "title": "Example Page",
+                        }
+                    }
+                ],
+            },
+        }
+    )
+
+    assert result.provider_data["web_search_queries"] == [
+        "bitcoin live price",
+        "BTC USD",
+    ]
+    assert result.provider_data["display_items"][0]["type"] == "google_search_result"
+    assert result.provider_data["display_items"][0]["queries"] == [
+        "bitcoin live price",
+        "BTC USD",
+    ]
+    assert result.provider_data["display_items"][1] == {
+        "type": "text",
+        "text": "Here is the answer.",
+    }
 
 
 def test_google_grounding_sources_preserve_duplicate_urls() -> None:
@@ -908,3 +961,190 @@ def test_google_parse_response_no_grounding_metadata() -> None:
     )
 
     assert result.web_search_sources == []
+
+
+def test_google_parse_response_extracts_google_search_result_output() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_search_output",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "usage": {
+                "total_input_tokens": 12,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 7,
+            },
+            "outputs": [
+                {
+                    "type": "google_search_result",
+                    "call_id": "search_1",
+                    "result": [
+                        {
+                            "url": "https://example.com/price",
+                            "title": "BTC price",
+                        }
+                    ],
+                },
+                {"type": "text", "text": "Bitcoin is around $70k."},
+            ],
+            "groundingMetadata": {
+                "webSearchQueries": ["bitcoin live price"],
+            },
+        }
+    )
+
+    assert len(result.web_search_sources) == 1
+    assert result.web_search_sources[0].url == "https://example.com/price"
+    assert result.provider_data["display_items"][0] == {
+        "type": "google_search_result",
+        "queries": ["bitcoin live price"],
+        "sources": [WebSearchSource(title="BTC price", url="https://example.com/price")],
+    }
+    assert result.provider_data["display_items"][1] == {
+        "type": "text",
+        "text": "Bitcoin is around $70k.",
+    }
+
+
+def test_google_parse_response_uses_google_search_call_queries_and_text_citations() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_google_search_call",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "usage": {
+                "total_input_tokens": 12,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 7,
+            },
+            "outputs": [
+                {
+                    "type": "google_search_call",
+                    "id": "search_1",
+                    "arguments": {"queries": ["current bitcoin price"]},
+                },
+                {
+                    "type": "google_search_result",
+                    "call_id": "search_1",
+                    "result": [{"search_suggestions": "<div>chip</div>"}],
+                },
+                {
+                    "type": "text",
+                    "text": "Bitcoin is around $70k.",
+                    "annotations": [
+                        {
+                            "type": "url_citation",
+                            "url": "https://example.com/coindesk",
+                            "title": "coindesk.com",
+                        },
+                        {
+                            "type": "url_citation",
+                            "url": "https://example.com/kraken",
+                            "title": "kraken.com",
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert result.provider_data["display_items"][0] == {
+        "type": "google_search_result",
+        "queries": ["current bitcoin price"],
+        "sources": [
+            WebSearchSource(
+                title="coindesk.com",
+                url="https://example.com/coindesk",
+            ),
+            WebSearchSource(
+                title="kraken.com",
+                url="https://example.com/kraken",
+            ),
+        ],
+    }
+    assert result.web_search_sources == [
+        WebSearchSource(
+            title="coindesk.com",
+            url="https://example.com/coindesk",
+        ),
+        WebSearchSource(
+            title="kraken.com",
+            url="https://example.com/kraken",
+        ),
+    ]
+
+
+def test_google_request_turn_renders_google_search_block_before_text(monkeypatch) -> None:
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        return _FakeHTTPResponse(
+            {
+                "id": "int_1",
+                "model": DEFAULT_GOOGLE_MODEL,
+                "status": "completed",
+                "usage": {
+                    "total_input_tokens": 10,
+                    "total_cached_tokens": 0,
+                    "total_output_tokens": 3,
+                    "total_thought_tokens": 0,
+                },
+                "outputs": [
+                    {
+                        "type": "google_search_call",
+                        "id": "search_1",
+                        "arguments": {"queries": ["bitcoin live price"]},
+                    },
+                    {
+                        "type": "google_search_result",
+                        "call_id": "search_1",
+                        "result": [{"search_suggestions": "<div>chip</div>"}],
+                    },
+                    {
+                        "type": "text",
+                        "text": "Bitcoin is around $70k.",
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "url": "https://example.com/price",
+                                "title": "BTC price",
+                            }
+                        ],
+                    },
+                ],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GoogleProvider(_make_settings())
+    display = _DisplayStub()
+
+    provider.request_turn(
+        user_message="check bitcoin price",
+        display=display,
+        session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+    )
+
+    assert display.events[0] == ("function_start", 1)
+    assert display.events[1][0] == "function_result"
+    assert display.events[1][1]["name"] == "web_search"
+    assert display.events[1][1]["arguments"] == {
+        "queries": ["bitcoin live price"],
+        "sources": [
+            {
+                "title": "BTC price",
+                "url": "https://example.com/price",
+                "snippet": "",
+            }
+        ],
+    }
+    assert display.events[2] == ("tool_group_end", None)
+    assert display.events[3] == ("markdown", "Bitcoin is around $70k.")

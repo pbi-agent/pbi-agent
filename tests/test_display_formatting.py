@@ -159,6 +159,21 @@ class TestFormatWebSearchSourcesItem:
         assert "no sources" in result
         assert "finance: BTC" in result
 
+    def test_compact_sources_use_separate_url_line(self) -> None:
+        result = format_web_search_sources_item(
+            [
+                {
+                    "title": "CoinMarketCap",
+                    "url": "https://example.com/btc",
+                    "snippet": "",
+                }
+            ],
+            status="[green]done[/green]",
+        )
+        assert "[dim]•[/dim] CoinMarketCap" in result
+        assert "https://example.com/btc" in result
+        assert "CoinMarketCap  [dim]https://example.com/btc[/dim]" not in result
+
 
 class TestRenderThinking:
     def test_missing_body_uses_summary_text(self) -> None:
