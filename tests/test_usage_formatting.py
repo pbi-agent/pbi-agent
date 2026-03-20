@@ -10,7 +10,12 @@ from pbi_agent.models.messages import (
     _pricing_for_model,
     context_window_for_model,
 )
-from pbi_agent.ui.formatting import format_session_subtitle, format_usage_summary
+from pbi_agent.ui.formatting import (
+    format_context_tooltip,
+    format_session_subtitle_parts,
+    format_session_subtitle,
+    format_usage_summary,
+)
 
 
 def test_format_usage_summary_includes_sub_agent_breakdown() -> None:
@@ -169,3 +174,44 @@ def test_default_service_tier_no_change() -> None:
         assert tier_usage.estimated_cost_usd == pytest.approx(
             base_usage.estimated_cost_usd
         ), f"tier={tier} should not change cost"
+
+
+def test_format_context_tooltip_with_known_model() -> None:
+    usage = TokenUsage(context_tokens=100_000, model="gpt-5.3-codex")
+    tip = format_context_tooltip(usage, model="gpt-5.3-codex")
+    assert tip is not None
+    assert "100,000" in tip
+    assert "272,000" in tip
+    assert "Utilization:" in tip
+
+
+def test_format_context_tooltip_no_context_tokens() -> None:
+    usage = TokenUsage(model="gpt-5.3-codex")
+    assert format_context_tooltip(usage) is None
+
+
+def test_format_context_tooltip_unknown_model() -> None:
+    usage = TokenUsage(context_tokens=50_000, model="unknown-model")
+    tip = format_context_tooltip(usage, model="unknown-model")
+    assert tip is not None
+    assert "50,000" in tip
+    assert "200,000" in tip
+
+
+def test_format_session_subtitle_parts_extracts_context_label() -> None:
+    usage = TokenUsage(
+        input_tokens=8,
+        output_tokens=3,
+        context_tokens=100_000,
+        model="gpt-5.3-codex",
+    )
+
+    subtitle, context_label = format_session_subtitle_parts(
+        usage,
+        model="gpt-5.3-codex",
+    )
+
+    assert "gpt-5.3-codex" in subtitle
+    assert "11 tok" in subtitle
+    assert "ctx" not in subtitle
+    assert context_label == "ctx 37%"

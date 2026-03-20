@@ -199,6 +199,8 @@ def test_session_usage_updates_header_with_model_and_effort() -> None:
     assert callback == app.update_session_header
     assert "gpt-5.4-2026-03-05 (xhigh)" in subtitle
     assert "11 tok" in subtitle
+    assert "ctx" not in subtitle
+    assert app.call_from_thread.call_args.kwargs["context_label"] is None
 
 
 # -- function_result routing -------------------------------------------------

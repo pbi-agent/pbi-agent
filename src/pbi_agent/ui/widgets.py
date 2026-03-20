@@ -8,6 +8,13 @@ from typing import Any
 from textual import events
 from textual.containers import Vertical
 from textual.message import Message
+from textual.widgets import Header
+from textual.widgets._header import (
+    HeaderClock,
+    HeaderClockSpace,
+    HeaderIcon,
+    HeaderTitle,
+)
 from textual.widgets import (
     Collapsible,
     LoadingIndicator,
@@ -75,6 +82,73 @@ class WelcomeBanner(Static):
             lines.append("[dim]\u00b7[/dim]  ".join(parts))
 
         super().__init__("\n".join(lines))
+
+
+class SessionHeaderContext(Static):
+    """Header badge for the context utilization tooltip target."""
+
+    _cached_label: str | None = None
+    _cached_tooltip: str | None = None
+
+    DEFAULT_CSS = """
+    SessionHeaderContext {
+        dock: right;
+        width: auto;
+        padding: 0 1;
+        color: $text-muted;
+        display: none;
+    }
+
+    SessionHeaderContext.-active {
+        display: block;
+    }
+    """
+
+    def set_context(self, label: str | None, *, tooltip: str | None = None) -> None:
+        if label == self._cached_label and tooltip == self._cached_tooltip:
+            return
+        self._cached_label = label
+        self._cached_tooltip = tooltip
+        has_context = bool(label)
+        self.update(label or "")
+        self.tooltip = tooltip if has_context else None
+        self.set_class(has_context, "-active")
+
+
+class SessionHeader(Header):
+    """Header with a dedicated context hover target."""
+
+    DEFAULT_CSS = """
+    SessionHeader > HeaderTitle {
+        width: 1fr;
+        min-width: 0;
+    }
+    """
+
+    def __init__(
+        self,
+        *,
+        context_label: str | None = None,
+        context_tooltip: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._initial_context_label = context_label
+        self._initial_context_tooltip = context_tooltip
+
+    def compose(self):
+        yield HeaderIcon().data_bind(Header.icon)
+        yield HeaderTitle()
+        yield (
+            HeaderClock().data_bind(Header.time_format)
+            if self._show_clock
+            else HeaderClockSpace()
+        )
+        context = SessionHeaderContext(id="session-header-context")
+        context.set_context(
+            self._initial_context_label,
+            tooltip=self._initial_context_tooltip,
+        )
+        yield context
 
 
 class UserMessage(Static):
@@ -222,6 +296,8 @@ __all__ = [
     "ChatInput",
     "ErrorMessage",
     "NoticeMessage",
+    "SessionHeader",
+    "SessionHeaderContext",
     "SessionListItem",
     "SessionSidebar",
     "SubAgentBlock",
