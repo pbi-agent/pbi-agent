@@ -105,6 +105,15 @@ def _pricing_for_model(model: str) -> tuple[float, float, float, float, float]:
     return _get_catalog().get_pricing(model)
 
 
+def _service_tier_multiplier(service_tier: str) -> float:
+    """Return the pricing multiplier for an OpenAI service tier."""
+    if service_tier == "flex":
+        return 0.5
+    if service_tier == "priority":
+        return 2.0
+    return 1.0
+
+
 def _estimated_cost(
     *,
     model: str,
@@ -113,19 +122,23 @@ def _estimated_cost(
     cache_write_tokens: int,
     cache_write_1h_tokens: int,
     output_tokens: int,
+    service_tier: str = "",
 ) -> float:
     p_in, p_w5, p_w1h, p_hit, p_out = _pricing_for_model(model)
     non_cached_input_tokens = max(
         input_tokens - cached_input_tokens - cache_write_tokens - cache_write_1h_tokens,
         0,
     )
-    return (
+    cost = (
         (non_cached_input_tokens / 1_000_000.0) * p_in
         + (cache_write_tokens / 1_000_000.0) * p_w5
         + (cache_write_1h_tokens / 1_000_000.0) * p_w1h
         + (cached_input_tokens / 1_000_000.0) * p_hit
         + (output_tokens / 1_000_000.0) * p_out
     )
+    if service_tier:
+        cost *= _service_tier_multiplier(service_tier)
+    return cost
 
 
 @dataclass(slots=True)
@@ -149,6 +162,7 @@ class TokenUsage:
     sub_agent_cost_usd: float = 0.0
     context_tokens: int = 0
     model: str = ""
+    service_tier: str = ""
     _lock: threading.Lock = field(
         default_factory=threading.Lock,
         init=False,
@@ -203,6 +217,7 @@ class TokenUsage:
                 cache_write_tokens=main_cache_write_tokens,
                 cache_write_1h_tokens=main_cache_write_1h_tokens,
                 output_tokens=main_output_tokens,
+                service_tier=self.service_tier,
             )
             + self.sub_agent_cost_usd
         )
@@ -255,6 +270,8 @@ class TokenUsage:
                 self.context_tokens = other_snapshot.context_tokens
             if not self.model and other_snapshot.model:
                 self.model = other_snapshot.model
+            if not self.service_tier and other_snapshot.service_tier:
+                self.service_tier = other_snapshot.service_tier
 
     def snapshot(self) -> "TokenUsage":
         with self._lock:
@@ -278,6 +295,7 @@ class TokenUsage:
                 sub_agent_cost_usd=self.sub_agent_cost_usd,
                 context_tokens=self.context_tokens,
                 model=self.model,
+                service_tier=self.service_tier,
             )
 
 

@@ -57,10 +57,11 @@ def run_single_turn(
         single_turn_hint=single_turn_hint,
     )
     model = _selected_model(settings)
-    session_usage = TokenUsage(model=model)
+    _tier = settings.service_tier or ""
+    session_usage = TokenUsage(model=model, service_tier=_tier)
     display.session_usage(session_usage)
     session_start = time.monotonic()
-    turn_usage = TokenUsage(model=model)
+    turn_usage = TokenUsage(model=model, service_tier=_tier)
 
     store, session_id = _open_session_store(
         settings,
@@ -115,6 +116,7 @@ def run_chat_loop(
     resume_session_id: str | None = None,
 ) -> int:
     model = _selected_model(settings)
+    _tier = settings.service_tier or ""
     store = _open_store(settings)
     session_id: str | None = resume_session_id
     title_set = bool(resume_session_id)
@@ -126,7 +128,7 @@ def run_chat_loop(
             model=model,
             reasoning_effort=settings.reasoning_effort,
         )
-        new_usage = TokenUsage(model=model)
+        new_usage = TokenUsage(model=model, service_tier=_tier)
         display.session_usage(new_usage)
         return new_usage
 
@@ -185,7 +187,7 @@ def run_chat_loop(
                 title_set = True
 
             turn_start = time.monotonic()
-            turn_usage = TokenUsage(model=model)
+            turn_usage = TokenUsage(model=model, service_tier=_tier)
             display.assistant_start()
             response = provider.request_turn(
                 user_message=user_input,
@@ -235,8 +237,13 @@ def run_sub_agent_task(
         task_instruction=task_instruction,
         reasoning_effort=reasoning_effort,
     )
-    child_session_usage = TokenUsage(model=_selected_model(child_settings))
-    child_turn_usage = TokenUsage(model=_selected_model(child_settings))
+    _child_tier = child_settings.service_tier or ""
+    child_session_usage = TokenUsage(
+        model=_selected_model(child_settings), service_tier=_child_tier
+    )
+    child_turn_usage = TokenUsage(
+        model=_selected_model(child_settings), service_tier=_child_tier
+    )
     child_display.session_usage(child_session_usage)
     started_at = time.monotonic()
     request_count = 0

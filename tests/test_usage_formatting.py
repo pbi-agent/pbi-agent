@@ -114,3 +114,58 @@ def test_user_override_catalog(tmp_path, monkeypatch) -> None:
     assert catalog.get_pricing("my-custom-model") == (10.0, 10.0, 10.0, 1.0, 50.0)
     # Bundled models should still be available
     assert catalog.get_pricing("gpt-5.3-codex") == (1.75, 1.75, 1.75, 0.175, 14.00)
+
+
+def test_flex_service_tier_halves_cost() -> None:
+    """OpenAI flex tier should halve the estimated cost."""
+    base_usage = TokenUsage(
+        input_tokens=1_000_000,
+        output_tokens=1_000_000,
+        model="gpt-5.3-codex",
+    )
+    flex_usage = TokenUsage(
+        input_tokens=1_000_000,
+        output_tokens=1_000_000,
+        model="gpt-5.3-codex",
+        service_tier="flex",
+    )
+    assert flex_usage.estimated_cost_usd == pytest.approx(
+        base_usage.estimated_cost_usd / 2
+    )
+
+
+def test_priority_service_tier_doubles_cost() -> None:
+    """OpenAI priority tier should double the estimated cost."""
+    base_usage = TokenUsage(
+        input_tokens=1_000_000,
+        output_tokens=1_000_000,
+        model="gpt-5.3-codex",
+    )
+    priority_usage = TokenUsage(
+        input_tokens=1_000_000,
+        output_tokens=1_000_000,
+        model="gpt-5.3-codex",
+        service_tier="priority",
+    )
+    assert priority_usage.estimated_cost_usd == pytest.approx(
+        base_usage.estimated_cost_usd * 2
+    )
+
+
+def test_default_service_tier_no_change() -> None:
+    """'auto' and 'default' tiers should not change pricing."""
+    base_usage = TokenUsage(
+        input_tokens=1_000_000,
+        output_tokens=1_000_000,
+        model="gpt-5.3-codex",
+    )
+    for tier in ("auto", "default"):
+        tier_usage = TokenUsage(
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            model="gpt-5.3-codex",
+            service_tier=tier,
+        )
+        assert tier_usage.estimated_cost_usd == pytest.approx(
+            base_usage.estimated_cost_usd
+        ), f"tier={tier} should not change cost"
