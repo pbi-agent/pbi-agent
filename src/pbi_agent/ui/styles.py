@@ -106,6 +106,9 @@ ToolGroup.tool-group-python-exec {
 ToolGroup.tool-group-sub-agent {
     border-left: thick #14B8A6;
 }
+ToolGroup.tool-group-web-search {
+    border-left: thick #10B981;
+}
 ToolGroup > CollapsibleTitle {
     padding: 1 2;
     color: $text-muted;
@@ -151,6 +154,9 @@ ToolItem.tool-call-python-exec {
 }
 ToolItem.tool-call-sub-agent {
     background: #14B8A6 14%;
+}
+ToolItem.tool-call-web-search {
+    background: #10B981 14%;
 }
 
 /* ---- sub-agent block ---- */
