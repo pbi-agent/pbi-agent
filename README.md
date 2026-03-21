@@ -22,8 +22,6 @@ Full documentation lives at [nasirus.github.io/pbi-agent](https://nasirus.github
 
 [![Watch the demo](https://img.youtube.com/vi/vw3RVwbILbE/maxresdefault.jpg)](https://nasirus.github.io/pbi-agent/#demo)
 
-[Open the embedded demo](https://nasirus.github.io/pbi-agent/#demo)
-
 ## Quick Start
 
 > `pbi-agent` works with **PBIP** projects, not `.pbix` files.
