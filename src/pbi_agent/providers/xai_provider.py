@@ -694,7 +694,9 @@ def _merge_web_search_sources(
         current_title = _normalize_web_search_source_title(current.title, url)
         new_title = _normalize_web_search_source_title(normalized.title, url)
         merged[index] = WebSearchSource(
-            title=current_title if not _is_placeholder_web_search_title(current_title) else new_title,
+            title=current_title
+            if not _is_placeholder_web_search_title(current_title)
+            else new_title,
             url=url,
             snippet=current.snippet or normalized.snippet,
         )

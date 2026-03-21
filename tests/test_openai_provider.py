@@ -880,7 +880,7 @@ def test_openai_request_turn_renders_web_search_as_tool_result(
                         "url": "https://example.com/btc",
                         "snippet": "",
                     }
-                ]
+                ],
             },
         }
     ]

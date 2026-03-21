@@ -677,7 +677,7 @@ def test_xai_request_turn_renders_web_search_as_tool_result(
                         "url": "https://example.com/btc",
                         "snippet": "",
                     }
-                ]
+                ],
             },
         }
     ]
@@ -854,7 +854,9 @@ def test_xai_parse_response_extracts_web_search_action_sources() -> None:
     assert result.web_search_sources[1].url == "https://example.com/chart"
 
 
-def test_xai_web_search_sources_deduplicate_urls_and_prefer_non_numeric_titles() -> None:
+def test_xai_web_search_sources_deduplicate_urls_and_prefer_non_numeric_titles() -> (
+    None
+):
     provider = XAIProvider(_make_settings())
 
     result = provider._parse_response(

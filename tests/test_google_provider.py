@@ -1000,7 +1000,9 @@ def test_google_parse_response_extracts_google_search_result_output() -> None:
     assert result.provider_data["display_items"][0] == {
         "type": "google_search_result",
         "queries": ["bitcoin live price"],
-        "sources": [WebSearchSource(title="BTC price", url="https://example.com/price")],
+        "sources": [
+            WebSearchSource(title="BTC price", url="https://example.com/price")
+        ],
     }
     assert result.provider_data["display_items"][1] == {
         "type": "text",
@@ -1008,7 +1010,9 @@ def test_google_parse_response_extracts_google_search_result_output() -> None:
     }
 
 
-def test_google_parse_response_uses_google_search_call_queries_and_text_citations() -> None:
+def test_google_parse_response_uses_google_search_call_queries_and_text_citations() -> (
+    None
+):
     provider = GoogleProvider(_make_settings())
 
     result = provider._parse_response(
@@ -1078,7 +1082,9 @@ def test_google_parse_response_uses_google_search_call_queries_and_text_citation
     ]
 
 
-def test_google_request_turn_renders_google_search_block_before_text(monkeypatch) -> None:
+def test_google_request_turn_renders_google_search_block_before_text(
+    monkeypatch,
+) -> None:
     def fake_urlopen(
         request: urllib.request.Request,
         timeout: float,

@@ -17,7 +17,7 @@ from pathlib import Path
 from aiohttp import web
 from textual_serve.server import Server
 
-from pbi_agent.branding import rich_brand_block
+from pbi_agent.branding import startup_panel
 
 _WEB_DIR = Path(__file__).resolve().parent
 _TEMPLATES_DIR = str(_WEB_DIR / "templates")
@@ -52,9 +52,9 @@ class _FaviconServer(Server):
 
     async def on_startup(self, app: web.Application) -> None:
         del app
-        self.console.print(rich_brand_block(), highlight=False)
-        self.console.print(f"Serving {self.command!r} on {self.public_url}")
-        self.console.print("\n[cyan]Press Ctrl+C to quit")
+        self.console.print(startup_panel(), highlight=False)
+        self.console.print(f"  Serving on [bold]{self.public_url}[/bold]")
+        self.console.print("[cyan]  Press Ctrl+C to quit[/cyan]")
 
     async def _handle_favicon(self, _request: web.Request) -> web.FileResponse:
         return web.FileResponse(

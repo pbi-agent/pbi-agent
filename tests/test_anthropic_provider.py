@@ -847,7 +847,10 @@ def test_anthropic_request_turn_preserves_web_search_order_from_content_blocks(
             {
                 "id": "msg_ws_order",
                 "content": [
-                    {"type": "text", "text": "I'll search for the current Bitcoin price."},
+                    {
+                        "type": "text",
+                        "text": "I'll search for the current Bitcoin price.",
+                    },
                     {
                         "type": "server_tool_use",
                         "id": "srvtoolu_1",

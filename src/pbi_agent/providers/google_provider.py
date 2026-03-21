@@ -603,7 +603,9 @@ def _extract_google_search_queries(
     if isinstance(item, dict):
         raw_queries = item.get("web_search_queries") or item.get("webSearchQueries")
         if isinstance(raw_queries, list):
-            queries = [str(query).strip() for query in raw_queries if str(query).strip()]
+            queries = [
+                str(query).strip() for query in raw_queries if str(query).strip()
+            ]
             if queries:
                 return queries
 
