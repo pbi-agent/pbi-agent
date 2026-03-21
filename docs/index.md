@@ -70,7 +70,7 @@ If this is your first `uv tool install`, reload your shell before running `pbi-a
 ### 3. Run pbi-agent
 
 ```bash
-uv run pbi-agent --api-key "$OPENAI_API_KEY"
+pbi-agent --api-key "$OPENAI_API_KEY"
 ```
 
 | Section | What you will find |
