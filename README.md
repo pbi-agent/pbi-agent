@@ -20,7 +20,9 @@ Full documentation lives at [nasirus.github.io/pbi-agent](https://nasirus.github
 
 ## Demo
 
-<video src="assets/demo.mp4" controls width="100%"></video>
+[![Watch the demo](https://img.youtube.com/vi/vw3RVwbILbE/maxresdefault.jpg)](https://nasirus.github.io/pbi-agent/#demo)
+
+[Open the embedded demo](https://nasirus.github.io/pbi-agent/#demo)
 
 ## Quick Start
 

@@ -24,6 +24,21 @@ features:
     details: 'Choose the default browser UI, the Textual console interface, or a single-prompt execution path.'
 ---
 
+## Demo
+
+<div style="position: relative; width: 100%; padding-bottom: 56.25%; margin: 1.5rem 0;">
+  <iframe
+    src="https://www.youtube.com/embed/vw3RVwbILbE"
+    title="pbi-agent demo"
+    style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 12px;"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    referrerpolicy="strict-origin-when-cross-origin"
+    allowfullscreen
+  ></iframe>
+</div>
+
+[Watch on YouTube](https://youtu.be/vw3RVwbILbE?si=9pbH_4ETPPIRLUqa)
+
 ## Start Here
 
 ::: tip
