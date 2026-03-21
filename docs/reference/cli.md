@@ -20,7 +20,7 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--provider` | `PBI_AGENT_PROVIDER` | `openai` | LLM provider backend: `openai`, `xai`, `google`, `anthropic`, or `generic`. |
 | `--api-key` | `PBI_AGENT_API_KEY` | none | Shared API key override. If unset, provider-specific fallback env vars are checked. |
 | `--model` | `PBI_AGENT_MODEL` | per-provider | Model override for the selected provider. Generic omits `model` when this is unset. |
-| `--sub-agent-model` | `PBI_AGENT_SUB_AGENT_MODEL` | main model | Optional model override for `sub_agent`. When unset, child agents reuse `--model`. |
+| `--sub-agent-model` | `PBI_AGENT_SUB_AGENT_MODEL` | per-provider sub-model | Optional model override for `sub_agent`. When unset, child agents use the provider-specific sub-agent default from `config.py`. |
 | `--max-tokens` | `PBI_AGENT_MAX_TOKENS` | `16384` | Max output tokens for the selected provider. |
 | `--reasoning-effort` | `PBI_AGENT_REASONING_EFFORT` | `xhigh` for OpenAI; `high` otherwise | Requested reasoning effort: `low`, `medium`, `high`, or `xhigh`. |
 | `--max-tool-workers` | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum parallel workers for tool execution. |
@@ -33,13 +33,13 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 
 Per-provider model defaults:
 
-| Provider | Default model |
-| --- | --- |
-| OpenAI | `gpt-5.4-2026-03-05` |
-| xAI | `grok-4-1-fast-reasoning` |
-| Google | `gemini-3.1-flash-lite-preview` |
-| Anthropic | `claude-opus-4-6` |
-| Generic | none |
+| Provider | Default model | Default sub-model |
+| --- | --- | --- |
+| OpenAI | `gpt-5.4` | `gpt-5.4-mini` |
+| xAI | `grok-4.20` | `grok-4-1-fast` |
+| Google | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` |
+| Anthropic | `claude-opus-4-6` | `claude-sonnet-4-6` |
+| Generic | none | none |
 
 ## Hidden API-Key Aliases
 

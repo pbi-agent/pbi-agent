@@ -37,13 +37,13 @@ CLI
 
 ## Supported Providers
 
-| Provider | API Shape | Default Endpoint | Default Model |
-| --- | --- | --- | --- |
-| OpenAI | Responses API | `https://api.openai.com/v1/responses` | `gpt-5.4-2026-03-05` |
-| xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4-1-fast-reasoning` |
-| Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-flash-lite-preview` |
-| Anthropic | Messages API | `https://api.anthropic.com/v1/messages` | `claude-opus-4-6` |
-| Generic | Chat Completions API | `https://openrouter.ai/api/v1/chat/completions` | none; the `model` field is omitted when unset |
+| Provider | API Shape | Default Endpoint | Default Model | Default Sub-Model |
+| --- | --- | --- | --- | --- |
+| OpenAI | Responses API | `https://api.openai.com/v1/responses` | `gpt-5.4` | `gpt-5.4-mini` |
+| xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4.20` | `grok-4-1-fast` |
+| Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` |
+| Anthropic | Messages API | `https://api.anthropic.com/v1/messages` | `claude-opus-4-6` | `claude-sonnet-4-6` |
+| Generic | Chat Completions API | `https://openrouter.ai/api/v1/chat/completions` | none; the `model` field is omitted when unset | none |
 
 ::: details Conversation history mode
 OpenAI, xAI, and Google keep conversation state server-side by passing a previous response or interaction ID. Anthropic and Generic keep history client-side by re-sending accumulated messages on each turn.
