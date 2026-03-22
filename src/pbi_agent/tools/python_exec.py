@@ -28,8 +28,8 @@ SPEC = ToolSpec(
         "workspace directory by default, and can optionally return a structured "
         "top-level `result` value.\n\n"
         "Available packages:\n"
-        "- `polars` — use for ALL data manipulation and analysis, including CSV, "
-        "Excel, Parquet, and Arrow files. Do NOT use pandas.\n"
+        "- `pandas` — use for data manipulation and analysis, including CSV, "
+        "Excel, Parquet, Feather, and Arrow/IPC files.\n"
         "All standard-library modules are available. The subprocess boundary "
         "enforces timeout and runtime stability, not security isolation."
     ),

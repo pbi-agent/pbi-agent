@@ -45,7 +45,7 @@ def test_read_file_auto_detects_utf16_bom(tmp_path: Path, monkeypatch) -> None:
 def test_read_file_summarizes_csv_with_schema_and_stats(
     tmp_path: Path, monkeypatch
 ) -> None:
-    pytest.importorskip("polars")
+    pytest.importorskip("pandas")
     monkeypatch.chdir(tmp_path)
     (tmp_path / "dataset.csv").write_text(
         "city,sales,ordered_at\nSeattle,10,2025-01-01\nSeattle,20,2025-01-02\nPortland,30,2025-01-03\n",
@@ -76,7 +76,7 @@ def test_read_file_summarizes_csv_with_schema_and_stats(
 def test_read_file_summarizes_csv_with_cr_only_line_endings(
     tmp_path: Path, monkeypatch
 ) -> None:
-    pytest.importorskip("polars")
+    pytest.importorskip("pandas")
     monkeypatch.chdir(tmp_path)
     (tmp_path / "dataset.csv").write_bytes(
         b"city,sales,ordered_at\rSeattle,10,2025-01-01\rPortland,30,2025-01-03\r"
@@ -100,7 +100,7 @@ def test_read_file_summarizes_csv_with_cr_only_line_endings(
 
 
 def test_read_file_returns_all_excel_sheets(tmp_path: Path, monkeypatch) -> None:
-    pl = pytest.importorskip("polars")
+    pd = pytest.importorskip("pandas")
     monkeypatch.chdir(tmp_path)
     (tmp_path / "workbook.xlsx").write_bytes(b"placeholder")
 
@@ -108,10 +108,10 @@ def test_read_file_returns_all_excel_sheets(tmp_path: Path, monkeypatch) -> None
         read_file_tool,
         "_read_excel_workbook",
         lambda path: {
-            "Orders": pl.DataFrame(
+            "Orders": pd.DataFrame(
                 {"city": ["Seattle", "Portland"], "sales": [10, 20]}
             ),
-            "Returns": pl.DataFrame({"city": ["Seattle"], "count": [1]}),
+            "Returns": pd.DataFrame({"city": ["Seattle"], "count": [1]}),
         },
     )
 
@@ -129,7 +129,7 @@ def test_read_file_returns_all_excel_sheets(tmp_path: Path, monkeypatch) -> None
 def test_read_file_bounds_tabular_schema_and_preview(
     tmp_path: Path, monkeypatch
 ) -> None:
-    pytest.importorskip("polars")
+    pytest.importorskip("pandas")
     monkeypatch.chdir(tmp_path)
 
     headers = [f"column_{index}_{'x' * 40}" for index in range(120)]

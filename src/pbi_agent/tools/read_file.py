@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import math
+import numbers
 from zipfile import BadZipFile
 from datetime import date, datetime, time
 from pathlib import Path
@@ -215,30 +216,30 @@ def _extract_docx_text(path: Path) -> str:
 
 
 def _summarize_dataframe(dataframe: Any) -> dict[str, Any]:
-    schema = dataframe.schema
-    rows = dataframe.height
-    columns = dataframe.width
+    schema = {
+        column_name: _display_dtype(dataframe[column_name])
+        for column_name in dataframe.columns
+    }
+    rows, columns = dataframe.shape
     null_counts = {
-        column_name: int(null_count)
-        for column_name, null_count in zip(
-            dataframe.columns, dataframe.null_count().row(0), strict=True
-        )
+        column_name: int(dataframe[column_name].isna().sum())
+        for column_name in dataframe.columns
     }
     kind_by_column = {
-        column_name: _column_kind(dataframe, column_name, dtype)
-        for column_name, dtype in schema.items()
+        column_name: _column_kind(dataframe[column_name])
+        for column_name in dataframe.columns
     }
 
     schema_lines = [
         _summarize_tabular_column(
-            dataframe,
+            dataframe[column_name],
             column_name,
-            dtype,
+            schema[column_name],
             kind=kind_by_column[column_name],
             null_count=null_counts[column_name],
             row_count=rows,
         )
-        for column_name, dtype in schema.items()
+        for column_name in dataframe.columns
     ]
     schema_text, schema_truncated = bound_output(
         "\n".join(f"- {line}" for line in schema_lines),
@@ -271,116 +272,191 @@ def _summarize_dataframe(dataframe: Any) -> dict[str, Any]:
 
 
 def _read_tabular_dataframe(path: Path, suffix: str) -> Any:
-    import polars as pl
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.ipc as ipc
 
     if suffix == ".csv":
         return _read_delimited_dataframe(path, separator=",")
     if suffix == ".tsv":
         return _read_delimited_dataframe(path, separator="\t")
     if suffix == ".parquet":
-        return pl.read_parquet(path)
-    if suffix in {".feather", ".ipc", ".arrow"}:
-        return pl.read_ipc(path)
+        return _coerce_temporal_columns(pd.read_parquet(path))
+    if suffix == ".feather":
+        return _coerce_temporal_columns(pd.read_feather(path))
+    if suffix in {".ipc", ".arrow"}:
+        with pa.memory_map(str(path), "r") as source:
+            try:
+                dataframe = ipc.RecordBatchFileReader(source).read_all().to_pandas()
+            except pa.ArrowInvalid:
+                source.seek(0)
+                dataframe = ipc.RecordBatchStreamReader(source).read_all().to_pandas()
+        return _coerce_temporal_columns(dataframe)
     raise ValueError(f"unsupported tabular file type: {suffix}")
 
 
 def _read_excel_workbook(path: Path) -> dict[str, Any]:
-    import polars as pl
+    import pandas as pd
 
-    workbook = pl.read_excel(path, sheet_id=0, infer_schema_length=10_000)
-    if isinstance(workbook, dict):
-        return {
-            sheet_name: _coerce_temporal_columns(dataframe)
-            for sheet_name, dataframe in workbook.items()
-        }
-    return {"Sheet1": _coerce_temporal_columns(workbook)}
+    workbook = pd.read_excel(path, sheet_name=None)
+    return {
+        str(sheet_name): _coerce_temporal_columns(dataframe)
+        for sheet_name, dataframe in workbook.items()
+    }
 
 
 def _read_delimited_dataframe(path: Path, *, separator: str) -> Any:
-    import polars as pl
+    import pandas as pd
 
     raw_bytes = path.read_bytes()
     if b"\r" in raw_bytes and b"\n" not in raw_bytes:
         raw_bytes = raw_bytes.replace(b"\r", b"\n")
-        dataframe = pl.read_csv(
+        dataframe = pd.read_csv(
             io.BytesIO(raw_bytes),
-            separator=separator,
-            infer_schema_length=10_000,
+            sep=separator,
+            low_memory=False,
         )
     else:
-        dataframe = pl.read_csv(
+        dataframe = pd.read_csv(
             path,
-            separator=separator,
-            infer_schema_length=10_000,
+            sep=separator,
+            low_memory=False,
         )
     return _coerce_temporal_columns(dataframe)
 
 
 def _coerce_temporal_columns(dataframe: Any) -> Any:
-    import polars as pl
+    from pandas.api import types as ptypes
 
-    temporal_formats: tuple[tuple[Any, str], ...] = (
-        (pl.Date, "%Y-%m-%d"),
-        (pl.Date, "%m/%d/%Y"),
-        (pl.Datetime, "%Y-%m-%d %H:%M:%S"),
-        (pl.Datetime, "%Y-%m-%dT%H:%M:%S"),
+    temporal_formats: dict[str, tuple[str, ...]] = {
+        "date": (
+            "%Y-%m-%d",
+            "%m/%d/%Y",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+        ),
+        "datetime": ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"),
+    }
+    temporal_kinds = (
+        "date",
+        "datetime",
     )
-    expressions: list[Any] = []
+    result = dataframe.copy()
 
-    for column_name, dtype in dataframe.schema.items():
-        if dtype != pl.String:
-            continue
-
+    for column_name in dataframe.columns:
         series = dataframe[column_name]
-        non_null = series.drop_nulls()
-        if non_null.len() == 0:
+        if not (
+            ptypes.is_string_dtype(series.dtype) or ptypes.is_object_dtype(series.dtype)
+        ):
             continue
 
-        cleaned = series.str.strip_chars()
-        for temporal_type, format_string in temporal_formats:
-            parsed = cleaned.str.strptime(
-                temporal_type,
-                format=format_string,
-                strict=False,
-            )
-            if parsed.drop_nulls().len() == non_null.len():
-                expressions.append(parsed.alias(column_name))
+        non_null = series.dropna()
+        if non_null.empty or not all(
+            _is_temporal_candidate(value) for value in non_null
+        ):
+            continue
+
+        cleaned = series.map(_normalize_temporal_candidate, na_action="ignore").astype(
+            "string"
+        )
+        cleaned = cleaned.str.strip()
+        for temporal_kind in temporal_kinds:
+            parsed = _parse_temporal_series(cleaned, temporal_formats[temporal_kind])
+            if parsed is not None and int(parsed.notna().sum()) == len(non_null):
+                if temporal_kind == "date":
+                    result[column_name] = parsed.dt.date
+                else:
+                    result[column_name] = parsed
                 break
 
-    if not expressions:
-        return dataframe
-    return dataframe.with_columns(expressions)
+    return result
 
 
-def _is_categorical_column(dataframe: Any, name: str, dtype: Any) -> bool:
-    import polars as pl
+def _parse_temporal_series(series: Any, formats: tuple[str, ...]) -> Any:
+    import pandas as pd
 
-    if dtype in {pl.Categorical, pl.Enum}:
+    parsed = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+    remaining = series.notna()
+
+    for format_string in formats:
+        if not bool(remaining.any()):
+            break
+
+        current = pd.to_datetime(
+            series.where(remaining),
+            format=format_string,
+            errors="coerce",
+        )
+        matched = current.notna() & remaining
+        if bool(matched.any()):
+            parsed.loc[matched] = current.loc[matched]
+            remaining = remaining & ~matched
+
+    if bool(remaining.any()):
+        return None
+    return parsed
+
+
+def _is_temporal_candidate(value: Any) -> bool:
+    return isinstance(value, (str, date, datetime))
+
+
+def _normalize_temporal_candidate(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat(sep="T")
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def _is_categorical_column(series: Any) -> bool:
+    if _is_categorical_dtype(series):
         return True
-    if dtype != pl.String or dataframe.height == 0:
+    if series.empty or not _is_text_series(series):
         return False
 
-    non_null = dataframe[name].drop_nulls()
-    if non_null.len() == 0:
+    non_null = series.dropna()
+    if non_null.empty:
         return False
-    unique_ratio = non_null.n_unique() / non_null.len()
-    return unique_ratio <= 0.2 and non_null.n_unique() <= 100
+    distinct = int(non_null.nunique(dropna=True))
+    unique_ratio = distinct / len(non_null)
+    return unique_ratio <= 0.2 and distinct <= 100
 
 
-def _column_kind(dataframe: Any, name: str, dtype: Any) -> str:
-    import polars as pl
+def _column_kind(series: Any) -> str:
+    from pandas.api import types as ptypes
 
-    if dtype.is_numeric():
+    if ptypes.is_numeric_dtype(series.dtype) and not _is_boolean_series(series):
         return "numeric"
-    if dtype in {pl.Date, pl.Datetime, pl.Time}:
+    if _is_temporal_series(series):
         return "datetime"
-    if dtype == pl.Boolean:
+    if _is_boolean_series(series):
         return "boolean"
-    if _is_categorical_column(dataframe, name, dtype):
+    if _is_categorical_column(series):
         return "categorical"
-    if dtype in {pl.String, pl.Categorical, pl.Enum}:
+    if _is_text_series(series) or _is_categorical_dtype(series):
         return "text"
     return "other"
+
+
+def _display_dtype(series: Any) -> str:
+    from pandas.api import types as ptypes
+
+    if _is_boolean_series(series):
+        return "Boolean"
+    if _is_date_only_series(series):
+        return "Date"
+    if _is_temporal_series(series):
+        return "Datetime"
+    if ptypes.is_integer_dtype(series.dtype):
+        return "Int64"
+    if ptypes.is_float_dtype(series.dtype):
+        return "Float64"
+    if _is_categorical_dtype(series):
+        return "Categorical"
+    if _is_text_series(series):
+        return "String"
+    return str(series.dtype)
 
 
 def _tabular_dataset_summary(
@@ -411,7 +487,7 @@ def _tabular_dataset_summary(
 
 
 def _summarize_tabular_column(
-    dataframe: Any,
+    series: Any,
     column_name: str,
     dtype: Any,
     *,
@@ -419,7 +495,6 @@ def _summarize_tabular_column(
     null_count: int,
     row_count: int,
 ) -> str:
-    series = dataframe[column_name]
     parts = [f"{column_name}: {dtype}"]
     if kind != "other":
         parts.append(f"kind={kind}")
@@ -427,8 +502,8 @@ def _summarize_tabular_column(
         null_ratio = (null_count / row_count) * 100 if row_count else 0.0
         parts.append(f"nulls={null_count} ({_format_number(null_ratio)}%)")
 
-    non_null = series.drop_nulls()
-    if non_null.len() == 0:
+    non_null = series.dropna()
+    if non_null.empty:
         parts.append("all values null")
         return "; ".join(parts)
 
@@ -455,7 +530,7 @@ def _summarize_tabular_column(
         return "; ".join(parts)
 
     if kind == "categorical":
-        distinct = non_null.n_unique()
+        distinct = int(non_null.nunique(dropna=True))
         examples = _top_examples(non_null, limit=5)
         parts.append(f"distinct={distinct}")
         if examples:
@@ -473,7 +548,7 @@ def _summarize_tabular_column(
 
 def _render_preview_csv(dataframe: Any) -> str:
     preview = dataframe.head(DATAFRAME_PREVIEW_ROWS)
-    if preview.height == 0:
+    if preview.empty:
         return ""
 
     buffer = io.StringIO()
@@ -483,7 +558,7 @@ def _render_preview_csv(dataframe: Any) -> str:
         lineterminator="\n",
     )
     writer.writeheader()
-    for row in preview.to_dicts():
+    for row in preview.to_dict(orient="records"):
         writer.writerow(
             {
                 column_name: _format_preview_value(row.get(column_name))
@@ -494,8 +569,90 @@ def _render_preview_csv(dataframe: Any) -> str:
 
 
 def _top_examples(series: Any, *, limit: int) -> list[str]:
-    values = series.value_counts(sort=True)[series.name].to_list()
+    values = series.value_counts(dropna=True).index.tolist()
     return _ordered_examples(values, limit=limit)
+
+
+def _is_text_series(series: Any) -> bool:
+    from pandas.api import types as ptypes
+
+    if ptypes.is_string_dtype(series.dtype):
+        return True
+    if not ptypes.is_object_dtype(series.dtype):
+        return False
+
+    non_null = series.dropna()
+    return non_null.empty or all(isinstance(value, str) for value in non_null)
+
+
+def _is_categorical_dtype(series: Any) -> bool:
+    import pandas as pd
+
+    return isinstance(series.dtype, pd.CategoricalDtype)
+
+
+def _is_boolean_series(series: Any) -> bool:
+    from pandas.api import types as ptypes
+
+    if ptypes.is_bool_dtype(series.dtype):
+        return True
+    if not ptypes.is_object_dtype(series.dtype):
+        return False
+
+    non_null = series.dropna()
+    return not non_null.empty and all(isinstance(value, bool) for value in non_null)
+
+
+def _is_date_only_series(series: Any) -> bool:
+    from pandas.api import types as ptypes
+
+    non_null = series.dropna()
+    if non_null.empty:
+        return False
+    if _is_categorical_dtype(series):
+        return False
+    if all(
+        isinstance(value, date) and not isinstance(value, datetime)
+        for value in non_null
+    ):
+        return True
+    if ptypes.is_datetime64_any_dtype(series.dtype):
+        timestamps = non_null.dt
+        return bool(
+            (
+                (timestamps.hour == 0)
+                & (timestamps.minute == 0)
+                & (timestamps.second == 0)
+                & (timestamps.microsecond == 0)
+                & (timestamps.nanosecond == 0)
+            ).all()
+        )
+    if not all(isinstance(value, datetime) for value in non_null):
+        return False
+    return bool(
+        all(
+            value.hour == 0
+            and value.minute == 0
+            and value.second == 0
+            and value.microsecond == 0
+            for value in non_null
+        )
+    )
+
+
+def _is_temporal_series(series: Any) -> bool:
+    from pandas.api import types as ptypes
+
+    if ptypes.is_datetime64_any_dtype(series.dtype) or ptypes.is_timedelta64_dtype(
+        series.dtype
+    ):
+        return True
+    if _is_date_only_series(series):
+        return True
+    if ptypes.is_object_dtype(series.dtype):
+        non_null = series.dropna()
+        return not non_null.empty and all(isinstance(value, time) for value in non_null)
+    return False
 
 
 def _ordered_examples(values: list[Any], *, limit: int) -> list[str]:
@@ -521,22 +678,34 @@ def _format_preview_value(value: Any) -> str:
 
 
 def _format_scalar(value: Any) -> str:
+    import pandas as pd
+
+    if pd.isna(value):
+        return "null"
     if value is None:
         return "null"
     if isinstance(value, datetime):
+        if (
+            value.hour == 0
+            and value.minute == 0
+            and value.second == 0
+            and value.microsecond == 0
+        ):
+            return value.date().isoformat()
         return value.isoformat()
     if isinstance(value, (date, time)):
         return value.isoformat()
     if isinstance(value, bool):
         return str(value).lower()
-    if isinstance(value, int):
+    if isinstance(value, numbers.Integral):
         return str(value)
-    if isinstance(value, float):
-        return _format_number(value)
+    if isinstance(value, numbers.Real):
+        return _format_number(float(value))
     return str(value)
 
 
-def _format_number(value: float) -> str:
+def _format_number(value: float | numbers.Real) -> str:
+    value = float(value)
     if math.isnan(value):
         return "null"
     if value.is_integer():

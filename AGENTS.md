@@ -76,7 +76,7 @@ Abstract `Provider` base class with implementations for each LLM. All use synchr
 - Sub-agents: spawned with limited scope (max 30 requests, 300s timeout, no recursive sub-agents).
 
 ### Tools (`tools/`)
-Registered in `tools/registry.py`. All tools receive `ToolContext` (workspace, display, settings). Key tools: `apply_patch` (V4A diffs), `shell` (workspace-confined), `python_exec` (local Python with polars/pypdf/python-docx), `skill_knowledge` (retrieves Power BI Markdown docs from `skills/`), `sub_agent`, `read_file`, `search_files`, `list_files`, `read_web_url`, `init_report`.
+Registered in `tools/registry.py`. All tools receive `ToolContext` (workspace, display, settings). Key tools: `apply_patch` (V4A diffs), `shell` (workspace-confined), `python_exec` (local Python with pandas/pypdf/python-docx), `skill_knowledge` (retrieves Power BI Markdown docs from `skills/`), `sub_agent`, `read_file`, `search_files`, `list_files`, `read_web_url`, `init_report`.
 
 ### UI Layer (`ui/`)
 Built on Textual. `DisplayProtocol` abstracts UI so implementations can be swapped (web TUI via `app.py`, console via `console_display.py`, test spy via `conftest.py::DisplaySpy`).
@@ -103,5 +103,5 @@ Precedence: CLI flags > `PBI_AGENT_*` env vars > provider-specific env vars (e.g
 - Bundled PBIP template assets must stay under `src/pbi_agent/report/`; hatchling packaging relies on git tracking for non-Python assets.
 - Workspace confinement: `shell` tool rejects path traversal; all file tools validate paths against workspace boundaries.
 - `python_exec` runs trusted local Python — it is not a sandbox.
-- `uvx ruff check .`, `uvx ruff format --check .`, and `uv run pytest` must all pass before merging.
+- `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest` must all pass before merging.
 - **No migration or backward-compatibility logic.** The project is in early development — do not add schema migrations, version checks, deprecation shims, or any other backward-compatibility code. When something changes, just change it directly.
