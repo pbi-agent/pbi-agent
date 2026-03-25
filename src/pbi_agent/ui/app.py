@@ -17,7 +17,9 @@ from textual.widgets import Button, Footer
 from pbi_agent.models.messages import TokenUsage
 from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.ui.display import Display
+from pbi_agent.ui.command_registry import LOCAL_COMMANDS, normalize_command_name
 from pbi_agent.ui.formatting import format_session_subtitle_parts
+from pbi_agent.ui.input_mentions import expand_file_mentions
 from pbi_agent.ui.styles import CHAT_APP_CSS
 from pbi_agent.ui.widgets import (
     AssistantMarkdown,
@@ -94,9 +96,10 @@ class ChatApp(App):
         )
         yield Horizontal(
             ChatInput(
+                workspace_root=str(Path.cwd().resolve()),
                 placeholder=(
                     "Type your message\u2026  "
-                    "(Enter: newline, Ctrl+S: send, Ctrl+Q: quit)"
+                    "(Enter: send, Ctrl/Alt/Shift+Enter: newline, Ctrl+Q: quit)"
                 ),
                 id="user-input",
                 disabled=True,
@@ -142,7 +145,7 @@ class ChatApp(App):
         inp.disabled = not enabled
         send_btn.disabled = not enabled
         if enabled:
-            inp.focus()
+            inp.focus_input()
 
     def _run_single_turn_mode(self, display: Display) -> int:
         from pbi_agent.agent.session import run_single_turn
@@ -346,25 +349,79 @@ class ChatApp(App):
         inp.clear()
         inp.reset_height()
 
-    def _submit_user_message(self, raw_text: str) -> None:
+    async def _submit_user_message(self, raw_text: str) -> None:
         value = raw_text.strip()
         if not value:
             return
         inp = self._chat_input()
         inp.clear()
         inp.reset_height()
+        if await self._handle_local_command(value):
+            inp.focus_input()
+            return
+
         self.disable_input()
         self.add_user_message(value)
+        submitted_value = value
+        if not value.startswith("/"):
+            submitted_value, warnings = expand_file_mentions(
+                value,
+                root=Path.cwd().resolve(),
+            )
+            for warning in warnings:
+                self.notify(warning, severity="warning", timeout=4)
         if self._bridge is not None:
-            self._bridge.submit_input(value)
+            self._bridge.submit_input(submitted_value)
 
     @on(ChatInput.Submitted, "#user-input")
-    def handle_input_submitted(self, event: ChatInput.Submitted) -> None:
-        self._submit_user_message(event.value)
+    async def handle_input_submitted(self, event: ChatInput.Submitted) -> None:
+        await self._submit_user_message(event.value)
 
     @on(Button.Pressed, "#send-button")
-    def handle_send_button_pressed(self, _: Button.Pressed) -> None:
-        self._submit_user_message(self._chat_input().text)
+    async def handle_send_button_pressed(self, _: Button.Pressed) -> None:
+        await self._submit_user_message(self._chat_input().text)
+
+    async def _handle_local_command(self, value: str) -> bool:
+        command = normalize_command_name(value)
+        if command not in LOCAL_COMMANDS:
+            return False
+
+        if command == "/help":
+            self.add_user_message(value)
+            await self.mount_widget(AssistantMarkdown(self._help_markdown()))
+            return True
+
+        if command == "/clear":
+            self.disable_input()
+            if self._bridge is not None:
+                self._bridge.request_new_chat()
+            return True
+
+        if command == "/quit":
+            await self.action_quit()
+            return True
+
+        return False
+
+    @staticmethod
+    def _help_markdown() -> str:
+        return (
+            "### Commands\n"
+            "- `/help` Show this help\n"
+            "- `/clear` Clear chat and start a new session\n"
+            "- `/quit` Quit the app\n"
+            "- `/image add|list|clear` Manage staged image inputs\n\n"
+            "### Shortcuts\n"
+            "- `Enter` send message\n"
+            "- `Ctrl+Enter`, `Alt+Enter`, `Shift+Enter` insert newline\n"
+            "- `Ctrl+S` send message\n"
+            "- `Ctrl+R` start a new chat\n"
+            "- `Ctrl+B` toggle sessions sidebar\n"
+            "- `Ctrl+Q` quit\n\n"
+            "### Input Features\n"
+            "- Type `@` to autocomplete workspace files and attach their content to the prompt\n"
+            "- Type `/` to autocomplete local slash commands"
+        )
 
     async def action_new_chat(self) -> None:
         if self._bridge is not None:

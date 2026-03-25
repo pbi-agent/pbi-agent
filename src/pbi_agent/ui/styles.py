@@ -268,7 +268,7 @@ NoticeMessage {
 #user-input {
     width: 1fr;
     min-width: 0;
-    height: 3;
+    height: auto;
 }
 #user-input:disabled {
     opacity: 0.5;
