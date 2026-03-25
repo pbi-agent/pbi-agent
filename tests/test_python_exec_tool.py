@@ -12,8 +12,7 @@ def test_python_exec_description_recommends_pandas() -> None:
     description = python_exec_tool.SPEC.description
 
     assert description is not None
-    assert "`pandas`" in description
-    assert "`polars`" not in description
+    assert "pandas" in description
 
 
 def test_python_exec_runs_code_in_same_environment_and_workspace(

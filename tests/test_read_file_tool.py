@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import zipfile
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -99,6 +100,42 @@ def test_read_file_summarizes_csv_with_cr_only_line_endings(
     )
 
 
+@pytest.mark.parametrize(
+    ("separator", "label"),
+    [
+        (";", "semicolon"),
+        ("|", "pipe"),
+        ("\t", "tab"),
+    ],
+)
+def test_read_file_sniffs_common_noncomma_csv_separators(
+    tmp_path: Path, monkeypatch, separator: str, label: str
+) -> None:
+    pytest.importorskip("pandas")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "dataset.csv").write_text(
+        (
+            f"city{separator}sales{separator}ordered_at\n"
+            f"Seattle{separator}10{separator}2025-01-01\n"
+            f"Portland{separator}30{separator}2025-01-03\n"
+        ),
+        encoding="utf-8",
+    )
+
+    result = read_file_tool.handle({"path": "dataset.csv"}, ToolContext())
+
+    assert result["shape"] == {"rows": 2, "columns": 3}
+    assert (
+        result["summary"]
+        == "2 rows x 3 columns; column mix: 1 numeric, 1 datetime, 1 text; missing values: no missing values."
+    )
+    assert "- city: String; kind=text; examples=Seattle, Portland" in result["schema"]
+    assert "- sales: Int64; kind=numeric; min=10; max=30; mean=20" in result["schema"]
+    assert result["preview"] == (
+        "city,sales,ordered_at\nSeattle,10,2025-01-01\nPortland,30,2025-01-03\n"
+    ), label
+
+
 def test_read_file_returns_all_excel_sheets(tmp_path: Path, monkeypatch) -> None:
     pd = pytest.importorskip("pandas")
     monkeypatch.chdir(tmp_path)
@@ -164,6 +201,58 @@ def test_read_file_samples_large_csv_summaries(tmp_path: Path, monkeypatch) -> N
     assert "missing values in sample" in result["summary"]
 
 
+def test_read_file_counts_multiline_csv_rows_logically(
+    tmp_path: Path, monkeypatch
+) -> None:
+    pytest.importorskip("pandas")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(read_file_tool, "TABULAR_SAMPLE_ROWS", 1)
+    (tmp_path / "dataset.csv").write_text(
+        'city,notes\nSeattle,"Line 1\nLine 2"\nPortland,"Single line"\n',
+        encoding="utf-8",
+    )
+
+    result = read_file_tool.handle({"path": "dataset.csv"}, ToolContext())
+
+    assert result["shape"] == {"rows": 2, "columns": 2}
+    assert result["sampled"] is True
+    assert result["sample_rows"] == 1
+    assert "2 rows x 2 columns" in result["summary"]
+    assert "schema/stats sampled from first 1 rows" in result["summary"]
+
+
+@pytest.mark.parametrize(
+    ("separator", "label"),
+    [
+        (";", "semicolon"),
+        ("|", "pipe"),
+        ("\t", "tab"),
+    ],
+)
+def test_read_file_samples_sniffed_common_noncomma_csv_separators(
+    tmp_path: Path, monkeypatch, separator: str, label: str
+) -> None:
+    pytest.importorskip("pandas")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(read_file_tool, "TABULAR_SAMPLE_ROWS", 1)
+    (tmp_path / "dataset.csv").write_text(
+        (
+            f"city{separator}sales{separator}ordered_at\n"
+            f"Seattle{separator}10{separator}2025-01-01\n"
+            f"Portland{separator}20{separator}2025-01-02\n"
+        ),
+        encoding="utf-8",
+    )
+
+    result = read_file_tool.handle({"path": "dataset.csv"}, ToolContext())
+
+    assert result["shape"] == {"rows": 2, "columns": 3}
+    assert result["sampled"] is True
+    assert result["sample_rows"] == 1
+    assert "2 rows x 3 columns" in result["summary"]
+    assert "schema/stats sampled from first 1 rows" in result["summary"], label
+
+
 def test_read_file_samples_large_excel_summaries(tmp_path: Path, monkeypatch) -> None:
     pd = pytest.importorskip("pandas")
     monkeypatch.chdir(tmp_path)
@@ -190,6 +279,57 @@ def test_read_file_samples_large_excel_summaries(tmp_path: Path, monkeypatch) ->
     assert result["sheets"][0]["sampled"] is True
     assert result["sheets"][0]["sample_rows"] == 1
     assert "schema/stats sampled from first 1 rows" in result["sheets"][0]["summary"]
+
+
+def test_read_file_ignores_stale_xlsx_dimension_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
+    pd = pytest.importorskip("pandas")
+    openpyxl = pytest.importorskip("openpyxl")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(read_file_tool, "TABULAR_SAMPLE_ROWS", 1)
+
+    workbook_path = tmp_path / "workbook.xlsx"
+    workbook = openpyxl.Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Orders"
+    worksheet["A1"] = "city"
+    worksheet["B1"] = "sales"
+    worksheet["A2"] = "Seattle"
+    worksheet["B2"] = 10
+    worksheet["A3"] = "Portland"
+    worksheet["B3"] = 20
+    workbook.save(workbook_path)
+    workbook.close()
+
+    with zipfile.ZipFile(workbook_path) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+
+    sheet_xml = members["xl/worksheets/sheet1.xml"].decode("utf-8")
+    members["xl/worksheets/sheet1.xml"] = sheet_xml.replace(
+        'ref="A1:B3"',
+        'ref="A1:XFD1048576"',
+    ).encode("utf-8")
+
+    with zipfile.ZipFile(workbook_path, "w") as archive:
+        for name, content in members.items():
+            archive.writestr(name, content)
+
+    monkeypatch.setattr(
+        read_file_tool,
+        "_read_excel_sheet",
+        lambda path, *, sheet_name, nrows: pd.DataFrame(
+            {"city": ["Seattle"], "sales": [10]}
+        ),
+    )
+
+    result = read_file_tool.handle({"path": "workbook.xlsx"}, ToolContext())
+
+    assert result["sheet_count"] == 1
+    assert result["sheets"][0]["shape"] == {"rows": 2, "columns": 2}
+    assert result["sheets"][0]["sampled"] is True
+    assert result["sheets"][0]["sample_rows"] == 1
+    assert "2 rows x 2 columns" in result["sheets"][0]["summary"]
 
 
 def test_read_file_summarizes_pdf_content_and_metadata(

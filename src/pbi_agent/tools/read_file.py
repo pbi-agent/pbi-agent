@@ -4,13 +4,10 @@ import csv
 import io
 import math
 import numbers
-import re
-import zipfile
 from zipfile import BadZipFile
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree
 
 from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
@@ -25,6 +22,7 @@ DATAFRAME_PREVIEW_ROWS = 3
 MAX_TABULAR_SCHEMA_CHARS = 8_000
 MAX_TABULAR_PREVIEW_CHARS = 2_500
 TABULAR_SAMPLE_ROWS = 5_000
+MAX_CSV_SNIFF_CHARS = 65_536
 
 _TABULAR_EXTENSIONS = {
     ".csv",
@@ -152,10 +150,11 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
 
 
 def _handle_tabular_file(root: Path, target_path: Path, suffix: str) -> dict[str, Any]:
+    separator: str | None = None
     if suffix in {".csv", ".tsv"}:
-        separator = "," if suffix == ".csv" else "\t"
+        separator = _detect_delimited_separator(target_path, suffix=suffix)
         raw_bytes = target_path.read_bytes()
-        row_count = _count_delimited_rows(raw_bytes)
+        row_count = _count_delimited_rows(target_path, separator=separator)
         if row_count > TABULAR_SAMPLE_ROWS:
             dataframe = _read_delimited_dataframe_from_bytes(
                 raw_bytes,
@@ -170,7 +169,11 @@ def _handle_tabular_file(root: Path, target_path: Path, suffix: str) -> dict[str
             result["path"] = relative_workspace_path(root, target_path)
             return result
 
-    dataframe = _read_tabular_dataframe(target_path, suffix)
+    dataframe = _read_tabular_dataframe(
+        target_path,
+        suffix,
+        separator=separator,
+    )
     result = _summarize_dataframe(dataframe)
     result["path"] = relative_workspace_path(root, target_path)
     return result
@@ -334,15 +337,17 @@ def _summarize_dataframe(
     return result
 
 
-def _read_tabular_dataframe(path: Path, suffix: str) -> Any:
+def _read_tabular_dataframe(
+    path: Path, suffix: str, *, separator: str | None = None
+) -> Any:
     import pandas as pd
     import pyarrow as pa
     import pyarrow.ipc as ipc
 
     if suffix == ".csv":
-        return _read_delimited_dataframe(path, separator=",")
+        return _read_delimited_dataframe(path, separator=separator or ",")
     if suffix == ".tsv":
-        return _read_delimited_dataframe(path, separator="\t")
+        return _read_delimited_dataframe(path, separator=separator or "\t")
     if suffix == ".parquet":
         return _coerce_temporal_columns(pd.read_parquet(path))
     if suffix == ".feather":
@@ -404,9 +409,34 @@ def _normalize_delimited_bytes(raw_bytes: bytes) -> bytes:
     return raw_bytes
 
 
-def _count_delimited_rows(raw_bytes: bytes) -> int:
-    line_count = len(_normalize_delimited_bytes(raw_bytes).splitlines())
-    return max(line_count - 1, 0)
+def _detect_delimited_separator(path: Path, *, suffix: str) -> str:
+    if suffix == ".tsv":
+        return "\t"
+    if suffix != ".csv":
+        raise ValueError(f"unsupported delimited file type: {suffix}")
+
+    with open_text_file(path, encoding="auto") as text_handle:
+        sample = text_handle.read(MAX_CSV_SNIFF_CHARS)
+
+    if not sample:
+        return ","
+
+    normalized_sample = sample.replace("\r", "\n") if "\n" not in sample else sample
+    try:
+        dialect = csv.Sniffer().sniff(normalized_sample, delimiters=",;\t|")
+    except csv.Error:
+        return ","
+    return str(dialect.delimiter)
+
+
+def _count_delimited_rows(path: Path, *, separator: str) -> int:
+    with open_text_file(path, encoding="auto") as text_handle:
+        reader = csv.reader(text_handle, delimiter=separator)
+        try:
+            next(reader)
+        except StopIteration:
+            return 0
+        return sum(1 for _ in reader)
 
 
 def _read_excel_sheet_metadata(path: Path) -> list[dict[str, Any]]:
@@ -414,69 +444,45 @@ def _read_excel_sheet_metadata(path: Path) -> list[dict[str, Any]]:
         return []
 
     try:
-        with zipfile.ZipFile(path) as archive:
-            workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))
-            relationships = ElementTree.fromstring(
-                archive.read("xl/_rels/workbook.xml.rels")
-            )
-            relationship_targets = {
-                element.attrib["Id"]: element.attrib["Target"]
-                for element in relationships.findall(
-                    "{http://schemas.openxmlformats.org/package/2006/relationships}Relationship"
-                )
-            }
-            sheets_root = workbook.find(
-                "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheets"
-            )
-            if sheets_root is None:
-                return []
-
-            metadata: list[dict[str, Any]] = []
-            for sheet in sheets_root:
-                relationship_id = sheet.attrib.get(
-                    "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
-                )
-                if not relationship_id:
-                    continue
-                target = relationship_targets.get(relationship_id, "")
-                if not target.startswith("worksheets/"):
-                    continue
-
-                rows, columns = _read_xlsx_sheet_dimension(archive, f"xl/{target}")
-                metadata.append(
-                    {
-                        "name": sheet.attrib.get("name", "Sheet1"),
-                        "rows": max(rows - 1, 0),
-                        "columns": columns,
-                    }
-                )
-            return metadata
-    except (BadZipFile, ElementTree.ParseError, KeyError, ValueError):
+        from openpyxl import load_workbook
+        from openpyxl.utils.exceptions import InvalidFileException
+    except ImportError:
         return []
 
+    try:
+        workbook = load_workbook(path, read_only=True, data_only=False)
+    except (BadZipFile, InvalidFileException, KeyError, OSError, ValueError):
+        return []
 
-def _read_xlsx_sheet_dimension(
-    archive: zipfile.ZipFile, member_name: str
-) -> tuple[int, int]:
-    with archive.open(member_name) as file_handle:
-        for _event, element in ElementTree.iterparse(file_handle, events=("start",)):
-            if element.tag == (
-                "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}dimension"
-            ):
-                return _parse_excel_dimension_ref(element.attrib.get("ref", "A1"))
-            if element.tag == (
-                "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheetData"
-            ):
-                break
-    return (0, 0)
+    try:
+        metadata: list[dict[str, Any]] = []
+        for worksheet in workbook.worksheets:
+            rows, columns = _read_xlsx_sheet_bounds(worksheet)
+            metadata.append(
+                {
+                    "name": str(worksheet.title),
+                    "rows": max(rows - 1, 0),
+                    "columns": columns,
+                }
+            )
+        return metadata
+    finally:
+        workbook.close()
 
 
-def _parse_excel_dimension_ref(reference: str) -> tuple[int, int]:
-    target = reference.split(":", 1)[-1]
-    match = re.fullmatch(r"([A-Z]+)(\d+)", target)
-    if match is None:
-        raise ValueError(f"invalid worksheet dimension: {reference}")
-    return int(match.group(2)), _excel_column_letters_to_index(match.group(1))
+def _read_xlsx_sheet_bounds(worksheet: Any) -> tuple[int, int]:
+    worksheet.reset_dimensions()
+    max_row = 0
+    max_column = 0
+
+    for row in worksheet.iter_rows():
+        populated_cells = [cell for cell in row if cell.value is not None]
+        if not populated_cells:
+            continue
+        max_row = max(max_row, max(cell.row for cell in populated_cells))
+        max_column = max(max_column, max(cell.column for cell in populated_cells))
+
+    return (max_row, max_column)
 
 
 def _excel_column_letters_to_index(letters: str) -> int:
