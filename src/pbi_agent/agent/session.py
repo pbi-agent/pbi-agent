@@ -11,6 +11,7 @@ from pbi_agent.agent.system_prompt import (
     get_custom_excluded_tools,
     get_sub_agent_system_prompt,
 )
+from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.config import Settings
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import (
@@ -31,6 +32,7 @@ RESUME_SESSION_PREFIX = "__resume_session__:"
 SUB_AGENT_MAX_REQUESTS = 30
 SUB_AGENT_MAX_ELAPSED_SECONDS = 300.0
 SUB_AGENT_DISABLED_TOOLS = {"sub_agent"}
+SKILLS_COMMAND = "/skills"
 
 
 class SubAgentRunError(RuntimeError):
@@ -195,6 +197,9 @@ def run_chat_loop(
                 continue
             if user_input.lower() in {"exit", "quit"}:
                 break
+            if user_input == SKILLS_COMMAND:
+                display.render_markdown(format_project_skills_markdown())
+                continue
             if not user_input and not image_paths:
                 continue
 
@@ -621,4 +626,3 @@ def _user_turn_history_text(user_input: UserTurnInput) -> str:
 
 def _session_title_for_user_turn(user_input: UserTurnInput) -> str:
     return _user_turn_history_text(user_input)[:80]
-

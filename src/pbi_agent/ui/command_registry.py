@@ -27,6 +27,11 @@ COMMANDS: tuple[SlashCommand, ...] = (
         local_only=True,
     ),
     SlashCommand(
+        name="/skills",
+        description="Show discovered project skills",
+        hidden_keywords="skill catalog list loaded skills",
+    ),
+    SlashCommand(
         name="/quit",
         description="Quit the app",
         hidden_keywords="exit close",

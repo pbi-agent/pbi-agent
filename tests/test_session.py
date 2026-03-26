@@ -4,7 +4,12 @@ import os
 
 import pytest
 
-from pbi_agent.agent.session import NEW_CHAT_SENTINEL, run_chat_loop, run_single_turn
+from pbi_agent.agent.session import (
+    NEW_CHAT_SENTINEL,
+    SKILLS_COMMAND,
+    run_chat_loop,
+    run_single_turn,
+)
 from pbi_agent.config import DEFAULT_MODEL, Settings
 from pbi_agent.models.messages import (
     CompletedResponse,
@@ -23,6 +28,7 @@ class _DisplaySpy:
         self.session_usage_calls: list[TokenUsage] = []
         self.turn_usage_calls: list[tuple[TokenUsage, float]] = []
         self.debug_messages: list[str] = []
+        self.markdown_calls: list[str] = []
         self.reset_chat_calls = 0
 
     def welcome(
@@ -50,6 +56,9 @@ class _DisplaySpy:
 
     def debug(self, message: str) -> None:
         self.debug_messages.append(message)
+
+    def render_markdown(self, text: str) -> None:
+        self.markdown_calls.append(text)
 
     def reset_chat(self) -> None:
         self.reset_chat_calls += 1
@@ -316,6 +325,30 @@ def test_run_chat_loop_resets_welcome_and_usage_on_new_chat(monkeypatch) -> None
     assert [usage.total_tokens for usage in display.session_usage_calls] == [0, 3, 0, 3]
     assert display.reset_chat_calls == 1
     assert display.assistant_start_calls == 2
+
+
+def test_run_chat_loop_handles_skills_command_locally(monkeypatch) -> None:
+    provider = _ChatProviderStub()
+    display = _ChatDisplaySpy([SKILLS_COMMAND, "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.create_provider",
+        lambda runtime_settings, **kw: provider,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.format_project_skills_markdown",
+        lambda: "### Project Skills\n\n- `repo-skill`: Demo skill",
+    )
+
+    exit_code = run_chat_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == []
+    assert display.markdown_calls == [
+        "### Project Skills\n\n- `repo-skill`: Demo skill"
+    ]
+    assert display.assistant_start_calls == 0
 
 
 def test_run_chat_loop_passes_queued_image_paths_to_provider(monkeypatch) -> None:

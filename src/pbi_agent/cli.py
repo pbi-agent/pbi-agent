@@ -15,6 +15,7 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import urlparse
 
+from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.config import (
     ConfigError,
     OPENAI_SERVICE_TIERS,
@@ -170,6 +171,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--verbose",
         action="store_true",
         help="Enable verbose logs.",
+    )
+    diagnostics_group.add_argument(
+        "--skills",
+        action="store_true",
+        help="List discovered project skills from .agents/skills and exit.",
     )
 
     subparsers = parser.add_subparsers(
@@ -349,6 +355,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # ---- commands that don't need settings or the TUI ----
 
+    if args.skills:
+        return _handle_skills_flag(args)
+
     if args.command == "init":
         return _handle_init_command(args)
 
@@ -408,6 +417,33 @@ def _handle_console_command(settings: Settings) -> int:
 
     app = ChatApp(settings=settings, verbose=settings.verbose)
     return _run_app(app)
+
+
+def _handle_skills_flag(args: argparse.Namespace) -> int:
+    target_dir = _skills_directory_for_args(args)
+    if not target_dir.exists():
+        print(
+            f"Error: Skills directory root does not exist: {target_dir}",
+            file=sys.stderr,
+        )
+        return 1
+    if not target_dir.is_dir():
+        print(
+            f"Error: Skills directory root is not a directory: {target_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(format_project_skills_markdown(cwd=target_dir))
+    return 0
+
+
+def _skills_directory_for_args(args: argparse.Namespace) -> Path:
+    if getattr(args, "command", None) == "run" and getattr(args, "project_dir", None):
+        return (Path.cwd() / args.project_dir).resolve()
+    if getattr(args, "command", None) == "audit" and getattr(args, "report_dir", None):
+        return (Path.cwd() / args.report_dir).resolve()
+    return Path.cwd().resolve()
 
 
 def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:

@@ -18,6 +18,21 @@ class ProjectSkill:
     location: Path
 
 
+def format_project_skills_markdown(cwd: Path | None = None) -> str:
+    skills = discover_project_skills(cwd)
+    if not skills:
+        return (
+            "### Project Skills\n\n"
+            "No project skills discovered under `.agents/skills/`."
+        )
+
+    lines = ["### Project Skills", ""]
+    for skill in skills:
+        lines.append(f"- `{skill.name}`: {skill.description}")
+        lines.append(f"  `{skill.location}`")
+    return "\n".join(lines)
+
+
 def _warn(message: str) -> None:
     print(message, file=sys.stderr)
 

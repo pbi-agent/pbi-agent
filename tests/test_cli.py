@@ -145,6 +145,13 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(args.sub_agent_model, "gpt-5-mini")
 
+    def test_parser_accepts_skills_flag(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["--skills", "console"])
+
+        self.assertTrue(args.skills)
+
     def test_web_chat_command_uses_parent_pid_wrapper(self) -> None:
         command = cli._web_chat_command(self._settings(verbose=True), parent_pid=4321)
 
@@ -444,6 +451,37 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 1)
         self.assertIn("Project directory does not exist", stderr.getvalue())
+
+    def test_main_skills_flag_lists_project_skills_without_settings(self) -> None:
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = Path.cwd()
+            root_dir = Path(tmpdir).resolve()
+            skill_dir = root_dir / ".agents" / "skills" / "repo-skill"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "---\n"
+                "name: repo-skill\n"
+                "description: Repository-specific workflow.\n"
+                "---\n\n# Repo Skill\n",
+                encoding="utf-8",
+            )
+
+            try:
+                os.chdir(root_dir)
+                with (
+                    patch("sys.stdout", stdout),
+                    patch("pbi_agent.cli.save_internal_config") as mock_save,
+                ):
+                    rc = cli.main(["--skills"])
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(rc, 0)
+        self.assertIn("### Project Skills", stdout.getvalue())
+        self.assertIn("repo-skill", stdout.getvalue())
+        mock_save.assert_not_called()
 
     def test_handle_audit_command_uses_direct_single_turn_path(self) -> None:
         parser = cli.build_parser()

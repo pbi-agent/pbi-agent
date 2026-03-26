@@ -43,6 +43,21 @@ async def test_clear_command_requests_new_chat(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_skills_command_is_forwarded_to_session(monkeypatch) -> None:
+    monkeypatch.setattr(ChatApp, "_run_session", lambda self: None)
+    app = ChatApp(settings=Settings(api_key="test-key", model="gpt-5.4-2026-03-05"))
+
+    async with app.run_test() as pilot:
+        bridge = MagicMock()
+        app._bridge = bridge
+
+        await app._submit_user_message("/skills")
+        await pilot.pause()
+
+        bridge.submit_input.assert_called_once_with("/skills", image_paths=None)
+
+
+@pytest.mark.asyncio
 async def test_submit_expands_file_mentions_before_bridge_submit(
     monkeypatch, tmp_path: Path
 ) -> None:
