@@ -76,7 +76,7 @@ Abstract `Provider` base class with implementations for each LLM. All use synchr
 - Sub-agents: spawned with limited scope (max 30 requests, 300s timeout, no recursive sub-agents).
 
 ### Tools (`tools/`)
-Registered in `tools/registry.py`. All tools receive `ToolContext` (workspace, display, settings). Key tools: `apply_patch` (V4A diffs), `shell` (workspace-confined), `python_exec` (local Python with polars/pypdf/python-docx), `skill_knowledge` (retrieves Power BI Markdown docs from `skills/`), `sub_agent`, `read_file`, `search_files`, `list_files`, `read_web_url`, `init_report`.
+Registered in `tools/registry.py`. All tools receive `ToolContext` (workspace, display, settings). Key tools: `apply_patch` (V4A diffs), `shell` (workspace-confined), `python_exec` (local Python with pandas/pypdf/python-docx), `skill_knowledge` (retrieves Power BI Markdown docs from `skills/`), `sub_agent`, `read_file`, `search_files`, `list_files`, `read_web_url`, `init_report`.
 
 ### UI Layer (`ui/`)
 Built on Textual. `DisplayProtocol` abstracts UI so implementations can be swapped (web TUI via `app.py`, console via `console_display.py`, test spy via `conftest.py::DisplaySpy`).

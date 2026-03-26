@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import math
+import numbers
 from zipfile import BadZipFile
 from datetime import date, datetime, time
 from pathlib import Path
@@ -20,6 +21,8 @@ MAX_READ_FILE_OUTPUT_CHARS = 12_000
 DATAFRAME_PREVIEW_ROWS = 3
 MAX_TABULAR_SCHEMA_CHARS = 8_000
 MAX_TABULAR_PREVIEW_CHARS = 2_500
+TABULAR_SAMPLE_ROWS = 5_000
+MAX_CSV_SNIFF_CHARS = 65_536
 
 _TABULAR_EXTENSIONS = {
     ".csv",
@@ -147,13 +150,65 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
 
 
 def _handle_tabular_file(root: Path, target_path: Path, suffix: str) -> dict[str, Any]:
-    dataframe = _read_tabular_dataframe(target_path, suffix)
+    separator: str | None = None
+    if suffix in {".csv", ".tsv"}:
+        separator = _detect_delimited_separator(target_path, suffix=suffix)
+        raw_bytes = target_path.read_bytes()
+        row_count = _count_delimited_rows(target_path, separator=separator)
+        if row_count > TABULAR_SAMPLE_ROWS:
+            dataframe = _read_delimited_dataframe_from_bytes(
+                raw_bytes,
+                separator=separator,
+                nrows=TABULAR_SAMPLE_ROWS,
+            )
+            result = _summarize_dataframe(
+                dataframe,
+                actual_rows=row_count,
+                sampled_rows=len(dataframe),
+            )
+            result["path"] = relative_workspace_path(root, target_path)
+            return result
+
+    dataframe = _read_tabular_dataframe(
+        target_path,
+        suffix,
+        separator=separator,
+    )
     result = _summarize_dataframe(dataframe)
     result["path"] = relative_workspace_path(root, target_path)
     return result
 
 
 def _handle_excel_workbook(root: Path, target_path: Path) -> dict[str, Any]:
+    sheet_metadata = _read_excel_sheet_metadata(target_path)
+    if sheet_metadata and any(
+        meta["rows"] > TABULAR_SAMPLE_ROWS for meta in sheet_metadata
+    ):
+        sheets: list[dict[str, Any]] = []
+        for meta in sheet_metadata:
+            sample_rows = (
+                TABULAR_SAMPLE_ROWS if meta["rows"] > TABULAR_SAMPLE_ROWS else None
+            )
+            dataframe = _read_excel_sheet(
+                target_path,
+                sheet_name=meta["name"],
+                nrows=sample_rows,
+            )
+            sheet_result = _summarize_dataframe(
+                dataframe,
+                actual_rows=meta["rows"],
+                actual_columns=meta["columns"],
+                sampled_rows=len(dataframe) if sample_rows is not None else None,
+            )
+            sheet_result["name"] = meta["name"]
+            sheets.append(sheet_result)
+
+        return {
+            "path": relative_workspace_path(root, target_path),
+            "sheet_count": len(sheets),
+            "sheets": sheets,
+        }
+
     workbook = _read_excel_workbook(target_path)
     sheets: list[dict[str, Any]] = []
 
@@ -214,31 +269,39 @@ def _extract_docx_text(path: Path) -> str:
     return "\n".join(parts)
 
 
-def _summarize_dataframe(dataframe: Any) -> dict[str, Any]:
-    schema = dataframe.schema
-    rows = dataframe.height
-    columns = dataframe.width
+def _summarize_dataframe(
+    dataframe: Any,
+    *,
+    actual_rows: int | None = None,
+    actual_columns: int | None = None,
+    sampled_rows: int | None = None,
+) -> dict[str, Any]:
+    schema = {
+        column_name: _display_dtype(dataframe[column_name])
+        for column_name in dataframe.columns
+    }
+    rows, columns = dataframe.shape
+    reported_rows = rows if actual_rows is None else actual_rows
+    reported_columns = columns if actual_columns is None else actual_columns
     null_counts = {
-        column_name: int(null_count)
-        for column_name, null_count in zip(
-            dataframe.columns, dataframe.null_count().row(0), strict=True
-        )
+        column_name: int(dataframe[column_name].isna().sum())
+        for column_name in dataframe.columns
     }
     kind_by_column = {
-        column_name: _column_kind(dataframe, column_name, dtype)
-        for column_name, dtype in schema.items()
+        column_name: _column_kind(dataframe[column_name])
+        for column_name in dataframe.columns
     }
 
     schema_lines = [
         _summarize_tabular_column(
-            dataframe,
+            dataframe[column_name],
             column_name,
-            dtype,
+            schema[column_name],
             kind=kind_by_column[column_name],
             null_count=null_counts[column_name],
             row_count=rows,
         )
-        for column_name, dtype in schema.items()
+        for column_name in dataframe.columns
     ]
     schema_text, schema_truncated = bound_output(
         "\n".join(f"- {line}" for line in schema_lines),
@@ -251,18 +314,22 @@ def _summarize_dataframe(dataframe: Any) -> dict[str, Any]:
 
     result: dict[str, Any] = {
         "shape": {
-            "rows": rows,
-            "columns": columns,
+            "rows": reported_rows,
+            "columns": reported_columns,
         },
         "summary": _tabular_dataset_summary(
-            rows=rows,
-            columns=columns,
+            rows=reported_rows,
+            columns=reported_columns,
             kind_by_column=kind_by_column,
             null_counts=null_counts,
+            sampled_rows=sampled_rows,
         ),
         "schema": schema_text,
         "preview": preview_text,
     }
+    if sampled_rows is not None and sampled_rows < reported_rows:
+        result["sampled"] = True
+        result["sample_rows"] = sampled_rows
     if schema_truncated:
         result["schema_truncated"] = True
     if preview_truncated:
@@ -270,117 +337,293 @@ def _summarize_dataframe(dataframe: Any) -> dict[str, Any]:
     return result
 
 
-def _read_tabular_dataframe(path: Path, suffix: str) -> Any:
-    import polars as pl
+def _read_tabular_dataframe(
+    path: Path, suffix: str, *, separator: str | None = None
+) -> Any:
+    import pandas as pd
+    import pyarrow as pa
+    import pyarrow.ipc as ipc
 
     if suffix == ".csv":
-        return _read_delimited_dataframe(path, separator=",")
+        return _read_delimited_dataframe(path, separator=separator or ",")
     if suffix == ".tsv":
-        return _read_delimited_dataframe(path, separator="\t")
+        return _read_delimited_dataframe(path, separator=separator or "\t")
     if suffix == ".parquet":
-        return pl.read_parquet(path)
-    if suffix in {".feather", ".ipc", ".arrow"}:
-        return pl.read_ipc(path)
+        return _coerce_temporal_columns(pd.read_parquet(path))
+    if suffix == ".feather":
+        return _coerce_temporal_columns(pd.read_feather(path))
+    if suffix in {".ipc", ".arrow"}:
+        with pa.memory_map(str(path), "r") as source:
+            try:
+                dataframe = ipc.RecordBatchFileReader(source).read_all().to_pandas()
+            except pa.ArrowInvalid:
+                source.seek(0)
+                dataframe = ipc.RecordBatchStreamReader(source).read_all().to_pandas()
+        return _coerce_temporal_columns(dataframe)
     raise ValueError(f"unsupported tabular file type: {suffix}")
 
 
 def _read_excel_workbook(path: Path) -> dict[str, Any]:
-    import polars as pl
+    import pandas as pd
 
-    workbook = pl.read_excel(path, sheet_id=0, infer_schema_length=10_000)
-    if isinstance(workbook, dict):
-        return {
-            sheet_name: _coerce_temporal_columns(dataframe)
-            for sheet_name, dataframe in workbook.items()
-        }
-    return {"Sheet1": _coerce_temporal_columns(workbook)}
+    workbook = pd.read_excel(path, sheet_name=None)
+    return {
+        str(sheet_name): _coerce_temporal_columns(dataframe)
+        for sheet_name, dataframe in workbook.items()
+    }
 
 
-def _read_delimited_dataframe(path: Path, *, separator: str) -> Any:
-    import polars as pl
+def _read_excel_sheet(path: Path, *, sheet_name: str, nrows: int | None) -> Any:
+    import pandas as pd
 
-    raw_bytes = path.read_bytes()
-    if b"\r" in raw_bytes and b"\n" not in raw_bytes:
-        raw_bytes = raw_bytes.replace(b"\r", b"\n")
-        dataframe = pl.read_csv(
-            io.BytesIO(raw_bytes),
-            separator=separator,
-            infer_schema_length=10_000,
-        )
-    else:
-        dataframe = pl.read_csv(
-            path,
-            separator=separator,
-            infer_schema_length=10_000,
-        )
+    dataframe = pd.read_excel(path, sheet_name=sheet_name, nrows=nrows)
     return _coerce_temporal_columns(dataframe)
 
 
-def _coerce_temporal_columns(dataframe: Any) -> Any:
-    import polars as pl
+def _read_delimited_dataframe(path: Path, *, separator: str) -> Any:
+    raw_bytes = path.read_bytes()
+    return _read_delimited_dataframe_from_bytes(raw_bytes, separator=separator)
 
-    temporal_formats: tuple[tuple[Any, str], ...] = (
-        (pl.Date, "%Y-%m-%d"),
-        (pl.Date, "%m/%d/%Y"),
-        (pl.Datetime, "%Y-%m-%d %H:%M:%S"),
-        (pl.Datetime, "%Y-%m-%dT%H:%M:%S"),
+
+def _read_delimited_dataframe_from_bytes(
+    raw_bytes: bytes,
+    *,
+    separator: str,
+    nrows: int | None = None,
+) -> Any:
+    import pandas as pd
+
+    normalized_bytes = _normalize_delimited_bytes(raw_bytes)
+    dataframe = pd.read_csv(
+        io.BytesIO(normalized_bytes),
+        sep=separator,
+        low_memory=False,
+        nrows=nrows,
     )
-    expressions: list[Any] = []
+    return _coerce_temporal_columns(dataframe)
 
-    for column_name, dtype in dataframe.schema.items():
-        if dtype != pl.String:
-            continue
 
-        series = dataframe[column_name]
-        non_null = series.drop_nulls()
-        if non_null.len() == 0:
-            continue
+def _normalize_delimited_bytes(raw_bytes: bytes) -> bytes:
+    if b"\r" in raw_bytes and b"\n" not in raw_bytes:
+        return raw_bytes.replace(b"\r", b"\n")
+    return raw_bytes
 
-        cleaned = series.str.strip_chars()
-        for temporal_type, format_string in temporal_formats:
-            parsed = cleaned.str.strptime(
-                temporal_type,
-                format=format_string,
-                strict=False,
+
+def _detect_delimited_separator(path: Path, *, suffix: str) -> str:
+    if suffix == ".tsv":
+        return "\t"
+    if suffix != ".csv":
+        raise ValueError(f"unsupported delimited file type: {suffix}")
+
+    with open_text_file(path, encoding="auto") as text_handle:
+        sample = text_handle.read(MAX_CSV_SNIFF_CHARS)
+
+    if not sample:
+        return ","
+
+    normalized_sample = sample.replace("\r", "\n") if "\n" not in sample else sample
+    try:
+        dialect = csv.Sniffer().sniff(normalized_sample, delimiters=",;\t|")
+    except csv.Error:
+        return ","
+    return str(dialect.delimiter)
+
+
+def _count_delimited_rows(path: Path, *, separator: str) -> int:
+    with open_text_file(path, encoding="auto") as text_handle:
+        reader = csv.reader(text_handle, delimiter=separator)
+        try:
+            next(reader)
+        except StopIteration:
+            return 0
+        return sum(1 for _ in reader)
+
+
+def _read_excel_sheet_metadata(path: Path) -> list[dict[str, Any]]:
+    if path.suffix.lower() not in {".xlsx", ".xlsm"}:
+        return []
+
+    try:
+        from openpyxl import load_workbook
+        from openpyxl.utils.exceptions import InvalidFileException
+    except ImportError:
+        return []
+
+    try:
+        workbook = load_workbook(path, read_only=True, data_only=False)
+    except (BadZipFile, InvalidFileException, KeyError, OSError, ValueError):
+        return []
+
+    try:
+        metadata: list[dict[str, Any]] = []
+        for worksheet in workbook.worksheets:
+            rows, columns = _read_xlsx_sheet_bounds(worksheet)
+            metadata.append(
+                {
+                    "name": str(worksheet.title),
+                    "rows": max(rows - 1, 0),
+                    "columns": columns,
+                }
             )
-            if parsed.drop_nulls().len() == non_null.len():
-                expressions.append(parsed.alias(column_name))
+        return metadata
+    finally:
+        workbook.close()
+
+
+def _read_xlsx_sheet_bounds(worksheet: Any) -> tuple[int, int]:
+    worksheet.reset_dimensions()
+    max_row = 0
+    max_column = 0
+
+    for row in worksheet.iter_rows():
+        populated_cells = [cell for cell in row if cell.value is not None]
+        if not populated_cells:
+            continue
+        max_row = max(max_row, max(cell.row for cell in populated_cells))
+        max_column = max(max_column, max(cell.column for cell in populated_cells))
+
+    return (max_row, max_column)
+
+
+def _excel_column_letters_to_index(letters: str) -> int:
+    index = 0
+    for character in letters:
+        index = index * 26 + (ord(character) - ord("A") + 1)
+    return index
+
+
+def _coerce_temporal_columns(dataframe: Any) -> Any:
+    from pandas.api import types as ptypes
+
+    temporal_formats: dict[str, tuple[str, ...]] = {
+        "date": (
+            "%Y-%m-%d",
+            "%m/%d/%Y",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S",
+        ),
+        "datetime": ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"),
+    }
+    temporal_kinds = (
+        "date",
+        "datetime",
+    )
+    result = dataframe.copy()
+
+    for column_name in dataframe.columns:
+        series = dataframe[column_name]
+        if not (
+            ptypes.is_string_dtype(series.dtype) or ptypes.is_object_dtype(series.dtype)
+        ):
+            continue
+
+        non_null = series.dropna()
+        if non_null.empty or not all(
+            _is_temporal_candidate(value) for value in non_null
+        ):
+            continue
+
+        cleaned = series.map(_normalize_temporal_candidate, na_action="ignore").astype(
+            "string"
+        )
+        cleaned = cleaned.str.strip()
+        for temporal_kind in temporal_kinds:
+            parsed = _parse_temporal_series(cleaned, temporal_formats[temporal_kind])
+            if parsed is not None and int(parsed.notna().sum()) == len(non_null):
+                if temporal_kind == "date":
+                    result[column_name] = parsed.dt.date
+                else:
+                    result[column_name] = parsed
                 break
 
-    if not expressions:
-        return dataframe
-    return dataframe.with_columns(expressions)
+    return result
 
 
-def _is_categorical_column(dataframe: Any, name: str, dtype: Any) -> bool:
-    import polars as pl
+def _parse_temporal_series(series: Any, formats: tuple[str, ...]) -> Any:
+    import pandas as pd
 
-    if dtype in {pl.Categorical, pl.Enum}:
+    parsed = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+    remaining = series.notna()
+
+    for format_string in formats:
+        if not bool(remaining.any()):
+            break
+
+        current = pd.to_datetime(
+            series.where(remaining),
+            format=format_string,
+            errors="coerce",
+        )
+        matched = current.notna() & remaining
+        if bool(matched.any()):
+            parsed.loc[matched] = current.loc[matched]
+            remaining = remaining & ~matched
+
+    if bool(remaining.any()):
+        return None
+    return parsed
+
+
+def _is_temporal_candidate(value: Any) -> bool:
+    return isinstance(value, (str, date, datetime))
+
+
+def _normalize_temporal_candidate(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat(sep="T")
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def _is_categorical_column(series: Any) -> bool:
+    if _is_categorical_dtype(series):
         return True
-    if dtype != pl.String or dataframe.height == 0:
+    if series.empty or not _is_text_series(series):
         return False
 
-    non_null = dataframe[name].drop_nulls()
-    if non_null.len() == 0:
+    non_null = series.dropna()
+    if non_null.empty:
         return False
-    unique_ratio = non_null.n_unique() / non_null.len()
-    return unique_ratio <= 0.2 and non_null.n_unique() <= 100
+    distinct = int(non_null.nunique(dropna=True))
+    unique_ratio = distinct / len(non_null)
+    return unique_ratio <= 0.2 and distinct <= 100
 
 
-def _column_kind(dataframe: Any, name: str, dtype: Any) -> str:
-    import polars as pl
+def _column_kind(series: Any) -> str:
+    from pandas.api import types as ptypes
 
-    if dtype.is_numeric():
+    if ptypes.is_numeric_dtype(series.dtype) and not _is_boolean_series(series):
         return "numeric"
-    if dtype in {pl.Date, pl.Datetime, pl.Time}:
+    if _is_temporal_series(series):
         return "datetime"
-    if dtype == pl.Boolean:
+    if _is_boolean_series(series):
         return "boolean"
-    if _is_categorical_column(dataframe, name, dtype):
+    if _is_categorical_column(series):
         return "categorical"
-    if dtype in {pl.String, pl.Categorical, pl.Enum}:
+    if _is_text_series(series) or _is_categorical_dtype(series):
         return "text"
     return "other"
+
+
+def _display_dtype(series: Any) -> str:
+    from pandas.api import types as ptypes
+
+    if _is_boolean_series(series):
+        return "Boolean"
+    if _is_date_only_series(series):
+        return "Date"
+    if _is_temporal_series(series):
+        return "Datetime"
+    if ptypes.is_integer_dtype(series.dtype):
+        return "Int64"
+    if ptypes.is_float_dtype(series.dtype):
+        return "Float64"
+    if _is_categorical_dtype(series):
+        return "Categorical"
+    if _is_text_series(series):
+        return "String"
+    return str(series.dtype)
 
 
 def _tabular_dataset_summary(
@@ -389,6 +632,7 @@ def _tabular_dataset_summary(
     columns: int,
     kind_by_column: dict[str, str],
     null_counts: dict[str, int],
+    sampled_rows: int | None = None,
 ) -> str:
     kind_order = ["numeric", "datetime", "categorical", "text", "boolean", "other"]
     kind_counts = {
@@ -404,14 +648,19 @@ def _tabular_dataset_summary(
     )
 
     parts = [f"{rows} rows x {columns} columns"]
+    if sampled_rows is not None and sampled_rows < rows:
+        parts.append(f"schema/stats sampled from first {sampled_rows} rows")
     if mix_parts:
         parts.append("column mix: " + ", ".join(mix_parts))
-    parts.append(f"missing values: {missing_summary}")
+    if sampled_rows is not None and sampled_rows < rows:
+        parts.append(f"missing values in sample: {missing_summary}")
+    else:
+        parts.append(f"missing values: {missing_summary}")
     return "; ".join(parts) + "."
 
 
 def _summarize_tabular_column(
-    dataframe: Any,
+    series: Any,
     column_name: str,
     dtype: Any,
     *,
@@ -419,7 +668,6 @@ def _summarize_tabular_column(
     null_count: int,
     row_count: int,
 ) -> str:
-    series = dataframe[column_name]
     parts = [f"{column_name}: {dtype}"]
     if kind != "other":
         parts.append(f"kind={kind}")
@@ -427,8 +675,8 @@ def _summarize_tabular_column(
         null_ratio = (null_count / row_count) * 100 if row_count else 0.0
         parts.append(f"nulls={null_count} ({_format_number(null_ratio)}%)")
 
-    non_null = series.drop_nulls()
-    if non_null.len() == 0:
+    non_null = series.dropna()
+    if non_null.empty:
         parts.append("all values null")
         return "; ".join(parts)
 
@@ -455,7 +703,7 @@ def _summarize_tabular_column(
         return "; ".join(parts)
 
     if kind == "categorical":
-        distinct = non_null.n_unique()
+        distinct = int(non_null.nunique(dropna=True))
         examples = _top_examples(non_null, limit=5)
         parts.append(f"distinct={distinct}")
         if examples:
@@ -473,7 +721,7 @@ def _summarize_tabular_column(
 
 def _render_preview_csv(dataframe: Any) -> str:
     preview = dataframe.head(DATAFRAME_PREVIEW_ROWS)
-    if preview.height == 0:
+    if preview.empty:
         return ""
 
     buffer = io.StringIO()
@@ -483,7 +731,7 @@ def _render_preview_csv(dataframe: Any) -> str:
         lineterminator="\n",
     )
     writer.writeheader()
-    for row in preview.to_dicts():
+    for row in preview.to_dict(orient="records"):
         writer.writerow(
             {
                 column_name: _format_preview_value(row.get(column_name))
@@ -494,8 +742,90 @@ def _render_preview_csv(dataframe: Any) -> str:
 
 
 def _top_examples(series: Any, *, limit: int) -> list[str]:
-    values = series.value_counts(sort=True)[series.name].to_list()
+    values = series.value_counts(dropna=True).index.tolist()
     return _ordered_examples(values, limit=limit)
+
+
+def _is_text_series(series: Any) -> bool:
+    from pandas.api import types as ptypes
+
+    if ptypes.is_string_dtype(series.dtype):
+        return True
+    if not ptypes.is_object_dtype(series.dtype):
+        return False
+
+    non_null = series.dropna()
+    return non_null.empty or all(isinstance(value, str) for value in non_null)
+
+
+def _is_categorical_dtype(series: Any) -> bool:
+    import pandas as pd
+
+    return isinstance(series.dtype, pd.CategoricalDtype)
+
+
+def _is_boolean_series(series: Any) -> bool:
+    from pandas.api import types as ptypes
+
+    if ptypes.is_bool_dtype(series.dtype):
+        return True
+    if not ptypes.is_object_dtype(series.dtype):
+        return False
+
+    non_null = series.dropna()
+    return not non_null.empty and all(isinstance(value, bool) for value in non_null)
+
+
+def _is_date_only_series(series: Any) -> bool:
+    from pandas.api import types as ptypes
+
+    non_null = series.dropna()
+    if non_null.empty:
+        return False
+    if _is_categorical_dtype(series):
+        return False
+    if all(
+        isinstance(value, date) and not isinstance(value, datetime)
+        for value in non_null
+    ):
+        return True
+    if ptypes.is_datetime64_any_dtype(series.dtype):
+        timestamps = non_null.dt
+        return bool(
+            (
+                (timestamps.hour == 0)
+                & (timestamps.minute == 0)
+                & (timestamps.second == 0)
+                & (timestamps.microsecond == 0)
+                & (timestamps.nanosecond == 0)
+            ).all()
+        )
+    if not all(isinstance(value, datetime) for value in non_null):
+        return False
+    return bool(
+        all(
+            value.hour == 0
+            and value.minute == 0
+            and value.second == 0
+            and value.microsecond == 0
+            for value in non_null
+        )
+    )
+
+
+def _is_temporal_series(series: Any) -> bool:
+    from pandas.api import types as ptypes
+
+    if ptypes.is_datetime64_any_dtype(series.dtype) or ptypes.is_timedelta64_dtype(
+        series.dtype
+    ):
+        return True
+    if _is_date_only_series(series):
+        return True
+    if ptypes.is_object_dtype(series.dtype):
+        non_null = series.dropna()
+        return not non_null.empty and all(isinstance(value, time) for value in non_null)
+    return False
 
 
 def _ordered_examples(values: list[Any], *, limit: int) -> list[str]:
@@ -521,22 +851,34 @@ def _format_preview_value(value: Any) -> str:
 
 
 def _format_scalar(value: Any) -> str:
+    import pandas as pd
+
+    if pd.isna(value):
+        return "null"
     if value is None:
         return "null"
     if isinstance(value, datetime):
+        if (
+            value.hour == 0
+            and value.minute == 0
+            and value.second == 0
+            and value.microsecond == 0
+        ):
+            return value.date().isoformat()
         return value.isoformat()
     if isinstance(value, (date, time)):
         return value.isoformat()
     if isinstance(value, bool):
         return str(value).lower()
-    if isinstance(value, int):
+    if isinstance(value, numbers.Integral):
         return str(value)
-    if isinstance(value, float):
-        return _format_number(value)
+    if isinstance(value, numbers.Real):
+        return _format_number(float(value))
     return str(value)
 
 
-def _format_number(value: float) -> str:
+def _format_number(value: float | numbers.Real) -> str:
+    value = float(value)
     if math.isnan(value):
         return "null"
     if value.is_integer():

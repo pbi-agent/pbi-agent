@@ -8,6 +8,13 @@ from pbi_agent.tools import python_exec as python_exec_tool
 from pbi_agent.tools.types import ToolContext
 
 
+def test_python_exec_description_recommends_pandas() -> None:
+    description = python_exec_tool.SPEC.description
+
+    assert description is not None
+    assert "pandas" in description
+
+
 def test_python_exec_runs_code_in_same_environment_and_workspace(
     tmp_path: Path,
     monkeypatch,

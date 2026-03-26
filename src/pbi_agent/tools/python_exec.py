@@ -23,15 +23,10 @@ MAX_RESULT_CHARS = 20_000
 SPEC = ToolSpec(
     name="python_exec",
     description=(
-        "Execute trusted local Python code in a subprocess using the same "
-        "interpreter and environment as the CLI. Commands run inside the "
-        "workspace directory by default, and can optionally return a structured "
-        "top-level `result` value.\n\n"
-        "Available packages:\n"
-        "- `polars` — use for ALL data manipulation and analysis, including CSV, "
-        "Excel, Parquet, and Arrow files. Do NOT use pandas.\n"
-        "All standard-library modules are available. The subprocess boundary "
-        "enforces timeout and runtime stability, not security isolation."
+        "Run Python code locally in the workspace. "
+        "Use for data analysis, file parsing, calculations, and transformations. "
+        "Has pandas, pypdf, python-docx, and stdlib. "
+        "Can return a top-level `result` variable."
     ),
     parameters_schema={
         "type": "object",
