@@ -136,9 +136,7 @@ async def test_file_mention_tab_escapes_spaces(tmp_path: Path) -> None:
         ci.insert("@my")
         await pilot.pause()
 
-        assert any(
-            label == r"@my\ notes.txt" for label, _ in ci._current_suggestions
-        )
+        assert any(label == r"@my\ notes.txt" for label, _ in ci._current_suggestions)
 
         await pilot.press("tab")
         await pilot.pause()

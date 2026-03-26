@@ -218,7 +218,9 @@ def test_format_session_subtitle_parts_extracts_context_label() -> None:
     assert context_label == "ctx 37%"
 
 
-def test_format_session_subtitle_parts_uses_informal_workspace_path(monkeypatch) -> None:
+def test_format_session_subtitle_parts_uses_informal_workspace_path(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(
         "pbi_agent.ui.formatting.Path.cwd",
         lambda: Path("/mnt/c/Users/nbensaid/workspace/oai-ws"),

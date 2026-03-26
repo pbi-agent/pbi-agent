@@ -128,9 +128,7 @@ class Display(DisplayProtocol):
         self._shutdown.set()
         self._input_event.set()
 
-    def submit_input(
-        self, value: str, *, image_paths: list[str] | None = None
-    ) -> None:
+    def submit_input(self, value: str, *, image_paths: list[str] | None = None) -> None:
         queued: str | QueuedInput = value
         if image_paths:
             queued = QueuedInput(text=value, image_paths=list(image_paths))

@@ -52,8 +52,7 @@ def test_pbi_app_service_uses_repo_owned_web_driver() -> None:
     environment = app_service._build_environment(100, 40)
 
     assert (
-        environment["TEXTUAL_DRIVER"]
-        == "pbi_agent.web.textual_web_driver:PBIWebDriver"
+        environment["TEXTUAL_DRIVER"] == "pbi_agent.web.textual_web_driver:PBIWebDriver"
     )
     assert environment["COLUMNS"] == "100"
     assert environment["ROWS"] == "40"

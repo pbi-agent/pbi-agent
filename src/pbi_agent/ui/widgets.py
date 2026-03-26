@@ -519,8 +519,7 @@ class ChatTextArea(TextArea):
             return
 
         if self._completion_active and (
-            event.key in {"up", "down", "tab", "escape"}
-            or event.key == "enter"
+            event.key in {"up", "down", "tab", "escape"} or event.key == "enter"
         ):
             event.prevent_default()
             return

@@ -197,7 +197,7 @@ def run_chat_loop(
                 continue
             if user_input.lower() in {"exit", "quit"}:
                 break
-            if user_input == SKILLS_COMMAND:
+            if user_input.strip().lower() == SKILLS_COMMAND:
                 display.render_markdown(format_project_skills_markdown())
                 continue
             if not user_input and not image_paths:

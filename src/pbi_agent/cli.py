@@ -421,20 +421,7 @@ def _handle_console_command(settings: Settings) -> int:
 
 def _handle_skills_flag(args: argparse.Namespace) -> int:
     target_dir = _skills_directory_for_args(args)
-    if not target_dir.exists():
-        print(
-            f"Error: Skills directory root does not exist: {target_dir}",
-            file=sys.stderr,
-        )
-        return 1
-    if not target_dir.is_dir():
-        print(
-            f"Error: Skills directory root is not a directory: {target_dir}",
-            file=sys.stderr,
-        )
-        return 1
-
-    print(format_project_skills_markdown(cwd=target_dir))
+    print(format_project_skills_markdown(workspace=target_dir))
     return 0
 
 

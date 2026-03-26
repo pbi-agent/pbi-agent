@@ -80,7 +80,9 @@ def format_informal_path(path: str | Path, *, levels: int = 2) -> str:
         return "/"
 
     normalized = raw.replace("\\", "/")
-    parts = [part for part in _PATH_SEPARATOR_RE.split(normalized) if part and part != "."]
+    parts = [
+        part for part in _PATH_SEPARATOR_RE.split(normalized) if part and part != "."
+    ]
     if not parts:
         return "/" if normalized.startswith("/") else "."
     if len(parts) == 1 and parts[0].endswith(":") and normalized.endswith("/"):

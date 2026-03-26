@@ -91,18 +91,18 @@ def test_name_directory_mismatch_warns_but_loads(tmp_path: Path, capsys) -> None
     assert "does not match parent directory" in capsys.readouterr().err
 
 
-def test_unparseable_yaml_is_skipped(tmp_path: Path, capsys) -> None:
+def test_unparseable_frontmatter_is_skipped(tmp_path: Path, capsys) -> None:
     skill_dir = tmp_path / ".agents" / "skills" / "broken"
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
-        "---\nname: [broken\ndescription: nope\n---\n",
+        "---\nthis has no colon\n---\n",
         encoding="utf-8",
     )
 
     skills = discover_project_skills(tmp_path)
 
     assert skills == []
-    assert "failed to parse frontmatter" in capsys.readouterr().err
+    assert "not a key-value pair" in capsys.readouterr().err
 
 
 @pytest.mark.skipif(os.name == "nt", reason="chmod not effective on Windows")

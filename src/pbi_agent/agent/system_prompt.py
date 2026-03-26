@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from html import escape
 import sys
 from pathlib import Path
 
@@ -109,9 +108,9 @@ def _append_available_skills(base_prompt: str) -> str:
         catalog_lines.extend(
             [
                 "  <skill>",
-                f"    <name>{escape(skill.name)}</name>",
-                f"    <description>{escape(skill.description)}</description>",
-                f"    <location>{escape(str(skill.location))}</location>",
+                f"    <name>{skill.name}</name>",
+                f"    <description>{skill.description}</description>",
+                f"    <location>{skill.location}</location>",
                 "  </skill>",
             ]
         )

@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 import re
-
-import yaml
 
 _DISCOVERY_ROOT = Path(".agents/skills")
 
@@ -18,8 +15,8 @@ class ProjectSkill:
     location: Path
 
 
-def format_project_skills_markdown(cwd: Path | None = None) -> str:
-    skills = discover_project_skills(cwd)
+def format_project_skills_markdown(workspace: Path | None = None) -> str:
+    skills = discover_project_skills(workspace)
     if not skills:
         return (
             "### Project Skills\n\n"
@@ -37,8 +34,8 @@ def _warn(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def discover_project_skills(cwd: Path | None = None) -> list[ProjectSkill]:
-    root = (cwd or Path.cwd()).resolve()
+def discover_project_skills(workspace: Path | None = None) -> list[ProjectSkill]:
+    root = (workspace or Path.cwd()).resolve()
     skills_root = root / _DISCOVERY_ROOT
     if not skills_root.is_dir():
         return []
@@ -111,41 +108,27 @@ def _extract_frontmatter(content: str, skill_path: Path) -> str | None:
     return match.group(1)
 
 
-def _parse_frontmatter(frontmatter: str, skill_path: Path) -> dict[str, object] | None:
-    attempts = (frontmatter, _normalize_description_line(frontmatter))
-    last_error: yaml.YAMLError | None = None
-
-    for candidate in attempts:
-        try:
-            loaded = yaml.safe_load(candidate)
-        except yaml.YAMLError as exc:
-            last_error = exc
+def _parse_frontmatter(frontmatter: str, skill_path: Path) -> dict[str, str] | None:
+    """Parse simple ``key: value`` frontmatter without external dependencies."""
+    result: dict[str, str] = {}
+    for line in frontmatter.splitlines():
+        stripped = line.strip()
+        if not stripped:
             continue
-        if isinstance(loaded, dict):
-            return loaded
-        _warn(f"Skipping skill at {skill_path}: frontmatter must be a mapping.")
+        colon_idx = stripped.find(":")
+        if colon_idx < 0:
+            _warn(
+                f"Skipping skill at {skill_path}: "
+                f"frontmatter line is not a key-value pair: {stripped!r}."
+            )
+            return None
+        key = stripped[:colon_idx].strip()
+        value = stripped[colon_idx + 1 :].strip()
+        if not key:
+            _warn(f"Skipping skill at {skill_path}: frontmatter contains an empty key.")
+            return None
+        result[key] = value
+    if not result:
+        _warn(f"Skipping skill at {skill_path}: frontmatter is empty.")
         return None
-
-    message = str(last_error) if last_error is not None else "invalid YAML"
-    _warn(f"Skipping skill at {skill_path}: failed to parse frontmatter ({message}).")
-    return None
-
-
-def _normalize_description_line(frontmatter: str) -> str:
-    pattern = re.compile(
-        r"^(?P<prefix>\s*description\s*:\s*)(?P<value>.+)$",
-        re.IGNORECASE | re.MULTILINE,
-    )
-
-    def replace(match: re.Match[str]) -> str:
-        value = match.group("value").strip()
-        if (
-            ":" not in value
-            or value.startswith(("'", '"'))
-            or value in {"|", ">"}
-            or value.startswith(("|", ">"))
-        ):
-            return match.group(0)
-        return f"{match.group('prefix')}{json.dumps(value)}"
-
-    return pattern.sub(replace, frontmatter, count=1)
+    return result

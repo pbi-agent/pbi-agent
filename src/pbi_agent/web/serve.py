@@ -175,7 +175,10 @@ class _FaviconServer(Server):
     async def _handle_logo(self, _request: web.Request) -> web.FileResponse:
         return web.FileResponse(
             _FAVICON_PATH,
-            headers={"Content-Type": "image/png", "Cache-Control": "public, max-age=86400"},
+            headers={
+                "Content-Type": "image/png",
+                "Cache-Control": "public, max-age=86400",
+            },
         )
 
     async def _process_messages(
