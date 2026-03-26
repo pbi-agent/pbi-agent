@@ -12,17 +12,19 @@ Use the `gh` CLI for all GitHub interactions — never construct API URLs manual
 
 ```bash
 # View a PR (description, status, checks)
-gh pr view <number>
+# NOTE: plain `gh pr view` / `gh issue view` fail with a Projects Classic
+# deprecation error. Always use --json to bypass the broken projectCards query.
+gh pr view <number> --json title,body,state,author,labels,headRefName,baseRefName
 
 # View an issue
-gh issue view <number>
+gh issue view <number> --json title,body,state,author,labels,comments
 
 # List PRs or issues
 gh pr list
 gh issue list
 
 # View PR comments
-gh pr view <number> --comments
+gh pr view <number> --json comments
 
 # View PR diff
 gh pr diff <number>
