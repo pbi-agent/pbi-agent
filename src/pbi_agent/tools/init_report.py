@@ -15,9 +15,8 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 SPEC = ToolSpec(
     name="init_report",
     description=(
-        "Scaffold a new Power BI report project in the working directory by "
-        "copying the bundled PBIP template.  Call this tool when the user asks "
-        "to create a new report and no existing PBIP project is present."
+        "Create a new Power BI PBIP report from the bundled template. "
+        "Use when no existing PBIP project is present."
     ),
     parameters_schema={
         "type": "object",

@@ -17,11 +17,7 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 
 SPEC = ToolSpec(
     name="apply_patch",
-    description=(
-        "Apply a file operation (create, update, or delete) using V4A diff format. "
-        "Use this tool to create new files, edit existing files via diffs, "
-        "or delete files in the workspace."
-    ),
+    description="Create, update, or delete workspace files using V4A diff format.",
     parameters_schema={
         "type": "object",
         "properties": {

@@ -10,10 +10,7 @@ _REASONING_EFFORT_VALUES = ("low", "medium", "high")
 
 SPEC = ToolSpec(
     name="sub_agent",
-    description=(
-        "Delegate a tightly scoped task to a stateless child agent that reuses "
-        "the current tool set and returns its final result to the main agent."
-    ),
+    description="Delegate a scoped task to a stateless child agent with the same tools.",
     parameters_schema={
         "type": "object",
         "properties": {

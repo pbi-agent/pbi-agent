@@ -39,10 +39,8 @@ _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 SPEC = ToolSpec(
     name="read_file",
     description=(
-        "Read a workspace file safely, with line-range support for text files and "
-        "compact summarization for tabular data such as CSV, TSV, and Excel, plus "
-        "text extraction for DOCX files and text extraction and metadata for PDF "
-        "files."
+        "Read a workspace file. Supports text (with line ranges), "
+        "tabular data (CSV/Excel/Parquet), PDF, and DOCX."
     ),
     parameters_schema={
         "type": "object",

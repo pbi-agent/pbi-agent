@@ -17,10 +17,8 @@ def build_spec() -> ToolSpec:
     catalog = "\n".join(catalog_lines)
 
     description = (
-        "Retrieves Power BI skill definitions from the knowledge base. "
-        "You MUST call this tool before creating or editing a visual to get "
-        "the correct property definitions and JSON structure.\n\n"
-        f"Available skills:\n{catalog}"
+        "Get Power BI skill definitions. MUST be called before creating or "
+        f"editing a visual.\n\nAvailable skills:\n{catalog}"
     )
 
     parameters_schema: dict[str, Any] = {

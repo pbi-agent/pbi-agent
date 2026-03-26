@@ -17,10 +17,7 @@ from pbi_agent.tools.workspace_access import resolve_safe_path
 
 SPEC = ToolSpec(
     name="search_files",
-    description=(
-        "Search text files in the workspace for a string or regex pattern. "
-        "Use this for safe cross-platform content search instead of shell grep."
-    ),
+    description="Search workspace files for a string or regex pattern.",
     parameters_schema={
         "type": "object",
         "properties": {

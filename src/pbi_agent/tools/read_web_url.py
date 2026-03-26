@@ -16,10 +16,7 @@ _REQUEST_TIMEOUT_SECS = 120.0
 
 SPEC = ToolSpec(
     name="read_web_url",
-    description=(
-        "Fetch a public web page and return clean Markdown. "
-        "Use this for single-page web content retrieval instead of shell curl/wget."
-    ),
+    description="Fetch a public web page and return it as Markdown.",
     parameters_schema={
         "type": "object",
         "properties": {

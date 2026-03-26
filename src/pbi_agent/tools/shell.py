@@ -20,11 +20,7 @@ MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
 
 SPEC = ToolSpec(
     name="shell",
-    description=(
-        "Execute a shell command and return its stdout, stderr, and exit code. "
-        "Commands run inside the workspace directory by default. "
-        "Use this for running builds, tests, git, file listing, or any CLI tool."
-    ),
+    description="Run a shell command in the workspace. Returns stdout, stderr, and exit code.",
     parameters_schema={
         "type": "object",
         "properties": {

@@ -8,10 +8,7 @@ from pbi_agent.tools.types import ToolContext, ToolOutput, ToolSpec
 
 SPEC = ToolSpec(
     name="read_image",
-    description=(
-        "Read a workspace image file safely and attach it to the model context in "
-        "native multimodal format, alongside a compact metadata summary."
-    ),
+    description="Read a workspace image file and attach it to the model context.",
     parameters_schema={
         "type": "object",
         "properties": {

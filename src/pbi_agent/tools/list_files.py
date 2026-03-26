@@ -15,11 +15,7 @@ from pbi_agent.tools.workspace_access import resolve_safe_path
 
 SPEC = ToolSpec(
     name="list_files",
-    description=(
-        "List files and directories within the workspace, with optional glob and "
-        "type filtering for targeted filename or path lookups. Recursive listings "
-        "skip common generated and dependency directories."
-    ),
+    description="List files and directories in the workspace with optional glob filtering.",
     parameters_schema={
         "type": "object",
         "properties": {
