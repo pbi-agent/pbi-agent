@@ -119,6 +119,176 @@
         }
         window.location.href = getStartUrl();
       }
+
+      function installTerminalInputBridges() {
+        const NATIVE_WEBSOCKET = window.WebSocket;
+        const MODIFIER_ENTER_SEQUENCES = new Map([
+          ["shift", "\u001b[13;2u"],
+          ["alt", "\u001b[13;3u"],
+          ["alt+shift", "\u001b[13;4u"],
+          ["ctrl", "\u001b[13;5u"],
+          ["ctrl+shift", "\u001b[13;6u"],
+          ["alt+ctrl", "\u001b[13;7u"],
+          ["alt+ctrl+shift", "\u001b[13;8u"],
+        ]);
+        let appSocket = null;
+
+        function websocketTargetsApp(url) {
+          if (typeof url !== "string") {
+            return false;
+          }
+          return url.includes("/ws");
+        }
+
+        function WrappedWebSocket(...args) {
+          const socket = new NATIVE_WEBSOCKET(...args);
+          if (websocketTargetsApp(args[0])) {
+            appSocket = socket;
+          }
+          return socket;
+        }
+
+        WrappedWebSocket.prototype = NATIVE_WEBSOCKET.prototype;
+        Object.setPrototypeOf(WrappedWebSocket, NATIVE_WEBSOCKET);
+        for (const name of ["CONNECTING", "OPEN", "CLOSING", "CLOSED"]) {
+          WrappedWebSocket[name] = NATIVE_WEBSOCKET[name];
+        }
+        window.WebSocket = WrappedWebSocket;
+
+        function getModifierKey(event) {
+          const modifiers = [];
+          if (event.altKey) {
+            modifiers.push("alt");
+          }
+          if (event.ctrlKey) {
+            modifiers.push("ctrl");
+          }
+          if (event.shiftKey) {
+            modifiers.push("shift");
+          }
+          return modifiers.join("+");
+        }
+
+        function terminalOwnsFocus() {
+          const active = document.activeElement;
+          if (!(active instanceof Element)) {
+            return false;
+          }
+          return (
+            active.classList.contains("xterm-helper-textarea") ||
+            active.closest(".textual-terminal") !== null
+          );
+        }
+
+        function appSocketReady() {
+          return (
+            appSocket !== null &&
+            appSocket.readyState === NATIVE_WEBSOCKET.OPEN
+          );
+        }
+
+        function sendTerminalInput(text) {
+          if (!text || !appSocketReady()) {
+            return false;
+          }
+          appSocket.send(JSON.stringify(["stdin", text]));
+          return true;
+        }
+
+        function sendTerminalPaste(text) {
+          if (!text || !appSocketReady()) {
+            return false;
+          }
+          appSocket.send(JSON.stringify(["paste", text]));
+          return true;
+        }
+
+        async function pasteClipboardText() {
+          if (
+            !terminalOwnsFocus() ||
+            !appSocketReady() ||
+            !navigator.clipboard ||
+            typeof navigator.clipboard.readText !== "function"
+          ) {
+            return false;
+          }
+          try {
+            const text = await navigator.clipboard.readText();
+            return sendTerminalPaste(text);
+          } catch (_error) {
+            return false;
+          }
+        }
+
+        document.addEventListener(
+          "keydown",
+          (event) => {
+            if (
+              event.key === "v" ||
+              event.key === "V"
+            ) {
+              if (
+                !event.altKey &&
+                (event.ctrlKey || event.metaKey) &&
+                !event.shiftKey &&
+                terminalOwnsFocus()
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (typeof event.stopImmediatePropagation === "function") {
+                  event.stopImmediatePropagation();
+                }
+                void pasteClipboardText();
+              }
+              return;
+            }
+
+            if (event.key !== "Enter" || event.metaKey) {
+              return;
+            }
+            const modifierKey = getModifierKey(event);
+            if (!modifierKey) {
+              return;
+            }
+            const sequence = MODIFIER_ENTER_SEQUENCES.get(modifierKey);
+            if (!sequence || !terminalOwnsFocus()) {
+              return;
+            }
+            if (!appSocketReady()) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === "function") {
+              event.stopImmediatePropagation();
+            }
+            sendTerminalInput(sequence);
+          },
+          true
+        );
+
+        document.addEventListener(
+          "paste",
+          (event) => {
+            if (!terminalOwnsFocus()) {
+              return;
+            }
+            const text = event.clipboardData?.getData("text/plain") ?? "";
+            if (!text || !appSocketReady()) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === "function") {
+              event.stopImmediatePropagation();
+            }
+            sendTerminalPaste(text);
+          },
+          true
+        );
+      }
+
+      installTerminalInputBridges();
     </script>
   </head>
   <body data-pingurl="{{ ping_url }}">

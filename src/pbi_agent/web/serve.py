@@ -12,16 +12,43 @@ It is invoked as ``python -m pbi_agent.web.serve <command> [options]`` by
 from __future__ import annotations
 
 import argparse
+import asyncio
+import os
 from pathlib import Path
 
 from aiohttp import web
-from textual_serve.server import Server
+from aiohttp import WSMsgType
+from textual_serve.app_service import AppService
+from textual_serve.server import Server, log
+
+from importlib.metadata import version
 
 from pbi_agent.branding import startup_panel
 
 _WEB_DIR = Path(__file__).resolve().parent
 _TEMPLATES_DIR = str(_WEB_DIR / "templates")
 _FAVICON_PATH = _WEB_DIR / "static" / "favicon.png"
+
+
+class _PBIAppService(AppService):
+    """App service that uses the repo-owned Textual web driver."""
+
+    def _build_environment(self, width: int = 80, height: int = 24) -> dict[str, str]:
+        environment = dict(os.environ.copy())
+        environment["TEXTUAL_DRIVER"] = "pbi_agent.web.textual_web_driver:PBIWebDriver"
+        environment["TEXTUAL_FPS"] = "60"
+        environment["TEXTUAL_COLOR_SYSTEM"] = "truecolor"
+        environment["TERM_PROGRAM"] = "textual"
+        environment["TERM_PROGRAM_VERSION"] = version("textual-serve")
+        environment["COLUMNS"] = str(width)
+        environment["ROWS"] = str(height)
+        if self.debug:
+            environment["TEXTUAL"] = "debug,devtools"
+            environment["TEXTUAL_LOG"] = "textual.log"
+        return environment
+
+    async def paste(self, text: str) -> None:
+        await self.send_meta({"type": "paste", "text": text})
 
 
 class _FaviconServer(Server):
@@ -61,6 +88,77 @@ class _FaviconServer(Server):
             _FAVICON_PATH,
             headers={"Content-Type": "image/png"},
         )
+
+    async def _process_messages(
+        self, websocket: web.WebSocketResponse, app_service: _PBIAppService
+    ) -> None:
+        text_type = WSMsgType.TEXT
+
+        async for message in websocket:
+            if message.type != text_type:
+                continue
+            envelope = message.json()
+            assert isinstance(envelope, list)
+            type_ = envelope[0]
+            if type_ == "stdin":
+                data = envelope[1]
+                await app_service.send_bytes(data.encode("utf-8"))
+            elif type_ == "paste":
+                data = envelope[1]
+                if isinstance(data, str):
+                    await app_service.paste(data)
+            elif type_ == "resize":
+                data = envelope[1]
+                await app_service.set_terminal_size(data["width"], data["height"])
+            elif type_ == "ping":
+                data = envelope[1]
+                await websocket.send_json(["pong", data])
+            elif type_ == "blur":
+                await app_service.blur()
+            elif type_ == "focus":
+                await app_service.focus()
+
+    async def handle_websocket(self, request: web.Request) -> web.WebSocketResponse:
+        websocket = web.WebSocketResponse(heartbeat=15)
+
+        width = _to_int(request.query.get("width", "80"), 80)
+        height = _to_int(request.query.get("height", "24"), 24)
+
+        app_service: _PBIAppService | None = None
+        try:
+            await websocket.prepare(request)
+            app_service = _PBIAppService(
+                self.command,
+                write_bytes=websocket.send_bytes,
+                write_str=websocket.send_str,
+                close=websocket.close,
+                download_manager=self.download_manager,
+                debug=self.debug,
+            )
+            await app_service.start(width, height)
+            try:
+                await self._process_messages(websocket, app_service)
+            finally:
+                await app_service.stop()
+
+        except asyncio.CancelledError:
+            await websocket.close()
+
+        except Exception as error:
+            log.exception(error)
+
+        finally:
+            if app_service is not None:
+                await app_service.stop()
+
+        return websocket
+
+
+def _to_int(value: str, default: int) -> int:
+    try:
+        return int(value)
+    except ValueError:
+        return default
 
 
 # -- CLI entry-point ----------------------------------------------------

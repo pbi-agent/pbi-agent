@@ -144,30 +144,28 @@ class SlashCommandController:
         if not self._suggestions:
             return CompletionResult.IGNORED
 
-        match event.key:
-            case "tab":
-                return (
-                    CompletionResult.HANDLED
-                    if self._apply_selected_completion(cursor_index)
-                    else CompletionResult.IGNORED
-                )
-            case "enter":
-                return (
-                    CompletionResult.SUBMIT
-                    if self._apply_selected_completion(cursor_index)
-                    else CompletionResult.HANDLED
-                )
-            case "down":
-                self._move_selection(1)
-                return CompletionResult.HANDLED
-            case "up":
-                self._move_selection(-1)
-                return CompletionResult.HANDLED
-            case "escape":
-                self.reset()
-                return CompletionResult.HANDLED
-            case _:
-                return CompletionResult.IGNORED
+        if event.key == "tab":
+            return (
+                CompletionResult.HANDLED
+                if self._apply_selected_completion(cursor_index)
+                else CompletionResult.IGNORED
+            )
+        if event.key == "enter":
+            return (
+                CompletionResult.SUBMIT
+                if self._apply_selected_completion(cursor_index)
+                else CompletionResult.HANDLED
+            )
+        if event.key == "down":
+            self._move_selection(1)
+            return CompletionResult.HANDLED
+        if event.key == "up":
+            self._move_selection(-1)
+            return CompletionResult.HANDLED
+        if event.key == "escape":
+            self.reset()
+            return CompletionResult.HANDLED
+        return CompletionResult.IGNORED
 
     def _move_selection(self, delta: int) -> None:
         if not self._suggestions:
@@ -269,24 +267,22 @@ class FuzzyFileController:
         if not self._suggestions:
             return CompletionResult.IGNORED
 
-        match event.key:
-            case "tab" | "enter":
-                return (
-                    CompletionResult.HANDLED
-                    if self._apply_selected_completion(text, cursor_index)
-                    else CompletionResult.IGNORED
-                )
-            case "down":
-                self._move_selection(1)
-                return CompletionResult.HANDLED
-            case "up":
-                self._move_selection(-1)
-                return CompletionResult.HANDLED
-            case "escape":
-                self.reset()
-                return CompletionResult.HANDLED
-            case _:
-                return CompletionResult.IGNORED
+        if event.key == "tab" or event.key == "enter":
+            return (
+                CompletionResult.HANDLED
+                if self._apply_selected_completion(text, cursor_index)
+                else CompletionResult.IGNORED
+            )
+        if event.key == "down":
+            self._move_selection(1)
+            return CompletionResult.HANDLED
+        if event.key == "up":
+            self._move_selection(-1)
+            return CompletionResult.HANDLED
+        if event.key == "escape":
+            self.reset()
+            return CompletionResult.HANDLED
+        return CompletionResult.IGNORED
 
     def _move_selection(self, delta: int) -> None:
         if not self._suggestions:
