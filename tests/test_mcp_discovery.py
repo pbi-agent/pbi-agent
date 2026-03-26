@@ -57,31 +57,24 @@ def test_discover_mcp_server_configs_loads_valid_servers_from_map(
     ]
 
 
-def test_discover_mcp_server_configs_skips_duplicate_names(
-    tmp_path: Path, capsys
+def test_discover_mcp_server_configs_ignores_non_mcp_json_files(
+    tmp_path: Path,
 ) -> None:
     _write_config(
         tmp_path,
-        "a.json",
+        "other.json",
         '{"servers":{"echo":{"command":"uv","cwd":"."}}}',
-    )
-    _write_config(
-        tmp_path,
-        "b.json",
-        '{"servers":{"echo":{"command":"python3","cwd":"."}}}',
     )
 
     configs = discover_mcp_server_configs(tmp_path)
 
-    assert len(configs) == 1
-    assert configs[0].command == "uv"
-    assert "duplicate server name" in capsys.readouterr().err
+    assert configs == []
 
 
 def test_discover_mcp_server_configs_skips_invalid_cwd(tmp_path: Path, capsys) -> None:
     _write_config(
         tmp_path,
-        "echo.json",
+        "mcp.json",
         '{"servers":{"echo":{"command":"uv","cwd":"../outside"}}}',
     )
 

@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
 import queue
+import sys
 import threading
 from collections.abc import Awaitable
 from contextlib import AsyncExitStack
@@ -18,6 +20,11 @@ from pbi_agent.models.messages import ImageAttachment
 from pbi_agent.tools.catalog import ToolCatalog, ToolCatalogEntry
 from pbi_agent.tools.output import MAX_OUTPUT_CHARS, bound_output
 from pbi_agent.tools.types import ToolContext, ToolOutput, ToolSpec
+
+_log = logging.getLogger(__name__)
+
+MCP_CONNECT_TIMEOUT_SECONDS = 30.0
+MCP_CALL_TOOL_TIMEOUT_SECONDS = 120.0
 
 
 @dataclass(slots=True, frozen=True)
@@ -38,7 +45,7 @@ class _ConnectedServer:
 
 
 def _warn(message: str) -> None:
-    print(message, file=os.sys.stderr)
+    print(message, file=sys.stderr)
 
 
 def _import_mcp_client_components() -> tuple[Any, Any, Any, Any]:
@@ -88,6 +95,8 @@ class McpServerPool:
         self._submit(self._close_all())
         self._request_queue.put((None, queue.Queue()))
         self._thread.join(timeout=5.0)
+        if self._thread.is_alive():
+            _log.warning("MCP worker thread did not shut down within 5 s")
         self._thread = None
         self._loop = None
 
@@ -201,8 +210,12 @@ class McpServerPool:
         session = await stack.enter_async_context(
             ClientSession(read_stream, write_stream)
         )
-        await session.initialize()
-        response = await session.list_tools()
+        await asyncio.wait_for(
+            session.initialize(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
+        )
+        response = await asyncio.wait_for(
+            session.list_tools(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
+        )
         bindings = _bindings_for_server(config, getattr(response, "tools", []))
         return (
             _ConnectedServer(
@@ -215,8 +228,11 @@ class McpServerPool:
         )
 
     async def _close_all(self) -> None:
-        for server in self._servers.values():
-            await server.stack.aclose()
+        for name, server in self._servers.items():
+            try:
+                await server.stack.aclose()
+            except Exception:
+                _log.warning("Failed to close MCP server %r", name, exc_info=True)
         self._servers.clear()
         self._bindings.clear()
 
@@ -231,7 +247,10 @@ class McpServerPool:
                 f"MCP server {binding.server_name!r} is no longer connected."
             )
         async with server.lock:
-            return await server.session.call_tool(binding.original_name, arguments)
+            return await asyncio.wait_for(
+                server.session.call_tool(binding.original_name, arguments),
+                timeout=MCP_CALL_TOOL_TIMEOUT_SECONDS,
+            )
 
 
 def _bindings_for_server(

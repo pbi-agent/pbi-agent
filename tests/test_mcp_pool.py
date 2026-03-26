@@ -129,7 +129,7 @@ def _fake_mcp_imports() -> tuple[object, object, object, object]:
 def _write_config(root: Path) -> None:
     config_dir = root / ".agents"
     config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / "echo.json").write_text(
+    (config_dir / "mcp.json").write_text(
         '{"servers":{"echo":{"command":"uv","args":["run","server.py"],"cwd":"."}}}',
         encoding="utf-8",
     )
@@ -138,7 +138,7 @@ def _write_config(root: Path) -> None:
 def _write_http_config(root: Path) -> None:
     config_dir = root / ".agents"
     config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / "http.json").write_text(
+    (config_dir / "mcp.json").write_text(
         '{"servers":{"github":{"type":"http","url":"https://example.test/mcp"}}}',
         encoding="utf-8",
     )

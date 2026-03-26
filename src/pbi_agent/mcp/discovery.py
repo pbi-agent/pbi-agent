@@ -53,7 +53,8 @@ def discover_mcp_server_configs(workspace: Path | None = None) -> list[McpServer
 
     discovered: list[McpServerConfig] = []
     seen_names: set[str] = set()
-    for config_path in sorted(config_root.glob("*.json"), key=lambda item: item.name):
+    config_file = config_root / "mcp.json"
+    for config_path in [config_file] if config_file.is_file() else []:
         for config in _load_mcp_server_configs(root, config_path):
             if not config.enabled:
                 continue

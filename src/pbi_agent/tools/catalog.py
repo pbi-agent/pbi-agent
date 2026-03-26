@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 from pbi_agent.tools import registry
 from pbi_agent.tools.types import ToolHandler, ToolSpec
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True, frozen=True)
@@ -16,6 +19,12 @@ class ToolCatalogEntry:
 class ToolCatalog:
     def __init__(self, entries: dict[str, ToolCatalogEntry] | None = None) -> None:
         self._entries = dict(entries or {})
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __bool__(self) -> bool:
+        return bool(self._entries)
 
     @classmethod
     def from_builtin_registry(cls) -> "ToolCatalog":
@@ -30,6 +39,11 @@ class ToolCatalog:
     def merged(self, extra_entries: list[ToolCatalogEntry]) -> "ToolCatalog":
         merged = dict(self._entries)
         for entry in extra_entries:
+            if entry.spec.name in self._entries:
+                _log.warning(
+                    "MCP tool %r shadows a built-in tool with the same name",
+                    entry.spec.name,
+                )
             merged[entry.spec.name] = entry
         return ToolCatalog(merged)
 

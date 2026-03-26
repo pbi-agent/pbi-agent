@@ -23,13 +23,9 @@ def make_mcp_tool_name(server_name: str, tool_name: str) -> str:
 
 def parse_mcp_tool_name(value: str) -> tuple[str, str] | None:
     normalized = value.strip().lower()
-    if normalized.startswith("mcp__"):
-        _, _, remainder = normalized.partition("mcp__")
-    else:
-        remainder = normalized
-    if "__" not in remainder:
+    if "__" not in normalized:
         return None
-    server, sep, tool = remainder.partition("__")
+    server, sep, tool = normalized.partition("__")
     if not sep or not server or not tool:
         return None
     return server, tool

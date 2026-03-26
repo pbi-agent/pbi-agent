@@ -8,6 +8,7 @@ from pbi_agent.models.messages import ImageAttachment
 if TYPE_CHECKING:
     from pbi_agent.config import Settings
     from pbi_agent.models.messages import TokenUsage
+    from pbi_agent.tools.catalog import ToolCatalog
     from pbi_agent.ui.display_protocol import DisplayProtocol
 
 
@@ -32,6 +33,7 @@ class ToolContext:
     session_usage: TokenUsage | None = None
     turn_usage: TokenUsage | None = None
     sub_agent_depth: int = 0
+    tool_catalog: ToolCatalog | None = None
 
 
 @dataclass(slots=True)

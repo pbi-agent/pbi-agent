@@ -498,7 +498,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             root_dir = Path(tmpdir).resolve()
             config_dir = root_dir / ".agents"
             config_dir.mkdir(parents=True)
-            (config_dir / "echo.json").write_text(
+            (config_dir / "mcp.json").write_text(
                 (
                     "{"
                     '"servers":{'

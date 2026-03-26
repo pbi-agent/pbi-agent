@@ -220,6 +220,7 @@ class AnthropicProvider(Provider):
                 session_usage=session_usage,
                 turn_usage=turn_usage,
                 sub_agent_depth=sub_agent_depth,
+                tool_catalog=self._tool_catalog,
             ),
         )
         had_errors = batch.had_errors
