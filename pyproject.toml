@@ -7,6 +7,7 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp==3.13.3",
+    "mcp==1.26.0",
     "pandas[excel]==3.0.1",
     "pyarrow==23.0.1",
     "pypdf==6.9.2",

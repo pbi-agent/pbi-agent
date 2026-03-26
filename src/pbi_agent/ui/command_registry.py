@@ -32,6 +32,11 @@ COMMANDS: tuple[SlashCommand, ...] = (
         hidden_keywords="skill catalog list loaded skills",
     ),
     SlashCommand(
+        name="/mcp",
+        description="Show discovered project MCP servers",
+        hidden_keywords="mcp server servers tools catalog list",
+    ),
+    SlashCommand(
         name="/quit",
         description="Quit the app",
         hidden_keywords="exit close",

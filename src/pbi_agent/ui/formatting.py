@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from pbi_agent import __version__
+from pbi_agent.mcp import display_name_for_mcp_tool
+from pbi_agent.mcp.naming import parse_mcp_tool_name
 from pbi_agent.models.messages import TokenUsage, context_window_for_model
 
 TOOL_STYLE_MAP = {
@@ -22,6 +24,7 @@ TOOL_STYLE_MAP = {
     "read_web_url": "read-web-url",
     "python_exec": "python-exec",
     "sub_agent": "sub-agent",
+    "mcp": "mcp",
     "web_search": "web-search",
 }
 TOOL_ICONS: dict[str, str] = {
@@ -36,6 +39,7 @@ TOOL_ICONS: dict[str, str] = {
     "read-web-url": "\U0001f310",  # 🌐
     "python-exec": "\u2699",  # ⚙
     "sub-agent": "\u25c9",  # ◉
+    "mcp": "\u25a7",  # ▧
     "web-search": "\U0001f50d",  # 🔍
     "generic": "\u2022",  # •
 }
@@ -52,6 +56,7 @@ TOOL_BORDER_STYLES: dict[str, str] = {
     "read-web-url": "#06B6D4",
     "python-exec": "#A855F7",
     "sub-agent": "#F59E0B",
+    "mcp": "#14B8A6",
     "web-search": "#0EA5E9",
     "mixed": "#8B5CF6",
     "generic": "blue",
@@ -313,6 +318,8 @@ def to_dict(value: Any) -> dict[str, Any]:
 
 def tool_style_key(tool_name: str) -> str:
     normalized = tool_name.strip().lower()
+    if parse_mcp_tool_name(normalized) is not None:
+        return "mcp"
     return TOOL_STYLE_MAP.get(normalized, "generic")
 
 
@@ -453,8 +460,9 @@ def format_generic_function_item(
     status: str,
     call_id: str = "",
     arguments: Any = None,
+    label: str | None = None,
 ) -> str:
-    name_safe = escape_markup_text(name)
+    name_safe = escape_markup_text(label or name)
     args = to_dict(arguments)
     if not verbose:
         if args:
@@ -754,6 +762,7 @@ def route_function_result(
         status=status,
         call_id=call_id,
         arguments=arguments,
+        label=display_name_for_mcp_tool(name),
     )
 
 

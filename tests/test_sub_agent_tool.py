@@ -202,13 +202,18 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
         *,
         system_prompt: str | None = None,
         excluded_tools: set[str] | None = None,
+        tool_catalog=None,
     ) -> _ProviderStub:
         captured["settings"] = settings
         captured["system_prompt"] = system_prompt
         captured["excluded_tools"] = excluded_tools
+        captured["tool_catalog"] = tool_catalog
         return _ProviderStub()
 
     monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
+    monkeypatch.setattr(
+        "pbi_agent.mcp.pool.discover_mcp_server_configs", lambda *_a, **_kw: []
+    )
 
     parent_display = _ParentDisplay()
     parent_session_usage = TokenUsage(model="gpt-5")
@@ -250,6 +255,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
         "skill_knowledge",
         "init_report",
     }
+    assert captured["tool_catalog"] is not None
     assert "delegated sub-agent" in str(captured["system_prompt"])
     assert isinstance(captured["settings"], Settings)
     assert captured["settings"].model == expected_model

@@ -404,6 +404,7 @@ class ChatApp(App):
             "- `/help` Show this help\n"
             "- `/clear` Clear chat and start a new session\n"
             "- `/skills` Show discovered project skills\n"
+            "- `/mcp` Show discovered project MCP servers\n"
             "- `/quit` Quit the app\n\n"
             "### Shortcuts\n"
             "- `Enter` send message\n"

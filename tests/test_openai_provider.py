@@ -24,6 +24,8 @@ from pbi_agent.models.messages import (
     WebSearchSource,
 )
 from pbi_agent.providers.openai_provider import OpenAIProvider, _extract_retry_after
+from pbi_agent.tools.catalog import ToolCatalog, ToolCatalogEntry
+from pbi_agent.tools.types import ToolSpec
 from pbi_agent.tools.types import ToolResult
 
 
@@ -219,6 +221,30 @@ def test_openai_provider_can_exclude_sub_agent_tool() -> None:
     provider = OpenAIProvider(_make_settings(), excluded_tools={"sub_agent"})
 
     assert "sub_agent" not in {
+        tool["name"] for tool in provider._tools if "name" in tool
+    }
+
+
+def test_openai_provider_uses_custom_tool_catalog() -> None:
+    catalog = ToolCatalog.from_builtin_registry().merged(
+        [
+            ToolCatalogEntry(
+                spec=ToolSpec(
+                    name="echo__say_hi",
+                    description="Return a greeting.",
+                    parameters_schema={"type": "object", "properties": {}},
+                ),
+                handler=lambda arguments, context: {
+                    "arguments": arguments,
+                    "ok": bool(context),
+                },
+            )
+        ]
+    )
+
+    provider = OpenAIProvider(_make_settings(), tool_catalog=catalog)
+
+    assert "echo__say_hi" in {
         tool["name"] for tool in provider._tools if "name" in tool
     }
 
@@ -455,7 +481,7 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
 
     monkeypatch.setattr(
         "pbi_agent.providers.openai_provider._execute_tool_calls",
-        lambda calls, max_workers, context=None: batch,
+        lambda calls, max_workers, context=None, tool_catalog=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(
@@ -528,7 +554,7 @@ def test_openai_execute_tool_calls_skips_generic_display_for_sub_agent(
 
     monkeypatch.setattr(
         "pbi_agent.providers.openai_provider._execute_tool_calls",
-        lambda calls, max_workers, context=None: batch,
+        lambda calls, max_workers, context=None, tool_catalog=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(
@@ -1248,7 +1274,7 @@ def test_openai_execute_tool_calls_serializes_image_attachments(
 
     monkeypatch.setattr(
         "pbi_agent.providers.openai_provider._execute_tool_calls",
-        lambda calls, max_workers, context=None: batch,
+        lambda calls, max_workers, context=None, tool_catalog=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(

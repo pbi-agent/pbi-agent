@@ -20,10 +20,11 @@ The runtime is intentionally small and linear:
 ```text
 CLI
   -> config resolution (.env, env vars, flags)
+  -> workspace MCP discovery (.agents/mcp.json)
   -> provider backend
   -> agent session
   -> tool runtime (parallel ThreadPoolExecutor)
-  -> built-in tools
+  -> built-in tools + MCP tools
 ```
 
 | Layer | Responsibility |
@@ -33,7 +34,8 @@ CLI
 | Provider | Sends synchronous HTTP requests to the selected API shape and normalizes tool calls and text output. |
 | Agent Session | Runs interactive chat, single-turn execution, or audit mode. |
 | Tool Runtime | Executes requested tools serially or in parallel based on `--max-tool-workers`. |
-| Tools | Exposes `shell`, `python_exec`, `apply_patch`, `skill_knowledge`, and `init_report`. |
+| Tool Catalog | Merges built-in tools with any discovered MCP tools before provider setup. |
+| Tools | Exposes `shell`, `python_exec`, `apply_patch`, `skill_knowledge`, `init_report`, and discovered MCP tools. |
 
 ## Supported Providers
 

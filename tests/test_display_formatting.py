@@ -12,6 +12,7 @@ from pbi_agent.ui.formatting import (
     format_informal_path,
     format_generic_function_item,
     format_init_report_item,
+    route_function_result,
     format_skill_knowledge_item,
     format_web_search_sources_item,
 )
@@ -154,6 +155,16 @@ class TestFormatGenericFunctionItem:
         )
         assert "call_id=call_99" in result
         assert "args=" in result
+
+    def test_mcp_tool_names_are_displayed_with_friendly_label(self) -> None:
+        tool_name, result = route_function_result(
+            "echo__say_hi",
+            status="[green]done[/green]",
+            arguments={"name": "Ada"},
+        )
+
+        assert tool_name == "echo__say_hi"
+        assert "mcp:echo/say_hi()" in result
 
 
 class TestFormatWebSearchSourcesItem:

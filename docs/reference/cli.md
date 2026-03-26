@@ -30,6 +30,7 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--generic-api-url` | `PBI_AGENT_GENERIC_API_URL` | `https://openrouter.ai/api/v1/chat/completions` | Override the OpenAI-compatible Chat Completions endpoint used by the Generic backend. |
 | `--service-tier` | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier for request processing: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |
 | `--verbose` | none | `false` | Enable verbose logging. |
+| `--mcp` | none | `false` | List discovered project MCP servers from `.agents/mcp.json` and exit. |
 
 Per-provider model defaults:
 
@@ -93,6 +94,8 @@ Image input in `console` and `web` mode is path-based and staged through chat co
 ```
 
 After `/image add`, send your normal prompt. The staged images are attached to the next turn and then cleared automatically.
+
+The console and web chat UIs also expose `/skills` and `/mcp` as local listing commands. They render the discovered project skills or MCP servers without sending a model request.
 
 ## `pbi-agent run`
 

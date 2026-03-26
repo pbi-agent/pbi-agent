@@ -9,6 +9,7 @@ from __future__ import annotations
 from pbi_agent.config import Settings
 from pbi_agent.providers.capabilities import image_excluded_tools
 from pbi_agent.providers.base import Provider
+from pbi_agent.tools.catalog import ToolCatalog
 
 
 def create_provider(
@@ -16,6 +17,7 @@ def create_provider(
     *,
     system_prompt: str | None = None,
     excluded_tools: set[str] | None = None,
+    tool_catalog: ToolCatalog | None = None,
 ) -> Provider:
     """Return a configured :class:`Provider` instance.
 
@@ -38,6 +40,7 @@ def create_provider(
             settings,
             system_prompt=system_prompt,
             excluded_tools=effective_excluded_tools,
+            tool_catalog=tool_catalog,
         )
 
     if name == "xai":
@@ -47,6 +50,7 @@ def create_provider(
             settings,
             system_prompt=system_prompt,
             excluded_tools=effective_excluded_tools,
+            tool_catalog=tool_catalog,
         )
 
     if name == "google":
@@ -56,6 +60,7 @@ def create_provider(
             settings,
             system_prompt=system_prompt,
             excluded_tools=effective_excluded_tools,
+            tool_catalog=tool_catalog,
         )
 
     if name == "anthropic":
@@ -65,6 +70,7 @@ def create_provider(
             settings,
             system_prompt=system_prompt,
             excluded_tools=effective_excluded_tools,
+            tool_catalog=tool_catalog,
         )
 
     if name == "generic":
@@ -74,6 +80,7 @@ def create_provider(
             settings,
             system_prompt=system_prompt,
             excluded_tools=effective_excluded_tools,
+            tool_catalog=tool_catalog,
         )
 
     raise ValueError(

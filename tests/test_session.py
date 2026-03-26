@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import os
 
 import pytest
 
 from pbi_agent.agent.session import (
+    MCP_COMMAND,
     NEW_CHAT_SENTINEL,
     SKILLS_COMMAND,
     run_chat_loop,
@@ -173,6 +175,15 @@ class _ProviderStub:
         )
 
 
+def _stub_runtime_provider(provider):
+    @contextmanager
+    def _open_runtime_provider(*args, **kwargs):
+        del args, kwargs
+        yield provider
+
+    return _open_runtime_provider
+
+
 def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) -> None:
     provider = _ProviderStub()
     display = _DisplaySpy()
@@ -180,8 +191,8 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
     monotonic_values = iter([10.0, 13.5])
 
     monkeypatch.setattr(
-        "pbi_agent.agent.session.create_provider",
-        lambda runtime_settings, **kw: provider,
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.time.monotonic",
@@ -306,8 +317,8 @@ def test_run_chat_loop_resets_welcome_and_usage_on_new_chat(monkeypatch) -> None
     monotonic_values = iter([5.0, 6.5, 10.0, 11.0])
 
     monkeypatch.setattr(
-        "pbi_agent.agent.session.create_provider",
-        lambda runtime_settings, **kw: provider,
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.time.monotonic",
@@ -333,8 +344,8 @@ def test_run_chat_loop_handles_skills_command_locally(monkeypatch) -> None:
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.setattr(
-        "pbi_agent.agent.session.create_provider",
-        lambda runtime_settings, **kw: provider,
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_skills_markdown",
@@ -351,6 +362,28 @@ def test_run_chat_loop_handles_skills_command_locally(monkeypatch) -> None:
     assert display.assistant_start_calls == 0
 
 
+def test_run_chat_loop_handles_mcp_command_locally(monkeypatch) -> None:
+    provider = _ChatProviderStub()
+    display = _ChatDisplaySpy([MCP_COMMAND, "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.format_project_mcp_servers_markdown",
+        lambda: "### MCP Servers\n\n- `echo`: `uv run server.py`",
+    )
+
+    exit_code = run_chat_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == []
+    assert display.markdown_calls == ["### MCP Servers\n\n- `echo`: `uv run server.py`"]
+    assert display.assistant_start_calls == 0
+
+
 def test_run_chat_loop_passes_queued_image_paths_to_provider(monkeypatch) -> None:
     provider = _ChatProviderStub()
     display = _ChatDisplaySpy(
@@ -360,8 +393,8 @@ def test_run_chat_loop_passes_queued_image_paths_to_provider(monkeypatch) -> Non
     monotonic_values = iter([5.0, 6.5])
 
     monkeypatch.setattr(
-        "pbi_agent.agent.session.create_provider",
-        lambda runtime_settings, **kw: provider,
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.time.monotonic",
@@ -422,8 +455,8 @@ def test_run_chat_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> Non
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.setattr(
-        "pbi_agent.agent.session.create_provider",
-        lambda runtime_settings, **kw: _FailingProvider(),
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(_FailingProvider()),
     )
 
     with pytest.raises(RuntimeError, match="boom"):
