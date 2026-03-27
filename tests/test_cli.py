@@ -762,7 +762,6 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(settings.responses_url, DEFAULT_XAI_RESPONSES_URL)
 
     def test_main_run_with_session_id_uses_saved_session_directory(self) -> None:
-        parser = cli.build_parser()
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             db_path = tmp_path / "sessions.db"
@@ -800,7 +799,9 @@ class DefaultWebCommandTests(unittest.TestCase):
                 ):
                     os.environ.pop("PBI_AGENT_API_KEY", None)
                     os.environ.pop("OPENAI_API_KEY", None)
-                    rc = cli.main(["run", "--prompt", "hello", "--session-id", session_id])
+                    rc = cli.main(
+                        ["run", "--prompt", "hello", "--session-id", session_id]
+                    )
             finally:
                 os.chdir(original_cwd)
 
@@ -810,6 +811,34 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(Path(args.project_dir), saved_project)
         self.assertEqual(settings.provider, "xai")
         self.assertEqual(settings.model, "grok-4")
+
+    def test_main_run_with_nonexistent_session_id_exits_with_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            db_path = tmp_path / "sessions.db"
+            config_path = tmp_path / "config.json"
+            config_path.write_text("{}", encoding="utf-8")
+            SessionStore(db_path=db_path).close()
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "PBI_AGENT_SESSION_DB_PATH": str(db_path),
+                        "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
+                    },
+                    clear=False,
+                ),
+                patch("pbi_agent.config.load_dotenv"),
+            ):
+                stderr = io.StringIO()
+                with patch("sys.stderr", stderr):
+                    rc = cli.main(
+                        ["run", "--prompt", "hello", "--session-id", "nonexistent-id"]
+                    )
+
+        self.assertEqual(rc, 1)
+        self.assertIn("not found", stderr.getvalue())
 
 
 if __name__ == "__main__":

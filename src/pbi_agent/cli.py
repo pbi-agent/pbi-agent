@@ -389,7 +389,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.model:
             args.model = _open_session.model
 
-    if args.command == "run" and getattr(args, "session_id", None):
+    if args.command == "run" and args.session_id:
         _run_session = _load_session_record(args.session_id)
         if _run_session is None:
             return 1
@@ -556,7 +556,7 @@ def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:
             prompt=args.prompt,
             settings=settings,
             image_paths=list(args.images or []),
-            resume_session_id=getattr(args, "session_id", None),
+            resume_session_id=args.session_id,
         )
     finally:
         os.chdir(original_cwd)
