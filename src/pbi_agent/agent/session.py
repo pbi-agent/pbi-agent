@@ -141,6 +141,7 @@ def run_single_turn(
             response_id=response.response_id,
             text=response.text,
             tool_errors=had_tool_errors,
+            session_id=session_id,
         )
 
 

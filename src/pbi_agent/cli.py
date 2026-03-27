@@ -218,6 +218,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("."),
         help="Relative project directory to scope tool execution to (default: current directory).",
     )
+    run_parser.add_argument(
+        "--session-id",
+        help="Resume a previous session by ID to continue the conversation.",
+    )
 
     add_command_parser("console", "Run an interactive terminal session.")
     web_parser = add_command_parser("web", "Serve the browser interface.")
@@ -385,6 +389,15 @@ def main(argv: list[str] | None = None) -> int:
         if not args.model:
             args.model = _open_session.model
 
+    if args.command == "run" and args.session_id:
+        _run_session = _load_session_record(args.session_id)
+        if _run_session is None:
+            return 1
+        args.project_dir = _run_session.directory
+        args.provider = _run_session.provider
+        if not args.model:
+            args.model = _run_session.model
+
     # ---- resolve settings for interactive/session commands ----
 
     try:
@@ -493,9 +506,7 @@ def _handle_agents_flag(args: argparse.Namespace) -> int:
     console = Console()
 
     if not agents:
-        console.print(
-            "[dim]No project sub-agents discovered under[/dim] .agents/*.md"
-        )
+        console.print("[dim]No project sub-agents discovered under[/dim] .agents/*.md")
         return 0
 
     table = Table(title="Sub-Agents", title_style="bold cyan")
@@ -545,6 +556,7 @@ def _handle_run_command(args: argparse.Namespace, settings: Settings) -> int:
             prompt=args.prompt,
             settings=settings,
             image_paths=list(args.images or []),
+            resume_session_id=args.session_id,
         )
     finally:
         os.chdir(original_cwd)
@@ -612,6 +624,7 @@ def _run_single_turn_command(
     settings: Settings,
     single_turn_hint: str | None = None,
     image_paths: list[str] | None = None,
+    resume_session_id: str | None = None,
 ) -> int:
     from pbi_agent.agent.error_formatting import format_user_facing_error
     from pbi_agent.agent.session import run_single_turn
@@ -626,6 +639,7 @@ def _run_single_turn_command(
             display,
             single_turn_hint=single_turn_hint,
             image_paths=image_paths,
+            resume_session_id=resume_session_id,
         )
     except KeyboardInterrupt:
         return 130
@@ -633,6 +647,8 @@ def _run_single_turn_command(
         _print_error(format_user_facing_error(exc))
         return 1
 
+    if outcome.session_id:
+        print(f"session_id={outcome.session_id}")
     return 4 if outcome.tool_errors else 0
 
 

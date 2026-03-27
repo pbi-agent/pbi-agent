@@ -173,14 +173,7 @@ def test_skips_unsupported_nested_yaml_structures(tmp_path: Path, capsys) -> Non
     _write_sub_agent(
         tmp_path,
         "broken.md",
-        (
-            "---\n"
-            "name:\n"
-            "  value: reviewer\n"
-            "description: Reviews code.\n"
-            "---\n\n"
-            "Prompt.\n"
-        ),
+        ("---\nname:\n  value: reviewer\ndescription: Reviews code.\n---\n\nPrompt.\n"),
     )
 
     agents = discover_project_sub_agents(tmp_path)

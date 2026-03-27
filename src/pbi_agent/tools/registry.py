@@ -44,7 +44,9 @@ def _resolve_spec(
 
 def get_tool_specs(*, excluded_names: set[str] | None = None) -> list[ToolSpec]:
     excluded = excluded_names or set()
-    return [_resolve_spec(item) for name, item in _REGISTRY.items() if name not in excluded]
+    return [
+        _resolve_spec(item) for name, item in _REGISTRY.items() if name not in excluded
+    ]
 
 
 def get_tool_handler(name: str) -> ToolHandler | None:

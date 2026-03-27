@@ -385,6 +385,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             mock_display_cls.return_value,
             single_turn_hint=None,
             image_paths=[],
+            resume_session_id=None,
         )
 
     def test_handle_run_command_scopes_to_requested_project_dir(self) -> None:
@@ -413,8 +414,16 @@ class DefaultWebCommandTests(unittest.TestCase):
                 *,
                 single_turn_hint: str | None = None,
                 image_paths: list[str] | None = None,
+                resume_session_id: str | None = None,
             ) -> object:
-                del prompt, runtime_settings, display, single_turn_hint, image_paths
+                del (
+                    prompt,
+                    runtime_settings,
+                    display,
+                    single_turn_hint,
+                    image_paths,
+                    resume_session_id,
+                )
                 seen_cwds.append(Path.cwd())
                 return Mock(tool_errors=False)
 
@@ -713,6 +722,123 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 23)
         self.assertEqual(Path.cwd(), original_cwd)
+
+    def test_main_run_with_session_id_uses_stored_provider_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            db_path = tmp_path / "sessions.db"
+            config_path = tmp_path / "config.json"
+            config_path.write_text("{}", encoding="utf-8")
+            with SessionStore(db_path=db_path) as store:
+                session_id = store.create_session(
+                    "/tmp/project", "xai", "grok-4", "saved xai session"
+                )
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "PBI_AGENT_SESSION_DB_PATH": str(db_path),
+                        "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
+                        "PBI_AGENT_PROVIDER": "openai",
+                        "XAI_API_KEY": "xai-key",
+                    },
+                    clear=False,
+                ),
+                patch("pbi_agent.config.load_dotenv"),
+                patch("pbi_agent.cli.configure_logging"),
+                patch("pbi_agent.cli.save_internal_config"),
+                patch("pbi_agent.cli._handle_run_command", return_value=0) as mock_run,
+            ):
+                os.environ.pop("PBI_AGENT_API_KEY", None)
+                os.environ.pop("OPENAI_API_KEY", None)
+                rc = cli.main(["run", "--prompt", "hello", "--session-id", session_id])
+
+        self.assertEqual(rc, 0)
+        args, settings = mock_run.call_args.args
+        self.assertEqual(args.session_id, session_id)
+        self.assertEqual(settings.provider, "xai")
+        self.assertEqual(settings.model, "grok-4")
+        self.assertEqual(settings.responses_url, DEFAULT_XAI_RESPONSES_URL)
+
+    def test_main_run_with_session_id_uses_saved_session_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            db_path = tmp_path / "sessions.db"
+            config_path = tmp_path / "config.json"
+            config_path.write_text("{}", encoding="utf-8")
+            saved_project = tmp_path / "saved-project"
+            saved_project.mkdir()
+            caller_project = tmp_path / "caller-project"
+            caller_project.mkdir()
+            with SessionStore(db_path=db_path) as store:
+                session_id = store.create_session(
+                    str(saved_project), "xai", "grok-4", "saved xai session"
+                )
+
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(caller_project)
+                with (
+                    patch.dict(
+                        os.environ,
+                        {
+                            "PBI_AGENT_SESSION_DB_PATH": str(db_path),
+                            "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
+                            "PBI_AGENT_PROVIDER": "openai",
+                            "XAI_API_KEY": "xai-key",
+                        },
+                        clear=False,
+                    ),
+                    patch("pbi_agent.config.load_dotenv"),
+                    patch("pbi_agent.cli.configure_logging"),
+                    patch("pbi_agent.cli.save_internal_config"),
+                    patch(
+                        "pbi_agent.cli._handle_run_command", return_value=0
+                    ) as mock_run,
+                ):
+                    os.environ.pop("PBI_AGENT_API_KEY", None)
+                    os.environ.pop("OPENAI_API_KEY", None)
+                    rc = cli.main(
+                        ["run", "--prompt", "hello", "--session-id", session_id]
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(rc, 0)
+        args, settings = mock_run.call_args.args
+        self.assertEqual(args.session_id, session_id)
+        self.assertEqual(Path(args.project_dir), saved_project)
+        self.assertEqual(settings.provider, "xai")
+        self.assertEqual(settings.model, "grok-4")
+
+    def test_main_run_with_nonexistent_session_id_exits_with_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            db_path = tmp_path / "sessions.db"
+            config_path = tmp_path / "config.json"
+            config_path.write_text("{}", encoding="utf-8")
+            SessionStore(db_path=db_path).close()
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "PBI_AGENT_SESSION_DB_PATH": str(db_path),
+                        "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
+                    },
+                    clear=False,
+                ),
+                patch("pbi_agent.config.load_dotenv"),
+            ):
+                stderr = io.StringIO()
+                with patch("sys.stderr", stderr):
+                    rc = cli.main(
+                        ["run", "--prompt", "hello", "--session-id", "nonexistent-id"]
+                    )
+
+        self.assertEqual(rc, 1)
+        self.assertIn("not found", stderr.getvalue())
 
 
 if __name__ == "__main__":

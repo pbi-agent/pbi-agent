@@ -359,3 +359,4 @@ class AgentOutcome:
     response_id: str | None
     text: str
     tool_errors: bool = False
+    session_id: str | None = None
