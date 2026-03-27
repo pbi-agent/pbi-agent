@@ -333,7 +333,7 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
     monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
     monkeypatch.setattr(
         "pbi_agent.agent.session.get_project_sub_agent_by_name",
-        lambda name: type(
+        lambda name, workspace=None: type(
             "AgentDef",
             (),
             {

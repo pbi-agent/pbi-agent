@@ -28,6 +28,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.providers import create_provider
+from pbi_agent.providers.base import Provider
 
 if TYPE_CHECKING:
     from pbi_agent.tools.catalog import ToolCatalog
@@ -683,10 +684,8 @@ def _normalize_user_command(value: str) -> str:
     return " ".join(value.strip().lower().split())
 
 
-def _reload_provider_sub_agents(provider: Any) -> None:
-    set_system_prompt = getattr(provider, "set_system_prompt", None)
-    if callable(set_system_prompt):
-        set_system_prompt(get_system_prompt())
+def _reload_provider_sub_agents(provider: Provider) -> None:
+    provider.set_system_prompt(get_system_prompt())
 
 
 def _request_user_turn(

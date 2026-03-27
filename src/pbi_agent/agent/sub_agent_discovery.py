@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +13,6 @@ class ProjectSubAgent:
     name: str
     description: str
     system_prompt: str
-    tool_name: str
     location: Path
 
 
@@ -112,7 +110,6 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
         name=normalized_name,
         description=description.strip(),
         system_prompt=_extract_body(content).strip(),
-        tool_name=f"{normalized_name}-subagent",
         location=agent_path.resolve(),
     )
 
@@ -141,6 +138,16 @@ def _extract_frontmatter(content: str, agent_path: Path) -> str | None:
 
 
 def _parse_frontmatter(frontmatter: str, agent_path: Path) -> dict[str, str] | None:
+    """Parse a limited frontmatter subset.
+
+    Supported syntax:
+    - ``key: value`` scalar pairs
+    - blank lines and ``#`` comments
+    - ``|`` and ``>`` block scalars with indented content
+
+    This is intentionally not a general YAML parser. Unsupported YAML constructs
+    such as lists, nested mappings, and anchors are rejected.
+    """
     result: dict[str, str] = {}
     lines = frontmatter.splitlines()
     index = 0
@@ -167,6 +174,24 @@ def _parse_frontmatter(frontmatter: str, agent_path: Path) -> dict[str, str] | N
                 f"Skipping sub-agent at {agent_path}: frontmatter contains an empty key."
             )
             return None
+
+        if not value:
+            next_index = index + 1
+            while next_index < len(lines):
+                next_line = lines[next_index]
+                next_stripped = next_line.strip()
+                if not next_stripped or next_stripped.startswith("#"):
+                    next_index += 1
+                    continue
+                next_indent = len(next_line) - len(next_line.lstrip(" "))
+                if next_indent > indent:
+                    _warn(
+                        f"Skipping sub-agent at {agent_path}: unsupported YAML "
+                        f"structure for key {key!r}; only scalar values and block "
+                        "scalars are supported."
+                    )
+                    return None
+                break
 
         if value in {"|", ">"}:
             block_lines: list[str] = []
@@ -201,10 +226,5 @@ def _parse_frontmatter(frontmatter: str, agent_path: Path) -> dict[str, str] | N
 
 def _parse_scalar(value: str) -> str:
     if len(value) >= 2 and value[:1] == value[-1:] and value[0] in {"'", '"'}:
-        try:
-            parsed = ast.literal_eval(value)
-        except (SyntaxError, ValueError):
-            return value[1:-1]
-        if isinstance(parsed, str):
-            return parsed
+        return value[1:-1]
     return value

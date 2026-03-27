@@ -142,7 +142,6 @@ def _append_available_sub_agents(base_prompt: str) -> str:
                 "  <sub_agent>",
                 f"    <name>{agent.name}</name>",
                 f"    <description>{agent.description}</description>",
-                f"    <tool_name>{agent.tool_name}</tool_name>",
                 "  </sub_agent>",
             ]
         )

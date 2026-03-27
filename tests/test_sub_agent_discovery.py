@@ -42,7 +42,6 @@ def test_discovers_valid_project_sub_agent(tmp_path: Path) -> None:
             name="code-reviewer",
             description="Reviews code changes.",
             system_prompt="You are a code reviewer.",
-            tool_name="code-reviewer-subagent",
             location=agent_path.resolve(),
         )
     ]
@@ -89,7 +88,6 @@ def test_duplicate_names_keep_first_loaded(tmp_path: Path, capsys) -> None:
             name="reviewer",
             description="First reviewer.",
             system_prompt="First prompt.",
-            tool_name="reviewer-subagent",
             location=first.resolve(),
         )
     ]
@@ -116,6 +114,46 @@ def test_description_supports_colons_and_block_scalars(tmp_path: Path) -> None:
     assert [agent.description for agent in agents] == [
         "Use this sub-agent when: the task needs focused repository research. Prefer it for broad codebase lookups."
     ]
+
+
+def test_description_supports_simple_quoted_scalars(tmp_path: Path) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "reviewer.md",
+        (
+            "---\n"
+            "name: reviewer\n"
+            'description: "Reviews code changes before merge."\n'
+            "---\n\n"
+            "Review prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert [agent.description for agent in agents] == [
+        "Reviews code changes before merge."
+    ]
+
+
+def test_skips_unsupported_nested_yaml_structures(tmp_path: Path, capsys) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "broken.md",
+        (
+            "---\n"
+            "name:\n"
+            "  value: reviewer\n"
+            "description: Reviews code.\n"
+            "---\n\n"
+            "Prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert agents == []
+    assert "unsupported yaml structure" in capsys.readouterr().err.lower()
 
 
 def test_format_project_sub_agents_markdown_includes_default_note(

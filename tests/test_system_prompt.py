@@ -218,7 +218,6 @@ def test_get_system_prompt_with_project_sub_agents(tmp_path, monkeypatch):
     assert "<available_sub_agents>" in prompt
     assert "<name>code-reviewer</name>" in prompt
     assert "<description>Review code changes before merging.</description>" in prompt
-    assert "<tool_name>code-reviewer-subagent</tool_name>" in prompt
     assert "call `sub_agent` with `agent_type`" in prompt
 
 
