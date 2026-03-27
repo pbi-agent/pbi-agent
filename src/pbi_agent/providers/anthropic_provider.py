@@ -82,11 +82,9 @@ class AnthropicProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
-        self._tools = self._tool_catalog.get_anthropic_tool_definitions(
-            excluded_names=excluded_tools
-        )
-        if settings.web_search:
-            self._tools.append(_anthropic_web_search_tool(settings.model))
+        self._excluded_tools = set(excluded_tools or set())
+        self._tools: list[dict[str, Any]] = []
+        self.refresh_tools()
         self._system_prompt = system_prompt or get_system_prompt()
         # Client-side conversation history — full messages list.
         self._messages: list[dict[str, Any]] = []
@@ -114,6 +112,13 @@ class AnthropicProvider(Provider):
 
     def set_system_prompt(self, system_prompt: str) -> None:
         self._system_prompt = system_prompt
+
+    def refresh_tools(self) -> None:
+        self._tools = self._tool_catalog.get_anthropic_tool_definitions(
+            excluded_names=self._excluded_tools
+        )
+        if self._settings.web_search:
+            self._tools.append(_anthropic_web_search_tool(self._settings.model))
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         self._messages = [

@@ -159,6 +159,13 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertTrue(args.mcp)
 
+    def test_parser_accepts_agents_flag(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["--agents", "console"])
+
+        self.assertTrue(args.agents)
+
     def test_web_chat_command_uses_parent_pid_wrapper(self) -> None:
         command = cli._web_chat_command(self._settings(verbose=True), parent_pid=4321)
 
@@ -486,8 +493,9 @@ class DefaultWebCommandTests(unittest.TestCase):
                 os.chdir(original_cwd)
 
         self.assertEqual(rc, 0)
-        self.assertIn("### Project Skills", stdout.getvalue())
-        self.assertIn("repo-skill", stdout.getvalue())
+        output = stdout.getvalue()
+        self.assertIn("Project Skills", output)
+        self.assertIn("repo-skill", output)
         mock_save.assert_not_called()
 
     def test_main_mcp_flag_lists_project_servers_without_settings(self) -> None:
@@ -520,9 +528,42 @@ class DefaultWebCommandTests(unittest.TestCase):
                 os.chdir(original_cwd)
 
         self.assertEqual(rc, 0)
-        self.assertIn("### MCP Servers", stdout.getvalue())
-        self.assertIn("echo", stdout.getvalue())
-        self.assertIn("uv run server.py", stdout.getvalue())
+        output = stdout.getvalue()
+        self.assertIn("MCP Servers", output)
+        self.assertIn("echo", output)
+        self.assertIn("uv run server.py", output)
+        mock_save.assert_not_called()
+
+    def test_main_agents_flag_lists_project_sub_agents_without_settings(self) -> None:
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = Path.cwd()
+            root_dir = Path(tmpdir).resolve()
+            agents_dir = root_dir / ".agents"
+            agents_dir.mkdir(parents=True)
+            (agents_dir / "code-reviewer.md").write_text(
+                "---\n"
+                "name: code-reviewer\n"
+                "description: Reviews code for quality.\n"
+                "---\n\nYou are a code reviewer.\n",
+                encoding="utf-8",
+            )
+
+            try:
+                os.chdir(root_dir)
+                with (
+                    patch("sys.stdout", stdout),
+                    patch("pbi_agent.cli.save_internal_config") as mock_save,
+                ):
+                    rc = cli.main(["--agents"])
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(rc, 0)
+        output = stdout.getvalue()
+        self.assertIn("Sub-Agents", output)
+        self.assertIn("code-reviewer", output)
         mock_save.assert_not_called()
 
     def test_handle_audit_command_uses_direct_single_turn_path(self) -> None:

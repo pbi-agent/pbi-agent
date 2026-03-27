@@ -178,7 +178,7 @@ class _ProviderStub:
 
 def test_sub_agent_tool_blocks_nested_calls() -> None:
     result = sub_agent_tool.handle(
-        {"task_instruction": "Inspect src", "reasoning_effort": "medium"},
+        {"task_instruction": "Inspect src"},
         ToolContext(sub_agent_depth=1),
     )
 
@@ -194,7 +194,6 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         settings: Settings,
         display,
         *,
-        reasoning_effort: str = "low",
         parent_session_usage: TokenUsage,
         parent_turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
@@ -203,7 +202,6 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
     ) -> dict[str, object]:
         del settings, display, parent_session_usage, parent_turn_usage, sub_agent_depth
         captured["task_instruction"] = task_instruction
-        captured["reasoning_effort"] = reasoning_effort
         captured["tool_catalog"] = tool_catalog
         captured["agent_type"] = agent_type
         return {"status": "completed", "final_output": "done"}
@@ -215,7 +213,6 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
     result = sub_agent_tool.handle(
         {
             "task_instruction": "Review the auth changes",
-            "reasoning_effort": "medium",
             "agent_type": "code-reviewer",
         },
         ToolContext(
@@ -230,10 +227,49 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
     assert result == {"status": "completed", "final_output": "done"}
     assert captured == {
         "task_instruction": "Review the auth changes",
-        "reasoning_effort": "medium",
         "tool_catalog": ANY,
         "agent_type": "code-reviewer",
     }
+
+
+def test_sub_agent_tool_maps_default_agent_type_to_generalist(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_sub_agent_task(
+        task_instruction: str,
+        settings: Settings,
+        display,
+        *,
+        parent_session_usage: TokenUsage,
+        parent_turn_usage: TokenUsage,
+        sub_agent_depth: int = 0,
+        tool_catalog: ToolCatalog | None = None,
+        agent_type: str | None = None,
+    ) -> dict[str, object]:
+        del settings, display, parent_session_usage, parent_turn_usage, sub_agent_depth
+        captured["agent_type"] = agent_type
+        return {"status": "completed", "final_output": "done"}
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.run_sub_agent_task", fake_run_sub_agent_task
+    )
+
+    result = sub_agent_tool.handle(
+        {
+            "task_instruction": "Summarize the repo structure",
+            "agent_type": "default",
+        },
+        ToolContext(
+            settings=Settings(api_key="test-key", provider="openai", model="gpt-5"),
+            display=_ParentDisplay(),
+            session_usage=TokenUsage(model="gpt-5"),
+            turn_usage=TokenUsage(model="gpt-5"),
+            tool_catalog=ToolCatalog.from_builtin_registry(),
+        ),
+    )
+
+    assert result == {"status": "completed", "final_output": "done"}
+    assert captured["agent_type"] is None
 
 
 @pytest.mark.parametrize(
@@ -272,13 +308,13 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
         provider="openai",
         model="gpt-5",
         sub_agent_model=sub_agent_model,
+        reasoning_effort="xhigh",
     )
 
     result = run_sub_agent_task(
         "Summarize the repo structure",
         settings,
         parent_display,
-        reasoning_effort="medium",
         parent_session_usage=parent_session_usage,
         parent_turn_usage=parent_turn_usage,
         tool_catalog=catalog,
@@ -291,7 +327,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
     assert parent_display.sub_agent_calls == [
         {
             "task_instruction": "Summarize the repo structure",
-            "reasoning_effort": "medium",
+            "reasoning_effort": "xhigh",
             "name": ANY,
         }
     ]
@@ -309,7 +345,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
     assert "delegated sub-agent" in str(captured["system_prompt"])
     assert isinstance(captured["settings"], Settings)
     assert captured["settings"].model == expected_model
-    assert captured["settings"].reasoning_effort == "medium"
+    assert captured["settings"].reasoning_effort == "xhigh"
 
 
 def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
@@ -339,6 +375,8 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
             {
                 "name": name,
                 "description": "Reviews code.",
+                "model": "gpt-5.4-mini",
+                "reasoning_effort": "high",
                 "system_prompt": "You are a code reviewer.",
             },
         )(),
@@ -360,6 +398,9 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
     assert result["status"] == "completed"
     assert parent_display.sub_agent_calls[0]["name"] == "code-reviewer"
     assert "You are a code reviewer." in str(captured["system_prompt"])
+    assert isinstance(captured["settings"], Settings)
+    assert captured["settings"].model == "gpt-5.4-mini"
+    assert captured["settings"].reasoning_effort == "high"
 
 
 def test_run_sub_agent_task_rejects_unknown_agent_type() -> None:

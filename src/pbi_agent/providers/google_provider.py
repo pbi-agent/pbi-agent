@@ -71,12 +71,9 @@ class GoogleProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
-        self._tools = _google_tool_definitions(
-            self._tool_catalog,
-            excluded_names=excluded_tools,
-        )
-        if settings.web_search:
-            self._tools.append({"type": "google_search"})
+        self._excluded_tools = set(excluded_tools or set())
+        self._tools: list[dict[str, Any]] = []
+        self.refresh_tools()
         self._instructions = system_prompt or get_system_prompt()
         self._previous_interaction_id: str | None = None
 
@@ -99,6 +96,14 @@ class GoogleProvider(Provider):
 
     def set_system_prompt(self, system_prompt: str) -> None:
         self._instructions = system_prompt
+
+    def refresh_tools(self) -> None:
+        self._tools = _google_tool_definitions(
+            self._tool_catalog,
+            excluded_names=self._excluded_tools,
+        )
+        if self._settings.web_search:
+            self._tools.append({"type": "google_search"})
 
     def request_turn(
         self,

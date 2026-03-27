@@ -14,6 +14,8 @@ class ProjectSubAgent:
     description: str
     system_prompt: str
     location: Path
+    model: str | None = None
+    reasoning_effort: str | None = None
 
 
 def format_project_sub_agents_markdown(
@@ -98,11 +100,32 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
 
     name = metadata.get("name")
     description = metadata.get("description")
+    model = metadata.get("model")
+    reasoning_effort = metadata.get("reasoning_effort")
     if not isinstance(name, str) or not name.strip():
         _warn(f"Skipping sub-agent at {agent_path}: missing non-empty 'name'.")
         return None
     if not isinstance(description, str) or not description.strip():
         _warn(f"Skipping sub-agent at {agent_path}: missing non-empty 'description'.")
+        return None
+    if model is not None and not isinstance(model, str):
+        _warn(f"Skipping sub-agent at {agent_path}: 'model' must be a string.")
+        return None
+    if reasoning_effort is not None and not isinstance(reasoning_effort, str):
+        _warn(
+            f"Skipping sub-agent at {agent_path}: 'reasoning_effort' must be a string."
+        )
+        return None
+    if reasoning_effort is not None and reasoning_effort not in {
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    }:
+        _warn(
+            f"Skipping sub-agent at {agent_path}: 'reasoning_effort' must be one of: "
+            "low, medium, high, xhigh."
+        )
         return None
 
     normalized_name = name.strip()
@@ -111,6 +134,12 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
         description=description.strip(),
         system_prompt=_extract_body(content).strip(),
         location=agent_path.resolve(),
+        model=model.strip() if isinstance(model, str) and model.strip() else None,
+        reasoning_effort=(
+            reasoning_effort.strip()
+            if isinstance(reasoning_effort, str) and reasoning_effort.strip()
+            else None
+        ),
     )
 
 
@@ -144,6 +173,8 @@ def _parse_frontmatter(frontmatter: str, agent_path: Path) -> dict[str, str] | N
     - ``key: value`` scalar pairs
     - blank lines and ``#`` comments
     - ``|`` and ``>`` block scalars with indented content
+    - optional ``model`` and ``reasoning_effort`` scalar keys used for runtime
+      child-agent configuration
 
     This is intentionally not a general YAML parser. Unsupported YAML constructs
     such as lists, nested mappings, and anchors are rejected.

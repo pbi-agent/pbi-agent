@@ -15,7 +15,6 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.config import (
     ConfigError,
     OPENAI_SERVICE_TIERS,
@@ -25,7 +24,6 @@ from pbi_agent.config import (
 )
 from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
-from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.session_store import SessionRecord
 
 LOGGER = logging.getLogger(__name__)
@@ -182,6 +180,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--mcp",
         action="store_true",
         help="List discovered project MCP servers from .agents and exit.",
+    )
+    diagnostics_group.add_argument(
+        "--agents",
+        action="store_true",
+        help="List discovered project sub-agents from .agents/*.md and exit.",
     )
 
     subparsers = parser.add_subparsers(
@@ -365,6 +368,8 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_skills_flag(args)
     if args.mcp:
         return _handle_mcp_flag(args)
+    if args.agents:
+        return _handle_agents_flag(args)
 
     if args.command == "init":
         return _handle_init_command(args)
@@ -428,14 +433,84 @@ def _handle_console_command(settings: Settings) -> int:
 
 
 def _handle_skills_flag(args: argparse.Namespace) -> int:
+    from pbi_agent.agent.skill_discovery import discover_project_skills
+    from rich.console import Console
+    from rich.table import Table
+
     target_dir = _workspace_directory_for_args(args)
-    print(format_project_skills_markdown(workspace=target_dir))
+    skills = discover_project_skills(workspace=target_dir)
+    console = Console()
+
+    if not skills:
+        console.print("[dim]No project skills discovered under[/dim] .agents/skills/")
+        return 0
+
+    table = Table(title="Project Skills", title_style="bold cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Description")
+    table.add_column("Location", style="dim")
+    for skill in skills:
+        table.add_row(skill.name, skill.description, str(skill.location))
+    console.print(table)
     return 0
 
 
 def _handle_mcp_flag(args: argparse.Namespace) -> int:
+    from pbi_agent.mcp import discover_mcp_server_configs
+    from rich.console import Console
+    from rich.table import Table
+
     target_dir = _workspace_directory_for_args(args)
-    print(format_project_mcp_servers_markdown(workspace=target_dir))
+    servers = discover_mcp_server_configs(workspace=target_dir)
+    console = Console()
+
+    if not servers:
+        console.print("[dim]No project MCP servers discovered under[/dim] .agents/")
+        return 0
+
+    table = Table(title="MCP Servers", title_style="bold cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Transport", style="yellow")
+    table.add_column("Command / URL")
+    table.add_column("Config", style="dim")
+    for server in servers:
+        if server.transport == "http":
+            detail = server.url or ""
+        else:
+            detail = " ".join([server.command or "", *server.args]).strip()
+        table.add_row(server.name, server.transport, detail, str(server.location))
+    console.print(table)
+    return 0
+
+
+def _handle_agents_flag(args: argparse.Namespace) -> int:
+    from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
+    from rich.console import Console
+    from rich.table import Table
+
+    target_dir = _workspace_directory_for_args(args)
+    agents = discover_project_sub_agents(workspace=target_dir)
+    console = Console()
+
+    if not agents:
+        console.print(
+            "[dim]No project sub-agents discovered under[/dim] .agents/*.md"
+        )
+        return 0
+
+    table = Table(title="Sub-Agents", title_style="bold cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Description")
+    table.add_column("Model", style="yellow")
+    table.add_column("Reasoning", style="yellow")
+    for agent in agents:
+        table.add_row(
+            agent.name,
+            agent.description,
+            agent.model or "default",
+            agent.reasoning_effort or "default",
+        )
+    console.print(table)
     return 0
 
 

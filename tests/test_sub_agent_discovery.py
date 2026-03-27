@@ -41,6 +41,8 @@ def test_discovers_valid_project_sub_agent(tmp_path: Path) -> None:
         ProjectSubAgent(
             name="code-reviewer",
             description="Reviews code changes.",
+            model=None,
+            reasoning_effort=None,
             system_prompt="You are a code reviewer.",
             location=agent_path.resolve(),
         )
@@ -87,6 +89,8 @@ def test_duplicate_names_keep_first_loaded(tmp_path: Path, capsys) -> None:
         ProjectSubAgent(
             name="reviewer",
             description="First reviewer.",
+            model=None,
+            reasoning_effort=None,
             system_prompt="First prompt.",
             location=first.resolve(),
         )
@@ -133,6 +137,35 @@ def test_description_supports_simple_quoted_scalars(tmp_path: Path) -> None:
 
     assert [agent.description for agent in agents] == [
         "Reviews code changes before merge."
+    ]
+
+
+def test_discovers_agent_model_and_reasoning_effort(tmp_path: Path) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "reviewer.md",
+        (
+            "---\n"
+            "name: reviewer\n"
+            "description: Reviews code changes.\n"
+            "model: gpt-5.4-mini\n"
+            "reasoning_effort: high\n"
+            "---\n\n"
+            "Review prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert agents == [
+        ProjectSubAgent(
+            name="reviewer",
+            description="Reviews code changes.",
+            model="gpt-5.4-mini",
+            reasoning_effort="high",
+            system_prompt="Review prompt.",
+            location=tmp_path.joinpath(".agents", "reviewer.md").resolve(),
+        )
     ]
 
 

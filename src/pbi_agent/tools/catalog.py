@@ -50,9 +50,12 @@ class ToolCatalog:
 
     def get_specs(self, *, excluded_names: set[str] | None = None) -> list[ToolSpec]:
         excluded = excluded_names or set()
-        return [
-            entry.spec for name, entry in self._entries.items() if name not in excluded
-        ]
+        specs: list[ToolSpec] = []
+        for name, entry in self._entries.items():
+            if name in excluded:
+                continue
+            specs.append(registry.get_tool_spec(name) or entry.spec)
+        return specs
 
     def get_handler(self, name: str) -> ToolHandler | None:
         entry = self._entries.get(name)
@@ -64,7 +67,7 @@ class ToolCatalog:
         entry = self._entries.get(name)
         if entry is None:
             return None
-        return entry.spec
+        return registry.get_tool_spec(name) or entry.spec
 
     def get_openai_tool_definitions(
         self,

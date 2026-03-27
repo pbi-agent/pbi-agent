@@ -276,6 +276,7 @@ class _ChatProviderStub:
         self.request_inputs: list[UserTurnInput] = []
         self.reset_calls = 0
         self.system_prompts: list[str] = []
+        self.refresh_tools_calls = 0
 
     def __enter__(self) -> _ChatProviderStub:
         return self
@@ -288,6 +289,9 @@ class _ChatProviderStub:
 
     def set_system_prompt(self, system_prompt: str) -> None:
         self.system_prompts.append(system_prompt)
+
+    def refresh_tools(self) -> None:
+        self.refresh_tools_calls += 1
 
     def request_turn(
         self,
@@ -437,6 +441,7 @@ def test_run_chat_loop_handles_agents_reload_command_locally(monkeypatch) -> Non
     assert exit_code == 0
     assert provider.request_messages == []
     assert provider.system_prompts == ["updated prompt"]
+    assert provider.refresh_tools_calls == 1
     assert display.markdown_calls == ["### Sub-Agents\n\nReloaded"]
     assert display.assistant_start_calls == 0
 

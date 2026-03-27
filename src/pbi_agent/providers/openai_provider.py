@@ -59,11 +59,9 @@ class OpenAIProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
-        self._tools = self._tool_catalog.get_openai_tool_definitions(
-            excluded_names=excluded_tools
-        )
-        if settings.web_search:
-            self._tools.append({"type": "web_search"})
+        self._excluded_tools = set(excluded_tools or set())
+        self._tools: list[dict[str, Any]] = []
+        self.refresh_tools()
         self._instructions = system_prompt or get_system_prompt()
         self._previous_response_id: str | None = None
 
@@ -89,6 +87,13 @@ class OpenAIProvider(Provider):
 
     def set_system_prompt(self, system_prompt: str) -> None:
         self._instructions = system_prompt
+
+    def refresh_tools(self) -> None:
+        self._tools = self._tool_catalog.get_openai_tool_definitions(
+            excluded_names=self._excluded_tools
+        )
+        if self._settings.web_search:
+            self._tools.append({"type": "web_search"})
 
     def request_turn(
         self,

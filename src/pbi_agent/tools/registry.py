@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from pbi_agent.tools.types import ToolHandler, ToolSpec
 
-_REGISTRY: dict[str, tuple[ToolSpec, ToolHandler]] = {}
+_REGISTRY: dict[str, tuple[ToolSpec | Callable[[], ToolSpec], ToolHandler]] = {}
 
 # --- built-in function tools -----------------------------------------------
 from pbi_agent.tools.skill_knowledge import SPEC as _sk_spec, handle as _sk_handle  # noqa: E402
@@ -17,7 +18,7 @@ from pbi_agent.tools.search_files import SPEC as _sf_spec, handle as _sf_handle 
 from pbi_agent.tools.read_file import SPEC as _rf_spec, handle as _rf_handle  # noqa: E402
 from pbi_agent.tools.read_image import SPEC as _ri_spec, handle as _ri_handle  # noqa: E402
 from pbi_agent.tools.read_web_url import SPEC as _rwu_spec, handle as _rwu_handle  # noqa: E402
-from pbi_agent.tools.sub_agent import SPEC as _sa_spec, handle as _sa_handle  # noqa: E402
+from pbi_agent.tools.sub_agent import build_spec as _sa_build_spec, handle as _sa_handle  # noqa: E402
 
 _REGISTRY[_sk_spec.name] = (_sk_spec, _sk_handle)
 _REGISTRY[_ir_spec.name] = (_ir_spec, _ir_handle)
@@ -29,12 +30,21 @@ _REGISTRY[_sf_spec.name] = (_sf_spec, _sf_handle)
 _REGISTRY[_rf_spec.name] = (_rf_spec, _rf_handle)
 _REGISTRY[_ri_spec.name] = (_ri_spec, _ri_handle)
 _REGISTRY[_rwu_spec.name] = (_rwu_spec, _rwu_handle)
-_REGISTRY[_sa_spec.name] = (_sa_spec, _sa_handle)
+_REGISTRY["sub_agent"] = (_sa_build_spec, _sa_handle)
+
+
+def _resolve_spec(
+    entry: tuple[ToolSpec | Callable[[], ToolSpec], ToolHandler],
+) -> ToolSpec:
+    spec_or_factory, _handler = entry
+    if callable(spec_or_factory):
+        return spec_or_factory()
+    return spec_or_factory
 
 
 def get_tool_specs(*, excluded_names: set[str] | None = None) -> list[ToolSpec]:
     excluded = excluded_names or set()
-    return [item[0] for name, item in _REGISTRY.items() if name not in excluded]
+    return [_resolve_spec(item) for name, item in _REGISTRY.items() if name not in excluded]
 
 
 def get_tool_handler(name: str) -> ToolHandler | None:
@@ -48,7 +58,7 @@ def get_tool_spec(name: str) -> ToolSpec | None:
     entry = _REGISTRY.get(name)
     if entry is None:
         return None
-    return entry[0]
+    return _resolve_spec(entry)
 
 
 def get_openai_tool_definitions(

@@ -35,3 +35,37 @@ def test_registry_exposes_expected_built_in_tools() -> None:
 def test_registry_returns_none_for_unknown_tool() -> None:
     assert registry.get_tool_handler("missing_tool") is None
     assert registry.get_tool_spec("missing_tool") is None
+
+
+def test_registry_sub_agent_schema_uses_project_agent_enum(tmp_path, monkeypatch) -> None:
+    agents_dir = tmp_path / ".agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Reviews code.\n"
+        "---\n\n"
+        "Review prompt.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+
+    spec = registry.get_tool_spec("sub_agent")
+    assert spec is not None
+    assert "reasoning_effort" not in spec.parameters_schema["properties"]
+    assert spec.parameters_schema["properties"]["agent_type"]["enum"] == [
+        "default",
+        "reviewer",
+    ]
+
+    openai_tool = next(
+        item
+        for item in registry.get_openai_tool_definitions()
+        if item["name"] == "sub_agent"
+    )
+    assert "reasoning_effort" not in openai_tool["parameters"]["properties"]
+    assert openai_tool["parameters"]["properties"]["agent_type"]["enum"] == [
+        "default",
+        "reviewer",
+    ]

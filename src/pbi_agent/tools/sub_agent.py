@@ -4,38 +4,42 @@ from __future__ import annotations
 
 from typing import Any
 
+from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
-_REASONING_EFFORT_VALUES = ("low", "medium", "high")
+_DEFAULT_AGENT_TYPE = "default"
 
-SPEC = ToolSpec(
-    name="sub_agent",
-    description="Delegate a scoped task to a stateless child agent with the same tools.",
-    parameters_schema={
-        "type": "object",
-        "properties": {
-            "task_instruction": {
-                "type": "string",
-                "description": "The delegated task and any context the child agent needs.",
+
+def build_spec() -> ToolSpec:
+    agent_type_values = [_DEFAULT_AGENT_TYPE]
+    agent_type_values.extend(agent.name for agent in discover_project_sub_agents())
+
+    return ToolSpec(
+        name="sub_agent",
+        description="Delegate a scoped task to a stateless child agent with the same tools.",
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "task_instruction": {
+                    "type": "string",
+                    "description": "The delegated task and any context the child agent needs.",
+                },
+                "agent_type": {
+                    "type": "string",
+                    "enum": agent_type_values,
+                    "description": (
+                        "Project sub-agent name to invoke. Use "
+                        f"`{_DEFAULT_AGENT_TYPE}` for the built-in generalist sub-agent."
+                    ),
+                },
             },
-            "reasoning_effort": {
-                "type": "string",
-                "enum": list(_REASONING_EFFORT_VALUES),
-                "default": "low",
-                "description": "Reasoning effort for the child agent. Defaults to low.",
-            },
-            "agent_type": {
-                "type": "string",
-                "description": (
-                    "Optional project sub-agent name from `.agents/*.md`. "
-                    "When omitted, the default generalist sub-agent is used."
-                ),
-            },
+            "required": ["task_instruction"],
+            "additionalProperties": False,
         },
-        "required": ["task_instruction"],
-        "additionalProperties": False,
-    },
-)
+    )
+
+
+SPEC = build_spec()
 
 
 def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -49,17 +53,13 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             },
         }
 
-    reasoning_effort = arguments.get("reasoning_effort", "low")
-    if (
-        not isinstance(reasoning_effort, str)
-        or reasoning_effort not in _REASONING_EFFORT_VALUES
-    ):
-        reasoning_effort = "low"
     agent_type = arguments.get("agent_type")
     if not isinstance(agent_type, str) or not agent_type.strip():
         agent_type = None
     else:
         agent_type = agent_type.strip()
+        if agent_type == _DEFAULT_AGENT_TYPE:
+            agent_type = None
 
     settings = context.settings
     display = context.display
@@ -92,7 +92,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         task_instruction.strip(),
         settings,
         display,
-        reasoning_effort=reasoning_effort,
         parent_session_usage=session_usage,
         parent_turn_usage=turn_usage,
         sub_agent_depth=sub_agent_depth,

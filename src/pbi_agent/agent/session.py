@@ -40,8 +40,8 @@ _log = logging.getLogger(__name__)
 
 NEW_CHAT_SENTINEL = "__new_chat__"
 RESUME_SESSION_PREFIX = "__resume_session__:"
-SUB_AGENT_MAX_REQUESTS = 30
-SUB_AGENT_MAX_ELAPSED_SECONDS = 300.0
+SUB_AGENT_MAX_REQUESTS = 50
+SUB_AGENT_MAX_ELAPSED_SECONDS = 600.0
 SUB_AGENT_DISABLED_TOOLS = {"sub_agent"}
 SKILLS_COMMAND = "/skills"
 MCP_COMMAND = "/mcp"
@@ -296,7 +296,6 @@ def run_sub_agent_task(
     settings: Settings,
     display: DisplayProtocol,
     *,
-    reasoning_effort: str = "low",
     parent_session_usage: TokenUsage,
     parent_turn_usage: TokenUsage,
     sub_agent_depth: int = 0,
@@ -317,8 +316,10 @@ def run_sub_agent_task(
 
     child_settings = replace(
         settings,
-        model=_selected_sub_agent_model(settings),
-        reasoning_effort=reasoning_effort,
+        model=getattr(agent_definition, "model", None)
+        or _selected_sub_agent_model(settings),
+        reasoning_effort=getattr(agent_definition, "reasoning_effort", None)
+        or settings.reasoning_effort,
     )
     from pbi_agent.ui.names import pick_deity_name
 
@@ -327,7 +328,7 @@ def run_sub_agent_task(
     )
     child_display = display.begin_sub_agent(
         task_instruction=task_instruction,
-        reasoning_effort=reasoning_effort,
+        reasoning_effort=child_settings.reasoning_effort,
         name=child_name,
     )
     _child_tier = child_settings.service_tier or ""
@@ -686,6 +687,7 @@ def _normalize_user_command(value: str) -> str:
 
 def _reload_provider_sub_agents(provider: Provider) -> None:
     provider.set_system_prompt(get_system_prompt())
+    provider.refresh_tools()
 
 
 def _request_user_turn(
