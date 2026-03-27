@@ -19,7 +19,7 @@ from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.ui.display import Display
 from pbi_agent.ui.command_registry import LOCAL_COMMANDS, normalize_command_name
-from pbi_agent.ui.formatting import format_session_subtitle_parts
+from pbi_agent.ui.formatting import escape_markup_text, format_session_subtitle_parts
 from pbi_agent.ui.input_mentions import expand_input_mentions
 from pbi_agent.ui.styles import CHAT_APP_CSS
 from pbi_agent.ui.widgets import (
@@ -448,7 +448,7 @@ class ChatApp(App):
                     title = title[:21] + "..."
                 updated = s.updated_at[:10]
                 items.append(
-                    (s.session_id, f"{title}\n[dim]{s.provider} · {updated}[/dim]")
+                    (s.session_id, f"{escape_markup_text(title)}\n[dim]{escape_markup_text(s.provider)} · {updated}[/dim]")
                 )
             sidebar.refresh_sessions(items)
         except Exception:
