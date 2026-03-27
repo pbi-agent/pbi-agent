@@ -100,6 +100,58 @@ At runtime, discovered skills are appended to the active system prompt as an `<a
 
 This v1 implementation is project-only. User-level skill directories are intentionally not scanned, and any files referenced by a project skill must remain inside the workspace so the existing file tools can access them safely.
 
+## Project sub-agent files
+
+`pbi-agent` can also discover project-local sub-agent definitions and advertise them to the main agent as specialized delegated worker choices for the `sub_agent` tool.
+
+Supported root:
+
+- `.agents/<agent-name>.md`
+
+Each sub-agent file must include YAML frontmatter with at least:
+
+```yaml
+---
+name: code-reviewer
+description: Review code changes for correctness and test gaps.
+---
+```
+
+The Markdown body becomes that sub-agent's system prompt. Two optional frontmatter keys can override the child runtime configuration for that specific sub-agent:
+
+```yaml
+---
+name: code-reviewer
+description: Review code changes for correctness and test gaps.
+model: gpt-5.4-mini
+reasoning_effort: high
+---
+```
+
+Supported frontmatter in this implementation is intentionally narrow:
+
+- Scalar `key: value` pairs
+- Quoted strings
+- `|` and `>` block scalars
+- Blank lines and `#` comments
+
+Nested mappings, lists, anchors, and other general YAML features are rejected and the file is skipped with a warning on stderr.
+
+At runtime, discovered sub-agents are appended to the active system prompt as an `<available_sub_agents>` catalog. The main agent can then call `sub_agent` with `agent_type` set to the discovered `name`. Calling `sub_agent` without `agent_type` still uses the built-in generalist child agent.
+
+Project sub-agents:
+
+- Run in isolated child-agent contexts and do not inherit the full parent conversation history.
+- Use the same provider as the parent session.
+- Can override the child `model` and `reasoning_effort` per sub-agent.
+- Cannot recursively spawn more sub-agents in this build.
+
+You can inspect the discovered catalog without starting a model request:
+
+- CLI: `pbi-agent --agents`
+- Chat UI: `/agents`
+- Chat UI reload after editing files: `/agents reload`
+
 ## MCP server config
 
 `pbi-agent` can also discover project-local MCP server definitions and expose their tools to the model as ordinary function tools. The runtime reads a single JSON file from the workspace root:

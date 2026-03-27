@@ -72,6 +72,7 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 - `INSTRUCTIONS.md` replaces the default system prompt for the workspace.
 - `AGENTS.md` adds project-specific rules on top of the active prompt.
 - `.agents/skills/<skill-name>/SKILL.md` adds project-local skills that are advertised to the model.
+- `.agents/<agent-name>.md` adds project-local sub-agents that can be selected through the `sub_agent` tool.
 - `.agents/mcp.json` declares MCP servers whose tools are exposed to the model at startup.
 
 See the full [Customization guide](https://nasirus.github.io/pbi-agent/guide/customization) for examples and behavior details.

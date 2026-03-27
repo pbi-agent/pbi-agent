@@ -29,8 +29,11 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--responses-url` | `PBI_AGENT_RESPONSES_URL` | provider-specific | Override the Responses or Interactions endpoint for OpenAI, xAI, or Google. Ignored by Anthropic and Generic. |
 | `--generic-api-url` | `PBI_AGENT_GENERIC_API_URL` | `https://openrouter.ai/api/v1/chat/completions` | Override the OpenAI-compatible Chat Completions endpoint used by the Generic backend. |
 | `--service-tier` | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier for request processing: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |
+| `--no-web-search` | none | `false` | Disable the provider's native web search tool when that backend supports it. |
 | `--verbose` | none | `false` | Enable verbose logging. |
+| `--skills` | none | `false` | List discovered project skills from `.agents/skills` and exit. |
 | `--mcp` | none | `false` | List discovered project MCP servers from `.agents/mcp.json` and exit. |
+| `--agents` | none | `false` | List discovered project sub-agents from `.agents/*.md` and exit. |
 
 Per-provider model defaults:
 
@@ -95,7 +98,12 @@ Image input in `console` and `web` mode is path-based and staged through chat co
 
 After `/image add`, send your normal prompt. The staged images are attached to the next turn and then cleared automatically.
 
-The console and web chat UIs also expose `/skills` and `/mcp` as local listing commands. They render the discovered project skills or MCP servers without sending a model request.
+The console and web chat UIs also expose local catalog commands without sending a model request:
+
+- `/skills` renders discovered project skills.
+- `/mcp` renders discovered project MCP servers.
+- `/agents` renders discovered project sub-agents.
+- `/agents reload` refreshes the loaded project sub-agent definitions from `.agents/*.md` and then renders the catalog again.
 
 ## `pbi-agent run`
 

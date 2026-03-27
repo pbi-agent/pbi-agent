@@ -18,6 +18,8 @@ features:
     details: 'Target OpenAI, xAI, Google Gemini, Anthropic, or an OpenAI-compatible gateway from the same CLI.'
   - title: 'Parallel Tool Execution'
     details: 'Run multiple model-requested tool calls concurrently with a configurable worker limit.'
+  - title: 'Project Sub-Agents'
+    details: 'Discover project-local sub-agent definitions from `.agents/*.md` and route delegated work through `sub_agent`.'
   - title: 'PBIP Template Scaffolding'
     details: 'Bootstrap a Power BI Project from the bundled template with the init command or the init_report tool.'
   - title: 'Browser & Terminal UI'
@@ -81,7 +83,7 @@ pbi-agent --api-key "$OPENAI_API_KEY"
 | [CLI Reference](/reference/cli) | Commands, flags, defaults, and audit behavior |
 | [Tools](/reference/tools) | The built-in function tools available to the agent |
 | [Environment Variables](/reference/environment) | `PBI_AGENT_*` settings and provider-specific key fallbacks |
-| [Customization](/guide/customization) | `INSTRUCTIONS.md`, `AGENTS.md`, skills, and MCP server discovery |
+| [Customization](/guide/customization) | `INSTRUCTIONS.md`, `AGENTS.md`, project skills, sub-agents, and MCP discovery |
 
 ::: details Why this project exists
 `pbi-agent` is designed for local, file-based Power BI Project workflows. It edits PBIP assets directly and talks to LLM providers through synchronous HTTP REST requests implemented with Python's standard library.
