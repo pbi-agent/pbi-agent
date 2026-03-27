@@ -185,6 +185,7 @@ def test_tool_runtime_executes_dynamic_mcp_tool_without_batch_errors(
     )
 
     with McpServerPool(tmp_path) as pool:
+        catalog = pool.to_tool_catalog()
         batch = tool_runtime.execute_tool_calls(
             [
                 ToolCall(
@@ -194,7 +195,7 @@ def test_tool_runtime_executes_dynamic_mcp_tool_without_batch_errors(
                 )
             ],
             max_workers=1,
-            tool_catalog=pool.to_tool_catalog(),
+            context=ToolContext(tool_catalog=catalog),
         )
 
     assert batch.had_errors is False

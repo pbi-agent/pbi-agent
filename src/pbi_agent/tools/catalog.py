@@ -41,9 +41,10 @@ class ToolCatalog:
         for entry in extra_entries:
             if entry.spec.name in self._entries:
                 _log.warning(
-                    "MCP tool %r shadows a built-in tool with the same name",
+                    "Skipping MCP tool %r: shadows a built-in tool with the same name",
                     entry.spec.name,
                 )
+                continue
             merged[entry.spec.name] = entry
         return ToolCatalog(merged)
 

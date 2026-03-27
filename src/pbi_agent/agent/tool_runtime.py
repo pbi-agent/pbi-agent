@@ -26,11 +26,12 @@ def execute_tool_calls(
     calls: list[ToolCall],
     *,
     max_workers: int,
-    tool_catalog: ToolCatalog | None = None,
     context: ToolContext | None = None,
 ) -> ToolExecutionBatch:
     if not calls:
         return ToolExecutionBatch(results=[], had_errors=False)
+
+    tool_catalog = context.tool_catalog if context is not None else None
 
     if len(calls) == 1 or max_workers == 1:
         results = [

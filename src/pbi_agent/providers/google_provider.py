@@ -186,7 +186,6 @@ class GoogleProvider(Provider):
         batch = _execute_tool_calls(
             response.function_calls,
             max_workers=max_workers,
-            tool_catalog=self._tool_catalog,
             context=ToolContext(
                 settings=self._settings,
                 display=display,

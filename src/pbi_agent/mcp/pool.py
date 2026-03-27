@@ -86,7 +86,11 @@ class McpServerPool:
         if not self._configs:
             return self
         self._start_loop_thread()
-        self._submit(self._connect_all())
+        try:
+            self._submit(self._connect_all())
+        except Exception:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -94,9 +98,9 @@ class McpServerPool:
             return
         self._submit(self._close_all())
         self._request_queue.put((None, queue.Queue()))
-        self._thread.join(timeout=5.0)
+        self._thread.join(timeout=15.0)
         if self._thread.is_alive():
-            _log.warning("MCP worker thread did not shut down within 5 s")
+            _log.warning("MCP worker thread did not shut down within 15 s")
         self._thread = None
         self._loop = None
 
@@ -191,31 +195,37 @@ class McpServerPool:
             _import_mcp_client_components()
         )
         stack = AsyncExitStack()
-        if config.transport == "http":
-            read_stream, write_stream, _ = await stack.enter_async_context(
-                streamablehttp_client(config.url or "", headers=config.headers or None)
+        try:
+            if config.transport == "http":
+                read_stream, write_stream, _ = await stack.enter_async_context(
+                    streamablehttp_client(
+                        config.url or "", headers=config.headers or None
+                    )
+                )
+            else:
+                env = os.environ.copy()
+                env.update(config.env)
+                server_params = StdioServerParameters(
+                    command=config.command or "",
+                    args=list(config.args),
+                    env=env,
+                    cwd=str(config.cwd) if config.cwd is not None else None,
+                )
+                read_stream, write_stream = await stack.enter_async_context(
+                    stdio_client(server_params)
+                )
+            session = await stack.enter_async_context(
+                ClientSession(read_stream, write_stream)
             )
-        else:
-            env = os.environ.copy()
-            env.update(config.env)
-            server_params = StdioServerParameters(
-                command=config.command or "",
-                args=list(config.args),
-                env=env,
-                cwd=str(config.cwd) if config.cwd is not None else None,
+            await asyncio.wait_for(
+                session.initialize(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
             )
-            read_stream, write_stream = await stack.enter_async_context(
-                stdio_client(server_params)
+            response = await asyncio.wait_for(
+                session.list_tools(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
             )
-        session = await stack.enter_async_context(
-            ClientSession(read_stream, write_stream)
-        )
-        await asyncio.wait_for(
-            session.initialize(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
-        )
-        response = await asyncio.wait_for(
-            session.list_tools(), timeout=MCP_CONNECT_TIMEOUT_SECONDS
-        )
+        except Exception:
+            await stack.aclose()
+            raise
         bindings = _bindings_for_server(config, getattr(response, "tools", []))
         return (
             _ConnectedServer(
