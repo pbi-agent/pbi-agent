@@ -9,6 +9,8 @@ outline: [2, 3]
 
 Most built-in tools are exposed through the shared tool registry across providers. `read_image` is only enabled on providers that support multimodal image input in this build.
 
+Project-local MCP servers are discovered from `.agents/mcp.json` and their tools are merged into the same runtime catalog at startup. Those tools are exposed to the model as ordinary function tools with per-server namespacing, so a tool named `say_hi` from the `echo` server is sent to the model as `echo__say_hi`.
+
 | Tool | Destructive | Purpose |
 | --- | --- | --- |
 | `shell` | yes | Run a shell command in the workspace and return stdout, stderr, and exit code. |
@@ -21,6 +23,17 @@ Most built-in tools are exposed through the shared tool registry across provider
 | `read_file` | no | Read text files with optional line ranges, summarize tabular files, and extract text from PDF and DOCX files. |
 | `read_image` | no | Read a local image file and attach it to the model context in native multimodal format. |
 | `read_web_url` | no | Fetch a public web page through markdown.new and return Markdown. |
+
+## MCP Tools
+
+Discovered MCP tools behave like built-in function tools from the model's point of view:
+
+- They are loaded from `.agents/mcp.json` at startup.
+- Each server contributes tools after a simple namespaced rename of the form `server__tool`.
+- The UI shows a friendly `mcp:server/tool` label when rendering tool activity.
+- The runtime skips broken server entries and continues loading the rest.
+
+MCP tools follow the JSON schema advertised by the server during `list_tools()`. They are passed through to the underlying MCP server with the original tool name and arguments.
 
 ## `shell`
 

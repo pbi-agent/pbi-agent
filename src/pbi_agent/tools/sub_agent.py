@@ -54,6 +54,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     session_usage = context.session_usage
     turn_usage = context.turn_usage
     sub_agent_depth = context.sub_agent_depth
+    tool_catalog = context.tool_catalog
 
     if sub_agent_depth > 0:
         return {
@@ -83,4 +84,5 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         parent_session_usage=session_usage,
         parent_turn_usage=turn_usage,
         sub_agent_depth=sub_agent_depth,
+        tool_catalog=tool_catalog,
     )

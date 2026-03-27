@@ -25,7 +25,7 @@ from pbi_agent.models.messages import (
     WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
-from pbi_agent.tools.registry import get_openai_tool_definitions
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolContext
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
@@ -67,9 +67,14 @@ class GoogleProvider(Provider):
         *,
         system_prompt: str | None = None,
         excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
     ) -> None:
         self._settings = settings
-        self._tools = _google_tool_definitions(excluded_names=excluded_tools)
+        self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
+        self._tools = _google_tool_definitions(
+            self._tool_catalog,
+            excluded_names=excluded_tools,
+        )
         if settings.web_search:
             self._tools.append({"type": "google_search"})
         self._instructions = system_prompt or get_system_prompt()
@@ -187,6 +192,7 @@ class GoogleProvider(Provider):
                 session_usage=session_usage,
                 turn_usage=turn_usage,
                 sub_agent_depth=sub_agent_depth,
+                tool_catalog=self._tool_catalog,
             ),
         )
 
@@ -692,11 +698,13 @@ def _google_image_part(image: ImageAttachment) -> dict[str, Any]:
 
 
 def _google_tool_definitions(
-    *, excluded_names: set[str] | None = None
+    tool_catalog: ToolCatalog, *, excluded_names: set[str] | None = None
 ) -> list[dict[str, Any]]:
     return [
         _normalize_google_tool_definition(tool)
-        for tool in get_openai_tool_definitions(excluded_names=excluded_names)
+        for tool in tool_catalog.get_openai_tool_definitions(
+            excluded_names=excluded_names
+        )
     ]
 
 

@@ -25,6 +25,7 @@ from pbi_agent.config import (
 )
 from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
+from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.session_store import SessionRecord
 
 LOGGER = logging.getLogger(__name__)
@@ -176,6 +177,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--skills",
         action="store_true",
         help="List discovered project skills from .agents/skills and exit.",
+    )
+    diagnostics_group.add_argument(
+        "--mcp",
+        action="store_true",
+        help="List discovered project MCP servers from .agents and exit.",
     )
 
     subparsers = parser.add_subparsers(
@@ -357,6 +363,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.skills:
         return _handle_skills_flag(args)
+    if args.mcp:
+        return _handle_mcp_flag(args)
 
     if args.command == "init":
         return _handle_init_command(args)
@@ -420,12 +428,18 @@ def _handle_console_command(settings: Settings) -> int:
 
 
 def _handle_skills_flag(args: argparse.Namespace) -> int:
-    target_dir = _skills_directory_for_args(args)
+    target_dir = _workspace_directory_for_args(args)
     print(format_project_skills_markdown(workspace=target_dir))
     return 0
 
 
-def _skills_directory_for_args(args: argparse.Namespace) -> Path:
+def _handle_mcp_flag(args: argparse.Namespace) -> int:
+    target_dir = _workspace_directory_for_args(args)
+    print(format_project_mcp_servers_markdown(workspace=target_dir))
+    return 0
+
+
+def _workspace_directory_for_args(args: argparse.Namespace) -> Path:
     if getattr(args, "command", None) == "run" and getattr(args, "project_dir", None):
         return (Path.cwd() / args.project_dir).resolve()
     if getattr(args, "command", None) == "audit" and getattr(args, "report_dir", None):

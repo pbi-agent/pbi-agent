@@ -393,7 +393,7 @@ def test_xai_execute_tool_calls_returns_function_call_outputs(
 
     monkeypatch.setattr(
         "pbi_agent.providers.xai_provider._execute_tool_calls",
-        lambda calls, max_workers, context=None: batch,
+        lambda calls, max_workers, context=None, tool_catalog=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(

@@ -100,6 +100,40 @@ At runtime, discovered skills are appended to the active system prompt as an `<a
 
 This v1 implementation is project-only. User-level skill directories are intentionally not scanned, and any files referenced by a project skill must remain inside the workspace so the existing file tools can access them safely.
 
+## MCP server config
+
+`pbi-agent` can also discover project-local MCP server definitions and expose their tools to the model as ordinary function tools. The runtime reads a single JSON file from the workspace root:
+
+- `.agents/mcp.json`
+
+The file must contain a top-level `servers` object. Each entry can be either:
+
+- `type: "stdio"` with `command`, optional `args`, optional `env`, and optional `cwd`
+- `type: "http"` with `url` and optional `headers`
+
+Example:
+
+```json
+{
+  "servers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@microsoft/mcp-server-playwright"]
+    }
+  }
+}
+```
+
+Discovered MCP tools are added to the model-facing tool list at startup. In the UI, you can inspect the discovered server list with `/mcp`, or from the CLI with `pbi-agent --mcp`.
+
+::: tip
+Model-facing MCP tool names are namespaced per server, so a tool like `say_hi` from the `echo` server is exposed as `echo__say_hi`.
+:::
+
 ## Using both files together
 
 The two files compose cleanly:

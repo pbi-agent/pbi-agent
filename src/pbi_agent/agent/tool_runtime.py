@@ -9,6 +9,7 @@ from typing import Any
 
 from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import ToolCall
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.registry import get_tool_handler
 from pbi_agent.tools.types import ToolContext, ToolOutput, ToolResult
 
@@ -30,8 +31,13 @@ def execute_tool_calls(
     if not calls:
         return ToolExecutionBatch(results=[], had_errors=False)
 
+    tool_catalog = context.tool_catalog if context is not None else None
+
     if len(calls) == 1 or max_workers == 1:
-        results = [_execute_one_tool_call(call, context=context) for call in calls]
+        results = [
+            _execute_one_tool_call(call, tool_catalog=tool_catalog, context=context)
+            for call in calls
+        ]
         return ToolExecutionBatch(
             results=results, had_errors=any(r.is_error for r in results)
         )
@@ -40,7 +46,14 @@ def execute_tool_calls(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures: dict[Future[ToolResult], int] = {}
         for idx, call in enumerate(calls):
-            futures[executor.submit(_execute_one_tool_call, call, context)] = idx
+            futures[
+                executor.submit(
+                    _execute_one_tool_call,
+                    call,
+                    tool_catalog,
+                    context,
+                )
+            ] = idx
         for future, idx in futures.items():
             results[idx] = future.result()
 
@@ -76,11 +89,14 @@ def to_function_call_output_items(results: list[ToolResult]) -> list[dict[str, A
 
 def _execute_one_tool_call(
     call: ToolCall,
+    tool_catalog: ToolCatalog | None = None,
     context: ToolContext | None = None,
 ) -> ToolResult:
     start = time.monotonic()
     _log.debug("Starting tool call %s (%s)", call.call_id, call.name)
-    handler = get_tool_handler(call.name)
+    handler = (
+        tool_catalog.get_handler(call.name) if tool_catalog is not None else None
+    ) or get_tool_handler(call.name)
     if handler is None:
         result = _error_result(
             call, "unknown_tool", f"Tool '{call.name}' is not registered."

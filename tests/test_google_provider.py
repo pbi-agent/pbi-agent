@@ -323,7 +323,7 @@ def test_google_execute_tool_calls_returns_function_results(
 
     monkeypatch.setattr(
         "pbi_agent.providers.google_provider._execute_tool_calls",
-        lambda calls, max_workers, context=None: batch,
+        lambda calls, max_workers, context=None, tool_catalog=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(
@@ -779,7 +779,7 @@ def test_google_execute_tool_calls_serializes_image_attachments(
 
     monkeypatch.setattr(
         "pbi_agent.providers.google_provider._execute_tool_calls",
-        lambda calls, max_workers, context=None: batch,
+        lambda calls, max_workers, context=None, tool_catalog=None: batch,
     )
 
     tool_result_items, had_errors = provider.execute_tool_calls(

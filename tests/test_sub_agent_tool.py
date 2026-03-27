@@ -7,6 +7,7 @@ import pytest
 from pbi_agent.agent.session import run_sub_agent_task
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
 from pbi_agent.tools import sub_agent as sub_agent_tool
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolContext
 from pbi_agent.config import Settings
 
@@ -202,10 +203,12 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
         *,
         system_prompt: str | None = None,
         excluded_tools: set[str] | None = None,
+        tool_catalog=None,
     ) -> _ProviderStub:
         captured["settings"] = settings
         captured["system_prompt"] = system_prompt
         captured["excluded_tools"] = excluded_tools
+        captured["tool_catalog"] = tool_catalog
         return _ProviderStub()
 
     monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
@@ -213,6 +216,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
     parent_display = _ParentDisplay()
     parent_session_usage = TokenUsage(model="gpt-5")
     parent_turn_usage = TokenUsage(model="gpt-5")
+    catalog = ToolCatalog.from_builtin_registry()
     settings = Settings(
         api_key="test-key",
         provider="openai",
@@ -227,6 +231,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
         reasoning_effort="medium",
         parent_session_usage=parent_session_usage,
         parent_turn_usage=parent_turn_usage,
+        tool_catalog=catalog,
     )
 
     assert result == {
@@ -250,6 +255,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
         "skill_knowledge",
         "init_report",
     }
+    assert captured["tool_catalog"] is not None
     assert "delegated sub-agent" in str(captured["system_prompt"])
     assert isinstance(captured["settings"], Settings)
     assert captured["settings"].model == expected_model

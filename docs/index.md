@@ -22,6 +22,8 @@ features:
     details: 'Bootstrap a Power BI Project from the bundled template with the init command or the init_report tool.'
   - title: 'Browser & Terminal UI'
     details: 'Choose the default browser UI, the Textual console interface, or a single-prompt execution path.'
+  - title: 'MCP Tool Integration'
+    details: 'Discover project-local MCP servers from `.agents/mcp.json` and expose their tools to the model.'
 ---
 
 ## Demo
@@ -79,6 +81,7 @@ pbi-agent --api-key "$OPENAI_API_KEY"
 | [CLI Reference](/reference/cli) | Commands, flags, defaults, and audit behavior |
 | [Tools](/reference/tools) | The built-in function tools available to the agent |
 | [Environment Variables](/reference/environment) | `PBI_AGENT_*` settings and provider-specific key fallbacks |
+| [Customization](/guide/customization) | `INSTRUCTIONS.md`, `AGENTS.md`, skills, and MCP server discovery |
 
 ::: details Why this project exists
 `pbi-agent` is designed for local, file-based Power BI Project workflows. It edits PBIP assets directly and talks to LLM providers through synchronous HTTP REST requests implemented with Python's standard library.

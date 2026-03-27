@@ -62,7 +62,19 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 - [Provider Setup](https://nasirus.github.io/pbi-agent/guide/providers)
 - [CLI Reference](https://nasirus.github.io/pbi-agent/reference/cli)
 - [Environment Variables](https://nasirus.github.io/pbi-agent/reference/environment)
+- [Customization](https://nasirus.github.io/pbi-agent/guide/customization)
 - [Audit System](https://nasirus.github.io/pbi-agent/guide/audit)
+
+## Customization
+
+`pbi-agent` supports a few workspace-level customization points:
+
+- `INSTRUCTIONS.md` replaces the default system prompt for the workspace.
+- `AGENTS.md` adds project-specific rules on top of the active prompt.
+- `.agents/skills/<skill-name>/SKILL.md` adds project-local skills that are advertised to the model.
+- `.agents/mcp.json` declares MCP servers whose tools are exposed to the model at startup.
+
+See the full [Customization guide](https://nasirus.github.io/pbi-agent/guide/customization) for examples and behavior details.
 
 ## Common Commands
 

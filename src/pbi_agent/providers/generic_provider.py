@@ -24,7 +24,7 @@ from pbi_agent.models.messages import (
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.session_store import MessageRecord
-from pbi_agent.tools.registry import get_openai_chat_tool_definitions
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolContext
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
@@ -40,9 +40,13 @@ class GenericProvider(Provider):
         *,
         system_prompt: str | None = None,
         excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
     ) -> None:
         self._settings = settings
-        self._tools = get_openai_chat_tool_definitions(excluded_names=excluded_tools)
+        self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
+        self._tools = self._tool_catalog.get_openai_chat_tool_definitions(
+            excluded_names=excluded_tools
+        )
         self._system_prompt = system_prompt or get_system_prompt()
         self._messages: list[dict[str, Any]] = []
 
@@ -136,6 +140,7 @@ class GenericProvider(Provider):
                 session_usage=session_usage,
                 turn_usage=turn_usage,
                 sub_agent_depth=sub_agent_depth,
+                tool_catalog=self._tool_catalog,
             ),
         )
 

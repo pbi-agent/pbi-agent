@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import replace
 import logging
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent.agent.system_prompt import (
     get_custom_excluded_tools,
@@ -14,6 +15,7 @@ from pbi_agent.agent.system_prompt import (
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.config import Settings
 from pbi_agent.media import load_workspace_image
+from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.models.messages import (
     AgentOutcome,
     CompletedResponse,
@@ -21,6 +23,9 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.providers import create_provider
+
+if TYPE_CHECKING:
+    from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.session_store import SessionStore
 from pbi_agent.ui.display_protocol import DisplayProtocol, QueuedInput
@@ -33,6 +38,7 @@ SUB_AGENT_MAX_REQUESTS = 30
 SUB_AGENT_MAX_ELAPSED_SECONDS = 300.0
 SUB_AGENT_DISABLED_TOOLS = {"sub_agent"}
 SKILLS_COMMAND = "/skills"
+MCP_COMMAND = "/mcp"
 
 
 class SubAgentRunError(RuntimeError):
@@ -88,16 +94,17 @@ def run_single_turn(
         title=_session_title_for_user_turn(user_input),
     )
 
-    provider = create_provider(settings, excluded_tools=get_custom_excluded_tools())
-    _resume_session(
-        provider=provider,
-        store=store,
-        session_id=resume_session_id,
-        session_usage=session_usage,
-        display=display,
-    )
-
-    with provider:
+    with _open_runtime_provider(
+        settings,
+        excluded_tools=get_custom_excluded_tools(),
+    ) as provider:
+        _resume_session(
+            provider=provider,
+            store=store,
+            session_id=resume_session_id,
+            session_usage=session_usage,
+            display=display,
+        )
         response = _request_user_turn(
             provider=provider,
             user_input=user_input,
@@ -154,16 +161,17 @@ def run_chat_loop(
 
     session_usage = _reset_session()
     had_tool_errors = False
-    provider = create_provider(settings, excluded_tools=get_custom_excluded_tools())
-    _resume_session(
-        provider=provider,
-        store=store,
-        session_id=resume_session_id,
-        session_usage=session_usage,
-        display=display,
-    )
-
-    with provider:
+    with _open_runtime_provider(
+        settings,
+        excluded_tools=get_custom_excluded_tools(),
+    ) as provider:
+        _resume_session(
+            provider=provider,
+            store=store,
+            session_id=resume_session_id,
+            session_usage=session_usage,
+            display=display,
+        )
         while True:
             queued_input = display.user_prompt()
             image_paths: list[str] = []
@@ -199,6 +207,9 @@ def run_chat_loop(
                 break
             if user_input.strip().lower() == SKILLS_COMMAND:
                 display.render_markdown(format_project_skills_markdown())
+                continue
+            if user_input.strip().lower() == MCP_COMMAND:
+                display.render_markdown(format_project_mcp_servers_markdown())
                 continue
             if not user_input and not image_paths:
                 continue
@@ -271,6 +282,7 @@ def run_sub_agent_task(
     parent_session_usage: TokenUsage,
     parent_turn_usage: TokenUsage,
     sub_agent_depth: int = 0,
+    tool_catalog: "ToolCatalog | None" = None,
 ) -> dict[str, Any]:
     child_settings = replace(
         settings,
@@ -296,12 +308,12 @@ def run_sub_agent_task(
     request_count = 0
 
     try:
-        provider = create_provider(
+        with _open_runtime_provider(
             child_settings,
             system_prompt=get_sub_agent_system_prompt(),
             excluded_tools=SUB_AGENT_DISABLED_TOOLS | get_custom_excluded_tools(),
-        )
-        with provider:
+            tool_catalog=tool_catalog,
+        ) as provider:
             _raise_if_sub_agent_timed_out(started_at)
             response = provider.request_turn(
                 user_message=task_instruction,
@@ -349,6 +361,37 @@ def run_sub_agent_task(
         parent_session_usage.add_sub_agent(child_session_usage)
         parent_turn_usage.add_sub_agent(child_turn_usage)
         display.session_usage(parent_session_usage)
+
+
+@contextmanager
+def _open_runtime_provider(
+    settings: Settings,
+    *,
+    system_prompt: str | None = None,
+    excluded_tools: set[str] | None = None,
+    tool_catalog: "ToolCatalog | None" = None,
+):
+    from pbi_agent.mcp import McpServerPool
+
+    if tool_catalog is not None:
+        provider = create_provider(
+            settings,
+            system_prompt=system_prompt,
+            excluded_tools=excluded_tools,
+            tool_catalog=tool_catalog,
+        )
+        with provider:
+            yield provider
+    else:
+        with McpServerPool(Path.cwd()) as mcp_pool:
+            provider = create_provider(
+                settings,
+                system_prompt=system_prompt,
+                excluded_tools=excluded_tools,
+                tool_catalog=mcp_pool.to_tool_catalog(),
+            )
+            with provider:
+                yield provider
 
 
 # ---------------------------------------------------------------------------
