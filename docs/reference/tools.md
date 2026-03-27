@@ -18,7 +18,7 @@ Project-local MCP servers are discovered from `.agents/mcp.json` and their tools
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `skill_knowledge` | no | Load bundled Power BI skill markdown from the local knowledge base. |
 | `init_report` | no | Scaffold the bundled PBIP template into a destination directory. |
-| `sub_agent` | no | Delegate a scoped task to a stateless child agent, optionally selecting a discovered project sub-agent type. |
+| `sub_agent` | no | Delegate a scoped task to a child agent, optionally selecting a discovered project sub-agent type and inheriting parent context. |
 | `list_files` | no | List files and directories in the workspace, with optional glob and type filtering. |
 | `search_files` | no | Search text file contents for a string or regex pattern. |
 | `read_file` | no | Read text files with optional line ranges, summarize tabular files, and extract text from PDF and DOCX files. |
@@ -146,20 +146,23 @@ Delegate a focused task to a child agent that runs with the same provider and to
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `task_instruction` | `string` | yes | The delegated task and the context the child agent needs. |
+| `include_context` | `boolean` | no | When `true`, the child inherits the parent conversation context when the provider supports it directly, or via transcript replay otherwise. Defaults to `false`. |
 | `agent_type` | `string` | no | Optional project sub-agent name discovered from `.agents/*.md`. Use `default` or omit the field for the built-in generalist child agent. |
 
 ```json
 {
   "task_instruction": "Review the recent CLI parser changes and summarize any risks.",
+  "include_context": true,
   "agent_type": "code-reviewer"
 }
 ```
 
 Runtime behavior:
 
-- Child runs are isolated and do not inherit the full main-session conversation history.
+- Child runs are isolated by default. Set `include_context` to `true` to inherit parent context.
 - The child uses `PBI_AGENT_SUB_AGENT_MODEL` or `--sub-agent-model` by default unless the selected project sub-agent overrides `model` in its frontmatter.
 - The child inherits the parent provider and tool catalog, but `sub_agent` itself is disabled inside the child, so nested sub-agent calls fail fast.
+- OpenAI and Google reuse the parent conversation checkpoint when available; other providers fall back to replaying the visible parent transcript plus the current live user turn.
 - Unknown `agent_type` values are rejected before the child session starts.
 - The child session is bounded to `50` provider requests or `600` elapsed seconds, whichever happens first.
 

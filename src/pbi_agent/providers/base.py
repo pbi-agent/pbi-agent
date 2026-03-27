@@ -6,6 +6,7 @@ from typing import Any
 from pbi_agent.config import Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, UserTurnInput
 from pbi_agent.session_store import MessageRecord
+from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
 
@@ -61,6 +62,7 @@ class Provider(ABC):
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
+        parent_context: ParentContextSnapshot | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute every tool call present in *response*.
 
@@ -78,6 +80,10 @@ class Provider(ABC):
 
     def set_previous_response_id(self, response_id: str | None) -> None:
         """Set conversation continuation ID for session resume. No-op by default."""
+
+    def get_conversation_checkpoint(self) -> str | None:
+        """Return the current provider conversation checkpoint when supported."""
+        return None
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         """Restore persisted conversation messages for client-side history providers."""

@@ -153,7 +153,7 @@ def _append_available_sub_agents(base_prompt: str) -> str:
 The `sub_agent` tool is available for delegated work.
 - Use `sub_agent` without `agent_type` for the default generalist sub-agent.
 - When a task matches one of the available project sub-agents below, call `sub_agent` with `agent_type` set to that sub-agent's `name`.
-- Project sub-agents run in isolated child-agent contexts and do not inherit the main conversation history.
+- Project sub-agents are isolated by default. Set `include_context` to `true` when the child should inherit the parent conversation context.
 </sub_agent_loading_rules>
 """.strip()
 

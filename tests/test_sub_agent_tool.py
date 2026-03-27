@@ -6,9 +6,10 @@ import pytest
 
 from pbi_agent.agent.session import run_sub_agent_task
 from pbi_agent.models.messages import CompletedResponse, TokenUsage
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools import sub_agent as sub_agent_tool
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ToolContext
+from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
 from pbi_agent.config import Settings
 
 
@@ -133,12 +134,16 @@ class _ParentDisplay:
 class _ProviderStub:
     def __init__(self) -> None:
         self.request_messages: list[str | None] = []
+        self.previous_response_ids: list[str | None] = []
 
     def __enter__(self) -> _ProviderStub:
         return self
 
     def __exit__(self, *_: object) -> None:
         return None
+
+    def set_previous_response_id(self, response_id: str | None) -> None:
+        self.previous_response_ids.append(response_id)
 
     def request_turn(
         self,
@@ -171,8 +176,17 @@ class _ProviderStub:
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
+        parent_context=None,
     ):
-        del response, max_workers, display, session_usage, turn_usage, sub_agent_depth
+        del (
+            response,
+            max_workers,
+            display,
+            session_usage,
+            turn_usage,
+            sub_agent_depth,
+            parent_context,
+        )
         return [], False
 
 
@@ -199,11 +213,15 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         sub_agent_depth: int = 0,
         tool_catalog: ToolCatalog | None = None,
         agent_type: str | None = None,
+        include_context: bool = False,
+        parent_context: ParentContextSnapshot | None = None,
     ) -> dict[str, object]:
         del settings, display, parent_session_usage, parent_turn_usage, sub_agent_depth
         captured["task_instruction"] = task_instruction
         captured["tool_catalog"] = tool_catalog
         captured["agent_type"] = agent_type
+        captured["include_context"] = include_context
+        captured["parent_context"] = parent_context
         return {"status": "completed", "final_output": "done"}
 
     monkeypatch.setattr(
@@ -214,6 +232,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         {
             "task_instruction": "Review the auth changes",
             "agent_type": "code-reviewer",
+            "include_context": True,
         },
         ToolContext(
             settings=Settings(api_key="test-key", provider="openai", model="gpt-5"),
@@ -221,6 +240,10 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
             session_usage=TokenUsage(model="gpt-5"),
             turn_usage=TokenUsage(model="gpt-5"),
             tool_catalog=ToolCatalog.from_builtin_registry(),
+            parent_context=ParentContextSnapshot(
+                provider="openai",
+                continuation_id="resp_parent",
+            ),
         ),
     )
 
@@ -229,6 +252,11 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         "task_instruction": "Review the auth changes",
         "tool_catalog": ANY,
         "agent_type": "code-reviewer",
+        "include_context": True,
+        "parent_context": ParentContextSnapshot(
+            provider="openai",
+            continuation_id="resp_parent",
+        ),
     }
 
 
@@ -245,8 +273,18 @@ def test_sub_agent_tool_maps_default_agent_type_to_generalist(monkeypatch) -> No
         sub_agent_depth: int = 0,
         tool_catalog: ToolCatalog | None = None,
         agent_type: str | None = None,
+        include_context: bool = False,
+        parent_context: ParentContextSnapshot | None = None,
     ) -> dict[str, object]:
-        del settings, display, parent_session_usage, parent_turn_usage, sub_agent_depth
+        del (
+            settings,
+            display,
+            parent_session_usage,
+            parent_turn_usage,
+            sub_agent_depth,
+            include_context,
+            parent_context,
+        )
         captured["agent_type"] = agent_type
         return {"status": "completed", "final_output": "done"}
 
@@ -270,6 +308,16 @@ def test_sub_agent_tool_maps_default_agent_type_to_generalist(monkeypatch) -> No
 
     assert result == {"status": "completed", "final_output": "done"}
     assert captured["agent_type"] is None
+
+
+def test_sub_agent_tool_rejects_non_boolean_include_context() -> None:
+    result = sub_agent_tool.handle(
+        {"task_instruction": "Inspect src", "include_context": "yes"},
+        ToolContext(),
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"]["type"] == "invalid_arguments"
 
 
 @pytest.mark.parametrize(
@@ -346,6 +394,98 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
     assert isinstance(captured["settings"], Settings)
     assert captured["settings"].model == expected_model
     assert captured["settings"].reasoning_effort == "xhigh"
+
+
+def test_run_sub_agent_task_uses_parent_checkpoint_for_openai_context_inheritance(
+    monkeypatch,
+) -> None:
+    child_provider = _ProviderStub()
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.create_provider",
+        lambda *args, **kwargs: child_provider,
+    )
+
+    result = run_sub_agent_task(
+        "Summarize the repo structure",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(),
+        include_context=True,
+        parent_context=ParentContextSnapshot(
+            provider="openai",
+            continuation_id="resp_parent",
+            current_user_turn="How is the CLI structured?",
+        ),
+    )
+
+    assert result["status"] == "completed"
+    assert child_provider.previous_response_ids == ["resp_parent"]
+    assert child_provider.request_messages == ["Summarize the repo structure"]
+
+
+def test_run_sub_agent_task_falls_back_to_transcript_for_xai_context_inheritance(
+    monkeypatch,
+) -> None:
+    child_provider = _ProviderStub()
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.create_provider",
+        lambda *args, **kwargs: child_provider,
+    )
+
+    result = run_sub_agent_task(
+        "Summarize the repo structure",
+        Settings(api_key="test-key", provider="xai", model="grok-4"),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(),
+        include_context=True,
+        parent_context=ParentContextSnapshot(
+            provider="xai",
+            continuation_id="resp_parent",
+            messages=(
+                MessageRecord(
+                    id=1,
+                    session_id="sess",
+                    role="user",
+                    content="How is the CLI structured?",
+                    created_at="2026-03-27T00:00:00+00:00",
+                ),
+                MessageRecord(
+                    id=2,
+                    session_id="sess",
+                    role="assistant",
+                    content="The CLI routes commands through cli.py.",
+                    created_at="2026-03-27T00:00:01+00:00",
+                ),
+            ),
+            current_user_turn="Inspect the sub-agent tool path.",
+        ),
+    )
+
+    assert result["status"] == "completed"
+    assert child_provider.previous_response_ids == []
+    assert child_provider.request_messages == [
+        "Use the parent conversation below as context for the delegated task.\n\n"
+        "<parent_conversation>\n"
+        "<user>\n"
+        "How is the CLI structured?\n"
+        "</user>\n"
+        "<assistant>\n"
+        "The CLI routes commands through cli.py.\n"
+        "</assistant>\n"
+        "<user>\n"
+        "Inspect the sub-agent tool path.\n"
+        "</user>\n"
+        "</parent_conversation>\n\n"
+        "<delegated_task>\n"
+        "Summarize the repo structure\n"
+        "</delegated_task>"
+    ]
 
 
 def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(

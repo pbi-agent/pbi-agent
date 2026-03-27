@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.session_store import SessionStore
+from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.ui.display_protocol import DisplayProtocol, QueuedInput
 
 _log = logging.getLogger(__name__)
@@ -96,6 +97,7 @@ def run_single_turn(
         image_paths=image_paths or [],
         settings=settings,
     )
+    user_turn_history_text = _user_turn_history_text(user_input)
     store, session_id = _open_session_store(
         settings,
         resume_session_id=resume_session_id,
@@ -127,8 +129,11 @@ def run_single_turn(
             display=display,
             session_usage=session_usage,
             turn_usage=turn_usage,
+            store=store,
+            session_id=session_id,
+            current_user_turn_text=user_turn_history_text,
         )
-        _add_message(store, session_id, "user", _user_turn_history_text(user_input))
+        _add_message(store, session_id, "user", user_turn_history_text)
         _add_message(store, session_id, "assistant", response.text)
         _update_session_after_turn(
             store, session_id, response.response_id, session_usage
@@ -238,6 +243,7 @@ def run_chat_loop(
                 image_paths=image_paths,
                 settings=settings,
             )
+            turn_history_text = _user_turn_history_text(turn_input)
 
             if session_id is None:
                 session_id = _create_session(
@@ -271,13 +277,16 @@ def run_chat_loop(
                 display=display,
                 session_usage=session_usage,
                 turn_usage=turn_usage,
+                store=store,
+                session_id=session_id,
+                current_user_turn_text=turn_history_text,
             )
 
             _add_message(
                 store,
                 session_id,
                 "user",
-                _user_turn_history_text(turn_input),
+                turn_history_text,
             )
             _add_message(store, session_id, "assistant", response.text)
             _update_session_after_turn(
@@ -302,6 +311,8 @@ def run_sub_agent_task(
     sub_agent_depth: int = 0,
     tool_catalog: "ToolCatalog | None" = None,
     agent_type: str | None = None,
+    include_context: bool = False,
+    parent_context: ParentContextSnapshot | None = None,
 ) -> dict[str, Any]:
     agent_definition = None
     if agent_type is not None:
@@ -356,9 +367,21 @@ def run_sub_agent_task(
             excluded_tools=SUB_AGENT_DISABLED_TOOLS | get_custom_excluded_tools(),
             tool_catalog=tool_catalog,
         ) as provider:
+            _apply_sub_agent_parent_context(
+                provider=provider,
+                provider_name=child_settings.provider,
+                include_context=include_context,
+                parent_context=parent_context,
+            )
+            child_user_message = _build_sub_agent_initial_message(
+                task_instruction,
+                provider_name=child_settings.provider,
+                include_context=include_context,
+                parent_context=parent_context,
+            )
             _raise_if_sub_agent_timed_out(started_at)
             response = provider.request_turn(
-                user_message=task_instruction,
+                user_message=child_user_message,
                 display=child_display,
                 session_usage=child_session_usage,
                 turn_usage=child_turn_usage,
@@ -454,6 +477,9 @@ def _run_tool_iterations(
     request_count: int = 0,
     started_at: float | None = None,
     max_elapsed_seconds: float | None = None,
+    store: SessionStore | None = None,
+    session_id: str | None = None,
+    current_user_turn_text: str | None = None,
 ) -> tuple[CompletedResponse, bool, int]:
     had_errors = False
 
@@ -470,6 +496,14 @@ def _run_tool_iterations(
         )
 
         try:
+            parent_context = None
+            if any(call.name == "sub_agent" for call in response.function_calls):
+                parent_context = _build_parent_context_snapshot(
+                    provider=provider,
+                    store=store,
+                    session_id=session_id,
+                    current_user_turn_text=current_user_turn_text,
+                )
             tool_result_items, loop_errors = provider.execute_tool_calls(
                 response,
                 max_workers=max_workers,
@@ -477,6 +511,7 @@ def _run_tool_iterations(
                 session_usage=session_usage,
                 turn_usage=turn_usage,
                 sub_agent_depth=sub_agent_depth,
+                parent_context=parent_context,
             )
         except Exception:
             _log.exception("Tool execution failed inside provider.execute_tool_calls")
@@ -654,6 +689,121 @@ def _resume_session(
             display.replay_history(messages)
     except Exception:
         _log.warning("Failed to restore session history", exc_info=True)
+
+
+def _build_parent_context_snapshot(
+    *,
+    provider: Provider,
+    store: SessionStore | None,
+    session_id: str | None,
+    current_user_turn_text: str | None,
+) -> ParentContextSnapshot | None:
+    messages: tuple = ()
+    if store is not None and session_id is not None:
+        try:
+            messages = tuple(store.list_messages(session_id))
+        except Exception:
+            _log.warning("Failed to capture parent session history", exc_info=True)
+
+    continuation_id: str | None = None
+    try:
+        continuation_id = provider.get_conversation_checkpoint()
+    except Exception:
+        _log.warning(
+            "Failed to capture provider conversation checkpoint", exc_info=True
+        )
+
+    current_turn = (current_user_turn_text or "").strip() or None
+    if not messages and current_turn is None and continuation_id is None:
+        return None
+
+    provider_name = getattr(provider.settings, "provider", "")
+    return ParentContextSnapshot(
+        provider=provider_name,
+        continuation_id=continuation_id,
+        messages=messages,
+        current_user_turn=current_turn,
+    )
+
+
+def _apply_sub_agent_parent_context(
+    *,
+    provider: Provider,
+    provider_name: str,
+    include_context: bool,
+    parent_context: ParentContextSnapshot | None,
+) -> None:
+    if not include_context or parent_context is None:
+        return
+
+    if provider_name not in {"openai", "google"}:
+        return
+
+    continuation_id = (parent_context.continuation_id or "").strip()
+    if continuation_id:
+        provider.set_previous_response_id(continuation_id)
+
+
+def _build_sub_agent_initial_message(
+    task_instruction: str,
+    *,
+    provider_name: str,
+    include_context: bool,
+    parent_context: ParentContextSnapshot | None,
+) -> str:
+    if not include_context or parent_context is None:
+        return task_instruction
+
+    if provider_name in {"openai", "google"}:
+        if (parent_context.continuation_id or "").strip():
+            return task_instruction
+
+    transcript_lines: list[str] = []
+    for message in parent_context.messages:
+        if message.role not in {"user", "assistant"}:
+            continue
+        content = message.content.strip()
+        if not content:
+            continue
+        transcript_lines.extend(
+            [
+                f"<{message.role}>",
+                content,
+                f"</{message.role}>",
+            ]
+        )
+
+    current_user_turn = (parent_context.current_user_turn or "").strip()
+    if current_user_turn:
+        last_message = parent_context.messages[-1] if parent_context.messages else None
+        if not (
+            last_message
+            and last_message.role == "user"
+            and last_message.content.strip() == current_user_turn
+        ):
+            transcript_lines.extend(
+                [
+                    "<user>",
+                    current_user_turn,
+                    "</user>",
+                ]
+            )
+
+    if not transcript_lines:
+        return task_instruction
+
+    sections = [
+        "Use the parent conversation below as context for the delegated task.",
+        "",
+        "<parent_conversation>",
+        *transcript_lines,
+        "</parent_conversation>",
+        "",
+        "<delegated_task>",
+        task_instruction,
+        "</delegated_task>",
+    ]
+    return "\n".join(sections)
 
 
 def _close_store(store: SessionStore | None) -> None:

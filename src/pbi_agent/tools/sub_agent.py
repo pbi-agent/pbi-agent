@@ -16,13 +16,23 @@ def build_spec() -> ToolSpec:
 
     return ToolSpec(
         name="sub_agent",
-        description="Delegate a scoped task to a stateless child agent with the same tools.",
+        description=(
+            "Delegate a scoped task to a child agent with the same tools. "
+            "Set `include_context` to inherit the parent conversation context."
+        ),
         parameters_schema={
             "type": "object",
             "properties": {
                 "task_instruction": {
                     "type": "string",
                     "description": "The delegated task and any context the child agent needs.",
+                },
+                "include_context": {
+                    "type": "boolean",
+                    "description": (
+                        "When true, the child agent inherits the parent "
+                        "conversation context when supported by the provider."
+                    ),
                 },
                 "agent_type": {
                     "type": "string",
@@ -61,12 +71,23 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         if agent_type == _DEFAULT_AGENT_TYPE:
             agent_type = None
 
+    include_context = arguments.get("include_context", False)
+    if not isinstance(include_context, bool):
+        return {
+            "status": "failed",
+            "error": {
+                "type": "invalid_arguments",
+                "message": "'include_context' must be a boolean when provided.",
+            },
+        }
+
     settings = context.settings
     display = context.display
     session_usage = context.session_usage
     turn_usage = context.turn_usage
     sub_agent_depth = context.sub_agent_depth
     tool_catalog = context.tool_catalog
+    parent_context = context.parent_context
 
     if sub_agent_depth > 0:
         return {
@@ -97,4 +118,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         sub_agent_depth=sub_agent_depth,
         tool_catalog=tool_catalog,
         agent_type=agent_type,
+        include_context=include_context,
+        parent_context=parent_context,
     )

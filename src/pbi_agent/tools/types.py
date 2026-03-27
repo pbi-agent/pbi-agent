@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, TYPE_CHECKING
 
 from pbi_agent.models.messages import ImageAttachment
+from pbi_agent.session_store import MessageRecord
 
 if TYPE_CHECKING:
     from pbi_agent.config import Settings
@@ -20,6 +21,14 @@ class ToolSpec:
     is_destructive: bool = False
 
 
+@dataclass(slots=True, frozen=True)
+class ParentContextSnapshot:
+    provider: str
+    continuation_id: str | None = None
+    messages: tuple[MessageRecord, ...] = ()
+    current_user_turn: str | None = None
+
+
 @dataclass(slots=True)
 class ToolContext:
     """Runtime context passed to every tool handler.
@@ -34,6 +43,7 @@ class ToolContext:
     turn_usage: TokenUsage | None = None
     sub_agent_depth: int = 0
     tool_catalog: ToolCatalog | None = None
+    parent_context: ParentContextSnapshot | None = None
 
 
 @dataclass(slots=True)

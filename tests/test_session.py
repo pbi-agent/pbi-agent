@@ -85,10 +85,13 @@ class _DisplaySpy:
 
 
 class _ProviderStub:
-    def __init__(self) -> None:
+    def __init__(self, *, tool_name: str = "shell") -> None:
         self.connected = False
         self.request_calls: list[dict[str, object | None]] = []
         self.execute_calls: list[dict[str, object]] = []
+        self.conversation_checkpoint = "resp_current"
+        self.settings = Settings(api_key="test-key", provider="openai")
+        self.tool_name = tool_name
 
     def __enter__(self) -> _ProviderStub:
         self.connect()
@@ -102,6 +105,12 @@ class _ProviderStub:
 
     def close(self) -> None:
         self.connected = False
+
+    def get_conversation_checkpoint(self) -> str | None:
+        return self.conversation_checkpoint
+
+    def restore_messages(self, messages) -> None:
+        self.restored_messages = list(messages)
 
     def request_turn(
         self,
@@ -131,8 +140,12 @@ class _ProviderStub:
                 function_calls=[
                     ToolCall(
                         call_id="call_1",
-                        name="shell",
-                        arguments={"command": "pwd"},
+                        name=self.tool_name,
+                        arguments=(
+                            {"command": "pwd"}
+                            if self.tool_name == "shell"
+                            else {"task_instruction": "Inspect the workspace"}
+                        ),
                     )
                 ],
             )
@@ -156,6 +169,7 @@ class _ProviderStub:
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
+        parent_context=None,
     ) -> tuple[list[dict[str, object]], bool]:
         del display, session_usage, turn_usage, sub_agent_depth
         self.execute_calls.append(
@@ -163,6 +177,7 @@ class _ProviderStub:
                 "response_id": response.response_id,
                 "max_workers": max_workers,
                 "call_count": len(response.function_calls),
+                "parent_context": parent_context,
             }
         )
         return (
@@ -227,9 +242,11 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
             ],
         },
     ]
-    assert provider.execute_calls == [
-        {"response_id": "resp_1", "max_workers": 3, "call_count": 1}
-    ]
+    assert len(provider.execute_calls) == 1
+    assert provider.execute_calls[0]["response_id"] == "resp_1"
+    assert provider.execute_calls[0]["max_workers"] == 3
+    assert provider.execute_calls[0]["call_count"] == 1
+    assert provider.execute_calls[0]["parent_context"] is None
     assert display.welcome_calls == [
         {
             "interactive": False,
@@ -528,3 +545,50 @@ def test_run_chat_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> Non
         sessions = store.list_sessions(os.getcwd(), limit=10)
         assert len(sessions) == 1
         assert store.list_messages(sessions[0].session_id) == []
+
+
+def test_run_single_turn_passes_parent_context_snapshot_to_tool_execution(
+    monkeypatch, tmp_path
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+
+    with SessionStore() as store:
+        session_id = store.create_session(
+            directory=os.getcwd(),
+            provider="openai",
+            model=DEFAULT_MODEL,
+            title="existing",
+        )
+        store.add_message(session_id, "user", "What does the CLI do?")
+        store.add_message(session_id, "assistant", "It routes commands in cli.py.")
+
+    provider = _ProviderStub(tool_name="sub_agent")
+    display = _DisplaySpy()
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=3)
+    monotonic_values = iter([10.0, 13.5])
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    run_single_turn(
+        "Inspect the sub-agent path",
+        settings,
+        display,
+        resume_session_id=session_id,
+    )
+
+    parent_context = provider.execute_calls[0]["parent_context"]
+    assert parent_context is not None
+    assert parent_context.continuation_id == "resp_current"
+    assert [message.content for message in parent_context.messages] == [
+        "What does the CLI do?",
+        "It routes commands in cli.py.",
+    ]
+    assert parent_context.current_user_turn == "Inspect the sub-agent path"

@@ -30,7 +30,7 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.base import Provider
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ToolContext
+from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
 _log = logging.getLogger(__name__)
@@ -188,6 +188,7 @@ class AnthropicProvider(Provider):
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
+        parent_context: ParentContextSnapshot | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         """Execute all tool calls in the response.
 
@@ -228,6 +229,7 @@ class AnthropicProvider(Provider):
                 turn_usage=turn_usage,
                 sub_agent_depth=sub_agent_depth,
                 tool_catalog=self._tool_catalog,
+                parent_context=parent_context,
             ),
         )
         had_errors = batch.had_errors

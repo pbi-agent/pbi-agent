@@ -29,7 +29,7 @@ from pbi_agent.models.messages import (
 )
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ToolContext
+from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
 from pbi_agent.ui.display_protocol import DisplayProtocol
 
 _REQUEST_TIMEOUT_SECS = 3600.0
@@ -71,6 +71,9 @@ class OpenAIProvider(Provider):
 
     def set_previous_response_id(self, response_id: str | None) -> None:
         self._previous_response_id = response_id
+
+    def get_conversation_checkpoint(self) -> str | None:
+        return self._previous_response_id
 
     def connect(self) -> None:
         if not self._settings.api_key:
@@ -172,6 +175,7 @@ class OpenAIProvider(Provider):
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
         sub_agent_depth: int = 0,
+        parent_context: ParentContextSnapshot | None = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -191,6 +195,7 @@ class OpenAIProvider(Provider):
                 turn_usage=turn_usage,
                 sub_agent_depth=sub_agent_depth,
                 tool_catalog=self._tool_catalog,
+                parent_context=parent_context,
             ),
         )
 
@@ -344,14 +349,10 @@ class OpenAIProvider(Provider):
         input_items: list[dict[str, Any]],
         instructions: str | None,
     ) -> dict[str, Any]:
-        request_input_items = list(input_items)
-        if instructions and not self._previous_response_id:
-            request_input_items.insert(0, _build_system_input_item(instructions))
-
         body: dict[str, Any] = {
             "model": self._settings.model,
             "max_output_tokens": self._settings.max_tokens,
-            "input": request_input_items,
+            "input": list(input_items),
             "tools": self._tools,
             "parallel_tool_calls": True,
             "store": True,
@@ -368,6 +369,8 @@ class OpenAIProvider(Provider):
                 "summary": "auto",
             },
         }
+        if instructions:
+            body["instructions"] = instructions
         if self._previous_response_id:
             body["previous_response_id"] = self._previous_response_id
         if self._settings.service_tier:
@@ -528,10 +531,6 @@ def _build_user_input_item(user_input: UserTurnInput) -> dict[str, Any]:
             }
         )
     return {"role": "user", "content": content}
-
-
-def _build_system_input_item(prompt: str) -> dict[str, Any]:
-    return {"role": "system", "content": prompt}
 
 
 def _extract_reasoning_summary_texts(raw_summary: Any) -> list[str]:

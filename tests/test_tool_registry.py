@@ -52,6 +52,7 @@ def test_registry_sub_agent_schema_uses_project_agent_enum(
     spec = registry.get_tool_spec("sub_agent")
     assert spec is not None
     assert "reasoning_effort" not in spec.parameters_schema["properties"]
+    assert spec.parameters_schema["properties"]["include_context"]["type"] == "boolean"
     assert spec.parameters_schema["properties"]["agent_type"]["enum"] == [
         "default",
         "reviewer",
@@ -63,6 +64,9 @@ def test_registry_sub_agent_schema_uses_project_agent_enum(
         if item["name"] == "sub_agent"
     )
     assert "reasoning_effort" not in openai_tool["parameters"]["properties"]
+    assert (
+        openai_tool["parameters"]["properties"]["include_context"]["type"] == "boolean"
+    )
     assert openai_tool["parameters"]["properties"]["agent_type"]["enum"] == [
         "default",
         "reviewer",

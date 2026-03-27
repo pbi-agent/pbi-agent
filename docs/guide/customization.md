@@ -141,7 +141,7 @@ At runtime, discovered sub-agents are appended to the active system prompt as an
 
 Project sub-agents:
 
-- Run in isolated child-agent contexts and do not inherit the full parent conversation history.
+- Run in isolated child-agent contexts by default. Set `include_context: true` on the `sub_agent` tool call to inherit the parent conversation context.
 - Use the same provider as the parent session.
 - Can override the child `model` and `reasoning_effort` per sub-agent.
 - Cannot recursively spawn more sub-agents in this build.

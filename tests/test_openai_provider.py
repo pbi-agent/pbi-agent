@@ -187,12 +187,25 @@ def test_openai_build_request_body_uses_http_responses_shape() -> None:
         {"type": "compaction", "compact_threshold": 150000}
     ]
     assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
-    assert body["input"] == [
-        {"role": "system", "content": "be concise"},
-        {"role": "user", "content": "hello"},
-    ]
-    assert "instructions" not in body
+    assert body["input"] == [{"role": "user", "content": "hello"}]
+    assert body["instructions"] == "be concise"
     assert "previous_response_id" not in body
+
+
+def test_openai_build_request_body_keeps_instructions_with_previous_response_id() -> (
+    None
+):
+    provider = OpenAIProvider(_make_settings())
+    provider.set_previous_response_id("resp_parent")
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "hello"}],
+        instructions="be concise",
+    )
+
+    assert body["input"] == [{"role": "user", "content": "hello"}]
+    assert body["instructions"] == "be concise"
+    assert body["previous_response_id"] == "resp_parent"
 
 
 def test_openai_build_request_body_includes_service_tier() -> None:
@@ -431,13 +444,14 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     assert first.response_id == "resp_1"
     assert second.response_id == "resp_2"
     assert requests[0]["input"] == [
-        {"role": "system", "content": get_system_prompt()},
         {"role": "user", "content": "What is the temperature in San Francisco?"},
     ]
+    assert requests[0]["instructions"] == get_system_prompt()
     assert requests[0]["stream"] is False
     assert requests[0]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert "previous_response_id" not in requests[0]
     assert requests[1]["previous_response_id"] == "resp_1"
+    assert requests[1]["instructions"] == get_system_prompt()
     assert requests[1]["input"] == [
         {
             "type": "function_call_output",
