@@ -426,6 +426,7 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
         session_usage=session_usage,
         turn_usage=first_turn_usage,
     )
+    assert provider.get_conversation_checkpoint() is None
 
     second_turn_usage = TokenUsage(model=DEFAULT_MODEL)
     second = provider.request_turn(
@@ -440,6 +441,7 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
         session_usage=session_usage,
         turn_usage=second_turn_usage,
     )
+    assert provider.get_conversation_checkpoint() == "resp_2"
 
     assert first.response_id == "resp_1"
     assert second.response_id == "resp_2"

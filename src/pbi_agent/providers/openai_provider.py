@@ -64,6 +64,7 @@ class OpenAIProvider(Provider):
         self.refresh_tools()
         self._instructions = system_prompt or get_system_prompt()
         self._previous_response_id: str | None = None
+        self._branch_response_id: str | None = None
 
     @property
     def settings(self) -> Settings:
@@ -71,9 +72,10 @@ class OpenAIProvider(Provider):
 
     def set_previous_response_id(self, response_id: str | None) -> None:
         self._previous_response_id = response_id
+        self._branch_response_id = response_id
 
     def get_conversation_checkpoint(self) -> str | None:
-        return self._previous_response_id
+        return self._branch_response_id
 
     def connect(self) -> None:
         if not self._settings.api_key:
@@ -87,6 +89,7 @@ class OpenAIProvider(Provider):
 
     def reset_conversation(self) -> None:
         self._previous_response_id = None
+        self._branch_response_id = None
 
     def set_system_prompt(self, system_prompt: str) -> None:
         self._instructions = system_prompt
@@ -125,6 +128,9 @@ class OpenAIProvider(Provider):
             display=display,
         )
         self._previous_response_id = result.response_id
+        if not result.has_tool_calls:
+            # Only completed assistant responses are safe to branch from.
+            self._branch_response_id = result.response_id
         session_usage.add(result.usage)
         turn_usage.add(result.usage)
         display.session_usage(session_usage)

@@ -252,6 +252,7 @@ def test_google_request_turn_reuses_previous_interaction_id(monkeypatch) -> None
         session_usage=session_usage,
         turn_usage=first_turn_usage,
     )
+    assert provider.get_conversation_checkpoint() is None
 
     second_turn_usage = TokenUsage(model=DEFAULT_GOOGLE_MODEL)
     second = provider.request_turn(
@@ -267,6 +268,7 @@ def test_google_request_turn_reuses_previous_interaction_id(monkeypatch) -> None
         session_usage=session_usage,
         turn_usage=second_turn_usage,
     )
+    assert provider.get_conversation_checkpoint() == "int_2"
 
     assert first.response_id == "int_1"
     assert second.response_id == "int_2"
