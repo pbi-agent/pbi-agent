@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, closestCenter, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createTask, deleteTask, fetchTasks, runTask, updateTask } from "../../api";
 import type { TaskRecord } from "../../types";
@@ -7,6 +7,7 @@ import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { EmptyState } from "../shared/EmptyState";
 import { StageColumn } from "./StageColumn";
 import { TaskModal, type EditableTask } from "./TaskModal";
+import { TaskCardContent } from "./TaskCard";
 
 const BOARD_STAGES = ["backlog", "plan", "processing", "review"] as const;
 
@@ -14,6 +15,7 @@ export function BoardPage() {
   const client = useQueryClient();
   const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
   const [editingTask, setEditingTask] = useState<EditableTask | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   const createTaskMutation = useMutation({
     mutationFn: createTask,
@@ -45,13 +47,24 @@ export function BoardPage() {
     [tasks],
   );
 
+  const activeTask = activeDragId ? tasks.find((t) => t.task_id === activeDragId) : undefined;
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
     const taskId = String(event.active.id);
     const overStage = event.over?.data.current?.stage as TaskRecord["stage"] | undefined;
     if (!overStage || overStage === "processing") return;
     const task = tasks.find((t) => t.task_id === taskId);
     if (!task || task.stage === overStage) return;
     updateTaskMutation.mutate({ taskId, payload: { stage: overStage } });
+  };
+
+  const handleDragCancel = () => {
+    setActiveDragId(null);
   };
 
   const openNewTask = () =>
@@ -134,7 +147,12 @@ export function BoardPage() {
           }
         />
       ) : (
-        <DndContext onDragEnd={handleDragEnd}>
+        <DndContext
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
           <div className="board-grid">
             {BOARD_STAGES.map((stage) => (
               <StageColumn
@@ -147,6 +165,13 @@ export function BoardPage() {
               />
             ))}
           </div>
+          <DragOverlay dropAnimation={null}>
+            {activeTask ? (
+              <article className="task-card task-card--overlay">
+                <TaskCardContent task={activeTask} />
+              </article>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
 
