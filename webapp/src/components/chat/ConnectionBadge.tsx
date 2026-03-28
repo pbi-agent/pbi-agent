@@ -2,7 +2,7 @@ export function ConnectionBadge({
   connection,
 }: {
   connection: "disconnected" | "connecting" | "connected";
-}): JSX.Element {
+}) {
   const label =
     connection === "connected" ? "Connected"
     : connection === "connecting" ? "Connecting..."

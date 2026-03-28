@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useShallow } from "zustand/react/shallow";
 import {
   createChatSession,
   fetchSessions,
@@ -18,26 +19,42 @@ export function ChatPage({
   workspaceRoot,
 }: {
   workspaceRoot: string | undefined;
-}): JSX.Element {
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const liveSessionId = useChatStore((s) => s.liveSessionId);
+  const {
+    liveSessionId,
+    connection,
+    inputEnabled,
+    waitMessage,
+    sessionUsage,
+    turnUsage,
+    sessionEnded,
+    fatalError,
+    items,
+    subAgents,
+  } = useChatStore(
+    useShallow((s) => ({
+      liveSessionId: s.liveSessionId,
+      connection: s.connection,
+      inputEnabled: s.inputEnabled,
+      waitMessage: s.waitMessage,
+      sessionUsage: s.sessionUsage,
+      turnUsage: s.turnUsage,
+      sessionEnded: s.sessionEnded,
+      fatalError: s.fatalError,
+      items: s.items,
+      subAgents: s.subAgents,
+    })),
+  );
+
   const switchLiveSession = useChatStore((s) => s.switchLiveSession);
   const clearTimeline = useChatStore((s) => s.clearTimeline);
-  const connection = useChatStore((s) => s.connection);
-  const inputEnabled = useChatStore((s) => s.inputEnabled);
-  const waitMessage = useChatStore((s) => s.waitMessage);
-  const sessionUsage = useChatStore((s) => s.sessionUsage);
-  const turnUsage = useChatStore((s) => s.turnUsage);
-  const sessionEnded = useChatStore((s) => s.sessionEnded);
-  const fatalError = useChatStore((s) => s.fatalError);
-  const items = useChatStore((s) => s.items);
-  const subAgents = useChatStore((s) => s.subAgents);
 
   const sessionsQuery = useQuery({
     queryKey: ["sessions"],
     queryFn: fetchSessions,
-    refetchInterval: 12000,
+    refetchInterval: 12_000,
   });
 
   const createSessionMutation = useMutation({
@@ -61,15 +78,16 @@ export function ChatPage({
   });
 
   const startedRef = useRef(false);
+  const mutateRef = useRef(createSessionMutation.mutate);
+  mutateRef.current = createSessionMutation.mutate;
+
   useLiveChatEvents(liveSessionId);
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    createSessionMutation.mutate(
-      liveSessionId ? { live_session_id: liveSessionId } : {},
-    );
-  }, [createSessionMutation, liveSessionId]);
+    mutateRef.current(liveSessionId ? { live_session_id: liveSessionId } : {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (text: string, imagePaths: string[]) => {
     await sendInputMutation.mutateAsync({ text, image_paths: imagePaths });

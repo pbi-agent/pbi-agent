@@ -45,6 +45,15 @@ def test_bootstrap_endpoint_returns_workspace_metadata() -> None:
     assert payload["board_stages"] == ["backlog", "plan", "processing", "review"]
 
 
+def test_sessions_endpoint_rejects_invalid_limit() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get("/api/sessions", params={"limit": 0})
+
+    assert response.status_code == 422
+
+
 def test_task_creation_is_visible_on_app_event_stream() -> None:
     app = create_app(_settings())
 
@@ -60,6 +69,18 @@ def test_task_creation_is_visible_on_app_event_stream() -> None:
 
     assert event["type"] == "task_updated"
     assert event["payload"]["task"]["title"] == "Task A"
+
+
+def test_task_creation_rejects_blank_title() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/tasks",
+            json={"title": "   ", "prompt": "Investigate the PBIP model"},
+        )
+
+    assert response.status_code == 422
 
 
 def test_chat_session_stream_replays_state_events() -> None:
@@ -93,6 +114,7 @@ def test_event_stream_treats_cancelled_error_as_clean_disconnect() -> None:
     class FakeWebSocket:
         def __init__(self) -> None:
             self.accepted = False
+            self.app = app
             self.closed_code = None
             self.sent: list[dict[str, object]] = []
 
@@ -114,7 +136,9 @@ def test_event_stream_treats_cancelled_error_as_clean_disconnect() -> None:
             raise asyncio.CancelledError()
 
     subscriber_id = "subscriber-1"
-    with patch.object(stream, "subscribe", return_value=(subscriber_id, CancellingQueue())):
+    with patch.object(
+        stream, "subscribe", return_value=(subscriber_id, CancellingQueue())
+    ):
         with patch.object(stream, "unsubscribe") as mock_unsubscribe:
             asyncio.run(endpoint(fake_websocket, "app"))
 

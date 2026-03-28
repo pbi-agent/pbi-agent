@@ -1,8 +1,6 @@
 ---
 title: 'Introduction'
 description: 'What pbi-agent is, how it is structured, and which providers it supports.'
-layout: doc
-outline: [2, 3]
 ---
 
 # What Is pbi-agent?

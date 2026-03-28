@@ -1,8 +1,6 @@
 ---
 title: 'Providers'
 description: 'Provider selection, key resolution, endpoint overrides, history mode, and examples for every supported backend.'
-layout: doc
-outline: [2, 3]
 ---
 
 # Provider Configuration

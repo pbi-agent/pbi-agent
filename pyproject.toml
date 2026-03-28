@@ -33,6 +33,9 @@ packages = ["src/pbi_agent"]
 # tracked by git (hatchling default behaviour).  Only add force-include
 # entries for assets that live *outside* the packages listed above.
 
+[tool.fastapi]
+entrypoint = "pbi_agent.web.serve:app"
+
 [tool.uv]
 default-groups = ["dev"]
 

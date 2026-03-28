@@ -448,7 +448,10 @@ class ChatApp(App):
                     title = title[:21] + "..."
                 updated = s.updated_at[:10]
                 items.append(
-                    (s.session_id, f"{escape_markup_text(title)}\n[dim]{escape_markup_text(s.provider)} · {updated}[/dim]")
+                    (
+                        s.session_id,
+                        f"{escape_markup_text(title)}\n[dim]{escape_markup_text(s.provider)} · {updated}[/dim]",
+                    )
                 )
             sidebar.refresh_sessions(items)
         except Exception:

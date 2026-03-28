@@ -10,7 +10,7 @@ import { TaskModal, type EditableTask } from "./TaskModal";
 
 const BOARD_STAGES = ["backlog", "plan", "processing", "review"] as const;
 
-export function BoardPage(): JSX.Element {
+export function BoardPage() {
   const client = useQueryClient();
   const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
   const [editingTask, setEditingTask] = useState<EditableTask | null>(null);
@@ -102,7 +102,7 @@ export function BoardPage(): JSX.Element {
             <h2 className="board-layout__title">Board</h2>
           </div>
         </div>
-        <div style={{ display: "flex", justifyContent: "center", padding: 64 }}>
+        <div className="center-spinner">
           <LoadingSpinner size="lg" />
         </div>
       </section>

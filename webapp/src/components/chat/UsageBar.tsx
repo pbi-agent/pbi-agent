@@ -11,7 +11,7 @@ export function UsageBar({
 }: {
   sessionUsage: UsagePayload | null;
   turnUsage: { usage: UsagePayload; elapsedSeconds?: number } | null;
-}): JSX.Element {
+}) {
   return (
     <div className="usage-bar">
       <div className="usage-bar__item">

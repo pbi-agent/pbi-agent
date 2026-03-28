@@ -21,7 +21,7 @@ export function StageColumn({
   onEdit: (task: TaskRecord) => void;
   onDelete: (taskId: string) => void;
   onRun: (taskId: string) => void;
-}): JSX.Element {
+}) {
   const { isOver, setNodeRef } = useDroppable({
     id: `stage:${stage}`,
     data: { stage },

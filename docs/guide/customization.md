@@ -1,8 +1,6 @@
 ---
 title: 'Customization'
 description: 'Override the agent system prompt and add project-specific rules using INSTRUCTIONS.md and AGENTS.md.'
-layout: doc
-outline: [2, 3]
 ---
 
 # Customization

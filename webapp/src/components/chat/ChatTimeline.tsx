@@ -11,7 +11,7 @@ export function ChatTimeline({
   items: TimelineItem[];
   subAgents: Record<string, { title: string; status: string }>;
   connection: "disconnected" | "connecting" | "connected";
-}): JSX.Element {
+}) {
   const { containerRef, showNewMessages, scrollToBottom } = useAutoScroll([items.length]);
 
   if (items.length === 0 && connection === "connected") {

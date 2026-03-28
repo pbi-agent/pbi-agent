@@ -154,6 +154,44 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Center spinner (lazy loading / board loading) */
+.center-spinner {
+  display: flex;
+  justify-content: center;
+  padding: var(--sp-16);
+}
+
+/* Error boundary */
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  height: 100vh;
+  padding: var(--sp-6);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.error-boundary h2 {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+  color: var(--color-text);
+}
+
+.error-boundary pre {
+  max-width: 480px;
+  padding: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-error);
+  background: var(--color-surface-1);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
 /* Utility classes */
 .text-mono {
   font-family: var(--font-mono);

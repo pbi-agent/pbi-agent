@@ -12,7 +12,7 @@ export function TaskCard({
   onEdit: () => void;
   onDelete: () => void;
   onRun: () => void;
-}): JSX.Element {
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.task_id,
     disabled: task.stage === "processing",

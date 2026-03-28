@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export function EmptyState({
   title,
   description,
@@ -5,8 +7,8 @@ export function EmptyState({
 }: {
   title: string;
   description?: string;
-  action?: JSX.Element;
-}): JSX.Element {
+  action?: ReactNode;
+}) {
   return (
     <div className="empty-state">
       <div className="empty-state__title">{title}</div>

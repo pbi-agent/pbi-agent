@@ -10,7 +10,7 @@ export function TimelineEntry({
   item: TimelineItem;
   subAgentTitle?: string;
   subAgentStatus?: string;
-}): JSX.Element {
+}) {
   const [collapsed, setCollapsed] = useState(true);
 
   const subAgentBanner =

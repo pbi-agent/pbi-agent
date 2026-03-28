@@ -2,7 +2,7 @@ export function StatusPill({
   status,
 }: {
   status: string;
-}): JSX.Element {
+}) {
   const modifier =
     status === "running" ? "running"
     : status === "completed" ? "completed"

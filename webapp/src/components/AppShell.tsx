@@ -1,17 +1,24 @@
+import { lazy, Suspense } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchBootstrap } from "../api";
 import { useTaskEvents } from "../hooks/useTaskEvents";
-import { ChatPage } from "./chat/ChatPage";
-import { BoardPage } from "./board/BoardPage";
+import { LoadingSpinner } from "./shared/LoadingSpinner";
 
-export function AppShell(): JSX.Element {
+const ChatPage = lazy(() =>
+  import("./chat/ChatPage").then((m) => ({ default: m.ChatPage })),
+);
+const BoardPage = lazy(() =>
+  import("./board/BoardPage").then((m) => ({ default: m.BoardPage })),
+);
+
+export function AppShell() {
   useTaskEvents();
 
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap"],
     queryFn: fetchBootstrap,
-    staleTime: 30000,
+    staleTime: 30_000,
   });
 
   const bootstrap = bootstrapQuery.data;
@@ -33,10 +40,12 @@ export function AppShell(): JSX.Element {
       </header>
 
       <main className="app-main">
-        <Routes>
-          <Route path="/" element={<ChatPage workspaceRoot={bootstrap?.workspace_root} />} />
-          <Route path="/board" element={<BoardPage />} />
-        </Routes>
+        <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
+          <Routes>
+            <Route path="/" element={<ChatPage workspaceRoot={bootstrap?.workspace_root} />} />
+            <Route path="/board" element={<BoardPage />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   );

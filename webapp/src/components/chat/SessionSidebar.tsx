@@ -19,7 +19,7 @@ export function SessionSidebar({
   onResumeSession: (sessionId: string) => void;
   onToggle: () => void;
   isOpen: boolean;
-}): JSX.Element {
+}) {
   if (!isOpen) {
     return (
       <div className="sidebar__collapsed">
@@ -47,7 +47,7 @@ export function SessionSidebar({
     <>
       <div className="sidebar__header">
         <span className="sidebar__title">Sessions</span>
-        <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+        <div className="sidebar__header-actions">
           <button type="button" className="btn btn--primary btn--sm" onClick={onNewSession}>
             + New
           </button>

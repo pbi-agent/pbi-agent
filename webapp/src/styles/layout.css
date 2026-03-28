@@ -93,6 +93,12 @@
   letter-spacing: 0.01em;
 }
 
+/* ── Sidebar header actions ── */
+.sidebar__header-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
 /* ── Main content area ── */
 .app-main {
   flex: 1;

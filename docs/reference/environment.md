@@ -1,8 +1,6 @@
 ---
 title: 'Environment Variables'
 description: 'Runtime configuration variables and provider-specific key fallbacks for pbi-agent.'
-layout: doc
-outline: [2, 3]
 ---
 
 # Environment Variables

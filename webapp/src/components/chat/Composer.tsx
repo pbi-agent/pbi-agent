@@ -10,7 +10,7 @@ export function Composer({
   sessionEnded: boolean;
   liveSessionId: string | null;
   onSubmit: (text: string, imagePaths: string[]) => Promise<void>;
-}): JSX.Element {
+}) {
   const [input, setInput] = useState("");
   const [imagePaths, setImagePaths] = useState("");
   const [showImages, setShowImages] = useState(false);

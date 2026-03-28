@@ -30,6 +30,7 @@ features:
 
 ## Demo
 
+<ClientOnly>
 <div style="position: relative; width: 100%; padding-bottom: 56.25%; margin: 1.5rem 0;">
   <iframe
     src="https://www.youtube.com/embed/vw3RVwbILbE"
@@ -40,6 +41,7 @@ features:
     allowfullscreen
   ></iframe>
 </div>
+</ClientOnly>
 
 ## Start Here
 
@@ -49,17 +51,17 @@ Running `pbi-agent` without a command defaults to `pbi-agent web`, so a bare inv
 
 ### 1. Install uv
 
-macOS / Linux:
+::: code-group
 
-```bash
+```bash [macOS / Linux]
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Windows (PowerShell):
-
-```powershell
+```powershell [Windows]
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
+
+:::
 
 ### 2. Install pbi-agent
 

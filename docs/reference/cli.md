@@ -1,8 +1,6 @@
 ---
 title: 'CLI Reference'
 description: 'Commands, global options, defaults, and audit behavior for pbi-agent.'
-layout: doc
-outline: [2, 3]
 ---
 
 # CLI Reference

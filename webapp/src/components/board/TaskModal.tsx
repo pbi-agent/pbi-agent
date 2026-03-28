@@ -21,7 +21,7 @@ export function TaskModal({
   onChange: (updates: Partial<EditableTask>) => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
-}): JSX.Element {
+}) {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
