@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import threading
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -49,11 +50,12 @@ CREATE INDEX IF NOT EXISTS idx_sessions_directory ON sessions(directory);
 CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS messages (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id  TEXT NOT NULL REFERENCES sessions(session_id),
-    role        TEXT NOT NULL,
-    content     TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id             TEXT NOT NULL REFERENCES sessions(session_id),
+    role                   TEXT NOT NULL,
+    content                TEXT NOT NULL DEFAULT '',
+    image_attachments_json TEXT NOT NULL DEFAULT '[]',
+    created_at             TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, id);
 
@@ -101,6 +103,16 @@ class MessageRecord:
     role: str
     content: str
     created_at: str
+    image_attachments: list["MessageImageAttachment"] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class MessageImageAttachment:
+    upload_id: str
+    name: str
+    mime_type: str
+    byte_count: int
+    preview_url: str
 
 
 @dataclass(slots=True)
@@ -132,6 +144,63 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _serialize_image_attachments(
+    image_attachments: list[MessageImageAttachment] | None,
+) -> str:
+    if not image_attachments:
+        return "[]"
+    return json.dumps(
+        [
+            {
+                "upload_id": attachment.upload_id,
+                "name": attachment.name,
+                "mime_type": attachment.mime_type,
+                "byte_count": attachment.byte_count,
+                "preview_url": attachment.preview_url,
+            }
+            for attachment in image_attachments
+        ]
+    )
+
+
+def _deserialize_image_attachments(raw_value: object) -> list[MessageImageAttachment]:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return []
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, list):
+        return []
+    attachments: list[MessageImageAttachment] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        upload_id = item.get("upload_id")
+        name = item.get("name")
+        mime_type = item.get("mime_type")
+        preview_url = item.get("preview_url")
+        byte_count = item.get("byte_count")
+        if not all(
+            isinstance(value, str) and value for value in (upload_id, name, mime_type)
+        ):
+            continue
+        if not isinstance(preview_url, str):
+            continue
+        if not isinstance(byte_count, int):
+            byte_count = 0
+        attachments.append(
+            MessageImageAttachment(
+                upload_id=upload_id,
+                name=name,
+                mime_type=mime_type,
+                byte_count=byte_count,
+                preview_url=preview_url,
+            )
+        )
+    return attachments
+
+
 class SessionStore:
     """Thread-safe SQLite session store."""
 
@@ -146,6 +215,7 @@ class SessionStore:
         self._lock = threading.Lock()
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
+        self._ensure_schema()
 
     def __enter__(self) -> SessionStore:
         return self
@@ -155,6 +225,18 @@ class SessionStore:
 
     def close(self) -> None:
         self._conn.close()
+
+    def _ensure_schema(self) -> None:
+        message_columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        if "image_attachments_json" not in message_columns:
+            self._conn.execute(
+                "ALTER TABLE messages "
+                "ADD COLUMN image_attachments_json TEXT NOT NULL DEFAULT '[]'"
+            )
+            self._conn.commit()
 
     def create_session(
         self,
@@ -276,13 +358,22 @@ class SessionStore:
         session_id: str,
         role: str,
         content: str,
+        *,
+        image_attachments: list[MessageImageAttachment] | None = None,
     ) -> int:
         now = _now_iso()
         with self._lock:
             cursor = self._conn.execute(
-                "INSERT INTO messages (session_id, role, content, created_at) "
-                "VALUES (?, ?, ?, ?)",
-                (session_id, role, content, now),
+                "INSERT INTO messages "
+                "(session_id, role, content, image_attachments_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    session_id,
+                    role,
+                    content,
+                    _serialize_image_attachments(image_attachments),
+                    now,
+                ),
             )
             self._conn.commit()
         return cursor.lastrowid  # type: ignore[return-value]
@@ -293,7 +384,22 @@ class SessionStore:
                 "SELECT * FROM messages WHERE session_id = ? ORDER BY id ASC",
                 (session_id,),
             ).fetchall()
-        return [MessageRecord(**dict(r)) for r in rows]
+        messages: list[MessageRecord] = []
+        for row in rows:
+            data = dict(row)
+            messages.append(
+                MessageRecord(
+                    id=data["id"],
+                    session_id=data["session_id"],
+                    role=data["role"],
+                    content=data["content"],
+                    image_attachments=_deserialize_image_attachments(
+                        data.get("image_attachments_json")
+                    ),
+                    created_at=data["created_at"],
+                )
+            )
+        return messages
 
     # -- kanban tasks -----------------------------------------------------
 

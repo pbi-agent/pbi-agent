@@ -11,11 +11,15 @@ from typing import Any
 from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.agent.session import run_chat_loop
 from pbi_agent.config import Settings
+from pbi_agent.media import load_workspace_image
+from pbi_agent.models.messages import ImageAttachment
+from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.session_store import (
     KANBAN_RUN_STATUS_COMPLETED,
     KANBAN_RUN_STATUS_FAILED,
     KANBAN_STAGE_BACKLOG,
     KanbanTaskRecord,
+    MessageImageAttachment,
     SessionRecord,
     SessionStore,
 )
@@ -23,6 +27,14 @@ from pbi_agent.task_runner import run_single_turn_in_directory
 from pbi_agent.ui.formatting import shorten
 from pbi_agent.ui.input_mentions import MentionSearchResult, WorkspaceFileIndex
 from pbi_agent.web.display import KanbanTaskDisplay, WebDisplay
+from pbi_agent.web.uploads import (
+    StoredImageUpload,
+    delete_uploaded_images,
+    load_uploaded_image,
+    load_uploaded_image_record,
+    store_image_attachment,
+    store_uploaded_image_bytes,
+)
 
 
 APP_EVENT_STREAM_ID = "app"
@@ -66,6 +78,32 @@ def _serialize_task(record: KanbanTaskRecord) -> dict[str, Any]:
         "updated_at": record.updated_at,
         "last_run_started_at": record.last_run_started_at,
         "last_run_finished_at": record.last_run_finished_at,
+    }
+
+
+def _preview_url(upload_id: str) -> str:
+    return f"/api/chat/uploads/{upload_id}"
+
+
+def _message_image_attachment(record: StoredImageUpload) -> MessageImageAttachment:
+    return MessageImageAttachment(
+        upload_id=record.upload_id,
+        name=record.name,
+        mime_type=record.mime_type,
+        byte_count=record.byte_count,
+        preview_url=_preview_url(record.upload_id),
+    )
+
+
+def _message_image_payload(
+    attachment: MessageImageAttachment,
+) -> dict[str, Any]:
+    return {
+        "upload_id": attachment.upload_id,
+        "name": attachment.name,
+        "mime_type": attachment.mime_type,
+        "byte_count": attachment.byte_count,
+        "preview_url": attachment.preview_url,
     }
 
 
@@ -163,6 +201,7 @@ class WebSessionManager:
             "provider": self._settings.provider,
             "model": self._settings.model,
             "reasoning_effort": self._settings.reasoning_effort,
+            "supports_image_inputs": provider_supports_images(self._settings.provider),
             "sessions": self.list_sessions(),
             "tasks": self.list_tasks(),
             "live_sessions": [
@@ -259,13 +298,44 @@ class WebSessionManager:
                 if updated is not None:
                     updated_tasks.append(updated)
 
+            upload_ids = [
+                attachment.upload_id
+                for message in store.list_messages(session_id)
+                for attachment in message.image_attachments
+            ]
+
             deleted = store.delete_session(session_id)
 
         if not deleted:
             raise KeyError(session_id)
 
+        delete_uploaded_images(upload_ids)
+
         for task in updated_tasks:
             self._publish_task_updated(task)
+
+    def upload_chat_images(
+        self,
+        live_session_id: str,
+        *,
+        files: list[tuple[str, bytes]],
+    ) -> list[dict[str, Any]]:
+        live_session = self._require_live_session(live_session_id)
+        if live_session.status == "ended":
+            raise RuntimeError("Live chat session has already ended.")
+        if not provider_supports_images(self._settings.provider):
+            raise ValueError("Image inputs are not supported by the current provider.")
+
+        attachments: list[dict[str, Any]] = []
+        for original_name, raw_bytes in files:
+            safe_name = (
+                original_name or "pasted-image.png"
+            ).strip() or "pasted-image.png"
+            record = store_uploaded_image_bytes(raw_bytes=raw_bytes, name=safe_name)
+            attachments.append(
+                _message_image_payload(_message_image_attachment(record))
+            )
+        return attachments
 
     def submit_chat_input(
         self,
@@ -274,12 +344,30 @@ class WebSessionManager:
         text: str,
         file_paths: list[str] | None = None,
         image_paths: list[str] | None = None,
+        image_upload_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
             raise RuntimeError("Live chat session has already ended.")
         message_text = text.strip()
-        if message_text:
+        if (image_paths or image_upload_ids) and not provider_supports_images(
+            self._settings.provider
+        ):
+            raise ValueError("Image inputs are not supported by the current provider.")
+        resolved_images: list[ImageAttachment] = []
+        message_image_attachments: list[MessageImageAttachment] = []
+        for image_path in image_paths or []:
+            image = load_workspace_image(self._workspace_root, image_path)
+            resolved_images.append(image)
+            message_image_attachments.append(
+                _message_image_attachment(store_image_attachment(image))
+            )
+        for upload_id in image_upload_ids or []:
+            resolved_images.append(load_uploaded_image(upload_id))
+            message_image_attachments.append(
+                _message_image_attachment(load_uploaded_image_record(upload_id))
+            )
+        if message_text or message_image_attachments:
             live_session.event_stream.publish(
                 "message_added",
                 {
@@ -287,10 +375,18 @@ class WebSessionManager:
                     "role": "user",
                     "content": message_text,
                     "file_paths": list(file_paths or []),
+                    "image_attachments": [
+                        _message_image_payload(attachment)
+                        for attachment in message_image_attachments
+                    ],
                     "markdown": False,
                 },
             )
-        live_session.display.submit_input(message_text, image_paths=image_paths or None)
+        live_session.display.submit_input(
+            message_text,
+            images=resolved_images or None,
+            image_attachments=message_image_attachments or None,
+        )
         return self._serialize_live_session(live_session)
 
     def request_new_chat(self, live_session_id: str) -> dict[str, Any]:

@@ -1,4 +1,5 @@
 import {
+  type ClipboardEvent,
   forwardRef,
   useCallback,
   useEffect,
@@ -19,8 +20,10 @@ interface ComposerProps {
   inputEnabled: boolean;
   sessionEnded: boolean;
   liveSessionId: string | null;
+  supportsImageInputs: boolean;
   waitMessage: string | null;
-  onSubmit: (text: string, imagePaths: string[]) => Promise<void>;
+  isSubmitting: boolean;
+  onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
 }
 
 type ActiveCompletionRange = {
@@ -43,7 +46,15 @@ type CompletionItem =
       command: SlashCommandItem;
     };
 
+type PendingImage = {
+  id: string;
+  file: File;
+  previewUrl: string;
+  source: "picker" | "clipboard";
+};
+
 const EMAIL_PREFIX_PATTERN = /[a-zA-Z0-9._%+-]$/;
+const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function parseActiveMention(
   text: string,
@@ -120,16 +131,23 @@ function replaceTextRange(
   };
 }
 
+function imageFingerprint(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer({
   inputEnabled,
   sessionEnded,
   liveSessionId,
+  supportsImageInputs,
   waitMessage,
+  isSubmitting,
   onSubmit,
 }, ref) {
   const [input, setInput] = useState("");
-  const [imagePaths, setImagePaths] = useState("");
-  const [showImages, setShowImages] = useState(false);
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [cursorIndex, setCursorIndex] = useState(0);
   const [completionMode, setCompletionMode] = useState<CompletionMode | null>(null);
   const [completionItems, setCompletionItems] = useState<CompletionItem[]>([]);
@@ -138,7 +156,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [completionSelectedIndex, setCompletionSelectedIndex] = useState(0);
   const completionRequestIdRef = useRef(0);
+  const pendingImagesRef = useRef<PendingImage[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
@@ -151,7 +172,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, []);
 
-  const canSend = Boolean(liveSessionId) && inputEnabled && !sessionEnded;
+  const canSend =
+    Boolean(liveSessionId) && inputEnabled && !sessionEnded && !isSubmitting;
   const activeSlashCommand = parseActiveSlashCommand(input, cursorIndex);
   const activeMention = activeSlashCommand
     ? null
@@ -255,26 +277,131 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     [applyInputState, buildMentionReplacement, buildSlashReplacement, cursorIndex, input],
   );
 
+  const appendFiles = useCallback(
+    (files: File[], source: PendingImage["source"]) => {
+      if (!supportsImageInputs) {
+        setAttachmentMessage("The current provider does not support image inputs.");
+        return;
+      }
+
+      const nextFiles = files.filter((file) => SUPPORTED_IMAGE_TYPES.has(file.type));
+      if (nextFiles.length === 0) {
+        setAttachmentMessage("Only PNG, JPEG, and WEBP images are supported.");
+        return;
+      }
+
+      setPendingImages((current) => {
+        const seen = new Set(current.map((item) => imageFingerprint(item.file)));
+        const additions = nextFiles
+          .filter((file) => {
+            const fingerprint = imageFingerprint(file);
+            if (seen.has(fingerprint)) {
+              return false;
+            }
+            seen.add(fingerprint);
+            return true;
+          })
+          .map((file) => ({
+            id: `${source}-${crypto.randomUUID()}`,
+            file,
+            previewUrl: URL.createObjectURL(file),
+            source,
+          }));
+        if (additions.length === 0) {
+          return current;
+        }
+        return [...current, ...additions];
+      });
+      setAttachmentMessage(null);
+    },
+    [supportsImageInputs],
+  );
+
+  useEffect(() => {
+    pendingImagesRef.current = pendingImages;
+  }, [pendingImages]);
+
+  useEffect(() => {
+    return () => {
+      for (const image of pendingImagesRef.current) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+    };
+  }, []);
+
+  const clearPendingImages = useCallback(() => {
+    setPendingImages((current) => {
+      for (const image of current) {
+        URL.revokeObjectURL(image.previewUrl);
+      }
+      return [];
+    });
+  }, []);
+
+  const removePendingImage = useCallback((imageId: string) => {
+    setPendingImages((current) => {
+      const target = current.find((image) => image.id === imageId);
+      if (target) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return current.filter((image) => image.id !== imageId);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!actionMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const menu = actionMenuRef.current;
+      if (!menu || menu.contains(event.target as Node)) {
+        return;
+      }
+      setActionMenuOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [actionMenuOpen]);
+
+  useEffect(() => {
+    if (!canSend) {
+      setActionMenuOpen(false);
+    }
+  }, [canSend]);
+
   const submitValue = useCallback(
-    async (textValue: string, imageValue: string) => {
+    async (textValue: string) => {
       const trimmed = textValue.trim();
-      if (!trimmed && !imageValue.trim()) return;
-      await onSubmit(
-        trimmed,
-        imageValue
-          .split("\n")
-          .map((value) => value.trim())
-          .filter(Boolean),
-      );
-      setInput("");
-      setImagePaths("");
-      setCursorIndex(0);
-      closeCompletions();
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto";
+      if (!trimmed && pendingImages.length === 0) return;
+      if (trimmed.startsWith("/") && pendingImages.length > 0) {
+        setAttachmentMessage("Slash commands cannot include image attachments.");
+        return;
+      }
+
+      try {
+        await onSubmit({
+          text: trimmed,
+          images: pendingImages.map((image) => image.file),
+        });
+        clearPendingImages();
+        setInput("");
+        setAttachmentMessage(null);
+        setCursorIndex(0);
+        closeCompletions();
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+        }
+      } catch (error) {
+        setAttachmentMessage(
+          error instanceof Error ? error.message : "Unable to send the message.",
+        );
       }
     },
-    [closeCompletions, onSubmit],
+    [clearPendingImages, closeCompletions, onSubmit, pendingImages],
   );
 
   useEffect(() => {
@@ -343,7 +470,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const handleSubmit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
-    await submitValue(input, imagePaths);
+    await submitValue(input);
   };
 
   const handleSlashEnter = useCallback(async () => {
@@ -361,7 +488,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         currentCursor,
       );
       if (nextState) {
-        await submitValue(nextState.nextInput, "");
+        await submitValue(nextState.nextInput);
         return;
       }
     }
@@ -377,7 +504,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             currentCursor,
           );
           if (nextState) {
-            await submitValue(nextState.nextInput, "");
+            await submitValue(nextState.nextInput);
             return;
           }
         }
@@ -386,7 +513,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       }
     }
 
-    await submitValue(currentText, "");
+    await submitValue(currentText);
   }, [
     activeSlashCommand,
     buildSlashReplacement,
@@ -441,17 +568,32 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      void submitValue(input, imagePaths);
+      void submitValue(input);
     }
   };
+
+  const handleTextareaPaste = useCallback(
+    (event: ClipboardEvent<HTMLTextAreaElement>) => {
+      const clipboardImages = Array.from(event.clipboardData.items)
+        .filter((item) => item.kind === "file")
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+      if (clipboardImages.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      appendFiles(clipboardImages, "clipboard");
+    },
+    [appendFiles],
+  );
 
   const statusClass = sessionEnded
     ? "composer__status composer__status--ended"
     : waitMessage
       ? "composer__status composer__status--waiting"
-    : inputEnabled
-      ? "composer__status composer__status--ready"
-      : "composer__status";
+      : inputEnabled
+        ? "composer__status composer__status--ready"
+        : "composer__status";
   const showCompletionStatus = completionLoading && completionItems.length > 0;
   const showCompletionEmptyState =
     completionItems.length === 0 &&
@@ -469,9 +611,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const statusText = sessionEnded
     ? "Session ended"
     : waitMessage ?? (inputEnabled ? "Ready" : "Waiting for agent...");
+  const attachmentStatus =
+    attachmentMessage ??
+    (pendingImages.length > 0
+      ? `${pendingImages.length} image${pendingImages.length === 1 ? "" : "s"} attached`
+      : null);
 
   return (
     <form className="composer" onSubmit={handleSubmit}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = event.target.files ? Array.from(event.target.files) : [];
+          appendFiles(files, "picker");
+          event.target.value = "";
+        }}
+      />
+
       <div className="composer__input-row">
         <div className="composer__textarea-wrap">
           <textarea
@@ -486,6 +646,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             onClick={syncCursor}
             onKeyDown={handleKeyDown}
             onKeyUp={syncCursor}
+            onPaste={handleTextareaPaste}
             onSelect={syncCursor}
             placeholder={sessionEnded ? "Start a new session to continue..." : "Send a message..."}
             rows={1}
@@ -545,6 +706,45 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         </div>
       ) : null}
 
+      {pendingImages.length > 0 ? (
+        <div className="composer__attachments" aria-label="Pending image attachments">
+          {pendingImages.map((image) => (
+            <div key={image.id} className="composer__attachment-card">
+              <img
+                src={image.previewUrl}
+                alt={image.file.name}
+                className="composer__attachment-preview"
+              />
+              <div className="composer__attachment-copy">
+                <span className="composer__attachment-name" title={image.file.name}>
+                  {image.file.name}
+                </span>
+                <span className="composer__attachment-meta">
+                  {Math.max(1, Math.round(image.file.size / 1024))} KB
+                </span>
+              </div>
+              <button
+                type="button"
+                className="composer__attachment-remove"
+                onClick={() => removePendingImage(image.id)}
+                aria-label={`Remove ${image.file.name}`}
+                disabled={!canSend}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {attachmentStatus ? (
+        <div
+          className={`composer__attachment-status ${attachmentMessage ? "composer__attachment-status--error" : ""}`}
+        >
+          {attachmentStatus}
+        </div>
+      ) : null}
+
       <div className="composer__footer">
         <span
           className={statusClass}
@@ -554,27 +754,54 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           {waitMessage ? <span className="composer__status-dot" aria-hidden="true" /> : null}
           <span className="composer__status-text">{statusText}</span>
         </span>
-        <button
-          type="button"
-          className="composer__attach-toggle"
-          onClick={() => setShowImages((prev) => !prev)}
-        >
-          {showImages ? "Hide images" : "+ Images"}
-        </button>
-      </div>
-
-      {showImages ? (
-        <div className="composer__image-input">
-          <textarea
-            className="composer__image-textarea"
-            value={imagePaths}
-            onChange={(event) => setImagePaths(event.target.value)}
-            placeholder="Image paths, one per line"
-            rows={2}
+        <div className="composer__action-menu" ref={actionMenuRef}>
+          <button
+            type="button"
+            className={`composer__action-trigger ${actionMenuOpen ? "composer__action-trigger--open" : ""}`}
+            onClick={() => setActionMenuOpen((current) => !current)}
             disabled={!canSend}
-          />
+            aria-haspopup="menu"
+            aria-expanded={actionMenuOpen}
+          >
+            <span className="composer__action-trigger-icon" aria-hidden="true">
+              +
+            </span>
+            <span>Actions</span>
+            <span className="composer__action-trigger-caret" aria-hidden="true">
+              ▾
+            </span>
+          </button>
+          {actionMenuOpen ? (
+            <div className="composer__action-popover" role="menu" aria-label="Input actions">
+              <button
+                type="button"
+                className="composer__action-item"
+                onClick={() => {
+                  setActionMenuOpen(false);
+                  fileInputRef.current?.click();
+                }}
+                disabled={!supportsImageInputs}
+                role="menuitem"
+              >
+                <span className="composer__action-item-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+                    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" />
+                    <circle cx="5.4" cy="5.4" r="1.1" fill="currentColor" stroke="none" />
+                    <path d="M3.75 11.2 6.7 8.35a1 1 0 0 1 1.38 0l1.35 1.28" />
+                    <path d="m8.9 10.1 1.35-1.3a1 1 0 0 1 1.41.03l1.59 1.67" />
+                  </svg>
+                </span>
+                <span className="composer__action-item-copy">
+                  <span className="composer__action-item-label">Image</span>
+                  <span className="composer__action-item-description">
+                    Upload from your device
+                  </span>
+                </span>
+              </button>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
     </form>
   );
 });

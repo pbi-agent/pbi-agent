@@ -131,10 +131,18 @@ class Display(DisplayProtocol):
     def bind_session(self, session_id: str | None) -> None:
         del session_id
 
-    def submit_input(self, value: str, *, image_paths: list[str] | None = None) -> None:
+    def submit_input(
+        self,
+        value: str,
+        *,
+        image_paths: list[str] | None = None,
+        images=None,
+        image_attachments=None,
+    ) -> None:
         queued: str | QueuedInput = value
         if image_paths:
             queued = QueuedInput(text=value, image_paths=list(image_paths))
+        del images, image_attachments
         self._input_queue.put(queued)
         self._input_event.set()
 

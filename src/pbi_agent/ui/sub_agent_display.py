@@ -126,8 +126,15 @@ class SubAgentDisplay(DisplayProtocol):
     def bind_session(self, session_id: str | None) -> None:
         del session_id
 
-    def submit_input(self, value: str, *, image_paths: list[str] | None = None) -> None:
-        del value, image_paths
+    def submit_input(
+        self,
+        value: str,
+        *,
+        image_paths: list[str] | None = None,
+        images=None,
+        image_attachments=None,
+    ) -> None:
+        del value, image_paths, images, image_attachments
 
     def request_new_chat(self) -> None:
         raise RuntimeError("Sub-agent display does not support interactive chat.")

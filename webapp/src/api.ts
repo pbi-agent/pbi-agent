@@ -2,6 +2,7 @@ import type {
   BootstrapPayload,
   ExpandedChatInput,
   FileMentionItem,
+  ImageAttachment,
   LiveSession,
   SessionRecord,
   SlashCommandItem,
@@ -9,11 +10,12 @@ import type {
 } from "./types";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers ?? {});
+  if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
+    headers,
     ...init,
   });
   if (!response.ok) {
@@ -89,7 +91,12 @@ export async function createChatSession(
 
 export async function submitChatInput(
   liveSessionId: string,
-  payload: { text: string; file_paths: string[]; image_paths: string[] },
+  payload: {
+    text: string;
+    file_paths: string[];
+    image_paths: string[];
+    image_upload_ids: string[];
+  },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
     `/api/chat/session/${liveSessionId}/input`,
@@ -99,6 +106,24 @@ export async function submitChatInput(
     },
   );
   return result.session;
+}
+
+export async function uploadChatImages(
+  liveSessionId: string,
+  files: File[],
+): Promise<ImageAttachment[]> {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+  const result = await requestJson<{ uploads: ImageAttachment[] }>(
+    `/api/chat/session/${liveSessionId}/images`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  return result.uploads;
 }
 
 export async function expandChatInput(text: string): Promise<ExpandedChatInput> {

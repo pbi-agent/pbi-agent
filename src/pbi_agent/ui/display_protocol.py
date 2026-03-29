@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from pbi_agent.models.messages import TokenUsage, WebSearchSource
-from pbi_agent.session_store import MessageRecord
+from pbi_agent.models.messages import ImageAttachment, TokenUsage, WebSearchSource
+from pbi_agent.session_store import MessageImageAttachment, MessageRecord
 from pbi_agent.ui.formatting import tool_group_class
 
 
@@ -20,6 +20,8 @@ class PendingToolGroupItem:
 class QueuedInput:
     text: str
     image_paths: list[str] = field(default_factory=list)
+    images: list[ImageAttachment] = field(default_factory=list)
+    image_attachments: list[MessageImageAttachment] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -69,7 +71,12 @@ class DisplayProtocol(Protocol):
     def request_shutdown(self) -> None: ...
 
     def submit_input(
-        self, value: str, *, image_paths: list[str] | None = None
+        self,
+        value: str,
+        *,
+        image_paths: list[str] | None = None,
+        images: list[ImageAttachment] | None = None,
+        image_attachments: list[MessageImageAttachment] | None = None,
     ) -> None: ...
 
     def request_new_chat(self) -> None: ...

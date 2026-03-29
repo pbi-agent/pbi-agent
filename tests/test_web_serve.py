@@ -10,6 +10,7 @@ from rich.console import Console
 from pbi_agent.branding import PBI_AGENT_NAME, PBI_AGENT_TAGLINE
 from pbi_agent.config import Settings
 from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
+from pbi_agent.ui.display_protocol import QueuedInput
 from pbi_agent.web.serve import PBIWebServer, create_app
 
 
@@ -42,6 +43,7 @@ def test_bootstrap_endpoint_returns_workspace_metadata() -> None:
     payload = response.json()
     assert payload["provider"] == "openai"
     assert payload["model"] == "gpt-5.4"
+    assert payload["supports_image_inputs"] is True
     assert "workspace_root" in payload
     assert payload["board_stages"] == ["backlog", "plan", "processing", "review"]
 
@@ -216,6 +218,116 @@ def test_chat_session_stream_replays_session_identity_event() -> None:
     identity_events = [event for event in events if event["type"] == "session_identity"]
     assert identity_events
     assert identity_events[0]["payload"]["resume_session_id"] == "saved-session-1"
+
+
+def test_upload_endpoint_returns_uploaded_image_metadata() -> None:
+    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        display.user_prompt()
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            response = client.post("/api/chat/session", json={})
+            assert response.status_code == 200
+            live_session_id = response.json()["session"]["live_session_id"]
+
+            upload_response = client.post(
+                f"/api/chat/session/{live_session_id}/images",
+                files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+            )
+
+    assert upload_response.status_code == 200
+    payload = upload_response.json()
+    assert len(payload["uploads"]) == 1
+    assert payload["uploads"][0]["name"] == "chart.png"
+    assert payload["uploads"][0]["mime_type"] == "image/png"
+    assert payload["uploads"][0]["preview_url"].startswith("/api/chat/uploads/")
+
+
+def test_submit_chat_input_accepts_uploaded_image_ids() -> None:
+    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        queued = display.user_prompt()
+        assert isinstance(queued, QueuedInput)
+        assert queued.text == ""
+        assert len(queued.images) == 1
+        assert queued.images[0].path == "chart.png"
+        assert len(queued.image_attachments) == 1
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            response = client.post("/api/chat/session", json={})
+            assert response.status_code == 200
+            live_session_id = response.json()["session"]["live_session_id"]
+
+            upload_response = client.post(
+                f"/api/chat/session/{live_session_id}/images",
+                files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+            )
+            assert upload_response.status_code == 200
+            upload_id = upload_response.json()["uploads"][0]["upload_id"]
+
+            submit_response = client.post(
+                f"/api/chat/session/{live_session_id}/input",
+                json={
+                    "text": "",
+                    "file_paths": [],
+                    "image_paths": [],
+                    "image_upload_ids": [upload_id],
+                },
+            )
+            assert submit_response.status_code == 200
+
+            events = app.state.manager.get_event_stream(live_session_id).snapshot()
+
+    message_events = [event for event in events if event["type"] == "message_added"]
+    assert message_events
+    assert (
+        message_events[0]["payload"]["image_attachments"][0]["upload_id"] == upload_id
+    )
+
+
+def test_submit_chat_input_does_not_duplicate_workspace_image_mentions(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "chart.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        queued = display.user_prompt()
+        assert isinstance(queued, QueuedInput)
+        assert queued.text == "Describe chart.png"
+        assert queued.image_paths == []
+        assert len(queued.images) == 1
+        assert queued.images[0].path == "chart.png"
+        assert len(queued.image_attachments) == 1
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            response = client.post("/api/chat/session", json={})
+            assert response.status_code == 200
+            live_session_id = response.json()["session"]["live_session_id"]
+
+            submit_response = client.post(
+                f"/api/chat/session/{live_session_id}/input",
+                json={
+                    "text": "Describe chart.png",
+                    "file_paths": ["chart.png"],
+                    "image_paths": ["chart.png"],
+                    "image_upload_ids": [],
+                },
+            )
+            assert submit_response.status_code == 200
 
 
 def test_delete_session_endpoint_removes_session_and_clears_task_links(

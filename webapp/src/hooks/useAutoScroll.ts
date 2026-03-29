@@ -47,5 +47,5 @@ export function useAutoScroll(
     setShowNewMessages(false);
   }, []);
 
-  return { containerRef, showNewMessages, scrollToBottom };
+  return { containerRef, showNewMessages, setShowNewMessages, scrollToBottom, userScrolledRef };
 }

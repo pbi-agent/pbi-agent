@@ -11,6 +11,7 @@ from pbi_agent.session_store import (
     KANBAN_STAGE_BACKLOG,
     KANBAN_STAGE_PLAN,
     KANBAN_STAGE_REVIEW,
+    MessageImageAttachment,
     SessionStore,
 )
 
@@ -170,6 +171,27 @@ def test_add_and_list_messages(tmp_path) -> None:
     assert msgs[2].content == "How are you?"
     # Ordered by id ASC
     assert msgs[0].id < msgs[1].id < msgs[2].id
+
+
+def test_add_and_list_messages_preserve_image_attachments(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    attachment = MessageImageAttachment(
+        upload_id="upload-1",
+        name="chart.png",
+        mime_type="image/png",
+        byte_count=8,
+        preview_url="/api/chat/uploads/upload-1",
+    )
+
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session("/w", "openai", "gpt-5", "msg test")
+        store.add_message(
+            sid, "user", "Here is a chart", image_attachments=[attachment]
+        )
+        msgs = store.list_messages(sid)
+
+    assert len(msgs) == 1
+    assert msgs[0].image_attachments == [attachment]
 
 
 def test_messages_scoped_to_session(tmp_path) -> None:

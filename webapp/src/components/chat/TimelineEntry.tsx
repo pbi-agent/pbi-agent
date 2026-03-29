@@ -1,65 +1,88 @@
 import { useState, type JSX, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
-import type { TimelineItem } from "../../types";
+import type { ImageAttachment, TimelineItem } from "../../types";
 
-function renderUserMessage(
+function renderUserContent(
   content: string,
   filePaths: string[] | undefined,
+  imageAttachments: ImageAttachment[] | undefined,
 ): JSX.Element {
-  if (!filePaths || filePaths.length === 0) {
-    return <p>{content}</p>;
-  }
+  const hasText = content.trim().length > 0;
+  const uniquePaths = filePaths
+    ? Array.from(new Set(filePaths)).sort((left, right) => right.length - left.length)
+    : [];
 
-  const uniquePaths = Array.from(new Set(filePaths)).sort(
-    (left, right) => right.length - left.length,
-  );
   const nodes: ReactNode[] = [];
-  let cursor = 0;
-  let partIndex = 0;
+  if (hasText) {
+    let cursor = 0;
+    let partIndex = 0;
 
-  while (cursor < content.length) {
-    let nextMatch:
-      | {
-          index: number;
-          path: string;
+    while (cursor < content.length) {
+      let nextMatch:
+        | {
+            index: number;
+            path: string;
+          }
+        | undefined;
+
+      for (const path of uniquePaths) {
+        const index = content.indexOf(path, cursor);
+        if (index < 0) {
+          continue;
         }
-      | undefined;
-
-    for (const path of uniquePaths) {
-      const index = content.indexOf(path, cursor);
-      if (index < 0) {
-        continue;
+        if (
+          !nextMatch ||
+          index < nextMatch.index ||
+          (index === nextMatch.index && path.length > nextMatch.path.length)
+        ) {
+          nextMatch = { index, path };
+        }
       }
-      if (
-        !nextMatch ||
-        index < nextMatch.index ||
-        (index === nextMatch.index && path.length > nextMatch.path.length)
-      ) {
-        nextMatch = { index, path };
+
+      if (!nextMatch) {
+        nodes.push(content.slice(cursor));
+        break;
       }
-    }
 
-    if (!nextMatch) {
-      nodes.push(content.slice(cursor));
-      break;
+      if (nextMatch.index > cursor) {
+        nodes.push(content.slice(cursor, nextMatch.index));
+      }
+      nodes.push(
+        <span key={`file-tag-${partIndex}`} className="timeline-entry__file-tag">
+          {nextMatch.path}
+        </span>,
+      );
+      partIndex += 1;
+      cursor = nextMatch.index + nextMatch.path.length;
     }
-
-    if (nextMatch.index > cursor) {
-      nodes.push(content.slice(cursor, nextMatch.index));
-    }
-    nodes.push(
-      <span
-        key={`file-tag-${partIndex}`}
-        className="timeline-entry__file-tag"
-      >
-        {nextMatch.path}
-      </span>,
-    );
-    partIndex += 1;
-    cursor = nextMatch.index + nextMatch.path.length;
   }
 
-  return <p>{nodes}</p>;
+  return (
+    <>
+      {imageAttachments && imageAttachments.length > 0 ? (
+        <div className="timeline-entry__attachments">
+          {imageAttachments.map((attachment) => (
+            <a
+              key={attachment.upload_id}
+              className="timeline-entry__attachment"
+              href={attachment.preview_url}
+              target="_blank"
+              rel="noreferrer"
+              title={attachment.name}
+            >
+              <img
+                className="timeline-entry__attachment-preview"
+                src={attachment.preview_url}
+                alt={attachment.name}
+              />
+              <span className="timeline-entry__attachment-name">{attachment.name}</span>
+            </a>
+          ))}
+        </div>
+      ) : null}
+      {hasText ? <p>{nodes}</p> : null}
+    </>
+  );
 }
 
 export function TimelineEntry({
@@ -99,10 +122,13 @@ export function TimelineEntry({
           {item.markdown && roleClass !== "user" ? (
             <ReactMarkdown>{item.content}</ReactMarkdown>
           ) : (
-            renderUserMessage(
+            renderUserContent(
               item.content,
               item.kind === "message" && item.role === "user"
                 ? item.filePaths
+                : undefined,
+              item.kind === "message" && item.role === "user"
+                ? item.imageAttachments
                 : undefined,
             )
           )}
@@ -136,7 +162,6 @@ export function TimelineEntry({
     );
   }
 
-  // tool_group
   return (
     <div
       className="timeline-entry timeline-entry--tool"

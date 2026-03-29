@@ -25,6 +25,7 @@ from pbi_agent.ui.formatting import (
 EventPublisher = Callable[[str, dict[str, Any]], None]
 SummaryPublisher = Callable[[str], None]
 SessionBinder = Callable[[str | None], None]
+_ATTACHED_IMAGES_MARKER = "[attached images:"
 
 
 def _plain_text(markup: str) -> str:
@@ -58,6 +59,19 @@ def _usage_payload(usage: TokenUsage) -> dict[str, Any]:
         "model": snap.model,
         "service_tier": snap.service_tier,
     }
+
+
+def _history_message_content(message: MessageRecord) -> str:
+    content = message.content
+    if message.role != "user" or not message.image_attachments:
+        return content
+    stripped = content.strip()
+    if stripped.startswith(_ATTACHED_IMAGES_MARKER) and stripped.endswith("]"):
+        return ""
+    marker_index = content.rfind(f"\n\n{_ATTACHED_IMAGES_MARKER}")
+    if marker_index >= 0 and content.rstrip().endswith("]"):
+        return content[:marker_index]
+    return content
 
 
 @dataclass(slots=True)
@@ -103,8 +117,15 @@ class _EventDisplayBase(DisplayProtocol):
     def request_shutdown(self) -> None:
         return None
 
-    def submit_input(self, value: str, *, image_paths: list[str] | None = None) -> None:
-        del value, image_paths
+    def submit_input(
+        self,
+        value: str,
+        *,
+        image_paths: list[str] | None = None,
+        images=None,
+        image_attachments=None,
+    ) -> None:
+        del value, image_paths, images, image_attachments
         return None
 
     def request_new_chat(self) -> None:
@@ -451,7 +472,17 @@ class _EventDisplayBase(DisplayProtocol):
                 {
                     "item_id": f"history-{message.id}",
                     "role": message.role,
-                    "content": message.content,
+                    "content": _history_message_content(message),
+                    "image_attachments": [
+                        {
+                            "upload_id": attachment.upload_id,
+                            "name": attachment.name,
+                            "mime_type": attachment.mime_type,
+                            "byte_count": attachment.byte_count,
+                            "preview_url": attachment.preview_url,
+                        }
+                        for attachment in message.image_attachments
+                    ],
                     "markdown": message.role == "assistant",
                     "historical": True,
                 },
@@ -485,10 +516,22 @@ class WebDisplay(_EventDisplayBase):
             self._bind_session_callback(session_id)
         self._publish("session_identity", {"resume_session_id": session_id})
 
-    def submit_input(self, value: str, *, image_paths: list[str] | None = None) -> None:
+    def submit_input(
+        self,
+        value: str,
+        *,
+        image_paths: list[str] | None = None,
+        images=None,
+        image_attachments=None,
+    ) -> None:
         queued: str | QueuedInput = value
-        if image_paths:
-            queued = QueuedInput(text=value, image_paths=list(image_paths))
+        if image_paths or images or image_attachments:
+            queued = QueuedInput(
+                text=value,
+                image_paths=list(image_paths or []),
+                images=list(images or []),
+                image_attachments=list(image_attachments or []),
+            )
         self._input_queue.put(queued)
         self._input_event.set()
         self._publish("input_state", {"enabled": False})
