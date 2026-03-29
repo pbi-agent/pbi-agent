@@ -40,26 +40,26 @@ export function ChatPage({
     resumeSessionId,
     connection,
     inputEnabled,
-    waitMessage,
     sessionUsage,
     turnUsage,
     sessionEnded,
     fatalError,
     items,
     subAgents,
+    waitMessage,
   } = useChatStore(
     useShallow((state) => ({
       liveSessionId: state.liveSessionId,
       resumeSessionId: state.resumeSessionId,
       connection: state.connection,
       inputEnabled: state.inputEnabled,
-      waitMessage: state.waitMessage,
       sessionUsage: state.sessionUsage,
       turnUsage: state.turnUsage,
       sessionEnded: state.sessionEnded,
       fatalError: state.fatalError,
       items: state.items,
       subAgents: state.subAgents,
+      waitMessage: state.waitMessage,
     })),
   );
 
@@ -268,6 +268,7 @@ export function ChatPage({
           items={items}
           subAgents={subAgents}
           connection={connection}
+          waitMessage={waitMessage}
         />
 
         <Composer
@@ -276,7 +277,6 @@ export function ChatPage({
           sessionEnded={sessionEnded}
           liveSessionId={liveSessionId}
           supportsImageInputs={supportsImageInputs}
-          waitMessage={waitMessage}
           isSubmitting={sendInputMutation.isPending}
           onSubmit={handleSubmit}
         />

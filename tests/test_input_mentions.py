@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pbi_agent.ui.input_mentions as input_mentions
-from pbi_agent.ui.input_mentions import (
+import pbi_agent.web.input_mentions as input_mentions
+from pbi_agent.web.input_mentions import (
     WorkspaceFileIndex,
     expand_file_mentions,
     expand_input_mentions,

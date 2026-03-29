@@ -3,32 +3,19 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Literal, TypeVar
+from typing import TypeVar
 
 
 @dataclass(frozen=True, slots=True)
 class SlashCommand:
-    """Slash-command metadata used by autocomplete and app dispatch."""
+    """Slash-command metadata used by the browser composer."""
 
     name: str
     description: str
     hidden_keywords: str = ""
-    local_only: bool = False
 
 
 COMMANDS: tuple[SlashCommand, ...] = (
-    SlashCommand(
-        name="/help",
-        description="Show chat shortcuts and local commands",
-        hidden_keywords="shortcuts commands",
-        local_only=True,
-    ),
-    SlashCommand(
-        name="/clear",
-        description="Clear chat and start a new session",
-        hidden_keywords="reset new chat",
-        local_only=True,
-    ),
     SlashCommand(
         name="/skills",
         description="Show discovered project skills",
@@ -44,43 +31,28 @@ COMMANDS: tuple[SlashCommand, ...] = (
         description="Show discovered project sub-agents",
         hidden_keywords="sub-agent subagent agent agents reload list",
     ),
-    SlashCommand(
-        name="/quit",
-        description="Quit the app",
-        hidden_keywords="exit close",
-        local_only=True,
-    ),
 )
 
 SlashCommandTuple = tuple[str, str, str]
-CommandSurface = Literal["textual", "web"]
 _MIN_SLASH_FUZZY_SCORE = 25
 _MIN_DESC_SEARCH_LEN = 2
 _T = TypeVar("_T")
 
 
-def _command_matches_surface(command: SlashCommand, surface: CommandSurface) -> bool:
-    return surface == "textual" or not command.local_only
+def list_slash_commands() -> list[SlashCommand]:
+    """Return slash commands exposed by the browser UI."""
 
-
-def list_slash_commands(*, surface: CommandSurface = "textual") -> list[SlashCommand]:
-    """Return slash commands for the requested UI surface."""
-
-    return [
-        command for command in COMMANDS if _command_matches_surface(command, surface)
-    ]
+    return list(COMMANDS)
 
 
 def _command_tuple(command: SlashCommand) -> SlashCommandTuple:
     return (command.name, command.description, command.hidden_keywords)
 
 
-def list_slash_command_tuples(
-    *, surface: CommandSurface = "textual"
-) -> list[SlashCommandTuple]:
+def list_slash_command_tuples() -> list[SlashCommandTuple]:
     """Return slash command tuples for autocomplete consumers."""
 
-    return [_command_tuple(command) for command in list_slash_commands(surface=surface)]
+    return [_command_tuple(command) for command in list_slash_commands()]
 
 
 def _score_command(search: str, cmd: str, desc: str, keywords: str = "") -> float:
@@ -127,12 +99,11 @@ def _rank_commands(
 def search_slash_commands(
     search: str,
     *,
-    surface: CommandSurface = "textual",
     limit: int = 10,
 ) -> list[SlashCommand]:
-    """Return ranked slash commands for the requested UI surface."""
+    """Return ranked slash commands for the browser UI."""
 
-    commands = list_slash_commands(surface=surface)
+    commands = list_slash_commands()
     return _rank_commands(
         search.lower(),
         [(command, _command_tuple(command)) for command in commands],
@@ -157,10 +128,6 @@ def search_slash_command_tuples(
 
 SLASH_COMMANDS: list[SlashCommandTuple] = list_slash_command_tuples()
 
-LOCAL_COMMANDS: frozenset[str] = frozenset(
-    command.name for command in COMMANDS if command.local_only
-)
-
 
 def normalize_command_name(value: str) -> str:
     """Return the normalized slash command token for *value*."""
@@ -170,8 +137,6 @@ def normalize_command_name(value: str) -> str:
 
 __all__ = [
     "COMMANDS",
-    "CommandSurface",
-    "LOCAL_COMMANDS",
     "SLASH_COMMANDS",
     "SlashCommand",
     "SlashCommandTuple",

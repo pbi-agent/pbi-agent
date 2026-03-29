@@ -148,7 +148,6 @@ You can inspect the discovered catalog without starting a model request:
 
 - CLI: `pbi-agent --agents`
 - Chat UI: `/agents`
-- Chat UI reload after editing files: `/agents reload`
 
 ## MCP server config
 

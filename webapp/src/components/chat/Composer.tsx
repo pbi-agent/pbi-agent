@@ -21,7 +21,6 @@ interface ComposerProps {
   sessionEnded: boolean;
   liveSessionId: string | null;
   supportsImageInputs: boolean;
-  waitMessage: string | null;
   isSubmitting: boolean;
   onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
 }
@@ -140,7 +139,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   sessionEnded,
   liveSessionId,
   supportsImageInputs,
-  waitMessage,
   isSubmitting,
   onSubmit,
 }, ref) {
@@ -587,13 +585,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     [appendFiles],
   );
 
-  const statusClass = sessionEnded
-    ? "composer__status composer__status--ended"
-    : waitMessage
-      ? "composer__status composer__status--waiting"
-      : inputEnabled
-        ? "composer__status composer__status--ready"
-        : "composer__status";
   const showCompletionStatus = completionLoading && completionItems.length > 0;
   const showCompletionEmptyState =
     completionItems.length === 0 &&
@@ -608,9 +599,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     completionMode === "slash"
       ? "Slash command suggestions"
       : "Workspace file suggestions";
-  const statusText = sessionEnded
-    ? "Session ended"
-    : waitMessage ?? (inputEnabled ? "Ready" : "Waiting for agent...");
   const attachmentStatus =
     attachmentMessage ??
     (pendingImages.length > 0
@@ -633,6 +621,43 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       />
 
       <div className="composer__input-row">
+        <div className="composer__action-menu" ref={actionMenuRef}>
+          <button
+            type="button"
+            className={`composer__action-trigger ${actionMenuOpen ? "composer__action-trigger--open" : ""}`}
+            onClick={() => setActionMenuOpen((current) => !current)}
+            disabled={!canSend}
+            aria-haspopup="menu"
+            aria-expanded={actionMenuOpen}
+            aria-label="Actions"
+          >
+            <span className="composer__action-trigger-icon" aria-hidden="true">+</span>
+          </button>
+          {actionMenuOpen ? (
+            <div className="composer__action-popover" role="menu" aria-label="Input actions">
+              <button
+                type="button"
+                className="composer__action-item"
+                onClick={() => {
+                  setActionMenuOpen(false);
+                  fileInputRef.current?.click();
+                }}
+                disabled={!supportsImageInputs}
+                role="menuitem"
+              >
+                <span className="composer__action-item-icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+                    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" />
+                    <circle cx="5.4" cy="5.4" r="1.1" fill="currentColor" stroke="none" />
+                    <path d="M3.75 11.2 6.7 8.35a1 1 0 0 1 1.38 0l1.35 1.28" />
+                    <path d="m8.9 10.1 1.35-1.3a1 1 0 0 1 1.41.03l1.59 1.67" />
+                  </svg>
+                </span>
+                <span className="composer__action-item-label">Image</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
         <div className="composer__textarea-wrap">
           <textarea
             ref={textareaRef}
@@ -745,63 +770,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         </div>
       ) : null}
 
-      <div className="composer__footer">
-        <span
-          className={statusClass}
-          role={waitMessage ? "status" : undefined}
-          aria-live={waitMessage ? "polite" : undefined}
-        >
-          {waitMessage ? <span className="composer__status-dot" aria-hidden="true" /> : null}
-          <span className="composer__status-text">{statusText}</span>
-        </span>
-        <div className="composer__action-menu" ref={actionMenuRef}>
-          <button
-            type="button"
-            className={`composer__action-trigger ${actionMenuOpen ? "composer__action-trigger--open" : ""}`}
-            onClick={() => setActionMenuOpen((current) => !current)}
-            disabled={!canSend}
-            aria-haspopup="menu"
-            aria-expanded={actionMenuOpen}
-          >
-            <span className="composer__action-trigger-icon" aria-hidden="true">
-              +
-            </span>
-            <span>Actions</span>
-            <span className="composer__action-trigger-caret" aria-hidden="true">
-              ▾
-            </span>
-          </button>
-          {actionMenuOpen ? (
-            <div className="composer__action-popover" role="menu" aria-label="Input actions">
-              <button
-                type="button"
-                className="composer__action-item"
-                onClick={() => {
-                  setActionMenuOpen(false);
-                  fileInputRef.current?.click();
-                }}
-                disabled={!supportsImageInputs}
-                role="menuitem"
-              >
-                <span className="composer__action-item-icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
-                    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" />
-                    <circle cx="5.4" cy="5.4" r="1.1" fill="currentColor" stroke="none" />
-                    <path d="M3.75 11.2 6.7 8.35a1 1 0 0 1 1.38 0l1.35 1.28" />
-                    <path d="m8.9 10.1 1.35-1.3a1 1 0 0 1 1.41.03l1.59 1.67" />
-                  </svg>
-                </span>
-                <span className="composer__action-item-copy">
-                  <span className="composer__action-item-label">Image</span>
-                  <span className="composer__action-item-description">
-                    Upload from your device
-                  </span>
-                </span>
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
     </form>
   );
 });

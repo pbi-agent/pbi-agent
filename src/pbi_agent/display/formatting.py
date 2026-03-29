@@ -1,4 +1,4 @@
-"""Formatting helpers for the Textual chat UI."""
+"""Formatting helpers shared by console and browser displays."""
 
 from __future__ import annotations
 
@@ -639,7 +639,7 @@ def route_function_result(
 ) -> tuple[str, str]:
     """Return ``(tool_name, formatted_text)`` for a generic function result.
 
-    This centralises the if/elif routing so that ``Display``,
+    This centralises the if/elif routing so that ``WebDisplay``,
     ``ConsoleDisplay``, and their sub-agent variants share a single code-path.
     Callers that have extra tool-specific formatters (e.g. ``list_files``,
     ``search_files``, ``read_file`` on the console) should handle those

@@ -10,7 +10,7 @@ from rich.console import Console
 from pbi_agent.branding import PBI_AGENT_NAME, PBI_AGENT_TAGLINE
 from pbi_agent.config import Settings
 from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
-from pbi_agent.ui.display_protocol import QueuedInput
+from pbi_agent.display.protocol import QueuedInput
 from pbi_agent.web.serve import PBIWebServer, create_app
 
 

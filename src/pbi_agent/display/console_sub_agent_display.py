@@ -11,8 +11,8 @@ from rich.tree import Tree
 
 from pbi_agent.models.messages import TokenUsage, WebSearchSource
 from pbi_agent.session_store import MessageRecord
-from pbi_agent.ui.display_protocol import DisplayProtocol, PendingToolGroup
-from pbi_agent.ui.formatting import (
+from pbi_agent.display.protocol import DisplayProtocol, PendingToolGroup
+from pbi_agent.display.formatting import (
     REDACTED_THINKING_NOTICE,
     TOOL_BORDER_STYLES,
     TOOL_ICONS,
@@ -30,7 +30,7 @@ from pbi_agent.ui.formatting import (
 )
 
 if TYPE_CHECKING:
-    from pbi_agent.ui.console_display import ConsoleDisplay
+    from pbi_agent.display.console_display import ConsoleDisplay
 
 
 class ConsoleSubAgentDisplay(DisplayProtocol):

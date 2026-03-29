@@ -35,8 +35,8 @@ from pbi_agent.config import ConfigError
 from pbi_agent.branding import startup_panel
 from pbi_agent.config import Settings, resolve_settings
 from pbi_agent.providers.capabilities import provider_supports_images
-from pbi_agent.ui.command_registry import search_slash_commands
-from pbi_agent.ui.input_mentions import expand_input_mentions
+from pbi_agent.web.command_registry import search_slash_commands
+from pbi_agent.web.input_mentions import expand_input_mentions
 from pbi_agent.web.session_manager import APP_EVENT_STREAM_ID, WebSessionManager
 from pbi_agent.web.uploads import load_uploaded_image_record, uploaded_image_path
 
@@ -296,11 +296,7 @@ def search_available_slash_commands(
     return SlashCommandSearchResponse(
         items=[
             SlashCommandItemModel(name=item.name, description=item.description)
-            for item in search_slash_commands(
-                q,
-                surface="web",
-                limit=limit,
-            )
+            for item in search_slash_commands(q, limit=limit)
         ]
     )
 

@@ -158,7 +158,7 @@ def test_resolve_settings_uses_openai_xhigh_default(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "openai-test-key")
 
     parser = build_parser()
-    args = parser.parse_args(["--provider", "openai", "console"])
+    args = parser.parse_args(["--provider", "openai", "web"])
     settings = resolve_settings(args)
 
     assert settings.provider == "openai"

@@ -44,7 +44,7 @@ def test_resolve_settings_uses_saved_provider_when_none_specified(
     )
 
     parser = build_parser()
-    args = parser.parse_args(["console"])
+    args = parser.parse_args(["web"])
 
     settings = resolve_settings(args)
 
@@ -82,7 +82,7 @@ def test_resolve_settings_uses_saved_generic_api_url(
     )
 
     parser = build_parser()
-    args = parser.parse_args(["console"])
+    args = parser.parse_args(["web"])
 
     settings = resolve_settings(args)
 
@@ -115,7 +115,7 @@ def test_resolve_settings_uses_saved_anthropic_model(
     )
 
     parser = build_parser()
-    args = parser.parse_args(["console"])
+    args = parser.parse_args(["web"])
 
     settings = resolve_settings(args)
 
@@ -167,7 +167,7 @@ def test_resolve_settings_uses_provider_specific_default_sub_agent_model(
     )
 
     parser = build_parser()
-    args = parser.parse_args(["console"])
+    args = parser.parse_args(["web"])
 
     settings = resolve_settings(args)
 
@@ -203,7 +203,7 @@ def test_resolve_settings_uses_saved_sub_agent_model(
     )
 
     parser = build_parser()
-    args = parser.parse_args(["console"])
+    args = parser.parse_args(["web"])
 
     settings = resolve_settings(args)
 
@@ -234,7 +234,7 @@ def test_resolve_settings_prefers_cli_sub_agent_model_over_env_and_config(
     )
 
     parser = build_parser()
-    args = parser.parse_args(["--sub-agent-model", "gpt-5.4-cli", "console"])
+    args = parser.parse_args(["--sub-agent-model", "gpt-5.4-cli", "web"])
 
     settings = resolve_settings(args)
 
@@ -248,7 +248,7 @@ def test_resolve_settings_rejects_invalid_service_tier_from_env(monkeypatch) -> 
     monkeypatch.setenv("PBI_AGENT_SERVICE_TIER", "bogus")
 
     parser = build_parser()
-    args = parser.parse_args(["console"])
+    args = parser.parse_args(["web"])
     settings = resolve_settings(args)
 
     with pytest.raises(ConfigError, match="--service-tier must be one of"):
@@ -285,7 +285,7 @@ def test_resolve_settings_rejects_invalid_service_tier_from_saved_config(
     )
 
     parser = build_parser()
-    args = parser.parse_args(["console"])
+    args = parser.parse_args(["web"])
     settings = resolve_settings(args)
 
     with pytest.raises(ConfigError, match="--service-tier must be one of"):

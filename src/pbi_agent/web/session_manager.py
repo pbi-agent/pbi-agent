@@ -24,8 +24,8 @@ from pbi_agent.session_store import (
     SessionStore,
 )
 from pbi_agent.task_runner import run_single_turn_in_directory
-from pbi_agent.ui.formatting import shorten
-from pbi_agent.ui.input_mentions import MentionSearchResult, WorkspaceFileIndex
+from pbi_agent.display.formatting import shorten
+from pbi_agent.web.input_mentions import MentionSearchResult, WorkspaceFileIndex
 from pbi_agent.web.display import KanbanTaskDisplay, WebDisplay
 from pbi_agent.web.uploads import (
     StoredImageUpload,

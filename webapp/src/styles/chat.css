@@ -266,6 +266,14 @@
   background: var(--color-bg);
 }
 
+/* ── Chat Scroll Area ── */
+.chat-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+}
+
 /* ── Chat Top Bar ── */
 .chat-topbar {
   display: flex;
@@ -295,17 +303,24 @@
 
 /* ── Timeline ── */
 .timeline {
-  flex: 1;
-  overflow-y: auto;
   padding: var(--sp-5) var(--sp-8);
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  scroll-behavior: smooth;
-  position: relative;
   max-width: 960px;
   width: 100%;
   margin: 0 auto;
+  min-height: 100%;
+}
+
+/* Processing indicator */
+.processing-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  animation: fade-in var(--duration-normal) var(--ease-out);
 }
 
 /* New messages indicator */
@@ -755,7 +770,7 @@
 
 /* ── Composer ── */
 .composer {
-  padding: var(--sp-3) var(--sp-5) var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
   background: var(--color-surface-0);
   border-top: 1px solid var(--color-border);
   flex-shrink: 0;
@@ -904,81 +919,30 @@
   color: var(--color-text-tertiary);
 }
 
-.composer__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  margin-top: var(--sp-1);
-  padding: 0 var(--sp-2);
-}
-
-.composer__status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-width: 0;
-  font-size: var(--text-2xs);
-  color: var(--color-text-tertiary);
-}
-
-.composer__status-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.composer__status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: currentColor;
-}
-
-.composer__status--ended {
-  color: var(--color-warning);
-}
-
-.composer__status--ready {
-  color: var(--color-success);
-}
-
-.composer__status--waiting {
-  color: color-mix(in srgb, var(--color-text-secondary) 74%, var(--color-accent) 26%);
-}
-
-.composer__status--waiting .composer__status-dot {
-  animation: composer-wait-pulse 1.4s ease-in-out infinite;
-}
-
 .composer__action-menu {
   position: relative;
+  flex-shrink: 0;
 }
 
 .composer__action-trigger {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  min-height: 28px;
-  padding: 0 var(--sp-2);
-  border: 1px solid transparent;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
   border-radius: var(--radius-md);
-  font-size: var(--text-2xs);
-  color: var(--color-text-tertiary);
   background: transparent;
-  transition:
-    color var(--duration-fast),
-    background var(--duration-fast),
-    border-color var(--duration-fast);
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  transition: color var(--duration-fast), background var(--duration-fast);
 }
 
 .composer__action-trigger:hover:not(:disabled),
 .composer__action-trigger--open {
   color: var(--color-text-secondary);
-  background: var(--color-surface-2);
-  border-color: var(--color-border);
+  background: var(--color-surface-3);
 }
 
 .composer__action-trigger:disabled {
@@ -990,46 +954,47 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1;
   color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent-muted) 72%, white 28%);
 }
 
-.composer__action-trigger-caret {
-  font-size: 10px;
-}
-
 .composer__action-popover {
   position: absolute;
-  right: 0;
+  left: 0;
   bottom: calc(100% + var(--sp-2));
   z-index: 15;
-  min-width: 190px;
+  min-width: 160px;
   padding: var(--sp-1);
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface-1) 80%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
 }
 
 .composer__action-item {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   width: 100%;
   padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   text-align: left;
-  transition: background var(--duration-fast), color var(--duration-fast);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  transition: background var(--duration-normal);
 }
 
 .composer__action-item:hover:not(:disabled) {
-  background: var(--color-surface-2);
+  background: color-mix(in srgb, var(--color-surface-2) 70%, transparent);
 }
 
 .composer__action-item:disabled {
@@ -1041,12 +1006,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--radius-sm);
-  font-size: 14px;
   color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent-muted) 72%, white 28%);
+  flex-shrink: 0;
 }
 
 .composer__action-item-icon svg {
@@ -1054,21 +1018,9 @@
   height: 16px;
 }
 
-.composer__action-item-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .composer__action-item-label {
   font-size: var(--text-xs);
   color: var(--color-text);
-}
-
-.composer__action-item-description {
-  font-size: var(--text-2xs);
-  color: var(--color-text-tertiary);
 }
 
 .composer__attachments {
@@ -1223,17 +1175,6 @@
   border-left: 2px solid var(--color-error);
 }
 
-@keyframes composer-wait-pulse {
-  0%, 100% {
-    opacity: 0.4;
-    transform: scale(0.9);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
@@ -1261,9 +1202,6 @@
     gap: var(--sp-2);
   }
 
-  .composer__footer {
-    gap: var(--sp-2);
-  }
 }
 
 @media (hover: none), (pointer: coarse) {
