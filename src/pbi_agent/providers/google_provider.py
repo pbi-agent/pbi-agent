@@ -27,7 +27,7 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
-from pbi_agent.ui.display_protocol import DisplayProtocol
+from pbi_agent.display.protocol import DisplayProtocol
 
 _REQUEST_TIMEOUT_SECS = 3600.0
 _THINKING_LEVEL_MAP: dict[str, str] = {

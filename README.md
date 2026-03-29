@@ -81,7 +81,7 @@ See the full [Customization guide](https://nasirus.github.io/pbi-agent/guide/cus
 
 ```bash
 pbi-agent
-pbi-agent console
+pbi-agent web
 pbi-agent run --prompt "Summarize this PBIP project."
 pbi-agent audit --report-dir .
 ```

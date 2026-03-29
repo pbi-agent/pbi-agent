@@ -24,7 +24,6 @@ from pbi_agent.config import (
 )
 from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
-from pbi_agent.session_store import SessionRecord
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_COMMAND = "web"
@@ -223,7 +222,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Resume a previous session by ID to continue the conversation.",
     )
 
-    add_command_parser("console", "Run an interactive terminal session.")
     web_parser = add_command_parser("web", "Serve the browser interface.")
     web_parser.add_argument(
         "--host",
@@ -275,13 +273,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--all-dirs",
         action="store_true",
         help="Show sessions from all directories, not just the current one.",
-    )
-
-    open_parser = add_command_parser("open", "Resume a previous session by ID.")
-    open_parser.add_argument(
-        "--session-id",
-        required=True,
-        help="Session ID to resume.",
     )
 
     init_parser = add_command_parser(
@@ -366,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(_argv_with_default_command(parser, raw_argv))
 
-    # ---- commands that don't need settings or the TUI ----
+    # ---- commands that don't need settings ----
 
     if args.skills:
         return _handle_skills_flag(args)
@@ -381,14 +372,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sessions":
         return _handle_sessions_command(args)
 
-    if args.command == "open":
-        _open_session = _load_session_record(args.session_id)
-        if _open_session is None:
-            return 1
-        args.provider = _open_session.provider
-        if not args.model:
-            args.model = _open_session.model
-
     if args.command == "run" and args.session_id:
         _run_session = _load_session_record(args.session_id)
         if _run_session is None:
@@ -398,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.model:
             args.model = _run_session.model
 
-    # ---- resolve settings for interactive/session commands ----
+    # ---- resolve settings for commands that need a provider ----
 
     try:
         settings = resolve_settings(args)
@@ -417,12 +400,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return _handle_run_command(args, settings)
 
-    if args.command == "console":
-        return _handle_console_command(settings)
-
-    if args.command == "open":
-        return _handle_open_command(args, settings, _open_session)
-
     if args.command == "audit":
         return _handle_audit_command(args, settings)
 
@@ -436,13 +413,6 @@ def main(argv: list[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
-
-
-def _handle_console_command(settings: Settings) -> int:
-    from pbi_agent.ui import ChatApp
-
-    app = ChatApp(settings=settings, verbose=settings.verbose)
-    return _run_app(app)
 
 
 def _handle_skills_flag(args: argparse.Namespace) -> int:
@@ -628,7 +598,7 @@ def _run_single_turn_command(
 ) -> int:
     from pbi_agent.agent.error_formatting import format_user_facing_error
     from pbi_agent.agent.session import run_single_turn
-    from pbi_agent.ui.console_display import ConsoleDisplay
+    from pbi_agent.display.console_display import ConsoleDisplay
 
     display = ConsoleDisplay(verbose=settings.verbose)
 
@@ -650,15 +620,6 @@ def _run_single_turn_command(
     if outcome.session_id:
         print(f"session_id={outcome.session_id}")
     return 4 if outcome.tool_errors else 0
-
-
-def _run_app(app: object) -> int:
-    app.run()
-    fatal_error_message = getattr(app, "fatal_error_message", None)
-    if isinstance(fatal_error_message, str) and fatal_error_message.strip():
-        _print_error(fatal_error_message)
-    exit_code = getattr(app, "exit_code", 0)
-    return exit_code if isinstance(exit_code, int) else 0
 
 
 def _print_error(message: str) -> None:
@@ -896,40 +857,6 @@ def _handle_sessions_command(args: argparse.Namespace) -> int:
             f"{title:<24} {tokens:>10} {cost:>8} {updated}"
         )
     return 0
-
-
-def _handle_open_command(
-    args: argparse.Namespace,
-    settings: Settings,
-    session: SessionRecord,
-) -> int:
-    from pbi_agent.ui import ChatApp
-
-    session_dir = Path(session.directory).expanduser()
-    if not session_dir.exists():
-        print(
-            f"Error: saved session directory does not exist: {session_dir}",
-            file=sys.stderr,
-        )
-        return 1
-    if not session_dir.is_dir():
-        print(
-            f"Error: saved session directory is not a directory: {session_dir}",
-            file=sys.stderr,
-        )
-        return 1
-
-    original_cwd = Path.cwd()
-    try:
-        os.chdir(session_dir)
-        app = ChatApp(
-            settings=settings,
-            verbose=settings.verbose,
-            resume_session_id=args.session_id,
-        )
-        return _run_app(app)
-    finally:
-        os.chdir(original_cwd)
 
 
 def _handle_init_command(args: argparse.Namespace) -> int:

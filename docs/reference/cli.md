@@ -57,7 +57,7 @@ These flags exist in the parser but are suppressed from help output:
 
 ## `pbi-agent web` (default)
 
-Serve the browser-based UI through Textual's web server.
+Serve the browser-based UI through the FastAPI web server.
 
 ```bash
 pbi-agent web --host 127.0.0.1 --port 8000
@@ -67,25 +67,21 @@ pbi-agent web --host 127.0.0.1 --port 8000
 | --- | --- | --- |
 | `--host` | `127.0.0.1` | Host interface to bind. |
 | `--port` | `8000` | Port to bind. Valid range: `1-65535`. |
-| `--dev` | `false` | Enable Textual web dev mode. |
-| `--title` | none | Optional browser title passed to the web server. |
+| `--dev` | `false` | Enable web development mode. |
+| `--title` | none | Optional browser title for the served app. |
 | `--url` | none | Optional public URL for reverse-proxy or externally published setups. |
 
 ::: details URL behavior
 When `--url` is omitted, the browser target is derived from `--host` and `--port`. Wildcard binds such as `0.0.0.0` and `::` are converted to loopback URLs for browser launch.
 :::
 
-## `pbi-agent console`
+The browser chat UI exposes local catalog commands without sending a model request:
 
-Run the interactive terminal UI.
+- `/skills` renders discovered project skills.
+- `/mcp` renders discovered project MCP servers.
+- `/agents` renders discovered project sub-agents.
 
-```bash
-pbi-agent console
-```
-
-This command has no command-specific flags. It uses the global provider, model, and runtime options.
-
-Image input in `console` and `web` mode is path-based and staged through chat commands:
+Image input in `web` mode is path-based and staged through chat commands:
 
 ```text
 /image add ./screen.png
@@ -95,13 +91,6 @@ Image input in `console` and `web` mode is path-based and staged through chat co
 ```
 
 After `/image add`, send your normal prompt. The staged images are attached to the next turn and then cleared automatically.
-
-The console and web chat UIs also expose local catalog commands without sending a model request:
-
-- `/skills` renders discovered project skills.
-- `/mcp` renders discovered project MCP servers.
-- `/agents` renders discovered project sub-agents.
-- `/agents reload` refreshes the loaded project sub-agent definitions from `.agents/*.md` and then renders the catalog again.
 
 ## `pbi-agent run`
 

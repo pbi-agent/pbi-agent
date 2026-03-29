@@ -23,7 +23,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.session_store import SessionStore
-from pbi_agent.ui.display_protocol import QueuedInput
+from pbi_agent.display.protocol import QueuedInput
 
 
 class _DisplaySpy:

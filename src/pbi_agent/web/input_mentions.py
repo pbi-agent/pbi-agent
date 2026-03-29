@@ -142,7 +142,7 @@ def search_input_mentions(
     limit: int = 20,
     index: WorkspaceFileIndex | None = None,
 ) -> list[MentionSearchResult]:
-    """Return ranked workspace file suggestions for web/Textual autocomplete."""
+    """Return ranked workspace file suggestions for the browser composer."""
 
     mention_index = index or WorkspaceFileIndex(root)
     return mention_index.search(query, limit=limit)

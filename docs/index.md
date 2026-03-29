@@ -22,8 +22,8 @@ features:
     details: 'Discover project-local sub-agent definitions from `.agents/*.md` and route delegated work through `sub_agent`.'
   - title: 'PBIP Template Scaffolding'
     details: 'Bootstrap a Power BI Project from the bundled template with the init command or the init_report tool.'
-  - title: 'Browser & Terminal UI'
-    details: 'Choose the default browser UI, the Textual console interface, or a single-prompt execution path.'
+  - title: 'Browser UI & Headless Runs'
+    details: 'Use the default browser UI for interactive work, or switch to single-prompt and audit commands for headless execution.'
   - title: 'MCP Tool Integration'
     details: 'Discover project-local MCP servers from `.agents/mcp.json` and expose their tools to the model.'
 ---

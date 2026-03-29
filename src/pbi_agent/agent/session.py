@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.session_store import MessageImageAttachment, SessionStore
 from pbi_agent.tools.types import ParentContextSnapshot
-from pbi_agent.ui.display_protocol import DisplayProtocol, QueuedInput
+from pbi_agent.display.protocol import DisplayProtocol, QueuedInput
 
 _log = logging.getLogger(__name__)
 
@@ -355,7 +355,7 @@ def run_sub_agent_task(
         reasoning_effort=getattr(agent_definition, "reasoning_effort", None)
         or settings.reasoning_effort,
     )
-    from pbi_agent.ui.names import pick_deity_name
+    from pbi_agent.agent.names import pick_deity_name
 
     child_name = (
         agent_definition.name if agent_definition is not None else pick_deity_name()

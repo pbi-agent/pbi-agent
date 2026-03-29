@@ -31,10 +31,12 @@ export function ChatTimeline({
   items,
   subAgents,
   connection,
+  waitMessage,
 }: {
   items: TimelineItem[];
   subAgents: Record<string, { title: string; status: string }>;
   connection: "disconnected" | "connecting" | "connected";
+  waitMessage: string | null;
 }) {
   const previousLengthRef = useRef<number>();
   const latestItem = items.at(-1);
@@ -89,34 +91,44 @@ export function ChatTimeline({
 
   if (items.length === 0 && connection === "connected") {
     return (
-      <div className="timeline" ref={containerRef}>
-        <EmptyState
-          title="No messages yet"
-          description="Send a message to start the conversation"
-        />
+      <div className="chat-scroll-area" ref={containerRef}>
+        <div className="timeline">
+          <EmptyState
+            title="No messages yet"
+            description="Send a message to start the conversation"
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="timeline" ref={containerRef}>
-      {items.map((item) => (
-        <TimelineEntry
-          key={item.itemId}
-          item={item}
-          subAgentTitle={item.subAgentId ? subAgents[item.subAgentId]?.title : undefined}
-          subAgentStatus={item.subAgentId ? subAgents[item.subAgentId]?.status : undefined}
-        />
-      ))}
-      {showNewMessages ? (
-        <button
-          type="button"
-          className="timeline__new-messages"
-          onClick={scrollToBottom}
-        >
-          New messages below
-        </button>
-      ) : null}
+    <div className="chat-scroll-area" ref={containerRef}>
+      <div className="timeline">
+        {items.map((item) => (
+          <TimelineEntry
+            key={item.itemId}
+            item={item}
+            subAgentTitle={item.subAgentId ? subAgents[item.subAgentId]?.title : undefined}
+            subAgentStatus={item.subAgentId ? subAgents[item.subAgentId]?.status : undefined}
+          />
+        ))}
+        {waitMessage ? (
+          <div className="processing-indicator">
+            <div className="spinner spinner--sm" />
+            <span>{waitMessage}</span>
+          </div>
+        ) : null}
+        {showNewMessages ? (
+          <button
+            type="button"
+            className="timeline__new-messages"
+            onClick={scrollToBottom}
+          >
+            New messages below
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

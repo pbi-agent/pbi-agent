@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pbi_agent.ui.command_registry import (
+from pbi_agent.web.command_registry import (
     list_slash_commands,
     search_slash_command_tuples,
     search_slash_commands,
@@ -8,7 +8,7 @@ from pbi_agent.ui.command_registry import (
 
 
 def test_list_slash_commands_for_web_excludes_local_only_commands() -> None:
-    assert [command.name for command in list_slash_commands(surface="web")] == [
+    assert [command.name for command in list_slash_commands()] == [
         "/skills",
         "/mcp",
         "/agents",
@@ -16,12 +16,8 @@ def test_list_slash_commands_for_web_excludes_local_only_commands() -> None:
 
 
 def test_search_slash_commands_ranks_matches_by_name_and_keywords() -> None:
-    assert [command.name for command in search_slash_commands("ag", surface="web")] == [
-        "/agents"
-    ]
-    assert [
-        command.name for command in search_slash_commands("serv", surface="web")
-    ] == ["/mcp"]
+    assert [command.name for command in search_slash_commands("ag")] == ["/agents"]
+    assert [command.name for command in search_slash_commands("serv")] == ["/mcp"]
 
 
 def test_search_slash_command_tuples_preserves_registry_order_on_empty_query() -> None:

@@ -7,7 +7,7 @@ from typing import Any, Protocol
 
 from pbi_agent.models.messages import ImageAttachment, TokenUsage, WebSearchSource
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord
-from pbi_agent.ui.formatting import tool_group_class
+from pbi_agent.display.formatting import tool_group_class
 
 
 @dataclass(slots=True)
