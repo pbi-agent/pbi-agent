@@ -20,6 +20,7 @@ type ChatState = {
   sessionEnded: boolean;
   fatalError: string | null;
   items: TimelineItem[];
+  itemsVersion: number;
   subAgents: Record<string, SubAgentState>;
   lastEventSeq: number;
   switchLiveSession: (liveSessionId: string, resumeSessionId?: string | null) => void;
@@ -54,6 +55,7 @@ export const useChatStore = create<ChatState>((set) => ({
   sessionEnded: false,
   fatalError: null,
   items: [],
+  itemsVersion: 0,
   subAgents: {},
   lastEventSeq: 0,
   switchLiveSession: (liveSessionId, resumeSessionId = null) => {
@@ -69,6 +71,7 @@ export const useChatStore = create<ChatState>((set) => ({
       sessionEnded: false,
       fatalError: null,
       items: [],
+      itemsVersion: 0,
       subAgents: {},
       lastEventSeq: 0,
     });
@@ -77,6 +80,7 @@ export const useChatStore = create<ChatState>((set) => ({
   clearTimeline: () =>
     set({
       items: [],
+      itemsVersion: 0,
       subAgents: {},
       waitMessage: null,
       turnUsage: null,
@@ -91,6 +95,7 @@ export const useChatStore = create<ChatState>((set) => ({
       switch (event.type) {
         case "chat_reset":
           nextState.items = [];
+          nextState.itemsVersion = 0;
           nextState.subAgents = {};
           nextState.waitMessage = null;
           nextState.turnUsage = null;
@@ -158,6 +163,7 @@ export const useChatStore = create<ChatState>((set) => ({
                 : undefined,
           } as TimelineItem;
           nextState.items = upsertItem(state.items, item);
+          nextState.itemsVersion = state.itemsVersion + 1;
           return { ...state, ...nextState };
         }
         case "thinking_updated": {
@@ -172,6 +178,7 @@ export const useChatStore = create<ChatState>((set) => ({
                 : undefined,
           };
           nextState.items = upsertItem(state.items, item);
+          nextState.itemsVersion = state.itemsVersion + 1;
           return { ...state, ...nextState };
         }
         case "tool_group_added": {
@@ -188,6 +195,7 @@ export const useChatStore = create<ChatState>((set) => ({
                 : undefined,
           };
           nextState.items = upsertItem(state.items, item);
+          nextState.itemsVersion = state.itemsVersion + 1;
           return { ...state, ...nextState };
         }
         case "sub_agent_state": {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
+import { useChatStore } from "../../store";
 import type { TimelineItem } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { TimelineEntry } from "./TimelineEntry";
@@ -42,8 +43,9 @@ export function ChatTimeline({
   const latestItem = items.at(-1);
   const latestItemIsUserMessage =
     latestItem?.kind === "message" && latestItem.role === "user";
+  const itemsVersion = useChatStore((s) => s.itemsVersion);
   const { containerRef, showNewMessages, setShowNewMessages, scrollToBottom, userScrolledRef } =
-    useAutoScroll([items.length], { followOnChange: false });
+    useAutoScroll([itemsVersion], { followOnChange: false });
 
   const scrollToTarget = useCallback(
     (container: HTMLElement, target: HTMLElement, offset: number) => {
@@ -58,36 +60,46 @@ export function ChatTimeline({
   useEffect(() => {
     const previousLength = previousLengthRef.current;
     previousLengthRef.current = items.length;
-    if (previousLength === undefined || items.length <= previousLength) {
-      return;
-    }
 
     const container = containerRef.current;
-    if (!container || !latestItem) {
-      return;
-    }
+    if (!container) return;
 
-    const target = container.querySelector<HTMLElement>(
-      `[data-timeline-item-id="${CSS.escape(latestItem.itemId)}"]`,
-    );
-    if (!target) {
-      return;
-    }
+    const isNewItem =
+      previousLength !== undefined && items.length > previousLength;
 
-    if (latestItemIsUserMessage) {
-      waitForImages(container).then(() => {
-        scrollToTarget(container, target, USER_MESSAGE_TOP_OFFSET);
-      });
-      userScrolledRef.current = false;
-    } else if (!userScrolledRef.current) {
-      waitForImages(container).then(() => {
-        scrollToTarget(container, target, ASSISTANT_MESSAGE_TOP_OFFSET);
-      });
-      userScrolledRef.current = true;
-    } else {
-      setShowNewMessages(true);
+    if (isNewItem && latestItem) {
+      // New item added — scroll to the top of that item
+      const target = container.querySelector<HTMLElement>(
+        `[data-timeline-item-id="${CSS.escape(latestItem.itemId)}"]`,
+      );
+
+      if (latestItemIsUserMessage) {
+        // Always scroll to user messages
+        if (target) {
+          waitForImages(container).then(() => {
+            scrollToTarget(container, target, USER_MESSAGE_TOP_OFFSET);
+          });
+        }
+        userScrolledRef.current = false;
+      } else if (!userScrolledRef.current) {
+        // Scroll to top of new assistant/tool/thinking item
+        if (target) {
+          waitForImages(container).then(() => {
+            scrollToTarget(container, target, ASSISTANT_MESSAGE_TOP_OFFSET);
+          });
+        }
+      } else {
+        setShowNewMessages(true);
+      }
+    } else if (!isNewItem) {
+      // Existing item content updated — stick to bottom
+      if (!userScrolledRef.current) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "instant" });
+      } else {
+        setShowNewMessages(true);
+      }
     }
-  }, [containerRef, items.length, latestItem, latestItemIsUserMessage, userScrolledRef, setShowNewMessages, scrollToTarget]);
+  }, [containerRef, itemsVersion, items.length, latestItem, latestItemIsUserMessage, userScrolledRef, setShowNewMessages, scrollToTarget]);
 
   if (items.length === 0 && connection === "connected") {
     return (
