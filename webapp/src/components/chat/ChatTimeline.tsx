@@ -1,10 +1,31 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { TimelineItem } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { TimelineEntry } from "./TimelineEntry";
 
 const USER_MESSAGE_TOP_OFFSET = 8;
+const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
+
+/**
+ * Wait for all images inside `container` to finish loading so that
+ * offsetTop calculations account for the final layout.  Resolves
+ * immediately when there are no pending images.
+ */
+function waitForImages(container: HTMLElement): Promise<void> {
+  const imgs = container.querySelectorAll<HTMLImageElement>("img");
+  const pending = Array.from(imgs).filter((img) => !img.complete);
+  if (pending.length === 0) return Promise.resolve();
+  return Promise.all(
+    pending.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+        }),
+    ),
+  ).then(() => {});
+}
 
 export function ChatTimeline({
   items,
@@ -19,9 +40,17 @@ export function ChatTimeline({
   const latestItem = items.at(-1);
   const latestItemIsUserMessage =
     latestItem?.kind === "message" && latestItem.role === "user";
-  const { containerRef, showNewMessages, scrollToBottom } = useAutoScroll(
-    [items.length],
-    { followOnChange: !latestItemIsUserMessage },
+  const { containerRef, showNewMessages, setShowNewMessages, scrollToBottom, userScrolledRef } =
+    useAutoScroll([items.length], { followOnChange: false });
+
+  const scrollToTarget = useCallback(
+    (container: HTMLElement, target: HTMLElement, offset: number) => {
+      container.scrollTo({
+        top: Math.max(target.offsetTop - offset, 0),
+        behavior: "smooth",
+      });
+    },
+    [],
   );
 
   useEffect(() => {
@@ -30,12 +59,9 @@ export function ChatTimeline({
     if (previousLength === undefined || items.length <= previousLength) {
       return;
     }
-    if (!latestItemIsUserMessage || !latestItem) {
-      return;
-    }
 
     const container = containerRef.current;
-    if (!container) {
+    if (!container || !latestItem) {
       return;
     }
 
@@ -46,11 +72,20 @@ export function ChatTimeline({
       return;
     }
 
-    container.scrollTo({
-      top: Math.max(target.offsetTop - USER_MESSAGE_TOP_OFFSET, 0),
-      behavior: "smooth",
-    });
-  }, [containerRef, items.length, latestItem, latestItemIsUserMessage]);
+    if (latestItemIsUserMessage) {
+      waitForImages(container).then(() => {
+        scrollToTarget(container, target, USER_MESSAGE_TOP_OFFSET);
+      });
+      userScrolledRef.current = false;
+    } else if (!userScrolledRef.current) {
+      waitForImages(container).then(() => {
+        scrollToTarget(container, target, ASSISTANT_MESSAGE_TOP_OFFSET);
+      });
+      userScrolledRef.current = true;
+    } else {
+      setShowNewMessages(true);
+    }
+  }, [containerRef, items.length, latestItem, latestItemIsUserMessage, userScrolledRef, setShowNewMessages, scrollToTarget]);
 
   if (items.length === 0 && connection === "connected") {
     return (

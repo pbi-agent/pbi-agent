@@ -74,6 +74,14 @@ export type SlashCommandItem = {
   description: string;
 };
 
+export type ImageAttachment = {
+  upload_id: string;
+  name: string;
+  mime_type: string;
+  byte_count: number;
+  preview_url: string;
+};
+
 export type ExpandedChatInput = {
   text: string;
   file_paths: string[];
@@ -86,6 +94,7 @@ export type BootstrapPayload = {
   provider: string;
   model: string;
   reasoning_effort: string;
+  supports_image_inputs: boolean;
   sessions: SessionRecord[];
   tasks: TaskRecord[];
   live_sessions: LiveSession[];
@@ -98,6 +107,7 @@ export type TimelineMessageItem = {
   role: "user" | "assistant" | "notice" | "error" | "debug";
   content: string;
   filePaths?: string[];
+  imageAttachments?: ImageAttachment[];
   markdown: boolean;
   subAgentId?: string;
 };

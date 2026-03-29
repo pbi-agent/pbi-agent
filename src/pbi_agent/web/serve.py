@@ -12,12 +12,14 @@ from typing import Annotated, Any, Literal, cast
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     FastAPI,
     HTTPException,
     Path as FastAPIPath,
     Query,
     Request,
     Response,
+    UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
@@ -36,6 +38,7 @@ from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.ui.command_registry import search_slash_commands
 from pbi_agent.ui.input_mentions import expand_input_mentions
 from pbi_agent.web.session_manager import APP_EVENT_STREAM_ID, WebSessionManager
+from pbi_agent.web.uploads import load_uploaded_image_record, uploaded_image_path
 
 _WEB_DIR = Path(__file__).resolve().parent
 _APP_STATIC_DIR = _WEB_DIR / "static" / "app"
@@ -64,6 +67,10 @@ SessionIdPath = Annotated[
     str,
     FastAPIPath(min_length=1, description="The saved session identifier."),
 ]
+UploadIdPath = Annotated[
+    str,
+    FastAPIPath(min_length=1, description="The uploaded image identifier."),
+]
 
 
 class CreateChatSessionRequest(BaseModel):
@@ -75,6 +82,7 @@ class ChatInputRequest(BaseModel):
     text: str = ""
     file_paths: list[str] = Field(default_factory=list)
     image_paths: list[str] = Field(default_factory=list)
+    image_upload_ids: list[str] = Field(default_factory=list)
 
 
 class ExpandInputRequest(BaseModel):
@@ -149,6 +157,18 @@ class LiveSessionModel(BaseModel):
     ended_at: str | None
 
 
+class ImageAttachmentModel(BaseModel):
+    upload_id: str
+    name: str
+    mime_type: str
+    byte_count: int
+    preview_url: str
+
+
+class ImageUploadResponse(BaseModel):
+    uploads: list[ImageAttachmentModel]
+
+
 class TaskRecordModel(BaseModel):
     task_id: str
     directory: str
@@ -171,6 +191,7 @@ class BootstrapResponse(BaseModel):
     provider: str
     model: str
     reasoning_effort: str
+    supports_image_inputs: bool
     sessions: list[SessionRecordModel]
     tasks: list[TaskRecordModel]
     live_sessions: list[LiveSessionModel]
@@ -315,6 +336,7 @@ def submit_chat_input(
             text=request.text,
             file_paths=request.file_paths,
             image_paths=request.image_paths,
+            image_upload_ids=request.image_upload_ids,
         )
     except KeyError as exc:
         raise _not_found("Live session not found.") from exc
@@ -322,6 +344,34 @@ def submit_chat_input(
         raise _bad_request(str(exc)) from exc
     return ChatSessionResponse(
         session=_model_from_payload(LiveSessionModel, session),
+    )
+
+
+@chat_router.post(
+    "/session/{live_session_id}/images",
+    response_model=ImageUploadResponse,
+)
+async def upload_chat_images(
+    live_session_id: LiveSessionIdPath,
+    manager: SessionManagerDep,
+    files: Annotated[list[UploadFile], File(description="One or more image files")],
+) -> ImageUploadResponse:
+    try:
+        uploads = manager.upload_chat_images(
+            live_session_id,
+            files=[
+                (upload.filename or "pasted-image.png", await upload.read())
+                for upload in files
+            ],
+        )
+    except KeyError as exc:
+        raise _not_found("Live session not found.") from exc
+    except Exception as exc:
+        raise _bad_request(str(exc)) from exc
+    return ImageUploadResponse(
+        uploads=[
+            _model_from_payload(ImageAttachmentModel, upload) for upload in uploads
+        ]
     )
 
 
@@ -365,6 +415,15 @@ def request_new_chat(
     return ChatSessionResponse(
         session=_model_from_payload(LiveSessionModel, session),
     )
+
+
+@chat_router.get("/uploads/{upload_id}")
+def get_uploaded_chat_image(upload_id: UploadIdPath) -> Response:
+    try:
+        record = load_uploaded_image_record(upload_id)
+    except KeyError as exc:
+        raise _not_found("Uploaded image not found.") from exc
+    return FileResponse(uploaded_image_path(upload_id), media_type=record.mime_type)
 
 
 @tasks_router.get("", response_model=TasksResponse)

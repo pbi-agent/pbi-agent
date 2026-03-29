@@ -8,6 +8,7 @@ import {
   expandChatInput,
   fetchSessions,
   submitChatInput,
+  uploadChatImages,
 } from "../../api";
 import type { SessionRecord } from "../../types";
 import { useChatStore } from "../../store";
@@ -21,8 +22,10 @@ import { Composer, type ComposerHandle } from "./Composer";
 
 export function ChatPage({
   workspaceRoot,
+  supportsImageInputs,
 }: {
   workspaceRoot: string | undefined;
+  supportsImageInputs: boolean;
 }) {
   const client = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -79,6 +82,7 @@ export function ChatPage({
       text: string;
       file_paths: string[];
       image_paths: string[];
+      image_upload_ids: string[];
     }) => {
       if (!liveSessionId) throw new Error("No live session available.");
       return submitChatInput(liveSessionId, payload);
@@ -145,13 +149,15 @@ export function ChatPage({
         }
       : null;
 
-  const handleSubmit = async (text: string, imagePaths: string[]) => {
+  const handleSubmit = async (payload: { text: string; images: File[] }) => {
+    const { text, images } = payload;
     setInputWarnings([]);
     if (text.startsWith("/")) {
       await sendInputMutation.mutateAsync({
         text,
         file_paths: [],
         image_paths: [],
+        image_upload_ids: [],
       });
       return;
     }
@@ -162,12 +168,19 @@ export function ChatPage({
     }
 
     const mergedImagePaths = Array.from(
-      new Set([...expanded.image_paths, ...imagePaths]),
+      new Set(expanded.image_paths),
     );
+    const uploadedImageIds =
+      images.length > 0 && liveSessionId
+        ? (await uploadChatImages(liveSessionId, images)).map(
+            (image) => image.upload_id,
+          )
+        : [];
     await sendInputMutation.mutateAsync({
       text: expanded.text,
       file_paths: expanded.file_paths,
       image_paths: mergedImagePaths,
+      image_upload_ids: uploadedImageIds,
     });
   };
 
@@ -262,7 +275,9 @@ export function ChatPage({
           inputEnabled={inputEnabled}
           sessionEnded={sessionEnded}
           liveSessionId={liveSessionId}
+          supportsImageInputs={supportsImageInputs}
           waitMessage={waitMessage}
+          isSubmitting={sendInputMutation.isPending}
           onSubmit={handleSubmit}
         />
       </div>

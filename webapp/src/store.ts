@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { TimelineItem, UsagePayload, WebEvent } from "./types";
+import type { ImageAttachment, TimelineItem, UsagePayload, WebEvent } from "./types";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
 
@@ -138,6 +138,18 @@ export const useChatStore = create<ChatState>((set) => ({
             filePaths: Array.isArray(payload.file_paths)
               ? payload.file_paths
                   .filter((value): value is string => typeof value === "string")
+              : undefined,
+            imageAttachments: Array.isArray(payload.image_attachments)
+              ? payload.image_attachments.filter(
+                  (value): value is ImageAttachment =>
+                    Boolean(value) &&
+                    typeof value === "object" &&
+                    typeof value.upload_id === "string" &&
+                    typeof value.name === "string" &&
+                    typeof value.mime_type === "string" &&
+                    typeof value.byte_count === "number" &&
+                    typeof value.preview_url === "string",
+                )
               : undefined,
             markdown: Boolean(payload.markdown),
             subAgentId:

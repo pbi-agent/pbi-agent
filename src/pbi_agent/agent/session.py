@@ -24,6 +24,7 @@ from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.models.messages import (
     AgentOutcome,
     CompletedResponse,
+    ImageAttachment,
     TokenUsage,
     UserTurnInput,
 )
@@ -33,7 +34,7 @@ from pbi_agent.providers.base import Provider
 if TYPE_CHECKING:
     from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.providers.capabilities import provider_supports_images
-from pbi_agent.session_store import SessionStore
+from pbi_agent.session_store import MessageImageAttachment, SessionStore
 from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.ui.display_protocol import DisplayProtocol, QueuedInput
 
@@ -101,6 +102,7 @@ def run_single_turn(
     user_input = _build_user_turn_input(
         text=prompt,
         image_paths=image_paths or [],
+        images=None,
         settings=settings,
     )
     user_turn_history_text = _user_turn_history_text(user_input)
@@ -196,9 +198,13 @@ def run_chat_loop(
         while True:
             queued_input = display.user_prompt()
             image_paths: list[str] = []
+            queued_images: list[ImageAttachment] = []
+            message_image_attachments: list[MessageImageAttachment] = []
             if isinstance(queued_input, QueuedInput):
                 user_input = queued_input.text.strip()
                 image_paths = queued_input.image_paths
+                queued_images = queued_input.images
+                message_image_attachments = queued_input.image_attachments
             else:
                 user_input = queued_input.strip()
             if user_input == NEW_CHAT_SENTINEL:
@@ -248,12 +254,13 @@ def run_chat_loop(
                     format_project_sub_agents_markdown(reloaded=True)
                 )
                 continue
-            if not user_input and not image_paths:
+            if not user_input and not image_paths and not queued_images:
                 continue
 
             turn_input = _build_user_turn_input(
                 text=user_input,
                 image_paths=image_paths,
+                images=queued_images,
                 settings=settings,
             )
             turn_history_text = _user_turn_history_text(turn_input)
@@ -301,6 +308,7 @@ def run_chat_loop(
                 session_id,
                 "user",
                 turn_history_text,
+                image_attachments=message_image_attachments,
             )
             _add_message(store, session_id, "assistant", response.text)
             _update_session_after_turn(
@@ -661,11 +669,18 @@ def _add_message(
     session_id: str | None,
     role: str,
     content: str,
+    *,
+    image_attachments: list[MessageImageAttachment] | None = None,
 ) -> None:
     if store is None or session_id is None:
         return
     try:
-        store.add_message(session_id, role, content)
+        store.add_message(
+            session_id,
+            role,
+            content,
+            image_attachments=image_attachments,
+        )
     except Exception:
         _log.warning("Failed to add message to session store", exc_info=True)
 
@@ -833,17 +848,22 @@ def _build_user_turn_input(
     *,
     text: str,
     image_paths: list[str],
+    images: list[ImageAttachment] | None,
     settings: Settings,
 ) -> UserTurnInput:
-    images = []
+    resolved_images = list(images or [])
     if image_paths:
         if not provider_supports_images(settings.provider):
             raise ValueError(
                 f"Provider '{settings.provider}' does not support image inputs in this build."
             )
         root = Path.cwd().resolve()
-        images = [load_workspace_image(root, path) for path in image_paths]
-    return UserTurnInput(text=text, images=images)
+        resolved_images.extend(load_workspace_image(root, path) for path in image_paths)
+    elif resolved_images and not provider_supports_images(settings.provider):
+        raise ValueError(
+            f"Provider '{settings.provider}' does not support image inputs in this build."
+        )
+    return UserTurnInput(text=text, images=resolved_images)
 
 
 def _normalize_user_command(value: str) -> str:

@@ -48,7 +48,15 @@ export function AppShell() {
       <main className="app-main">
         <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
           <Routes>
-            <Route path="/" element={<ChatPage workspaceRoot={bootstrap?.workspace_root} />} />
+            <Route
+              path="/"
+              element={
+                <ChatPage
+                  workspaceRoot={bootstrap?.workspace_root}
+                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                />
+              }
+            />
             <Route path="/board" element={<BoardPage />} />
           </Routes>
         </Suspense>
