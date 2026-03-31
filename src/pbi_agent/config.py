@@ -223,6 +223,10 @@ def slugify(value: str) -> str:
     return slug
 
 
+def _config_sort_key(item: ProviderConfig | ModelProfileConfig) -> tuple[str, str]:
+    return (item.name.lower(), item.id)
+
+
 def _default_responses_url(provider: str) -> str:
     if provider == "xai":
         return DEFAULT_XAI_RESPONSES_URL
@@ -381,13 +385,13 @@ def save_internal_config_with_revision(
 
 
 def list_provider_configs() -> list[ProviderConfig]:
-    return sorted(load_internal_config().providers, key=lambda item: item.id)
+    return sorted(load_internal_config().providers, key=_config_sort_key)
 
 
 def list_model_profile_configs() -> tuple[list[ModelProfileConfig], str | None]:
     config = load_internal_config()
     return sorted(
-        config.model_profiles, key=lambda item: item.id
+        config.model_profiles, key=_config_sort_key
     ), config.active_model_profile
 
 
@@ -395,16 +399,43 @@ def create_provider_config(
     provider: ProviderConfig,
     *,
     expected_revision: str | None = None,
-) -> ProviderConfig:
+) -> tuple[ProviderConfig, str]:
     provider.validate()
     config = load_internal_config()
     providers = _provider_map(config)
     if provider.id in providers:
         raise ConfigError(f"Provider '{provider.id}' already exists.")
     config.providers.append(provider)
-    config.providers.sort(key=lambda item: item.id)
-    save_internal_config_with_revision(config, expected_revision=expected_revision)
-    return provider
+    config.providers.sort(key=_config_sort_key)
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return provider, revision
+
+
+def replace_provider_config(
+    provider_id: str,
+    updated: ProviderConfig,
+    *,
+    expected_revision: str | None = None,
+) -> tuple[ProviderConfig, str]:
+    """Replace an existing provider with a fully-built updated config."""
+    config = load_internal_config()
+    if _provider_map(config).get(slugify(provider_id)) is None:
+        raise ConfigError(f"Unknown provider ID '{provider_id}'.")
+    updated.validate()
+    for profile in config.model_profiles:
+        if profile.provider_id == updated.id:
+            profile.validate(provider_kind=updated.kind)
+    config.providers = [
+        updated if existing.id == updated.id else existing
+        for existing in config.providers
+    ]
+    config.providers.sort(key=_config_sort_key)
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return updated, revision
 
 
 def update_provider_config(
@@ -417,13 +448,12 @@ def update_provider_config(
     responses_url: str | None = None,
     generic_api_url: str | None = None,
     expected_revision: str | None = None,
-) -> ProviderConfig:
+) -> tuple[ProviderConfig, str]:
     config = load_internal_config()
     providers = _provider_map(config)
     provider = providers.get(slugify(provider_id))
     if provider is None:
         raise ConfigError(f"Unknown provider ID '{provider_id}'.")
-
     updated = replace(
         provider,
         name=name if name is not None else provider.name,
@@ -437,27 +467,16 @@ def update_provider_config(
             generic_api_url if generic_api_url is not None else provider.generic_api_url
         ),
     )
-    updated.validate()
-
-    for profile in config.model_profiles:
-        if profile.provider_id != updated.id:
-            continue
-        profile.validate(provider_kind=updated.kind)
-
-    config.providers = [
-        updated if existing.id == updated.id else existing
-        for existing in config.providers
-    ]
-    config.providers.sort(key=lambda item: item.id)
-    save_internal_config_with_revision(config, expected_revision=expected_revision)
-    return updated
+    return replace_provider_config(
+        provider_id, updated, expected_revision=expected_revision
+    )
 
 
 def delete_provider_config(
     provider_id: str,
     *,
     expected_revision: str | None = None,
-) -> None:
+) -> str:
     config = load_internal_config()
     normalized_id = slugify(provider_id)
     provider = _provider_map(config).get(normalized_id)
@@ -472,14 +491,16 @@ def delete_provider_config(
     config.providers = [
         existing for existing in config.providers if existing.id != normalized_id
     ]
-    save_internal_config_with_revision(config, expected_revision=expected_revision)
+    return save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
 
 
 def create_model_profile_config(
     profile: ModelProfileConfig,
     *,
     expected_revision: str | None = None,
-) -> ModelProfileConfig:
+) -> tuple[ModelProfileConfig, str]:
     config = load_internal_config()
     providers = _provider_map(config)
     profile.validate(
@@ -489,9 +510,35 @@ def create_model_profile_config(
     if profile.id in profiles:
         raise ConfigError(f"Model profile '{profile.id}' already exists.")
     config.model_profiles.append(profile)
-    config.model_profiles.sort(key=lambda item: item.id)
-    save_internal_config_with_revision(config, expected_revision=expected_revision)
-    return profile
+    config.model_profiles.sort(key=_config_sort_key)
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return profile, revision
+
+
+def replace_model_profile_config(
+    profile_id: str,
+    updated: ModelProfileConfig,
+    *,
+    expected_revision: str | None = None,
+) -> tuple[ModelProfileConfig, str]:
+    """Replace an existing model profile with a fully-built updated config."""
+    config = load_internal_config()
+    if _profile_map(config).get(slugify(profile_id)) is None:
+        raise ConfigError(f"Unknown model profile ID '{profile_id}'.")
+    providers = _provider_map(config)
+    provider = _require_provider(providers, updated.provider_id)
+    updated.validate(provider_kind=provider.kind)
+    config.model_profiles = [
+        updated if existing.id == updated.id else existing
+        for existing in config.model_profiles
+    ]
+    config.model_profiles.sort(key=_config_sort_key)
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return updated, revision
 
 
 def update_model_profile_config(
@@ -509,16 +556,13 @@ def update_model_profile_config(
     max_retries: int | None = None,
     compact_threshold: int | None = None,
     expected_revision: str | None = None,
-) -> ModelProfileConfig:
+) -> tuple[ModelProfileConfig, str]:
     config = load_internal_config()
     profiles = _profile_map(config)
     profile = profiles.get(slugify(profile_id))
     if profile is None:
         raise ConfigError(f"Unknown model profile ID '{profile_id}'.")
-
     next_provider_id = provider_id if provider_id is not None else profile.provider_id
-    providers = _provider_map(config)
-    provider = _require_provider(providers, next_provider_id)
     updated = replace(
         profile,
         name=name if name is not None else profile.name,
@@ -549,22 +593,16 @@ def update_model_profile_config(
             else profile.compact_threshold
         ),
     )
-    updated.validate(provider_kind=provider.kind)
-
-    config.model_profiles = [
-        updated if existing.id == updated.id else existing
-        for existing in config.model_profiles
-    ]
-    config.model_profiles.sort(key=lambda item: item.id)
-    save_internal_config_with_revision(config, expected_revision=expected_revision)
-    return updated
+    return replace_model_profile_config(
+        profile_id, updated, expected_revision=expected_revision
+    )
 
 
 def delete_model_profile_config(
     profile_id: str,
     *,
     expected_revision: str | None = None,
-) -> None:
+) -> str:
     config = load_internal_config()
     normalized_id = slugify(profile_id)
     profile = _profile_map(config).get(normalized_id)
@@ -575,21 +613,28 @@ def delete_model_profile_config(
     ]
     if config.active_model_profile == normalized_id:
         config.active_model_profile = None
-    save_internal_config_with_revision(config, expected_revision=expected_revision)
+    return save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
 
 
 def select_active_model_profile(
-    profile_id: str,
+    profile_id: str | None,
     *,
     expected_revision: str | None = None,
-) -> ModelProfileConfig:
+) -> tuple[str | None, str]:
     config = load_internal_config()
-    profile = _profile_map(config).get(slugify(profile_id))
-    if profile is None:
-        raise ConfigError(f"Unknown model profile ID '{profile_id}'.")
-    config.active_model_profile = profile.id
-    save_internal_config_with_revision(config, expected_revision=expected_revision)
-    return profile
+    if profile_id is None:
+        config.active_model_profile = None
+    else:
+        profile = _profile_map(config).get(slugify(profile_id))
+        if profile is None:
+            raise ConfigError(f"Unknown model profile ID '{profile_id}'.")
+        config.active_model_profile = profile.id
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return config.active_model_profile, revision
 
 
 def resolve_settings(args: argparse.Namespace) -> Settings:

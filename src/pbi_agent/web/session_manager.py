@@ -19,12 +19,19 @@ from pbi_agent.config import (
     PROVIDER_KINDS,
     ProviderConfig,
     Settings,
+    create_model_profile_config,
+    create_provider_config,
+    delete_model_profile_config,
+    delete_provider_config,
+    load_internal_config,
     load_internal_config_snapshot,
     provider_has_secret,
     provider_secret_source,
     provider_ui_metadata,
+    replace_model_profile_config,
+    replace_provider_config,
     resolve_settings_for_model_profile,
-    save_internal_config_with_revision,
+    select_active_model_profile,
     slugify,
 )
 from pbi_agent.display.formatting import shorten
@@ -643,24 +650,16 @@ class WebSessionManager:
         expected_revision: str,
     ) -> dict[str, Any]:
         self._validate_secret_inputs(api_key=api_key, api_key_env=api_key_env)
-        config, _ = load_internal_config_snapshot()
-        provider = ProviderConfig(
-            id=slugify(provider_id or name),
-            name=name,
-            kind=kind,
-            api_key=api_key or "",
-            api_key_env=api_key_env,
-            responses_url=responses_url,
-            generic_api_url=generic_api_url,
-        )
-        provider.validate()
-        providers = self._provider_map(config)
-        if provider.id in providers:
-            raise ConfigError(f"Provider '{provider.id}' already exists.")
-        config.providers.append(provider)
-        config.providers.sort(key=lambda item: _config_sort_key(item.name, item.id))
-        revision = save_internal_config_with_revision(
-            config,
+        provider, revision = create_provider_config(
+            ProviderConfig(
+                id=slugify(provider_id or name),
+                name=name,
+                kind=kind,
+                api_key=api_key or "",
+                api_key_env=api_key_env,
+                responses_url=responses_url,
+                generic_api_url=generic_api_url,
+            ),
             expected_revision=expected_revision,
         )
         return {"provider": self._provider_view(provider), "config_revision": revision}
@@ -686,11 +685,10 @@ class WebSessionManager:
             api_key=api_key if "api_key" in fields_set else None,
             api_key_env=api_key_env if "api_key_env" in fields_set else None,
         )
-        config, _ = load_internal_config_snapshot()
+        config = load_internal_config()
         provider = self._provider_map(config).get(slugify(provider_id))
         if provider is None:
             raise ConfigError(f"Unknown provider ID '{provider_id}'.")
-
         next_api_key = provider.api_key
         next_api_key_env = provider.api_key_env
         if "api_key" in fields_set:
@@ -701,7 +699,7 @@ class WebSessionManager:
             next_api_key_env = (api_key_env or "").strip() or None
             if next_api_key_env:
                 next_api_key = ""
-        updated = replace(
+        merged = replace(
             provider,
             name=name if "name" in fields_set else provider.name,
             kind=kind if "kind" in fields_set else provider.kind,
@@ -718,20 +716,8 @@ class WebSessionManager:
                 else provider.generic_api_url
             ),
         )
-        updated.validate()
-
-        for profile in config.model_profiles:
-            if profile.provider_id == updated.id:
-                profile.validate(provider_kind=updated.kind)
-
-        config.providers = [
-            updated if existing.id == updated.id else existing
-            for existing in config.providers
-        ]
-        config.providers.sort(key=lambda item: _config_sort_key(item.name, item.id))
-        revision = save_internal_config_with_revision(
-            config,
-            expected_revision=expected_revision,
+        updated, revision = replace_provider_config(
+            provider_id, merged, expected_revision=expected_revision
         )
         return {"provider": self._provider_view(updated), "config_revision": revision}
 
@@ -741,24 +727,7 @@ class WebSessionManager:
         *,
         expected_revision: str,
     ) -> str:
-        config, _ = load_internal_config_snapshot()
-        normalized_id = slugify(provider_id)
-        provider = self._provider_map(config).get(normalized_id)
-        if provider is None:
-            raise ConfigError(f"Unknown provider ID '{provider_id}'.")
-        for profile in config.model_profiles:
-            if profile.provider_id == normalized_id:
-                raise ConfigError(
-                    f"Cannot delete provider '{normalized_id}': model profile "
-                    f"'{profile.id}' still references it."
-                )
-        config.providers = [
-            existing for existing in config.providers if existing.id != normalized_id
-        ]
-        return save_internal_config_with_revision(
-            config,
-            expected_revision=expected_revision,
-        )
+        return delete_provider_config(provider_id, expected_revision=expected_revision)
 
     def create_model_profile(
         self,
@@ -777,31 +746,23 @@ class WebSessionManager:
         compact_threshold: int | None,
         expected_revision: str,
     ) -> dict[str, Any]:
-        config, _ = load_internal_config_snapshot()
+        config = load_internal_config()
         provider = self._require_provider(config, provider_id)
-        profile = ModelProfileConfig(
-            id=slugify(profile_id or name),
-            name=name,
-            provider_id=provider.id,
-            model=model,
-            sub_agent_model=sub_agent_model,
-            reasoning_effort=reasoning_effort,
-            max_tokens=max_tokens,
-            service_tier=service_tier,
-            web_search=web_search,
-            max_tool_workers=max_tool_workers,
-            max_retries=max_retries,
-            compact_threshold=compact_threshold,
-        )
-        profile.validate(provider_kind=provider.kind)
-        if profile.id in self._profile_map(config):
-            raise ConfigError(f"Model profile '{profile.id}' already exists.")
-        config.model_profiles.append(profile)
-        config.model_profiles.sort(
-            key=lambda item: _config_sort_key(item.name, item.id)
-        )
-        revision = save_internal_config_with_revision(
-            config,
+        profile, revision = create_model_profile_config(
+            ModelProfileConfig(
+                id=slugify(profile_id or name),
+                name=name,
+                provider_id=provider.id,
+                model=model,
+                sub_agent_model=sub_agent_model,
+                reasoning_effort=reasoning_effort,
+                max_tokens=max_tokens,
+                service_tier=service_tier,
+                web_search=web_search,
+                max_tool_workers=max_tool_workers,
+                max_retries=max_retries,
+                compact_threshold=compact_threshold,
+            ),
             expected_revision=expected_revision,
         )
         return {
@@ -835,7 +796,7 @@ class WebSessionManager:
             raise ConfigError("Model profile name cannot be null.")
         if "provider_id" in fields_set and provider_id is None:
             raise ConfigError("provider_id cannot be null.")
-        config, _ = load_internal_config_snapshot()
+        config = load_internal_config()
         profile = self._profile_map(config).get(slugify(profile_id))
         if profile is None:
             raise ConfigError(f"Unknown model profile ID '{profile_id}'.")
@@ -845,7 +806,7 @@ class WebSessionManager:
             else profile.provider_id
         )
         provider = self._require_provider(config, next_provider_id)
-        updated = replace(
+        merged = replace(
             profile,
             name=name if "name" in fields_set else profile.name,
             provider_id=next_provider_id,
@@ -879,17 +840,8 @@ class WebSessionManager:
                 else profile.compact_threshold
             ),
         )
-        updated.validate(provider_kind=provider.kind)
-        config.model_profiles = [
-            updated if existing.id == updated.id else existing
-            for existing in config.model_profiles
-        ]
-        config.model_profiles.sort(
-            key=lambda item: _config_sort_key(item.name, item.id)
-        )
-        revision = save_internal_config_with_revision(
-            config,
-            expected_revision=expected_revision,
+        updated, revision = replace_model_profile_config(
+            profile_id, merged, expected_revision=expected_revision
         )
         return {
             "model_profile": self._model_profile_view(
@@ -906,21 +858,8 @@ class WebSessionManager:
         *,
         expected_revision: str,
     ) -> str:
-        config, _ = load_internal_config_snapshot()
-        normalized_id = slugify(profile_id)
-        profile = self._profile_map(config).get(normalized_id)
-        if profile is None:
-            raise ConfigError(f"Unknown model profile ID '{profile_id}'.")
-        config.model_profiles = [
-            existing
-            for existing in config.model_profiles
-            if existing.id != normalized_id
-        ]
-        if config.active_model_profile == normalized_id:
-            config.active_model_profile = None
-        return save_internal_config_with_revision(
-            config,
-            expected_revision=expected_revision,
+        return delete_model_profile_config(
+            profile_id, expected_revision=expected_revision
         )
 
     def set_active_model_profile(
@@ -929,20 +868,11 @@ class WebSessionManager:
         *,
         expected_revision: str,
     ) -> dict[str, Any]:
-        config, _ = load_internal_config_snapshot()
-        if model_profile_id is None:
-            config.active_model_profile = None
-        else:
-            profile = self._profile_map(config).get(slugify(model_profile_id))
-            if profile is None:
-                raise ConfigError(f"Unknown model profile ID '{model_profile_id}'.")
-            config.active_model_profile = profile.id
-        revision = save_internal_config_with_revision(
-            config,
-            expected_revision=expected_revision,
+        active_id, revision = select_active_model_profile(
+            model_profile_id, expected_revision=expected_revision
         )
         return {
-            "active_model_profile": config.active_model_profile,
+            "active_model_profile": active_id,
             "config_revision": revision,
         }
 

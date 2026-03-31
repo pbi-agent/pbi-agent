@@ -53,7 +53,7 @@ def test_load_internal_config_treats_old_provider_scoped_shape_as_absent(
 def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> None:
     monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
 
-    provider = create_provider_config(
+    provider, _ = create_provider_config(
         ProviderConfig(
             id="openai-main",
             name="OpenAI Main",
@@ -62,7 +62,7 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
             responses_url="https://api.openai.com/v1/responses",
         )
     )
-    profile = create_model_profile_config(
+    profile, _ = create_model_profile_config(
         ModelProfileConfig(
             id="analysis",
             name="Analysis",

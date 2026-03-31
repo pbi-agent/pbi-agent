@@ -665,7 +665,7 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.config_action == "create":
-        provider = create_provider_config(
+        provider, _ = create_provider_config(
             ProviderConfig(
                 id=slugify(args.id or args.name),
                 name=args.name,
@@ -679,7 +679,7 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.config_action == "update":
-        provider = update_provider_config(
+        provider, _ = update_provider_config(
             args.provider_id,
             name=args.name,
             kind=args.kind,
@@ -731,7 +731,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.config_action == "create":
-        profile = create_model_profile_config(
+        profile, _ = create_model_profile_config(
             ModelProfileConfig(
                 id=slugify(args.id or args.name),
                 name=args.name,
@@ -751,7 +751,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.config_action == "update":
-        profile = update_model_profile_config(
+        profile, _ = update_model_profile_config(
             args.profile_id,
             name=args.name,
             provider_id=args.provider_id,
@@ -774,8 +774,8 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.config_action == "select":
-        profile = select_active_model_profile(args.profile_id)
-        print(f"Selected model profile '{profile.id}'.")
+        active_id, _ = select_active_model_profile(args.profile_id)
+        print(f"Selected model profile '{active_id}'.")
         return 0
 
     raise ConfigError(f"Unknown profiles action '{args.config_action}'.")
