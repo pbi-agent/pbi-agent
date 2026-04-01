@@ -18,7 +18,12 @@ from pbi_agent.agent.sub_agent_discovery import (
     get_project_sub_agent_by_name,
 )
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
-from pbi_agent.config import ResolvedRuntime, Settings, resolve_runtime_for_profile_id
+from pbi_agent.config import (
+    ResolvedRuntime,
+    Settings,
+    find_mode_config_by_alias,
+    resolve_runtime_for_profile_id,
+)
 from pbi_agent.media import load_workspace_image
 from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.models.messages import (
@@ -91,6 +96,28 @@ def _coerce_runtime(value: Settings | ResolvedRuntime) -> ResolvedRuntime:
     )
 
 
+def _extract_active_mode(
+    value: str,
+) -> tuple[str, str | None]:
+    stripped = value.strip()
+    if not stripped.startswith("/"):
+        return value, None
+    head, _, tail = stripped.partition(" ")
+    try:
+        mode = find_mode_config_by_alias(head)
+    except Exception:
+        return value, None
+    if mode is None:
+        return value, None
+    return tail.lstrip(), mode.instructions
+
+
+def _turn_instructions(active_mode_instructions: str | None) -> str | None:
+    if active_mode_instructions is None:
+        return None
+    return get_system_prompt(active_mode_instructions=active_mode_instructions)
+
+
 def run_single_turn(
     prompt: str,
     settings: Settings | ResolvedRuntime,
@@ -117,9 +144,11 @@ def run_single_turn(
     display.session_usage(session_usage)
     session_start = time.monotonic()
     turn_usage = TokenUsage(model=model, service_tier=_tier)
+    prompt_text, active_mode_instructions = _extract_active_mode(prompt)
+    turn_instructions = _turn_instructions(active_mode_instructions)
 
     user_input = _build_user_turn_input(
-        text=prompt,
+        text=prompt_text,
         image_paths=image_paths or [],
         images=None,
         settings=settings,
@@ -145,6 +174,7 @@ def run_single_turn(
         response = _request_user_turn(
             provider=provider,
             user_input=user_input,
+            instructions=turn_instructions,
             display=display,
             session_usage=session_usage,
             turn_usage=turn_usage,
@@ -159,6 +189,7 @@ def run_single_turn(
             store=store,
             session_id=session_id,
             current_user_turn_text=user_turn_history_text,
+            instructions=turn_instructions,
         )
         _add_message(
             store,
@@ -327,7 +358,14 @@ def run_chat_loop(
                         format_project_sub_agents_markdown(reloaded=True)
                     )
                     continue
-                if not user_input and not image_paths and not queued_images:
+                user_input, active_mode_instructions = _extract_active_mode(user_input)
+                turn_instructions = _turn_instructions(active_mode_instructions)
+                if (
+                    not user_input
+                    and not image_paths
+                    and not queued_images
+                    and turn_instructions is None
+                ):
                     continue
 
                 turn_input = _build_user_turn_input(
@@ -363,6 +401,7 @@ def run_chat_loop(
                 response = _request_user_turn(
                     provider=provider,
                     user_input=turn_input,
+                    instructions=turn_instructions,
                     display=display,
                     session_usage=session_usage,
                     turn_usage=turn_usage,
@@ -377,6 +416,7 @@ def run_chat_loop(
                     store=store,
                     session_id=session_id,
                     current_user_turn_text=turn_history_text,
+                    instructions=turn_instructions,
                 )
 
                 _add_message(
@@ -593,6 +633,7 @@ def _run_tool_iterations(
     store: SessionStore | None = None,
     session_id: str | None = None,
     current_user_turn_text: str | None = None,
+    instructions: str | None = None,
 ) -> tuple[CompletedResponse, bool, int]:
     had_errors = False
 
@@ -647,6 +688,7 @@ def _run_tool_iterations(
         try:
             response = provider.request_turn(
                 tool_result_items=tool_result_items,
+                instructions=instructions,
                 display=display,
                 session_usage=session_usage,
                 turn_usage=turn_usage,
@@ -1047,12 +1089,14 @@ def _request_user_turn(
     *,
     provider: Any,
     user_input: UserTurnInput,
+    instructions: str | None,
     display: DisplayProtocol,
     session_usage: TokenUsage,
     turn_usage: TokenUsage,
 ) -> CompletedResponse:
     return provider.request_turn(
         user_input=user_input,
+        instructions=instructions,
         display=display,
         session_usage=session_usage,
         turn_usage=turn_usage,

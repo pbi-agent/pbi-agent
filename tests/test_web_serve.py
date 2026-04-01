@@ -11,10 +11,12 @@ from pbi_agent.branding import PBI_AGENT_NAME, PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     ModelProfileConfig,
+    ModeConfig,
     ProviderConfig,
     resolve_runtime,
     Settings,
     create_model_profile_config,
+    create_mode_config,
     create_provider_config,
 )
 from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
@@ -72,6 +74,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
         assert len(bootstrap_payload["providers"]) == 1
         assert bootstrap_payload["providers"][0]["id"] == "auto-provider-openai"
         assert len(bootstrap_payload["model_profiles"]) == 1
+        assert bootstrap_payload["modes"] == []
         assert (
             bootstrap_payload["model_profiles"][0]["provider_id"]
             == "auto-provider-openai"
@@ -126,6 +129,22 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
         assert select_response.status_code == 200
         revision = select_response.json()["config_revision"]
 
+        create_mode_response = client.post(
+            "/api/config/modes",
+            headers={"If-Match": revision},
+            json={
+                "name": "Plan",
+                "slash_alias": "/plan",
+                "description": "Planning mode",
+                "instructions": "Plan before coding.",
+            },
+        )
+        assert create_mode_response.status_code == 200
+        mode_payload = create_mode_response.json()
+        assert mode_payload["mode"]["id"] == "plan"
+        assert mode_payload["mode"]["slash_alias"] == "/plan"
+        revision = mode_payload["config_revision"]
+
         refreshed = client.get("/api/config/bootstrap")
         assert refreshed.status_code == 200
         refreshed_payload = refreshed.json()
@@ -139,6 +158,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
             for item in refreshed_payload["model_profiles"]
             if item["id"] == "analysis"
         )
+        assert refreshed_payload["modes"][0]["id"] == "plan"
         assert analysis_profile["is_active_default"] is True
         assert refreshed_payload["config_revision"] == revision
 
@@ -161,6 +181,44 @@ def test_config_writes_require_current_revision() -> None:
             json={"name": "xAI Main", "kind": "xai", "api_key": "x-key"},
         )
         assert stale_update.status_code == 409
+
+
+def test_mode_crud_endpoints_round_trip() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        create_response = client.post(
+            "/api/config/modes",
+            headers={"If-Match": revision},
+            json={
+                "name": "Plan",
+                "slash_alias": "/plan",
+                "description": "Planning mode",
+                "instructions": "Plan before coding.",
+            },
+        )
+        assert create_response.status_code == 200
+        revision = create_response.json()["config_revision"]
+
+        update_response = client.patch(
+            "/api/config/modes/plan",
+            headers={"If-Match": revision},
+            json={"description": "Updated planning mode"},
+        )
+        assert update_response.status_code == 200
+        assert update_response.json()["mode"]["description"] == "Updated planning mode"
+        revision = update_response.json()["config_revision"]
+
+        list_response = client.get("/api/config/modes")
+        assert list_response.status_code == 200
+        assert list_response.json()["modes"][0]["slash_alias"] == "/plan"
+
+        delete_response = client.delete(
+            "/api/config/modes/plan",
+            headers={"If-Match": revision},
+        )
+        assert delete_response.status_code == 204
 
 
 def test_provider_update_rejects_dual_secret_mutation() -> None:
@@ -217,15 +275,45 @@ def test_slash_command_search_endpoint_returns_web_commands() -> None:
         {
             "name": "/skills",
             "description": "Show discovered project skills",
+            "kind": "local_command",
         },
         {
             "name": "/mcp",
             "description": "Show discovered project MCP servers",
+            "kind": "local_command",
         },
         {
             "name": "/agents",
             "description": "Show discovered project sub-agents",
+            "kind": "local_command",
         },
+    ]
+
+
+def test_slash_command_search_endpoint_includes_configured_modes() -> None:
+    create_mode_config(
+        ModeConfig(
+            id="plan",
+            name="Plan",
+            slash_alias="/plan",
+            description="Planning mode",
+            instructions="Plan before coding.",
+        )
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/slash-commands/search", params={"q": "pla", "limit": 10}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {
+            "name": "/plan",
+            "description": "Planning mode",
+            "kind": "mode",
+        }
     ]
 
 

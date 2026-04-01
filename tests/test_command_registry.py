@@ -22,9 +22,14 @@ def test_search_slash_commands_ranks_matches_by_name_and_keywords() -> None:
 
 def test_search_slash_command_tuples_preserves_registry_order_on_empty_query() -> None:
     commands = [
-        ("/skills", "Show discovered project skills", "skill catalog"),
-        ("/mcp", "Show discovered project MCP servers", "mcp server"),
-        ("/agents", "Show discovered project sub-agents", "sub-agent agents"),
+        ("/skills", "Show discovered project skills", "skill catalog", "local_command"),
+        ("/mcp", "Show discovered project MCP servers", "mcp server", "local_command"),
+        (
+            "/agents",
+            "Show discovered project sub-agents",
+            "sub-agent agents",
+            "local_command",
+        ),
     ]
 
     assert search_slash_command_tuples("", commands, limit=2) == commands[:2]

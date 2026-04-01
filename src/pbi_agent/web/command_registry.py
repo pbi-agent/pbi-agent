@@ -13,6 +13,7 @@ class SlashCommand:
     name: str
     description: str
     hidden_keywords: str = ""
+    kind: str = "local_command"
 
 
 COMMANDS: tuple[SlashCommand, ...] = (
@@ -33,7 +34,7 @@ COMMANDS: tuple[SlashCommand, ...] = (
     ),
 )
 
-SlashCommandTuple = tuple[str, str, str]
+SlashCommandTuple = tuple[str, str, str, str]
 _MIN_SLASH_FUZZY_SCORE = 25
 _MIN_DESC_SEARCH_LEN = 2
 _T = TypeVar("_T")
@@ -46,7 +47,12 @@ def list_slash_commands() -> list[SlashCommand]:
 
 
 def _command_tuple(command: SlashCommand) -> SlashCommandTuple:
-    return (command.name, command.description, command.hidden_keywords)
+    return (
+        command.name,
+        command.description,
+        command.hidden_keywords,
+        command.kind,
+    )
 
 
 def list_slash_command_tuples() -> list[SlashCommandTuple]:
@@ -88,7 +94,7 @@ def _rank_commands(
         return [item for item, _parts in items[:limit]]
 
     scored: list[tuple[float, int, _T]] = []
-    for index, (item, (cmd, desc, keywords)) in enumerate(items):
+    for index, (item, (cmd, desc, keywords, _kind)) in enumerate(items):
         score = _score_command(search, cmd, desc, keywords)
         if score > 0:
             scored.append((score, index, item))

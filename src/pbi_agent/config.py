@@ -40,8 +40,10 @@ INTERNAL_CONFIG_PATH_ENV = "PBI_AGENT_INTERNAL_CONFIG_PATH"
 PROFILE_ID_ENV = "PBI_AGENT_PROFILE_ID"
 DEFAULT_INTERNAL_CONFIG_PATH = Path.home() / ".pbi-agent" / "config.json"
 SLUG_RE = re.compile(r"[^a-z0-9]+")
+SLASH_ALIAS_RE = re.compile(r"^/[a-z0-9][a-z0-9-]*$")
 AUTO_PROVIDER_ID_PREFIX = "auto-provider"
 AUTO_PROFILE_ID_PREFIX = "auto-profile"
+RESERVED_MODE_ALIASES = frozenset({"/skills", "/mcp", "/agents", "/agents-reload"})
 
 
 class ConfigError(ValueError):
@@ -204,9 +206,34 @@ class ModelProfileConfig:
 
 
 @dataclass(slots=True)
+class ModeConfig:
+    id: str
+    name: str
+    slash_alias: str
+    description: str = ""
+    instructions: str = ""
+
+    def validate(self) -> None:
+        self.id = slugify(self.id)
+        self.name = self.name.strip()
+        self.description = self.description.strip()
+        self.instructions = self.instructions.strip()
+        self.slash_alias = normalize_slash_alias(self.slash_alias)
+        if not self.name:
+            raise ConfigError("Mode name cannot be empty.")
+        if self.slash_alias in RESERVED_MODE_ALIASES:
+            raise ConfigError(
+                f"Mode alias '{self.slash_alias}' is reserved for a local command."
+            )
+        if not self.instructions:
+            raise ConfigError("Mode instructions cannot be empty.")
+
+
+@dataclass(slots=True)
 class InternalConfig:
     providers: list[ProviderConfig] = field(default_factory=list)
     model_profiles: list[ModelProfileConfig] = field(default_factory=list)
+    modes: list[ModeConfig] = field(default_factory=list)
     active_model_profile: str | None = None
 
 
@@ -238,7 +265,21 @@ def slugify(value: str) -> str:
     return slug
 
 
-def _config_sort_key(item: ProviderConfig | ModelProfileConfig) -> tuple[str, str]:
+def normalize_slash_alias(value: str) -> str:
+    alias = value.strip().lower()
+    if not alias.startswith("/"):
+        alias = f"/{alias}"
+    if not SLASH_ALIAS_RE.fullmatch(alias):
+        raise ConfigError(
+            "Mode alias must look like '/plan' and contain only lowercase "
+            "letters, numbers, or hyphens."
+        )
+    return alias
+
+
+def _config_sort_key(
+    item: ProviderConfig | ModelProfileConfig | ModeConfig,
+) -> tuple[str, str]:
     return (item.name.lower(), item.id)
 
 
@@ -361,16 +402,21 @@ def load_internal_config() -> InternalConfig:
     payload = _read_internal_config_payload()
     providers_payload = payload.get("providers")
     profiles_payload = payload.get("model_profiles")
+    modes_payload = payload.get("modes")
     active_payload = payload.get("active_model_profile")
 
     if providers_payload is None:
         providers_payload = []
     if profiles_payload is None:
         profiles_payload = []
+    if modes_payload is None:
+        modes_payload = []
 
     if not isinstance(providers_payload, list) or not isinstance(
         profiles_payload, list
     ):
+        return InternalConfig()
+    if not isinstance(modes_payload, list):
         return InternalConfig()
     if active_payload is not None and not isinstance(active_payload, str):
         return InternalConfig()
@@ -387,10 +433,17 @@ def load_internal_config() -> InternalConfig:
         if profile is not None:
             profiles.append(profile)
 
+    modes: list[ModeConfig] = []
+    for item in modes_payload:
+        mode = _mode_from_payload(item)
+        if mode is not None:
+            modes.append(mode)
+
     active_model_profile = active_payload if isinstance(active_payload, str) else None
     return InternalConfig(
         providers=providers,
         model_profiles=profiles,
+        modes=modes,
         active_model_profile=active_model_profile,
     )
 
@@ -433,6 +486,10 @@ def list_model_profile_configs() -> tuple[list[ModelProfileConfig], str | None]:
     return sorted(
         config.model_profiles, key=_config_sort_key
     ), config.active_model_profile
+
+
+def list_mode_configs() -> list[ModeConfig]:
+    return sorted(load_internal_config().modes, key=_config_sort_key)
 
 
 def create_provider_config(
@@ -555,6 +612,87 @@ def create_model_profile_config(
         config, expected_revision=expected_revision
     )
     return profile, revision
+
+
+def create_mode_config(
+    mode: ModeConfig,
+    *,
+    expected_revision: str | None = None,
+) -> tuple[ModeConfig, str]:
+    mode.validate()
+    config = load_internal_config()
+    if mode.id in _mode_map(config):
+        raise ConfigError(f"Mode '{mode.id}' already exists.")
+    _ensure_mode_alias_available(config, mode.slash_alias)
+    config.modes.append(mode)
+    config.modes.sort(key=_config_sort_key)
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return mode, revision
+
+
+def replace_mode_config(
+    mode_id: str,
+    updated: ModeConfig,
+    *,
+    expected_revision: str | None = None,
+) -> tuple[ModeConfig, str]:
+    config = load_internal_config()
+    normalized_id = slugify(mode_id)
+    if _mode_map(config).get(normalized_id) is None:
+        raise ConfigError(f"Unknown mode ID '{mode_id}'.")
+    updated.validate()
+    _ensure_mode_alias_available(config, updated.slash_alias, exclude_id=normalized_id)
+    config.modes = [
+        updated if existing.id == updated.id else existing for existing in config.modes
+    ]
+    config.modes.sort(key=_config_sort_key)
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return updated, revision
+
+
+def update_mode_config(
+    mode_id: str,
+    *,
+    name: str | None = None,
+    slash_alias: str | None = None,
+    description: str | None = None,
+    instructions: str | None = None,
+    expected_revision: str | None = None,
+) -> tuple[ModeConfig, str]:
+    config = load_internal_config()
+    mode = _mode_map(config).get(slugify(mode_id))
+    if mode is None:
+        raise ConfigError(f"Unknown mode ID '{mode_id}'.")
+    updated = replace(
+        mode,
+        name=name if name is not None else mode.name,
+        slash_alias=slash_alias if slash_alias is not None else mode.slash_alias,
+        description=description if description is not None else mode.description,
+        instructions=instructions if instructions is not None else mode.instructions,
+    )
+    return replace_mode_config(mode_id, updated, expected_revision=expected_revision)
+
+
+def delete_mode_config(
+    mode_id: str,
+    *,
+    expected_revision: str | None = None,
+) -> str:
+    config = load_internal_config()
+    normalized_id = slugify(mode_id)
+    mode = _mode_map(config).get(normalized_id)
+    if mode is None:
+        raise ConfigError(f"Unknown mode ID '{mode_id}'.")
+    config.modes = [
+        existing for existing in config.modes if existing.id != normalized_id
+    ]
+    return save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
 
 
 def replace_model_profile_config(
@@ -1277,12 +1415,42 @@ def _profile_from_payload(payload: object) -> ModelProfileConfig | None:
     return profile
 
 
+def _mode_from_payload(payload: object) -> ModeConfig | None:
+    if not isinstance(payload, dict):
+        return None
+    mode_id = payload.get("id")
+    name = payload.get("name")
+    slash_alias = payload.get("slash_alias")
+    if (
+        not isinstance(mode_id, str)
+        or not isinstance(name, str)
+        or not isinstance(slash_alias, str)
+    ):
+        return None
+    mode = ModeConfig(
+        id=mode_id,
+        name=name,
+        slash_alias=slash_alias,
+        description=_optional_string(payload.get("description")) or "",
+        instructions=_optional_string(payload.get("instructions")) or "",
+    )
+    try:
+        mode.validate()
+    except ConfigError:
+        return None
+    return mode
+
+
 def _provider_map(config: InternalConfig) -> dict[str, ProviderConfig]:
     return {provider.id: provider for provider in config.providers}
 
 
 def _profile_map(config: InternalConfig) -> dict[str, ModelProfileConfig]:
     return {profile.id: profile for profile in config.model_profiles}
+
+
+def _mode_map(config: InternalConfig) -> dict[str, ModeConfig]:
+    return {mode.id: mode for mode in config.modes}
 
 
 def _require_provider(
@@ -1293,6 +1461,35 @@ def _require_provider(
     if provider is None:
         raise ConfigError(f"Unknown provider ID '{provider_id}'.")
     return provider
+
+
+def get_mode_config(mode_id: str) -> ModeConfig:
+    config = load_internal_config()
+    mode = _mode_map(config).get(slugify(mode_id))
+    if mode is None:
+        raise ConfigError(f"Unknown mode ID '{mode_id}'.")
+    return mode
+
+
+def find_mode_config_by_alias(alias: str) -> ModeConfig | None:
+    normalized_alias = normalize_slash_alias(alias)
+    for mode in load_internal_config().modes:
+        if mode.slash_alias == normalized_alias:
+            return mode
+    return None
+
+
+def _ensure_mode_alias_available(
+    config: InternalConfig,
+    slash_alias: str,
+    *,
+    exclude_id: str | None = None,
+) -> None:
+    for mode in config.modes:
+        if exclude_id is not None and mode.id == exclude_id:
+            continue
+        if mode.slash_alias == slash_alias:
+            raise ConfigError(f"Mode alias '{slash_alias}' already exists.")
 
 
 def _optional_string(value: object) -> str | None:
@@ -1317,5 +1514,6 @@ def _internal_config_payload(config: InternalConfig) -> dict[str, Any]:
     return {
         "providers": [asdict(provider) for provider in config.providers],
         "model_profiles": [asdict(profile) for profile in config.model_profiles],
+        "modes": [asdict(mode) for mode in config.modes],
         "active_model_profile": config.active_model_profile,
     }

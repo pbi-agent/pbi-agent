@@ -41,7 +41,6 @@ from pbi_agent.config import (
     resolve_runtime,
 )
 from pbi_agent.providers.capabilities import provider_supports_images
-from pbi_agent.web.command_registry import search_slash_commands
 from pbi_agent.web.input_mentions import expand_input_mentions
 from pbi_agent.web.session_manager import APP_EVENT_STREAM_ID, WebSessionManager
 from pbi_agent.web.uploads import load_uploaded_image_record, uploaded_image_path
@@ -114,6 +113,7 @@ class FileMentionSearchResponse(BaseModel):
 class SlashCommandItemModel(BaseModel):
     name: str
     description: str
+    kind: Literal["local_command", "mode"]
 
 
 class SlashCommandSearchResponse(BaseModel):
@@ -414,9 +414,43 @@ class ActiveProfileResponse(BaseModel):
     config_revision: str
 
 
+class ModeViewModel(BaseModel):
+    id: str
+    name: str
+    slash_alias: str
+    description: str
+    instructions: str
+
+
+class ModeMutationRequest(BaseModel):
+    id: str | None = None
+    name: NonEmptyString
+    slash_alias: NonEmptyString
+    description: str = ""
+    instructions: NonEmptyString
+
+
+class ModeUpdateRequest(BaseModel):
+    name: NonEmptyString | None = None
+    slash_alias: NonEmptyString | None = None
+    description: str | None = None
+    instructions: NonEmptyString | None = None
+
+
+class ModeListResponse(BaseModel):
+    modes: list[ModeViewModel]
+    config_revision: str
+
+
+class ModeResponse(BaseModel):
+    mode: ModeViewModel
+    config_revision: str
+
+
 class ConfigBootstrapResponse(BaseModel):
     providers: list[ProviderViewModel]
     model_profiles: list[ModelProfileViewModel]
+    modes: list[ModeViewModel]
     active_profile_id: str | None
     config_revision: str
     options: ConfigOptionsModel
@@ -456,11 +490,17 @@ def _config_http_error(exc: Exception) -> HTTPException:
     detail = str(exc)
     if isinstance(exc, ConfigConflictError):
         return _conflict(detail)
-    if detail.startswith("Unknown provider ID") or detail.startswith(
-        "Unknown profile ID"
+    if (
+        detail.startswith("Unknown provider ID")
+        or detail.startswith("Unknown profile ID")
+        or detail.startswith("Unknown mode ID")
     ):
         return _not_found(detail)
-    if "already exists" in detail or "still references it" in detail:
+    if (
+        "already exists" in detail
+        or "still references it" in detail
+        or detail.startswith("Mode alias '")
+    ):
         return _conflict(detail)
     return _bad_request(detail)
 
@@ -671,6 +711,76 @@ def set_active_model_profile(
     )
 
 
+@config_router.get("/modes", response_model=ModeListResponse)
+def list_modes(manager: SessionManagerDep) -> ModeListResponse:
+    payload = manager.config_bootstrap()
+    return ModeListResponse(
+        modes=[_model_from_payload(ModeViewModel, item) for item in payload["modes"]],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@config_router.post("/modes", response_model=ModeResponse)
+def create_mode(
+    request: ModeMutationRequest,
+    manager: SessionManagerDep,
+    expected_revision: ConfigRevisionHeader,
+) -> ModeResponse:
+    try:
+        payload = manager.create_mode(
+            mode_id=request.id,
+            name=request.name,
+            slash_alias=request.slash_alias,
+            description=request.description,
+            instructions=request.instructions,
+            expected_revision=expected_revision,
+        )
+    except Exception as exc:
+        raise _config_http_error(exc) from exc
+    return ModeResponse(
+        mode=_model_from_payload(ModeViewModel, payload["mode"]),
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@config_router.patch("/modes/{mode_id}", response_model=ModeResponse)
+def update_mode(
+    mode_id: str,
+    request: ModeUpdateRequest,
+    manager: SessionManagerDep,
+    expected_revision: ConfigRevisionHeader,
+) -> ModeResponse:
+    try:
+        payload = manager.update_mode(
+            mode_id,
+            name=request.name,
+            slash_alias=request.slash_alias,
+            description=request.description,
+            instructions=request.instructions,
+            fields_set=set(request.model_fields_set),
+            expected_revision=expected_revision,
+        )
+    except Exception as exc:
+        raise _config_http_error(exc) from exc
+    return ModeResponse(
+        mode=_model_from_payload(ModeViewModel, payload["mode"]),
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@config_router.delete("/modes/{mode_id}", status_code=204)
+def delete_mode(
+    mode_id: str,
+    manager: SessionManagerDep,
+    expected_revision: ConfigRevisionHeader,
+) -> Response:
+    try:
+        manager.delete_mode(mode_id, expected_revision=expected_revision)
+    except Exception as exc:
+        raise _config_http_error(exc) from exc
+    return Response(status_code=204)
+
+
 @system_router.get("/sessions", response_model=SessionsResponse)
 def list_sessions(
     manager: SessionManagerDep,
@@ -740,13 +850,14 @@ def search_workspace_files(
 
 @system_router.get("/slash-commands/search", response_model=SlashCommandSearchResponse)
 def search_available_slash_commands(
+    manager: SessionManagerDep,
     q: MentionQuery = "",
     limit: MentionLimitQuery = 8,
 ) -> SlashCommandSearchResponse:
     return SlashCommandSearchResponse(
         items=[
-            SlashCommandItemModel(name=item.name, description=item.description)
-            for item in search_slash_commands(q, limit=limit)
+            _model_from_payload(SlashCommandItemModel, item)
+            for item in manager.search_slash_commands(q, limit=limit)
         ]
     )
 

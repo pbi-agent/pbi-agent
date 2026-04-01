@@ -15,21 +15,26 @@ from pbi_agent.config import (
     ConfigError,
     InternalConfig,
     ModelProfileConfig,
+    ModeConfig,
     OPENAI_SERVICE_TIERS,
     PROVIDER_KINDS,
     ProviderConfig,
     ResolvedRuntime,
     Settings,
     create_model_profile_config,
+    create_mode_config,
     create_provider_config,
     delete_model_profile_config,
+    delete_mode_config,
     delete_provider_config,
     load_internal_config,
     load_internal_config_snapshot,
+    normalize_slash_alias,
     provider_has_secret,
     provider_secret_source,
     provider_ui_metadata,
     replace_model_profile_config,
+    replace_mode_config,
     replace_provider_config,
     resolve_runtime,
     resolve_runtime_for_profile_id,
@@ -51,6 +56,10 @@ from pbi_agent.session_store import (
     SessionStore,
 )
 from pbi_agent.task_runner import run_single_turn_in_directory
+from pbi_agent.web.command_registry import (
+    list_slash_commands,
+    search_slash_command_tuples,
+)
 from pbi_agent.web.display import (
     KanbanTaskDisplay,
     WebDisplay,
@@ -336,6 +345,13 @@ class WebSessionManager:
                     key=lambda item: _config_sort_key(item.name, item.id),
                 )
             ],
+            "modes": [
+                self._mode_view(mode)
+                for mode in sorted(
+                    config.modes,
+                    key=lambda item: _config_sort_key(item.name, item.id),
+                )
+            ],
             "active_profile_id": config.active_model_profile,
             "config_revision": revision,
             "options": {
@@ -348,6 +364,39 @@ class WebSessionManager:
                 },
             },
         }
+
+    def search_slash_commands(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+    ) -> list[dict[str, str]]:
+        command_tuples = [
+            (
+                command.name,
+                command.description,
+                command.hidden_keywords,
+                command.kind,
+            )
+            for command in list_slash_commands()
+        ]
+        for mode in load_internal_config().modes:
+            command_tuples.append(
+                (
+                    mode.slash_alias,
+                    mode.description or f"Activate {mode.name}",
+                    f"{mode.name} mode prompt preset",
+                    "mode",
+                )
+            )
+        return [
+            {"name": name, "description": description, "kind": kind}
+            for name, description, _keywords, kind in search_slash_command_tuples(
+                query,
+                command_tuples,
+                limit=limit,
+            )
+        ]
 
     def list_sessions(self, limit: int = 30) -> list[dict[str, Any]]:
         with SessionStore() as store:
@@ -955,6 +1004,81 @@ class WebSessionManager:
             "config_revision": revision,
         }
 
+    def create_mode(
+        self,
+        *,
+        mode_id: str | None,
+        name: str,
+        slash_alias: str,
+        description: str | None,
+        instructions: str,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        mode, revision = create_mode_config(
+            ModeConfig(
+                id=slugify(mode_id or name),
+                name=name,
+                slash_alias=slash_alias,
+                description=description or "",
+                instructions=instructions,
+            ),
+            expected_revision=expected_revision,
+        )
+        return {"mode": self._mode_view(mode), "config_revision": revision}
+
+    def update_mode(
+        self,
+        mode_id: str,
+        *,
+        name: str | None,
+        slash_alias: str | None,
+        description: str | None,
+        instructions: str | None,
+        fields_set: set[str],
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        if "name" in fields_set and name is None:
+            raise ConfigError("Mode name cannot be null.")
+        if "slash_alias" in fields_set and slash_alias is None:
+            raise ConfigError("Mode alias cannot be null.")
+        if "instructions" in fields_set and instructions is None:
+            raise ConfigError("Mode instructions cannot be null.")
+        config = load_internal_config()
+        mode = self._mode_map(config).get(slugify(mode_id))
+        if mode is None:
+            raise ConfigError(f"Unknown mode ID '{mode_id}'.")
+        merged = replace(
+            mode,
+            name=name if "name" in fields_set else mode.name,
+            slash_alias=(
+                normalize_slash_alias(slash_alias)
+                if "slash_alias" in fields_set and slash_alias is not None
+                else mode.slash_alias
+            ),
+            description=(
+                description or "" if "description" in fields_set else mode.description
+            ),
+            instructions=(
+                instructions
+                if "instructions" in fields_set and instructions is not None
+                else mode.instructions
+            ),
+        )
+        updated, revision = replace_mode_config(
+            mode_id,
+            merged,
+            expected_revision=expected_revision,
+        )
+        return {"mode": self._mode_view(updated), "config_revision": revision}
+
+    def delete_mode(
+        self,
+        mode_id: str,
+        *,
+        expected_revision: str,
+    ) -> str:
+        return delete_mode_config(mode_id, expected_revision=expected_revision)
+
     def shutdown(self) -> None:
         sessions = list(self._chat_sessions.values())
         for session in sessions:
@@ -1257,11 +1381,23 @@ class WebSessionManager:
             "resolved_runtime": _resolved_runtime_view(runtime),
         }
 
+    def _mode_view(self, mode: ModeConfig) -> dict[str, Any]:
+        return {
+            "id": mode.id,
+            "name": mode.name,
+            "slash_alias": mode.slash_alias,
+            "description": mode.description,
+            "instructions": mode.instructions,
+        }
+
     def _provider_map(self, config: InternalConfig) -> dict[str, ProviderConfig]:
         return {provider.id: provider for provider in config.providers}
 
     def _profile_map(self, config: InternalConfig) -> dict[str, ModelProfileConfig]:
         return {profile.id: profile for profile in config.model_profiles}
+
+    def _mode_map(self, config: InternalConfig) -> dict[str, ModeConfig]:
+        return {mode.id: mode for mode in config.modes}
 
     def _require_provider(
         self, config: InternalConfig, provider_id: str

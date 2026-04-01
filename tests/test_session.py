@@ -22,7 +22,9 @@ from pbi_agent.config import (
     DEFAULT_GOOGLE_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
+    ModeConfig,
     Settings,
+    create_mode_config,
 )
 from pbi_agent.models.messages import (
     CompletedResponse,
@@ -134,15 +136,16 @@ class _ProviderStub:
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
     ) -> CompletedResponse:
-        del display, instructions
         if user_input is not None and user_message is None:
             user_message = user_input.text
         self.request_calls.append(
             {
                 "user_message": user_message,
                 "tool_result_items": tool_result_items,
+                "instructions": instructions,
             }
         )
+        del display
         if user_message is not None:
             response = CompletedResponse(
                 response_id="resp_1",
@@ -241,6 +244,7 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
         {
             "user_message": "Inspect the workspace",
             "tool_result_items": None,
+            "instructions": None,
         },
         {
             "user_message": None,
@@ -251,6 +255,7 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
                     "output": '{"ok": true, "result": "/workspace"}',
                 }
             ],
+            "instructions": None,
         },
     ]
     assert len(provider.execute_calls) == 1
@@ -280,6 +285,44 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
             3.5,
         )
     ]
+
+
+def test_run_single_turn_uses_mode_specific_instructions_for_full_turn(
+    monkeypatch,
+) -> None:
+    provider = _ProviderStub()
+    display = _DisplaySpy()
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=3)
+    monotonic_values = iter([10.0, 13.5])
+    create_mode_config(
+        ModeConfig(
+            id="plan",
+            name="Plan",
+            slash_alias="/plan",
+            instructions="Plan before coding.",
+        )
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    run_single_turn("/plan inspect the workspace", settings, display)
+
+    assert provider.request_calls[0]["user_message"] == "inspect the workspace"
+    assert provider.request_calls[0]["instructions"] is not None
+    assert "<active_mode>\nPlan before coding.\n</active_mode>" in str(
+        provider.request_calls[0]["instructions"]
+    )
+    assert (
+        provider.request_calls[1]["instructions"]
+        == provider.request_calls[0]["instructions"]
+    )
 
 
 def test_run_single_turn_persists_provider_checkpoint_for_resume(
@@ -409,6 +452,7 @@ class _ChatProviderStub:
     def __init__(self) -> None:
         self.request_messages: list[str | None] = []
         self.request_inputs: list[UserTurnInput] = []
+        self.request_instructions: list[str | None] = []
         self.reset_calls = 0
         self.system_prompts: list[str] = []
         self.refresh_tools_calls = 0
@@ -439,12 +483,13 @@ class _ChatProviderStub:
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
     ) -> CompletedResponse:
-        del display, instructions, tool_result_items
+        del display, tool_result_items
         if user_input is not None:
             self.request_inputs.append(user_input)
         if user_input is not None and user_message is None:
             user_message = user_input.text
         self.request_messages.append(user_message)
+        self.request_instructions.append(instructions)
         response = CompletedResponse(
             response_id="resp_chat",
             text="Ack",
@@ -579,6 +624,91 @@ def test_run_chat_loop_handles_agents_reload_command_locally(monkeypatch) -> Non
     assert provider.refresh_tools_calls == 1
     assert display.markdown_calls == ["### Sub-Agents\n\nReloaded"]
     assert display.assistant_start_calls == 0
+
+
+def test_run_chat_loop_strips_mode_alias_and_uses_turn_specific_instructions(
+    monkeypatch,
+) -> None:
+    provider = _ChatProviderStub()
+    display = _ChatDisplaySpy(["/plan draft the approach", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    create_mode_config(
+        ModeConfig(
+            id="plan",
+            name="Plan",
+            slash_alias="/plan",
+            instructions="Plan before coding.",
+        )
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_chat_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == ["draft the approach"]
+    assert provider.request_instructions[0] is not None
+    assert "<active_mode>\nPlan before coding.\n</active_mode>" in str(
+        provider.request_instructions[0]
+    )
+
+
+def test_run_chat_loop_accepts_mode_only_turn(monkeypatch) -> None:
+    provider = _ChatProviderStub()
+    display = _ChatDisplaySpy(["/plan", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    create_mode_config(
+        ModeConfig(
+            id="plan",
+            name="Plan",
+            slash_alias="/plan",
+            instructions="Plan before coding.",
+        )
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_chat_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == [""]
+
+
+def test_run_chat_loop_keeps_local_command_precedence_over_modes(monkeypatch) -> None:
+    provider = _ChatProviderStub()
+    display = _ChatDisplaySpy([SKILLS_COMMAND, "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    create_mode_config(
+        ModeConfig(
+            id="plan",
+            name="Plan",
+            slash_alias="/plan",
+            instructions="Plan before coding.",
+        )
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.format_project_skills_markdown",
+        lambda: "### Project Skills\n\n- `repo-skill`: Demo skill",
+    )
+
+    exit_code = run_chat_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == []
+    assert display.markdown_calls == [
+        "### Project Skills\n\n- `repo-skill`: Demo skill"
+    ]
 
 
 def test_run_chat_loop_passes_queued_image_paths_to_provider(monkeypatch) -> None:
