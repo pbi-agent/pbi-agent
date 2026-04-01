@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useShallow } from "zustand/react/shallow";
 import {
+  ApiError,
   createChatSession,
   deleteSession,
   expandChatInput,
@@ -94,6 +95,8 @@ export function ChatPage({
         Boolean(variables.resume_session_id),
       ),
   });
+  const createSession = createSessionMutation.mutate;
+  const createSessionAsync = createSessionMutation.mutateAsync;
 
   const sendInputMutation = useMutation({
     mutationFn: (payload: {
@@ -154,19 +157,17 @@ export function ChatPage({
       }
 
       if (hydratedRouteKeyRef.current !== routeKey) {
-        // When an existing live session is already running, skip pre-loading API history.
-        // The WebSocket snapshot replay will rebuild the timeline, avoiding duplicates.
-        const hasExistingLiveSession = sessionDetailQuery.data.live_session !== null;
-        const historyItems = hasExistingLiveSession
-          ? []
-          : sessionDetailQuery.data.history_items.map(mapHistoryItem);
+        // Always preload persisted history. If an active live session also replays those
+        // same messages via the WebSocket snapshot, matching item IDs let the store
+        // upsert them instead of duplicating them.
+        const historyItems = sessionDetailQuery.data.history_items.map(mapHistoryItem);
         setRouteState(routeSessionId, historyItems);
         hydratedRouteKeyRef.current = routeKey;
         liveRequestRouteKeyRef.current = null;
       }
 
       if (liveRequestRouteKeyRef.current !== routeKey) {
-        createSessionMutation.mutate({ resume_session_id: routeSessionId });
+        createSession({ resume_session_id: routeSessionId });
         liveRequestRouteKeyRef.current = routeKey;
       }
       return;
@@ -191,12 +192,12 @@ export function ChatPage({
     }
 
     if (liveRequestRouteKeyRef.current !== routeKey) {
-      createSessionMutation.mutate({});
+      createSession({});
       liveRequestRouteKeyRef.current = routeKey;
     }
   }, [
     awaitingBlankChat,
-    createSessionMutation,
+    createSession,
     liveSessionId,
     resumeSessionId,
     routeSessionId,
@@ -292,34 +293,54 @@ export function ChatPage({
     });
   };
 
-  const handleNewSession = async () => {
+  const openBlankChat = async ({
+    replace = false,
+    awaitCreate = false,
+  }: {
+    replace?: boolean;
+    awaitCreate?: boolean;
+  } = {}) => {
+    const routeKey = "__new__";
+    setAwaitingBlankChat(false);
+    liveRequestRouteKeyRef.current = routeKey;
+    navigate("/chat", { replace });
+    setRouteState(null, []);
+    hydratedRouteKeyRef.current = routeKey;
+    if (awaitCreate) {
+      await createSessionAsync({});
+      return;
+    }
+    createSession({});
+  };
+
+  const transitionToBlankChat = async ({
+    replace = false,
+    awaitCreate = false,
+  }: {
+    replace?: boolean;
+    awaitCreate?: boolean;
+  } = {}) => {
     const currentLiveSessionId = liveSessionId;
     setAwaitingBlankChat(true);
-    setSidebarOpen(false);
 
     if (currentLiveSessionId && !sessionEnded) {
       try {
         await requestNewChatMutation.mutateAsync({ liveSessionId: currentLiveSessionId });
         attachLiveSession(currentLiveSessionId, null, false);
-        navigate("/chat");
+        navigate("/chat", { replace });
       } catch {
-        setAwaitingBlankChat(false);
-        liveRequestRouteKeyRef.current = null;
-        navigate("/chat");
-        setRouteState(null, []);
-        hydratedRouteKeyRef.current = "__new__";
-        createSessionMutation.mutate({});
+        await openBlankChat({ replace, awaitCreate });
       }
     } else {
-      setAwaitingBlankChat(false);
-      liveRequestRouteKeyRef.current = null;
-      navigate("/chat");
-      setRouteState(null, []);
-      hydratedRouteKeyRef.current = "__new__";
-      createSessionMutation.mutate({});
+      await openBlankChat({ replace, awaitCreate });
     }
 
     window.setTimeout(() => composerRef.current?.focus(), 100);
+  };
+
+  const handleNewSession = async () => {
+    setSidebarOpen(false);
+    await transitionToBlankChat();
   };
 
   const handleDeleteSession = async () => {
@@ -336,32 +357,7 @@ export function ChatPage({
     await client.invalidateQueries({ queryKey: ["sessions"] });
 
     if (deletingActive) {
-      const currentLiveSessionId = liveSessionId;
-      setAwaitingBlankChat(true);
-      if (currentLiveSessionId && !sessionEnded) {
-        try {
-          await requestNewChatMutation.mutateAsync({
-            liveSessionId: currentLiveSessionId,
-          });
-          attachLiveSession(currentLiveSessionId, null, false);
-          navigate("/chat", { replace: true });
-        } catch {
-          setAwaitingBlankChat(false);
-          liveRequestRouteKeyRef.current = null;
-          navigate("/chat", { replace: true });
-          setRouteState(null, []);
-          hydratedRouteKeyRef.current = "__new__";
-          await createSessionMutation.mutateAsync({});
-        }
-      } else {
-        setAwaitingBlankChat(false);
-        liveRequestRouteKeyRef.current = null;
-        navigate("/chat", { replace: true });
-        setRouteState(null, []);
-        hydratedRouteKeyRef.current = "__new__";
-        await createSessionMutation.mutateAsync({});
-      }
-      window.setTimeout(() => composerRef.current?.focus(), 100);
+      await transitionToBlankChat({ replace: true, awaitCreate: true });
     }
   };
 
@@ -371,7 +367,14 @@ export function ChatPage({
     || createSessionMutation.isPending
     || requestNewChatMutation.isPending;
   const sessionDetailError = routeSessionId ? sessionDetailQuery.error : null;
-  const sessionNotFound = routeSessionId && sessionDetailQuery.isError;
+  const sessionNotFound =
+    routeSessionId
+    && sessionDetailError instanceof ApiError
+    && sessionDetailError.status === 404;
+  const sessionDetailLoadError =
+    routeSessionId && sessionDetailQuery.isError && !sessionNotFound
+      ? "Unable to load this chat right now."
+      : null;
 
   return (
     <section className={`chat-layout ${sidebarOpen ? "chat-layout--sidebar-open" : ""}`}>
@@ -428,6 +431,9 @@ export function ChatPage({
         {fatalError ? <div className="banner banner--error">{fatalError}</div> : null}
         {createSessionMutation.error ? (
           <div className="banner banner--error">{createSessionMutation.error.message}</div>
+        ) : null}
+        {sessionDetailLoadError ? (
+          <div className="banner banner--error">{sessionDetailLoadError}</div>
         ) : null}
 
         {sessionNotFound ? (

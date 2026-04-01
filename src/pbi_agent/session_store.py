@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS messages (
     content                TEXT NOT NULL DEFAULT '',
     provider_id            TEXT,
     profile_id             TEXT,
+    file_paths_json        TEXT NOT NULL DEFAULT '[]',
     image_attachments_json TEXT NOT NULL DEFAULT '[]',
     created_at             TEXT NOT NULL
 );
@@ -112,6 +113,7 @@ class MessageRecord:
     created_at: str
     provider_id: str | None = None
     profile_id: str | None = None
+    file_paths: list[str] = field(default_factory=list)
     image_attachments: list["MessageImageAttachment"] = field(default_factory=list)
 
 
@@ -171,6 +173,24 @@ def _serialize_image_attachments(
             for attachment in image_attachments
         ]
     )
+
+
+def _serialize_file_paths(file_paths: list[str] | None) -> str:
+    if not file_paths:
+        return "[]"
+    return json.dumps([path for path in file_paths if isinstance(path, str)])
+
+
+def _deserialize_file_paths(raw_value: object) -> list[str]:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return []
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, str)]
 
 
 def _deserialize_image_attachments(raw_value: object) -> list[MessageImageAttachment]:
@@ -254,6 +274,11 @@ class SessionStore:
             self._conn.execute("ALTER TABLE messages ADD COLUMN provider_id TEXT")
         if "profile_id" not in message_columns:
             self._conn.execute("ALTER TABLE messages ADD COLUMN profile_id TEXT")
+        if "file_paths_json" not in message_columns:
+            self._conn.execute(
+                "ALTER TABLE messages "
+                "ADD COLUMN file_paths_json TEXT NOT NULL DEFAULT '[]'"
+            )
         if "image_attachments_json" not in message_columns:
             self._conn.execute(
                 "ALTER TABLE messages "
@@ -414,6 +439,7 @@ class SessionStore:
         role: str,
         content: str,
         *,
+        file_paths: list[str] | None = None,
         provider_id: str | None = None,
         profile_id: str | None = None,
         image_attachments: list[MessageImageAttachment] | None = None,
@@ -422,14 +448,15 @@ class SessionStore:
         with self._lock:
             cursor = self._conn.execute(
                 "INSERT INTO messages "
-                "(session_id, role, content, provider_id, profile_id, image_attachments_json, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "(session_id, role, content, provider_id, profile_id, file_paths_json, image_attachments_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     session_id,
                     role,
                     content,
                     provider_id,
                     profile_id,
+                    _serialize_file_paths(file_paths),
                     _serialize_image_attachments(image_attachments),
                     now,
                 ),
@@ -454,6 +481,7 @@ class SessionStore:
                     content=data["content"],
                     provider_id=data.get("provider_id"),
                     profile_id=data.get("profile_id"),
+                    file_paths=_deserialize_file_paths(data.get("file_paths_json")),
                     image_attachments=_deserialize_image_attachments(
                         data.get("image_attachments_json")
                     ),

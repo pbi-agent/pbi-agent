@@ -20,6 +20,7 @@ class PendingToolGroupItem:
 @dataclass(slots=True)
 class QueuedInput:
     text: str
+    file_paths: list[str] = field(default_factory=list)
     image_paths: list[str] = field(default_factory=list)
     images: list[ImageAttachment] = field(default_factory=list)
     image_attachments: list[MessageImageAttachment] = field(default_factory=list)
@@ -81,6 +82,7 @@ class DisplayProtocol(Protocol):
         self,
         value: str,
         *,
+        file_paths: list[str] | None = None,
         image_paths: list[str] | None = None,
         images: list[ImageAttachment] | None = None,
         image_attachments: list[MessageImageAttachment] | None = None,

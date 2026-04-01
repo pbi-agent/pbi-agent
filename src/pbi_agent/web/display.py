@@ -66,7 +66,7 @@ def _usage_payload(usage: TokenUsage) -> dict[str, Any]:
     }
 
 
-def _history_message_content(message: MessageRecord) -> str:
+def history_message_content(message: MessageRecord) -> str:
     content = message.content
     if message.role != "user" or not message.image_attachments:
         return content
@@ -126,11 +126,12 @@ class _EventDisplayBase(DisplayProtocol):
         self,
         value: str,
         *,
+        file_paths: list[str] | None = None,
         image_paths: list[str] | None = None,
         images=None,
         image_attachments=None,
     ) -> None:
-        del value, image_paths, images, image_attachments
+        del value, file_paths, image_paths, images, image_attachments
         return None
 
     def request_new_chat(self) -> None:
@@ -477,7 +478,8 @@ class _EventDisplayBase(DisplayProtocol):
                 {
                     "item_id": f"history-{message.id}",
                     "role": message.role,
-                    "content": _history_message_content(message),
+                    "content": history_message_content(message),
+                    "file_paths": list(message.file_paths),
                     "image_attachments": [
                         {
                             "upload_id": attachment.upload_id,
@@ -527,14 +529,16 @@ class WebDisplay(_EventDisplayBase):
         self,
         value: str,
         *,
+        file_paths: list[str] | None = None,
         image_paths: list[str] | None = None,
         images=None,
         image_attachments=None,
     ) -> None:
         queued: str | QueuedInput = value
-        if image_paths or images or image_attachments:
+        if file_paths or image_paths or images or image_attachments:
             queued = QueuedInput(
                 text=value,
+                file_paths=list(file_paths or []),
                 image_paths=list(image_paths or []),
                 images=list(images or []),
                 image_attachments=list(image_attachments or []),

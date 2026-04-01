@@ -54,7 +54,7 @@ from pbi_agent.task_runner import run_single_turn_in_directory
 from pbi_agent.web.display import (
     KanbanTaskDisplay,
     WebDisplay,
-    _history_message_content,
+    history_message_content,
 )
 from pbi_agent.web.input_mentions import MentionSearchResult, WorkspaceFileIndex
 from pbi_agent.web.uploads import (
@@ -153,8 +153,8 @@ def _serialize_history_message(message: MessageRecord) -> dict[str, Any]:
     return {
         "item_id": f"history-{message.id}",
         "role": message.role,
-        "content": _history_message_content(message),
-        "file_paths": [],
+        "content": history_message_content(message),
+        "file_paths": list(message.file_paths),
         "image_attachments": [
             _message_image_payload(attachment)
             for attachment in message.image_attachments
@@ -564,6 +564,7 @@ class WebSessionManager:
             )
         live_session.display.submit_input(
             message_text,
+            file_paths=file_paths,
             images=resolved_images or None,
             image_attachments=message_image_attachments or None,
         )

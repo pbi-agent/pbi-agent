@@ -245,6 +245,7 @@ def run_chat_loop(
                 replay_history_on_restore = False
             while True:
                 queued_input = display.user_prompt()
+                file_paths: list[str] = []
                 image_paths: list[str] = []
                 queued_images: list[ImageAttachment] = []
                 message_image_attachments: list[MessageImageAttachment] = []
@@ -265,6 +266,7 @@ def run_chat_loop(
                     break
                 if isinstance(queued_input, QueuedInput):
                     user_input = queued_input.text.strip()
+                    file_paths = queued_input.file_paths
                     image_paths = queued_input.image_paths
                     queued_images = queued_input.images
                     message_image_attachments = queued_input.image_attachments
@@ -383,6 +385,7 @@ def run_chat_loop(
                     current_runtime,
                     "user",
                     turn_history_text,
+                    file_paths=file_paths,
                     image_attachments=message_image_attachments,
                 )
                 _add_message(
@@ -825,6 +828,7 @@ def _add_message(
     role: str,
     content: str,
     *,
+    file_paths: list[str] | None = None,
     image_attachments: list[MessageImageAttachment] | None = None,
 ) -> None:
     if store is None or session_id is None:
@@ -834,6 +838,7 @@ def _add_message(
             session_id,
             role,
             content,
+            file_paths=file_paths,
             provider_id=runtime.provider_id or None,
             profile_id=runtime.profile_id or None,
             image_attachments=image_attachments,

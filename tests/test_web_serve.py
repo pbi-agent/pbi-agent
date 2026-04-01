@@ -567,7 +567,7 @@ def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None
             "gpt-5.4",
             "Saved chat",
         )
-        store.add_message(session_id, "user", "Hello")
+        store.add_message(session_id, "user", "Hello", file_paths=["notes.md"])
         store.add_message(session_id, "assistant", "Hi there")
 
     with TestClient(app) as client:
@@ -581,7 +581,7 @@ def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None
             "item_id": "history-1",
             "role": "user",
             "content": "Hello",
-            "file_paths": [],
+            "file_paths": ["notes.md"],
             "image_attachments": [],
             "markdown": False,
             "historical": True,

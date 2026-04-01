@@ -194,6 +194,23 @@ def test_add_and_list_messages_preserve_image_attachments(tmp_path) -> None:
     assert msgs[0].image_attachments == [attachment]
 
 
+def test_add_and_list_messages_preserve_file_paths(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session("/w", "openai", "gpt-5", "msg test")
+        store.add_message(
+            sid,
+            "user",
+            "Check these files",
+            file_paths=["notes.md", "docs/spec.md"],
+        )
+        msgs = store.list_messages(sid)
+
+    assert len(msgs) == 1
+    assert msgs[0].file_paths == ["notes.md", "docs/spec.md"]
+
+
 def test_messages_scoped_to_session(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

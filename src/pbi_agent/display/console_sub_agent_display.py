@@ -79,11 +79,12 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         self,
         value: str,
         *,
+        file_paths: list[str] | None = None,
         image_paths: list[str] | None = None,
         images=None,
         image_attachments=None,
     ) -> None:
-        del value, image_paths, images, image_attachments
+        del value, file_paths, image_paths, images, image_attachments
 
     def request_new_chat(self) -> None:
         raise RuntimeError("Sub-agent display does not support interactive chat.")
