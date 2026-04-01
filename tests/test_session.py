@@ -17,7 +17,13 @@ from pbi_agent.agent.session import (
     run_chat_loop,
     run_single_turn,
 )
-from pbi_agent.config import DEFAULT_MODEL, Settings
+from pbi_agent.config import (
+    DEFAULT_GOOGLE_INTERACTIONS_URL,
+    DEFAULT_GOOGLE_MODEL,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL,
+    Settings,
+)
 from pbi_agent.models.messages import (
     CompletedResponse,
     ImageAttachment,
@@ -25,6 +31,7 @@ from pbi_agent.models.messages import (
     ToolCall,
     UserTurnInput,
 )
+from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.session_store import SessionStore
 from pbi_agent.display.protocol import QueuedInput
@@ -840,6 +847,204 @@ def test_run_single_turn_resumed_session_bootstraps_from_history_without_previou
         {"role": "assistant", "content": "hi"},
         {"role": "user", "content": "continue"},
     ]
+
+
+def test_run_single_turn_resumed_openai_session_increments_total_usage(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(
+            directory=os.getcwd(),
+            provider="openai",
+            model=DEFAULT_MODEL,
+            title="existing",
+        )
+        store.update_session(
+            session_id,
+            previous_id="resp_parent",
+            total_tokens=15,
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.01,
+        )
+        store.add_message(session_id, "user", "hello")
+        store.add_message(session_id, "assistant", "hi")
+
+    provider = OpenAIProvider(Settings(api_key="test-key", provider="openai"))
+    display = _ChatDisplaySpy([])
+    monotonic_values = iter([20.0, 21.5])
+
+    class _FakeHTTPResponse:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self) -> _FakeHTTPResponse:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        return _FakeHTTPResponse(
+            {
+                "id": "resp_recovered",
+                "model": DEFAULT_MODEL,
+                "usage": {
+                    "input_tokens": 7,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 3,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                },
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "Recovered."}],
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    outcome = run_single_turn(
+        "continue",
+        Settings(api_key="test-key", provider="openai"),
+        display,
+        resume_session_id=session_id,
+    )
+
+    assert outcome.response_id == "resp_recovered"
+    assert display.session_usage_calls[-1].input_tokens == 17
+    assert display.session_usage_calls[-1].output_tokens == 8
+    assert display.session_usage_calls[-1].total_tokens == 25
+
+
+def test_run_single_turn_resumed_google_session_restores_provider_total_tokens(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(
+            directory=os.getcwd(),
+            provider="google",
+            model=DEFAULT_GOOGLE_MODEL,
+            title="existing",
+        )
+        store.update_session(
+            session_id,
+            previous_id="resp_parent",
+            total_tokens=15,
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.01,
+        )
+        store.add_message(session_id, "user", "hello")
+        store.add_message(session_id, "assistant", "hi")
+
+    provider = GoogleProvider(
+        Settings(
+            api_key="test-key",
+            provider="google",
+            responses_url=DEFAULT_GOOGLE_INTERACTIONS_URL,
+            model=DEFAULT_GOOGLE_MODEL,
+            max_tokens=DEFAULT_MAX_TOKENS,
+            reasoning_effort="xhigh",
+            max_retries=0,
+        )
+    )
+    display = _ChatDisplaySpy([])
+    monotonic_values = iter([30.0, 31.5])
+
+    class _FakeHTTPResponse:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self) -> _FakeHTTPResponse:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        return _FakeHTTPResponse(
+            {
+                "id": "resp_google",
+                "model": DEFAULT_GOOGLE_MODEL,
+                "usage": {
+                    "total_input_tokens": 7,
+                    "total_output_tokens": 3,
+                    "total_tokens": 10,
+                },
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "Recovered."}],
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    outcome = run_single_turn(
+        "continue",
+        Settings(
+            api_key="test-key",
+            provider="google",
+            responses_url=DEFAULT_GOOGLE_INTERACTIONS_URL,
+            model=DEFAULT_GOOGLE_MODEL,
+            max_tokens=DEFAULT_MAX_TOKENS,
+            reasoning_effort="xhigh",
+            max_retries=0,
+        ),
+        display,
+        resume_session_id=session_id,
+    )
+
+    assert outcome.response_id == "resp_google"
+    assert display.session_usage_calls[-1].input_tokens == 17
+    assert display.session_usage_calls[-1].output_tokens == 8
+    assert display.session_usage_calls[-1].provider_total_tokens == 25
+    assert display.session_usage_calls[-1].total_tokens == 25
 
 
 def test_run_chat_loop_resumed_session_bootstraps_once_then_uses_previous_response_id(

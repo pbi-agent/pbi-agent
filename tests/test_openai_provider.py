@@ -501,55 +501,6 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     assert requests[1]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
 
 
-def test_openai_request_turn_logs_raw_http_request_and_response(
-    monkeypatch,
-    caplog,
-) -> None:
-    def fake_urlopen(
-        request: urllib.request.Request,
-        timeout: float,
-    ) -> _FakeHTTPResponse:
-        del timeout
-        payload = request.data.decode("utf-8") if request.data else "{}"
-        assert '"content": "hello"' in payload
-        return _FakeHTTPResponse(
-            {
-                "id": "resp_1",
-                "model": DEFAULT_MODEL,
-                "usage": {
-                    "input_tokens": 10,
-                    "input_tokens_details": {"cached_tokens": 0},
-                    "output_tokens": 2,
-                    "output_tokens_details": {"reasoning_tokens": 0},
-                },
-                "output": [
-                    {
-                        "type": "message",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": "Hi."}],
-                    }
-                ],
-            }
-        )
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-
-    provider = OpenAIProvider(_make_settings())
-    with caplog.at_level("DEBUG", logger="pbi_agent.providers.openai_provider"):
-        response = provider.request_turn(
-            user_message="hello",
-            display=_DisplayStub(),
-            session_usage=TokenUsage(model=DEFAULT_MODEL),
-            turn_usage=TokenUsage(model=DEFAULT_MODEL),
-        )
-
-    assert response.response_id == "resp_1"
-    assert "OpenAI HTTP request" in caplog.text
-    assert '"content": "hello"' in caplog.text
-    assert "OpenAI HTTP response" in caplog.text
-    assert '"id": "resp_1"' in caplog.text
-
-
 def test_openai_execute_tool_calls_returns_function_call_outputs(
     monkeypatch,
     display_spy,

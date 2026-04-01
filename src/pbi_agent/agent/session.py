@@ -862,14 +862,15 @@ def _resume_session(
     try:
         rec = store.get_session(session_id)
         if rec and (rec.input_tokens or rec.output_tokens):
-            session_usage.add(
-                TokenUsage(
-                    input_tokens=rec.input_tokens,
-                    output_tokens=rec.output_tokens,
-                    provider_total_tokens=rec.total_tokens,
-                    model=session_usage.model,
-                )
+            provider_name = provider.settings.provider
+            restored_usage = TokenUsage(
+                input_tokens=rec.input_tokens,
+                output_tokens=rec.output_tokens,
+                model=session_usage.model,
             )
+            if provider_name == "google":
+                restored_usage.provider_total_tokens = rec.total_tokens
+            session_usage.add(restored_usage)
             display.session_usage(session_usage)
     except Exception:
         _log.warning("Failed to restore session state", exc_info=True)
