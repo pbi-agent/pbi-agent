@@ -68,6 +68,10 @@
   border-color: var(--color-border-focus);
 }
 
+.settings-item--mode {
+  align-items: flex-start;
+}
+
 .settings-item__info {
   flex: 1;
   min-width: 0;
@@ -95,6 +99,29 @@
   align-items: center;
   gap: var(--sp-1);
   margin-top: var(--sp-1);
+}
+
+.settings-item__summary {
+  margin-top: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.settings-item__instructions {
+  margin-top: var(--sp-2);
+  padding: var(--sp-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  max-height: 10rem;
+  overflow: auto;
 }
 
 .settings-item__tag {
@@ -191,6 +218,10 @@
   margin-top: 2px;
 }
 
+.task-form__textarea--lg {
+  min-height: 12rem;
+}
+
 .task-form__row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -274,6 +305,20 @@
 
 .active-profile-control__select:focus {
   border-color: var(--color-accent-border);
+}
+
+.settings-inline-note {
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  line-height: var(--leading-normal);
+}
+
+.settings-inline-note code {
+  font-family: var(--font-mono);
 }
 
 /* ── Resolved runtime summary in profile card ── */

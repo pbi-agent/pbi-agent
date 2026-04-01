@@ -2,24 +2,30 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createModelProfile,
+  createMode,
   createProvider,
   deleteModelProfile,
+  deleteMode,
   deleteProvider,
   fetchConfigBootstrap,
   setActiveModelProfile,
   updateModelProfile,
+  updateMode,
   updateProvider,
 } from "../../api";
 import { ApiError } from "../../api";
 import type {
   ConfigBootstrapPayload,
   ModelProfileView,
+  ModeView,
   ProviderView,
 } from "../../types";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import type { ProfilePayload } from "./ModelProfileModal";
 import { ModelProfileModal } from "./ModelProfileModal";
+import type { ModePayload } from "./ModeModal";
+import { ModeModal } from "./ModeModal";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
 
@@ -134,6 +140,47 @@ function ProfileCard({
   );
 }
 
+function ModeCard({
+  mode,
+  onEdit,
+  onDelete,
+}: {
+  mode: ModeView;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="settings-item settings-item--mode">
+      <div className="settings-item__info">
+        <div className="settings-item__name">{mode.name}</div>
+        <div className="settings-item__id">{mode.id}</div>
+        <div className="settings-item__meta">
+          <span className="settings-item__tag settings-item__tag--accent">
+            {mode.slash_alias}
+          </span>
+          <span className="settings-item__tag">global</span>
+        </div>
+        {mode.description && (
+          <div className="settings-item__summary">{mode.description}</div>
+        )}
+        <pre className="settings-item__instructions">{mode.instructions}</pre>
+      </div>
+      <div className="settings-item__actions">
+        <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit}>
+          Edit
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost-danger btn--sm"
+          onClick={onDelete}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Modal state discriminated union ─────────────────────────────────────────
 
 type ModalState =
@@ -143,7 +190,10 @@ type ModalState =
   | { type: "delete-provider"; provider: ProviderView }
   | { type: "create-profile" }
   | { type: "edit-profile"; profile: ModelProfileView }
-  | { type: "delete-profile"; profile: ModelProfileView };
+  | { type: "delete-profile"; profile: ModelProfileView }
+  | { type: "create-mode" }
+  | { type: "edit-mode"; mode: ModeView }
+  | { type: "delete-mode"; mode: ModeView };
 
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
@@ -264,6 +314,32 @@ export function SettingsPage() {
     }
   }
 
+  // ── Mode handlers ──────────────────────────────────────────────────────────
+
+  async function saveMode(payload: ModePayload, existingId?: string): Promise<void> {
+    try {
+      if (existingId) {
+        await updateMode(existingId, payload, getRevision());
+      } else {
+        await createMode(payload, getRevision());
+      }
+      await invalidateBoth();
+      setModal({ type: "none" });
+    } catch (err) {
+      wrapStale(err);
+    }
+  }
+
+  async function deleteModeById(modeId: string): Promise<void> {
+    try {
+      await deleteMode(modeId, getRevision());
+      await invalidateBoth();
+      setModal({ type: "none" });
+    } catch (err) {
+      wrapStale(err);
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (configQuery.isLoading) {
@@ -287,7 +363,7 @@ export function SettingsPage() {
     );
   }
 
-  const { providers, model_profiles, active_profile_id, options } =
+  const { providers, model_profiles, modes, active_profile_id, options } =
     configQuery.data;
 
   return (
@@ -403,6 +479,48 @@ export function SettingsPage() {
             )}
           </div>
         </div>
+
+        <div className="settings-panel">
+          <div className="settings-panel__header">
+            <div>
+              <div className="settings-panel__title">Modes</div>
+              <div className="settings-panel__subtitle">
+                Global slash-triggered prompt presets for a single chat turn
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => setModal({ type: "create-mode" })}
+            >
+              + Add Mode
+            </button>
+          </div>
+          <div className="settings-panel__body">
+            <div className="settings-inline-note">
+              Start a message with a mode alias such as <code>/plan</code> to
+              append its instructions to that turn only.
+            </div>
+
+            {modes.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state__title">No modes configured</div>
+                <div className="empty-state__description">
+                  Add a global mode to inject predefined instructions from chat.
+                </div>
+              </div>
+            ) : (
+              modes.map((mode) => (
+                <ModeCard
+                  key={mode.id}
+                  mode={mode}
+                  onEdit={() => setModal({ type: "edit-mode", mode })}
+                  onDelete={() => setModal({ type: "delete-mode", mode })}
+                />
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── Modals ── */}
@@ -461,6 +579,33 @@ export function SettingsPage() {
             </>
           }
           onConfirm={() => deleteProfileById(modal.profile.id)}
+          onClose={() => setModal({ type: "none" })}
+        />
+      )}
+      {modal.type === "create-mode" && (
+        <ModeModal
+          onSave={(payload) => saveMode(payload)}
+          onClose={() => setModal({ type: "none" })}
+        />
+      )}
+      {modal.type === "edit-mode" && (
+        <ModeModal
+          mode={modal.mode}
+          onSave={(payload) => saveMode(payload, modal.mode.id)}
+          onClose={() => setModal({ type: "none" })}
+        />
+      )}
+      {modal.type === "delete-mode" && (
+        <DeleteConfirmModal
+          title="Delete Mode"
+          body={
+            <>
+              Delete mode <strong>{modal.mode.name}</strong> and remove the
+              alias <strong>{modal.mode.slash_alias}</strong>? This cannot be
+              undone.
+            </>
+          }
+          onConfirm={() => deleteModeById(modal.mode.id)}
           onClose={() => setModal({ type: "none" })}
         />
       )}

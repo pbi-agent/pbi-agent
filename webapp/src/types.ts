@@ -109,6 +109,7 @@ export type FileMentionItem = {
 export type SlashCommandItem = {
   name: string;
   description: string;
+  kind: "local_command" | "mode";
 };
 
 export type ImageAttachment = {
@@ -206,9 +207,18 @@ export type ModelProfileView = {
   resolved_runtime: ResolvedRuntimeView;
 };
 
+export type ModeView = {
+  id: string;
+  name: string;
+  slash_alias: string;
+  description: string;
+  instructions: string;
+};
+
 export type ConfigBootstrapPayload = {
   providers: ProviderView[];
   model_profiles: ModelProfileView[];
+  modes: ModeView[];
   active_profile_id: string | null;
   config_revision: string;
   options: ConfigOptions;

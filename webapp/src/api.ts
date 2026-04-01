@@ -7,6 +7,7 @@ import type {
   ImageAttachment,
   LiveSession,
   ModelProfileView,
+  ModeView,
   ProviderView,
   SessionDetailPayload,
   SessionRecord,
@@ -348,5 +349,49 @@ export async function setActiveModelProfile(
     method: "PUT",
     headers: { "If-Match": configRevision },
     body: JSON.stringify({ profile_id: modelProfileId }),
+  });
+}
+
+export async function createMode(
+  payload: {
+    id?: string | null;
+    name: string;
+    slash_alias: string;
+    description?: string;
+    instructions: string;
+  },
+  configRevision: string,
+): Promise<{ mode: ModeView; config_revision: string }> {
+  return requestJson("/api/config/modes", {
+    method: "POST",
+    headers: { "If-Match": configRevision },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateMode(
+  modeId: string,
+  payload: Partial<{
+    name: string | null;
+    slash_alias: string | null;
+    description: string | null;
+    instructions: string | null;
+  }>,
+  configRevision: string,
+): Promise<{ mode: ModeView; config_revision: string }> {
+  return requestJson(`/api/config/modes/${modeId}`, {
+    method: "PATCH",
+    headers: { "If-Match": configRevision },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMode(
+  modeId: string,
+  configRevision: string,
+): Promise<void> {
+  await requestJson(`/api/config/modes/${modeId}`, {
+    method: "DELETE",
+    headers: { "If-Match": configRevision },
   });
 }
