@@ -3,10 +3,12 @@ import type {
   ConfigBootstrapPayload,
   ExpandedChatInput,
   FileMentionItem,
+  HistoryItem,
   ImageAttachment,
   LiveSession,
   ModelProfileView,
   ProviderView,
+  SessionDetailPayload,
   SessionRecord,
   SlashCommandItem,
   TaskRecord,
@@ -66,6 +68,14 @@ export async function fetchSessions(): Promise<SessionRecord[]> {
 
 export async function deleteSession(sessionId: string): Promise<void> {
   await requestJson<void>(`/api/sessions/${sessionId}`, { method: "DELETE" });
+}
+
+export async function fetchSessionDetail(sessionId: string): Promise<SessionDetailPayload> {
+  return requestJson<{
+    session: SessionRecord;
+    history_items: HistoryItem[];
+    live_session: LiveSession | null;
+  }>(`/api/sessions/${sessionId}`);
 }
 
 export async function searchFileMentions(

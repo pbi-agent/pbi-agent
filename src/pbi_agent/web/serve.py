@@ -235,6 +235,23 @@ class SessionsResponse(BaseModel):
     sessions: list[SessionRecordModel]
 
 
+class HistoryItemModel(BaseModel):
+    item_id: str
+    role: str
+    content: str
+    file_paths: list[str] = Field(default_factory=list)
+    image_attachments: list[ImageAttachmentModel] = Field(default_factory=list)
+    markdown: bool
+    historical: bool
+    created_at: str
+
+
+class SessionDetailResponse(BaseModel):
+    session: SessionRecordModel
+    history_items: list[HistoryItemModel]
+    live_session: LiveSessionModel | None
+
+
 class ChatSessionResponse(BaseModel):
     session: LiveSessionModel
 
@@ -667,6 +684,29 @@ def list_sessions(
     )
 
 
+@system_router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
+def get_session_detail(
+    session_id: SessionIdPath,
+    manager: SessionManagerDep,
+) -> SessionDetailResponse:
+    try:
+        payload = manager.get_session_detail(session_id)
+    except KeyError as exc:
+        raise _not_found("Session not found.") from exc
+    return SessionDetailResponse(
+        session=_model_from_payload(SessionRecordModel, payload["session"]),
+        history_items=[
+            _model_from_payload(HistoryItemModel, item)
+            for item in payload["history_items"]
+        ],
+        live_session=(
+            _model_from_payload(LiveSessionModel, payload["live_session"])
+            if payload["live_session"] is not None
+            else None
+        ),
+    )
+
+
 @system_router.delete("/sessions/{session_id}", status_code=204)
 def delete_session(
     session_id: SessionIdPath,
@@ -722,6 +762,8 @@ def create_chat_session(
             live_session_id=request.live_session_id,
             profile_id=request.profile_id,
         )
+    except KeyError as exc:
+        raise _not_found("Session not found.") from exc
     except ConfigError as exc:
         raise _config_http_error(exc) from exc
     except Exception as exc:
@@ -942,8 +984,13 @@ async def stream_events(websocket: WebSocket, stream_id: StreamIdPath) -> None:
         return
 
     await websocket.accept()
-    for event in stream.snapshot():
-        await websocket.send_json(event)
+    try:
+        for event in stream.snapshot():
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        return
+    except asyncio.CancelledError:
+        return
     subscriber_id, queue = stream.subscribe()
     try:
         while True:

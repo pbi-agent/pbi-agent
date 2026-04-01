@@ -23,16 +23,16 @@ type ChatState = {
   itemsVersion: number;
   subAgents: Record<string, SubAgentState>;
   lastEventSeq: number;
-  switchLiveSession: (liveSessionId: string, resumeSessionId?: string | null) => void;
+  setRouteState: (resumeSessionId: string | null, items?: TimelineItem[]) => void;
+  attachLiveSession: (
+    liveSessionId: string,
+    resumeSessionId?: string | null,
+    preserveItems?: boolean,
+  ) => void;
   setConnection: (connection: ConnectionState) => void;
   clearTimeline: () => void;
   applyEvent: (event: WebEvent) => void;
 };
-
-const storedLiveSessionId =
-  typeof window === "undefined"
-    ? null
-    : window.localStorage.getItem("pbi-agent-live-session-id");
 
 function upsertItem(items: TimelineItem[], nextItem: TimelineItem): TimelineItem[] {
   const index = items.findIndex((item) => item.itemId === nextItem.itemId);
@@ -45,7 +45,7 @@ function upsertItem(items: TimelineItem[], nextItem: TimelineItem): TimelineItem
 }
 
 export const useChatStore = create<ChatState>((set) => ({
-  liveSessionId: storedLiveSessionId,
+  liveSessionId: null,
   resumeSessionId: null,
   connection: "disconnected",
   inputEnabled: false,
@@ -58,10 +58,9 @@ export const useChatStore = create<ChatState>((set) => ({
   itemsVersion: 0,
   subAgents: {},
   lastEventSeq: 0,
-  switchLiveSession: (liveSessionId, resumeSessionId = null) => {
-    window.localStorage.setItem("pbi-agent-live-session-id", liveSessionId);
+  setRouteState: (resumeSessionId, items = []) =>
     set({
-      liveSessionId,
+      liveSessionId: null,
       resumeSessionId,
       connection: "disconnected",
       inputEnabled: false,
@@ -70,12 +69,31 @@ export const useChatStore = create<ChatState>((set) => ({
       turnUsage: null,
       sessionEnded: false,
       fatalError: null,
-      items: [],
-      itemsVersion: 0,
+      items,
+      itemsVersion: items.length,
       subAgents: {},
       lastEventSeq: 0,
-    });
-  },
+    }),
+  attachLiveSession: (
+    liveSessionId,
+    resumeSessionId = null,
+    preserveItems = false,
+  ) =>
+    set((state) => ({
+      liveSessionId,
+      resumeSessionId,
+      connection: state.connection,
+      inputEnabled: false,
+      waitMessage: null,
+      sessionUsage: null,
+      turnUsage: null,
+      sessionEnded: false,
+      fatalError: null,
+      items: preserveItems ? state.items : [],
+      itemsVersion: preserveItems ? state.itemsVersion : 0,
+      subAgents: {},
+      lastEventSeq: 0,
+    })),
   setConnection: (connection) => set({ connection }),
   clearTimeline: () =>
     set({

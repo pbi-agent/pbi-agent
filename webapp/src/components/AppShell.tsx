@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchBootstrap } from "../api";
 import { useTaskEvents } from "../hooks/useTaskEvents";
@@ -39,7 +39,7 @@ export function AppShell() {
           ) : null}
         </div>
         <nav className="topnav">
-          <NavLink to="/" end>Chat</NavLink>
+          <NavLink to="/chat">Chat</NavLink>
           <NavLink to="/board">Kanban</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
@@ -52,8 +52,18 @@ export function AppShell() {
       <main className="app-main">
         <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
           <Routes>
+            <Route path="/" element={<Navigate to="/chat" replace />} />
             <Route
-              path="/"
+              path="/chat"
+              element={
+                <ChatPage
+                  workspaceRoot={bootstrap?.workspace_root}
+                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                />
+              }
+            />
+            <Route
+              path="/chat/:sessionId"
               element={
                 <ChatPage
                   workspaceRoot={bootstrap?.workspace_root}

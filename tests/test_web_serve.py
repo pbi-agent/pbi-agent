@@ -555,6 +555,113 @@ def test_chat_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -
     assert observed_runtime.settings.model == "gpt-5.4-2026-03-05"
 
 
+def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved chat",
+        )
+        store.add_message(session_id, "user", "Hello")
+        store.add_message(session_id, "assistant", "Hi there")
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/sessions/{session_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["session"]["session_id"] == session_id
+    assert payload["history_items"] == [
+        {
+            "item_id": "history-1",
+            "role": "user",
+            "content": "Hello",
+            "file_paths": [],
+            "image_attachments": [],
+            "markdown": False,
+            "historical": True,
+            "created_at": payload["history_items"][0]["created_at"],
+        },
+        {
+            "item_id": "history-2",
+            "role": "assistant",
+            "content": "Hi there",
+            "file_paths": [],
+            "image_attachments": [],
+            "markdown": True,
+            "historical": True,
+            "created_at": payload["history_items"][1]["created_at"],
+        },
+    ]
+    assert payload["live_session"] is None
+
+
+def test_get_session_detail_returns_not_found_for_unknown_session() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get("/api/sessions/missing-session")
+
+    assert response.status_code == 404
+
+
+def test_create_chat_session_rejects_unknown_resume_session() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/chat/session",
+            json={"resume_session_id": "missing-session"},
+        )
+
+    assert response.status_code == 404
+
+
+def test_create_chat_session_reuses_active_live_session_for_saved_chat(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        display.user_prompt()
+        return 0
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved chat",
+        )
+
+    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            first_response = client.post(
+                "/api/chat/session",
+                json={"resume_session_id": session_id},
+            )
+            second_response = client.post(
+                "/api/chat/session",
+                json={"resume_session_id": session_id},
+            )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert (
+        first_response.json()["session"]["live_session_id"]
+        == second_response.json()["session"]["live_session_id"]
+    )
+
+
 def test_chat_session_stream_replays_session_identity_event() -> None:
     def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id

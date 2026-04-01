@@ -45,12 +45,17 @@ from pbi_agent.session_store import (
     KANBAN_RUN_STATUS_FAILED,
     KANBAN_STAGE_BACKLOG,
     KanbanTaskRecord,
+    MessageRecord,
     MessageImageAttachment,
     SessionRecord,
     SessionStore,
 )
 from pbi_agent.task_runner import run_single_turn_in_directory
-from pbi_agent.web.display import KanbanTaskDisplay, WebDisplay
+from pbi_agent.web.display import (
+    KanbanTaskDisplay,
+    WebDisplay,
+    _history_message_content,
+)
 from pbi_agent.web.input_mentions import MentionSearchResult, WorkspaceFileIndex
 from pbi_agent.web.uploads import (
     StoredImageUpload,
@@ -141,6 +146,22 @@ def _serialize_task(
         "last_run_started_at": record.last_run_started_at,
         "last_run_finished_at": record.last_run_finished_at,
         "runtime_summary": _runtime_summary(runtime),
+    }
+
+
+def _serialize_history_message(message: MessageRecord) -> dict[str, Any]:
+    return {
+        "item_id": f"history-{message.id}",
+        "role": message.role,
+        "content": _history_message_content(message),
+        "file_paths": [],
+        "image_attachments": [
+            _message_image_payload(attachment)
+            for attachment in message.image_attachments
+        ],
+        "markdown": message.role == "assistant",
+        "historical": True,
+        "created_at": message.created_at,
     }
 
 
@@ -336,6 +357,25 @@ class WebSessionManager:
             )
         return [_serialize_session(session) for session in sessions]
 
+    def get_session_detail(self, session_id: str) -> dict[str, Any]:
+        with SessionStore() as store:
+            record = store.get_session(session_id)
+            if record is None or record.directory != self._directory_key:
+                raise KeyError(session_id)
+            messages = store.list_messages(session_id)
+        live_session = self._find_live_session_for_saved_session(session_id)
+        return {
+            "session": _serialize_session(record),
+            "history_items": [
+                _serialize_history_message(message) for message in messages
+            ],
+            "live_session": (
+                self._serialize_live_session(live_session)
+                if live_session is not None
+                else None
+            ),
+        }
+
     def list_tasks(self) -> list[dict[str, Any]]:
         with SessionStore() as store:
             records = store.list_kanban_tasks(self._directory_key)
@@ -356,11 +396,18 @@ class WebSessionManager:
     ) -> dict[str, Any]:
         runtime = self._resolve_runtime(profile_id)
         if resume_session_id is not None:
+            self._require_saved_session(resume_session_id)
             runtime = self._resolve_saved_session_runtime(
                 resume_session_id,
                 fallback=runtime,
             )
         with self._lock:
+            if resume_session_id is not None:
+                existing_live_session = (
+                    self._find_live_session_for_saved_session_locked(resume_session_id)
+                )
+                if existing_live_session is not None:
+                    return self._serialize_live_session(existing_live_session)
             if live_session_id and live_session_id in self._chat_sessions:
                 return self._serialize_live_session(
                     self._chat_sessions[live_session_id]
@@ -1008,6 +1055,32 @@ class WebSessionManager:
         payload = self._serialize_task_record(record)
         self._app_stream.publish("task_updated", {"task": payload})
         return payload
+
+    def _require_saved_session(self, session_id: str) -> SessionRecord:
+        with SessionStore() as store:
+            record = store.get_session(session_id)
+        if record is None or record.directory != self._directory_key:
+            raise KeyError(session_id)
+        return record
+
+    def _find_live_session_for_saved_session(
+        self,
+        session_id: str,
+    ) -> LiveChatSession | None:
+        with self._lock:
+            return self._find_live_session_for_saved_session_locked(session_id)
+
+    def _find_live_session_for_saved_session_locked(
+        self,
+        session_id: str,
+    ) -> LiveChatSession | None:
+        for live_session in self._chat_sessions.values():
+            if live_session.resume_session_id != session_id:
+                continue
+            if live_session.status == "ended":
+                continue
+            return live_session
+        return None
 
     def _bind_live_session(
         self,

@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useShallow } from "zustand/react/shallow";
 import {
   createChatSession,
   deleteSession,
   expandChatInput,
+  fetchSessionDetail,
   fetchSessions,
+  requestNewChat,
   submitChatInput,
   uploadChatImages,
 } from "../../api";
-import type { SessionRecord } from "../../types";
+import type { HistoryItem, SessionRecord, TimelineItem } from "../../types";
 import { useChatStore } from "../../store";
 import { useLiveChatEvents } from "../../hooks/useLiveChatEvents";
 import { ConnectionBadge } from "./ConnectionBadge";
@@ -28,12 +30,16 @@ export function ChatPage({
   supportsImageInputs: boolean;
 }) {
   const client = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { sessionId: routeSessionId } = useParams<{ sessionId?: string }>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
   const composerRef = useRef<ComposerHandle>(null);
   const lastResolvedSessionIdRef = useRef<string | null>(null);
+  const hydratedRouteKeyRef = useRef<string | null>(null);
+  const liveRequestRouteKeyRef = useRef<string | null>(null);
+  const [awaitingBlankChat, setAwaitingBlankChat] = useState(false);
 
   const {
     liveSessionId,
@@ -63,7 +69,8 @@ export function ChatPage({
     })),
   );
 
-  const switchLiveSession = useChatStore((state) => state.switchLiveSession);
+  const setRouteState = useChatStore((state) => state.setRouteState);
+  const attachLiveSession = useChatStore((state) => state.attachLiveSession);
 
   const sessionsQuery = useQuery({
     queryKey: ["sessions"],
@@ -71,10 +78,21 @@ export function ChatPage({
     refetchInterval: 12_000,
   });
 
+  const sessionDetailQuery = useQuery({
+    queryKey: ["session", routeSessionId],
+    queryFn: () => fetchSessionDetail(routeSessionId!),
+    enabled: Boolean(routeSessionId),
+    retry: false,
+  });
+
   const createSessionMutation = useMutation({
     mutationFn: createChatSession,
-    onSuccess: (session) =>
-      switchLiveSession(session.live_session_id, session.resume_session_id),
+    onSuccess: (session, variables) =>
+      attachLiveSession(
+        session.live_session_id,
+        session.resume_session_id,
+        Boolean(variables.resume_session_id),
+      ),
   });
 
   const sendInputMutation = useMutation({
@@ -93,23 +111,110 @@ export function ChatPage({
     mutationFn: deleteSession,
   });
 
-  const startedRef = useRef(false);
-  const mutateRef = useRef(createSessionMutation.mutate);
-  mutateRef.current = createSessionMutation.mutate;
+  const requestNewChatMutation = useMutation({
+    mutationFn: ({
+      liveSessionId,
+      profileId = null,
+    }: {
+      liveSessionId: string;
+      profileId?: string | null;
+    }) => requestNewChat(liveSessionId, profileId),
+  });
 
-  useLiveChatEvents(createSessionMutation.isSuccess ? liveSessionId : null);
+  useLiveChatEvents(liveSessionId);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-    const resumeId = searchParams.get("session");
-    if (resumeId) {
-      mutateRef.current({ resume_session_id: resumeId });
-      setSearchParams({}, { replace: true });
-    } else {
-      mutateRef.current(liveSessionId ? { live_session_id: liveSessionId } : {});
+    if (awaitingBlankChat && resumeSessionId === null) {
+      setAwaitingBlankChat(false);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [awaitingBlankChat, resumeSessionId]);
+
+  useEffect(() => {
+    // While a new-blank-chat transition is in flight, hold off — prevents the
+    // stale-route render (zustand update before react-router propagates) from
+    // creating a spurious resume session.
+    if (awaitingBlankChat) return;
+
+    const routeKey = routeSessionId ?? "__new__";
+
+    if (routeSessionId) {
+      if (liveSessionId && resumeSessionId === routeSessionId) {
+        hydratedRouteKeyRef.current = routeKey;
+        liveRequestRouteKeyRef.current = routeKey;
+        return;
+      }
+
+      if (!sessionDetailQuery.isSuccess) {
+        if (sessionDetailQuery.isError && hydratedRouteKeyRef.current !== routeKey) {
+          setRouteState(routeSessionId, []);
+          hydratedRouteKeyRef.current = routeKey;
+          liveRequestRouteKeyRef.current = null;
+        }
+        return;
+      }
+
+      if (hydratedRouteKeyRef.current !== routeKey) {
+        // When an existing live session is already running, skip pre-loading API history.
+        // The WebSocket snapshot replay will rebuild the timeline, avoiding duplicates.
+        const hasExistingLiveSession = sessionDetailQuery.data.live_session !== null;
+        const historyItems = hasExistingLiveSession
+          ? []
+          : sessionDetailQuery.data.history_items.map(mapHistoryItem);
+        setRouteState(routeSessionId, historyItems);
+        hydratedRouteKeyRef.current = routeKey;
+        liveRequestRouteKeyRef.current = null;
+      }
+
+      if (liveRequestRouteKeyRef.current !== routeKey) {
+        createSessionMutation.mutate({ resume_session_id: routeSessionId });
+        liveRequestRouteKeyRef.current = routeKey;
+      }
+      return;
+    }
+
+    if (hydratedRouteKeyRef.current !== routeKey) {
+      // Don't wipe the store if we already have an active live session waiting for a
+      // new-chat response — the WebSocket is still open and will deliver session_state.
+      if (liveSessionId && resumeSessionId === null && !sessionEnded) {
+        hydratedRouteKeyRef.current = routeKey;
+        liveRequestRouteKeyRef.current = routeKey;
+        return;
+      }
+      setRouteState(null, []);
+      hydratedRouteKeyRef.current = routeKey;
+      liveRequestRouteKeyRef.current = null;
+    }
+
+    if (liveSessionId && resumeSessionId === null && !sessionEnded) {
+      liveRequestRouteKeyRef.current = routeKey;
+      return;
+    }
+
+    if (liveRequestRouteKeyRef.current !== routeKey) {
+      createSessionMutation.mutate({});
+      liveRequestRouteKeyRef.current = routeKey;
+    }
+  }, [
+    awaitingBlankChat,
+    createSessionMutation,
+    liveSessionId,
+    resumeSessionId,
+    routeSessionId,
+    sessionDetailQuery.data,
+    sessionDetailQuery.isError,
+    sessionDetailQuery.isSuccess,
+    sessionEnded,
+    setRouteState,
+  ]);
+
+  useEffect(() => {
+    if (awaitingBlankChat) {
+      return;
+    }
+    if (resumeSessionId && !routeSessionId) {
+      navigate(`/chat/${encodeURIComponent(resumeSessionId)}`, { replace: true });
+    }
+  }, [awaitingBlankChat, navigate, resumeSessionId, routeSessionId]);
 
   useEffect(() => {
     if (inputEnabled && liveSessionId && !sessionEnded) {
@@ -127,27 +232,30 @@ export function ChatPage({
     const previous = lastResolvedSessionIdRef.current;
     if (resumeSessionId && resumeSessionId !== previous) {
       client.invalidateQueries({ queryKey: ["sessions"] });
+      client.invalidateQueries({ queryKey: ["session", resumeSessionId] });
     }
     lastResolvedSessionIdRef.current = resumeSessionId;
   }, [client, resumeSessionId]);
 
-  const activeSessionRecord =
-    resumeSessionId && sessionsQuery.data
-      ? sessionsQuery.data.find((session) => session.session_id === resumeSessionId) ?? {
-          session_id: resumeSessionId,
-          directory: workspaceRoot ?? "",
-          provider: "",
-          model: "",
-          previous_id: null,
-          title: "",
-          total_tokens: 0,
-          input_tokens: 0,
-          output_tokens: 0,
-          cost_usd: 0,
-          created_at: "",
-          updated_at: "",
-        }
-      : null;
+  const activeSessionRecord = routeSessionId
+    ? sessionDetailQuery.data?.session ??
+      (sessionsQuery.data?.find((session) => session.session_id === routeSessionId) ?? {
+        session_id: routeSessionId,
+        directory: workspaceRoot ?? "",
+        provider: "",
+        provider_id: null,
+        model: "",
+        profile_id: null,
+        previous_id: null,
+        title: "",
+        total_tokens: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        cost_usd: 0,
+        created_at: "",
+        updated_at: "",
+      })
+    : null;
 
   const handleSubmit = async (payload: { text: string; images: File[] }) => {
     const { text, images } = payload;
@@ -184,9 +292,39 @@ export function ChatPage({
     });
   };
 
+  const handleNewSession = async () => {
+    const currentLiveSessionId = liveSessionId;
+    setAwaitingBlankChat(true);
+    setSidebarOpen(false);
+
+    if (currentLiveSessionId && !sessionEnded) {
+      try {
+        await requestNewChatMutation.mutateAsync({ liveSessionId: currentLiveSessionId });
+        attachLiveSession(currentLiveSessionId, null, false);
+        navigate("/chat");
+      } catch {
+        setAwaitingBlankChat(false);
+        liveRequestRouteKeyRef.current = null;
+        navigate("/chat");
+        setRouteState(null, []);
+        hydratedRouteKeyRef.current = "__new__";
+        createSessionMutation.mutate({});
+      }
+    } else {
+      setAwaitingBlankChat(false);
+      liveRequestRouteKeyRef.current = null;
+      navigate("/chat");
+      setRouteState(null, []);
+      hydratedRouteKeyRef.current = "__new__";
+      createSessionMutation.mutate({});
+    }
+
+    window.setTimeout(() => composerRef.current?.focus(), 100);
+  };
+
   const handleDeleteSession = async () => {
     if (!pendingDeleteSession) return;
-    const deletingActive = pendingDeleteSession.session_id === resumeSessionId;
+    const deletingActive = pendingDeleteSession.session_id === routeSessionId;
 
     await deleteSessionMutation.mutateAsync(pendingDeleteSession.session_id);
     client.setQueryData<SessionRecord[] | undefined>(["sessions"], (sessions) =>
@@ -198,14 +336,42 @@ export function ChatPage({
     await client.invalidateQueries({ queryKey: ["sessions"] });
 
     if (deletingActive) {
-      await createSessionMutation.mutateAsync({});
+      const currentLiveSessionId = liveSessionId;
+      setAwaitingBlankChat(true);
+      if (currentLiveSessionId && !sessionEnded) {
+        try {
+          await requestNewChatMutation.mutateAsync({
+            liveSessionId: currentLiveSessionId,
+          });
+          attachLiveSession(currentLiveSessionId, null, false);
+          navigate("/chat", { replace: true });
+        } catch {
+          setAwaitingBlankChat(false);
+          liveRequestRouteKeyRef.current = null;
+          navigate("/chat", { replace: true });
+          setRouteState(null, []);
+          hydratedRouteKeyRef.current = "__new__";
+          await createSessionMutation.mutateAsync({});
+        }
+      } else {
+        setAwaitingBlankChat(false);
+        liveRequestRouteKeyRef.current = null;
+        navigate("/chat", { replace: true });
+        setRouteState(null, []);
+        hydratedRouteKeyRef.current = "__new__";
+        await createSessionMutation.mutateAsync({});
+      }
       window.setTimeout(() => composerRef.current?.focus(), 100);
     }
   };
 
-  const canDeleteActiveSession = Boolean(resumeSessionId) && items.length > 0;
+  const canDeleteActiveSession = Boolean(routeSessionId && activeSessionRecord);
   const isDeleteBusy =
-    deleteSessionMutation.isPending || createSessionMutation.isPending;
+    deleteSessionMutation.isPending
+    || createSessionMutation.isPending
+    || requestNewChatMutation.isPending;
+  const sessionDetailError = routeSessionId ? sessionDetailQuery.error : null;
+  const sessionNotFound = routeSessionId && sessionDetailQuery.isError;
 
   return (
     <section className={`chat-layout ${sidebarOpen ? "chat-layout--sidebar-open" : ""}`}>
@@ -213,16 +379,13 @@ export function ChatPage({
         <SessionSidebar
           sessions={sessionsQuery.data ?? []}
           isLoading={sessionsQuery.isLoading}
-          activeSessionId={resumeSessionId}
+          activeSessionId={routeSessionId ?? resumeSessionId}
           workspaceRoot={workspaceRoot}
-          onNewSession={() => {
-            createSessionMutation.mutate({});
+          onNewSession={() => { void handleNewSession(); }}
+          onResumeSession={(sessionId) => {
+            navigate(`/chat/${encodeURIComponent(sessionId)}`);
             setSidebarOpen(false);
-            setTimeout(() => composerRef.current?.focus(), 100);
           }}
-          onResumeSession={(sessionId) =>
-            createSessionMutation.mutate({ resume_session_id: sessionId })
-          }
           onDeleteSession={(session) => {
             deleteSessionMutation.reset();
             setPendingDeleteSession(session);
@@ -263,23 +426,44 @@ export function ChatPage({
           <div className="banner banner--notice">{inputWarnings.join(" ")}</div>
         ) : null}
         {fatalError ? <div className="banner banner--error">{fatalError}</div> : null}
+        {createSessionMutation.error ? (
+          <div className="banner banner--error">{createSessionMutation.error.message}</div>
+        ) : null}
 
-        <ChatTimeline
-          items={items}
-          subAgents={subAgents}
-          connection={connection}
-          waitMessage={waitMessage}
-        />
+        {sessionNotFound ? (
+          <div className="empty-state">
+            <div className="empty-state__title">Session not found</div>
+            <div className="empty-state__description">
+              {sessionDetailError?.message ?? "This chat does not exist in the current workspace."}
+            </div>
+            <button
+              type="button"
+              className="btn btn--primary empty-state__action"
+              onClick={() => { void handleNewSession(); }}
+            >
+              Start new chat
+            </button>
+          </div>
+        ) : (
+          <>
+            <ChatTimeline
+              items={items}
+              subAgents={subAgents}
+              connection={connection}
+              waitMessage={waitMessage}
+            />
 
-        <Composer
-          ref={composerRef}
-          inputEnabled={inputEnabled}
-          sessionEnded={sessionEnded}
-          liveSessionId={liveSessionId}
-          supportsImageInputs={supportsImageInputs}
-          isSubmitting={sendInputMutation.isPending}
-          onSubmit={handleSubmit}
-        />
+            <Composer
+              ref={composerRef}
+              inputEnabled={inputEnabled}
+              sessionEnded={sessionEnded}
+              liveSessionId={liveSessionId}
+              supportsImageInputs={supportsImageInputs}
+              isSubmitting={sendInputMutation.isPending}
+              onSubmit={handleSubmit}
+            />
+          </>
+        )}
       </div>
 
       {pendingDeleteSession ? (
@@ -297,4 +481,16 @@ export function ChatPage({
       ) : null}
     </section>
   );
+}
+
+function mapHistoryItem(item: HistoryItem): TimelineItem {
+  return {
+    kind: "message",
+    itemId: item.item_id,
+    role: item.role,
+    content: item.content,
+    filePaths: item.file_paths,
+    imageAttachments: item.image_attachments,
+    markdown: item.markdown,
+  };
 }

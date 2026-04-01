@@ -64,7 +64,7 @@ export function TaskCard({
         {task.session_id ? (
           <a
             className="btn btn--ghost btn--sm"
-            href={`/?session=${encodeURIComponent(task.session_id)}`}
+            href={`/chat/${encodeURIComponent(task.session_id)}`}
             target="_blank"
             rel="noopener noreferrer"
           >

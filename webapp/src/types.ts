@@ -81,6 +81,23 @@ export type LiveSession = {
   ended_at: string | null;
 };
 
+export type HistoryItem = {
+  item_id: string;
+  role: "user" | "assistant" | "notice" | "error" | "debug";
+  content: string;
+  file_paths: string[];
+  image_attachments: ImageAttachment[];
+  markdown: boolean;
+  historical: boolean;
+  created_at: string;
+};
+
+export type SessionDetailPayload = {
+  session: SessionRecord;
+  history_items: HistoryItem[];
+  live_session: LiveSession | null;
+};
+
 export type FileMentionItem = {
   path: string;
   kind: "file" | "image";
