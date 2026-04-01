@@ -67,7 +67,7 @@ def test_resolve_settings_uses_google_defaults(monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
 
     parser = build_parser()
-    args = parser.parse_args(["--provider", "google", "console"])
+    args = parser.parse_args(["--provider", "google", "web"])
     settings = resolve_settings(args)
 
     assert settings.provider == "google"

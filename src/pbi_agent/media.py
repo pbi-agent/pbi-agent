@@ -31,22 +31,30 @@ def load_workspace_image(root: Path, raw_path: Any) -> ImageAttachment:
     if not target_path.is_file():
         raise ValueError(f"path is not a file: {target_path}")
 
-    raw_bytes = target_path.read_bytes()
+    return load_image_bytes(
+        relative_workspace_path(root, target_path),
+        target_path.read_bytes(),
+    )
+
+
+def load_image_bytes(path_label: str, raw_bytes: bytes) -> ImageAttachment:
+    if not isinstance(path_label, str) or not path_label.strip():
+        raise ValueError("image path must be a non-empty string")
     if len(raw_bytes) > _MAX_IMAGE_BYTES:
         size_mb = len(raw_bytes) / (1024 * 1024)
         raise ValueError(
-            f"image too large: {target_path.name} is {size_mb:.1f} MB "
+            f"image too large: {Path(path_label).name} is {size_mb:.1f} MB "
             f"(limit: {_MAX_IMAGE_BYTES // (1024 * 1024)} MB)"
         )
     mime_type = detect_image_mime_type(raw_bytes)
     if mime_type is None:
         allowed = ", ".join(_MIME_LABELS[mime] for mime in SUPPORTED_IMAGE_MIME_TYPES)
         raise ValueError(
-            f"unsupported image format: {target_path.name} (allowed: {allowed})"
+            f"unsupported image format: {Path(path_label).name} (allowed: {allowed})"
         )
 
     return ImageAttachment(
-        path=relative_workspace_path(root, target_path),
+        path=path_label.strip(),
         mime_type=mime_type,
         data_base64=base64.b64encode(raw_bytes).decode("ascii"),
         byte_count=len(raw_bytes),

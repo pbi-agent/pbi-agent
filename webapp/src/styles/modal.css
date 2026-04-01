@@ -1,0 +1,166 @@
+/* ── Modal ─────────────────────────────────────────────────────────── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  animation: fade-in var(--duration-fast) var(--ease-out);
+}
+
+.modal-card {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  background: var(--color-surface-0);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  animation: slide-up var(--duration-slow) var(--ease-out);
+}
+
+.modal-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-card__title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semi);
+}
+
+.modal-card__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: var(--text-lg);
+  color: var(--color-text-tertiary);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.modal-card__close:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+/* ── Task Form ── */
+.task-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+}
+
+.task-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.task-form__label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+}
+
+.task-form__input,
+.task-form__textarea,
+.task-form__select {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  transition: border-color var(--duration-fast);
+}
+
+.task-form__input:focus,
+.task-form__textarea:focus,
+.task-form__select:focus {
+  border-color: var(--color-accent-border);
+}
+
+.task-form__textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: var(--leading-relaxed);
+}
+
+.task-form__select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238080a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: var(--sp-8);
+  cursor: pointer;
+}
+
+.task-form__submit {
+  width: 100%;
+  padding: var(--sp-3);
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast);
+  margin-top: var(--sp-2);
+}
+
+.task-form__submit:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.task-form__submit:disabled {
+  background: var(--color-surface-3);
+  color: var(--color-text-tertiary);
+}
+
+.modal-card--confirm {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.confirm-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+}
+
+.confirm-modal__body {
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--color-text-secondary);
+}
+
+.confirm-modal__body strong {
+  color: var(--color-text);
+}
+
+.confirm-modal__error {
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--color-error);
+  border-radius: var(--radius-md);
+  background: var(--color-error-muted);
+  color: var(--color-error);
+  font-size: var(--text-xs);
+}
+
+.confirm-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}

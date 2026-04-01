@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pbi_agent import cli
 from pbi_agent.config import DEFAULT_XAI_RESPONSES_URL
-from pbi_agent.session_store import SessionRecord, SessionStore
+from pbi_agent.session_store import SessionStore
 
 
 class DefaultWebCommandTests(unittest.TestCase):
@@ -74,7 +74,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 patch("pbi_agent.config.load_dotenv"),
                 patch("sys.stderr", stderr),
             ):
-                rc = cli.main(["--provider", "google", "console"])
+                rc = cli.main(["--provider", "google", "web"])
 
         self.assertEqual(rc, 2)
         self.assertIn("Missing API key for provider 'google'", stderr.getvalue())
@@ -119,6 +119,24 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertNotIn("[GLOBAL OPTIONS] [<command>] [COMMAND OPTIONS] web", web_help)
         self.assertIn("Serve the browser interface.", web_help)
 
+    def test_root_help_omits_removed_console_and_open_commands(self) -> None:
+        help_text = cli.build_parser().format_help()
+
+        self.assertNotIn(" console ", help_text)
+        self.assertNotIn(" open ", help_text)
+
+    def test_parser_rejects_removed_console_command(self) -> None:
+        with self.assertRaises(SystemExit) as exc_info:
+            cli.build_parser().parse_args(["console"])
+
+        self.assertEqual(exc_info.exception.code, 2)
+
+    def test_parser_rejects_removed_open_command(self) -> None:
+        with self.assertRaises(SystemExit) as exc_info:
+            cli.build_parser().parse_args(["open", "--session-id", "session-1"])
+
+        self.assertEqual(exc_info.exception.code, 2)
+
     def test_browser_target_url_uses_loopback_for_wildcard_bind(self) -> None:
         parser = cli.build_parser()
         args = parser.parse_args(["web", "--host", "0.0.0.0", "--port", "9001"])
@@ -134,44 +152,37 @@ class DefaultWebCommandTests(unittest.TestCase):
     def test_parser_accepts_max_tokens_flag(self) -> None:
         parser = cli.build_parser()
 
-        args = parser.parse_args(["--max-tokens", "2048", "console"])
+        args = parser.parse_args(["--max-tokens", "2048", "web"])
 
         self.assertEqual(args.max_tokens, 2048)
 
     def test_parser_accepts_sub_agent_model_flag(self) -> None:
         parser = cli.build_parser()
 
-        args = parser.parse_args(["--sub-agent-model", "gpt-5-mini", "console"])
+        args = parser.parse_args(["--sub-agent-model", "gpt-5-mini", "web"])
 
         self.assertEqual(args.sub_agent_model, "gpt-5-mini")
 
     def test_parser_accepts_skills_flag(self) -> None:
         parser = cli.build_parser()
 
-        args = parser.parse_args(["--skills", "console"])
+        args = parser.parse_args(["--skills", "web"])
 
         self.assertTrue(args.skills)
 
     def test_parser_accepts_mcp_flag(self) -> None:
         parser = cli.build_parser()
 
-        args = parser.parse_args(["--mcp", "console"])
+        args = parser.parse_args(["--mcp", "web"])
 
         self.assertTrue(args.mcp)
 
     def test_parser_accepts_agents_flag(self) -> None:
         parser = cli.build_parser()
 
-        args = parser.parse_args(["--agents", "console"])
+        args = parser.parse_args(["--agents", "web"])
 
         self.assertTrue(args.agents)
-
-    def test_web_chat_command_uses_parent_pid_wrapper(self) -> None:
-        command = cli._web_chat_command(self._settings(verbose=True), parent_pid=4321)
-
-        self.assertIn("pbi_agent.web.chat_entry", command)
-        self.assertIn("--parent-pid 4321", command)
-        self.assertIn("--verbose", command)
 
     def test_handle_web_command_serves_in_process(self) -> None:
         parser = cli.build_parser()
@@ -193,8 +204,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             9001,
             "http://127.0.0.1:9001",
         )
-        mock_server.assert_called_once()
-        self.assertIn("pbi_agent.web.chat_entry", mock_server.call_args.args[1])
+        mock_server.assert_called_once_with(args, settings)
         server.serve.assert_called_once_with(debug=False)
 
     def test_handle_web_command_sets_and_restores_settings_env(self) -> None:
@@ -363,7 +373,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(rc, 130)
         server.serve.assert_called_once_with(debug=False)
 
-    def test_handle_run_command_uses_console_single_turn_path(self) -> None:
+    def test_handle_run_command_uses_single_turn_path(self) -> None:
         parser = cli.build_parser()
         args = parser.parse_args(["run", "--prompt", "Inspect the report"])
         settings = self._settings()
@@ -373,7 +383,9 @@ class DefaultWebCommandTests(unittest.TestCase):
             patch(
                 "pbi_agent.agent.session.run_single_turn", return_value=outcome
             ) as mock_run,
-            patch("pbi_agent.ui.console_display.ConsoleDisplay") as mock_display_cls,
+            patch(
+                "pbi_agent.display.console_display.ConsoleDisplay"
+            ) as mock_display_cls,
         ):
             rc = cli._handle_run_command(args, settings)
 
@@ -435,7 +447,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                         side_effect=fake_run_single_turn,
                     ) as mock_run,
                     patch(
-                        "pbi_agent.ui.console_display.ConsoleDisplay"
+                        "pbi_agent.display.console_display.ConsoleDisplay"
                     ) as mock_display_cls,
                 ):
                     rc = cli._handle_run_command(args, settings)
@@ -614,7 +626,7 @@ class DefaultWebCommandTests(unittest.TestCase):
     def test_parser_accepts_service_tier_flag(self) -> None:
         parser = cli.build_parser()
 
-        args = parser.parse_args(["--service-tier", "flex", "console"])
+        args = parser.parse_args(["--service-tier", "flex", "web"])
 
         self.assertEqual(args.service_tier, "flex")
 
@@ -622,7 +634,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         parser = cli.build_parser()
 
         with self.assertRaises(SystemExit) as exc_info:
-            parser.parse_args(["--service-tier", "scale", "console"])
+            parser.parse_args(["--service-tier", "scale", "web"])
 
         self.assertEqual(exc_info.exception.code, 2)
 
@@ -641,87 +653,13 @@ class DefaultWebCommandTests(unittest.TestCase):
                     "flex",
                     "--api-key",
                     "k",
-                    "console",
+                    "web",
                 ]
             )
 
         self.assertEqual(rc, 2)
         self.assertIn("--service-tier", stderr.getvalue())
         self.assertIn("OpenAI", stderr.getvalue())
-
-    def test_main_open_uses_stored_provider_settings_before_validation(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmp_path = Path(tmpdir)
-            db_path = tmp_path / "sessions.db"
-            config_path = tmp_path / "config.json"
-            config_path.write_text("{}", encoding="utf-8")
-            with SessionStore(db_path=db_path) as store:
-                session_id = store.create_session(
-                    "/tmp/project", "xai", "grok-4", "saved xai session"
-                )
-
-            with (
-                patch.dict(
-                    os.environ,
-                    {
-                        "PBI_AGENT_SESSION_DB_PATH": str(db_path),
-                        "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
-                        "PBI_AGENT_PROVIDER": "openai",
-                        "XAI_API_KEY": "xai-key",
-                    },
-                    clear=False,
-                ),
-                patch("pbi_agent.config.load_dotenv"),
-                patch("pbi_agent.cli.configure_logging"),
-                patch("pbi_agent.cli.save_internal_config"),
-                patch(
-                    "pbi_agent.cli._handle_open_command", return_value=41
-                ) as mock_open,
-            ):
-                os.environ.pop("PBI_AGENT_API_KEY", None)
-                os.environ.pop("OPENAI_API_KEY", None)
-                rc = cli.main(["open", "--session-id", session_id])
-
-        self.assertEqual(rc, 41)
-        args, settings, session = mock_open.call_args.args
-        self.assertEqual(args.session_id, session_id)
-        self.assertEqual(settings.provider, "xai")
-        self.assertEqual(settings.model, "grok-4")
-        self.assertEqual(settings.responses_url, DEFAULT_XAI_RESPONSES_URL)
-        self.assertEqual(session.session_id, session_id)
-        self.assertEqual(session.provider, "xai")
-
-    def test_handle_open_command_switches_to_saved_session_directory(self) -> None:
-        settings = Mock(verbose=False)
-        session = SessionRecord(
-            session_id="session-1",
-            directory=tempfile.gettempdir(),
-            provider="openai",
-            model="gpt-5.4-2026-03-05",
-            previous_id="resp_1",
-            title="saved chat",
-            total_tokens=0,
-            input_tokens=0,
-            output_tokens=0,
-            cost_usd=0.0,
-            created_at="2026-03-19T10:00:00+00:00",
-            updated_at="2026-03-19T10:00:00+00:00",
-        )
-        args = argparse.Namespace(session_id=session.session_id)
-        original_cwd = Path.cwd()
-
-        def fake_run_app(_app) -> int:
-            self.assertEqual(Path.cwd(), Path(session.directory))
-            return 23
-
-        with (
-            patch("pbi_agent.cli._run_app", side_effect=fake_run_app),
-            patch("pbi_agent.ui.ChatApp"),
-        ):
-            rc = cli._handle_open_command(args, settings, session)
-
-        self.assertEqual(rc, 23)
-        self.assertEqual(Path.cwd(), original_cwd)
 
     def test_main_run_with_session_id_uses_stored_provider_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

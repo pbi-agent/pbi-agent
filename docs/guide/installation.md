@@ -1,8 +1,6 @@
 ---
 title: 'Installation'
 description: 'Prerequisites, package installation, source setup, and a minimal first-run flow.'
-layout: doc
-outline: [2, 3]
 ---
 
 # Installation

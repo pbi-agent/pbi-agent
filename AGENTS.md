@@ -60,6 +60,20 @@ uv tool install --reinstall .
 
 **Entry point:** `src/pbi_agent/__main__.py` → `cli.py` parses args and routes to commands (web, console, run, audit, init, sessions, open).
 
+## Web Stack
+
+- Backend web server: FastAPI in `src/pbi_agent/web/serve.py`, served by Uvicorn. It exposes JSON endpoints under `/api/*`, websocket event streams under `/api/events/*`, and serves the SPA shell plus built static assets.
+- Frontend app: Vite + React + TypeScript in `webapp/`. The app uses `react-router-dom` for client routing, `@tanstack/react-query` for server state, `zustand` for chat session state, and `@dnd-kit/core` for board drag-and-drop.
+- Build output: `npm run web:build` writes the production bundle to `src/pbi_agent/web/static/app`, which FastAPI serves in non-dev flows.
+- Docs site: VitePress in `docs/`, built separately with `npm run docs:build`.
+
+## Frontend Implementation Notes
+
+- Treat the web UI as a SPA mounted by FastAPI. Preserve the catch-all route pattern and keep client-side routes compatible with the backend SPA fallback.
+- Keep API contract changes coordinated across `src/pbi_agent/web/serve.py`, `src/pbi_agent/web/session_manager.py`, and `webapp/src/api.ts`.
+- Prefer extending the existing stack instead of introducing overlapping frontend frameworks, state managers, or data-fetching layers.
+- For local frontend development, use Vite dev server for the client and FastAPI/Uvicorn for the backend rather than replacing the current build pipeline.
+
 ### Provider Layer (`providers/`)
 Abstract `Provider` base class with implementations for each LLM. All use synchronous HTTP (`urllib.request`). Key methods: `connect()`, `close()`, `request_turn()`, `execute_tool_calls()`, `reset_conversation()`. Factory: `create_provider()` in `providers/__init__.py`.
 
@@ -105,5 +119,7 @@ Precedence: CLI flags > `PBI_AGENT_*` env vars > provider-specific env vars (e.g
 - Bundled PBIP template assets must stay under `src/pbi_agent/report/`; hatchling packaging relies on git tracking for non-Python assets.
 - Workspace confinement: `shell` tool rejects path traversal; all file tools validate paths against workspace boundaries.
 - `python_exec` runs trusted local Python — it is not a sandbox.
+- After every frontend edit, run the relevant npm build command and confirm it passes before finishing. Use `npm run web:build` for web app changes and `npm run docs:build` for VitePress/docs changes.
+- When changing the FastAPI web server or Vite frontend, keep the implementation aligned with the existing FastAPI + Vite/React architecture rather than introducing an alternative web framework.
 - `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest` must all pass before merging.
 - **No migration or backward-compatibility logic.** The project is in early development — do not add schema migrations, version checks, deprecation shims, or any other backward-compatibility code. When something changes, just change it directly.

@@ -7,7 +7,7 @@ from pbi_agent.config import Settings
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, UserTurnInput
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.types import ParentContextSnapshot
-from pbi_agent.ui.display_protocol import DisplayProtocol
+from pbi_agent.display.protocol import DisplayProtocol
 
 
 class Provider(ABC):

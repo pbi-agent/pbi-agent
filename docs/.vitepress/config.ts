@@ -58,16 +58,23 @@ function buildSocialHead(
 
 export default defineConfig({
   title: siteName,
+  titleTemplate: ':title | pbi-agent',
   description: siteDescription,
   lang: 'en-US',
   base: siteBase,
   cleanUrls: true,
   lastUpdated: true,
+  srcExclude: ['**/README.md', '**/TODO.md'],
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: faviconUrl }],
     ['link', { rel: 'apple-touch-icon', href: faviconUrl }],
     ['meta', { name: 'theme-color', content: '#0f172a' }]
   ],
+  markdown: {
+    image: {
+      lazyLoading: true
+    }
+  },
   transformHead(context) {
     return buildSocialHead(
       context.page,
@@ -77,26 +84,45 @@ export default defineConfig({
   },
   themeConfig: {
     nav: [
-      { text: 'Guide', link: '/guide/' },
-      { text: 'Reference', link: '/reference/cli' },
+      { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },
+      { text: 'Reference', link: '/reference/cli', activeMatch: '/reference/' },
       { text: 'GitHub', link: 'https://github.com/nasirus/pbi-agent' }
     ],
     sidebar: {
       '/guide/': [
-        { text: 'Introduction', link: '/guide/' },
-        { text: 'Installation', link: '/guide/installation' },
-        { text: 'Providers', link: '/guide/providers' },
-        { text: 'Audit System', link: '/guide/audit' },
-        { text: 'Customization', link: '/guide/customization' }
+        {
+          text: 'Guide',
+          collapsed: false,
+          items: [
+            { text: 'Introduction', link: '/guide/' },
+            { text: 'Installation', link: '/guide/installation' },
+            { text: 'Providers', link: '/guide/providers' },
+            { text: 'Audit System', link: '/guide/audit' },
+            { text: 'Customization', link: '/guide/customization' }
+          ]
+        }
       ],
       '/reference/': [
-        { text: 'CLI Reference', link: '/reference/cli' },
-        { text: 'Tools', link: '/reference/tools' },
-        { text: 'Environment Variables', link: '/reference/environment' }
+        {
+          text: 'Reference',
+          collapsed: false,
+          items: [
+            { text: 'CLI Reference', link: '/reference/cli' },
+            { text: 'Tools', link: '/reference/tools' },
+            { text: 'Environment Variables', link: '/reference/environment' }
+          ]
+        }
       ]
     },
+    outline: { level: [2, 3], label: 'On this page' },
     search: {
       provider: 'local'
+    },
+    externalLinkIcon: true,
+    editLink: {
+      pattern:
+        'https://github.com/nasirus/pbi-agent/edit/master/docs/:path',
+      text: 'Edit this page on GitHub'
     },
     socialLinks: [
       { icon: 'github', link: 'https://github.com/nasirus/pbi-agent' }

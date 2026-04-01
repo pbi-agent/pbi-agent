@@ -1,8 +1,6 @@
 ---
 title: 'Audit System'
 description: 'How pbi-agent audit scores a PBIP project and what files it writes.'
-layout: doc
-outline: [2, 3]
 ---
 
 # Audit System

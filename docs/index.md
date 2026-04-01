@@ -22,14 +22,15 @@ features:
     details: 'Discover project-local sub-agent definitions from `.agents/*.md` and route delegated work through `sub_agent`.'
   - title: 'PBIP Template Scaffolding'
     details: 'Bootstrap a Power BI Project from the bundled template with the init command or the init_report tool.'
-  - title: 'Browser & Terminal UI'
-    details: 'Choose the default browser UI, the Textual console interface, or a single-prompt execution path.'
+  - title: 'Browser UI & Headless Runs'
+    details: 'Use the default browser UI for interactive work, or switch to single-prompt and audit commands for headless execution.'
   - title: 'MCP Tool Integration'
     details: 'Discover project-local MCP servers from `.agents/mcp.json` and expose their tools to the model.'
 ---
 
 ## Demo
 
+<ClientOnly>
 <div style="position: relative; width: 100%; padding-bottom: 56.25%; margin: 1.5rem 0;">
   <iframe
     src="https://www.youtube.com/embed/vw3RVwbILbE"
@@ -40,6 +41,7 @@ features:
     allowfullscreen
   ></iframe>
 </div>
+</ClientOnly>
 
 ## Start Here
 
@@ -49,17 +51,17 @@ Running `pbi-agent` without a command defaults to `pbi-agent web`, so a bare inv
 
 ### 1. Install uv
 
-macOS / Linux:
+::: code-group
 
-```bash
+```bash [macOS / Linux]
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Windows (PowerShell):
-
-```powershell
+```powershell [Windows]
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
+
+:::
 
 ### 2. Install pbi-agent
 

@@ -6,7 +6,14 @@ import time
 
 import pytest
 
-from pbi_agent.session_store import SessionStore
+from pbi_agent.session_store import (
+    KANBAN_RUN_STATUS_COMPLETED,
+    KANBAN_STAGE_BACKLOG,
+    KANBAN_STAGE_PLAN,
+    KANBAN_STAGE_REVIEW,
+    MessageImageAttachment,
+    SessionStore,
+)
 
 
 def test_create_and_get_session(tmp_path) -> None:
@@ -166,6 +173,27 @@ def test_add_and_list_messages(tmp_path) -> None:
     assert msgs[0].id < msgs[1].id < msgs[2].id
 
 
+def test_add_and_list_messages_preserve_image_attachments(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    attachment = MessageImageAttachment(
+        upload_id="upload-1",
+        name="chart.png",
+        mime_type="image/png",
+        byte_count=8,
+        preview_url="/api/chat/uploads/upload-1",
+    )
+
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session("/w", "openai", "gpt-5", "msg test")
+        store.add_message(
+            sid, "user", "Here is a chart", image_attachments=[attachment]
+        )
+        msgs = store.list_messages(sid)
+
+    assert len(msgs) == 1
+    assert msgs[0].image_attachments == [attachment]
+
+
 def test_messages_scoped_to_session(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:
@@ -190,3 +218,80 @@ def test_list_messages_empty_session(tmp_path) -> None:
         msgs = store.list_messages(sid)
 
     assert msgs == []
+
+
+def test_delete_session_removes_session_and_messages(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session("/w", "openai", "gpt-5", "delete me")
+        store.add_message(sid, "user", "hello")
+        store.add_message(sid, "assistant", "hi")
+
+        deleted = store.delete_session(sid)
+
+        rec = store.get_session(sid)
+        msgs = store.list_messages(sid)
+
+    assert deleted is True
+    assert rec is None
+    assert msgs == []
+
+
+def test_create_and_list_kanban_tasks(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        task = store.create_kanban_task(
+            directory="/w",
+            title="Task A",
+            prompt="Investigate report layout",
+        )
+        tasks = store.list_kanban_tasks("/w")
+
+    assert len(tasks) == 1
+    assert tasks[0].task_id == task.task_id
+    assert tasks[0].stage == KANBAN_STAGE_BACKLOG
+
+
+def test_move_kanban_task_reorders_within_stage(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        first = store.create_kanban_task(directory="/w", title="A", prompt="One")
+        second = store.create_kanban_task(directory="/w", title="B", prompt="Two")
+        third = store.create_kanban_task(directory="/w", title="C", prompt="Three")
+
+        moved = store.move_kanban_task(
+            first.task_id, stage=KANBAN_STAGE_BACKLOG, position=2
+        )
+        tasks = [
+            task
+            for task in store.list_kanban_tasks("/w")
+            if task.stage == KANBAN_STAGE_BACKLOG
+        ]
+
+    assert moved is not None
+    assert [task.title for task in tasks] == ["B", "C", "A"]
+    assert [task.position for task in tasks] == [0, 1, 2]
+    assert second.task_id != third.task_id
+
+
+def test_set_kanban_task_result_moves_to_review(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        task = store.create_kanban_task(
+            directory="/w",
+            title="Planning",
+            prompt="Draft the task",
+            stage=KANBAN_STAGE_PLAN,
+        )
+        store.set_kanban_task_running(task.task_id)
+        updated = store.set_kanban_task_result(
+            task.task_id,
+            run_status=KANBAN_RUN_STATUS_COMPLETED,
+            summary="Finished successfully.",
+            session_id="session-123",
+        )
+
+    assert updated is not None
+    assert updated.stage == KANBAN_STAGE_REVIEW
+    assert updated.run_status == KANBAN_RUN_STATUS_COMPLETED
+    assert updated.session_id == "session-123"

@@ -1,8 +1,6 @@
 ---
 title: 'Built-in Tools'
 description: 'The provider-agnostic function tools available to the pbi-agent runtime.'
-layout: doc
-outline: [2, 3]
 ---
 
 # Built-in Tools

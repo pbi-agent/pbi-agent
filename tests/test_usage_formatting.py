@@ -11,7 +11,7 @@ from pbi_agent.models.messages import (
     _pricing_for_model,
     context_window_for_model,
 )
-from pbi_agent.ui.formatting import (
+from pbi_agent.display.formatting import (
     format_context_tooltip,
     format_session_subtitle_parts,
     format_session_subtitle,
@@ -222,7 +222,7 @@ def test_format_session_subtitle_parts_uses_informal_workspace_path(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "pbi_agent.ui.formatting.Path.cwd",
+        "pbi_agent.display.formatting.Path.cwd",
         lambda: Path("/mnt/c/Users/nbensaid/workspace/oai-ws"),
     )
 

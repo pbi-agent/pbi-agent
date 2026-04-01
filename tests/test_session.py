@@ -23,7 +23,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.session_store import SessionStore
-from pbi_agent.ui.display_protocol import QueuedInput
+from pbi_agent.display.protocol import QueuedInput
 
 
 class _DisplaySpy:
@@ -495,6 +495,53 @@ def test_run_chat_loop_passes_queued_image_paths_to_provider(monkeypatch) -> Non
     assert provider.request_messages == ["describe this"]
     assert len(provider.request_inputs) == 1
     assert provider.request_inputs[0].images[0].path == "chart.png"
+
+
+def test_run_chat_loop_processes_attachment_only_queued_images(monkeypatch) -> None:
+    provider = _ChatProviderStub()
+    display = _ChatDisplaySpy(
+        [
+            QueuedInput(
+                text="",
+                images=[
+                    ImageAttachment(
+                        path="chart.png",
+                        mime_type="image/png",
+                        data_base64="abcd",
+                        byte_count=4,
+                    )
+                ],
+            ),
+            "quit",
+        ]
+    )
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    monotonic_values = iter([5.0, 6.5])
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    exit_code = run_chat_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == [""]
+    assert len(provider.request_inputs) == 1
+    assert provider.request_inputs[0].images[0].path == "chart.png"
+
+    with SessionStore() as store:
+        sessions = store.list_sessions(os.getcwd(), limit=10)
+        assert len(sessions) == 1
+        messages = store.list_messages(sessions[0].session_id)
+
+    assert [message.role for message in messages] == ["user", "assistant"]
+    assert messages[0].content == "[attached images: chart.png]"
+    assert messages[1].content == "Ack"
 
 
 def test_run_chat_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> None:

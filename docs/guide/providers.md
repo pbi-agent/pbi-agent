@@ -1,8 +1,6 @@
 ---
 title: 'Providers'
 description: 'Provider selection, key resolution, endpoint overrides, history mode, and examples for every supported backend.'
-layout: doc
-outline: [2, 3]
 ---
 
 # Provider Configuration
@@ -48,7 +46,7 @@ The CLI also accepts provider-specific hidden aliases that map to `--api-key`: `
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-uv run pbi-agent --provider openai console
+uv run pbi-agent --provider openai web
 ```
 
 ## xAI
@@ -84,7 +82,7 @@ uv run pbi-agent --provider xai run --prompt "List the report pages in this PBIP
 
 ```bash
 export GEMINI_API_KEY="AIza..."
-uv run pbi-agent --provider google console
+uv run pbi-agent --provider google web
 ```
 
 ## Anthropic
@@ -102,7 +100,7 @@ uv run pbi-agent --provider google console
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
-uv run pbi-agent --provider anthropic console
+uv run pbi-agent --provider anthropic web
 ```
 
 ## Generic

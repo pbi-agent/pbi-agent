@@ -5,7 +5,7 @@ import io
 import pytest
 
 from pbi_agent.models.messages import TokenUsage
-from pbi_agent.ui.console_display import ConsoleDisplay
+from pbi_agent.display.console_display import ConsoleDisplay
 
 
 def _display(

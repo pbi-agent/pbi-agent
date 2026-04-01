@@ -1,8 +1,6 @@
 ---
 title: 'Customization'
 description: 'Override the agent system prompt and add project-specific rules using INSTRUCTIONS.md and AGENTS.md.'
-layout: doc
-outline: [2, 3]
 ---
 
 # Customization
@@ -150,7 +148,6 @@ You can inspect the discovered catalog without starting a model request:
 
 - CLI: `pbi-agent --agents`
 - Chat UI: `/agents`
-- Chat UI reload after editing files: `/agents reload`
 
 ## MCP server config
 

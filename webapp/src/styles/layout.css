@@ -1,0 +1,120 @@
+/* ── App Shell & Topbar ────────────────────────────────────────────── */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Topbar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  height: var(--topbar-height);
+  padding: 0 var(--sp-5);
+  background: var(--color-surface-0);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  gap: var(--sp-5);
+  z-index: 10;
+}
+
+.topbar__brand {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.topbar__brand strong {
+  color: var(--color-accent);
+  font-weight: var(--weight-bold);
+}
+
+.topbar__folder {
+  margin-left: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-normal);
+  color: var(--color-text-tertiary);
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.7;
+}
+
+/* ── Navigation tabs ── */
+.topnav {
+  display: flex;
+  gap: var(--sp-1);
+  margin-left: var(--sp-6);
+}
+
+.topnav a {
+  position: relative;
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  transition: color var(--duration-normal) var(--ease-out),
+              background var(--duration-normal) var(--ease-out);
+}
+
+.topnav a:hover {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+
+.topnav a.active {
+  color: var(--color-accent);
+}
+
+.topnav a.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: var(--sp-4);
+  right: var(--sp-4);
+  height: 2px;
+  background: var(--color-accent);
+  border-radius: 2px 2px 0 0;
+}
+
+/* ── Runtime metadata ── */
+.runtime-meta {
+  display: flex;
+  gap: var(--sp-2);
+  margin-left: auto;
+  align-items: center;
+}
+
+.runtime-meta__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--sp-1) var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.01em;
+}
+
+/* ── Sidebar header actions ── */
+.sidebar__header-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* ── Main content area ── */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
