@@ -233,8 +233,13 @@ export function SettingsPage() {
 
   function wrapStale(err: unknown): never {
     if (err instanceof ApiError && err.status === 409) {
-      handleStale();
-      throw new Error(STALE_MESSAGE);
+      if (err.message.includes("Config has changed")) {
+        handleStale();
+        throw new Error(STALE_MESSAGE);
+      }
+      // Business-logic conflict (e.g. "still references it") – surface
+      // the real backend message so the user knows what to fix.
+      throw err;
     }
     throw err;
   }
