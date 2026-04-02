@@ -76,7 +76,10 @@ export type LiveSessionRuntime = {
 
 export type LiveSession = LiveSessionRuntime & {
   live_session_id: string;
-  resume_session_id: string | null;
+  session_id: string | null;
+  task_id: string | null;
+  kind: "chat" | "task";
+  project_dir: string;
   created_at: string;
   status: "starting" | "running" | "ended";
   exit_code: number | null;
@@ -98,7 +101,24 @@ export type HistoryItem = {
 export type SessionDetailPayload = {
   session: SessionRecord;
   history_items: HistoryItem[];
-  live_session: LiveSession | null;
+  active_live_session: LiveSession | null;
+};
+
+export type LiveSessionSnapshot = {
+  live_session_id: string;
+  session_id: string | null;
+  runtime: RuntimeSummary | null;
+  input_enabled: boolean;
+  wait_message: string | null;
+  session_usage: UsagePayload | null;
+  turn_usage:
+    | { usage: UsagePayload | null; elapsed_seconds?: number | null }
+    | null;
+  session_ended: boolean;
+  fatal_error: string | null;
+  items: Record<string, unknown>[];
+  sub_agents: Record<string, { title: string; status: string }>;
+  last_event_seq: number;
 };
 
 export type FileMentionItem = {

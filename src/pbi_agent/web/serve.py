@@ -80,6 +80,7 @@ ConfigRevisionHeader = Annotated[str, Header(alias="If-Match", min_length=1)]
 
 
 class CreateChatSessionRequest(BaseModel):
+    session_id: str | None = None
     resume_session_id: str | None = None
     live_session_id: str | None = None
     profile_id: str | None = None
@@ -165,7 +166,11 @@ class SessionRecordModel(BaseModel):
 
 class LiveSessionModel(BaseModel):
     live_session_id: str
-    resume_session_id: str | None
+    session_id: str | None
+    resume_session_id: str | None = None
+    task_id: str | None
+    kind: Literal["chat", "task"]
+    project_dir: str
     provider_id: str | None
     profile_id: str | None
     provider: str
@@ -231,6 +236,30 @@ class BootstrapResponse(BaseModel):
     board_stages: list[BoardStage]
 
 
+class LiveSessionSnapshotModel(BaseModel):
+    live_session_id: str
+    session_id: str | None
+    runtime: RuntimeSummaryModel | None
+    input_enabled: bool
+    wait_message: str | None
+    session_usage: dict[str, Any] | None
+    turn_usage: dict[str, Any] | None
+    session_ended: bool
+    fatal_error: str | None
+    items: list[dict[str, Any]]
+    sub_agents: dict[str, dict[str, str]]
+    last_event_seq: int
+
+
+class LiveSessionsResponse(BaseModel):
+    live_sessions: list[LiveSessionModel]
+
+
+class LiveSessionDetailResponse(BaseModel):
+    live_session: LiveSessionModel
+    snapshot: LiveSessionSnapshotModel
+
+
 class SessionsResponse(BaseModel):
     sessions: list[SessionRecordModel]
 
@@ -250,6 +279,7 @@ class SessionDetailResponse(BaseModel):
     session: SessionRecordModel
     history_items: list[HistoryItemModel]
     live_session: LiveSessionModel | None
+    active_live_session: LiveSessionModel | None
 
 
 class ChatSessionResponse(BaseModel):
@@ -814,6 +844,39 @@ def get_session_detail(
             if payload["live_session"] is not None
             else None
         ),
+        active_live_session=(
+            _model_from_payload(LiveSessionModel, payload["active_live_session"])
+            if payload["active_live_session"] is not None
+            else None
+        ),
+    )
+
+
+@system_router.get("/live-sessions", response_model=LiveSessionsResponse)
+def list_live_sessions(manager: SessionManagerDep) -> LiveSessionsResponse:
+    return LiveSessionsResponse(
+        live_sessions=[
+            _model_from_payload(LiveSessionModel, item)
+            for item in manager.list_live_sessions()
+        ]
+    )
+
+
+@system_router.get(
+    "/live-sessions/{live_session_id}",
+    response_model=LiveSessionDetailResponse,
+)
+def get_live_session_detail(
+    live_session_id: LiveSessionIdPath,
+    manager: SessionManagerDep,
+) -> LiveSessionDetailResponse:
+    try:
+        payload = manager.get_live_session_detail(live_session_id)
+    except KeyError as exc:
+        raise _not_found("Live session not found.") from exc
+    return LiveSessionDetailResponse(
+        live_session=_model_from_payload(LiveSessionModel, payload["live_session"]),
+        snapshot=_model_from_payload(LiveSessionSnapshotModel, payload["snapshot"]),
     )
 
 
@@ -869,7 +932,7 @@ def create_chat_session(
 ) -> ChatSessionResponse:
     try:
         session = manager.create_live_chat(
-            resume_session_id=request.resume_session_id,
+            session_id=request.session_id or request.resume_session_id,
             live_session_id=request.live_session_id,
             profile_id=request.profile_id,
         )

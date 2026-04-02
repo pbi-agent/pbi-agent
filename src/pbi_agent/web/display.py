@@ -523,7 +523,10 @@ class WebDisplay(_EventDisplayBase):
     def bind_session(self, session_id: str | None) -> None:
         if self._bind_session_callback is not None:
             self._bind_session_callback(session_id)
-        self._publish("session_identity", {"resume_session_id": session_id})
+        self._publish(
+            "session_identity",
+            {"session_id": session_id, "resume_session_id": session_id},
+        )
 
     def submit_input(
         self,

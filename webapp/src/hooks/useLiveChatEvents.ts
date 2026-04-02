@@ -6,14 +6,19 @@ import type { WebEvent } from "../types";
 const INITIAL_DELAY = 1000;
 const MAX_DELAY = 30000;
 
-export function useLiveChatEvents(liveSessionId: string | null): void {
+export function useLiveChatEvents(
+  chatKey: string | null,
+  liveSessionId: string | null,
+): void {
   const applyEvent = useChatStore((state) => state.applyEvent);
   const setConnection = useChatStore((state) => state.setConnection);
   const retryDelay = useRef(INITIAL_DELAY);
 
   useEffect(() => {
-    if (!liveSessionId) {
-      setConnection("disconnected");
+    if (!chatKey || !liveSessionId) {
+      if (chatKey) {
+        setConnection(chatKey, "disconnected");
+      }
       return;
     }
 
@@ -23,21 +28,21 @@ export function useLiveChatEvents(liveSessionId: string | null): void {
 
     function connect() {
       if (disposed) return;
-      setConnection("connecting");
+      setConnection(chatKey, "connecting");
       socket = new WebSocket(websocketUrl(`/api/events/${liveSessionId}`));
 
       socket.onopen = () => {
         retryDelay.current = INITIAL_DELAY;
-        setConnection("connected");
+        setConnection(chatKey, "connected");
       };
 
       socket.onmessage = (message) => {
-        applyEvent(JSON.parse(message.data) as WebEvent);
+        applyEvent(chatKey, JSON.parse(message.data) as WebEvent);
       };
 
       socket.onclose = () => {
         if (disposed) return;
-        setConnection("disconnected");
+        setConnection(chatKey, "disconnected");
         retryTimer = setTimeout(() => {
           retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
           connect();
@@ -56,5 +61,5 @@ export function useLiveChatEvents(liveSessionId: string | null): void {
       if (retryTimer) clearTimeout(retryTimer);
       socket?.close();
     };
-  }, [applyEvent, liveSessionId, setConnection]);
+  }, [applyEvent, chatKey, liveSessionId, setConnection]);
 }

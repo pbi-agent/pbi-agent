@@ -27,6 +27,17 @@ export function useTaskEvents(): void {
         const event = JSON.parse(message.data) as WebEvent;
         if (event.type === "task_updated" || event.type === "task_deleted") {
           client.invalidateQueries({ queryKey: ["tasks"] });
+          return;
+        }
+        if (
+          event.type === "live_session_started"
+          || event.type === "live_session_updated"
+          || event.type === "live_session_bound"
+          || event.type === "live_session_ended"
+        ) {
+          client.invalidateQueries({ queryKey: ["sessions"] });
+          client.invalidateQueries({ queryKey: ["bootstrap"] });
+          client.invalidateQueries({ queryKey: ["live-sessions"] });
         }
       };
 

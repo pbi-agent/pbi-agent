@@ -258,15 +258,40 @@ class EventStream:
 class LiveChatSession:
     live_session_id: str
     event_stream: EventStream
+    snapshot: LiveSessionSnapshot
     display: WebDisplay
     worker: threading.Thread
     runtime: ResolvedRuntime
-    resume_session_id: str | None
+    bound_session_id: str | None
     created_at: str
+    kind: str = "chat"
+    task_id: str | None = None
+    project_dir: str = "."
     status: str = "starting"
     exit_code: int | None = None
     fatal_error: str | None = None
     ended_at: str | None = None
+
+
+@dataclass(slots=True)
+class LiveSessionSnapshot:
+    session_id: str | None = None
+    runtime: dict[str, str | None] | None = None
+    input_enabled: bool = False
+    wait_message: str | None = None
+    session_usage: dict[str, Any] | None = None
+    turn_usage: dict[str, Any] | None = None
+    session_ended: bool = False
+    fatal_error: str | None = None
+    items: list[dict[str, Any]] = None  # type: ignore[assignment]
+    sub_agents: dict[str, dict[str, str]] = None  # type: ignore[assignment]
+    last_event_seq: int = 0
+
+    def __post_init__(self) -> None:
+        if self.items is None:
+            self.items = []
+        if self.sub_agents is None:
+            self.sub_agents = {}
 
 
 class WebSessionManager:
@@ -444,6 +469,23 @@ class WebSessionManager:
                 if live_session is not None
                 else None
             ),
+            "active_live_session": (
+                self._serialize_live_session(live_session)
+                if live_session is not None
+                else None
+            ),
+        }
+
+    def list_live_sessions(self) -> list[dict[str, Any]]:
+        with self._lock:
+            sessions = list(self._chat_sessions.values())
+        return [self._serialize_live_session(session) for session in sessions]
+
+    def get_live_session_detail(self, live_session_id: str) -> dict[str, Any]:
+        live_session = self._require_live_session(live_session_id)
+        return {
+            "live_session": self._serialize_live_session(live_session),
+            "snapshot": self._serialize_live_snapshot(live_session),
         }
 
     def list_tasks(self) -> list[dict[str, Any]]:
@@ -460,21 +502,22 @@ class WebSessionManager:
     def create_live_chat(
         self,
         *,
-        resume_session_id: str | None = None,
+        session_id: str | None = None,
         live_session_id: str | None = None,
         profile_id: str | None = None,
     ) -> dict[str, Any]:
         runtime = self._resolve_runtime(profile_id)
-        if resume_session_id is not None:
-            self._require_saved_session(resume_session_id)
+        bound_session_id = session_id
+        if bound_session_id is not None:
+            self._require_saved_session(bound_session_id)
             runtime = self._resolve_saved_session_runtime(
-                resume_session_id,
+                bound_session_id,
                 fallback=runtime,
             )
         with self._lock:
-            if resume_session_id is not None:
+            if bound_session_id is not None:
                 existing_live_session = (
-                    self._find_live_session_for_saved_session_locked(resume_session_id)
+                    self._find_live_session_for_saved_session_locked(bound_session_id)
                 )
                 if existing_live_session is not None:
                     return self._serialize_live_session(existing_live_session)
@@ -483,44 +526,61 @@ class WebSessionManager:
                     self._chat_sessions[live_session_id]
                 )
 
-            session_id = live_session_id or uuid.uuid4().hex
+            new_live_session_id = live_session_id or uuid.uuid4().hex
             event_stream = EventStream()
+            snapshot = LiveSessionSnapshot(
+                session_id=bound_session_id,
+                runtime=_runtime_summary(runtime),
+            )
             display = WebDisplay(
-                publish_event=event_stream.publish,
+                publish_event=lambda event_type, payload, current=new_live_session_id: (
+                    self._publish_live_event(
+                        current,
+                        event_type,
+                        payload,
+                    )
+                ),
                 verbose=runtime.settings.verbose,
                 model=runtime.settings.model,
                 reasoning_effort=runtime.settings.reasoning_effort,
-                bind_session=lambda bound_session_id, current=session_id: (
+                bind_session=lambda next_bound_session_id, current=new_live_session_id: (
                     self._bind_live_session(
                         current,
-                        bound_session_id,
+                        next_bound_session_id,
                     )
                 ),
             )
             worker = threading.Thread(
                 target=self._run_chat_worker,
-                args=(session_id,),
+                args=(new_live_session_id,),
                 daemon=True,
-                name=f"pbi-agent-web-chat-{session_id[:8]}",
+                name=f"pbi-agent-web-chat-{new_live_session_id[:8]}",
             )
             live_session = LiveChatSession(
-                live_session_id=session_id,
+                live_session_id=new_live_session_id,
                 event_stream=event_stream,
+                snapshot=snapshot,
                 display=display,
                 worker=worker,
                 runtime=runtime,
-                resume_session_id=resume_session_id,
+                bound_session_id=bound_session_id,
                 created_at=_now_iso(),
             )
-            self._chat_sessions[session_id] = live_session
+            self._chat_sessions[new_live_session_id] = live_session
             self._publish_live_session_runtime(live_session)
-            event_stream.publish(
+            self._publish_live_event(
+                new_live_session_id,
                 "session_state",
                 {
                     "state": "starting",
-                    "live_session_id": session_id,
-                    "resume_session_id": resume_session_id,
+                    "live_session_id": new_live_session_id,
+                    "session_id": bound_session_id,
+                    "resume_session_id": bound_session_id,
                 },
+            )
+            self._app_stream.publish(
+                "live_session_started",
+                {"live_session": self._serialize_live_session(live_session)},
             )
             worker.start()
             return self._serialize_live_session(live_session)
@@ -618,7 +678,8 @@ class WebSessionManager:
                 _message_image_attachment(load_uploaded_image_record(upload_id))
             )
         if message_text or message_image_attachments:
-            live_session.event_stream.publish(
+            self._publish_live_event(
+                live_session_id,
                 "message_added",
                 {
                     "item_id": f"user-{uuid.uuid4().hex}",
@@ -1113,25 +1174,29 @@ class WebSessionManager:
     def _run_chat_worker(self, live_session_id: str) -> None:
         live_session = self._chat_sessions[live_session_id]
         live_session.status = "running"
-        live_session.event_stream.publish(
+        self._publish_live_event(
+            live_session_id,
             "session_state",
             {
                 "state": "running",
                 "live_session_id": live_session_id,
-                "resume_session_id": live_session.resume_session_id,
+                "session_id": live_session.bound_session_id,
+                "resume_session_id": live_session.bound_session_id,
             },
         )
+        self._publish_live_session_lifecycle("live_session_updated", live_session)
         try:
             exit_code = run_chat_loop(
                 live_session.runtime,
                 live_session.display,
-                resume_session_id=live_session.resume_session_id,
+                resume_session_id=live_session.bound_session_id,
             )
             live_session.exit_code = exit_code
         except Exception as exc:
             live_session.exit_code = 1
             live_session.fatal_error = format_user_facing_error(exc)
-            live_session.event_stream.publish(
+            self._publish_live_event(
+                live_session_id,
                 "message_added",
                 {
                     "item_id": f"fatal-{uuid.uuid4().hex}",
@@ -1143,15 +1208,19 @@ class WebSessionManager:
         finally:
             live_session.status = "ended"
             live_session.ended_at = _now_iso()
-            live_session.event_stream.publish(
+            self._publish_live_event(
+                live_session_id,
                 "session_state",
                 {
                     "state": "ended",
                     "live_session_id": live_session_id,
+                    "session_id": live_session.bound_session_id,
+                    "resume_session_id": live_session.bound_session_id,
                     "exit_code": live_session.exit_code,
                     "fatal_error": live_session.fatal_error,
                 },
             )
+            self._publish_live_session_lifecycle("live_session_ended", live_session)
 
     def _run_task_worker(self, task_id: str) -> None:
         def publish_summary(summary: str) -> None:
@@ -1238,7 +1307,7 @@ class WebSessionManager:
         session_id: str,
     ) -> LiveChatSession | None:
         for live_session in self._chat_sessions.values():
-            if live_session.resume_session_id != session_id:
+            if live_session.bound_session_id != session_id:
                 continue
             if live_session.status == "ended":
                 continue
@@ -1248,17 +1317,25 @@ class WebSessionManager:
     def _bind_live_session(
         self,
         live_session_id: str,
-        resume_session_id: str | None,
+        session_id: str | None,
     ) -> None:
         live_session = self._chat_sessions.get(live_session_id)
         if live_session is None:
             return
-        live_session.resume_session_id = resume_session_id
+        previous_session_id = live_session.bound_session_id
+        live_session.bound_session_id = session_id
+        live_session.snapshot.session_id = session_id
+        if previous_session_id != session_id:
+            self._publish_live_session_lifecycle("live_session_bound", live_session)
 
     def _serialize_live_session(self, live_session: LiveChatSession) -> dict[str, Any]:
         return {
             "live_session_id": live_session.live_session_id,
-            "resume_session_id": live_session.resume_session_id,
+            "session_id": live_session.bound_session_id,
+            "resume_session_id": live_session.bound_session_id,
+            "task_id": live_session.task_id,
+            "kind": live_session.kind,
+            "project_dir": live_session.project_dir,
             "provider_id": live_session.runtime.provider_id,
             "profile_id": live_session.runtime.profile_id,
             "provider": live_session.runtime.settings.provider,
@@ -1269,6 +1346,22 @@ class WebSessionManager:
             "exit_code": live_session.exit_code,
             "fatal_error": live_session.fatal_error,
             "ended_at": live_session.ended_at,
+        }
+
+    def _serialize_live_snapshot(self, live_session: LiveChatSession) -> dict[str, Any]:
+        return {
+            "live_session_id": live_session.live_session_id,
+            "session_id": live_session.snapshot.session_id,
+            "runtime": live_session.snapshot.runtime,
+            "input_enabled": live_session.snapshot.input_enabled,
+            "wait_message": live_session.snapshot.wait_message,
+            "session_usage": live_session.snapshot.session_usage,
+            "turn_usage": live_session.snapshot.turn_usage,
+            "session_ended": live_session.snapshot.session_ended,
+            "fatal_error": live_session.snapshot.fatal_error,
+            "items": list(live_session.snapshot.items),
+            "sub_agents": dict(live_session.snapshot.sub_agents),
+            "last_event_seq": live_session.snapshot.last_event_seq,
         }
 
     def _serialize_task_record(self, record: KanbanTaskRecord) -> dict[str, Any]:
@@ -1358,18 +1451,149 @@ class WebSessionManager:
             profile_id=runtime.profile_id,
         )
         self._publish_live_session_runtime(live_session)
+        self._publish_live_session_lifecycle("live_session_updated", live_session)
 
     def _publish_live_session_runtime(self, live_session: LiveChatSession) -> None:
-        live_session.event_stream.publish(
+        self._publish_live_event(
+            live_session.live_session_id,
             "session_runtime_updated",
             {
                 "live_session_id": live_session.live_session_id,
+                "session_id": live_session.bound_session_id,
+                "resume_session_id": live_session.bound_session_id,
                 "provider_id": live_session.runtime.provider_id,
                 "profile_id": live_session.runtime.profile_id,
                 "provider": live_session.runtime.settings.provider,
                 "model": live_session.runtime.settings.model,
                 "reasoning_effort": live_session.runtime.settings.reasoning_effort,
             },
+        )
+
+    def _publish_live_event(
+        self,
+        live_session_id: str,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        live_session = self._chat_sessions[live_session_id]
+        event = live_session.event_stream.publish(event_type, payload)
+        self._apply_live_event(live_session, event)
+        return event
+
+    def _apply_live_event(
+        self,
+        live_session: LiveChatSession,
+        event: dict[str, Any],
+    ) -> None:
+        snapshot = live_session.snapshot
+        snapshot.last_event_seq = int(event["seq"])
+        payload = event["payload"]
+        event_type = event["type"]
+
+        if event_type == "chat_reset":
+            snapshot.items = []
+            snapshot.sub_agents = {}
+            snapshot.wait_message = None
+            snapshot.turn_usage = None
+            snapshot.session_ended = False
+            snapshot.fatal_error = None
+            return
+        if event_type == "session_identity":
+            snapshot.session_id = (
+                payload["session_id"]
+                if isinstance(payload.get("session_id"), str)
+                else None
+            )
+            return
+        if event_type == "input_state":
+            snapshot.input_enabled = bool(payload.get("enabled"))
+            return
+        if event_type == "wait_state":
+            snapshot.wait_message = (
+                str(payload.get("message") or "Working...")
+                if payload.get("active")
+                else None
+            )
+            return
+        if event_type == "usage_updated":
+            if payload.get("scope") == "session":
+                snapshot.session_usage = payload.get("usage")
+            else:
+                snapshot.turn_usage = {
+                    "usage": payload.get("usage"),
+                    "elapsed_seconds": payload.get("elapsed_seconds"),
+                }
+            return
+        if event_type in {"message_added", "thinking_updated", "tool_group_added"}:
+            item = dict(payload)
+            item["kind"] = (
+                "message"
+                if event_type == "message_added"
+                else "thinking"
+                if event_type == "thinking_updated"
+                else "tool_group"
+            )
+            item["itemId"] = str(payload.get("item_id") or "")
+            snapshot.items = self._upsert_snapshot_item(snapshot.items, item)
+            return
+        if event_type == "sub_agent_state":
+            sub_agent_id = str(payload.get("sub_agent_id") or "")
+            snapshot.sub_agents[sub_agent_id] = {
+                "title": str(payload.get("title") or "sub_agent"),
+                "status": str(payload.get("status") or "running"),
+            }
+            return
+        if event_type == "session_state":
+            if "session_id" in payload:
+                snapshot.session_id = (
+                    payload["session_id"]
+                    if isinstance(payload.get("session_id"), str)
+                    else None
+                )
+            if payload.get("state") == "ended":
+                snapshot.session_ended = True
+                snapshot.input_enabled = False
+                snapshot.wait_message = None
+                snapshot.fatal_error = (
+                    str(payload["fatal_error"])
+                    if isinstance(payload.get("fatal_error"), str)
+                    else None
+                )
+            else:
+                snapshot.session_ended = False
+                snapshot.fatal_error = None
+            return
+        if event_type == "session_runtime_updated":
+            snapshot.runtime = {
+                "provider": payload.get("provider"),
+                "provider_id": payload.get("provider_id"),
+                "profile_id": payload.get("profile_id"),
+                "model": payload.get("model"),
+                "reasoning_effort": payload.get("reasoning_effort"),
+            }
+
+    def _upsert_snapshot_item(
+        self,
+        items: list[dict[str, Any]],
+        next_item: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        item_id = str(next_item.get("itemId") or "")
+        for index, item in enumerate(items):
+            if str(item.get("itemId") or "") != item_id:
+                continue
+            updated = list(items)
+            updated[index] = next_item
+            return updated
+        return [*items, next_item]
+
+    def _publish_live_session_lifecycle(
+        self,
+        event_type: str,
+        live_session: LiveChatSession,
+    ) -> None:
+        self._app_stream.publish(
+            event_type,
+            {"live_session": self._serialize_live_session(live_session)},
         )
 
     def _provider_view(self, provider: ProviderConfig) -> dict[str, Any]:

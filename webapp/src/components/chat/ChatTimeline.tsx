@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
-import { useChatStore } from "../../store";
 import type { TimelineItem } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { TimelineEntry } from "./TimelineEntry";
@@ -33,17 +32,18 @@ export function ChatTimeline({
   subAgents,
   connection,
   waitMessage,
+  itemsVersion,
 }: {
   items: TimelineItem[];
   subAgents: Record<string, { title: string; status: string }>;
   connection: "disconnected" | "connecting" | "connected";
   waitMessage: string | null;
+  itemsVersion: number;
 }) {
   const previousLengthRef = useRef<number>();
   const latestItem = items.at(-1);
   const latestItemIsUserMessage =
     latestItem?.kind === "message" && latestItem.role === "user";
-  const itemsVersion = useChatStore((s) => s.itemsVersion);
   const { containerRef, showNewMessages, setShowNewMessages, scrollToBottom, userScrolledRef } =
     useAutoScroll([itemsVersion], { followOnChange: false });
 

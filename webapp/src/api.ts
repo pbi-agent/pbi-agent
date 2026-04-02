@@ -6,6 +6,7 @@ import type {
   HistoryItem,
   ImageAttachment,
   LiveSession,
+  LiveSessionSnapshot,
   ModelProfileView,
   ModeView,
   ProviderView,
@@ -75,8 +76,19 @@ export async function fetchSessionDetail(sessionId: string): Promise<SessionDeta
   return requestJson<{
     session: SessionRecord;
     history_items: HistoryItem[];
-    live_session: LiveSession | null;
+    active_live_session: LiveSession | null;
   }>(`/api/sessions/${sessionId}`);
+}
+
+export async function fetchLiveSessions(): Promise<LiveSession[]> {
+  const result = await requestJson<{ live_sessions: LiveSession[] }>("/api/live-sessions");
+  return result.live_sessions;
+}
+
+export async function fetchLiveSessionDetail(
+  liveSessionId: string,
+): Promise<{ live_session: LiveSession; snapshot: LiveSessionSnapshot }> {
+  return requestJson(`/api/live-sessions/${liveSessionId}`);
 }
 
 export async function searchFileMentions(
@@ -110,7 +122,7 @@ export async function searchSlashCommands(
 export async function createChatSession(
   payload: Partial<{
     live_session_id: string;
-    resume_session_id: string;
+    session_id: string;
     profile_id: string | null;
   }> = {},
 ): Promise<LiveSession> {
