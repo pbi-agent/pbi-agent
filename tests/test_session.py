@@ -910,6 +910,47 @@ def test_run_single_turn_passes_parent_context_snapshot_to_tool_execution(
     assert parent_context.current_user_turn == "Inspect the sub-agent path"
 
 
+def test_run_single_turn_resumed_session_uses_provided_runtime(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(
+            directory=os.getcwd(),
+            provider="xai",
+            model="grok-4",
+            title="existing",
+            profile_id="analysis",
+        )
+        store.add_message(session_id, "user", "hello")
+        store.add_message(session_id, "assistant", "hi")
+
+    provider = _ProviderStub()
+    display = _DisplaySpy()
+    monotonic_values = iter([10.0, 13.5])
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    run_single_turn(
+        "continue",
+        Settings(api_key="test-key", provider="openai", model="gpt-5.4-mini"),
+        display,
+        resume_session_id=session_id,
+    )
+
+    assert display.welcome_calls[0]["model"] == "gpt-5.4-mini"
+
+
 def test_run_single_turn_resumed_session_bootstraps_from_history_without_previous_id(
     monkeypatch, tmp_path
 ) -> None:

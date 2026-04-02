@@ -22,7 +22,6 @@ from pbi_agent.config import (
     ResolvedRuntime,
     Settings,
     find_mode_config_by_alias,
-    resolve_runtime_for_profile_id,
 )
 from pbi_agent.media import load_workspace_image
 from pbi_agent.mcp import format_project_mcp_servers_markdown
@@ -129,8 +128,6 @@ def run_single_turn(
 ) -> AgentOutcome:
     runtime = _coerce_runtime(settings)
     store = _open_store(runtime.settings)
-    if resume_session_id is not None:
-        runtime = _runtime_for_saved_session(store, resume_session_id, runtime)
     settings = runtime.settings
     display.welcome(
         interactive=False,
@@ -249,12 +246,6 @@ def run_chat_loop(
         display.session_usage(new_usage)
         return new_usage
 
-    if resume_session_id is not None:
-        current_runtime = _runtime_for_saved_session(
-            store,
-            resume_session_id,
-            current_runtime,
-        )
     session_usage = _reset_session(current_runtime)
     _bind_session(display, session_id)
     had_tool_errors = False
@@ -317,11 +308,6 @@ def run_chat_loop(
                 if user_input.startswith(RESUME_SESSION_PREFIX):
                     resume_id = user_input[len(RESUME_SESSION_PREFIX) :]
                     provider.reset_conversation()
-                    current_runtime = _runtime_for_saved_session(
-                        store,
-                        resume_id,
-                        current_runtime,
-                    )
                     session_usage = _reset_session(
                         current_runtime,
                         clear_display=True,
@@ -725,30 +711,6 @@ def _open_store(settings: Settings) -> SessionStore | None:
     except Exception:
         _log.warning("Failed to open session store", exc_info=True)
         return None
-
-
-def _runtime_for_saved_session(
-    store: SessionStore | None,
-    session_id: str,
-    fallback: ResolvedRuntime,
-) -> ResolvedRuntime:
-    if store is None:
-        return fallback
-    try:
-        rec = store.get_session(session_id)
-    except Exception:
-        _log.warning("Failed to load saved session runtime", exc_info=True)
-        return fallback
-    if rec is None or not rec.profile_id:
-        return fallback
-    try:
-        return resolve_runtime_for_profile_id(
-            rec.profile_id,
-            verbose=fallback.settings.verbose,
-        )
-    except Exception:
-        _log.warning("Failed to resolve saved session runtime", exc_info=True)
-        return fallback
 
 
 def _persist_runtime_change(

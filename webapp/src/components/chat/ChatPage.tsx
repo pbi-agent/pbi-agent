@@ -248,13 +248,15 @@ export function ChatPage({
       setRouteState(null, []);
       hydratedRouteKeyRef.current = routeKey;
       liveRequestRouteKeyRef.current = null;
-      // Return so the effect re-runs with the fresh store values before proceeding to
-      // session creation. The stale closure would otherwise still see the old liveSessionId
-      // and trigger the early-return guard below, blocking createSession.
-      return;
+      // Fall through to session creation below. We just reset the store so
+      // liveSessionId is null — read fresh state to avoid stale-closure guards.
     }
 
-    if (liveSessionId && resumeSessionId === null && !sessionEnded) {
+    // Read authoritative store values — the closure may still hold stale references
+    // from before setRouteState() was called above.
+    const freshState = useChatStore.getState();
+
+    if (freshState.liveSessionId && freshState.resumeSessionId === null && !freshState.sessionEnded) {
       liveRequestRouteKeyRef.current = routeKey;
       return;
     }
@@ -263,12 +265,16 @@ export function ChatPage({
       if (configQuery.isPending || configQuery.isFetching) {
         return;
       }
+      const profiles = configQuery.data?.model_profiles ?? [];
+      if (profiles.length === 0) {
+        return;
+      }
       const nextProfileId = resolveSavedProfileId(
         pendingProfileId
         ?? configQuery.data?.active_profile_id
-        ?? configQuery.data?.model_profiles[0]?.id
+        ?? profiles[0]?.id
         ?? null,
-        configQuery.data?.model_profiles ?? [],
+        profiles,
       );
       createSession(nextProfileId ? { profile_id: nextProfileId } : {});
       liveRequestRouteKeyRef.current = routeKey;

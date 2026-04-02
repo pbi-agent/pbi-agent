@@ -329,3 +329,12 @@
   color: var(--color-text-tertiary);
   margin-top: var(--sp-1);
 }
+
+.settings-onboarding-guide {
+  border-left: 2px solid var(--color-accent);
+}
+
+.settings-onboarding-guide ol {
+  margin: var(--sp-2) 0 0 var(--sp-4);
+  padding: 0;
+}

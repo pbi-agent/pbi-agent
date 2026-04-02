@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useShallow } from "zustand/react/shallow";
@@ -6,6 +6,7 @@ import { fetchBootstrap, fetchConfigBootstrap } from "../api";
 import { useTaskEvents } from "../hooks/useTaskEvents";
 import { useChatStore } from "../store";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
+import { OnboardingModal } from "./OnboardingModal";
 
 const ChatPage = lazy(() =>
   import("./chat/ChatPage").then((m) => ({ default: m.ChatPage })),
@@ -42,6 +43,18 @@ export function AppShell() {
   const bootstrap = bootstrapQuery.data;
   const configBootstrap = configBootstrapQuery.data;
 
+  const requiresOnboarding = configBootstrap
+    ? configBootstrap.model_profiles.length === 0
+    : false;
+
+  const [onboardingDismissedOnSettings, setOnboardingDismissedOnSettings] = useState(false);
+  const isSettingsRoute = location.pathname === "/settings";
+  const showOnboardingModal = requiresOnboarding && !(isSettingsRoute && onboardingDismissedOnSettings);
+
+  useEffect(() => {
+    if (!requiresOnboarding) setOnboardingDismissedOnSettings(false);
+  }, [requiresOnboarding]);
+
   const folderLabel = bootstrap?.workspace_root
     ? bootstrap.workspace_root.split(/[/\\]/).filter(Boolean).slice(-2).join("/")
     : null;
@@ -57,15 +70,21 @@ export function AppShell() {
     : null;
   const activeRuntime = activeProfile?.resolved_runtime;
 
-  const displayedProvider = isChatRoute && liveSessionId && runtime?.provider
-    ? runtime.provider
-    : (activeRuntime?.provider ?? "...");
-  const displayedModel = isChatRoute && liveSessionId && runtime?.model
-    ? runtime.model
-    : (activeRuntime?.model ?? "...");
-  const displayedReasoningEffort = isChatRoute && liveSessionId && runtime?.reasoning_effort
-    ? runtime.reasoning_effort
-    : (activeRuntime?.reasoning_effort ?? null);
+  const displayedProvider = requiresOnboarding
+    ? "Not configured"
+    : isChatRoute && liveSessionId && runtime?.provider
+      ? runtime.provider
+      : (activeRuntime?.provider ?? "...");
+  const displayedModel = requiresOnboarding
+    ? null
+    : isChatRoute && liveSessionId && runtime?.model
+      ? runtime.model
+      : (activeRuntime?.model ?? "...");
+  const displayedReasoningEffort = requiresOnboarding
+    ? null
+    : isChatRoute && liveSessionId && runtime?.reasoning_effort
+      ? runtime.reasoning_effort
+      : (activeRuntime?.reasoning_effort ?? null);
 
   return (
     <div className="app-shell">
@@ -83,7 +102,7 @@ export function AppShell() {
         </nav>
         <div className="runtime-meta">
           <span className="runtime-meta__pill">{displayedProvider}</span>
-          <span className="runtime-meta__pill">{displayedModel}</span>
+          {displayedModel && <span className="runtime-meta__pill">{displayedModel}</span>}
           {displayedReasoningEffort && displayedReasoningEffort !== "none" && (
             <span className="runtime-meta__pill">{displayedReasoningEffort}</span>
           )}
@@ -93,30 +112,41 @@ export function AppShell() {
       <main className="app-main">
         <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
           <Routes>
-            <Route path="/" element={<Navigate to="/chat" replace />} />
+            <Route path="/" element={<Navigate to={requiresOnboarding ? "/settings" : "/chat"} replace />} />
             <Route
               path="/chat"
               element={
+                requiresOnboarding ? <Navigate to="/settings" replace /> : (
                 <ChatPage
                   workspaceRoot={bootstrap?.workspace_root}
                   supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
                 />
+                )
               }
             />
             <Route
               path="/chat/:sessionId"
               element={
+                requiresOnboarding ? <Navigate to="/settings" replace /> : (
                 <ChatPage
                   workspaceRoot={bootstrap?.workspace_root}
                   supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
                 />
+                )
               }
             />
-            <Route path="/board" element={<BoardPage />} />
+            <Route path="/board" element={requiresOnboarding ? <Navigate to="/settings" replace /> : <BoardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </Suspense>
       </main>
+
+      {showOnboardingModal && (
+        <OnboardingModal
+          isOnSettingsPage={isSettingsRoute}
+          onDismissOnSettings={() => setOnboardingDismissedOnSettings(true)}
+        />
+      )}
     </div>
   );
 }

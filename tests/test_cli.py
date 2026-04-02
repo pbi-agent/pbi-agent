@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pbi_agent import cli
-from pbi_agent.config import DEFAULT_XAI_RESPONSES_URL, load_internal_config
+from pbi_agent.config import load_internal_config
 from pbi_agent.session_store import SessionStore
 
 
@@ -37,45 +37,37 @@ class DefaultWebCommandTests(unittest.TestCase):
 
     def test_main_defaults_to_web_for_global_options_only(self) -> None:
         with patch("pbi_agent.cli._handle_web_command", return_value=17) as mock_web:
-            rc = cli.main(["--api-key", "test-key"])
+            rc = cli.main([])
 
         self.assertEqual(rc, 17)
         args, runtime = mock_web.call_args.args
+        settings = getattr(runtime, "settings", runtime)
         self.assertEqual(args.command, "web")
         self.assertEqual(args.host, "127.0.0.1")
         self.assertEqual(args.port, 8000)
-        self.assertEqual(runtime.settings.api_key, "test-key")
+        self.assertEqual(settings.provider, "openai")
 
     def test_main_inserts_web_before_web_specific_flags(self) -> None:
         with patch("pbi_agent.cli._handle_web_command", return_value=23) as mock_web:
-            rc = cli.main(
-                ["--api-key", "test-key", "--host", "0.0.0.0", "--port", "9001"]
-            )
+            rc = cli.main(["--host", "0.0.0.0", "--port", "9001"])
 
         self.assertEqual(rc, 23)
         args, runtime = mock_web.call_args.args
+        settings = getattr(runtime, "settings", runtime)
         self.assertEqual(args.command, "web")
         self.assertEqual(args.host, "0.0.0.0")
         self.assertEqual(args.port, 9001)
-        self.assertEqual(runtime.settings.api_key, "test-key")
+        self.assertEqual(settings.provider, "openai")
 
-    def test_main_reports_google_specific_api_key_guidance(self) -> None:
+    def test_main_rejects_runtime_provider_flags_for_web(self) -> None:
         stderr = io.StringIO()
 
         with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("PBI_AGENT_API_KEY", None)
-            os.environ.pop("GEMINI_API_KEY", None)
-
-            with (
-                patch("pbi_agent.config.load_dotenv"),
-                patch("sys.stderr", stderr),
-            ):
+            with patch("sys.stderr", stderr):
                 rc = cli.main(["--provider", "google", "web"])
 
         self.assertEqual(rc, 2)
-        self.assertIn("Missing API key for provider 'google'", stderr.getvalue())
-        self.assertIn("GEMINI_API_KEY", stderr.getvalue())
-        self.assertIn("--google-api-key", stderr.getvalue())
+        self.assertIn("no longer supported with `pbi-agent web`", stderr.getvalue())
 
     def test_argv_with_default_command_keeps_root_help(self) -> None:
         parser = cli.build_parser()
@@ -658,7 +650,9 @@ class DefaultWebCommandTests(unittest.TestCase):
                     "flex",
                     "--api-key",
                     "k",
-                    "web",
+                    "run",
+                    "--prompt",
+                    "hello",
                 ]
             )
 
@@ -666,7 +660,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("--service-tier", stderr.getvalue())
         self.assertIn("OpenAI", stderr.getvalue())
 
-    def test_main_run_with_session_id_uses_stored_provider_settings(self) -> None:
+    def test_main_run_with_session_id_uses_current_runtime_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             db_path = tmp_path / "sessions.db"
@@ -684,7 +678,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                         "PBI_AGENT_SESSION_DB_PATH": str(db_path),
                         "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
                         "PBI_AGENT_PROVIDER": "openai",
-                        "XAI_API_KEY": "xai-key",
+                        "OPENAI_API_KEY": "openai-key",
                     },
                     clear=False,
                 ),
@@ -692,16 +686,14 @@ class DefaultWebCommandTests(unittest.TestCase):
                 patch("pbi_agent.cli.configure_logging"),
                 patch("pbi_agent.cli._handle_run_command", return_value=0) as mock_run,
             ):
-                os.environ.pop("PBI_AGENT_API_KEY", None)
-                os.environ.pop("OPENAI_API_KEY", None)
                 rc = cli.main(["run", "--prompt", "hello", "--session-id", session_id])
 
         self.assertEqual(rc, 0)
         args, runtime = mock_run.call_args.args
         self.assertEqual(args.session_id, session_id)
-        self.assertEqual(runtime.settings.provider, "xai")
-        self.assertEqual(runtime.settings.model, "grok-4")
-        self.assertEqual(runtime.settings.responses_url, DEFAULT_XAI_RESPONSES_URL)
+        self.assertEqual(runtime.settings.provider, "openai")
+        self.assertEqual(runtime.settings.model, "gpt-5.4")
+        self.assertIsNone(runtime.profile_id)
 
     def test_main_run_with_session_id_uses_saved_session_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -728,7 +720,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                             "PBI_AGENT_SESSION_DB_PATH": str(db_path),
                             "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
                             "PBI_AGENT_PROVIDER": "openai",
-                            "XAI_API_KEY": "xai-key",
+                            "OPENAI_API_KEY": "openai-key",
                         },
                         clear=False,
                     ),
@@ -738,8 +730,6 @@ class DefaultWebCommandTests(unittest.TestCase):
                         "pbi_agent.cli._handle_run_command", return_value=0
                     ) as mock_run,
                 ):
-                    os.environ.pop("PBI_AGENT_API_KEY", None)
-                    os.environ.pop("OPENAI_API_KEY", None)
                     rc = cli.main(
                         ["run", "--prompt", "hello", "--session-id", session_id]
                     )
@@ -750,8 +740,8 @@ class DefaultWebCommandTests(unittest.TestCase):
         args, runtime = mock_run.call_args.args
         self.assertEqual(args.session_id, session_id)
         self.assertEqual(Path(args.project_dir), saved_project)
-        self.assertEqual(runtime.settings.provider, "xai")
-        self.assertEqual(runtime.settings.model, "grok-4")
+        self.assertEqual(runtime.settings.provider, "openai")
+        self.assertEqual(runtime.settings.model, "gpt-5.4")
 
     def test_main_config_providers_crud_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -859,7 +849,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                     cli.main(["config", "profiles", "select", "analysis"]), 0
                 )
                 self.assertEqual(
-                    load_internal_config().active_model_profile, "analysis"
+                    load_internal_config().web.active_profile_id, "analysis"
                 )
 
                 self.assertEqual(
@@ -884,7 +874,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 )
                 config = load_internal_config()
                 self.assertEqual(config.model_profiles, [])
-                self.assertIsNone(config.active_model_profile)
+                self.assertIsNone(config.web.active_profile_id)
 
     def test_main_config_provider_delete_fails_when_profile_references_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -978,6 +968,9 @@ class DefaultWebCommandTests(unittest.TestCase):
                     ),
                     0,
                 )
+                self.assertEqual(
+                    cli.main(["config", "profiles", "select", "analysis"]), 0
+                )
                 before = config_path.read_text(encoding="utf-8")
 
                 with (
@@ -987,25 +980,17 @@ class DefaultWebCommandTests(unittest.TestCase):
                         "pbi_agent.cli._handle_web_command", return_value=0
                     ) as mock_web,
                 ):
-                    rc = cli.main(
-                        [
-                            "--profile-id",
-                            "analysis",
-                            "--model",
-                            "gpt-5.4-mini",
-                            "web",
-                        ]
-                    )
+                    rc = cli.main(["web"])
 
                 after = config_path.read_text(encoding="utf-8")
 
         self.assertEqual(rc, 0)
         _args, runtime = mock_web.call_args.args
         self.assertEqual(runtime.settings.provider, "openai")
-        self.assertEqual(runtime.settings.model, "gpt-5.4-mini")
+        self.assertEqual(runtime.settings.model, "gpt-5.4-2026-03-05")
         self.assertEqual(runtime.settings.api_key, "saved-key")
-        self.assertNotEqual(runtime.profile_id, "analysis")
-        self.assertNotEqual(before, after)
+        self.assertEqual(runtime.profile_id, "analysis")
+        self.assertEqual(before, after)
 
     def test_main_run_uses_profile_id_flag(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

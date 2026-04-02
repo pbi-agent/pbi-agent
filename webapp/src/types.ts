@@ -35,11 +35,11 @@ export type TaskRecord = {
 };
 
 export type RuntimeSummary = {
-  provider: string;
-  provider_id: string;
-  profile_id: string;
-  model: string;
-  reasoning_effort: string;
+  provider: string | null;
+  provider_id: string | null;
+  profile_id: string | null;
+  model: string | null;
+  reasoning_effort: string | null;
 };
 
 export type UsagePayload = {
@@ -67,8 +67,8 @@ export type UsagePayload = {
 };
 
 export type LiveSessionRuntime = {
-  provider_id: string;
-  profile_id: string;
+  provider_id: string | null;
+  profile_id: string | null;
   provider: string;
   model: string;
   reasoning_effort: string;
@@ -129,11 +129,11 @@ export type ExpandedChatInput = {
 
 export type BootstrapPayload = {
   workspace_root: string;
-  provider: string;
-  provider_id: string;
-  profile_id: string;
-  model: string;
-  reasoning_effort: string;
+  provider: string | null;
+  provider_id: string | null;
+  profile_id: string | null;
+  model: string | null;
+  reasoning_effort: string | null;
   supports_image_inputs: boolean;
   sessions: SessionRecord[];
   tasks: TaskRecord[];

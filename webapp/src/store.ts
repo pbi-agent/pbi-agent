@@ -267,15 +267,15 @@ export const useChatStore = create<ChatState>((set) => ({
           return { ...state, ...nextState };
         case "session_runtime_updated":
           if (
-            typeof payload.provider_id === "string"
-            && typeof payload.profile_id === "string"
-            && typeof payload.provider === "string"
+            typeof payload.provider === "string"
             && typeof payload.model === "string"
             && typeof payload.reasoning_effort === "string"
           ) {
             nextState.runtime = {
-              provider_id: payload.provider_id,
-              profile_id: payload.profile_id,
+              provider_id:
+                typeof payload.provider_id === "string" ? payload.provider_id : null,
+              profile_id:
+                typeof payload.profile_id === "string" ? payload.profile_id : null,
               provider: payload.provider,
               model: payload.model,
               reasoning_effort: payload.reasoning_effort,

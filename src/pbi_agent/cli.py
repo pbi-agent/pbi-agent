@@ -30,6 +30,7 @@ from pbi_agent.config import (
     list_model_profile_configs,
     list_provider_configs,
     resolve_runtime,
+    resolve_web_runtime,
     select_active_model_profile,
     slugify,
     update_model_profile_config,
@@ -493,8 +494,8 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_select = profiles_actions.add_parser(
         "select",
         prog="pbi-agent config profiles select",
-        description="Set the active saved model profile.",
-        help="Select the active model profile.",
+        description="Set the default saved model profile for the web UI.",
+        help="Select the default web model profile.",
         formatter_class=CleanHelpFormatter,
     )
     profiles_select.add_argument("profile_id", help="Model profile ID.")
@@ -561,6 +562,36 @@ def _subcommand_names(parser: argparse.ArgumentParser) -> set[str]:
     return set()
 
 
+def _web_runtime_flags_in_args(raw_argv: list[str]) -> list[str]:
+    runtime_flags = {
+        "--provider",
+        "--responses-url",
+        "--api-key",
+        "--openai-api-key",
+        "--xai-api-key",
+        "--google-api-key",
+        "--anthropic-api-key",
+        "--generic-api-key",
+        "--generic-api-url",
+        "--profile-id",
+        "--model",
+        "--sub-agent-model",
+        "--max-tokens",
+        "--reasoning-effort",
+        "--service-tier",
+        "--no-web-search",
+        "--max-tool-workers",
+        "--max-retries",
+        "--compact-threshold",
+    }
+    seen: list[str] = []
+    for token in raw_argv:
+        flag = token.split("=", 1)[0]
+        if flag in runtime_flags:
+            seen.append(flag)
+    return seen
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_argv = list(sys.argv[1:] if argv is None else argv)
@@ -593,12 +624,31 @@ def main(argv: list[str] | None = None) -> int:
         if _run_session is None:
             return 1
         args.project_dir = _run_session.directory
-        if _run_session.profile_id:
-            args.profile_id = _run_session.profile_id
-        else:
-            args.provider = _run_session.provider
-        if not args.model and not _run_session.profile_id:
-            args.model = _run_session.model
+
+    if args.command == "web":
+        if _web_runtime_flags_in_args(raw_argv):
+            print(
+                "Error: runtime provider/model flags are no longer supported with "
+                "`pbi-agent web`. Configure the web UI in Settings and use "
+                "`--profile-id` or explicit runtime flags only with `run` or `audit`.",
+                file=sys.stderr,
+            )
+            return 2
+        configure_logging(args.verbose)
+        try:
+            runtime: Settings | ResolvedRuntime = resolve_web_runtime(
+                verbose=args.verbose
+            )
+            runtime.settings.validate()
+        except ConfigError as exc:
+            LOGGER.debug("Starting web UI without an active web profile: %s", exc)
+            runtime = Settings(
+                api_key="",
+                provider="openai",
+                model="gpt-5.4",
+                verbose=args.verbose,
+            )
+        return _handle_web_command(args, runtime)
 
     # ---- resolve settings for commands that need a provider ----
 
@@ -618,9 +668,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "audit":
         return _handle_audit_command(args, runtime)
-
-    if args.command == "web":
-        return _handle_web_command(args, runtime)
 
     parser.error("Unknown command.")
     return 1
@@ -780,7 +827,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
 
     if args.config_action == "select":
         active_id, _ = select_active_model_profile(args.profile_id)
-        print(f"Selected model profile '{active_id}'.")
+        print(f"Selected web model profile '{active_id}'.")
         return 0
 
     raise ConfigError(f"Unknown profiles action '{args.config_action}'.")

@@ -14,7 +14,6 @@ from pbi_agent.config import (
     ModelProfileConfig,
     ModeConfig,
     ProviderConfig,
-    resolve_runtime,
     Settings,
     create_model_profile_config,
     create_mode_config,
@@ -67,24 +66,19 @@ def test_bootstrap_endpoint_returns_workspace_metadata() -> None:
 def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "env-openai-key")
     runtime_args = _runtime_args("web")
-    app = create_app(resolve_runtime(runtime_args), runtime_args=runtime_args)
+    app = create_app(_settings(), runtime_args=runtime_args)
 
     with TestClient(app) as client:
         bootstrap_response = client.get("/api/config/bootstrap")
         assert bootstrap_response.status_code == 200
         bootstrap_payload = bootstrap_response.json()
-        assert len(bootstrap_payload["providers"]) == 1
-        assert bootstrap_payload["providers"][0]["id"] == "auto-provider-openai"
-        assert len(bootstrap_payload["model_profiles"]) == 1
+        assert bootstrap_payload["providers"] == []
+        assert bootstrap_payload["model_profiles"] == []
         assert [item["id"] for item in bootstrap_payload["modes"]] == [
             "implement",
             "plan",
             "review",
         ]
-        assert (
-            bootstrap_payload["model_profiles"][0]["provider_id"]
-            == "auto-provider-openai"
-        )
         assert "config_revision" in bootstrap_payload
         revision = bootstrap_payload["config_revision"]
 
@@ -156,8 +150,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
         refreshed_payload = refreshed.json()
         assert refreshed_payload["active_profile_id"] == "analysis"
         assert {item["id"] for item in refreshed_payload["providers"]} == {
-            "auto-provider-openai",
-            "openai-main",
+            "openai-main"
         }
         analysis_profile = next(
             item
@@ -481,7 +474,7 @@ def test_task_contract_includes_model_profile_binding_and_null_patch_semantics(
             reasoning_effort="xhigh",
         )
     )
-    app = create_app(resolve_runtime(runtime_args), runtime_args=runtime_args)
+    app = create_app(_settings(), runtime_args=runtime_args)
 
     with SessionStore(db_path=tmp_path / "sessions.db") as store:
         session_id = store.create_session(
@@ -561,10 +554,8 @@ def test_chat_session_creation_with_model_profile_exposes_runtime_binding(
             reasoning_effort="xhigh",
         )
     )
-    runtime_args = _runtime_args("web")
-
     with patch("pbi_agent.web.session_manager.run_chat_loop", return_value=0):
-        app = create_app(resolve_runtime(runtime_args), runtime_args=runtime_args)
+        app = create_app(_settings())
 
         with TestClient(app) as client:
             response = client.post(
@@ -606,7 +597,6 @@ def test_chat_input_profile_override_emits_runtime_update(monkeypatch) -> None:
             reasoning_effort="xhigh",
         )
     )
-    runtime_args = _runtime_args("web")
     queued_values: list[object] = []
 
     def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
@@ -616,7 +606,7 @@ def test_chat_input_profile_override_emits_runtime_update(monkeypatch) -> None:
         return 0
 
     with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
-        app = create_app(resolve_runtime(runtime_args), runtime_args=runtime_args)
+        app = create_app(_settings())
 
         with TestClient(app) as client:
             response = client.post("/api/chat/session", json={})
@@ -663,7 +653,6 @@ def test_set_chat_session_profile_emits_runtime_update(monkeypatch) -> None:
             reasoning_effort="xhigh",
         )
     )
-    runtime_args = _runtime_args("web")
     queued_values: list[object] = []
 
     def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
@@ -673,7 +662,7 @@ def test_set_chat_session_profile_emits_runtime_update(monkeypatch) -> None:
         return 0
 
     with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
-        app = create_app(resolve_runtime(runtime_args), runtime_args=runtime_args)
+        app = create_app(_settings())
 
         with TestClient(app) as client:
             response = client.post("/api/chat/session", json={})
@@ -719,7 +708,6 @@ def test_chat_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -
             reasoning_effort="xhigh",
         )
     )
-    runtime_args = _runtime_args("web")
     observed_runtime = None
 
     def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
@@ -739,7 +727,7 @@ def test_chat_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -
         )
 
     with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
-        app = create_app(resolve_runtime(runtime_args), runtime_args=runtime_args)
+        app = create_app(_settings())
 
         with TestClient(app) as client:
             response = client.post(

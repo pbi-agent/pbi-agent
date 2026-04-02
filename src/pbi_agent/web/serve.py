@@ -38,7 +38,7 @@ from pbi_agent.config import (
     ConfigError,
     ResolvedRuntime,
     Settings,
-    resolve_runtime,
+    resolve_web_runtime,
 )
 from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.web.input_mentions import expand_input_mentions
@@ -166,8 +166,8 @@ class SessionRecordModel(BaseModel):
 class LiveSessionModel(BaseModel):
     live_session_id: str
     resume_session_id: str | None
-    provider_id: str
-    profile_id: str
+    provider_id: str | None
+    profile_id: str | None
     provider: str
     model: str
     reasoning_effort: str
@@ -191,11 +191,11 @@ class ImageUploadResponse(BaseModel):
 
 
 class RuntimeSummaryModel(BaseModel):
-    provider: str
-    provider_id: str
-    profile_id: str
-    model: str
-    reasoning_effort: str
+    provider: str | None
+    provider_id: str | None
+    profile_id: str | None
+    model: str | None
+    reasoning_effort: str | None
 
 
 class TaskRecordModel(BaseModel):
@@ -219,11 +219,11 @@ class TaskRecordModel(BaseModel):
 
 class BootstrapResponse(BaseModel):
     workspace_root: str
-    provider: str
-    provider_id: str
-    profile_id: str
-    model: str
-    reasoning_effort: str
+    provider: str | None
+    provider_id: str | None
+    profile_id: str | None
+    model: str | None
+    reasoning_effort: str | None
     supports_image_inputs: bool
     sessions: list[SessionRecordModel]
     tasks: list[TaskRecordModel]
@@ -1342,24 +1342,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
-    settings = Settings(
-        api_key=args.api_key,
-        provider=args.provider,
-        model=args.model,
-        sub_agent_model=args.sub_agent_model,
-        responses_url=args.responses_url,
-        generic_api_url=args.generic_api_url,
-        reasoning_effort=args.reasoning_effort,
-        max_tool_workers=args.max_tool_workers,
-        max_retries=args.max_retries,
-        compact_threshold=args.compact_threshold,
-        max_tokens=args.max_tokens,
-        verbose=args.verbose,
-        service_tier=args.service_tier,
-        web_search=not args.no_web_search,
-    )
+    try:
+        runtime: Settings | ResolvedRuntime = resolve_web_runtime(verbose=args.verbose)
+    except ConfigError:
+        runtime = Settings(api_key="", provider="openai", model="gpt-5.4")
     PBIWebServer(
-        settings=settings,
+        settings=runtime,
         runtime_args=args,
         host=args.host,
         port=args.port,
@@ -1395,19 +1383,9 @@ def _default_settings_namespace() -> argparse.Namespace:
 def _create_default_fastapi_app() -> FastAPI:
     args = _default_settings_namespace()
     try:
-        runtime = resolve_runtime(args)
-        runtime.settings.validate()
-    except ConfigError as error:
-        app = FastAPI(
-            title="PBI Agent", docs_url=None, redoc_url=None, openapi_url=None
-        )
-        detail = str(error)
-
-        @app.get("/")
-        def configuration_error() -> dict[str, str]:
-            raise HTTPException(status_code=500, detail=detail)
-
-        return app
+        runtime: Settings | ResolvedRuntime = resolve_web_runtime(verbose=args.verbose)
+    except ConfigError:
+        runtime = Settings(api_key="", provider="openai", model="gpt-5.4")
     return create_app(runtime, runtime_args=args)
 
 

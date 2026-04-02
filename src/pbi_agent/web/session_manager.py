@@ -36,8 +36,8 @@ from pbi_agent.config import (
     replace_model_profile_config,
     replace_mode_config,
     replace_provider_config,
-    resolve_runtime,
     resolve_runtime_for_profile_id,
+    resolve_web_runtime,
     select_active_model_profile,
     slugify,
 )
@@ -103,7 +103,15 @@ def _serialize_session(record: SessionRecord) -> dict[str, Any]:
     }
 
 
-def _runtime_summary(runtime: ResolvedRuntime) -> dict[str, str]:
+def _runtime_summary(runtime: ResolvedRuntime | None) -> dict[str, str | None]:
+    if runtime is None:
+        return {
+            "provider": None,
+            "provider_id": None,
+            "profile_id": None,
+            "model": None,
+            "reasoning_effort": None,
+        }
     return {
         "provider": runtime.settings.provider,
         "provider_id": runtime.provider_id,
@@ -136,7 +144,7 @@ def _resolved_runtime_view(runtime: ResolvedRuntime) -> dict[str, Any]:
 def _serialize_task(
     record: KanbanTaskRecord,
     *,
-    runtime: ResolvedRuntime,
+    runtime: ResolvedRuntime | None,
 ) -> dict[str, Any]:
     return {
         "task_id": record.task_id,
@@ -271,7 +279,7 @@ class WebSessionManager:
         self._default_runtime = (
             settings
             if isinstance(settings, ResolvedRuntime)
-            else ResolvedRuntime(settings=settings, provider_id="", profile_id="")
+            else ResolvedRuntime(settings=settings, provider_id=None, profile_id=None)
         )
         self._runtime_args = runtime_args
         self._workspace_root = Path.cwd().resolve()
@@ -290,6 +298,9 @@ class WebSessionManager:
 
     @property
     def settings(self) -> Settings:
+        runtime = self._resolve_runtime_optional(None)
+        if runtime is not None:
+            return runtime.settings
         return self._default_runtime.settings
 
     def warm_file_mentions_cache(self) -> None:
@@ -304,16 +315,26 @@ class WebSessionManager:
         return self._mention_index.search(query, limit=limit)
 
     def bootstrap(self) -> dict[str, Any]:
-        default_runtime = self._resolve_runtime_or_default(None)
+        default_runtime = self._resolve_runtime_optional(None)
         return {
             "workspace_root": str(self._workspace_root),
-            "provider": default_runtime.settings.provider,
-            "provider_id": default_runtime.provider_id,
-            "profile_id": default_runtime.profile_id,
-            "model": default_runtime.settings.model,
-            "reasoning_effort": default_runtime.settings.reasoning_effort,
-            "supports_image_inputs": provider_supports_images(
+            "provider": (
                 default_runtime.settings.provider
+                if default_runtime is not None
+                else None
+            ),
+            "provider_id": default_runtime.provider_id if default_runtime else None,
+            "profile_id": default_runtime.profile_id if default_runtime else None,
+            "model": default_runtime.settings.model if default_runtime else None,
+            "reasoning_effort": (
+                default_runtime.settings.reasoning_effort
+                if default_runtime is not None
+                else None
+            ),
+            "supports_image_inputs": (
+                provider_supports_images(default_runtime.settings.provider)
+                if default_runtime is not None
+                else False
             ),
             "sessions": self.list_sessions(),
             "tasks": self.list_tasks(),
@@ -338,7 +359,7 @@ class WebSessionManager:
                 self._model_profile_view(
                     profile,
                     provider=self._require_provider(config, profile.provider_id),
-                    active_profile_id=config.active_model_profile,
+                    active_profile_id=config.web.active_profile_id,
                 )
                 for profile in sorted(
                     config.model_profiles,
@@ -352,7 +373,7 @@ class WebSessionManager:
                     key=lambda item: _config_sort_key(item.name, item.id),
                 )
             ],
-            "active_profile_id": config.active_model_profile,
+            "active_profile_id": config.web.active_profile_id,
             "config_revision": revision,
             "options": {
                 "provider_kinds": list(PROVIDER_KINDS),
@@ -431,7 +452,7 @@ class WebSessionManager:
         return [
             _serialize_task(
                 record,
-                runtime=self._resolve_runtime_or_default(record.model_profile_id),
+                runtime=self._resolve_runtime_optional(record.model_profile_id),
             )
             for record in records
         ]
@@ -893,11 +914,14 @@ class WebSessionManager:
             ),
             expected_revision=expected_revision,
         )
+        # The config snapshot loaded above is stale after the save — if there was
+        # no active profile, create_model_profile_config auto-activated this one.
+        active_profile_id = config.web.active_profile_id or profile.id
         return {
             "model_profile": self._model_profile_view(
                 profile,
                 provider=provider,
-                active_profile_id=config.active_model_profile,
+                active_profile_id=active_profile_id,
             ),
             "config_revision": revision,
         }
@@ -975,7 +999,7 @@ class WebSessionManager:
             "model_profile": self._model_profile_view(
                 updated,
                 provider=provider,
-                active_profile_id=config.active_model_profile,
+                active_profile_id=config.web.active_profile_id,
             ),
             "config_revision": revision,
         }
@@ -1250,7 +1274,7 @@ class WebSessionManager:
     def _serialize_task_record(self, record: KanbanTaskRecord) -> dict[str, Any]:
         return _serialize_task(
             record,
-            runtime=self._resolve_runtime_or_default(record.model_profile_id),
+            runtime=self._resolve_runtime_optional(record.model_profile_id),
         )
 
     def _require_live_session(self, live_session_id: str) -> LiveChatSession:
@@ -1272,20 +1296,29 @@ class WebSessionManager:
         if profile_id is None:
             if self._runtime_args is None:
                 return self._default_runtime
-            return resolve_runtime(self._runtime_args)
+            return resolve_web_runtime(verbose=self._default_runtime.settings.verbose)
         return resolve_runtime_for_profile_id(
             profile_id,
             verbose=self._default_runtime.settings.verbose,
         )
 
+    def _resolve_runtime_optional(
+        self,
+        profile_id: str | None,
+    ) -> ResolvedRuntime | None:
+        try:
+            return self._resolve_runtime(profile_id)
+        except ConfigError:
+            return None
+
     def _resolve_runtime_or_default(
         self,
         profile_id: str | None,
     ) -> ResolvedRuntime:
-        try:
-            return self._resolve_runtime(profile_id)
-        except ConfigError:
-            return self._default_runtime
+        runtime = self._resolve_runtime_optional(profile_id)
+        if runtime is not None:
+            return runtime
+        return self._default_runtime
 
     def _resolve_saved_session_runtime(
         self,
@@ -1310,7 +1343,7 @@ class WebSessionManager:
         return ResolvedRuntime(
             settings=settings,
             provider_id=record.provider_id or fallback.provider_id,
-            profile_id="",
+            profile_id=None,
         )
 
     def _queue_runtime_change(

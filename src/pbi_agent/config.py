@@ -41,8 +41,6 @@ PROFILE_ID_ENV = "PBI_AGENT_PROFILE_ID"
 DEFAULT_INTERNAL_CONFIG_PATH = Path.home() / ".pbi-agent" / "config.json"
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 SLASH_ALIAS_RE = re.compile(r"^/[a-z0-9][a-z0-9-]*$")
-AUTO_PROVIDER_ID_PREFIX = "auto-provider"
-AUTO_PROFILE_ID_PREFIX = "auto-profile"
 RESERVED_MODE_ALIASES = frozenset({"/skills", "/mcp", "/agents", "/agents-reload"})
 DEFAULT_MODE_SPECS = (
     {
@@ -272,14 +270,19 @@ class InternalConfig:
     providers: list[ProviderConfig] = field(default_factory=list)
     model_profiles: list[ModelProfileConfig] = field(default_factory=list)
     modes: list[ModeConfig] = field(default_factory=list)
-    active_model_profile: str | None = None
+    web: WebConfig = field(default_factory=lambda: WebConfig())
+
+
+@dataclass(slots=True)
+class WebConfig:
+    active_profile_id: str | None = None
 
 
 @dataclass(slots=True)
 class ResolvedRuntime:
     settings: Settings
-    provider_id: str
-    profile_id: str
+    provider_id: str | None
+    profile_id: str | None
 
 
 @dataclass(slots=True)
@@ -421,7 +424,12 @@ def resolve_runtime_for_profile_id(
     profile = _profile_map(config).get(slugify(profile_id))
     if profile is None:
         raise ConfigError(f"Unknown profile ID '{profile_id}'.")
-    provider = _require_provider(_provider_map(config), profile.provider_id)
+    provider = _provider_map(config).get(profile.provider_id)
+    if provider is None:
+        raise ConfigError(
+            f"Profile '{profile.id}' references missing provider "
+            f"'{profile.provider_id}'."
+        )
     settings = _settings_from_runtime_parts(
         provider=provider,
         profile=profile,
@@ -451,7 +459,7 @@ def load_internal_config() -> InternalConfig:
     profiles_payload = payload.get("model_profiles")
     modes_present = "modes" in payload
     modes_payload = payload.get("modes")
-    active_payload = payload.get("active_model_profile")
+    web_payload = payload.get("web")
 
     seeded_modes = default_mode_configs() if not modes_present else []
 
@@ -468,7 +476,7 @@ def load_internal_config() -> InternalConfig:
         return InternalConfig(modes=seeded_modes)
     if modes_present and not isinstance(modes_payload, list):
         return InternalConfig(modes=seeded_modes)
-    if active_payload is not None and not isinstance(active_payload, str):
+    if web_payload is not None and not isinstance(web_payload, dict):
         return InternalConfig(modes=seeded_modes)
 
     providers: list[ProviderConfig] = []
@@ -492,12 +500,12 @@ def load_internal_config() -> InternalConfig:
     else:
         modes = seeded_modes
 
-    active_model_profile = active_payload if isinstance(active_payload, str) else None
+    web = _web_config_from_payload(web_payload)
     return InternalConfig(
         providers=providers,
         model_profiles=profiles,
         modes=modes,
-        active_model_profile=active_model_profile,
+        web=web,
     )
 
 
@@ -538,7 +546,7 @@ def list_model_profile_configs() -> tuple[list[ModelProfileConfig], str | None]:
     config = load_internal_config()
     return sorted(
         config.model_profiles, key=_config_sort_key
-    ), config.active_model_profile
+    ), config.web.active_profile_id
 
 
 def list_mode_configs() -> list[ModeConfig]:
@@ -661,6 +669,9 @@ def create_model_profile_config(
         raise ConfigError(f"Profile '{profile.id}' already exists.")
     config.model_profiles.append(profile)
     config.model_profiles.sort(key=_config_sort_key)
+    # Auto-activate the first profile so new users get a usable default.
+    if config.web.active_profile_id is None:
+        config.web.active_profile_id = profile.id
     revision = save_internal_config_with_revision(
         config, expected_revision=expected_revision
     )
@@ -842,8 +853,8 @@ def delete_model_profile_config(
     config.model_profiles = [
         existing for existing in config.model_profiles if existing.id != normalized_id
     ]
-    if config.active_model_profile == normalized_id:
-        config.active_model_profile = None
+    if config.web.active_profile_id == normalized_id:
+        config.web.active_profile_id = None
     return save_internal_config_with_revision(
         config, expected_revision=expected_revision
     )
@@ -856,16 +867,16 @@ def select_active_model_profile(
 ) -> tuple[str | None, str]:
     config = load_internal_config()
     if profile_id is None:
-        config.active_model_profile = None
+        config.web.active_profile_id = None
     else:
         profile = _profile_map(config).get(slugify(profile_id))
         if profile is None:
             raise ConfigError(f"Unknown profile ID '{profile_id}'.")
-        config.active_model_profile = profile.id
+        config.web.active_profile_id = profile.id
     revision = save_internal_config_with_revision(
         config, expected_revision=expected_revision
     )
-    return config.active_model_profile, revision
+    return config.web.active_profile_id, revision
 
 
 def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
@@ -874,10 +885,8 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
     config = load_internal_config()
     providers = _provider_map(config)
     profiles = _profile_map(config)
-    selected_profile_ref = (
-        getattr(args, "profile_id", None)
-        or os.getenv(PROFILE_ID_ENV)
-        or config.active_model_profile
+    selected_profile_ref = getattr(args, "profile_id", None) or os.getenv(
+        PROFILE_ID_ENV
     )
 
     selected_profile: ModelProfileConfig | None = None
@@ -913,26 +922,24 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         or DEFAULT_GENERIC_API_URL
     )
 
-    provider = _resolve_provider_identity(
-        config,
+    resolved_provider_id = _resolved_provider_id(
         selected_provider=selected_provider,
         provider_kind=provider_kind,
         responses_url=responses_url,
         generic_api_url=generic_api_url,
-        secret=provider_secret,
     )
 
     model = (
         getattr(args, "model", None)
         or os.getenv("PBI_AGENT_MODEL")
         or (selected_profile.model if selected_profile else None)
-        or _default_model(provider.kind)
+        or _default_model(provider_kind)
     )
     sub_agent_model = (
         getattr(args, "sub_agent_model", None)
         or os.getenv("PBI_AGENT_SUB_AGENT_MODEL")
         or (selected_profile.sub_agent_model if selected_profile else None)
-        or _default_sub_agent_model(provider.kind)
+        or _default_sub_agent_model(provider_kind)
     )
     max_tool_workers = _resolve_int_setting(
         cli_value=getattr(args, "max_tool_workers", None),
@@ -950,7 +957,7 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         getattr(args, "reasoning_effort", None)
         or os.getenv("PBI_AGENT_REASONING_EFFORT")
         or (selected_profile.reasoning_effort if selected_profile else None)
-        or _default_reasoning_effort(provider.kind)
+        or _default_reasoning_effort(provider_kind)
     )
     compact_threshold = _resolve_int_setting(
         cli_value=getattr(args, "compact_threshold", None),
@@ -983,22 +990,36 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         max_retries=max_retries,
         reasoning_effort=reasoning_effort,
         compact_threshold=compact_threshold,
-        provider=provider.kind,
+        provider=provider_kind,
         service_tier=service_tier,
         web_search=web_search,
     )
-
-    profile = _resolve_profile_identity(
-        config,
-        provider=provider,
-        selected_profile=selected_profile,
-        settings=settings,
-    )
     return ResolvedRuntime(
         settings=settings,
-        provider_id=provider.id,
-        profile_id=profile.id,
+        provider_id=resolved_provider_id,
+        profile_id=_resolved_profile_id(
+            selected_profile=selected_profile,
+            resolved_provider_id=resolved_provider_id,
+            provider_kind=provider_kind,
+            settings=settings,
+        ),
     )
+
+
+def resolve_web_runtime(
+    *,
+    verbose: bool = False,
+) -> ResolvedRuntime:
+    load_dotenv()
+    config = load_internal_config()
+    active_profile_id = config.web.active_profile_id
+    if not active_profile_id:
+        raise ConfigError(
+            "No active web model profile configured. "
+            "Select one in the web settings or run "
+            "'pbi-agent config profiles select <profile-id>'."
+        )
+    return resolve_runtime_for_profile_id(active_profile_id, verbose=verbose)
 
 
 def resolve_settings(args: argparse.Namespace) -> Settings:
@@ -1116,15 +1137,13 @@ def _settings_from_runtime_parts(
     )
 
 
-def _resolve_provider_identity(
-    config: InternalConfig,
+def _resolved_provider_id(
     *,
     selected_provider: ProviderConfig | None,
     provider_kind: str,
     responses_url: str,
     generic_api_url: str,
-    secret: _ResolvedSecret,
-) -> ProviderConfig:
+) -> str | None:
     if (
         selected_provider is not None
         and selected_provider.kind == provider_kind
@@ -1133,66 +1152,32 @@ def _resolve_provider_identity(
         and (selected_provider.generic_api_url or DEFAULT_GENERIC_API_URL)
         == generic_api_url
     ):
-        return selected_provider
-
-    provider_id = _managed_provider_id(
-        provider_kind,
-        responses_url=responses_url,
-        generic_api_url=generic_api_url,
-    )
-    provider = ProviderConfig(
-        id=provider_id,
-        name=_managed_provider_name(
-            provider_kind,
-            responses_url=responses_url,
-            generic_api_url=generic_api_url,
-        ),
-        kind=provider_kind,
-        api_key="" if secret.api_key_env else secret.api_key,
-        api_key_env=secret.api_key_env,
-        responses_url=None
-        if responses_url == _default_responses_url(provider_kind)
-        else responses_url,
-        generic_api_url=None
-        if provider_kind != "generic" and generic_api_url == DEFAULT_GENERIC_API_URL
-        else generic_api_url,
-    )
-    return _upsert_provider(config, provider)
+        return selected_provider.id
+    return None
 
 
-def _resolve_profile_identity(
-    config: InternalConfig,
+def _resolved_profile_id(
     *,
-    provider: ProviderConfig,
     selected_profile: ModelProfileConfig | None,
+    resolved_provider_id: str | None,
+    provider_kind: str,
     settings: Settings,
-) -> ModelProfileConfig:
-    concrete_profile = _concrete_profile_for_settings(settings, provider_id=provider.id)
+) -> str | None:
+    if selected_profile is None or resolved_provider_id != selected_profile.provider_id:
+        return None
+    concrete_profile = _concrete_profile_for_settings(
+        settings,
+        provider_id=resolved_provider_id,
+    )
     if (
-        selected_profile is not None
-        and selected_profile.provider_id == provider.id
-        and _concrete_profile_for_saved_profile(
+        _concrete_profile_for_saved_profile(
             selected_profile,
-            provider_kind=provider.kind,
+            provider_kind=provider_kind,
         )
         == concrete_profile
     ):
-        return selected_profile
-
-    default_profile = _default_concrete_profile(provider.kind, provider_id=provider.id)
-    if concrete_profile == default_profile:
-        managed = replace(
-            concrete_profile,
-            id=_managed_default_profile_id(provider.id),
-            name=_managed_default_profile_name(provider),
-        )
-    else:
-        managed = replace(
-            concrete_profile,
-            id=_derived_profile_id(concrete_profile),
-            name=_derived_profile_name(provider, concrete_profile),
-        )
-    return _upsert_profile(config, managed)
+        return selected_profile.id
+    return None
 
 
 def _concrete_profile_for_saved_profile(
@@ -1241,150 +1226,6 @@ def _concrete_profile_for_settings(
         max_retries=settings.max_retries,
         compact_threshold=settings.compact_threshold,
     )
-
-
-def _default_concrete_profile(
-    provider_kind: str,
-    *,
-    provider_id: str,
-) -> ModelProfileConfig:
-    return ModelProfileConfig(
-        id="default",
-        name="Default",
-        provider_id=provider_id,
-        model=_default_model(provider_kind),
-        sub_agent_model=_default_sub_agent_model(provider_kind),
-        reasoning_effort=_default_reasoning_effort(provider_kind),
-        max_tokens=DEFAULT_MAX_TOKENS,
-        service_tier=None,
-        web_search=True,
-        max_tool_workers=4,
-        max_retries=3,
-        compact_threshold=150000,
-    )
-
-
-def _managed_provider_id(
-    provider_kind: str,
-    *,
-    responses_url: str,
-    generic_api_url: str,
-) -> str:
-    payload = {
-        "kind": provider_kind,
-        "responses_url": responses_url,
-        "generic_api_url": generic_api_url if provider_kind == "generic" else None,
-    }
-    default_payload = {
-        "kind": provider_kind,
-        "responses_url": _default_responses_url(provider_kind),
-        "generic_api_url": DEFAULT_GENERIC_API_URL
-        if provider_kind == "generic"
-        else None,
-    }
-    if payload == default_payload:
-        return f"{AUTO_PROVIDER_ID_PREFIX}-{provider_kind}"
-    return f"{AUTO_PROVIDER_ID_PREFIX}-{provider_kind}-{_stable_suffix(payload)}"
-
-
-def _managed_provider_name(
-    provider_kind: str,
-    *,
-    responses_url: str,
-    generic_api_url: str,
-) -> str:
-    label = provider_kind.capitalize()
-    if responses_url == _default_responses_url(provider_kind) and (
-        provider_kind != "generic" or generic_api_url == DEFAULT_GENERIC_API_URL
-    ):
-        return f"{label} Default"
-    return f"{label} Default ({_stable_suffix({'responses_url': responses_url, 'generic_api_url': generic_api_url})})"
-
-
-def _managed_default_profile_id(provider_id: str) -> str:
-    return f"{AUTO_PROFILE_ID_PREFIX}-default-{provider_id}"
-
-
-def _managed_default_profile_name(provider: ProviderConfig) -> str:
-    return f"{provider.name} Default"
-
-
-def _derived_profile_id(profile: ModelProfileConfig) -> str:
-    return (
-        f"{AUTO_PROFILE_ID_PREFIX}-derived-"
-        f"{profile.provider_id}-{_stable_suffix(_profile_identity_payload(profile))}"
-    )
-
-
-def _derived_profile_name(
-    provider: ProviderConfig,
-    profile: ModelProfileConfig,
-) -> str:
-    model = profile.model or _default_model(provider.kind)
-    return f"{provider.name} Derived ({model})"
-
-
-def _profile_identity_payload(profile: ModelProfileConfig) -> dict[str, Any]:
-    return {
-        "provider_id": profile.provider_id,
-        "model": profile.model,
-        "sub_agent_model": profile.sub_agent_model,
-        "reasoning_effort": profile.reasoning_effort,
-        "max_tokens": profile.max_tokens,
-        "service_tier": profile.service_tier,
-        "web_search": profile.web_search,
-        "max_tool_workers": profile.max_tool_workers,
-        "max_retries": profile.max_retries,
-        "compact_threshold": profile.compact_threshold,
-    }
-
-
-def _stable_suffix(payload: dict[str, Any]) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()[:10]
-
-
-def _upsert_provider(
-    config: InternalConfig, provider: ProviderConfig
-) -> ProviderConfig:
-    provider.validate()
-    providers = _provider_map(config)
-    existing = providers.get(provider.id)
-    if existing == provider:
-        return existing
-    if existing is None:
-        config.providers.append(provider)
-    else:
-        config.providers = [
-            provider if item.id == provider.id else item for item in config.providers
-        ]
-    config.providers.sort(key=_config_sort_key)
-    save_internal_config(config)
-    return provider
-
-
-def _upsert_profile(
-    config: InternalConfig,
-    profile: ModelProfileConfig,
-) -> ModelProfileConfig:
-    providers = _provider_map(config)
-    profile.validate(
-        provider_kind=_require_provider(providers, profile.provider_id).kind
-    )
-    profiles = _profile_map(config)
-    existing = profiles.get(profile.id)
-    if existing == profile:
-        return existing
-    if existing is None:
-        config.model_profiles.append(profile)
-    else:
-        config.model_profiles = [
-            profile if item.id == profile.id else item for item in config.model_profiles
-        ]
-    config.model_profiles.sort(key=_config_sort_key)
-    save_internal_config(config)
-    return profile
 
 
 def _internal_config_path() -> Path:
@@ -1494,6 +1335,15 @@ def _mode_from_payload(payload: object) -> ModeConfig | None:
     return mode
 
 
+def _web_config_from_payload(payload: object) -> WebConfig:
+    if not isinstance(payload, dict):
+        return WebConfig()
+    active_profile_id = payload.get("active_profile_id")
+    if active_profile_id is not None and not isinstance(active_profile_id, str):
+        return WebConfig()
+    return WebConfig(active_profile_id=active_profile_id)
+
+
 def _provider_map(config: InternalConfig) -> dict[str, ProviderConfig]:
     return {provider.id: provider for provider in config.providers}
 
@@ -1568,5 +1418,5 @@ def _internal_config_payload(config: InternalConfig) -> dict[str, Any]:
         "providers": [asdict(provider) for provider in config.providers],
         "model_profiles": [asdict(profile) for profile in config.model_profiles],
         "modes": [asdict(mode) for mode in config.modes],
-        "active_model_profile": config.active_model_profile,
+        "web": {"active_profile_id": config.web.active_profile_id},
     }

@@ -14,6 +14,7 @@ from pbi_agent.config import (
     ModelProfileConfig,
     ModeConfig,
     ProviderConfig,
+    WebConfig,
     create_model_profile_config,
     create_mode_config,
     create_provider_config,
@@ -24,6 +25,7 @@ from pbi_agent.config import (
     normalize_slash_alias,
     resolve_runtime,
     resolve_settings,
+    resolve_web_runtime,
     save_internal_config,
     save_internal_config_with_revision,
     select_active_model_profile,
@@ -53,7 +55,7 @@ def test_load_internal_config_treats_old_provider_scoped_shape_as_absent(
     assert config.providers == []
     assert config.model_profiles == []
     assert [item.id for item in config.modes] == ["implement", "plan", "review"]
-    assert config.active_model_profile is None
+    assert config.web.active_profile_id is None
 
 
 def test_load_internal_config_seeds_default_modes_when_key_missing() -> None:
@@ -106,7 +108,7 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
 
     assert [item.id for item in config.providers] == ["openai-main"]
     assert [item.id for item in config.model_profiles] == ["analysis"]
-    assert config.active_model_profile == "analysis"
+    assert config.web.active_profile_id == "analysis"
     assert config.providers[0].api_key == "saved-openai-key"
     assert config.model_profiles[0].service_tier == "flex"
 
@@ -159,7 +161,7 @@ def test_deleting_seeded_default_mode_persists_deletion() -> None:
             providers=config.providers,
             model_profiles=config.model_profiles,
             modes=[mode for mode in config.modes if mode.id != "plan"],
-            active_model_profile=config.active_model_profile,
+            web=config.web,
         ),
         expected_revision=revision,
     )
@@ -170,7 +172,7 @@ def test_deleting_seeded_default_mode_persists_deletion() -> None:
     assert find_mode_config_by_alias("/plan") is None
 
 
-def test_resolve_settings_uses_active_saved_profile(monkeypatch) -> None:
+def test_resolve_web_runtime_uses_selected_web_profile(monkeypatch) -> None:
     monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
     monkeypatch.delenv("PBI_AGENT_PROVIDER", raising=False)
     monkeypatch.delenv("PBI_AGENT_API_KEY", raising=False)
@@ -199,7 +201,8 @@ def test_resolve_settings_uses_active_saved_profile(monkeypatch) -> None:
     )
     select_active_model_profile("analysis")
 
-    settings = resolve_settings(_args("web"))
+    runtime = resolve_web_runtime()
+    settings = runtime.settings
 
     assert settings.provider == "openai"
     assert settings.api_key == "saved-openai-key"
@@ -209,6 +212,14 @@ def test_resolve_settings_uses_active_saved_profile(monkeypatch) -> None:
     assert settings.max_retries == 5
     assert settings.compact_threshold == 123456
     assert settings.web_search is False
+    assert runtime.profile_id == "analysis"
+
+
+def test_resolve_web_runtime_requires_active_profile(monkeypatch) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+
+    with pytest.raises(ConfigError, match="No active web model profile configured"):
+        resolve_web_runtime()
 
 
 def test_resolve_settings_prefers_cli_profile_selector_over_env_and_active_profile(
@@ -353,7 +364,7 @@ def test_saved_provider_env_var_reference_beats_saved_plaintext_secret(
     assert settings.api_key == "env-ref-key"
 
 
-def test_runtime_overrides_persist_a_derived_profile(monkeypatch) -> None:
+def test_runtime_overrides_do_not_persist_a_derived_profile(monkeypatch) -> None:
     monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
 
     create_provider_config(
@@ -381,13 +392,11 @@ def test_runtime_overrides_persist_a_derived_profile(monkeypatch) -> None:
     after = config_module._internal_config_path().read_text(encoding="utf-8")
 
     assert runtime.settings.model == "cli-model"
-    assert runtime.profile_id != "analysis"
-    assert before != after
+    assert runtime.profile_id is None
+    assert runtime.provider_id == "openai-main"
+    assert before == after
     config = load_internal_config()
-    assert sorted(profile.id for profile in config.model_profiles) == [
-        "analysis",
-        runtime.profile_id,
-    ]
+    assert [profile.id for profile in config.model_profiles] == ["analysis"]
 
 
 def test_save_internal_config_rejects_stale_revision() -> None:
@@ -419,7 +428,7 @@ def test_save_internal_config_rejects_stale_revision() -> None:
                 )
             ],
             model_profiles=[],
-            active_model_profile=None,
+            web=WebConfig(),
         )
     )
 
@@ -448,7 +457,7 @@ def test_resolve_settings_rejects_profile_pointing_to_missing_provider(
                     provider_id="missing-provider",
                 )
             ],
-            active_model_profile="broken-profile",
+            web=WebConfig(active_profile_id="broken-profile"),
         )
     )
 
@@ -456,7 +465,7 @@ def test_resolve_settings_rejects_profile_pointing_to_missing_provider(
         ConfigError,
         match="references missing provider 'missing-provider'",
     ):
-        resolve_settings(_args("web"))
+        resolve_web_runtime()
 
 
 def test_invalid_service_tier_on_non_openai_profile_is_rejected(monkeypatch) -> None:
