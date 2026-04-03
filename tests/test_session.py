@@ -317,7 +317,7 @@ def test_run_single_turn_uses_mode_specific_instructions_for_full_turn(
 
     run_single_turn("/plan inspect the workspace", settings, display)
 
-    assert provider.request_calls[0]["user_message"] == "inspect the workspace"
+    assert provider.request_calls[0]["user_message"] == "/plan inspect the workspace"
     assert provider.request_calls[0]["instructions"] is not None
     assert "<active_mode>\nPlan before coding.\n</active_mode>" in str(
         provider.request_calls[0]["instructions"]
@@ -347,7 +347,7 @@ def test_run_single_turn_uses_seeded_plan_mode_when_modes_key_missing(
 
     run_single_turn("/plan inspect the workspace", settings, display)
 
-    assert provider.request_calls[0]["user_message"] == "inspect the workspace"
+    assert provider.request_calls[0]["user_message"] == "/plan inspect the workspace"
     assert "<active_mode>" in str(provider.request_calls[0]["instructions"])
     assert "Do not make code changes." in str(provider.request_calls[0]["instructions"])
 
@@ -653,7 +653,7 @@ def test_run_chat_loop_handles_agents_reload_command_locally(monkeypatch) -> Non
     assert display.assistant_start_calls == 0
 
 
-def test_run_chat_loop_strips_mode_alias_and_uses_turn_specific_instructions(
+def test_run_chat_loop_keeps_mode_alias_and_uses_turn_specific_instructions(
     monkeypatch,
 ) -> None:
     provider = _ChatProviderStub()
@@ -677,7 +677,7 @@ def test_run_chat_loop_strips_mode_alias_and_uses_turn_specific_instructions(
     exit_code = run_chat_loop(settings, display)
 
     assert exit_code == 0
-    assert provider.request_messages == ["draft the approach"]
+    assert provider.request_messages == ["/plan draft the approach"]
     assert provider.request_instructions[0] is not None
     assert "<active_mode>\nPlan before coding.\n</active_mode>" in str(
         provider.request_instructions[0]
@@ -706,7 +706,7 @@ def test_run_chat_loop_accepts_mode_only_turn(monkeypatch) -> None:
     exit_code = run_chat_loop(settings, display)
 
     assert exit_code == 0
-    assert provider.request_messages == [""]
+    assert provider.request_messages == ["/plan"]
 
 
 def test_run_chat_loop_keeps_local_command_precedence_over_modes(monkeypatch) -> None:
