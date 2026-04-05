@@ -97,10 +97,10 @@ export function BoardPage() {
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDragId(null);
     const activeId = String(event.active.id);
+    const overId = event.over ? String(event.over.id) : null;
 
     // Stage reorder
     if (activeId.startsWith("sortable-stage:")) {
-      const overId = event.over ? String(event.over.id) : null;
       if (!overId || !overId.startsWith("sortable-stage:") || activeId === overId) return;
       const oldIndex = boardStages.findIndex((s) => `sortable-stage:${s.id}` === activeId);
       const newIndex = boardStages.findIndex((s) => `sortable-stage:${s.id}` === overId);
@@ -119,7 +119,9 @@ export function BoardPage() {
     }
 
     // Task move between stages
-    const overStage = event.over?.data.current?.stage as string | undefined;
+    const overStage = overId?.startsWith("stage:")
+      ? overId.slice("stage:".length)
+      : (event.over?.data.current?.stage as string | undefined);
     if (!overStage) return;
     const task = tasks.find((item) => item.task_id === activeId);
     if (!task || task.stage === overStage) return;

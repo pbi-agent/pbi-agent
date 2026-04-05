@@ -945,7 +945,11 @@ class WebSessionManager:
                 self._directory_key,
                 record.stage,
             )
-            self._resolve_task_runtime(record, stage_record=stage_record)
+            self._resolve_task_runtime(
+                record,
+                stage_record=stage_record,
+                allow_fallback=False,
+            )
             running_record = store.set_kanban_task_running(task_id)
         if running_record is None:
             with self._lock:
@@ -1360,6 +1364,7 @@ class WebSessionManager:
                 runtime = self._resolve_task_runtime(
                     record,
                     stage_record=stage_record,
+                    allow_fallback=False,
                 )
                 outcome = run_single_turn_in_directory(
                     self._task_prompt_for_run(record.prompt, stage_record),
@@ -1580,11 +1585,14 @@ class WebSessionManager:
         record: KanbanTaskRecord,
         *,
         stage_record: KanbanStageConfigRecord | None = None,
+        allow_fallback: bool = True,
     ) -> ResolvedRuntime:
         resolved_profile_id = record.model_profile_id or (
             stage_record.model_profile_id if stage_record is not None else None
         )
-        return self._resolve_runtime_or_default(resolved_profile_id)
+        if allow_fallback:
+            return self._resolve_runtime_or_default(resolved_profile_id)
+        return self._resolve_runtime(resolved_profile_id)
 
     def _task_prompt_for_run(
         self,

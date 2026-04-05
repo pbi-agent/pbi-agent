@@ -41,10 +41,7 @@ export function StageColumn({
 
   return (
     <section
-      ref={(node) => {
-        setSortableRef(node);
-        setDropRef(node);
-      }}
+      ref={setSortableRef}
       style={style}
       className={`board-column${isOver ? " board-column--drop-over" : ""}${isDragging ? " board-column--dragging" : ""}`}
     >
@@ -86,7 +83,7 @@ export function StageColumn({
         </div>
         <span className="board-column__count">{tasks.length}</span>
       </header>
-      <div className="board-column__body">
+      <div ref={setDropRef} className="board-column__body">
         {tasks.length === 0 ? (
           <EmptyState title="No tasks" />
         ) : (

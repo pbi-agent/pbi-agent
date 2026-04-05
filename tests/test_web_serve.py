@@ -20,6 +20,7 @@ from pbi_agent.config import (
     create_model_profile_config,
     create_mode_config,
     create_provider_config,
+    delete_model_profile_config,
     save_internal_config,
 )
 from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
@@ -788,6 +789,104 @@ def test_run_task_rejects_done_stage(monkeypatch, tmp_path) -> None:
 
     assert run_response.status_code == 400
     assert run_response.json()["detail"] == "Done tasks cannot run."
+
+
+def test_run_task_rejects_orphaned_task_profile(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
+    runtime_args = _runtime_args("web")
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key_env="OPENAI_API_KEY",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-main",
+            model="gpt-5.4-2026-03-05",
+        )
+    )
+    app = create_app(_settings(), runtime_args=runtime_args)
+
+    with TestClient(app) as client:
+        create_response = client.post(
+            "/api/tasks",
+            json={
+                "title": "Task A",
+                "prompt": "Investigate",
+                "stage": "plan",
+                "profile_id": "analysis",
+            },
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task"]["task_id"]
+
+        delete_model_profile_config("analysis")
+
+        run_response = client.post(f"/api/tasks/{task_id}/run")
+
+    assert run_response.status_code == 404
+    assert run_response.json()["detail"] == "Unknown profile ID 'analysis'."
+
+
+def test_run_task_rejects_orphaned_stage_profile(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
+    runtime_args = _runtime_args("web")
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key_env="OPENAI_API_KEY",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-main",
+            model="gpt-5.4-2026-03-05",
+        )
+    )
+    app = create_app(_settings(), runtime_args=runtime_args)
+
+    with TestClient(app) as client:
+        update_response = client.put(
+            "/api/board/stages",
+            json={
+                "board_stages": [
+                    {"id": "backlog", "name": "Backlog"},
+                    {
+                        "id": "plan",
+                        "name": "Plan",
+                        "mode_id": "plan",
+                        "profile_id": "analysis",
+                    },
+                    {"id": "review", "name": "Review", "mode_id": "review"},
+                ]
+            },
+        )
+        assert update_response.status_code == 200
+
+        create_response = client.post(
+            "/api/tasks",
+            json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task"]["task_id"]
+
+        delete_model_profile_config("analysis")
+
+        run_response = client.post(f"/api/tasks/{task_id}/run")
+
+    assert run_response.status_code == 404
+    assert run_response.json()["detail"] == "Unknown profile ID 'analysis'."
 
 
 def test_chat_session_stream_replays_state_events() -> None:
