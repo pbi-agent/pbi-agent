@@ -18,6 +18,7 @@ DEFAULT_SESSION_DB_PATH = Path.home() / ".pbi-agent" / "sessions.db"
 KANBAN_STAGE_BACKLOG = "backlog"
 KANBAN_STAGE_PLAN = "plan"
 KANBAN_STAGE_REVIEW = "review"
+KANBAN_STAGE_DONE = "done"
 KANBAN_DEFAULT_STAGE_SPECS = (
     {
         "stage_id": KANBAN_STAGE_BACKLOG,
@@ -35,6 +36,12 @@ KANBAN_DEFAULT_STAGE_SPECS = (
         "stage_id": KANBAN_STAGE_REVIEW,
         "name": "Review",
         "mode_id": "review",
+        "auto_start": False,
+    },
+    {
+        "stage_id": KANBAN_STAGE_DONE,
+        "name": "Done",
+        "mode_id": None,
         "auto_start": False,
     },
 )
@@ -193,6 +200,77 @@ class KanbanStageConfigRecord:
     auto_start: bool
     created_at: str
     updated_at: str
+
+
+_KANBAN_FIXED_STAGE_NAMES = {
+    KANBAN_STAGE_BACKLOG: "Backlog",
+    KANBAN_STAGE_DONE: "Done",
+}
+
+
+def _normalize_kanban_stage_specs(
+    stages: list[KanbanStageConfigSpec],
+) -> list[KanbanStageConfigSpec]:
+    fixed_ids = set(_KANBAN_FIXED_STAGE_NAMES)
+    stage_map = {item.stage_id: item for item in stages}
+    middle_stages = [item for item in stages if item.stage_id not in fixed_ids]
+    normalized: list[KanbanStageConfigSpec] = [
+        KanbanStageConfigSpec(
+            stage_id=KANBAN_STAGE_BACKLOG,
+            name=_KANBAN_FIXED_STAGE_NAMES[KANBAN_STAGE_BACKLOG],
+            model_profile_id=None,
+            mode_id=None,
+            auto_start=False,
+        )
+    ]
+    normalized.extend(middle_stages)
+    normalized.append(
+        KanbanStageConfigSpec(
+            stage_id=KANBAN_STAGE_DONE,
+            name=_KANBAN_FIXED_STAGE_NAMES[KANBAN_STAGE_DONE],
+            model_profile_id=None,
+            mode_id=None,
+            auto_start=False,
+        )
+    )
+    for stage_id in (KANBAN_STAGE_BACKLOG, KANBAN_STAGE_DONE):
+        existing = stage_map.get(stage_id)
+        if existing is None:
+            continue
+        if stage_id == KANBAN_STAGE_BACKLOG:
+            normalized[0] = KanbanStageConfigSpec(
+                stage_id=stage_id,
+                name=_KANBAN_FIXED_STAGE_NAMES[stage_id],
+                model_profile_id=None,
+                mode_id=None,
+                auto_start=False,
+            )
+        else:
+            normalized[-1] = KanbanStageConfigSpec(
+                stage_id=stage_id,
+                name=_KANBAN_FIXED_STAGE_NAMES[stage_id],
+                model_profile_id=None,
+                mode_id=None,
+                auto_start=False,
+            )
+    return normalized
+
+
+def _default_kanban_stage_specs() -> list[KanbanStageConfigSpec]:
+    return [
+        KanbanStageConfigSpec(
+            stage_id=str(spec["stage_id"]),
+            name=str(spec["name"]),
+            model_profile_id=None,
+            mode_id=(
+                str(spec["mode_id"])
+                if isinstance(spec.get("mode_id"), str) and spec.get("mode_id")
+                else None
+            ),
+            auto_start=bool(spec["auto_start"]),
+        )
+        for spec in KANBAN_DEFAULT_STAGE_SPECS
+    ]
 
 
 def _db_path() -> Path:
@@ -561,7 +639,7 @@ class SessionStore:
         self, directory: str
     ) -> list[KanbanStageConfigRecord]:
         with self._lock:
-            self._ensure_default_kanban_stages_locked(directory)
+            self._ensure_canonical_kanban_stages_locked(directory)
             rows = self._conn.execute(
                 "SELECT * FROM kanban_stage_configs "
                 "WHERE directory = ? ORDER BY position ASC, stage_id ASC",
@@ -573,7 +651,7 @@ class SessionStore:
         self, directory: str, stage_id: str
     ) -> KanbanStageConfigRecord | None:
         with self._lock:
-            self._ensure_default_kanban_stages_locked(directory)
+            self._ensure_canonical_kanban_stages_locked(directory)
             row = self._conn.execute(
                 "SELECT * FROM kanban_stage_configs "
                 "WHERE directory = ? AND stage_id = ?",
@@ -621,6 +699,8 @@ class SessionStore:
                     auto_start=bool(item.auto_start),
                 )
             )
+        normalized = _normalize_kanban_stage_specs(normalized)
+        seen_stage_ids = {item.stage_id for item in normalized}
         with self._lock:
             existing = {
                 row["stage_id"]: row
@@ -740,7 +820,7 @@ class SessionStore:
 
     def list_kanban_tasks(self, directory: str) -> list[KanbanTaskRecord]:
         with self._lock:
-            self._ensure_default_kanban_stages_locked(directory)
+            self._ensure_canonical_kanban_stages_locked(directory)
             rows = self._conn.execute(
                 "SELECT task.* FROM kanban_tasks AS task "
                 "LEFT JOIN kanban_stage_configs AS stage_cfg "
@@ -1035,35 +1115,71 @@ class SessionStore:
             (delta, _now_iso(), directory, stage, start),
         )
 
-    def _ensure_default_kanban_stages_locked(self, directory: str) -> None:
-        row = self._conn.execute(
-            "SELECT 1 FROM kanban_stage_configs WHERE directory = ? LIMIT 1",
+    def _ensure_canonical_kanban_stages_locked(self, directory: str) -> None:
+        rows = self._conn.execute(
+            "SELECT * FROM kanban_stage_configs "
+            "WHERE directory = ? ORDER BY position ASC, stage_id ASC",
             (directory,),
-        ).fetchone()
-        if row is not None:
-            return
+        ).fetchall()
+        if rows:
+            existing_records = [_kanban_stage_config_record(row) for row in rows]
+            desired_specs = _normalize_kanban_stage_specs(
+                [
+                    KanbanStageConfigSpec(
+                        stage_id=record.stage_id,
+                        name=record.name,
+                        model_profile_id=record.model_profile_id,
+                        mode_id=record.mode_id,
+                        auto_start=record.auto_start,
+                    )
+                    for record in existing_records
+                ]
+            )
+            records_match = len(existing_records) == len(desired_specs) and all(
+                record.stage_id == spec.stage_id
+                and record.position == position
+                and record.name == spec.name
+                and record.model_profile_id == spec.model_profile_id
+                and record.mode_id == spec.mode_id
+                and record.auto_start == spec.auto_start
+                for position, (record, spec) in enumerate(
+                    zip(existing_records, desired_specs, strict=False)
+                )
+            )
+            if records_match:
+                return
+            existing_by_id = {record.stage_id: record for record in existing_records}
+        else:
+            desired_specs = _default_kanban_stage_specs()
+            existing_by_id = {}
         now = _now_iso()
-        for position, spec in enumerate(KANBAN_DEFAULT_STAGE_SPECS):
+        self._conn.execute(
+            "DELETE FROM kanban_stage_configs WHERE directory = ?",
+            (directory,),
+        )
+        for position, spec in enumerate(desired_specs):
+            existing = existing_by_id.get(spec.stage_id)
             self._conn.execute(
                 "INSERT INTO kanban_stage_configs "
                 "(directory, stage_id, name, position, model_profile_id, mode_id, "
                 "auto_start, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     directory,
-                    spec["stage_id"],
-                    spec["name"],
+                    spec.stage_id,
+                    spec.name,
                     position,
-                    spec["mode_id"],
-                    1 if spec["auto_start"] else 0,
-                    now,
+                    spec.model_profile_id,
+                    spec.mode_id,
+                    1 if spec.auto_start else 0,
+                    existing.created_at if existing is not None else now,
                     now,
                 ),
             )
         self._conn.commit()
 
     def _require_kanban_stage_locked(self, directory: str, stage: str) -> None:
-        self._ensure_default_kanban_stages_locked(directory)
+        self._ensure_canonical_kanban_stages_locked(directory)
         row = self._conn.execute(
             "SELECT 1 FROM kanban_stage_configs "
             "WHERE directory = ? AND stage_id = ? LIMIT 1",

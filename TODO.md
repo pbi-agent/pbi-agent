@@ -150,3 +150,36 @@ Design decision used:
 
 - [x] Review remaining hard-coded stage assumptions before finishing.
   Context: removed board-stage assumptions across backend, frontend, and tests, and rebuilt the bundled web assets.
+
+## Follow-up fixes
+
+- [x] Prevent terminal auto-start stages from re-running the same task forever.
+  Context: the worker now only auto-starts when a successful run actually moved the task into a different next stage; a final stage with `auto_start = true` runs once and stops.
+
+- [x] Treat backlog as a queue-only stage when users click `Run`.
+  Context: manual runs from `backlog` now move the task into the next configured stage before execution so stage defaults come from the real working stage, while all non-backlog stages keep the existing behavior.
+
+- [x] Rename the board action label from `Run` to `Start`.
+  Context: the task card action now matches the updated backlog semantics in the UI without changing the underlying API route or execution flow.
+
+- [x] Add a fixed `done` archive stage as the terminal board column.
+  Context: the default board now seeds `backlog -> plan -> review -> done`, existing board configs are normalized to include `done`, and successful runs can advance into that final archive stage.
+
+- [x] Enforce `backlog` first and `done` last across board reads and writes.
+  Context: the store now canonicalizes those two fixed stages on every board load/save, strips runtime settings from them, and preserves custom middle-stage ordering only between those bookends.
+
+- [x] Prevent tasks in `done` from running and hide the `Start` action there.
+  Context: backend execution rejects manual runs from `done`, backlog promotion skips non-runnable stages, and the board UI removes the run control for archived tasks.
+
+## Phase 9 - Drag-and-drop stage reordering
+
+- [x] Install `@dnd-kit/sortable` package.
+  Context: installed `@dnd-kit/sortable@10.0.0` via bun.
+- [x] Update `BoardPage.tsx` to use a single DndContext with discriminated drag types (task vs stage) and wrap stages in `SortableContext`.
+  Context: added `SortableContext` with `horizontalListSortingStrategy`, discriminated drag types via `sortable-stage:` prefix, and `arrayMove` for reordering.
+- [x] Update `StageColumn.tsx` to use `useSortable` alongside `useDroppable`, add a grip-icon drag handle to the column header.
+  Context: column uses `useSortable` for stage reordering and keeps `useDroppable` for task drops; both refs merged on the same DOM node.
+- [x] Add CSS styles for stage dragging state and drag handle.
+  Context: added `.board-column--dragging`, `.board-column--overlay`, `.board-column__drag-handle`, and `.board-column__grip-icon` styles.
+- [x] Run frontend lint, typecheck, and build to validate.
+  Context: `bun run lint`, `bun run typecheck`, and `bun run web:build` all pass.

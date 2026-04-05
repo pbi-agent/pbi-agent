@@ -326,6 +326,12 @@ def test_replace_kanban_stage_configs_reorders_task_listing(tmp_path) -> None:
         )
         store.create_kanban_task(
             directory="/w",
+            title="Plan Task",
+            prompt="Plan",
+            stage=KANBAN_STAGE_PLAN,
+        )
+        store.create_kanban_task(
+            directory="/w",
             title="Review Task",
             prompt="Review",
             stage=KANBAN_STAGE_REVIEW,
@@ -340,4 +346,8 @@ def test_replace_kanban_stage_configs_reorders_task_listing(tmp_path) -> None:
         )
         tasks = store.list_kanban_tasks("/w")
 
-    assert [task.title for task in tasks] == ["Review Task", "Backlog Task"]
+    assert [task.title for task in tasks] == [
+        "Backlog Task",
+        "Review Task",
+        "Plan Task",
+    ]

@@ -27,11 +27,13 @@ export function TaskCard({
   onEdit,
   onDelete,
   onRun,
+  canRun,
 }: {
   task: TaskRecord;
   onEdit: () => void;
   onDelete: () => void;
   onRun: () => void;
+  canRun: boolean;
 }) {
   const isRunning = task.run_status === "running";
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -54,14 +56,16 @@ export function TaskCard({
         <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit} disabled={isRunning}>
           Edit
         </button>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          onClick={onRun}
-          disabled={isRunning}
-        >
-          Run
-        </button>
+        {canRun ? (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={onRun}
+            disabled={isRunning}
+          >
+            Start
+          </button>
+        ) : null}
         {task.session_id ? (
           <a
             className="btn btn--ghost btn--sm"

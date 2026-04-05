@@ -66,9 +66,11 @@ def test_bootstrap_endpoint_returns_workspace_metadata() -> None:
         "backlog",
         "plan",
         "review",
+        "done",
     ]
     assert payload["board_stages"][1]["mode_id"] == "plan"
     assert payload["board_stages"][2]["mode_id"] == "review"
+    assert payload["board_stages"][3]["mode_id"] is None
 
 
 def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
@@ -529,19 +531,21 @@ def test_board_stage_endpoints_round_trip() -> None:
             "backlog",
             "plan",
             "review",
+            "done",
         ]
 
         update_response = client.put(
             "/api/board/stages",
             json={
                 "board_stages": [
-                    {"id": "backlog", "name": "Backlog"},
                     {
                         "id": "build",
                         "name": "Build",
                         "mode_id": "implement",
                         "auto_start": True,
                     },
+                    {"id": "done", "name": "Completed", "mode_id": "review"},
+                    {"id": "backlog", "name": "Inbox", "auto_start": True},
                     {"id": "review", "name": "Review", "mode_id": "review"},
                 ]
             },
@@ -552,9 +556,16 @@ def test_board_stage_endpoints_round_trip() -> None:
             "backlog",
             "build",
             "review",
+            "done",
         ]
+        assert payload["board_stages"][0]["name"] == "Backlog"
+        assert payload["board_stages"][0]["mode_id"] is None
+        assert payload["board_stages"][0]["auto_start"] is False
         assert payload["board_stages"][1]["auto_start"] is True
         assert payload["board_stages"][1]["mode_id"] == "implement"
+        assert payload["board_stages"][3]["name"] == "Done"
+        assert payload["board_stages"][3]["mode_id"] is None
+        assert payload["board_stages"][3]["auto_start"] is False
 
 
 def test_run_task_advances_to_next_configured_stage(monkeypatch, tmp_path) -> None:
@@ -606,6 +617,177 @@ def test_run_task_advances_to_next_configured_stage(monkeypatch, tmp_path) -> No
     assert task_payload["stage"] == "review"
     assert task_payload["run_status"] == "completed"
     assert task_payload["session_id"] == "session-123"
+
+
+def test_run_task_from_backlog_moves_to_next_stage_before_execution(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    app = create_app(_settings())
+
+    with patch(
+        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        return_value=SimpleNamespace(
+            tool_errors=[],
+            text="Planned.",
+            session_id="session-123",
+        ),
+    ) as mock_run:
+        with TestClient(app) as client:
+            client.put(
+                "/api/board/stages",
+                json={
+                    "board_stages": [
+                        {"id": "backlog", "name": "Backlog"},
+                        {"id": "plan", "name": "Plan", "mode_id": "plan"},
+                        {"id": "review", "name": "Review", "mode_id": "review"},
+                    ]
+                },
+            )
+            create_response = client.post(
+                "/api/tasks",
+                json={"title": "Task A", "prompt": "Investigate", "stage": "backlog"},
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+
+            deadline = time.monotonic() + 2
+            while True:
+                task_response = client.get("/api/tasks")
+                task_payload = task_response.json()["tasks"][0]
+                if (
+                    task_payload["stage"] == "review"
+                    and task_payload["run_status"] == "completed"
+                ):
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("backlog task run did not finish in time")
+                time.sleep(0.01)
+
+    assert task_payload["stage"] == "review"
+    assert task_payload["run_status"] == "completed"
+    assert task_payload["session_id"] == "session-123"
+    assert mock_run.call_args is not None
+    assert mock_run.call_args.args[0] == "/plan Investigate"
+
+
+def test_auto_start_stage_runs_once_before_done(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    app = create_app(_settings())
+    call_count = 0
+
+    def fake_run_single_turn_in_directory(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return SimpleNamespace(
+            tool_errors=[],
+            text=f"Completed run {call_count}.",
+            session_id=f"session-{call_count}",
+        )
+
+    with patch(
+        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        side_effect=fake_run_single_turn_in_directory,
+    ):
+        with TestClient(app) as client:
+            client.put(
+                "/api/board/stages",
+                json={
+                    "board_stages": [
+                        {"id": "backlog", "name": "Backlog"},
+                        {"id": "plan", "name": "Plan", "mode_id": "plan"},
+                        {
+                            "id": "fix-review",
+                            "name": "Fix Review",
+                            "mode_id": "implement",
+                            "auto_start": True,
+                        },
+                    ]
+                },
+            )
+            create_response = client.post(
+                "/api/tasks",
+                json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+
+            deadline = time.monotonic() + 2
+            while True:
+                task_response = client.get("/api/tasks")
+                task_payload = task_response.json()["tasks"][0]
+                if (
+                    task_payload["stage"] == "done"
+                    and task_payload["run_status"] == "completed"
+                ):
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("auto-start task did not finish in time")
+                time.sleep(0.01)
+
+            time.sleep(0.1)
+            task_payload = client.get("/api/tasks").json()["tasks"][0]
+
+    assert call_count == 2
+    assert task_payload["stage"] == "done"
+    assert task_payload["run_status"] == "completed"
+    assert task_payload["session_id"] == "session-2"
+
+
+def test_run_task_rejects_backlog_when_no_next_stage(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.put(
+            "/api/board/stages",
+            json={
+                "board_stages": [
+                    {"id": "backlog", "name": "Backlog"},
+                    {"id": "done", "name": "Done"},
+                ]
+            },
+        )
+        assert response.status_code == 200
+
+        create_response = client.post(
+            "/api/tasks",
+            json={"title": "Task A", "prompt": "Investigate", "stage": "backlog"},
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task"]["task_id"]
+
+        run_response = client.post(f"/api/tasks/{task_id}/run")
+
+    assert run_response.status_code == 400
+    assert (
+        run_response.json()["detail"]
+        == "Backlog tasks require a runnable board stage before they can run."
+    )
+
+
+def test_run_task_rejects_done_stage(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        create_response = client.post(
+            "/api/tasks",
+            json={"title": "Task A", "prompt": "Investigate", "stage": "done"},
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task"]["task_id"]
+
+        run_response = client.post(f"/api/tasks/{task_id}/run")
+
+    assert run_response.status_code == 400
+    assert run_response.json()["detail"] == "Done tasks cannot run."
 
 
 def test_chat_session_stream_replays_state_events() -> None:

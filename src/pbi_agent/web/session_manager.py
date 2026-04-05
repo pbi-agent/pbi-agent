@@ -46,6 +46,8 @@ from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
 from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.session_store import (
+    KANBAN_STAGE_BACKLOG,
+    KANBAN_STAGE_DONE,
     KANBAN_RUN_STATUS_COMPLETED,
     KANBAN_RUN_STATUS_FAILED,
     KanbanStageConfigRecord,
@@ -79,6 +81,7 @@ from pbi_agent.web.uploads import (
 
 APP_EVENT_STREAM_ID = "app"
 _MAX_EVENT_HISTORY = 1000
+_NON_RUNNABLE_BOARD_STAGE_IDS = frozenset({KANBAN_STAGE_BACKLOG, KANBAN_STAGE_DONE})
 
 
 def _now_iso() -> str:
@@ -542,25 +545,33 @@ class WebSessionManager:
             if stage_id in seen_stage_ids:
                 raise ConfigError(f"Stage '{stage_id}' already exists.")
             seen_stage_ids.add(stage_id)
-            profile_id = item.get("profile_id")
-            if profile_id is not None:
-                profile_key = slugify(str(profile_id))
-                if profiles.get(profile_key) is None:
-                    raise ConfigError(f"Unknown profile ID '{profile_id}'.")
-                profile_id = profile_key
-            mode_id = item.get("mode_id")
-            if mode_id is not None:
-                mode_key = slugify(str(mode_id))
-                if modes.get(mode_key) is None:
-                    raise ConfigError(f"Unknown mode ID '{mode_id}'.")
-                mode_id = mode_key
+            is_fixed_stage = stage_id in _NON_RUNNABLE_BOARD_STAGE_IDS
+            if is_fixed_stage:
+                raw_name = "Backlog" if stage_id == KANBAN_STAGE_BACKLOG else "Done"
+                profile_id = None
+                mode_id = None
+                auto_start = False
+            else:
+                profile_id = item.get("profile_id")
+                if profile_id is not None:
+                    profile_key = slugify(str(profile_id))
+                    if profiles.get(profile_key) is None:
+                        raise ConfigError(f"Unknown profile ID '{profile_id}'.")
+                    profile_id = profile_key
+                mode_id = item.get("mode_id")
+                if mode_id is not None:
+                    mode_key = slugify(str(mode_id))
+                    if modes.get(mode_key) is None:
+                        raise ConfigError(f"Unknown mode ID '{mode_id}'.")
+                    mode_id = mode_key
+                auto_start = bool(item.get("auto_start"))
             stage_specs.append(
                 KanbanStageConfigSpec(
                     stage_id=stage_id,
                     name=raw_name,
                     model_profile_id=profile_id,
                     mode_id=mode_id,
-                    auto_start=bool(item.get("auto_start")),
+                    auto_start=auto_start,
                 )
             )
         with SessionStore() as store:
@@ -908,8 +919,33 @@ class WebSessionManager:
                 with self._lock:
                     self._running_task_ids.discard(task_id)
                 raise KeyError(task_id)
-            if record.model_profile_id is not None:
-                self._resolve_runtime(record.model_profile_id)
+            if self._is_non_runnable_stage(record.stage):
+                if record.stage == KANBAN_STAGE_DONE:
+                    with self._lock:
+                        self._running_task_ids.discard(task_id)
+                    raise RuntimeError("Done tasks cannot run.")
+            if record.stage == KANBAN_STAGE_BACKLOG:
+                next_stage_id = self._next_runnable_board_stage_id(
+                    record.stage,
+                    store=store,
+                )
+                if next_stage_id is None:
+                    with self._lock:
+                        self._running_task_ids.discard(task_id)
+                    raise RuntimeError(
+                        "Backlog tasks require a runnable board stage before they can run."
+                    )
+                moved_record = store.move_kanban_task(task_id, stage=next_stage_id)
+                if moved_record is None:
+                    with self._lock:
+                        self._running_task_ids.discard(task_id)
+                    raise KeyError(task_id)
+                record = moved_record
+            stage_record = store.get_kanban_stage_config(
+                self._directory_key,
+                record.stage,
+            )
+            self._resolve_task_runtime(record, stage_record=stage_record)
             running_record = store.set_kanban_task_running(task_id)
         if running_record is None:
             with self._lock:
@@ -1355,6 +1391,7 @@ class WebSessionManager:
                     )
                     if updated is None:
                         raise KeyError(task_id)
+                    next_stage_id: str | None = None
                     if status == KANBAN_RUN_STATUS_FAILED:
                         next_record = updated
                     else:
@@ -1369,7 +1406,9 @@ class WebSessionManager:
                 self._publish_task_updated(next_record)
                 if status == KANBAN_RUN_STATUS_FAILED:
                     break
-                if not self._should_auto_start_stage(next_record.stage):
+                if next_stage_id is None or next_record.stage != next_stage_id:
+                    break
+                if not self._should_auto_start_stage(next_stage_id):
                     break
                 with SessionStore() as store:
                     rerunning = store.set_kanban_task_running(task_id)
@@ -1516,7 +1555,23 @@ class WebSessionManager:
                 return None
         return None
 
+    def _next_runnable_board_stage_id(
+        self,
+        current_stage_id: str,
+        *,
+        store: SessionStore | None = None,
+    ) -> str | None:
+        next_stage_id = self._next_board_stage_id(current_stage_id, store=store)
+        while next_stage_id is not None and self._is_non_runnable_stage(next_stage_id):
+            next_stage_id = self._next_board_stage_id(next_stage_id, store=store)
+        return next_stage_id
+
+    def _is_non_runnable_stage(self, stage_id: str) -> bool:
+        return stage_id in _NON_RUNNABLE_BOARD_STAGE_IDS
+
     def _should_auto_start_stage(self, stage_id: str) -> bool:
+        if self._is_non_runnable_stage(stage_id):
+            return False
         stage_record = self._get_board_stage_record(stage_id)
         return bool(stage_record and stage_record.auto_start)
 

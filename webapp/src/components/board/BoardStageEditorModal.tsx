@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { BoardStage, ModeView, ModelProfileView } from "../../types";
 
+const BACKLOG_STAGE_ID = "backlog";
+const DONE_STAGE_ID = "done";
+
 type EditableBoardStage = {
   id: string;
   name: string;
@@ -8,6 +11,10 @@ type EditableBoardStage = {
   mode_id: string;
   auto_start: boolean;
 };
+
+function isFixedStage(stageId: string): boolean {
+  return stageId === BACKLOG_STAGE_ID || stageId === DONE_STAGE_ID;
+}
 
 function initStages(stages: BoardStage[]): EditableBoardStage[] {
   return stages.map((stage) => ({
@@ -53,8 +60,10 @@ export function BoardStageEditorModal({
 
   const moveItem = (index: number, direction: -1 | 1) => {
     setItems((current) => {
+      if (isFixedStage(current[index]?.id ?? "")) return current;
       const targetIndex = index + direction;
       if (targetIndex < 0 || targetIndex >= current.length) return current;
+      if (isFixedStage(current[targetIndex]?.id ?? "")) return current;
       const next = [...current];
       const [item] = next.splice(index, 1);
       next.splice(targetIndex, 0, item);
@@ -63,20 +72,27 @@ export function BoardStageEditorModal({
   };
 
   const addStage = () => {
-    setItems((current) => [
-      ...current,
-      {
+    setItems((current) => {
+      const nextStage: EditableBoardStage = {
         id: "",
         name: "",
         profile_id: "",
         mode_id: "",
         auto_start: false,
-      },
-    ]);
+      };
+      const doneIndex = current.findIndex((item) => item.id === DONE_STAGE_ID);
+      if (doneIndex === -1) return [...current, nextStage];
+      const next = [...current];
+      next.splice(doneIndex, 0, nextStage);
+      return next;
+    });
   };
 
   const removeStage = (index: number) => {
-    setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setItems((current) => {
+      if (isFixedStage(current[index]?.id ?? "")) return current;
+      return current.filter((_, itemIndex) => itemIndex !== index);
+    });
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -110,17 +126,25 @@ export function BoardStageEditorModal({
           }}
         >
           <div className="board-stage-editor">
-            {items.map((item, index) => (
-              <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
+            {items.map((item, index) => {
+              const fixedStage = isFixedStage(item.id);
+              const fixedStageLabel = item.id === BACKLOG_STAGE_ID
+                ? "Backlog stays first and never runs directly."
+                : item.id === DONE_STAGE_ID
+                  ? "Done stays last and is archive-only."
+                  : null;
+
+              return (
+                <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
                 <div className="board-stage-editor__ordering">
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => moveItem(index, -1)} disabled={index === 0 || isSaving}>
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => moveItem(index, -1)} disabled={index === 0 || isSaving || fixedStage}>
                     ↑
                   </button>
                   <button
                     type="button"
                     className="btn btn--ghost btn--sm"
                     onClick={() => moveItem(index, 1)}
-                    disabled={index === items.length - 1 || isSaving}
+                    disabled={index === items.length - 1 || isSaving || fixedStage}
                   >
                     ↓
                   </button>
@@ -134,8 +158,12 @@ export function BoardStageEditorModal({
                       value={item.name}
                       onChange={(event) => updateItem(index, { name: event.target.value })}
                       required
+                      disabled={fixedStage}
                     />
                   </div>
+                  {fixedStageLabel ? (
+                    <p className="task-form__hint">{fixedStageLabel}</p>
+                  ) : null}
 
                   <div className="task-form__row">
                     <div className="task-form__field">
@@ -144,6 +172,7 @@ export function BoardStageEditorModal({
                         className="task-form__select"
                         value={item.profile_id}
                         onChange={(event) => updateItem(index, { profile_id: event.target.value })}
+                        disabled={fixedStage}
                       >
                         <option value="">No default profile</option>
                         {profiles.map((profile) => (
@@ -160,6 +189,7 @@ export function BoardStageEditorModal({
                         className="task-form__select"
                         value={item.mode_id}
                         onChange={(event) => updateItem(index, { mode_id: event.target.value })}
+                        disabled={fixedStage}
                       >
                         <option value="">No default mode</option>
                         {modes.map((mode) => (
@@ -176,16 +206,18 @@ export function BoardStageEditorModal({
                       type="checkbox"
                       checked={item.auto_start}
                       onChange={(event) => updateItem(index, { auto_start: event.target.checked })}
+                      disabled={fixedStage}
                     />
                     Auto-start when a task enters this stage
                   </label>
                 </div>
 
-                <button type="button" className="btn btn--ghost-danger btn--sm" onClick={() => removeStage(index)} disabled={isSaving || items.length === 1}>
+                <button type="button" className="btn btn--ghost-danger btn--sm" onClick={() => removeStage(index)} disabled={isSaving || items.length === 1 || fixedStage}>
                   Remove
                 </button>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
 
           {error ? <div className="settings-error-banner">{error}</div> : null}
