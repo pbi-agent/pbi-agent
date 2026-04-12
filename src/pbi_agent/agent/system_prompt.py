@@ -120,10 +120,12 @@ def _append_available_skills(base_prompt: str) -> str:
 
     instructions = """
 <skill_loading_rules>
-Project skills are available for specialized tasks.
-- When a task matches a skill description, load that skill's SKILL.md with read_file before proceeding.
-- Resolve relative paths in a skill against the skill directory, which is the parent directory of SKILL.md.
-- Use read_file, list_files, and search_files to inspect referenced project-local resources as needed.
+Project skills use progressive disclosure: the catalog contains only each skill's name, description, and SKILL.md location.
+- Use a skill when the user's task matches its description or the user explicitly names it.
+- Before applying a matched skill, load its SKILL.md with read_file using the listed location.
+- Treat loaded skill instructions as task guidance for the current session.
+- Resolve relative paths against the skill directory, which is the parent directory of SKILL.md.
+- Load referenced resources only when needed with read_file, list_files, or search_files.
 </skill_loading_rules>
 """.strip()
 
