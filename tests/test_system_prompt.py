@@ -179,7 +179,9 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
         in prompt
     )
     assert f"<location>{skill_dir.joinpath('SKILL.md').resolve()}</location>" in prompt
-    assert "load that skill's SKILL.md with read_file" in prompt
+    assert "Project skills use progressive disclosure" in prompt
+    assert "the user explicitly names it" in prompt
+    assert "load its SKILL.md with read_file using the listed location" in prompt
 
 
 def test_get_sub_agent_system_prompt_with_project_skills(tmp_path, monkeypatch):
@@ -199,7 +201,8 @@ def test_get_sub_agent_system_prompt_with_project_skills(tmp_path, monkeypatch):
     assert "<persona>" in prompt
     assert "<available_skills>" in prompt
     assert "<name>report-audit</name>" in prompt
-    assert "read_file, list_files, and search_files" in prompt
+    assert "Treat loaded skill instructions as task guidance" in prompt
+    assert "Load referenced resources only when needed" in prompt
 
 
 def test_get_system_prompt_with_project_sub_agents(tmp_path, monkeypatch):
