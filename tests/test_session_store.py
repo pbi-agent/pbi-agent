@@ -11,6 +11,7 @@ from pbi_agent.session_store import (
     KANBAN_STAGE_BACKLOG,
     KANBAN_STAGE_PLAN,
     KANBAN_STAGE_REVIEW,
+    KanbanStageConfigSpec,
     MessageImageAttachment,
     SessionStore,
 )
@@ -291,7 +292,7 @@ def test_move_kanban_task_reorders_within_stage(tmp_path) -> None:
     assert second.task_id != third.task_id
 
 
-def test_set_kanban_task_result_moves_to_review(tmp_path) -> None:
+def test_set_kanban_task_result_preserves_stage(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:
         task = store.create_kanban_task(
@@ -309,6 +310,44 @@ def test_set_kanban_task_result_moves_to_review(tmp_path) -> None:
         )
 
     assert updated is not None
-    assert updated.stage == KANBAN_STAGE_REVIEW
+    assert updated.stage == KANBAN_STAGE_PLAN
     assert updated.run_status == KANBAN_RUN_STATUS_COMPLETED
     assert updated.session_id == "session-123"
+
+
+def test_replace_kanban_stage_configs_reorders_task_listing(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        store.create_kanban_task(
+            directory="/w",
+            title="Backlog Task",
+            prompt="Backlog",
+            stage=KANBAN_STAGE_BACKLOG,
+        )
+        store.create_kanban_task(
+            directory="/w",
+            title="Plan Task",
+            prompt="Plan",
+            stage=KANBAN_STAGE_PLAN,
+        )
+        store.create_kanban_task(
+            directory="/w",
+            title="Review Task",
+            prompt="Review",
+            stage=KANBAN_STAGE_REVIEW,
+        )
+        store.replace_kanban_stage_configs(
+            "/w",
+            stages=[
+                KanbanStageConfigSpec(stage_id="review", name="Review"),
+                KanbanStageConfigSpec(stage_id="backlog", name="Backlog"),
+                KanbanStageConfigSpec(stage_id="plan", name="Plan"),
+            ],
+        )
+        tasks = store.list_kanban_tasks("/w")
+
+    assert [task.title for task in tasks] == [
+        "Backlog Task",
+        "Review Task",
+        "Plan Task",
+    ]

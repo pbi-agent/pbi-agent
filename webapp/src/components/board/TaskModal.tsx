@@ -1,22 +1,28 @@
 import { useEffect, type FormEvent } from "react";
+import type { BoardStage, ModelProfileView } from "../../types";
 
 export type EditableTask = {
   taskId?: string;
   title: string;
   prompt: string;
-  stage: "backlog" | "plan" | "review";
+  stage: string;
   projectDir: string;
   sessionId: string;
+  profileId: string;
 };
 
 export function TaskModal({
   task,
+  boardStages,
+  profiles,
   isSaving,
   onChange,
   onSave,
   onClose,
 }: {
   task: EditableTask;
+  boardStages: BoardStage[];
+  profiles: ModelProfileView[];
   isSaving: boolean;
   onChange: (updates: Partial<EditableTask>) => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
@@ -64,6 +70,37 @@ export function TaskModal({
             />
           </div>
 
+          <div className="task-form__field">
+            <label className="task-form__label">Stage</label>
+            <select
+              className="task-form__select"
+              value={task.stage}
+              onChange={(e) => onChange({ stage: e.target.value })}
+              required
+            >
+              {boardStages.map((stage) => (
+                <option key={stage.id} value={stage.id}>
+                  {stage.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="task-form__field">
+            <label className="task-form__label">Profile Override</label>
+            <select
+              className="task-form__select"
+              value={task.profileId}
+              onChange={(e) => onChange({ profileId: e.target.value })}
+            >
+              <option value="">Use stage/default runtime</option>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <button
             type="submit"

@@ -1,4 +1,5 @@
 import type {
+  BoardStage,
   BootstrapPayload,
   ConfigBootstrapPayload,
   ExpandedChatInput,
@@ -209,6 +210,29 @@ export async function setChatSessionProfile(
 export async function fetchTasks(): Promise<TaskRecord[]> {
   const result = await requestJson<{ tasks: TaskRecord[] }>("/api/tasks");
   return result.tasks;
+}
+
+export async function fetchBoardStages(): Promise<BoardStage[]> {
+  const result = await requestJson<{ board_stages: BoardStage[] }>("/api/board/stages");
+  return result.board_stages;
+}
+
+export async function updateBoardStages(
+  payload: {
+    board_stages: Array<{
+      id?: string | null;
+      name: string;
+      profile_id?: string | null;
+      mode_id?: string | null;
+      auto_start?: boolean;
+    }>;
+  },
+): Promise<BoardStage[]> {
+  const result = await requestJson<{ board_stages: BoardStage[] }>("/api/board/stages", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  return result.board_stages;
 }
 
 export async function createTask(

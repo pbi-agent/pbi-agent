@@ -49,7 +49,6 @@ _WEB_DIR = Path(__file__).resolve().parent
 _APP_STATIC_DIR = _WEB_DIR / "static" / "app"
 _FAVICON_PATH = _WEB_DIR / "static" / "favicon.png"
 
-BoardStage = Literal["backlog", "plan", "processing", "review"]
 RunStatus = Literal["idle", "running", "completed", "failed"]
 SessionStatus = Literal["starting", "running", "ended"]
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -131,7 +130,7 @@ class ExpandInputResponse(BaseModel):
 class CreateTaskRequest(BaseModel):
     title: NonEmptyString
     prompt: NonEmptyString
-    stage: BoardStage = "backlog"
+    stage: str | None = None
     project_dir: str = "."
     session_id: str | None = None
     profile_id: str | None = None
@@ -140,11 +139,36 @@ class CreateTaskRequest(BaseModel):
 class UpdateTaskRequest(BaseModel):
     title: NonEmptyString | None = None
     prompt: NonEmptyString | None = None
-    stage: BoardStage | None = None
+    stage: str | None = None
     position: Annotated[int, Field(ge=0)] | None = None
     project_dir: str | None = None
     session_id: str | None = None
     profile_id: str | None = None
+
+
+class BoardStageModel(BaseModel):
+    id: str
+    name: str
+    position: int
+    profile_id: str | None
+    mode_id: str | None
+    auto_start: bool
+
+
+class BoardStageUpdateModel(BaseModel):
+    id: str | None = None
+    name: NonEmptyString
+    profile_id: str | None = None
+    mode_id: str | None = None
+    auto_start: bool = False
+
+
+class BoardStagesResponse(BaseModel):
+    board_stages: list[BoardStageModel]
+
+
+class UpdateBoardStagesRequest(BaseModel):
+    board_stages: list[BoardStageUpdateModel]
 
 
 class SessionRecordModel(BaseModel):
@@ -209,7 +233,7 @@ class TaskRecordModel(BaseModel):
     directory: str
     title: str
     prompt: str
-    stage: BoardStage
+    stage: str
     position: int
     project_dir: str
     session_id: str | None
@@ -234,7 +258,7 @@ class BootstrapResponse(BaseModel):
     sessions: list[SessionRecordModel]
     tasks: list[TaskRecordModel]
     live_sessions: list[LiveSessionModel]
-    board_stages: list[BoardStage]
+    board_stages: list[BoardStageModel]
 
 
 class LiveSessionSnapshotModel(BaseModel):
@@ -491,6 +515,7 @@ system_router = APIRouter(prefix="/api", tags=["system"])
 config_router = APIRouter(prefix="/api/config", tags=["config"])
 chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
 tasks_router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+board_router = APIRouter(prefix="/api/board", tags=["board"])
 events_router = APIRouter(prefix="/api/events", tags=["events"])
 
 
@@ -1174,6 +1199,34 @@ def run_task(
     return TaskResponse(task=_model_from_payload(TaskRecordModel, task))
 
 
+@board_router.get("/stages", response_model=BoardStagesResponse)
+def list_board_stages(manager: SessionManagerDep) -> BoardStagesResponse:
+    return BoardStagesResponse(
+        board_stages=[
+            _model_from_payload(BoardStageModel, item)
+            for item in manager.list_board_stages()
+        ]
+    )
+
+
+@board_router.put("/stages", response_model=BoardStagesResponse)
+def update_board_stages(
+    request: UpdateBoardStagesRequest,
+    manager: SessionManagerDep,
+) -> BoardStagesResponse:
+    try:
+        stages = manager.replace_board_stages(
+            stages=[item.model_dump() for item in request.board_stages],
+        )
+    except ConfigError as exc:
+        raise _config_http_error(exc) from exc
+    except Exception as exc:
+        raise _bad_request(str(exc)) from exc
+    return BoardStagesResponse(
+        board_stages=[_model_from_payload(BoardStageModel, item) for item in stages]
+    )
+
+
 @events_router.websocket("/{stream_id}")
 async def stream_events(websocket: WebSocket, stream_id: StreamIdPath) -> None:
     manager = cast(WebSessionManager, websocket.app.state.manager)
@@ -1273,6 +1326,7 @@ def create_app(
     app.include_router(config_router)
     app.include_router(chat_router)
     app.include_router(tasks_router)
+    app.include_router(board_router)
     app.include_router(events_router)
 
     @app.get("/", response_class=HTMLResponse)

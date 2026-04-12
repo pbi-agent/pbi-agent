@@ -32,6 +32,12 @@ export function useTaskEvents(): void {
           void client.invalidateQueries({ queryKey: ["tasks"] });
           return;
         }
+        if (event.type === "board_stages_updated") {
+          void client.invalidateQueries({ queryKey: ["board-stages"] });
+          void client.invalidateQueries({ queryKey: ["tasks"] });
+          void client.invalidateQueries({ queryKey: ["bootstrap"] });
+          return;
+        }
         if (
           event.type === "live_session_started"
           || event.type === "live_session_updated"

@@ -27,22 +27,25 @@ export function TaskCard({
   onEdit,
   onDelete,
   onRun,
+  canRun,
 }: {
   task: TaskRecord;
   onEdit: () => void;
   onDelete: () => void;
   onRun: () => void;
+  canRun: boolean;
 }) {
+  const isRunning = task.run_status === "running";
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: task.task_id,
-    disabled: task.stage === "processing",
+    disabled: isRunning,
     data: { taskId: task.task_id, stage: task.stage },
   });
 
   return (
     <article
       ref={setNodeRef}
-      className={`task-card${isDragging ? " task-card--dragging" : ""}${task.stage === "processing" ? " task-card--readonly" : ""}`}
+      className={`task-card${isDragging ? " task-card--dragging" : ""}${isRunning ? " task-card--readonly" : ""}`}
     >
       {/* Drag handle — only this region initiates drag */}
       <div className="task-card__drag-handle" {...listeners} {...attributes}>
@@ -50,17 +53,19 @@ export function TaskCard({
       </div>
 
       <div className="task-card__actions">
-        <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit}>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit} disabled={isRunning}>
           Edit
         </button>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          onClick={onRun}
-          disabled={task.run_status === "running"}
-        >
-          Run
-        </button>
+        {canRun ? (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={onRun}
+            disabled={isRunning}
+          >
+            Start
+          </button>
+        ) : null}
         {task.session_id ? (
           <a
             className="btn btn--ghost btn--sm"
@@ -71,7 +76,7 @@ export function TaskCard({
             Chat
           </a>
         ) : null}
-        <button type="button" className="btn btn--danger btn--sm" onClick={onDelete}>
+        <button type="button" className="btn btn--danger btn--sm" onClick={onDelete} disabled={isRunning}>
           Delete
         </button>
       </div>

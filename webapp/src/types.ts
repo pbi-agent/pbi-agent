@@ -20,7 +20,7 @@ export type TaskRecord = {
   directory: string;
   title: string;
   prompt: string;
-  stage: "backlog" | "plan" | "processing" | "review";
+  stage: string;
   position: number;
   project_dir: string;
   session_id: string | null;
@@ -40,6 +40,15 @@ export type RuntimeSummary = {
   profile_id: string | null;
   model: string | null;
   reasoning_effort: string | null;
+};
+
+export type BoardStage = {
+  id: string;
+  name: string;
+  position: number;
+  profile_id: string | null;
+  mode_id: string | null;
+  auto_start: boolean;
 };
 
 export type UsagePayload = {
@@ -159,7 +168,7 @@ export type BootstrapPayload = {
   sessions: SessionRecord[];
   tasks: TaskRecord[];
   live_sessions: LiveSession[];
-  board_stages: string[];
+  board_stages: BoardStage[];
 };
 
 export type ProviderView = {

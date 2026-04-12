@@ -95,20 +95,18 @@ def _coerce_runtime(value: Settings | ResolvedRuntime) -> ResolvedRuntime:
     )
 
 
-def _extract_active_mode(
-    value: str,
-) -> tuple[str, str | None]:
+def _extract_active_mode_instructions(value: str) -> str | None:
     stripped = value.strip()
     if not stripped.startswith("/"):
-        return value, None
-    head, _, tail = stripped.partition(" ")
+        return None
+    head = stripped.partition(" ")[0]
     try:
         mode = find_mode_config_by_alias(head)
     except Exception:
-        return value, None
+        return None
     if mode is None:
-        return value, None
-    return tail.lstrip(), mode.instructions
+        return None
+    return mode.instructions
 
 
 def _turn_instructions(active_mode_instructions: str | None) -> str | None:
@@ -141,7 +139,8 @@ def run_single_turn(
     display.session_usage(session_usage)
     session_start = time.monotonic()
     turn_usage = TokenUsage(model=model, service_tier=_tier)
-    prompt_text, active_mode_instructions = _extract_active_mode(prompt)
+    prompt_text = prompt
+    active_mode_instructions = _extract_active_mode_instructions(prompt)
     turn_instructions = _turn_instructions(active_mode_instructions)
 
     user_input = _build_user_turn_input(
@@ -344,7 +343,7 @@ def run_chat_loop(
                         format_project_sub_agents_markdown(reloaded=True)
                     )
                     continue
-                user_input, active_mode_instructions = _extract_active_mode(user_input)
+                active_mode_instructions = _extract_active_mode_instructions(user_input)
                 turn_instructions = _turn_instructions(active_mode_instructions)
                 if (
                     not user_input
