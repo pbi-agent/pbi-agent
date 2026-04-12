@@ -1,6 +1,6 @@
 [project]
 name = "pbi-agent"
-version = "0.0.23"
+version = "0.0.24"
 description = "Multi-provider LLM CLI agent for editing Power BI reports"
 readme = "README.md"
 license = "MIT"
