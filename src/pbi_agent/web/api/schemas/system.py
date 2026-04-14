@@ -189,3 +189,57 @@ class SessionRunsResponse(BaseModel):
 class RunSessionDetailResponse(BaseModel):
     run: RunSessionModel
     events: list[ObservabilityEventModel]
+
+
+# -- Dashboard / observability aggregation --------------------------------
+
+
+class DailyBucketModel(BaseModel):
+    date: str
+    runs: int
+    tokens: int
+    cost: float
+    errors: int
+
+
+class ProviderBreakdownModel(BaseModel):
+    provider: str | None
+    model: str | None
+    run_count: int
+    total_tokens: int
+    total_cost: float
+    avg_duration_ms: float | None
+    error_count: int
+    total_api_calls: int
+    total_tool_calls: int
+
+
+class DashboardOverviewModel(BaseModel):
+    total_sessions: int
+    total_runs: int
+    total_input_tokens: int
+    total_cached_tokens: int
+    total_output_tokens: int
+    total_reasoning_tokens: int
+    total_cost: float
+    total_api_calls: int
+    total_tool_calls: int
+    total_errors: int
+    avg_duration_ms: float | None
+    completed_runs: int
+    failed_runs: int
+
+
+class DashboardStatsResponse(BaseModel):
+    overview: DashboardOverviewModel
+    breakdown: list[ProviderBreakdownModel]
+    daily: list[DailyBucketModel]
+
+
+class AllRunsRunModel(RunSessionModel):
+    session_title: str | None = None
+
+
+class AllRunsResponse(BaseModel):
+    runs: list[AllRunsRunModel]
+    total_count: int

@@ -349,3 +349,56 @@ export type ObservabilityEvent = {
   error_message: string | null;
   metadata: unknown;
 };
+
+// -- Dashboard / Observability Aggregation --------------------------------
+
+export type DailyBucket = {
+  date: string;
+  runs: number;
+  tokens: number;
+  cost: number;
+  errors: number;
+};
+
+export type ProviderBreakdown = {
+  provider: string | null;
+  model: string | null;
+  run_count: number;
+  total_tokens: number;
+  total_cost: number;
+  avg_duration_ms: number | null;
+  error_count: number;
+  total_api_calls: number;
+  total_tool_calls: number;
+};
+
+export type DashboardOverview = {
+  total_sessions: number;
+  total_runs: number;
+  total_input_tokens: number;
+  total_cached_tokens: number;
+  total_output_tokens: number;
+  total_reasoning_tokens: number;
+  total_cost: number;
+  total_api_calls: number;
+  total_tool_calls: number;
+  total_errors: number;
+  avg_duration_ms: number | null;
+  completed_runs: number;
+  failed_runs: number;
+};
+
+export type DashboardStatsPayload = {
+  overview: DashboardOverview;
+  breakdown: ProviderBreakdown[];
+  daily: DailyBucket[];
+};
+
+export type AllRunsRun = RunSession & {
+  session_title: string | null;
+};
+
+export type AllRunsPayload = {
+  runs: AllRunsRun[];
+  total_count: number;
+};

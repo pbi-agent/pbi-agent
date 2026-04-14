@@ -1,0 +1,360 @@
+/* ── Dashboard Page ─────────────────────────────────────────────────── */
+
+.dashboard-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-6);
+}
+
+.dashboard-page__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+
+/* ── Controls bar ──────────────────────────────────────────────────── */
+
+.dashboard-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.dashboard-controls__dates {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.dashboard-date-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.dashboard-date-input {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--sp-1) var(--sp-2);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease);
+}
+
+.dashboard-date-input:focus {
+  border-color: var(--color-border-focus);
+}
+
+/* Webkit date input icon colour fix for dark theme */
+.dashboard-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+  cursor: pointer;
+}
+
+.dashboard-controls__scope {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.dashboard-controls__scope .btn {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.dashboard-controls__scope .btn:hover {
+  border-color: var(--color-border-focus);
+  color: var(--color-text-primary);
+}
+
+.dashboard-controls__scope .btn--active {
+  background: var(--color-accent-muted);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ── Metric cards grid ─────────────────────────────────────────────── */
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+}
+
+@media (max-width: 900px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.metric-card {
+  background: var(--color-surface-0);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  transition: border-color var(--duration-fast) var(--ease);
+}
+
+.metric-card:hover {
+  border-color: var(--color-border-subtle);
+}
+
+.metric-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metric-card__label {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--weight-medium);
+}
+
+.metric-card__value {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+}
+
+/* ── Panels (breakdown, runs table) ────────────────────────────────── */
+
+.dashboard-panel {
+  background: var(--color-surface-0);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.dashboard-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dashboard-panel__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.dashboard-panel__count {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.dashboard-panel__body {
+  padding: 0;
+}
+
+.dashboard-panel__loading,
+.dashboard-panel__empty,
+.dashboard-panel__error {
+  padding: var(--sp-8);
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.dashboard-panel__error {
+  color: var(--color-error);
+}
+
+/* ── Shared table styles ───────────────────────────────────────────── */
+
+.dashboard-table-wrap {
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.dashboard-table th {
+  text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--color-text-tertiary);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: var(--text-2xs);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--duration-fast) var(--ease);
+}
+
+.dashboard-table th:hover {
+  color: var(--color-text-primary);
+}
+
+.dashboard-table td {
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.dashboard-table tbody tr {
+  transition: background var(--duration-fast) var(--ease);
+}
+
+.dashboard-table tbody tr:hover {
+  background: var(--color-surface-1);
+}
+
+.dashboard-table--clickable tbody tr {
+  cursor: pointer;
+}
+
+.dashboard-table .mono {
+  font-family: var(--font-mono);
+}
+
+.dashboard-table .text-error {
+  color: var(--color-error);
+}
+
+.sort-arrow {
+  font-size: var(--text-2xs);
+  margin-left: var(--sp-1);
+  color: var(--color-accent);
+}
+
+/* ── Runs filters ──────────────────────────────────────────────────── */
+
+.runs-filters {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.runs-filter-select,
+.runs-filter-input {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--sp-1) var(--sp-2);
+  outline: none;
+  min-width: 120px;
+  transition: border-color var(--duration-fast) var(--ease);
+}
+
+.runs-filter-select:focus,
+.runs-filter-input:focus {
+  border-color: var(--color-border-focus);
+}
+
+.runs-filter-select option {
+  background: var(--color-surface-1);
+  color: var(--color-text-primary);
+}
+
+/* ── Runs table row specifics ──────────────────────────────────────── */
+
+.runs-row__session {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.runs-row__time {
+  color: var(--color-text-secondary);
+}
+
+/* ── Pagination ────────────────────────────────────────────────────── */
+
+.runs-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--color-border);
+}
+
+.runs-pagination .btn {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--sp-1) var(--sp-3);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease);
+}
+
+.runs-pagination .btn:hover:not(:disabled) {
+  border-color: var(--color-border-focus);
+  color: var(--color-text-primary);
+}
+
+.runs-pagination .btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.runs-pagination__info {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+}
+
+/* ── Loading / error states ────────────────────────────────────────── */
+
+.dashboard-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-10);
+}
+
+.dashboard-error {
+  text-align: center;
+  padding: var(--sp-8);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+}
+
+/* ── Sparkline ─────────────────────────────────────────────────────── */
+
+.sparkline {
+  display: block;
+  flex-shrink: 0;
+}
+
+.sparkline--empty {
+  opacity: 0.3;
+}

@@ -582,6 +582,64 @@ class WebSessionManager:
             "events": [_serialize_observability_event(event) for event in events],
         }
 
+    def get_dashboard_stats(
+        self,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        global_scope: bool = False,
+    ) -> dict[str, Any]:
+        directory = None if global_scope else self._directory_key
+        with SessionStore() as store:
+            return store.get_dashboard_stats(
+                directory=directory,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+    def list_all_runs(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        sort_by: str = "started_at",
+        sort_dir: str = "desc",
+        global_scope: bool = False,
+    ) -> dict[str, Any]:
+        directory = None if global_scope else self._directory_key
+        with SessionStore() as store:
+            rows, total_count = store.list_all_run_sessions(
+                directory=directory,
+                limit=limit,
+                offset=offset,
+                status=status,
+                provider=provider,
+                model=model,
+                start_date=start_date,
+                end_date=end_date,
+                sort_by=sort_by,
+                sort_dir=sort_dir,
+            )
+        # Serialise each row dict — the store returns raw dicts with
+        # metadata_json still as a JSON string, so we deserialise it here.
+        runs: list[dict[str, Any]] = []
+        for row in rows:
+            run_dict = dict(row)
+            session_title = run_dict.pop("session_title", None)
+            # Deserialise metadata_json → metadata
+            raw_meta = run_dict.pop("metadata_json", "{}")
+            run_dict["metadata"] = _deserialize_json_field(raw_meta)
+            # Drop the autoincrement id; it's an internal detail.
+            run_dict.pop("id", None)
+            run_dict["session_title"] = session_title
+            runs.append(run_dict)
+        return {"runs": runs, "total_count": total_count}
+
     def list_live_sessions(self) -> list[dict[str, Any]]:
         with self._lock:
             sessions = list(self._chat_sessions.values())

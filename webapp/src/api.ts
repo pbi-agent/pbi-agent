@@ -1,7 +1,9 @@
 import type {
+  AllRunsPayload,
   BoardStage,
   BootstrapPayload,
   ConfigBootstrapPayload,
+  DashboardStatsPayload,
   ExpandedChatInput,
   FileMentionItem,
   HistoryItem,
@@ -400,4 +402,44 @@ export async function fetchRunDetail(
   runSessionId: string,
 ): Promise<{ run: RunSession; events: ObservabilityEvent[] }> {
   return requestJson(`/api/runs/${runSessionId}`);
+}
+
+export async function fetchDashboardStats(params: {
+  start_date?: string;
+  end_date?: string;
+  scope?: "workspace" | "global";
+}): Promise<DashboardStatsPayload> {
+  const qs = new URLSearchParams();
+  if (params.start_date) qs.set("start_date", params.start_date);
+  if (params.end_date) qs.set("end_date", params.end_date);
+  if (params.scope) qs.set("scope", params.scope);
+  const query = qs.toString();
+  return requestJson(`/api/dashboard/stats${query ? `?${query}` : ""}`);
+}
+
+export async function fetchAllRuns(params: {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  provider?: string;
+  model?: string;
+  start_date?: string;
+  end_date?: string;
+  sort_by?: string;
+  sort_dir?: string;
+  scope?: "workspace" | "global";
+}): Promise<AllRunsPayload> {
+  const qs = new URLSearchParams();
+  if (params.limit != null) qs.set("limit", String(params.limit));
+  if (params.offset != null) qs.set("offset", String(params.offset));
+  if (params.status) qs.set("status", params.status);
+  if (params.provider) qs.set("provider", params.provider);
+  if (params.model) qs.set("model", params.model);
+  if (params.start_date) qs.set("start_date", params.start_date);
+  if (params.end_date) qs.set("end_date", params.end_date);
+  if (params.sort_by) qs.set("sort_by", params.sort_by);
+  if (params.sort_dir) qs.set("sort_dir", params.sort_dir);
+  if (params.scope) qs.set("scope", params.scope);
+  const query = qs.toString();
+  return requestJson(`/api/runs${query ? `?${query}` : ""}`);
 }

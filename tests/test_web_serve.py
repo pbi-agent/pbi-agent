@@ -1665,3 +1665,151 @@ def test_lifespan_suppresses_cancelled_error_and_runs_shutdown() -> None:
         asyncio.run(run_lifespan())
 
     mock_shutdown.assert_called_once_with()
+
+
+def test_dashboard_stats_returns_aggregated_overview(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Dashboard test",
+        )
+        run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="chat_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+        )
+        store.update_run_session(
+            run_id,
+            status="completed",
+            total_duration_ms=1000,
+            input_tokens=100,
+            output_tokens=50,
+            estimated_cost_usd=0.01,
+            total_tool_calls=3,
+            total_api_calls=2,
+            error_count=0,
+        )
+
+    with TestClient(app) as client:
+        response = client.get("/api/dashboard/stats")
+
+    assert response.status_code == 200
+    payload = response.json()
+    overview = payload["overview"]
+    assert overview["total_sessions"] == 1
+    assert overview["total_runs"] == 1
+    assert overview["total_input_tokens"] == 100
+    assert overview["total_output_tokens"] == 50
+    assert overview["total_cost"] == 0.01
+    assert overview["total_tool_calls"] == 3
+    assert overview["total_api_calls"] == 2
+    assert overview["completed_runs"] == 1
+    assert overview["failed_runs"] == 0
+
+    assert len(payload["breakdown"]) == 1
+    assert payload["breakdown"][0]["provider"] == "openai"
+    assert payload["breakdown"][0]["model"] == "gpt-5.4"
+    assert payload["breakdown"][0]["run_count"] == 1
+
+    assert len(payload["daily"]) >= 1
+
+
+def test_dashboard_stats_global_scope_includes_other_workspaces(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        # Create a session in a *different* directory than the workspace.
+        session_id = store.create_session(
+            "/other/workspace",
+            "anthropic",
+            "claude-4",
+            "Other workspace",
+        )
+        store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="chat_turn",
+            provider="anthropic",
+            provider_id=None,
+            profile_id=None,
+            model="claude-4",
+        )
+
+    with TestClient(app) as client:
+        # Workspace scope should NOT see the other workspace's run.
+        ws_response = client.get("/api/dashboard/stats?scope=workspace")
+        assert ws_response.status_code == 200
+        assert ws_response.json()["overview"]["total_runs"] == 0
+
+        # Global scope SHOULD see it.
+        global_response = client.get("/api/dashboard/stats?scope=global")
+        assert global_response.status_code == 200
+        assert global_response.json()["overview"]["total_runs"] == 1
+
+
+def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Paginated test",
+        )
+        for i in range(5):
+            run_id = store.create_run_session(
+                session_id=session_id,
+                agent_name="main",
+                agent_type="chat_turn",
+                provider="openai",
+                provider_id="default",
+                profile_id="analysis",
+                model="gpt-5.4",
+                status="completed" if i % 2 == 0 else "failed",
+            )
+            store.update_run_session(
+                run_id,
+                input_tokens=(i + 1) * 100,
+                output_tokens=(i + 1) * 50,
+            )
+
+    with TestClient(app) as client:
+        # Fetch first page of 2
+        response = client.get("/api/runs?limit=2&offset=0")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total_count"] == 5
+        assert len(payload["runs"]) == 2
+        # Each run should include session_title
+        assert payload["runs"][0]["session_title"] == "Paginated test"
+
+        # Filter by status
+        response = client.get("/api/runs?status=completed")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total_count"] == 3
+        assert all(r["status"] == "completed" for r in payload["runs"])
+
+        # Filter by status=failed
+        response = client.get("/api/runs?status=failed")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total_count"] == 2
+        assert all(r["status"] == "failed" for r in payload["runs"])

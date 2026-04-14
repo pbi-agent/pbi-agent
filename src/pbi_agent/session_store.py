@@ -992,6 +992,198 @@ class SessionStore:
             ).fetchall()
         return [ObservabilityEventRecord(**dict(row)) for row in rows]
 
+    # -- dashboard / observability aggregation ----------------------------
+
+    def get_dashboard_stats(
+        self,
+        *,
+        directory: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, object]:
+        """Return aggregated overview, provider/model breakdown, and daily buckets."""
+        normalized_dir = _normalize_directory_key(directory) if directory else None
+
+        base_where = "WHERE 1=1"
+        params: list[object] = []
+        if normalized_dir is not None:
+            base_where += " AND s.directory = ?"
+            params.append(normalized_dir)
+        if start_date is not None:
+            base_where += " AND rs.started_at >= ?"
+            params.append(start_date)
+        if end_date is not None:
+            base_where += " AND rs.started_at <= ?"
+            params.append(end_date)
+
+        join_clause = (
+            "FROM run_sessions rs JOIN sessions s ON rs.session_id = s.session_id"
+        )
+
+        with self._lock:
+            # -- overview --
+            overview_row = self._conn.execute(
+                f"SELECT "
+                "COUNT(DISTINCT rs.session_id) AS total_sessions, "
+                "COUNT(*) AS total_runs, "
+                "COALESCE(SUM(rs.input_tokens), 0) AS total_input_tokens, "
+                "COALESCE(SUM(rs.cached_input_tokens), 0) AS total_cached_tokens, "
+                "COALESCE(SUM(rs.output_tokens), 0) AS total_output_tokens, "
+                "COALESCE(SUM(rs.reasoning_tokens), 0) AS total_reasoning_tokens, "
+                "COALESCE(SUM(rs.estimated_cost_usd), 0.0) AS total_cost, "
+                "COALESCE(SUM(rs.total_api_calls), 0) AS total_api_calls, "
+                "COALESCE(SUM(rs.total_tool_calls), 0) AS total_tool_calls, "
+                "COALESCE(SUM(rs.error_count), 0) AS total_errors, "
+                "AVG(rs.total_duration_ms) AS avg_duration_ms, "
+                "COUNT(CASE WHEN rs.status = 'completed' THEN 1 END) AS completed_runs, "
+                "COUNT(CASE WHEN rs.status = 'failed' THEN 1 END) AS failed_runs "
+                f"{join_clause} {base_where}",
+                params,
+            ).fetchone()
+
+            overview = (
+                dict(overview_row)
+                if overview_row
+                else {
+                    "total_sessions": 0,
+                    "total_runs": 0,
+                    "total_input_tokens": 0,
+                    "total_cached_tokens": 0,
+                    "total_output_tokens": 0,
+                    "total_reasoning_tokens": 0,
+                    "total_cost": 0.0,
+                    "total_api_calls": 0,
+                    "total_tool_calls": 0,
+                    "total_errors": 0,
+                    "avg_duration_ms": None,
+                    "completed_runs": 0,
+                    "failed_runs": 0,
+                }
+            )
+
+            # -- provider/model breakdown --
+            breakdown_rows = self._conn.execute(
+                f"SELECT "
+                "rs.provider, rs.model, "
+                "COUNT(*) AS run_count, "
+                "COALESCE(SUM(rs.input_tokens + rs.output_tokens), 0) AS total_tokens, "
+                "COALESCE(SUM(rs.estimated_cost_usd), 0.0) AS total_cost, "
+                "AVG(rs.total_duration_ms) AS avg_duration_ms, "
+                "COALESCE(SUM(rs.error_count), 0) AS error_count, "
+                "COALESCE(SUM(rs.total_api_calls), 0) AS total_api_calls, "
+                "COALESCE(SUM(rs.total_tool_calls), 0) AS total_tool_calls "
+                f"{join_clause} {base_where} "
+                "GROUP BY rs.provider, rs.model "
+                "ORDER BY total_tokens DESC",
+                params,
+            ).fetchall()
+            breakdown = [dict(row) for row in breakdown_rows]
+
+            # -- daily time-series buckets --
+            daily_rows = self._conn.execute(
+                f"SELECT "
+                "DATE(rs.started_at) AS date, "
+                "COUNT(*) AS runs, "
+                "COALESCE(SUM(rs.input_tokens + rs.output_tokens), 0) AS tokens, "
+                "COALESCE(SUM(rs.estimated_cost_usd), 0.0) AS cost, "
+                "COALESCE(SUM(rs.error_count), 0) AS errors "
+                f"{join_clause} {base_where} "
+                "GROUP BY DATE(rs.started_at) "
+                "ORDER BY date ASC",
+                params,
+            ).fetchall()
+            daily = [dict(row) for row in daily_rows]
+
+        return {
+            "overview": overview,
+            "breakdown": breakdown,
+            "daily": daily,
+        }
+
+    _ALLOWED_RUN_SORT_COLUMNS = frozenset(
+        {
+            "started_at",
+            "ended_at",
+            "total_duration_ms",
+            "estimated_cost_usd",
+            "input_tokens",
+            "output_tokens",
+            "error_count",
+            "total_tool_calls",
+            "total_api_calls",
+        }
+    )
+
+    def list_all_run_sessions(
+        self,
+        *,
+        directory: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        status: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        sort_by: str = "started_at",
+        sort_dir: str = "desc",
+    ) -> tuple[list[dict[str, object]], int]:
+        """Return a page of run_sessions with optional filters + total count.
+
+        Each dict in the returned list has all run_sessions columns plus
+        ``session_title`` (from the joined sessions table).
+        """
+        normalized_dir = _normalize_directory_key(directory) if directory else None
+
+        where_clauses = ["1=1"]
+        params: list[object] = []
+        if normalized_dir is not None:
+            where_clauses.append("s.directory = ?")
+            params.append(normalized_dir)
+        if status is not None:
+            where_clauses.append("rs.status = ?")
+            params.append(status)
+        if provider is not None:
+            where_clauses.append("rs.provider = ?")
+            params.append(provider)
+        if model is not None:
+            where_clauses.append("rs.model = ?")
+            params.append(model)
+        if start_date is not None:
+            where_clauses.append("rs.started_at >= ?")
+            params.append(start_date)
+        if end_date is not None:
+            where_clauses.append("rs.started_at <= ?")
+            params.append(end_date)
+
+        where = " AND ".join(where_clauses)
+        join = (
+            "FROM run_sessions rs LEFT JOIN sessions s ON rs.session_id = s.session_id"
+        )
+
+        # Sanitise sort column to prevent injection.
+        if sort_by not in self._ALLOWED_RUN_SORT_COLUMNS:
+            sort_by = "started_at"
+        direction = "ASC" if sort_dir.upper() == "ASC" else "DESC"
+
+        with self._lock:
+            total_row = self._conn.execute(
+                f"SELECT COUNT(*) AS cnt {join} WHERE {where}",
+                params,
+            ).fetchone()
+            total_count: int = total_row["cnt"] if total_row else 0
+
+            rows = self._conn.execute(
+                f"SELECT rs.*, s.title AS session_title {join} "
+                f"WHERE {where} "
+                f"ORDER BY rs.{sort_by} {direction}, rs.id DESC "
+                "LIMIT ? OFFSET ?",
+                [*params, limit, offset],
+            ).fetchall()
+
+        results: list[dict[str, object]] = [dict(row) for row in rows]
+        return results, total_count
+
     # -- kanban tasks -----------------------------------------------------
 
     def list_kanban_stage_configs(

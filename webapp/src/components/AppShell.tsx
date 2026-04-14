@@ -16,6 +16,9 @@ const BoardPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
+const DashboardPage = lazy(() =>
+  import("./dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })),
+);
 
 export function AppShell() {
   useTaskEvents();
@@ -93,6 +96,7 @@ export function AppShell() {
         <nav className="topnav">
           <NavLink to="/chat">Chat</NavLink>
           <NavLink to="/board">Kanban</NavLink>
+          <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="runtime-meta">
@@ -142,6 +146,7 @@ export function AppShell() {
               }
             />
             <Route path="/board" element={requiresOnboarding ? <Navigate to="/settings" replace /> : <BoardPage />} />
+            <Route path="/dashboard" element={requiresOnboarding ? <Navigate to="/settings" replace /> : <DashboardPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </Suspense>

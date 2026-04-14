@@ -502,3 +502,108 @@ def test_replace_kanban_stage_configs_reorders_task_listing(tmp_path) -> None:
         "Review Task",
         "Plan Task",
     ]
+
+
+def test_get_dashboard_stats_returns_aggregated_data(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        session_id = store.create_session("/w", "openai", "gpt-5", "dashboard")
+        run_id_1 = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="chat_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model="gpt-5",
+        )
+        store.update_run_session(
+            run_id_1,
+            status="completed",
+            input_tokens=200,
+            output_tokens=100,
+            estimated_cost_usd=0.02,
+            total_tool_calls=5,
+            total_api_calls=3,
+            error_count=0,
+            total_duration_ms=500,
+        )
+        run_id_2 = store.create_run_session(
+            session_id=session_id,
+            agent_name="sub",
+            agent_type="reviewer",
+            provider="anthropic",
+            provider_id=None,
+            profile_id=None,
+            model="claude-4",
+        )
+        store.update_run_session(
+            run_id_2,
+            status="failed",
+            input_tokens=50,
+            output_tokens=10,
+            estimated_cost_usd=0.005,
+            error_count=1,
+            total_duration_ms=100,
+        )
+
+        stats = store.get_dashboard_stats(directory="/w")
+
+    overview = stats["overview"]
+    assert overview["total_sessions"] == 1
+    assert overview["total_runs"] == 2
+    assert overview["total_input_tokens"] == 250
+    assert overview["total_output_tokens"] == 110
+    assert overview["completed_runs"] == 1
+    assert overview["failed_runs"] == 1
+
+    breakdown = stats["breakdown"]
+    assert len(breakdown) == 2
+    providers = {row["provider"] for row in breakdown}
+    assert providers == {"openai", "anthropic"}
+
+    daily = stats["daily"]
+    assert len(daily) >= 1
+
+
+def test_list_all_run_sessions_with_filters(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        session_id = store.create_session("/w", "openai", "gpt-5", "filter test")
+        for i in range(4):
+            run_id = store.create_run_session(
+                session_id=session_id,
+                agent_name="main",
+                agent_type="chat_turn",
+                provider="openai" if i < 3 else "anthropic",
+                provider_id=None,
+                profile_id=None,
+                model="gpt-5" if i < 3 else "claude-4",
+                status="completed" if i % 2 == 0 else "failed",
+            )
+            store.update_run_session(run_id, input_tokens=(i + 1) * 100)
+
+        # All runs
+        all_runs, total = store.list_all_run_sessions(directory="/w")
+        assert total == 4
+
+        # Paginated
+        page, total = store.list_all_run_sessions(directory="/w", limit=2, offset=0)
+        assert len(page) == 2
+        assert total == 4
+
+        # Filter by status
+        completed, total = store.list_all_run_sessions(
+            directory="/w", status="completed"
+        )
+        assert total == 2
+
+        # Filter by provider
+        anthropic_runs, total = store.list_all_run_sessions(
+            directory="/w", provider="anthropic"
+        )
+        assert total == 1
+        assert anthropic_runs[0]["model"] == "claude-4"
+
+        # Session title is included
+        assert all_runs[0]["session_title"] == "filter test"
