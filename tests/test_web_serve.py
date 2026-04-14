@@ -10,6 +10,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from rich.console import Console
 
+from pbi_agent.agent.session import NEW_CHAT_SENTINEL
 from pbi_agent.branding import PBI_AGENT_NAME, PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
@@ -1667,6 +1668,293 @@ def test_lifespan_suppresses_cancelled_error_and_runs_shutdown() -> None:
     mock_shutdown.assert_called_once_with()
 
 
+def test_config_provider_and_profile_list_update_delete_endpoints(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "env-openai-key")
+    app = create_app(_settings(), runtime_args=_runtime_args("web"))
+
+    with TestClient(app) as client:
+        bootstrap = client.get("/api/config/bootstrap")
+        assert bootstrap.status_code == 200
+        revision = bootstrap.json()["config_revision"]
+
+        providers_response = client.get("/api/config/providers")
+        assert providers_response.status_code == 200
+        assert providers_response.json()["providers"] == []
+
+        create_provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "OpenAI Main",
+                "kind": "openai",
+                "api_key_env": "OPENAI_API_KEY",
+            },
+        )
+        assert create_provider_response.status_code == 200
+        revision = create_provider_response.json()["config_revision"]
+
+        providers_response = client.get("/api/config/providers")
+        assert providers_response.status_code == 200
+        assert providers_response.json()["providers"] == [
+            {
+                "id": "openai-main",
+                "name": "OpenAI Main",
+                "kind": "openai",
+                "responses_url": None,
+                "generic_api_url": None,
+                "secret_source": "env_var",
+                "secret_env_var": "OPENAI_API_KEY",
+                "has_secret": True,
+            }
+        ]
+
+        update_provider_response = client.patch(
+            "/api/config/providers/openai-main",
+            headers={"If-Match": revision},
+            json={
+                "name": "OpenAI Updated",
+                "responses_url": "https://example.test/v1/responses",
+            },
+        )
+        assert update_provider_response.status_code == 200
+        assert update_provider_response.json()["provider"]["name"] == "OpenAI Updated"
+        assert (
+            update_provider_response.json()["provider"]["responses_url"]
+            == "https://example.test/v1/responses"
+        )
+        revision = update_provider_response.json()["config_revision"]
+
+        profiles_response = client.get("/api/config/model-profiles")
+        assert profiles_response.status_code == 200
+        assert profiles_response.json()["model_profiles"] == []
+
+        create_profile_response = client.post(
+            "/api/config/model-profiles",
+            headers={"If-Match": revision},
+            json={
+                "name": "Analysis",
+                "provider_id": "openai-main",
+                "model": "gpt-5.4-2026-03-05",
+                "reasoning_effort": "xhigh",
+                "max_tool_workers": 6,
+            },
+        )
+        assert create_profile_response.status_code == 200
+        revision = create_profile_response.json()["config_revision"]
+
+        profiles_response = client.get("/api/config/model-profiles")
+        assert profiles_response.status_code == 200
+        assert [item["id"] for item in profiles_response.json()["model_profiles"]] == [
+            "analysis"
+        ]
+        assert (
+            profiles_response.json()["model_profiles"][0]["resolved_runtime"]["model"]
+            == "gpt-5.4-2026-03-05"
+        )
+
+        update_profile_response = client.patch(
+            "/api/config/model-profiles/analysis",
+            headers={"If-Match": revision},
+            json={
+                "name": "Analysis Updated",
+                "model": "gpt-5.4",
+                "reasoning_effort": "high",
+                "web_search": False,
+            },
+        )
+        assert update_profile_response.status_code == 200
+        updated_profile = update_profile_response.json()["model_profile"]
+        assert updated_profile["name"] == "Analysis Updated"
+        assert updated_profile["resolved_runtime"]["model"] == "gpt-5.4"
+        assert updated_profile["resolved_runtime"]["web_search"] is False
+        revision = update_profile_response.json()["config_revision"]
+
+        delete_profile_response = client.delete(
+            "/api/config/model-profiles/analysis",
+            headers={"If-Match": revision},
+        )
+        assert delete_profile_response.status_code == 204
+
+        profiles_response = client.get("/api/config/model-profiles")
+        assert profiles_response.status_code == 200
+        assert profiles_response.json()["model_profiles"] == []
+        revision = profiles_response.json()["config_revision"]
+
+        delete_provider_response = client.delete(
+            "/api/config/providers/openai-main",
+            headers={"If-Match": revision},
+        )
+        assert delete_provider_response.status_code == 204
+
+        providers_response = client.get("/api/config/providers")
+        assert providers_response.status_code == 200
+        assert providers_response.json()["providers"] == []
+
+
+def test_sessions_endpoint_lists_saved_sessions(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        first_session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "First chat",
+        )
+        second_session_id = store.create_session(
+            str(tmp_path),
+            "xai",
+            "grok-4",
+            "Second chat",
+        )
+
+    with TestClient(app) as client:
+        response = client.get("/api/sessions", params={"limit": 10})
+
+    assert response.status_code == 200
+    payload = response.json()["sessions"]
+    assert [item["session_id"] for item in payload] == [
+        second_session_id,
+        first_session_id,
+    ]
+    assert payload[0]["provider"] == "xai"
+    assert payload[1]["provider"] == "openai"
+
+
+def test_live_session_list_and_detail_endpoints() -> None:
+    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        display.user_prompt()
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            create_response = client.post("/api/chat/session", json={})
+            assert create_response.status_code == 200
+            live_session_id = create_response.json()["session"]["live_session_id"]
+
+            list_response = client.get("/api/live-sessions")
+            detail_response = client.get(f"/api/live-sessions/{live_session_id}")
+
+    assert list_response.status_code == 200
+    live_sessions = list_response.json()["live_sessions"]
+    assert [item["live_session_id"] for item in live_sessions] == [live_session_id]
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["live_session"]["live_session_id"] == live_session_id
+    assert detail_payload["snapshot"]["live_session_id"] == live_session_id
+    assert detail_payload["snapshot"]["last_event_seq"] >= 0
+
+
+def test_delete_task_endpoint_removes_task() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        create_response = client.post(
+            "/api/tasks",
+            json={"title": "Task A", "prompt": "Investigate"},
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task"]["task_id"]
+
+        delete_response = client.delete(f"/api/tasks/{task_id}")
+        assert delete_response.status_code == 204
+
+        list_response = client.get("/api/tasks")
+
+    assert list_response.status_code == 200
+    assert list_response.json()["tasks"] == []
+
+
+def test_request_new_chat_endpoint_queues_new_chat() -> None:
+    queued_values: list[object] = []
+
+    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        queued_values.append(display.user_prompt())
+        queued_values.append(display.user_prompt())
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            response = client.post("/api/chat/session", json={})
+            assert response.status_code == 200
+            live_session_id = response.json()["session"]["live_session_id"]
+
+            new_chat_response = client.post(
+                f"/api/chat/session/{live_session_id}/new-chat",
+                json={},
+            )
+
+    assert new_chat_response.status_code == 200
+    assert queued_values[0] == NEW_CHAT_SENTINEL
+
+
+def test_uploaded_chat_image_route_returns_image_bytes() -> None:
+    image_bytes = b"\x89PNG\r\n\x1a\n"
+
+    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        display.user_prompt()
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            response = client.post("/api/chat/session", json={})
+            assert response.status_code == 200
+            live_session_id = response.json()["session"]["live_session_id"]
+
+            upload_response = client.post(
+                f"/api/chat/session/{live_session_id}/images",
+                files={"files": ("chart.png", image_bytes, "image/png")},
+            )
+            assert upload_response.status_code == 200
+            preview_url = upload_response.json()["uploads"][0]["preview_url"]
+
+            image_response = client.get(preview_url)
+
+    assert image_response.status_code == 200
+    assert image_response.headers["content-type"] == "image/png"
+    assert image_response.content == image_bytes
+
+
+def test_static_and_spa_routes_return_expected_responses() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        index_response = client.get("/")
+        fallback_response = client.get("/plan")
+        favicon_ico_response = client.get("/favicon.ico")
+        favicon_png_response = client.get("/favicon.png")
+        logo_response = client.get("/logo.png")
+        api_not_found_response = client.get("/api/not-found")
+        stream_guard_response = client.get("/app")
+
+    assert index_response.status_code == 200
+    assert "text/html" in index_response.headers["content-type"]
+    assert fallback_response.status_code == 200
+    assert "text/html" in fallback_response.headers["content-type"]
+    assert favicon_ico_response.status_code == 200
+    assert favicon_ico_response.headers["content-type"] == "image/png"
+    assert favicon_png_response.status_code == 200
+    assert favicon_png_response.headers["content-type"] == "image/png"
+    assert logo_response.status_code == 200
+    assert logo_response.headers["content-type"] == "image/png"
+    assert api_not_found_response.status_code == 404
+    assert stream_guard_response.status_code == 404
+
+
 def test_dashboard_stats_returns_aggregated_overview(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
@@ -1791,25 +2079,21 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
             )
 
     with TestClient(app) as client:
-        # Fetch first page of 2
         response = client.get("/api/runs?limit=2&offset=0")
         assert response.status_code == 200
         payload = response.json()
         assert payload["total_count"] == 5
         assert len(payload["runs"]) == 2
-        # Each run should include session_title
         assert payload["runs"][0]["session_title"] == "Paginated test"
 
-        # Filter by status
         response = client.get("/api/runs?status=completed")
         assert response.status_code == 200
         payload = response.json()
         assert payload["total_count"] == 3
-        assert all(r["status"] == "completed" for r in payload["runs"])
+        assert all(run["status"] == "completed" for run in payload["runs"])
 
-        # Filter by status=failed
         response = client.get("/api/runs?status=failed")
         assert response.status_code == 200
         payload = response.json()
         assert payload["total_count"] == 2
-        assert all(r["status"] == "failed" for r in payload["runs"])
+        assert all(run["status"] == "failed" for run in payload["runs"])
