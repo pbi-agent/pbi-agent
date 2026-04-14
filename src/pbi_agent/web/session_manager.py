@@ -393,7 +393,7 @@ class WebSessionManager:
         self._runtime_args = runtime_args
         self._workspace_root = Path.cwd().resolve()
         self._mention_index = WorkspaceFileIndex(self._workspace_root)
-        self._directory_key = str(self._workspace_root)
+        self._directory_key = str(self._workspace_root).lower()
         self._app_stream = EventStream()
         self._chat_sessions: dict[str, LiveChatSession] = {}
         self._running_task_ids: set[str] = set()

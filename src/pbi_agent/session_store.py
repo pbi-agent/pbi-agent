@@ -402,6 +402,10 @@ def _db_path() -> Path:
     return DEFAULT_SESSION_DB_PATH
 
 
+def _normalize_directory_key(directory: str) -> str:
+    return directory.lower()
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -517,6 +521,7 @@ class SessionStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
         self._ensure_schema()
+        self._normalize_directory_keys()
 
     def __enter__(self) -> SessionStore:
         return self
@@ -557,6 +562,21 @@ class SessionStore:
             )
         self._conn.commit()
 
+    def _normalize_directory_keys(self) -> None:
+        self._conn.execute(
+            "UPDATE sessions SET directory = LOWER(directory) "
+            "WHERE directory != LOWER(directory)"
+        )
+        self._conn.execute(
+            "UPDATE kanban_tasks SET directory = LOWER(directory) "
+            "WHERE directory != LOWER(directory)"
+        )
+        self._conn.execute(
+            "UPDATE kanban_stage_configs SET directory = LOWER(directory) "
+            "WHERE directory != LOWER(directory)"
+        )
+        self._conn.commit()
+
     def create_session(
         self,
         directory: str,
@@ -569,6 +589,7 @@ class SessionStore:
     ) -> str:
         session_id = uuid.uuid4().hex
         now = _now_iso()
+        normalized_directory = _normalize_directory_key(directory)
         with self._lock:
             self._conn.execute(
                 "INSERT INTO sessions "
@@ -578,7 +599,7 @@ class SessionStore:
                 "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, ?, ?)",
                 (
                     session_id,
-                    directory,
+                    normalized_directory,
                     provider,
                     provider_id,
                     model,
@@ -667,12 +688,13 @@ class SessionStore:
         limit: int = 20,
         provider: str | None = None,
     ) -> list[SessionRecord]:
+        normalized_directory = _normalize_directory_key(directory)
         if provider:
             sql = "SELECT * FROM sessions WHERE directory = ? AND provider = ? ORDER BY updated_at DESC LIMIT ?"
-            params: tuple[object, ...] = (directory, provider, limit)
+            params: tuple[object, ...] = (normalized_directory, provider, limit)
         else:
             sql = "SELECT * FROM sessions WHERE directory = ? ORDER BY updated_at DESC LIMIT ?"
-            params = (directory, limit)
+            params = (normalized_directory, limit)
         with self._lock:
             rows = self._conn.execute(sql, params).fetchall()
         return [SessionRecord(**dict(r)) for r in rows]
@@ -975,24 +997,26 @@ class SessionStore:
     def list_kanban_stage_configs(
         self, directory: str
     ) -> list[KanbanStageConfigRecord]:
+        normalized_directory = _normalize_directory_key(directory)
         with self._lock:
-            self._ensure_canonical_kanban_stages_locked(directory)
+            self._ensure_canonical_kanban_stages_locked(normalized_directory)
             rows = self._conn.execute(
                 "SELECT * FROM kanban_stage_configs "
                 "WHERE directory = ? ORDER BY position ASC, stage_id ASC",
-                (directory,),
+                (normalized_directory,),
             ).fetchall()
         return [_kanban_stage_config_record(row) for row in rows]
 
     def get_kanban_stage_config(
         self, directory: str, stage_id: str
     ) -> KanbanStageConfigRecord | None:
+        normalized_directory = _normalize_directory_key(directory)
         with self._lock:
-            self._ensure_canonical_kanban_stages_locked(directory)
+            self._ensure_canonical_kanban_stages_locked(normalized_directory)
             row = self._conn.execute(
                 "SELECT * FROM kanban_stage_configs "
                 "WHERE directory = ? AND stage_id = ?",
-                (directory, stage_id),
+                (normalized_directory, stage_id),
             ).fetchone()
         if row is None:
             return None
@@ -1004,6 +1028,7 @@ class SessionStore:
         *,
         stages: list[KanbanStageConfigSpec],
     ) -> list[KanbanStageConfigRecord]:
+        normalized_directory = _normalize_directory_key(directory)
         if not stages:
             raise ValueError("board must contain at least one stage")
         normalized: list[KanbanStageConfigSpec] = []
@@ -1043,12 +1068,12 @@ class SessionStore:
                 row["stage_id"]: row
                 for row in self._conn.execute(
                     "SELECT * FROM kanban_stage_configs WHERE directory = ?",
-                    (directory,),
+                    (normalized_directory,),
                 ).fetchall()
             }
             task_rows = self._conn.execute(
                 "SELECT DISTINCT stage FROM kanban_tasks WHERE directory = ?",
-                (directory,),
+                (normalized_directory,),
             ).fetchall()
             missing_task_stages = sorted(
                 {
@@ -1065,7 +1090,7 @@ class SessionStore:
             now = _now_iso()
             self._conn.execute(
                 "DELETE FROM kanban_stage_configs WHERE directory = ?",
-                (directory,),
+                (normalized_directory,),
             )
             for position, item in enumerate(normalized):
                 created_at = (
@@ -1079,7 +1104,7 @@ class SessionStore:
                     "auto_start, created_at, updated_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        directory,
+                        normalized_directory,
                         item.stage_id,
                         item.name,
                         position,
@@ -1094,7 +1119,7 @@ class SessionStore:
             rows = self._conn.execute(
                 "SELECT * FROM kanban_stage_configs "
                 "WHERE directory = ? ORDER BY position ASC, stage_id ASC",
-                (directory,),
+                (normalized_directory,),
             ).fetchall()
         return [_kanban_stage_config_record(row) for row in rows]
 
@@ -1112,9 +1137,10 @@ class SessionStore:
         task_id = uuid.uuid4().hex
         now = _now_iso()
         project_dir_value = project_dir.strip() or "."
+        normalized_directory = _normalize_directory_key(directory)
         with self._lock:
-            self._require_kanban_stage_locked(directory, stage)
-            position = self._next_kanban_position_locked(directory, stage)
+            self._require_kanban_stage_locked(normalized_directory, stage)
+            position = self._next_kanban_position_locked(normalized_directory, stage)
             self._conn.execute(
                 "INSERT INTO kanban_tasks "
                 "(task_id, directory, title, prompt, stage, position, project_dir, "
@@ -1123,7 +1149,7 @@ class SessionStore:
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)",
                 (
                     task_id,
-                    directory,
+                    normalized_directory,
                     title,
                     prompt,
                     stage,
@@ -1156,8 +1182,9 @@ class SessionStore:
         return KanbanTaskRecord(**dict(row))
 
     def list_kanban_tasks(self, directory: str) -> list[KanbanTaskRecord]:
+        normalized_directory = _normalize_directory_key(directory)
         with self._lock:
-            self._ensure_canonical_kanban_stages_locked(directory)
+            self._ensure_canonical_kanban_stages_locked(normalized_directory)
             rows = self._conn.execute(
                 "SELECT task.* FROM kanban_tasks AS task "
                 "LEFT JOIN kanban_stage_configs AS stage_cfg "
@@ -1166,7 +1193,7 @@ class SessionStore:
                 "ORDER BY "
                 "CASE WHEN stage_cfg.position IS NULL THEN 1 ELSE 0 END ASC, "
                 "stage_cfg.position ASC, task.position ASC, task.updated_at DESC",
-                (directory,),
+                (normalized_directory,),
             ).fetchall()
         return [KanbanTaskRecord(**dict(row)) for row in rows]
 
@@ -1416,7 +1443,7 @@ class SessionStore:
         params.append(KANBAN_RUN_STATUS_RUNNING)
         if directory is not None:
             where += " AND directory = ?"
-            params.append(directory)
+            params.append(_normalize_directory_key(directory))
         with self._lock:
             cursor = self._conn.execute(
                 f"UPDATE kanban_tasks SET {', '.join(clauses)} {where}",

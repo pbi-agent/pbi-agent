@@ -69,6 +69,18 @@ def test_directory_scoped_listing(tmp_path) -> None:
     assert b_sessions[0].directory == "/project-b"
 
 
+def test_directory_keys_are_lowercased_and_case_insensitive(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        session_id = store.create_session("/Project-A/Subdir", "openai", "gpt-5", "a1")
+        record = store.get_session(session_id)
+        sessions = store.list_sessions("/PROJECT-A/SUBDIR")
+
+    assert record is not None
+    assert record.directory == "/project-a/subdir"
+    assert [session.session_id for session in sessions] == [session_id]
+
+
 def test_ordering_by_updated_at(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

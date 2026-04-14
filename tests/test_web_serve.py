@@ -1176,6 +1176,40 @@ def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None
     assert payload["live_session"] is None
 
 
+def test_get_session_detail_matches_legacy_mixed_case_directory(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved chat",
+        )
+        legacy_directory = str(tmp_path).replace("/tmp/", "/TMP/", 1)
+        store._conn.execute(
+            "UPDATE sessions SET directory = ? WHERE session_id = ?",
+            (legacy_directory, session_id),
+        )
+        store._conn.commit()
+
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        sessions_response = client.get("/api/sessions")
+        detail_response = client.get(f"/api/sessions/{session_id}")
+
+    assert sessions_response.status_code == 200
+    assert [item["session_id"] for item in sessions_response.json()["sessions"]] == [
+        session_id
+    ]
+    assert detail_response.status_code == 200
+    assert detail_response.json()["session"]["session_id"] == session_id
+
+
 def test_list_session_runs_returns_observability_runs(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
