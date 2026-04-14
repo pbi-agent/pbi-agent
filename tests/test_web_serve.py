@@ -40,9 +40,11 @@ def _write_command(root: Path, name: str, content: str) -> None:
 
 
 def _write_default_commands(root: Path) -> None:
-    _write_command(root, "implement", "# Implementation mode\n\nImplement the change.")
-    _write_command(root, "plan", "# Planning mode\n\nPlan before coding.")
-    _write_command(root, "review", "# Code review mode\n\nReview the change.")
+    _write_command(
+        root, "implement", "# Implementation command\n\nImplement the change."
+    )
+    _write_command(root, "plan", "# Planning command\n\nPlan before coding.")
+    _write_command(root, "review", "# Code review command\n\nReview the change.")
 
 
 def test_web_server_prints_banner_and_starts_uvicorn() -> None:
@@ -189,12 +191,14 @@ def test_config_writes_require_current_revision() -> None:
         assert stale_update.status_code == 409
 
 
-def test_mode_list_endpoint_returns_command_files(monkeypatch, tmp_path: Path) -> None:
+def test_command_list_endpoint_returns_command_files(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.chdir(tmp_path)
     _write_command(
         tmp_path,
         "focus",
-        "# Focus mode\n\nStay focused on the requested change.",
+        "# Focus command\n\nStay focused on the requested change.",
     )
     app = create_app(_settings())
 
@@ -209,8 +213,8 @@ def test_mode_list_endpoint_returns_command_files(monkeypatch, tmp_path: Path) -
                 "id": "focus",
                 "name": "Focus",
                 "slash_alias": "/focus",
-                "description": "Focus mode",
-                "instructions": "# Focus mode\n\nStay focused on the requested change.",
+                "description": "Focus command",
+                "instructions": "# Focus command\n\nStay focused on the requested change.",
                 "path": ".agents/commands/focus.md",
             }
         ]
@@ -299,7 +303,7 @@ def test_slash_command_search_endpoint_returns_web_commands(
     ]
 
 
-def test_slash_command_search_endpoint_includes_command_file_modes(
+def test_slash_command_search_endpoint_includes_command_file_commands(
     monkeypatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -330,27 +334,27 @@ def test_slash_command_search_endpoint_includes_command_file_modes(
         },
         {
             "name": "/implement",
-            "description": "Implementation mode",
+            "description": "Implementation command",
             "kind": "command",
         },
         {
             "name": "/plan",
-            "description": "Planning mode",
+            "description": "Planning command",
             "kind": "command",
         },
         {
             "name": "/review",
-            "description": "Code review mode",
+            "description": "Code review command",
             "kind": "command",
         },
     ]
 
 
-def test_slash_command_search_endpoint_filters_command_file_modes(
+def test_slash_command_search_endpoint_filters_command_file_commands(
     monkeypatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    _write_command(tmp_path, "plan", "# Planning mode\n\nPlan before coding.")
+    _write_command(tmp_path, "plan", "# Planning command\n\nPlan before coding.")
     app = create_app(_settings())
 
     with TestClient(app) as client:
@@ -362,7 +366,7 @@ def test_slash_command_search_endpoint_filters_command_file_modes(
     assert response.json()["items"] == [
         {
             "name": "/plan",
-            "description": "Planning mode",
+            "description": "Planning command",
             "kind": "command",
         }
     ]

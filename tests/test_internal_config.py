@@ -65,7 +65,7 @@ def test_load_internal_config_treats_old_provider_scoped_shape_as_absent(
     assert config.web.active_profile_id is None
 
 
-def test_load_internal_config_does_not_seed_default_modes(
+def test_load_internal_config_does_not_seed_default_commands(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -139,11 +139,11 @@ def test_find_command_config_by_alias_reads_command_files(
     _write_command(tmp_path, "plan.md", "Plan carefully before making changes.")
 
     config = load_internal_config()
-    mode = find_command_config_by_alias("/plan")
+    command = find_command_config_by_alias("/plan")
 
     assert config.commands == []
-    assert mode is not None
-    assert mode.instructions == "Plan carefully before making changes."
+    assert command is not None
+    assert command.instructions == "Plan carefully before making changes."
 
 
 def test_list_command_configs_skips_reserved_command_alias(tmp_path: Path) -> None:
@@ -171,7 +171,7 @@ def test_normalize_slash_alias_adds_prefix() -> None:
     assert normalize_slash_alias("plan") == "/plan"
 
 
-def test_config_payload_ignores_modes_from_global_config(
+def test_config_payload_ignores_commands_from_global_config(
     tmp_path: Path, monkeypatch
 ) -> None:
     test_workspace = tmp_path / "workspace"
