@@ -568,14 +568,17 @@ class WebSessionManager:
             runs = store.list_run_sessions(session_id)
         return [_serialize_run_session(run) for run in runs]
 
-    def get_run_detail(self, run_session_id: str) -> dict[str, Any]:
+    def get_run_detail(
+        self, run_session_id: str, *, global_scope: bool = False
+    ) -> dict[str, Any]:
         with SessionStore() as store:
             run = store.get_run_session(run_session_id)
             if run is None or run.session_id is None:
                 raise KeyError(run_session_id)
-            session = store.get_session(run.session_id)
-            if session is None or session.directory != self._directory_key:
-                raise KeyError(run_session_id)
+            if not global_scope:
+                session = store.get_session(run.session_id)
+                if session is None or session.directory != self._directory_key:
+                    raise KeyError(run_session_id)
             events = store.list_observability_events(run_session_id=run_session_id)
         return {
             "run": _serialize_run_session(run),

@@ -6,13 +6,20 @@ import { MetricsCards } from "./MetricsCards";
 import { BreakdownTable } from "./BreakdownTable";
 import { RunsTable } from "./RunsTable";
 
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function defaultDateRange(): { start: string; end: string } {
   const end = new Date();
   const start = new Date();
   start.setDate(start.getDate() - 14);
   return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
+    start: toLocalDateString(start),
+    end: toLocalDateString(end),
   };
 }
 

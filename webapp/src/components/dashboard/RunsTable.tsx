@@ -65,6 +65,14 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
   // Detail modal state
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
+  // Reset pagination when external filters (date range or scope) change.
+  const externalKey = `${startDate}|${endDate}|${scope}`;
+  const [prevExternalKey, setPrevExternalKey] = useState(externalKey);
+  if (externalKey !== prevExternalKey) {
+    setPrevExternalKey(externalKey);
+    setPage(0);
+  }
+
   const runsQuery = useQuery({
     queryKey: [
       "dashboard-runs",
@@ -270,6 +278,7 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
         <RunDetailModal
           runSessionId={selectedRunId}
           onClose={() => setSelectedRunId(null)}
+          scope={scope}
         />
       )}
     </div>

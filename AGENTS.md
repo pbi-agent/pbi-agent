@@ -8,6 +8,12 @@ This file provides guidance to Coding Agent when working with code in this repos
 
 ## GitHub
 
+## Git Workflow
+
+- Do not commit, push, merge, or open PRs unless explicitly asked.
+- Stop after local changes; leave Git steps to the user.
+- Ask before any Git action if needed.
+
 Use the `gh` CLI for all GitHub interactions — never construct API URLs manually or use `curl` against the GitHub API.
 
 ```bash

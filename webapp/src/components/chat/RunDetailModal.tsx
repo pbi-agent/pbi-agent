@@ -7,9 +7,11 @@ import { LoadingSpinner } from "../shared/LoadingSpinner";
 export function RunDetailModal({
   runSessionId,
   onClose,
+  scope,
 }: {
   runSessionId: string;
   onClose: () => void;
+  scope?: "workspace" | "global";
 }) {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -20,8 +22,8 @@ export function RunDetailModal({
   }, [onClose]);
 
   const detailQuery = useQuery({
-    queryKey: ["run-detail", runSessionId],
-    queryFn: () => fetchRunDetail(runSessionId),
+    queryKey: ["run-detail", runSessionId, scope],
+    queryFn: () => fetchRunDetail(runSessionId, scope),
   });
 
   return (

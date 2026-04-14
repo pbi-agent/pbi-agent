@@ -103,13 +103,19 @@ def list_session_runs(
     )
 
 
+ScopeQuery = Annotated[str, Query(pattern="^(workspace|global)$")]
+
+
 @router.get("/runs/{run_session_id}", response_model=RunSessionDetailResponse)
 def get_run_detail(
     run_session_id: RunSessionIdPath,
     manager: SessionManagerDep,
+    scope: ScopeQuery = "workspace",
 ) -> RunSessionDetailResponse:
     try:
-        payload = manager.get_run_detail(run_session_id)
+        payload = manager.get_run_detail(
+            run_session_id, global_scope=(scope == "global")
+        )
     except KeyError as exc:
         raise not_found("Run not found.") from exc
     return RunSessionDetailResponse(
@@ -119,9 +125,6 @@ def get_run_detail(
             for item in payload["events"]
         ],
     )
-
-
-ScopeQuery = Annotated[str, Query(pattern="^(workspace|global)$")]
 
 
 @router.get("/dashboard/stats", response_model=DashboardStatsResponse)

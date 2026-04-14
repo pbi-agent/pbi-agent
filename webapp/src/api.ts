@@ -400,8 +400,10 @@ export async function fetchSessionRuns(sessionId: string): Promise<RunSession[]>
 
 export async function fetchRunDetail(
   runSessionId: string,
+  scope?: "workspace" | "global",
 ): Promise<{ run: RunSession; events: ObservabilityEvent[] }> {
-  return requestJson(`/api/runs/${runSessionId}`);
+  const qs = scope === "global" ? "?scope=global" : "";
+  return requestJson(`/api/runs/${runSessionId}${qs}`);
 }
 
 export async function fetchDashboardStats(params: {
