@@ -1,5 +1,5 @@
 # TODO
 
-- [x] Remove the facade-only `uvicorn` import from `src/pbi_agent/web/serve.py`.
-- [x] Retarget the web server test patch to `pbi_agent.web.server_runtime.uvicorn.Server.run`.
-- [x] Run targeted validation for the touched files.
+- [x] Map uncovered FastAPI and app-level web routes after the `serve.py` refactor.
+- [x] Add integration coverage in `tests/test_web_serve.py` for the missing routes.
+- [x] Run targeted validation for the updated test file.
