@@ -288,7 +288,9 @@ class OpenAIProvider(Provider):
                     model=self._settings.model,
                     url=self._settings.responses_url,
                     request_config=self._settings.redacted(),
-                    request_payload=request_body,
+                    request_payload=_sanitize_request_payload_for_observability(
+                        request_body
+                    ),
                     response_payload=response_json,
                     duration_ms=_duration_ms(req_start),
                     prompt_tokens=result.usage.input_tokens,
@@ -309,7 +311,9 @@ class OpenAIProvider(Provider):
                     model=self._settings.model,
                     url=self._settings.responses_url,
                     request_config=self._settings.redacted(),
-                    request_payload=request_body,
+                    request_payload=_sanitize_request_payload_for_observability(
+                        request_body
+                    ),
                     response_payload=error_payload or {"body": error_body},
                     duration_ms=_duration_ms(req_start),
                     status_code=exc.code,
@@ -410,7 +414,9 @@ class OpenAIProvider(Provider):
                     model=self._settings.model,
                     url=self._settings.responses_url,
                     request_config=self._settings.redacted(),
-                    request_payload=request_body,
+                    request_payload=_sanitize_request_payload_for_observability(
+                        request_body
+                    ),
                     response_payload={"error": str(exc)},
                     duration_ms=_duration_ms(req_start),
                     success=False,
@@ -865,6 +871,35 @@ def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
 
 def _duration_ms(started_at: float) -> int:
     return max(0, int((time.perf_counter() - started_at) * 1000))
+
+
+def _redact_inline_image_url(value: str) -> str:
+    normalized = value.lower()
+    if not normalized.startswith("data:image/"):
+        return value
+    prefix, separator, _ = value.partition(",")
+    if not separator:
+        return value
+    return f"{prefix},<redacted>"
+
+
+def _sanitize_request_payload_for_observability(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized = {
+            key: _sanitize_request_payload_for_observability(inner)
+            for key, inner in value.items()
+        }
+        image_url = sanitized.get("image_url")
+        if isinstance(image_url, str):
+            sanitized["image_url"] = _redact_inline_image_url(image_url)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_request_payload_for_observability(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(
+            _sanitize_request_payload_for_observability(item) for item in value
+        )
+    return value
 
 
 def _trace_provider_call(

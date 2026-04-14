@@ -1,10 +1,5 @@
 # TODO
 
-- [x] Add TypeScript types for RunSession and ObservabilityEvent in types.ts
-- [x] Add API client methods (fetchSessionRuns, fetchRunDetail) in api.ts
-- [x] Create RunHistory component (session-level run list)
-- [x] Create RunDetail modal/view (per-run event timeline)
-- [x] Add observability CSS styles
-- [x] Wire RunHistory into ChatPage for saved sessions
-- [x] Run validation: ruff check, ruff format, lint, typecheck, web:build, pytest
-- [x] Append MEMORY.md entry
+- [x] Review observability fix for per-turn usage, metadata preservation, and image payload redaction
+- [x] Validate targeted tests and look for regressions
+- [x] Summarize findings with file references

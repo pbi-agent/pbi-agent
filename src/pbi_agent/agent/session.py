@@ -233,7 +233,7 @@ def run_single_turn(
             display.session_usage(session_usage)
             tracer.finish(
                 status="completed",
-                usage=session_usage,
+                usage=turn_usage,
                 metadata={"tool_errors": had_tool_errors},
             )
             return AgentOutcome(
@@ -246,7 +246,7 @@ def run_single_turn(
         tracer.log_error(str(exc), metadata={"phase": "run_single_turn"})
         tracer.finish(
             status="failed",
-            usage=session_usage,
+            usage=turn_usage,
             metadata={"error_message": str(exc)},
         )
         raise
@@ -500,14 +500,14 @@ def run_chat_loop(
                     display.session_usage(session_usage)
                     turn_tracer.finish(
                         status="completed",
-                        usage=session_usage,
+                        usage=turn_usage,
                         metadata={"tool_errors": loop_had_errors},
                     )
                 except Exception as exc:
                     turn_tracer.log_error(str(exc), metadata={"phase": "run_chat_loop"})
                     turn_tracer.finish(
                         status="failed",
-                        usage=session_usage,
+                        usage=turn_usage,
                         metadata={"error_message": str(exc)},
                     )
                     raise

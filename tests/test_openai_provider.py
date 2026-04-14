@@ -1673,3 +1673,98 @@ def test_openai_request_turn_records_observability(monkeypatch) -> None:
 
     tracer.log_model_call.assert_called_once()
     assert tracer.log_model_call.call_args.kwargs["url"] == DEFAULT_RESPONSES_URL
+
+
+@pytest.mark.parametrize("request_kind", ["user_input", "tool_result_items"])
+def test_openai_request_turn_redacts_inline_image_data_in_observability_payload(
+    monkeypatch,
+    request_kind: str,
+) -> None:
+    provider = OpenAIProvider(_make_settings())
+    tracer = Mock()
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        return _FakeHTTPResponse(
+            {
+                "id": "resp_trace",
+                "model": DEFAULT_MODEL,
+                "usage": {
+                    "input_tokens": 7,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 3,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                },
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "Traced."}],
+                    }
+                ],
+            }
+        )
+
+    def _collect_image_urls(value: object) -> list[str]:
+        if isinstance(value, dict):
+            values: list[str] = []
+            image_url = value.get("image_url")
+            if isinstance(image_url, str):
+                values.append(image_url)
+            for inner in value.values():
+                values.extend(_collect_image_urls(inner))
+            return values
+        if isinstance(value, list):
+            values: list[str] = []
+            for item in value:
+                values.extend(_collect_image_urls(item))
+            return values
+        return []
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    kwargs = {
+        "display": _DisplayStub(),
+        "session_usage": TokenUsage(model=DEFAULT_MODEL),
+        "turn_usage": TokenUsage(model=DEFAULT_MODEL),
+        "tracer": tracer,
+    }
+    if request_kind == "user_input":
+        kwargs["user_input"] = UserTurnInput(
+            text="Describe this image.",
+            images=[
+                ImageAttachment(
+                    path="chart.png",
+                    mime_type="image/png",
+                    data_base64="QUJDRA==",
+                )
+            ],
+        )
+    else:
+        kwargs["tool_result_items"] = [
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": [
+                    {
+                        "type": "input_text",
+                        "text": '{"ok": true, "result": {"path": "chart.png"}}',
+                    },
+                    {
+                        "type": "input_image",
+                        "image_url": "data:image/png;base64,QUJDRA==",
+                    },
+                ],
+            }
+        ]
+
+    provider.request_turn(**kwargs)
+
+    tracer.log_model_call.assert_called_once()
+    image_urls = _collect_image_urls(
+        tracer.log_model_call.call_args.kwargs["request_payload"]
+    )
+    assert image_urls == ["data:image/png;base64,<redacted>"]

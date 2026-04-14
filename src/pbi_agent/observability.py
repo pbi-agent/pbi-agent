@@ -52,6 +52,13 @@ def redacted_json(value: Any) -> Any:
     return _coerce_json_value(value)
 
 
+def _redacted_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    sanitized = redacted_json(metadata or {})
+    if isinstance(sanitized, dict):
+        return sanitized
+    return {}
+
+
 @dataclass(slots=True)
 class RunTracer:
     store: SessionStore | None
@@ -66,6 +73,7 @@ class RunTracer:
     model: str | None
     _started_at_monotonic: float
     _lock: threading.Lock
+    _run_metadata: dict[str, Any]
     _next_step_index: int = 0
     _total_tool_calls: int = 0
     _total_api_calls: int = 0
@@ -90,6 +98,7 @@ class RunTracer:
         lock = threading.Lock()
         started_at_monotonic = time.perf_counter()
         run_session_id: str | None = None
+        run_metadata = _redacted_metadata(metadata)
         if store is not None:
             try:
                 run_session_id = store.create_run_session(
@@ -101,7 +110,7 @@ class RunTracer:
                     provider_id=provider_id,
                     profile_id=profile_id,
                     model=model,
-                    metadata=redacted_json(metadata),
+                    metadata=run_metadata,
                 )
             except Exception:
                 _log.warning("Failed to create run session", exc_info=True)
@@ -118,6 +127,7 @@ class RunTracer:
             model=model,
             _started_at_monotonic=started_at_monotonic,
             _lock=lock,
+            _run_metadata=run_metadata,
         )
         tracer.log_event(
             "run_start",
@@ -302,6 +312,7 @@ class RunTracer:
     ) -> None:
         if self.store is None or self.run_session_id is None:
             return
+        finish_metadata = _redacted_metadata(metadata)
         with self._lock:
             if self._finished:
                 return
@@ -309,6 +320,8 @@ class RunTracer:
             total_tool_calls = self._total_tool_calls
             total_api_calls = self._total_api_calls
             error_count = self._error_count
+            run_metadata = {**self._run_metadata, **finish_metadata}
+            self._run_metadata = run_metadata
         duration_ms = max(
             0,
             int((time.perf_counter() - self._started_at_monotonic) * 1000),
@@ -323,8 +336,8 @@ class RunTracer:
             completion_tokens=snap.output_tokens if snap is not None else None,
             total_tokens=snap.total_tokens if snap is not None else None,
             success=status == "completed",
-            error_message=(metadata or {}).get("error_message") if metadata else None,
-            metadata={"status": status, **(metadata or {})},
+            error_message=finish_metadata.get("error_message"),
+            metadata={"status": status, **finish_metadata},
         )
         try:
             self.store.update_run_session(
@@ -354,7 +367,7 @@ class RunTracer:
                 total_tool_calls=total_tool_calls,
                 total_api_calls=total_api_calls,
                 error_count=error_count,
-                metadata=redacted_json(metadata or {}),
+                metadata=run_metadata,
             )
         except Exception:
             _log.warning("Failed to finalize run session", exc_info=True)
