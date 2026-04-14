@@ -60,6 +60,17 @@ uv run pbi-agent --help
 uv tool install --reinstall .
 ```
 
+## Long-Term Memory
+
+- Use `MEMORY.md` for long-term agent memory and session continuity. At the start of substantive work, consult it when available for relevant prior context.
+- After each implementation, append a brief entry to `MEMORY.md` describing what changed, why it changed, validation performed, and any context useful for the next session.
+
+## Current Task Tracking
+
+- Use `TODO.md` for the current task session only.
+- Track step progress there with checkboxes by default.
+- If `TODO.md` already contains a fully checked list, reset it before starting the new task.
+
 ## Architecture
 
 **Entry point:** `src/pbi_agent/__main__.py` → `cli.py` parses args and routes to commands (web, console, run, audit, init, sessions, open).

@@ -12,14 +12,13 @@ from pbi_agent.config import (
     ConfigError,
     InternalConfig,
     ModelProfileConfig,
-    ModeConfig,
     ProviderConfig,
     WebConfig,
     create_model_profile_config,
-    create_mode_config,
     create_provider_config,
     find_mode_config_by_alias,
     delete_provider_config,
+    list_mode_configs,
     load_internal_config,
     load_internal_config_snapshot,
     normalize_slash_alias,
@@ -34,6 +33,14 @@ from pbi_agent.config import (
 
 def _args(*argv: str):
     return build_parser().parse_args(list(argv))
+
+
+def _write_command(root: Path, name: str, content: str) -> Path:
+    commands_dir = root / ".agents" / "commands"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    path = commands_dir / name
+    path.write_text(content, encoding="utf-8")
+    return path
 
 
 def test_load_internal_config_treats_old_provider_scoped_shape_as_absent(
@@ -54,24 +61,36 @@ def test_load_internal_config_treats_old_provider_scoped_shape_as_absent(
 
     assert config.providers == []
     assert config.model_profiles == []
-    assert [item.id for item in config.modes] == ["implement", "plan", "review"]
+    assert config.modes == []
     assert config.web.active_profile_id is None
 
 
-def test_load_internal_config_seeds_default_modes_when_key_missing() -> None:
-    config = load_internal_config()
-
-    assert [item.id for item in config.modes] == ["implement", "plan", "review"]
-    assert find_mode_config_by_alias("/plan") is not None
-
-
-def test_load_internal_config_does_not_reseed_explicit_empty_modes() -> None:
-    save_internal_config(InternalConfig(modes=[]))
+def test_load_internal_config_does_not_seed_default_modes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
 
     config = load_internal_config()
 
     assert config.modes == []
     assert find_mode_config_by_alias("/plan") is None
+
+
+def test_list_mode_configs_discovers_command_files(tmp_path: Path) -> None:
+    path = _write_command(
+        tmp_path,
+        "fix-issue.md",
+        "# Fix GitHub Issue\n\nResolve the linked issue.",
+    )
+
+    modes = list_mode_configs(tmp_path)
+
+    assert [item.id for item in modes] == ["fix-issue"]
+    assert modes[0].name == "Fix Issue"
+    assert modes[0].slash_alias == "/fix-issue"
+    assert modes[0].description == "Fix GitHub Issue"
+    assert modes[0].instructions == "# Fix GitHub Issue\n\nResolve the linked issue."
+    assert modes[0].path == str(path.relative_to(tmp_path))
 
 
 def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> None:
@@ -113,62 +132,73 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
     assert config.model_profiles[0].service_tier == "flex"
 
 
-def test_config_store_roundtrip_persists_modes() -> None:
-    save_internal_config(InternalConfig(modes=[]))
-    create_mode_config(
-        ModeConfig(
-            id="plan",
-            name="Plan",
-            slash_alias="/plan",
-            description="Planning mode",
-            instructions="Plan carefully before making changes.",
-        )
-    )
+def test_find_mode_config_by_alias_reads_command_files(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_command(tmp_path, "plan.md", "Plan carefully before making changes.")
 
     config = load_internal_config()
+    mode = find_mode_config_by_alias("/plan")
 
-    assert [item.id for item in config.modes] == ["plan"]
-    assert config.modes[0].slash_alias == "/plan"
-    assert (
-        find_mode_config_by_alias("/plan").instructions
-        == "Plan carefully before making changes."
-    )
+    assert config.modes == []
+    assert mode is not None
+    assert mode.instructions == "Plan carefully before making changes."
 
 
-def test_mode_alias_validation_rejects_reserved_command() -> None:
-    with pytest.raises(ConfigError, match="reserved for a local command"):
-        create_mode_config(
-            ModeConfig(
-                id="skills-helper",
-                name="Skills Helper",
-                slash_alias="/skills",
-                instructions="List project skills.",
-            )
-        )
+def test_list_mode_configs_skips_reserved_command_alias(tmp_path: Path) -> None:
+    _write_command(tmp_path, "skills.md", "List project skills.")
+
+    assert list_mode_configs(tmp_path) == []
+
+
+def test_list_mode_configs_skips_empty_files(tmp_path: Path) -> None:
+    _write_command(tmp_path, "plan.md", "   \n")
+
+    assert list_mode_configs(tmp_path) == []
+
+
+def test_list_mode_configs_skips_duplicate_normalized_names(tmp_path: Path) -> None:
+    _write_command(tmp_path, "fix issue.md", "First instructions.")
+    _write_command(tmp_path, "fix-issue.md", "Second instructions.")
+
+    modes = list_mode_configs(tmp_path)
+
+    assert [item.instructions for item in modes] == ["First instructions."]
 
 
 def test_normalize_slash_alias_adds_prefix() -> None:
     assert normalize_slash_alias("plan") == "/plan"
 
 
-def test_deleting_seeded_default_mode_persists_deletion() -> None:
-    config, revision = load_internal_config_snapshot()
-
-    assert [item.id for item in config.modes] == ["implement", "plan", "review"]
-
-    save_internal_config_with_revision(
-        InternalConfig(
-            providers=config.providers,
-            model_profiles=config.model_profiles,
-            modes=[mode for mode in config.modes if mode.id != "plan"],
-            web=config.web,
+def test_config_payload_ignores_modes_from_global_config(
+    tmp_path: Path, monkeypatch
+) -> None:
+    test_workspace = tmp_path / "workspace"
+    test_workspace.mkdir()
+    monkeypatch.chdir(test_workspace)
+    (tmp_path / "internal-config.json").write_text(
+        json.dumps(
+            {
+                "providers": [],
+                "model_profiles": [],
+                "modes": [
+                    {
+                        "id": "plan",
+                        "name": "Plan",
+                        "slash_alias": "/plan",
+                        "instructions": "Plan carefully.",
+                    }
+                ],
+                "web": {"active_profile_id": None},
+            }
         ),
-        expected_revision=revision,
+        encoding="utf-8",
     )
 
     config = load_internal_config()
 
-    assert [item.id for item in config.modes] == ["implement", "review"]
+    assert config.modes == []
     assert find_mode_config_by_alias("/plan") is None
 
 

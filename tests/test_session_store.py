@@ -9,6 +9,7 @@ import pytest
 from pbi_agent.session_store import (
     KANBAN_RUN_STATUS_COMPLETED,
     KANBAN_STAGE_BACKLOG,
+    KANBAN_STAGE_DONE,
     KANBAN_STAGE_PLAN,
     KANBAN_STAGE_REVIEW,
     KanbanStageConfigSpec,
@@ -270,6 +271,20 @@ def test_create_and_list_kanban_tasks(tmp_path) -> None:
     assert tasks[0].stage == KANBAN_STAGE_BACKLOG
 
 
+def test_default_kanban_stage_configs_are_neutral(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        stages = store.list_kanban_stage_configs("/w")
+
+    assert [stage.stage_id for stage in stages] == [
+        KANBAN_STAGE_BACKLOG,
+        KANBAN_STAGE_DONE,
+    ]
+    assert [stage.name for stage in stages] == ["Backlog", "Done"]
+    assert all(stage.mode_id is None for stage in stages)
+    assert all(stage.auto_start is False for stage in stages)
+
+
 def test_move_kanban_task_reorders_within_stage(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:
@@ -295,6 +310,14 @@ def test_move_kanban_task_reorders_within_stage(tmp_path) -> None:
 def test_set_kanban_task_result_preserves_stage(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:
+        store.replace_kanban_stage_configs(
+            "/w",
+            stages=[
+                KanbanStageConfigSpec(stage_id="backlog", name="Backlog"),
+                KanbanStageConfigSpec(stage_id="plan", name="Plan"),
+                KanbanStageConfigSpec(stage_id="done", name="Done"),
+            ],
+        )
         task = store.create_kanban_task(
             directory="/w",
             title="Planning",
@@ -318,6 +341,15 @@ def test_set_kanban_task_result_preserves_stage(tmp_path) -> None:
 def test_replace_kanban_stage_configs_reorders_task_listing(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:
+        store.replace_kanban_stage_configs(
+            "/w",
+            stages=[
+                KanbanStageConfigSpec(stage_id="backlog", name="Backlog"),
+                KanbanStageConfigSpec(stage_id="plan", name="Plan"),
+                KanbanStageConfigSpec(stage_id="review", name="Review"),
+                KanbanStageConfigSpec(stage_id="done", name="Done"),
+            ],
+        )
         store.create_kanban_task(
             directory="/w",
             title="Backlog Task",

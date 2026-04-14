@@ -243,6 +243,7 @@ export type ModeView = {
   slash_alias: string;
   description: string;
   instructions: string;
+  path: string;
 };
 
 export type ConfigBootstrapPayload = {

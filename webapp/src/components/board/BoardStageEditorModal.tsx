@@ -184,14 +184,14 @@ export function BoardStageEditorModal({
                     </div>
 
                     <div className="task-form__field">
-                      <label className="task-form__label">Default Mode</label>
+                      <label className="task-form__label">Default Command</label>
                       <select
                         className="task-form__select"
                         value={item.mode_id}
                         onChange={(event) => updateItem(index, { mode_id: event.target.value })}
                         disabled={fixedStage}
                       >
-                        <option value="">No default mode</option>
+                        <option value="">No default command</option>
                         {modes.map((mode) => (
                           <option key={mode.id} value={mode.id}>
                             {mode.name} ({mode.slash_alias})

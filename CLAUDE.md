@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to Coding Agent when working with code in this repository.
 
@@ -59,6 +59,17 @@ uv run pbi-agent --help
 # Install from source
 uv tool install --reinstall .
 ```
+
+## Long-Term Memory
+
+- Use `MEMORY.md` for long-term agent memory and session continuity. At the start of substantive work, consult it when available for relevant prior context.
+- After each implementation, append a brief entry to `MEMORY.md` describing what changed, why it changed, validation performed, and any context useful for the next session.
+
+## Current Task Tracking
+
+- Use `TODO.md` for the current task session only.
+- Track step progress there with checkboxes by default.
+- If `TODO.md` already contains a fully checked list, reset it before starting the new task.
 
 ## Architecture
 

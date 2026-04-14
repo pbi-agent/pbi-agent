@@ -22,19 +22,16 @@ from pbi_agent.config import (
     ResolvedRuntime,
     Settings,
     create_model_profile_config,
-    create_mode_config,
     create_provider_config,
     delete_model_profile_config,
-    delete_mode_config,
     delete_provider_config,
+    list_mode_configs,
     load_internal_config,
     load_internal_config_snapshot,
-    normalize_slash_alias,
     provider_has_secret,
     provider_secret_source,
     provider_ui_metadata,
     replace_model_profile_config,
-    replace_mode_config,
     replace_provider_config,
     resolve_runtime_for_profile_id,
     resolve_web_runtime,
@@ -409,7 +406,7 @@ class WebSessionManager:
             "modes": [
                 self._mode_view(mode)
                 for mode in sorted(
-                    config.modes,
+                    list_mode_configs(self._workspace_root),
                     key=lambda item: _config_sort_key(item.name, item.id),
                 )
             ],
@@ -441,7 +438,7 @@ class WebSessionManager:
             )
             for command in list_slash_commands()
         ]
-        for mode in load_internal_config().modes:
+        for mode in list_mode_configs(self._workspace_root):
             command_tuples.append(
                 (
                     mode.slash_alias,
@@ -533,7 +530,7 @@ class WebSessionManager:
             raise ConfigError("Board must contain at least one stage.")
         config = load_internal_config()
         profiles = self._profile_map(config)
-        modes = self._mode_map(config)
+        modes = self._mode_map()
         stage_specs: list[KanbanStageConfigSpec] = []
         seen_stage_ids: set[str] = set()
         for item in stages:
@@ -1207,81 +1204,6 @@ class WebSessionManager:
             "config_revision": revision,
         }
 
-    def create_mode(
-        self,
-        *,
-        mode_id: str | None,
-        name: str,
-        slash_alias: str,
-        description: str | None,
-        instructions: str,
-        expected_revision: str,
-    ) -> dict[str, Any]:
-        mode, revision = create_mode_config(
-            ModeConfig(
-                id=slugify(mode_id or name),
-                name=name,
-                slash_alias=slash_alias,
-                description=description or "",
-                instructions=instructions,
-            ),
-            expected_revision=expected_revision,
-        )
-        return {"mode": self._mode_view(mode), "config_revision": revision}
-
-    def update_mode(
-        self,
-        mode_id: str,
-        *,
-        name: str | None,
-        slash_alias: str | None,
-        description: str | None,
-        instructions: str | None,
-        fields_set: set[str],
-        expected_revision: str,
-    ) -> dict[str, Any]:
-        if "name" in fields_set and name is None:
-            raise ConfigError("Mode name cannot be null.")
-        if "slash_alias" in fields_set and slash_alias is None:
-            raise ConfigError("Mode alias cannot be null.")
-        if "instructions" in fields_set and instructions is None:
-            raise ConfigError("Mode instructions cannot be null.")
-        config = load_internal_config()
-        mode = self._mode_map(config).get(slugify(mode_id))
-        if mode is None:
-            raise ConfigError(f"Unknown mode ID '{mode_id}'.")
-        merged = replace(
-            mode,
-            name=name if "name" in fields_set else mode.name,
-            slash_alias=(
-                normalize_slash_alias(slash_alias)
-                if "slash_alias" in fields_set and slash_alias is not None
-                else mode.slash_alias
-            ),
-            description=(
-                description or "" if "description" in fields_set else mode.description
-            ),
-            instructions=(
-                instructions
-                if "instructions" in fields_set and instructions is not None
-                else mode.instructions
-            ),
-        )
-        updated, revision = replace_mode_config(
-            mode_id,
-            merged,
-            expected_revision=expected_revision,
-        )
-        return {"mode": self._mode_view(updated), "config_revision": revision}
-
-    def delete_mode(
-        self,
-        mode_id: str,
-        *,
-        expected_revision: str,
-    ) -> str:
-        return delete_mode_config(mode_id, expected_revision=expected_revision)
-
     def shutdown(self) -> None:
         sessions = list(self._chat_sessions.values())
         for session in sessions:
@@ -1607,8 +1529,7 @@ class WebSessionManager:
             or not stage_record.mode_id
         ):
             return prompt
-        config = load_internal_config()
-        mode = self._mode_map(config).get(stage_record.mode_id)
+        mode = self._mode_map().get(stage_record.mode_id)
         if mode is None:
             return prompt
         return f"{mode.slash_alias} {prompt}"
@@ -1887,6 +1808,7 @@ class WebSessionManager:
             "slash_alias": mode.slash_alias,
             "description": mode.description,
             "instructions": mode.instructions,
+            "path": mode.path,
         }
 
     def _provider_map(self, config: InternalConfig) -> dict[str, ProviderConfig]:
@@ -1895,8 +1817,8 @@ class WebSessionManager:
     def _profile_map(self, config: InternalConfig) -> dict[str, ModelProfileConfig]:
         return {profile.id: profile for profile in config.model_profiles}
 
-    def _mode_map(self, config: InternalConfig) -> dict[str, ModeConfig]:
-        return {mode.id: mode for mode in config.modes}
+    def _mode_map(self) -> dict[str, ModeConfig]:
+        return {mode.id: mode for mode in list_mode_configs(self._workspace_root)}
 
     def _require_provider(
         self, config: InternalConfig, provider_id: str

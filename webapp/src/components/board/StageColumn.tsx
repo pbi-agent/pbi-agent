@@ -74,7 +74,7 @@ export function StageColumn({
               <span className="board-column__label">auto-start</span>
             ) : null}
             {stage.mode_id ? (
-              <span className="board-column__label">mode:{stage.mode_id}</span>
+              <span className="board-column__label">command:{stage.mode_id}</span>
             ) : null}
             {stage.profile_id ? (
               <span className="board-column__label">profile:{stage.profile_id}</span>

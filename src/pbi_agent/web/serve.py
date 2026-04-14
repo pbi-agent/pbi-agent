@@ -475,30 +475,11 @@ class ModeViewModel(BaseModel):
     slash_alias: str
     description: str
     instructions: str
-
-
-class ModeMutationRequest(BaseModel):
-    id: str | None = None
-    name: NonEmptyString
-    slash_alias: NonEmptyString
-    description: str = ""
-    instructions: NonEmptyString
-
-
-class ModeUpdateRequest(BaseModel):
-    name: NonEmptyString | None = None
-    slash_alias: NonEmptyString | None = None
-    description: str | None = None
-    instructions: NonEmptyString | None = None
+    path: str
 
 
 class ModeListResponse(BaseModel):
     modes: list[ModeViewModel]
-    config_revision: str
-
-
-class ModeResponse(BaseModel):
-    mode: ModeViewModel
     config_revision: str
 
 
@@ -774,67 +755,6 @@ def list_modes(manager: SessionManagerDep) -> ModeListResponse:
         modes=[_model_from_payload(ModeViewModel, item) for item in payload["modes"]],
         config_revision=str(payload["config_revision"]),
     )
-
-
-@config_router.post("/modes", response_model=ModeResponse)
-def create_mode(
-    request: ModeMutationRequest,
-    manager: SessionManagerDep,
-    expected_revision: ConfigRevisionHeader,
-) -> ModeResponse:
-    try:
-        payload = manager.create_mode(
-            mode_id=request.id,
-            name=request.name,
-            slash_alias=request.slash_alias,
-            description=request.description,
-            instructions=request.instructions,
-            expected_revision=expected_revision,
-        )
-    except Exception as exc:
-        raise _config_http_error(exc) from exc
-    return ModeResponse(
-        mode=_model_from_payload(ModeViewModel, payload["mode"]),
-        config_revision=str(payload["config_revision"]),
-    )
-
-
-@config_router.patch("/modes/{mode_id}", response_model=ModeResponse)
-def update_mode(
-    mode_id: str,
-    request: ModeUpdateRequest,
-    manager: SessionManagerDep,
-    expected_revision: ConfigRevisionHeader,
-) -> ModeResponse:
-    try:
-        payload = manager.update_mode(
-            mode_id,
-            name=request.name,
-            slash_alias=request.slash_alias,
-            description=request.description,
-            instructions=request.instructions,
-            fields_set=set(request.model_fields_set),
-            expected_revision=expected_revision,
-        )
-    except Exception as exc:
-        raise _config_http_error(exc) from exc
-    return ModeResponse(
-        mode=_model_from_payload(ModeViewModel, payload["mode"]),
-        config_revision=str(payload["config_revision"]),
-    )
-
-
-@config_router.delete("/modes/{mode_id}", status_code=204)
-def delete_mode(
-    mode_id: str,
-    manager: SessionManagerDep,
-    expected_revision: ConfigRevisionHeader,
-) -> Response:
-    try:
-        manager.delete_mode(mode_id, expected_revision=expected_revision)
-    except Exception as exc:
-        raise _config_http_error(exc) from exc
-    return Response(status_code=204)
 
 
 @system_router.get("/sessions", response_model=SessionsResponse)

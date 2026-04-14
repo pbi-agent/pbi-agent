@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from io import StringIO
+from pathlib import Path
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -12,16 +13,12 @@ from rich.console import Console
 from pbi_agent.branding import PBI_AGENT_NAME, PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
-    InternalConfig,
     ModelProfileConfig,
-    ModeConfig,
     ProviderConfig,
     Settings,
     create_model_profile_config,
-    create_mode_config,
     create_provider_config,
     delete_model_profile_config,
-    save_internal_config,
 )
 from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
 from pbi_agent.display.protocol import QueuedInput, QueuedRuntimeChange
@@ -34,6 +31,18 @@ def _settings() -> Settings:
 
 def _runtime_args(*argv: str):
     return build_parser().parse_args(list(argv))
+
+
+def _write_command(root: Path, name: str, content: str) -> None:
+    commands_dir = root / ".agents" / "commands"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
+
+
+def _write_default_commands(root: Path) -> None:
+    _write_command(root, "implement", "# Implementation mode\n\nImplement the change.")
+    _write_command(root, "plan", "# Planning mode\n\nPlan before coding.")
+    _write_command(root, "review", "# Code review mode\n\nReview the change.")
 
 
 def test_web_server_prints_banner_and_starts_uvicorn() -> None:
@@ -63,19 +72,17 @@ def test_bootstrap_endpoint_returns_workspace_metadata() -> None:
     assert payload["model"] == "gpt-5.4"
     assert payload["supports_image_inputs"] is True
     assert "workspace_root" in payload
-    assert [stage["id"] for stage in payload["board_stages"]] == [
-        "backlog",
-        "plan",
-        "review",
-        "done",
-    ]
-    assert payload["board_stages"][1]["mode_id"] == "plan"
-    assert payload["board_stages"][2]["mode_id"] == "review"
-    assert payload["board_stages"][3]["mode_id"] is None
+    assert [stage["id"] for stage in payload["board_stages"]] == ["backlog", "done"]
+    assert payload["board_stages"][0]["mode_id"] is None
+    assert payload["board_stages"][1]["mode_id"] is None
 
 
-def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
+def test_config_bootstrap_and_crud_endpoints_round_trip(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENAI_API_KEY", "env-openai-key")
+    _write_default_commands(tmp_path)
     runtime_args = _runtime_args("web")
     app = create_app(_settings(), runtime_args=runtime_args)
 
@@ -90,6 +97,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
             "plan",
             "review",
         ]
+        assert bootstrap_payload["modes"][1]["path"] == ".agents/commands/plan.md"
         assert "config_revision" in bootstrap_payload
         revision = bootstrap_payload["config_revision"]
 
@@ -140,22 +148,6 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
         assert select_response.status_code == 200
         revision = select_response.json()["config_revision"]
 
-        create_mode_response = client.post(
-            "/api/config/modes",
-            headers={"If-Match": revision},
-            json={
-                "name": "Focus",
-                "slash_alias": "/focus",
-                "description": "Focus mode",
-                "instructions": "Stay focused on the requested change.",
-            },
-        )
-        assert create_mode_response.status_code == 200
-        mode_payload = create_mode_response.json()
-        assert mode_payload["mode"]["id"] == "focus"
-        assert mode_payload["mode"]["slash_alias"] == "/focus"
-        revision = mode_payload["config_revision"]
-
         refreshed = client.get("/api/config/bootstrap")
         assert refreshed.status_code == 200
         refreshed_payload = refreshed.json()
@@ -169,7 +161,6 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(monkeypatch) -> None:
             if item["id"] == "analysis"
         )
         assert {item["id"] for item in refreshed_payload["modes"]} == {
-            "focus",
             "implement",
             "plan",
             "review",
@@ -198,43 +189,42 @@ def test_config_writes_require_current_revision() -> None:
         assert stale_update.status_code == 409
 
 
-def test_mode_crud_endpoints_round_trip() -> None:
-    save_internal_config(InternalConfig(modes=[]))
+def test_mode_list_endpoint_returns_command_files(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_command(
+        tmp_path,
+        "focus",
+        "# Focus mode\n\nStay focused on the requested change.",
+    )
     app = create_app(_settings())
 
     with TestClient(app) as client:
         revision = client.get("/api/config/bootstrap").json()["config_revision"]
+
+        list_response = client.get("/api/config/modes")
+        assert list_response.status_code == 200
+        assert list_response.json()["config_revision"] == revision
+        assert list_response.json()["modes"] == [
+            {
+                "id": "focus",
+                "name": "Focus",
+                "slash_alias": "/focus",
+                "description": "Focus mode",
+                "instructions": "# Focus mode\n\nStay focused on the requested change.",
+                "path": ".agents/commands/focus.md",
+            }
+        ]
+
         create_response = client.post(
             "/api/config/modes",
             headers={"If-Match": revision},
             json={
                 "name": "Focus",
                 "slash_alias": "/focus",
-                "description": "Focus mode",
-                "instructions": "Stay focused on the requested change.",
+                "instructions": "Stay focused.",
             },
         )
-        assert create_response.status_code == 200
-        revision = create_response.json()["config_revision"]
-
-        update_response = client.patch(
-            "/api/config/modes/focus",
-            headers={"If-Match": revision},
-            json={"description": "Updated focus mode"},
-        )
-        assert update_response.status_code == 200
-        assert update_response.json()["mode"]["description"] == "Updated focus mode"
-        revision = update_response.json()["config_revision"]
-
-        list_response = client.get("/api/config/modes")
-        assert list_response.status_code == 200
-        assert list_response.json()["modes"][0]["slash_alias"] == "/focus"
-
-        delete_response = client.delete(
-            "/api/config/modes/focus",
-            headers={"If-Match": revision},
-        )
-        assert delete_response.status_code == 204
+        assert create_response.status_code == 405
 
 
 def test_provider_update_rejects_dual_secret_mutation() -> None:
@@ -278,8 +268,10 @@ def test_file_search_endpoint_returns_workspace_matches(tmp_path, monkeypatch) -
     ]
 
 
-def test_slash_command_search_endpoint_returns_web_commands() -> None:
-    save_internal_config(InternalConfig(modes=[]))
+def test_slash_command_search_endpoint_returns_web_commands(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
     app = create_app(_settings())
 
     with TestClient(app) as client:
@@ -307,7 +299,11 @@ def test_slash_command_search_endpoint_returns_web_commands() -> None:
     ]
 
 
-def test_slash_command_search_endpoint_includes_default_modes_on_fresh_config() -> None:
+def test_slash_command_search_endpoint_includes_command_file_modes(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_default_commands(tmp_path)
     app = create_app(_settings())
 
     with TestClient(app) as client:
@@ -350,17 +346,11 @@ def test_slash_command_search_endpoint_includes_default_modes_on_fresh_config() 
     ]
 
 
-def test_slash_command_search_endpoint_includes_configured_modes() -> None:
-    save_internal_config(InternalConfig(modes=[]))
-    create_mode_config(
-        ModeConfig(
-            id="plan",
-            name="Plan",
-            slash_alias="/plan",
-            description="Planning mode",
-            instructions="Plan before coding.",
-        )
-    )
+def test_slash_command_search_endpoint_filters_command_file_modes(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_command(tmp_path, "plan", "# Planning mode\n\nPlan before coding.")
     app = create_app(_settings())
 
     with TestClient(app) as client:
@@ -522,7 +512,9 @@ def test_task_contract_includes_model_profile_binding_and_null_patch_semantics(
         assert updated["profile_id"] is None
 
 
-def test_board_stage_endpoints_round_trip() -> None:
+def test_board_stage_endpoints_round_trip(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_default_commands(tmp_path)
     app = create_app(_settings())
 
     with TestClient(app) as client:
@@ -530,8 +522,6 @@ def test_board_stage_endpoints_round_trip() -> None:
         assert list_response.status_code == 200
         assert [item["id"] for item in list_response.json()["board_stages"]] == [
             "backlog",
-            "plan",
-            "review",
             "done",
         ]
 
@@ -571,6 +561,7 @@ def test_board_stage_endpoints_round_trip() -> None:
 
 def test_run_task_advances_to_next_configured_stage(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
+    _write_default_commands(tmp_path)
     app = create_app(_settings())
 
     with patch(
@@ -624,6 +615,7 @@ def test_run_task_from_backlog_moves_to_next_stage_before_execution(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    _write_default_commands(tmp_path)
     app = create_app(_settings())
 
     with patch(
@@ -677,6 +669,7 @@ def test_run_task_from_backlog_moves_to_next_stage_before_execution(
 
 def test_auto_start_stage_runs_once_before_done(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
+    _write_default_commands(tmp_path)
     app = create_app(_settings())
     call_count = 0
 
@@ -814,6 +807,18 @@ def test_run_task_rejects_orphaned_task_profile(monkeypatch, tmp_path) -> None:
     app = create_app(_settings(), runtime_args=runtime_args)
 
     with TestClient(app) as client:
+        update_response = client.put(
+            "/api/board/stages",
+            json={
+                "board_stages": [
+                    {"id": "backlog", "name": "Backlog"},
+                    {"id": "plan", "name": "Plan"},
+                    {"id": "done", "name": "Done"},
+                ]
+            },
+        )
+        assert update_response.status_code == 200
+
         create_response = client.post(
             "/api/tasks",
             json={
@@ -836,6 +841,7 @@ def test_run_task_rejects_orphaned_task_profile(monkeypatch, tmp_path) -> None:
 
 def test_run_task_rejects_orphaned_stage_profile(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
+    _write_default_commands(tmp_path)
     monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
     runtime_args = _runtime_args("web")
     create_provider_config(

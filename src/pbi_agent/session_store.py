@@ -27,18 +27,6 @@ KANBAN_DEFAULT_STAGE_SPECS = (
         "auto_start": False,
     },
     {
-        "stage_id": KANBAN_STAGE_PLAN,
-        "name": "Plan",
-        "mode_id": "plan",
-        "auto_start": False,
-    },
-    {
-        "stage_id": KANBAN_STAGE_REVIEW,
-        "name": "Review",
-        "mode_id": "review",
-        "auto_start": False,
-    },
-    {
         "stage_id": KANBAN_STAGE_DONE,
         "name": "Done",
         "mode_id": None,

@@ -68,7 +68,7 @@
   border-color: var(--color-border-focus);
 }
 
-.settings-item--mode {
+.settings-item--command {
   align-items: flex-start;
 }
 

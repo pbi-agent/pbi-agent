@@ -22,11 +22,7 @@ from pbi_agent.config import (
     DEFAULT_GOOGLE_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
-    InternalConfig,
-    ModeConfig,
     Settings,
-    create_mode_config,
-    save_internal_config,
 )
 from pbi_agent.models.messages import (
     CompletedResponse,
@@ -39,6 +35,12 @@ from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.session_store import SessionStore
 from pbi_agent.display.protocol import QueuedInput
+
+
+def _write_command(root, name: str, content: str) -> None:
+    commands_dir = root / ".agents" / "commands"
+    commands_dir.mkdir(parents=True, exist_ok=True)
+    (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
 
 
 class _DisplaySpy:
@@ -291,20 +293,14 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
 
 def test_run_single_turn_uses_mode_specific_instructions_for_full_turn(
     monkeypatch,
+    tmp_path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     provider = _ProviderStub()
     display = _DisplaySpy()
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=3)
     monotonic_values = iter([10.0, 13.5])
-    save_internal_config(InternalConfig(modes=[]))
-    create_mode_config(
-        ModeConfig(
-            id="plan",
-            name="Plan",
-            slash_alias="/plan",
-            instructions="Plan before coding.",
-        )
-    )
+    _write_command(tmp_path, "plan", "Plan before coding.")
 
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
@@ -328,9 +324,11 @@ def test_run_single_turn_uses_mode_specific_instructions_for_full_turn(
     )
 
 
-def test_run_single_turn_uses_seeded_plan_mode_when_modes_key_missing(
+def test_run_single_turn_does_not_activate_mode_when_command_file_is_missing(
     monkeypatch,
+    tmp_path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     provider = _ProviderStub()
     display = _DisplaySpy()
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=3)
@@ -348,8 +346,7 @@ def test_run_single_turn_uses_seeded_plan_mode_when_modes_key_missing(
     run_single_turn("/plan inspect the workspace", settings, display)
 
     assert provider.request_calls[0]["user_message"] == "/plan inspect the workspace"
-    assert "<active_mode>" in str(provider.request_calls[0]["instructions"])
-    assert "Do not make code changes." in str(provider.request_calls[0]["instructions"])
+    assert provider.request_calls[0]["instructions"] is None
 
 
 def test_run_single_turn_persists_provider_checkpoint_for_resume(
@@ -655,19 +652,13 @@ def test_run_chat_loop_handles_agents_reload_command_locally(monkeypatch) -> Non
 
 def test_run_chat_loop_keeps_mode_alias_and_uses_turn_specific_instructions(
     monkeypatch,
+    tmp_path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     provider = _ChatProviderStub()
     display = _ChatDisplaySpy(["/plan draft the approach", "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
-    save_internal_config(InternalConfig(modes=[]))
-    create_mode_config(
-        ModeConfig(
-            id="plan",
-            name="Plan",
-            slash_alias="/plan",
-            instructions="Plan before coding.",
-        )
-    )
+    _write_command(tmp_path, "plan", "Plan before coding.")
 
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
@@ -684,19 +675,12 @@ def test_run_chat_loop_keeps_mode_alias_and_uses_turn_specific_instructions(
     )
 
 
-def test_run_chat_loop_accepts_mode_only_turn(monkeypatch) -> None:
+def test_run_chat_loop_accepts_mode_only_turn(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
     provider = _ChatProviderStub()
     display = _ChatDisplaySpy(["/plan", "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
-    save_internal_config(InternalConfig(modes=[]))
-    create_mode_config(
-        ModeConfig(
-            id="plan",
-            name="Plan",
-            slash_alias="/plan",
-            instructions="Plan before coding.",
-        )
-    )
+    _write_command(tmp_path, "plan", "Plan before coding.")
 
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
