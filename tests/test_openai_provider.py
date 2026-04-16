@@ -26,9 +26,9 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
+from pbi_agent.providers.chatgpt_codex_backend import chatgpt_user_agent
 from pbi_agent.providers.openai_provider import (
     OpenAIProvider,
-    _chatgpt_user_agent,
     _extract_retry_after,
     _parse_sse_response,
 )
@@ -643,7 +643,7 @@ data: {"type":"response.completed","response":{"id":"resp_chatgpt","model":"gpt-
     assert request_details["headers"]["Accept"] == "text/event-stream"
     assert request_details["headers"]["Originator"] == "opencode"
     assert request_details["headers"]["Session_id"] == "session-123"
-    assert request_details["headers"]["User-agent"] == _chatgpt_user_agent()
+    assert request_details["headers"]["User-agent"] == chatgpt_user_agent()
 
 
 def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
