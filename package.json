@@ -9,6 +9,9 @@
     "docs:preview": "vitepress preview docs",
     "lint": "eslint webapp/src webapp/vite.config.ts",
     "lint:fix": "bun run lint -- --fix",
+    "test:web": "vitest run --config webapp/vitest.config.ts",
+    "test:web:watch": "vitest --config webapp/vitest.config.ts",
+    "test:web:coverage": "vitest run --coverage --config webapp/vitest.config.ts",
     "typecheck": "tsc -p webapp/tsconfig.json --noEmit",
     "web:dev": "vite --config webapp/vite.config.ts",
     "web:build": "vite build --config webapp/vite.config.ts",
@@ -25,7 +28,11 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
     "@eslint/js": "^9.39.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -33,9 +40,12 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.0",
     "globals": "^16.5.0",
+    "jsdom": "^27.1.0",
+    "semver": "^7.7.3",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.46.2",
     "vite": "^8.0.3",
+    "vitest": "^3.2.4",
     "vitepress": "^1.6.4"
   }
 }

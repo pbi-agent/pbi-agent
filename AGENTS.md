@@ -49,6 +49,10 @@ uv run pytest tests/test_cli.py::DefaultWebCommandTests::test_main_defaults_to_w
 # Run marked tests
 uv run pytest -m slow
 
+# Run webapp tests
+bun run test:web
+bun run test:web -- --watch
+
 # Lint and format
 uv run ruff check . --fix && uv run ruff format .
 bun run lint
@@ -130,6 +134,11 @@ Precedence: CLI flags > `PBI_AGENT_*` env vars > provider-specific env vars (e.g
 - Test files: `tests/test_*.py`, auto-discovered by pytest.
 - Prefer pytest-style with plain `assert` and `@pytest.mark.parametrize`.
 - Shared fixtures in `tests/conftest.py` (notably `DisplaySpy` for mocking UI).
+- Webapp tests use Vitest + jsdom + Testing Library and live alongside the frontend source under `webapp/src/**/*.test.ts` and `webapp/src/**/*.test.tsx`.
+- Webapp test setup lives in `webapp/src/test/setup.ts`; shared frontend test helpers live under `webapp/src/test/`.
+- Prefer testing user-visible behavior and state transitions over snapshots.
+- For frontend networked code, mock at the `webapp/src/api.ts` boundary for unit/component tests instead of re-testing FastAPI responses in depth.
+- For websocket flows, prefer mocked `WebSocket` instances with fake timers so reconnect behavior stays deterministic.
 - Provider changes must update `test_<provider>_provider.py`; tool changes must update `test_<tool>.py`.
 - Register new custom markers in `pyproject.toml` under `tool.pytest.ini_options.markers`.
 - Import from `pbi_agent` directly — pytest adds `src/` to `sys.path`.
@@ -142,7 +151,9 @@ Precedence: CLI flags > `PBI_AGENT_*` env vars > provider-specific env vars (e.g
 - Workspace confinement: `shell` tool rejects path traversal; all file tools validate paths against workspace boundaries.
 - `python_exec` runs trusted local Python — it is not a sandbox.
 - Frontend linting uses root `eslint.config.mjs`; run `bun run lint` for Vite/React/TypeScript code and `bun run typecheck` for TypeScript validation.
+- Frontend test runs use `bun run test:web`, configured by `webapp/vitest.config.ts`.
 - After every frontend edit, run the relevant Bun build command and confirm it passes before finishing. Use `bun run web:build` for web app changes and `bun run docs:build` for VitePress/docs changes.
+- After frontend code or frontend tests change, run `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build` before finishing.
 - When changing the FastAPI web server or Vite frontend, keep the implementation aligned with the existing FastAPI + Vite/React architecture rather than introducing an alternative web framework.
 - `uv run ruff check .`, `uv run ruff format --check .`, `bun run lint`, `bun run typecheck`, and `uv run pytest` must all pass before merging.
 - **No migration or backward-compatibility logic.** The project is in early development — do not add schema migrations, version checks, deprecation shims, or any other backward-compatibility code. When something changes, just change it directly.

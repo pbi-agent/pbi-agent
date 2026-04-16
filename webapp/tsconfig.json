@@ -11,7 +11,7 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "node", "react", "react-dom"]
+    "types": ["vite/client", "node", "react", "react-dom", "vitest/globals"]
   },
   "include": ["./src", "./vite.config.ts"]
 }
