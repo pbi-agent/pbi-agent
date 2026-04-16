@@ -111,7 +111,7 @@ export function SessionSidebar({
   return (
     <>
       <div className="sidebar__header">
-        <span className="sidebar__title">Chat History</span>
+        <span className="sidebar__title">Session History</span>
         <div className="sidebar__header-actions">
           <button type="button" className="btn btn--primary btn--sm" onClick={onNewSession}>
             + New
@@ -199,7 +199,7 @@ export function SessionSidebar({
                       }}
                     >
                       <TrashIcon />
-                      Delete chat
+                      Delete session
                     </button>
                   </div>
                 ) : null}

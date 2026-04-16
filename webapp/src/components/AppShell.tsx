@@ -3,12 +3,12 @@ import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { fetchBootstrap, fetchConfigBootstrap } from "../api";
 import { useTaskEvents } from "../hooks/useTaskEvents";
-import { useChatStore } from "../store";
+import { useSessionStore } from "../store";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
 
-const ChatPage = lazy(() =>
-  import("./chat/ChatPage").then((m) => ({ default: m.ChatPage })),
+const SessionPage = lazy(() =>
+  import("./session/SessionPage").then((m) => ({ default: m.SessionPage })),
 );
 const BoardPage = lazy(() =>
   import("./board/BoardPage").then((m) => ({ default: m.BoardPage })),
@@ -23,9 +23,9 @@ const DashboardPage = lazy(() =>
 export function AppShell() {
   useTaskEvents();
   const location = useLocation();
-  const activeChatKey = useChatStore((state) => state.activeChatKey);
-  const activeChat = useChatStore((state) =>
-    activeChatKey ? state.chatsByKey[activeChatKey] ?? null : null,
+  const activeSessionKey = useSessionStore((state) => state.activeSessionKey);
+  const activeSession = useSessionStore((state) =>
+    activeSessionKey ? state.sessionsByKey[activeSessionKey] ?? null : null,
   );
 
   const bootstrapQuery = useQuery({
@@ -57,7 +57,7 @@ export function AppShell() {
     ? bootstrap.workspace_root.split(/[/\\]/).filter(Boolean).slice(-2).join("/")
     : null;
 
-  const isChatRoute = location.pathname === "/chat" || location.pathname.startsWith("/chat/");
+  const isSessionRoute = location.pathname === "/sessions" || location.pathname.startsWith("/sessions/");
 
   // Derive the default runtime display from the active profile in config-bootstrap.
   // This query is kept fresh by settings-page mutations, so it always reflects the
@@ -70,18 +70,18 @@ export function AppShell() {
 
   const displayedProvider = requiresOnboarding
     ? "Not configured"
-    : isChatRoute && activeChat?.liveSessionId && activeChat.runtime?.provider
-      ? activeChat.runtime.provider
+    : isSessionRoute && activeSession?.liveSessionId && activeSession.runtime?.provider
+      ? activeSession.runtime.provider
       : (activeRuntime?.provider ?? "...");
   const displayedModel = requiresOnboarding
     ? null
-    : isChatRoute && activeChat?.liveSessionId && activeChat.runtime?.model
-      ? activeChat.runtime.model
+    : isSessionRoute && activeSession?.liveSessionId && activeSession.runtime?.model
+      ? activeSession.runtime.model
       : (activeRuntime?.model ?? "...");
   const displayedReasoningEffort = requiresOnboarding
     ? null
-    : isChatRoute && activeChat?.liveSessionId && activeChat.runtime?.reasoning_effort
-      ? activeChat.runtime.reasoning_effort
+    : isSessionRoute && activeSession?.liveSessionId && activeSession.runtime?.reasoning_effort
+      ? activeSession.runtime.reasoning_effort
       : (activeRuntime?.reasoning_effort ?? null);
 
   return (
@@ -94,7 +94,7 @@ export function AppShell() {
           ) : null}
         </div>
         <nav className="topnav">
-          <NavLink to="/chat">Chat</NavLink>
+          <NavLink to="/sessions">Sessions</NavLink>
           <NavLink to="/board">Kanban</NavLink>
           <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/settings">Settings</NavLink>
@@ -111,12 +111,12 @@ export function AppShell() {
       <main className="app-main">
         <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
           <Routes>
-            <Route path="/" element={<Navigate to={requiresOnboarding ? "/settings" : "/chat"} replace />} />
+            <Route path="/" element={<Navigate to={requiresOnboarding ? "/settings" : "/sessions"} replace />} />
             <Route
-              path="/chat"
+              path="/sessions"
               element={
                 requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                <ChatPage
+                <SessionPage
                   workspaceRoot={bootstrap?.workspace_root}
                   supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
                 />
@@ -124,10 +124,10 @@ export function AppShell() {
               }
             />
             <Route
-              path="/chat/:sessionId"
+              path="/sessions/:sessionId"
               element={
                 requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                <ChatPage
+                <SessionPage
                   workspaceRoot={bootstrap?.workspace_root}
                   supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
                 />
@@ -135,10 +135,10 @@ export function AppShell() {
               }
             />
             <Route
-              path="/chat/live/:liveSessionId"
+              path="/sessions/live/:liveSessionId"
               element={
                 requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                <ChatPage
+                <SessionPage
                   workspaceRoot={bootstrap?.workspace_root}
                   supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
                 />

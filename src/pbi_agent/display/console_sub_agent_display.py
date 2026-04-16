@@ -86,10 +86,10 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
     ) -> None:
         del value, file_paths, image_paths, images, image_attachments
 
-    def request_new_chat(self) -> None:
-        raise RuntimeError("Sub-agent display does not support interactive chat.")
+    def request_new_session(self) -> None:
+        raise RuntimeError("Sub-agent display does not support interactive session.")
 
-    def reset_chat(self) -> None:
+    def reset_session(self) -> None:
         return None
 
     def begin_sub_agent(

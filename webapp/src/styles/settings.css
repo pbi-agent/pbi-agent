@@ -161,7 +161,7 @@
 
 /* ── Button overrides for settings context ── */
 /* .btn, .btn--primary, .btn--ghost, .btn--danger are defined globally in
-   chat.css and intentionally reused. Only add what settings needs on top. */
+   session.css and intentionally reused. Only add what settings needs on top. */
 
 /* Give all buttons in the settings page a transparent border slot so that
    the ghost variant can show a real border without layout shift. */

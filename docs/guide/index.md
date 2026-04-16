@@ -30,7 +30,7 @@ CLI
 | CLI | Parses global options, inserts the default `web` command when needed, and dispatches subcommands. |
 | Config | Resolves provider, API key, model, retry limits, and other runtime settings. |
 | Provider | Sends synchronous HTTP requests to the selected API shape and normalizes tool calls and text output. |
-| Agent Session | Runs interactive chat, single-turn execution, audit mode, and delegated `sub_agent` child sessions. |
+| Agent Session | Runs interactive sessions, single-turn execution, audit mode, and delegated `sub_agent` child sessions. |
 | Tool Runtime | Executes requested tools serially or in parallel based on `--max-tool-workers`. |
 | Tool Catalog | Merges built-in tools with any discovered MCP tools and project sub-agent choices before provider setup. |
 | Tools | Exposes `shell`, `python_exec`, `apply_patch`, `skill_knowledge`, `init_report`, `sub_agent`, and discovered MCP tools. |

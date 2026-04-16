@@ -86,10 +86,10 @@ class _ChildDisplay:
     def submit_input(self, value: str, *, image_paths: list[str] | None = None) -> None:
         del value, image_paths
 
-    def request_new_chat(self) -> None:
+    def request_new_session(self) -> None:
         return None
 
-    def reset_chat(self) -> None:
+    def reset_session(self) -> None:
         return None
 
     def welcome(self, **kwargs) -> None:  # type: ignore[no-untyped-def]

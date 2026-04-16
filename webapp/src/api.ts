@@ -4,7 +4,7 @@ import type {
   BootstrapPayload,
   ConfigBootstrapPayload,
   DashboardStatsPayload,
-  ExpandedChatInput,
+  ExpandedSessionInput,
   FileMentionItem,
   HistoryItem,
   ImageAttachment,
@@ -123,21 +123,21 @@ export async function searchSlashCommands(
   return result.items;
 }
 
-export async function createChatSession(
+export async function createLiveSession(
   payload: Partial<{
     live_session_id: string;
     session_id: string;
     profile_id: string | null;
   }> = {},
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>("/api/chat/session", {
+  const result = await requestJson<{ session: LiveSession }>("/api/live-sessions", {
     method: "POST",
     body: JSON.stringify(payload),
   });
   return result.session;
 }
 
-export async function submitChatInput(
+export async function submitSessionInput(
   liveSessionId: string,
   payload: {
     text: string;
@@ -148,7 +148,7 @@ export async function submitChatInput(
   },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/chat/session/${liveSessionId}/input`,
+    `/api/live-sessions/${liveSessionId}/input`,
     {
       method: "POST",
       body: JSON.stringify(payload),
@@ -157,7 +157,7 @@ export async function submitChatInput(
   return result.session;
 }
 
-export async function uploadChatImages(
+export async function uploadSessionImages(
   liveSessionId: string,
   files: File[],
 ): Promise<ImageAttachment[]> {
@@ -166,7 +166,7 @@ export async function uploadChatImages(
     formData.append("files", file);
   }
   const result = await requestJson<{ uploads: ImageAttachment[] }>(
-    `/api/chat/session/${liveSessionId}/images`,
+    `/api/live-sessions/${liveSessionId}/images`,
     {
       method: "POST",
       body: formData,
@@ -175,19 +175,19 @@ export async function uploadChatImages(
   return result.uploads;
 }
 
-export async function expandChatInput(text: string): Promise<ExpandedChatInput> {
-  return requestJson<ExpandedChatInput>("/api/chat/expand-input", {
+export async function expandSessionInput(text: string): Promise<ExpandedSessionInput> {
+  return requestJson<ExpandedSessionInput>("/api/live-sessions/expand-input", {
     method: "POST",
     body: JSON.stringify({ text }),
   });
 }
 
-export async function requestNewChat(
+export async function requestNewSession(
   liveSessionId: string,
   profileId: string | null = null,
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/chat/session/${liveSessionId}/new-chat`,
+    `/api/live-sessions/${liveSessionId}/new-session`,
     {
       method: "POST",
       body: JSON.stringify({ profile_id: profileId }),
@@ -196,12 +196,12 @@ export async function requestNewChat(
   return result.session;
 }
 
-export async function setChatSessionProfile(
+export async function setLiveSessionProfile(
   liveSessionId: string,
   profileId: string | null,
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/chat/session/${liveSessionId}/profile`,
+    `/api/live-sessions/${liveSessionId}/profile`,
     {
       method: "PUT",
       body: JSON.stringify({ profile_id: profileId }),

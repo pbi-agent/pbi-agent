@@ -1,11 +1,11 @@
-from .chat import (
-    ChatInputRequest,
-    ChatSessionResponse,
-    CreateChatSessionRequest,
+from .live_sessions import (
+    LiveSessionInputRequest,
+    LiveSessionResponse,
+    CreateLiveSessionRequest,
     ExpandInputRequest,
     ExpandInputResponse,
     ImageUploadResponse,
-    NewChatRequest,
+    NewSessionRequest,
 )
 from .common import ImageAttachmentModel, RuntimeSummaryModel
 from .config import (
@@ -67,13 +67,13 @@ __all__ = [
     "BoardStagesResponse",
     "BoardStageUpdateModel",
     "BootstrapResponse",
-    "ChatInputRequest",
-    "ChatSessionResponse",
+    "LiveSessionInputRequest",
+    "LiveSessionResponse",
     "CommandListResponse",
     "CommandViewModel",
     "ConfigBootstrapResponse",
     "ConfigOptionsModel",
-    "CreateChatSessionRequest",
+    "CreateLiveSessionRequest",
     "CreateTaskRequest",
     "ExpandInputRequest",
     "ExpandInputResponse",
@@ -92,7 +92,7 @@ __all__ = [
     "ModelProfileResponse",
     "ModelProfileUpdateRequest",
     "ModelProfileViewModel",
-    "NewChatRequest",
+    "NewSessionRequest",
     "ObservabilityEventModel",
     "ProviderKindMetadataModel",
     "ProviderListResponse",

@@ -94,12 +94,12 @@ class ConsoleDisplay(DisplayProtocol):
         del value, file_paths, image_paths, images, image_attachments
         return None
 
-    def request_new_chat(self) -> None:
+    def request_new_session(self) -> None:
         raise RuntimeError(
-            "ConsoleDisplay does not support interactive new-chat requests."
+            "ConsoleDisplay does not support interactive new-session requests."
         )
 
-    def reset_chat(self) -> None:
+    def reset_session(self) -> None:
         self._stop_spinner()
         self._tool_group.reset()
         self._usage_section_open = False

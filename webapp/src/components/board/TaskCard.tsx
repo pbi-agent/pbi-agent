@@ -69,11 +69,11 @@ export function TaskCard({
         {task.session_id ? (
           <a
             className="btn btn--ghost btn--sm"
-            href={`/chat/${encodeURIComponent(task.session_id)}`}
+            href={`/sessions/${encodeURIComponent(task.session_id)}`}
             target="_blank"
             rel="noopener noreferrer"
           >
-            Chat
+            Session
           </a>
         ) : null}
         <button type="button" className="btn btn--danger btn--sm" onClick={onDelete} disabled={isRunning}>

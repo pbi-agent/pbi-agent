@@ -14,14 +14,14 @@ from pbi_agent.web.api.deps import (
     model_from_payload,
 )
 from pbi_agent.web.api.errors import bad_request, config_http_error, not_found
-from pbi_agent.web.api.schemas.chat import (
-    ChatInputRequest,
-    ChatSessionResponse,
-    CreateChatSessionRequest,
+from pbi_agent.web.api.schemas.live_sessions import (
+    LiveSessionInputRequest,
+    LiveSessionResponse,
+    CreateLiveSessionRequest,
     ExpandInputRequest,
     ExpandInputResponse,
     ImageUploadResponse,
-    NewChatRequest,
+    NewSessionRequest,
 )
 from pbi_agent.web.api.schemas.common import ImageAttachmentModel
 from pbi_agent.web.api.schemas.config import ActiveProfileRequest
@@ -29,16 +29,16 @@ from pbi_agent.web.api.schemas.system import LiveSessionModel
 from pbi_agent.web.input_mentions import expand_input_mentions
 from pbi_agent.web.uploads import load_uploaded_image_record, uploaded_image_path
 
-router = APIRouter(prefix="/api/chat", tags=["chat"])
+router = APIRouter(prefix="/api/live-sessions", tags=["live-sessions"])
 
 
-@router.post("/session", response_model=ChatSessionResponse)
-def create_chat_session(
-    request: CreateChatSessionRequest,
+@router.post("", response_model=LiveSessionResponse)
+def create_live_session(
+    request: CreateLiveSessionRequest,
     manager: SessionManagerDep,
-) -> ChatSessionResponse:
+) -> LiveSessionResponse:
     try:
-        session = manager.create_live_chat(
+        session = manager.create_live_session(
             session_id=request.session_id or request.resume_session_id,
             live_session_id=request.live_session_id,
             profile_id=request.profile_id,
@@ -49,19 +49,19 @@ def create_chat_session(
         raise config_http_error(exc) from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
-    return ChatSessionResponse(
+    return LiveSessionResponse(
         session=model_from_payload(LiveSessionModel, session),
     )
 
 
-@router.post("/session/{live_session_id}/input", response_model=ChatSessionResponse)
-def submit_chat_input(
+@router.post("/{live_session_id}/input", response_model=LiveSessionResponse)
+def submit_session_input(
     live_session_id: LiveSessionIdPath,
-    request: ChatInputRequest,
+    request: LiveSessionInputRequest,
     manager: SessionManagerDep,
-) -> ChatSessionResponse:
+) -> LiveSessionResponse:
     try:
-        session = manager.submit_chat_input(
+        session = manager.submit_session_input(
             live_session_id,
             text=request.text,
             file_paths=request.file_paths,
@@ -75,22 +75,22 @@ def submit_chat_input(
         raise config_http_error(exc) from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
-    return ChatSessionResponse(
+    return LiveSessionResponse(
         session=model_from_payload(LiveSessionModel, session),
     )
 
 
 @router.post(
-    "/session/{live_session_id}/images",
+    "/{live_session_id}/images",
     response_model=ImageUploadResponse,
 )
-async def upload_chat_images(
+async def upload_session_images(
     live_session_id: LiveSessionIdPath,
     manager: SessionManagerDep,
     files: Annotated[list[UploadFile], File(description="One or more image files")],
 ) -> ImageUploadResponse:
     try:
-        uploads = manager.upload_chat_images(
+        uploads = manager.upload_session_images(
             live_session_id,
             files=[
                 (upload.filename or "pasted-image.png", await upload.read())
@@ -107,7 +107,7 @@ async def upload_chat_images(
 
 
 @router.post("/expand-input", response_model=ExpandInputResponse)
-def expand_chat_input(
+def expand_session_input(
     request: ExpandInputRequest,
     manager: SessionManagerDep,
 ) -> ExpandInputResponse:
@@ -130,16 +130,16 @@ def expand_chat_input(
 
 
 @router.post(
-    "/session/{live_session_id}/new-chat",
-    response_model=ChatSessionResponse,
+    "/{live_session_id}/new-session",
+    response_model=LiveSessionResponse,
 )
-def request_new_chat(
+def request_new_session(
     live_session_id: LiveSessionIdPath,
-    request: NewChatRequest,
+    request: NewSessionRequest,
     manager: SessionManagerDep,
-) -> ChatSessionResponse:
+) -> LiveSessionResponse:
     try:
-        session = manager.request_new_chat(
+        session = manager.request_new_session(
             live_session_id,
             profile_id=request.profile_id,
         )
@@ -149,22 +149,22 @@ def request_new_chat(
         raise config_http_error(exc) from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
-    return ChatSessionResponse(
+    return LiveSessionResponse(
         session=model_from_payload(LiveSessionModel, session),
     )
 
 
 @router.put(
-    "/session/{live_session_id}/profile",
-    response_model=ChatSessionResponse,
+    "/{live_session_id}/profile",
+    response_model=LiveSessionResponse,
 )
-def set_chat_session_profile(
+def set_live_session_profile(
     live_session_id: LiveSessionIdPath,
     request: ActiveProfileRequest,
     manager: SessionManagerDep,
-) -> ChatSessionResponse:
+) -> LiveSessionResponse:
     try:
-        session = manager.set_live_chat_profile(
+        session = manager.set_live_session_profile(
             live_session_id,
             profile_id=request.profile_id,
         )
@@ -174,13 +174,13 @@ def set_chat_session_profile(
         raise config_http_error(exc) from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
-    return ChatSessionResponse(
+    return LiveSessionResponse(
         session=model_from_payload(LiveSessionModel, session),
     )
 
 
 @router.get("/uploads/{upload_id}")
-def get_uploaded_chat_image(upload_id: UploadIdPath) -> Response:
+def get_uploaded_session_image(upload_id: UploadIdPath) -> Response:
     try:
         record = load_uploaded_image_record(upload_id)
     except KeyError as exc:

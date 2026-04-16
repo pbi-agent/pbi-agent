@@ -13,7 +13,7 @@ MentionQuery = Annotated[str, Query(max_length=200)]
 MentionLimitQuery = Annotated[int, Query(ge=1, le=50)]
 LiveSessionIdPath = Annotated[
     str,
-    FastAPIPath(min_length=1, description="The live chat session identifier."),
+    FastAPIPath(min_length=1, description="The live session identifier."),
 ]
 TaskIdPath = Annotated[
     str,

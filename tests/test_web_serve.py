@@ -10,7 +10,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from rich.console import Console
 
-from pbi_agent.agent.session import NEW_CHAT_SENTINEL
+from pbi_agent.agent.session import NEW_SESSION_SENTINEL
 from pbi_agent.branding import PBI_AGENT_NAME, PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
@@ -384,7 +384,7 @@ def test_expand_input_endpoint_expands_mentions_and_extracts_images(
 
     with TestClient(app) as client:
         response = client.post(
-            "/api/chat/expand-input",
+            "/api/live-sessions/expand-input",
             json={"text": "Review @notes.md and @mockup.png carefully"},
         )
 
@@ -405,7 +405,7 @@ def test_expand_input_endpoint_warns_when_image_mentions_are_unsupported(
 
     with TestClient(app) as client:
         response = client.post(
-            "/api/chat/expand-input",
+            "/api/live-sessions/expand-input",
             json={"text": "Review @mockup.png carefully"},
         )
 
@@ -487,7 +487,7 @@ def test_task_contract_includes_model_profile_binding_and_null_patch_semantics(
             str(tmp_path),
             "openai",
             "gpt-5.4-2026-03-05",
-            "Saved chat",
+            "Saved session",
         )
 
     with TestClient(app) as client:
@@ -900,12 +900,12 @@ def test_run_task_rejects_orphaned_stage_profile(monkeypatch, tmp_path) -> None:
     assert run_response.json()["detail"] == "Unknown profile ID 'analysis'."
 
 
-def test_chat_session_stream_replays_state_events() -> None:
-    with patch("pbi_agent.web.session_manager.run_chat_loop", return_value=0):
+def test_session_stream_replays_state_events() -> None:
+    with patch("pbi_agent.web.session_manager.run_session_loop", return_value=0):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
@@ -922,7 +922,7 @@ def test_chat_session_stream_replays_state_events() -> None:
     assert {event["payload"]["state"] for event in state_events} & {"running", "ended"}
 
 
-def test_chat_session_creation_with_model_profile_exposes_runtime_binding(
+def test_session_creation_with_model_profile_exposes_runtime_binding(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
@@ -943,12 +943,12 @@ def test_chat_session_creation_with_model_profile_exposes_runtime_binding(
             reasoning_effort="xhigh",
         )
     )
-    with patch("pbi_agent.web.session_manager.run_chat_loop", return_value=0):
+    with patch("pbi_agent.web.session_manager.run_session_loop", return_value=0):
         app = create_app(_settings())
 
         with TestClient(app) as client:
             response = client.post(
-                "/api/chat/session",
+                "/api/live-sessions",
                 json={"profile_id": "analysis"},
             )
             assert response.status_code == 200
@@ -967,7 +967,7 @@ def test_chat_session_creation_with_model_profile_exposes_runtime_binding(
     assert runtime_events[0]["payload"]["model"] == "gpt-5.4-2026-03-05"
 
 
-def test_chat_input_profile_override_emits_runtime_update(monkeypatch) -> None:
+def test_session_input_profile_override_emits_runtime_update(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
     create_provider_config(
         ProviderConfig(
@@ -988,22 +988,22 @@ def test_chat_input_profile_override_emits_runtime_update(monkeypatch) -> None:
     )
     queued_values: list[object] = []
 
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         queued_values.append(display.user_prompt())
         queued_values.append(display.user_prompt())
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
             submit_response = client.post(
-                f"/api/chat/session/{live_session_id}/input",
+                f"/api/live-sessions/{live_session_id}/input",
                 json={
                     "text": "hello",
                     "file_paths": [],
@@ -1023,7 +1023,7 @@ def test_chat_input_profile_override_emits_runtime_update(monkeypatch) -> None:
     assert runtime_events[-1]["payload"]["profile_id"] == "analysis"
 
 
-def test_set_chat_session_profile_emits_runtime_update(monkeypatch) -> None:
+def test_set_live_session_profile_emits_runtime_update(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
     create_provider_config(
         ProviderConfig(
@@ -1044,22 +1044,22 @@ def test_set_chat_session_profile_emits_runtime_update(monkeypatch) -> None:
     )
     queued_values: list[object] = []
 
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         queued_values.append(display.user_prompt())
         queued_values.append(display.user_prompt())
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
             update_response = client.put(
-                f"/api/chat/session/{live_session_id}/profile",
+                f"/api/live-sessions/{live_session_id}/profile",
                 json={"profile_id": "analysis"},
             )
             assert update_response.status_code == 200
@@ -1076,7 +1076,7 @@ def test_set_chat_session_profile_emits_runtime_update(monkeypatch) -> None:
     assert runtime_events[-1]["payload"]["profile_id"] == "analysis"
 
 
-def test_chat_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -> None:
+def test_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
     monkeypatch.setenv("OPENAI_API_KEY", "env-openai-key")
@@ -1099,7 +1099,7 @@ def test_chat_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -
     )
     observed_runtime = None
 
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         nonlocal observed_runtime
         del display, resume_session_id
         observed_runtime = _settings
@@ -1110,17 +1110,17 @@ def test_chat_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -
             str(tmp_path),
             "openai",
             "gpt-5.4-2026-03-05",
-            "saved chat",
+            "saved session",
             provider_id="openai-main",
             profile_id="analysis",
         )
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
             response = client.post(
-                "/api/chat/session",
+                "/api/live-sessions",
                 json={"resume_session_id": session_id},
             )
 
@@ -1141,7 +1141,7 @@ def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None
             str(tmp_path),
             "openai",
             "gpt-5.4",
-            "Saved chat",
+            "Saved session",
         )
         store.add_message(session_id, "user", "Hello", file_paths=["notes.md"])
         store.add_message(session_id, "assistant", "Hi there")
@@ -1188,7 +1188,7 @@ def test_get_session_detail_matches_legacy_mixed_case_directory(
             str(tmp_path),
             "openai",
             "gpt-5.4",
-            "Saved chat",
+            "Saved session",
         )
         legacy_directory = str(tmp_path).replace("/tmp/", "/TMP/", 1)
         store._conn.execute(
@@ -1221,12 +1221,12 @@ def test_list_session_runs_returns_observability_runs(tmp_path, monkeypatch) -> 
             str(tmp_path),
             "openai",
             "gpt-5.4",
-            "Saved chat",
+            "Saved session",
         )
         parent_run_id = store.create_run_session(
             session_id=session_id,
             agent_name="main",
-            agent_type="chat_turn",
+            agent_type="session_turn",
             provider="openai",
             provider_id="default",
             profile_id="analysis",
@@ -1288,12 +1288,12 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
             str(tmp_path),
             "openai",
             "gpt-5.4",
-            "Saved chat",
+            "Saved session",
         )
         run_session_id = store.create_run_session(
             session_id=session_id,
             agent_name="main",
-            agent_type="chat_turn",
+            agent_type="session_turn",
             provider="openai",
             provider_id="default",
             profile_id="analysis",
@@ -1366,25 +1366,25 @@ def test_get_session_detail_returns_not_found_for_unknown_session() -> None:
     assert response.status_code == 404
 
 
-def test_create_chat_session_rejects_unknown_resume_session() -> None:
+def test_create_live_session_rejects_unknown_resume_session() -> None:
     app = create_app(_settings())
 
     with TestClient(app) as client:
         response = client.post(
-            "/api/chat/session",
+            "/api/live-sessions",
             json={"resume_session_id": "missing-session"},
         )
 
     assert response.status_code == 404
 
 
-def test_create_chat_session_reuses_active_live_session_for_saved_chat(
+def test_create_live_session_reuses_active_live_session_for_saved_chat(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
 
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
@@ -1394,19 +1394,19 @@ def test_create_chat_session_reuses_active_live_session_for_saved_chat(
             str(tmp_path),
             "openai",
             "gpt-5.4",
-            "Saved chat",
+            "Saved session",
         )
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
             first_response = client.post(
-                "/api/chat/session",
+                "/api/live-sessions",
                 json={"resume_session_id": session_id},
             )
             second_response = client.post(
-                "/api/chat/session",
+                "/api/live-sessions",
                 json={"resume_session_id": session_id},
             )
 
@@ -1418,17 +1418,17 @@ def test_create_chat_session_reuses_active_live_session_for_saved_chat(
     )
 
 
-def test_chat_session_stream_replays_session_identity_event() -> None:
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+def test_session_stream_replays_session_identity_event() -> None:
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         display.bind_session("saved-session-1")
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
@@ -1443,21 +1443,21 @@ def test_chat_session_stream_replays_session_identity_event() -> None:
 
 
 def test_upload_endpoint_returns_uploaded_image_metadata() -> None:
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
             upload_response = client.post(
-                f"/api/chat/session/{live_session_id}/images",
+                f"/api/live-sessions/{live_session_id}/images",
                 files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
             )
 
@@ -1466,11 +1466,13 @@ def test_upload_endpoint_returns_uploaded_image_metadata() -> None:
     assert len(payload["uploads"]) == 1
     assert payload["uploads"][0]["name"] == "chart.png"
     assert payload["uploads"][0]["mime_type"] == "image/png"
-    assert payload["uploads"][0]["preview_url"].startswith("/api/chat/uploads/")
+    assert payload["uploads"][0]["preview_url"].startswith(
+        "/api/live-sessions/uploads/"
+    )
 
 
-def test_submit_chat_input_accepts_uploaded_image_ids() -> None:
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+def test_submit_session_input_accepts_uploaded_image_ids() -> None:
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         queued = display.user_prompt()
         assert isinstance(queued, QueuedInput)
@@ -1480,23 +1482,23 @@ def test_submit_chat_input_accepts_uploaded_image_ids() -> None:
         assert len(queued.image_attachments) == 1
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
             upload_response = client.post(
-                f"/api/chat/session/{live_session_id}/images",
+                f"/api/live-sessions/{live_session_id}/images",
                 files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
             )
             assert upload_response.status_code == 200
             upload_id = upload_response.json()["uploads"][0]["upload_id"]
 
             submit_response = client.post(
-                f"/api/chat/session/{live_session_id}/input",
+                f"/api/live-sessions/{live_session_id}/input",
                 json={
                     "text": "",
                     "file_paths": [],
@@ -1515,13 +1517,13 @@ def test_submit_chat_input_accepts_uploaded_image_ids() -> None:
     )
 
 
-def test_submit_chat_input_does_not_duplicate_workspace_image_mentions(
+def test_submit_session_input_does_not_duplicate_workspace_image_mentions(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "chart.png").write_bytes(b"\x89PNG\r\n\x1a\n")
 
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         queued = display.user_prompt()
         assert isinstance(queued, QueuedInput)
@@ -1532,16 +1534,16 @@ def test_submit_chat_input_does_not_duplicate_workspace_image_mentions(
         assert len(queued.image_attachments) == 1
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
             submit_response = client.post(
-                f"/api/chat/session/{live_session_id}/input",
+                f"/api/live-sessions/{live_session_id}/input",
                 json={
                     "text": "Describe chart.png",
                     "file_paths": ["chart.png"],
@@ -1564,14 +1566,14 @@ def test_delete_session_endpoint_removes_session_and_clears_task_links(
             str(tmp_path),
             "openai",
             "gpt-5.4",
-            "Saved chat",
+            "Saved session",
         )
 
     with TestClient(app) as client:
         task_response = client.post(
             "/api/tasks",
             json={
-                "title": "Task with chat",
+                "title": "Task with session",
                 "prompt": "Investigate",
                 "session_id": session_id,
             },
@@ -1600,7 +1602,7 @@ def test_delete_session_endpoint_accepts_saved_sessions_from_any_provider(
             str(tmp_path),
             "xai",
             "grok-4",
-            "Other provider chat",
+            "Other provider session",
         )
 
     with TestClient(app) as client:
@@ -1804,13 +1806,13 @@ def test_sessions_endpoint_lists_saved_sessions(tmp_path, monkeypatch) -> None:
             str(tmp_path),
             "openai",
             "gpt-5.4",
-            "First chat",
+            "First session",
         )
         second_session_id = store.create_session(
             str(tmp_path),
             "xai",
             "grok-4",
-            "Second chat",
+            "Second session",
         )
 
     with TestClient(app) as client:
@@ -1827,16 +1829,16 @@ def test_sessions_endpoint_lists_saved_sessions(tmp_path, monkeypatch) -> None:
 
 
 def test_live_session_list_and_detail_endpoints() -> None:
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            create_response = client.post("/api/chat/session", json={})
+            create_response = client.post("/api/live-sessions", json={})
             assert create_response.status_code == 200
             live_session_id = create_response.json()["session"]["live_session_id"]
 
@@ -1873,50 +1875,50 @@ def test_delete_task_endpoint_removes_task() -> None:
     assert list_response.json()["tasks"] == []
 
 
-def test_request_new_chat_endpoint_queues_new_chat() -> None:
+def test_request_new_session_endpoint_queues_new_session() -> None:
     queued_values: list[object] = []
 
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         queued_values.append(display.user_prompt())
         queued_values.append(display.user_prompt())
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
-            new_chat_response = client.post(
-                f"/api/chat/session/{live_session_id}/new-chat",
+            new_session_response = client.post(
+                f"/api/live-sessions/{live_session_id}/new-session",
                 json={},
             )
 
-    assert new_chat_response.status_code == 200
-    assert queued_values[0] == NEW_CHAT_SENTINEL
+    assert new_session_response.status_code == 200
+    assert queued_values[0] == NEW_SESSION_SENTINEL
 
 
-def test_uploaded_chat_image_route_returns_image_bytes() -> None:
+def test_uploaded_session_image_route_returns_image_bytes() -> None:
     image_bytes = b"\x89PNG\r\n\x1a\n"
 
-    def fake_run_chat_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
 
-    with patch("pbi_agent.web.session_manager.run_chat_loop", fake_run_chat_loop):
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
         app = create_app(_settings())
 
         with TestClient(app) as client:
-            response = client.post("/api/chat/session", json={})
+            response = client.post("/api/live-sessions", json={})
             assert response.status_code == 200
             live_session_id = response.json()["session"]["live_session_id"]
 
             upload_response = client.post(
-                f"/api/chat/session/{live_session_id}/images",
+                f"/api/live-sessions/{live_session_id}/images",
                 files={"files": ("chart.png", image_bytes, "image/png")},
             )
             assert upload_response.status_code == 200
@@ -1970,7 +1972,7 @@ def test_dashboard_stats_returns_aggregated_overview(tmp_path, monkeypatch) -> N
         run_id = store.create_run_session(
             session_id=session_id,
             agent_name="main",
-            agent_type="chat_turn",
+            agent_type="session_turn",
             provider="openai",
             provider_id="default",
             profile_id="analysis",
@@ -2030,7 +2032,7 @@ def test_dashboard_stats_global_scope_includes_other_workspaces(
         store.create_run_session(
             session_id=session_id,
             agent_name="main",
-            agent_type="chat_turn",
+            agent_type="session_turn",
             provider="anthropic",
             provider_id=None,
             profile_id=None,
@@ -2065,7 +2067,7 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
             run_id = store.create_run_session(
                 session_id=session_id,
                 agent_name="main",
-                agent_type="chat_turn",
+                agent_type="session_turn",
                 provider="openai",
                 provider_id="default",
                 profile_id="analysis",

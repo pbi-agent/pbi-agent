@@ -49,10 +49,10 @@ from pbi_agent.display.protocol import (
 
 _log = logging.getLogger(__name__)
 
-NEW_CHAT_SENTINEL = "__new_chat__"
+NEW_SESSION_SENTINEL = "__new_session__"
 RESUME_SESSION_PREFIX = "__resume_session__:"
-SUB_AGENT_MAX_REQUESTS = 50
-SUB_AGENT_MAX_ELAPSED_SECONDS = 600.0
+SUB_AGENT_MAX_REQUESTS = 100
+SUB_AGENT_MAX_ELAPSED_SECONDS = 1200.0
 SUB_AGENT_DISABLED_TOOLS = {"sub_agent"}
 SKILLS_COMMAND = "/skills"
 MCP_COMMAND = "/mcp"
@@ -254,7 +254,7 @@ def run_single_turn(
         _close_store(store)
 
 
-def run_chat_loop(
+def run_session_loop(
     settings: Settings | ResolvedRuntime,
     display: DisplayProtocol,
     *,
@@ -272,7 +272,7 @@ def run_chat_loop(
         active_runtime: ResolvedRuntime, *, clear_display: bool = False
     ) -> TokenUsage:
         if clear_display:
-            display.reset_chat()
+            display.reset_session()
         active_settings = active_runtime.settings
         display.welcome(
             model=_selected_model(active_settings),
@@ -333,7 +333,7 @@ def run_chat_loop(
                     message_image_attachments = queued_input.image_attachments
                 else:
                     user_input = queued_input.strip()
-                if user_input == NEW_CHAT_SENTINEL:
+                if user_input == NEW_SESSION_SENTINEL:
                     provider.reset_conversation()
                     session_usage = _reset_session(
                         current_runtime,
@@ -428,7 +428,7 @@ def run_chat_loop(
                     store=store,
                     session_id=session_id,
                     agent_name="main",
-                    agent_type="chat_turn",
+                    agent_type="session_turn",
                     provider=current_runtime.settings.provider,
                     provider_id=current_runtime.provider_id,
                     profile_id=current_runtime.profile_id,
@@ -504,7 +504,9 @@ def run_chat_loop(
                         metadata={"tool_errors": loop_had_errors},
                     )
                 except Exception as exc:
-                    turn_tracer.log_error(str(exc), metadata={"phase": "run_chat_loop"})
+                    turn_tracer.log_error(
+                        str(exc), metadata={"phase": "run_session_loop"}
+                    )
                     turn_tracer.finish(
                         status="failed",
                         usage=turn_usage,

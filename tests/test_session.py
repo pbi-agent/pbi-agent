@@ -12,9 +12,9 @@ from pbi_agent.agent.session import (
     AGENTS_COMMAND,
     AGENTS_RELOAD_COMMAND,
     MCP_COMMAND,
-    NEW_CHAT_SENTINEL,
+    NEW_SESSION_SENTINEL,
     SKILLS_COMMAND,
-    run_chat_loop,
+    run_session_loop,
     run_sub_agent_task,
     run_single_turn,
 )
@@ -53,7 +53,7 @@ class _DisplaySpy:
         self.turn_usage_calls: list[tuple[TokenUsage, float]] = []
         self.debug_messages: list[str] = []
         self.markdown_calls: list[str] = []
-        self.reset_chat_calls = 0
+        self.reset_session_calls = 0
 
     def welcome(
         self,
@@ -84,8 +84,8 @@ class _DisplaySpy:
     def render_markdown(self, text: str) -> None:
         self.markdown_calls.append(text)
 
-    def reset_chat(self) -> None:
-        self.reset_chat_calls += 1
+    def reset_session(self) -> None:
+        self.reset_session_calls += 1
 
     def replay_history(self, messages) -> None:
         pass
@@ -469,7 +469,7 @@ def test_run_sub_agent_task_creates_nested_run_session(tmp_path, monkeypatch) ->
             store=store,
             session_id=session_id,
             agent_name="main",
-            agent_type="chat_turn",
+            agent_type="session_turn",
             provider="openai",
             provider_id=None,
             profile_id=None,
@@ -492,7 +492,7 @@ def test_run_sub_agent_task_creates_nested_run_session(tmp_path, monkeypatch) ->
     assert runs[1].parent_run_session_id == runs[0].run_session_id
 
 
-class _ChatDisplaySpy(_DisplaySpy):
+class _SessionDisplaySpy(_DisplaySpy):
     def __init__(self, prompts: list[str | QueuedInput]) -> None:
         super().__init__()
         self.prompts = prompts
@@ -628,7 +628,7 @@ class _ChatProviderStub:
         self.request_messages.append(user_message)
         self.request_instructions.append(instructions)
         response = CompletedResponse(
-            response_id="resp_chat",
+            response_id="resp_session",
             text="Ack",
             usage=TokenUsage(input_tokens=2, output_tokens=1, model=DEFAULT_MODEL),
         )
@@ -637,9 +637,9 @@ class _ChatProviderStub:
         return response
 
 
-def test_run_chat_loop_resets_welcome_and_usage_on_new_chat(monkeypatch) -> None:
+def test_run_session_loop_resets_welcome_and_usage_on_new_session(monkeypatch) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy(["hello", NEW_CHAT_SENTINEL, "after reset", "quit"])
+    display = _SessionDisplaySpy(["hello", NEW_SESSION_SENTINEL, "after reset", "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
     monotonic_values = iter([5.0, 6.5, 10.0, 11.0])
 
@@ -652,7 +652,7 @@ def test_run_chat_loop_resets_welcome_and_usage_on_new_chat(monkeypatch) -> None
         lambda: next(monotonic_values),
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == ["hello", "after reset"]
@@ -661,17 +661,17 @@ def test_run_chat_loop_resets_welcome_and_usage_on_new_chat(monkeypatch) -> None
     assert display.welcome_calls[0]["interactive"] is True
     assert display.welcome_calls[1]["interactive"] is True
     assert [usage.total_tokens for usage in display.session_usage_calls] == [0, 3, 0, 3]
-    assert display.reset_chat_calls == 1
+    assert display.reset_session_calls == 1
     assert display.assistant_start_calls == 2
 
 
-def test_run_chat_loop_persists_per_turn_usage_in_run_sessions(
+def test_run_session_loop_persists_per_turn_usage_in_run_sessions(
     monkeypatch,
     tmp_path,
 ) -> None:
     db_path = tmp_path / "sessions.db"
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy(["hello", "again", "quit"])
+    display = _SessionDisplaySpy(["hello", "again", "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
     monotonic_values = iter([5.0, 6.5, 10.0, 11.0])
 
@@ -686,7 +686,7 @@ def test_run_chat_loop_persists_per_turn_usage_in_run_sessions(
         lambda: next(monotonic_values),
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     with SessionStore(db_path=db_path) as store:
         session = store.list_all_sessions(limit=1)[0]
@@ -697,7 +697,7 @@ def test_run_chat_loop_persists_per_turn_usage_in_run_sessions(
     assert [(run.input_tokens, run.output_tokens) for run in runs] == [(2, 1), (2, 1)]
 
 
-def test_run_chat_loop_failed_run_uses_current_turn_usage_only(
+def test_run_session_loop_failed_run_uses_current_turn_usage_only(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -738,7 +738,7 @@ def test_run_chat_loop_failed_run_uses_current_turn_usage_only(
 
     db_path = tmp_path / "sessions.db"
     provider = _FailingAfterUsageChatProvider()
-    display = _ChatDisplaySpy(["first", "second"])
+    display = _SessionDisplaySpy(["first", "second"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
     monotonic_values = iter([5.0, 6.5, 10.0])
 
@@ -754,7 +754,7 @@ def test_run_chat_loop_failed_run_uses_current_turn_usage_only(
     )
 
     with pytest.raises(RuntimeError, match="boom"):
-        run_chat_loop(settings, display)
+        run_session_loop(settings, display)
 
     with SessionStore(db_path=db_path) as store:
         session = store.list_all_sessions(limit=1)[0]
@@ -766,9 +766,9 @@ def test_run_chat_loop_failed_run_uses_current_turn_usage_only(
     ]
 
 
-def test_run_chat_loop_handles_skills_command_locally(monkeypatch) -> None:
+def test_run_session_loop_handles_skills_command_locally(monkeypatch) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy([SKILLS_COMMAND, "quit"])
+    display = _SessionDisplaySpy([SKILLS_COMMAND, "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.setattr(
@@ -780,7 +780,7 @@ def test_run_chat_loop_handles_skills_command_locally(monkeypatch) -> None:
         lambda: "### Project Skills\n\n- `repo-skill`: Demo skill",
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == []
@@ -790,9 +790,9 @@ def test_run_chat_loop_handles_skills_command_locally(monkeypatch) -> None:
     assert display.assistant_start_calls == 0
 
 
-def test_run_chat_loop_handles_mcp_command_locally(monkeypatch) -> None:
+def test_run_session_loop_handles_mcp_command_locally(monkeypatch) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy([MCP_COMMAND, "quit"])
+    display = _SessionDisplaySpy([MCP_COMMAND, "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.setattr(
@@ -804,7 +804,7 @@ def test_run_chat_loop_handles_mcp_command_locally(monkeypatch) -> None:
         lambda: "### MCP Servers\n\n- `echo`: `uv run server.py`",
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == []
@@ -812,9 +812,9 @@ def test_run_chat_loop_handles_mcp_command_locally(monkeypatch) -> None:
     assert display.assistant_start_calls == 0
 
 
-def test_run_chat_loop_handles_agents_command_locally(monkeypatch) -> None:
+def test_run_session_loop_handles_agents_command_locally(monkeypatch) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy([AGENTS_COMMAND, "quit"])
+    display = _SessionDisplaySpy([AGENTS_COMMAND, "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.setattr(
@@ -826,7 +826,7 @@ def test_run_chat_loop_handles_agents_command_locally(monkeypatch) -> None:
         lambda reloaded=False: "### Sub-Agents\n\n- `reviewer`: Reviews code",
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == []
@@ -834,9 +834,9 @@ def test_run_chat_loop_handles_agents_command_locally(monkeypatch) -> None:
     assert display.assistant_start_calls == 0
 
 
-def test_run_chat_loop_handles_agents_reload_command_locally(monkeypatch) -> None:
+def test_run_session_loop_handles_agents_reload_command_locally(monkeypatch) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy([AGENTS_RELOAD_COMMAND, "quit"])
+    display = _SessionDisplaySpy([AGENTS_RELOAD_COMMAND, "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.setattr(
@@ -854,7 +854,7 @@ def test_run_chat_loop_handles_agents_reload_command_locally(monkeypatch) -> Non
         ),
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == []
@@ -864,13 +864,13 @@ def test_run_chat_loop_handles_agents_reload_command_locally(monkeypatch) -> Non
     assert display.assistant_start_calls == 0
 
 
-def test_run_chat_loop_keeps_command_alias_and_uses_turn_specific_instructions(
+def test_run_session_loop_keeps_command_alias_and_uses_turn_specific_instructions(
     monkeypatch,
     tmp_path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy(["/plan draft the approach", "quit"])
+    display = _SessionDisplaySpy(["/plan draft the approach", "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
     _write_command(tmp_path, "plan", "Plan before coding.")
 
@@ -879,7 +879,7 @@ def test_run_chat_loop_keeps_command_alias_and_uses_turn_specific_instructions(
         _stub_runtime_provider(provider),
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == ["/plan draft the approach"]
@@ -889,10 +889,10 @@ def test_run_chat_loop_keeps_command_alias_and_uses_turn_specific_instructions(
     )
 
 
-def test_run_chat_loop_accepts_command_only_turn(monkeypatch, tmp_path) -> None:
+def test_run_session_loop_accepts_command_only_turn(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy(["/plan", "quit"])
+    display = _SessionDisplaySpy(["/plan", "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
     _write_command(tmp_path, "plan", "Plan before coding.")
 
@@ -901,17 +901,17 @@ def test_run_chat_loop_accepts_command_only_turn(monkeypatch, tmp_path) -> None:
         _stub_runtime_provider(provider),
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == ["/plan"]
 
 
-def test_run_chat_loop_keeps_local_command_precedence_over_command_files(
+def test_run_session_loop_keeps_local_command_precedence_over_command_files(
     monkeypatch,
 ) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy([SKILLS_COMMAND, "quit"])
+    display = _SessionDisplaySpy([SKILLS_COMMAND, "quit"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.setattr(
@@ -923,7 +923,7 @@ def test_run_chat_loop_keeps_local_command_precedence_over_command_files(
         lambda: "### Project Skills\n\n- `repo-skill`: Demo skill",
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == []
@@ -932,9 +932,9 @@ def test_run_chat_loop_keeps_local_command_precedence_over_command_files(
     ]
 
 
-def test_run_chat_loop_passes_queued_image_paths_to_provider(monkeypatch) -> None:
+def test_run_session_loop_passes_queued_image_paths_to_provider(monkeypatch) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy(
+    display = _SessionDisplaySpy(
         [QueuedInput(text="describe this", image_paths=["chart.png"]), "quit"]
     )
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
@@ -958,7 +958,7 @@ def test_run_chat_loop_passes_queued_image_paths_to_provider(monkeypatch) -> Non
         ),
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == ["describe this"]
@@ -966,9 +966,9 @@ def test_run_chat_loop_passes_queued_image_paths_to_provider(monkeypatch) -> Non
     assert provider.request_inputs[0].images[0].path == "chart.png"
 
 
-def test_run_chat_loop_processes_attachment_only_queued_images(monkeypatch) -> None:
+def test_run_session_loop_processes_attachment_only_queued_images(monkeypatch) -> None:
     provider = _ChatProviderStub()
-    display = _ChatDisplaySpy(
+    display = _SessionDisplaySpy(
         [
             QueuedInput(
                 text="",
@@ -996,7 +996,7 @@ def test_run_chat_loop_processes_attachment_only_queued_images(monkeypatch) -> N
         lambda: next(monotonic_values),
     )
 
-    exit_code = run_chat_loop(settings, display)
+    exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
     assert provider.request_messages == [""]
@@ -1013,7 +1013,7 @@ def test_run_chat_loop_processes_attachment_only_queued_images(monkeypatch) -> N
     assert messages[1].content == "Ack"
 
 
-def test_run_chat_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> None:
+def test_run_session_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> None:
     class _FailingProvider:
         def __enter__(self):
             return self
@@ -1048,7 +1048,7 @@ def test_run_chat_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> Non
             )
             raise RuntimeError("boom")
 
-    display = _ChatDisplaySpy(["hello"])
+    display = _SessionDisplaySpy(["hello"])
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.setattr(
@@ -1057,7 +1057,7 @@ def test_run_chat_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> Non
     )
 
     with pytest.raises(RuntimeError, match="boom"):
-        run_chat_loop(settings, display)
+        run_session_loop(settings, display)
 
     with SessionStore() as store:
         sessions = store.list_sessions(os.getcwd(), limit=10)
@@ -1172,7 +1172,7 @@ def test_run_single_turn_resumed_session_bootstraps_from_history_without_previou
         store.add_message(session_id, "assistant", "hi")
 
     provider = OpenAIProvider(Settings(api_key="test-key", provider="openai"))
-    display = _ChatDisplaySpy([])
+    display = _SessionDisplaySpy([])
     requests: list[dict[str, object]] = []
     monotonic_values = iter([10.0, 12.5])
 
@@ -1269,7 +1269,7 @@ def test_run_single_turn_resumed_openai_session_increments_total_usage(
         store.add_message(session_id, "assistant", "hi")
 
     provider = OpenAIProvider(Settings(api_key="test-key", provider="openai"))
-    display = _ChatDisplaySpy([])
+    display = _SessionDisplaySpy([])
     monotonic_values = iter([20.0, 21.5])
 
     class _FakeHTTPResponse:
@@ -1369,7 +1369,7 @@ def test_run_single_turn_resumed_google_session_restores_provider_total_tokens(
             max_retries=0,
         )
     )
-    display = _ChatDisplaySpy([])
+    display = _SessionDisplaySpy([])
     monotonic_values = iter([30.0, 31.5])
 
     class _FakeHTTPResponse:
@@ -1441,7 +1441,7 @@ def test_run_single_turn_resumed_google_session_restores_provider_total_tokens(
     assert display.session_usage_calls[-1].total_tokens == 25
 
 
-def test_run_chat_loop_resumed_session_bootstraps_once_then_uses_previous_response_id(
+def test_run_session_loop_resumed_session_bootstraps_once_then_uses_previous_response_id(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -1460,7 +1460,7 @@ def test_run_chat_loop_resumed_session_bootstraps_once_then_uses_previous_respon
         store.add_message(session_id, "assistant", "hi")
 
     provider = OpenAIProvider(Settings(api_key="test-key", provider="openai"))
-    display = _ChatDisplaySpy(["continue", "more", "quit"])
+    display = _SessionDisplaySpy(["continue", "more", "quit"])
     requests: list[dict[str, object]] = []
     monotonic_values = iter([5.0, 6.0, 10.0, 11.0])
 
@@ -1534,7 +1534,7 @@ def test_run_chat_loop_resumed_session_bootstraps_once_then_uses_previous_respon
     )
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    exit_code = run_chat_loop(
+    exit_code = run_session_loop(
         Settings(api_key="test-key", provider="openai"),
         display,
         resume_session_id=session_id,

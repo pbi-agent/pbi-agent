@@ -147,7 +147,7 @@ Project sub-agents:
 You can inspect the discovered catalog without starting a model request:
 
 - CLI: `pbi-agent --agents`
-- Chat UI: `/agents`
+- Session UI: `/agents`
 
 ## MCP server config
 

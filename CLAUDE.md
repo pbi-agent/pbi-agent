@@ -78,7 +78,7 @@ uv tool install --reinstall .
 ## Web Stack
 
 - Backend web server: FastAPI in `src/pbi_agent/web/serve.py`, served by Uvicorn. It exposes JSON endpoints under `/api/*`, websocket event streams under `/api/events/*`, and serves the SPA shell plus built static assets.
-- Frontend app: Vite + React + TypeScript in `webapp/`. The app uses `react-router-dom` for client routing, `@tanstack/react-query` for server state, `zustand` for chat session state, and `@dnd-kit/core` for board drag-and-drop.
+- Frontend app: Vite + React + TypeScript in `webapp/`. The app uses `react-router-dom` for client routing, `@tanstack/react-query` for server state, `zustand` for interactive session state, and `@dnd-kit/core` for board drag-and-drop.
 - Build output: `bun run web:build` writes the production bundle to `src/pbi_agent/web/static/app`, which FastAPI serves in non-dev flows.
 - Docs site: VitePress in `docs/`, built separately with `bun run docs:build`.
 
@@ -101,7 +101,7 @@ Abstract `Provider` base class with implementations for each LLM. All use synchr
 | Generic | Chat Completions API | `generic_provider.py` |
 
 ### Agent Loop (`agent/`)
-- `session.py` — Core agentic loop: `run_single_turn()` and `run_chat_loop()`. Handles tool call → execute → feed back cycle.
+- `session.py` — Core agentic loop: `run_single_turn()` and `run_session_loop()`. Handles tool call → execute → feed back cycle.
 - `system_prompt.py` — Dynamic system prompt generation, loads workspace `AGENTS.md` rules.
 - `tool_runtime.py` — Parallel tool execution via `ThreadPoolExecutor`.
 - Sub-agents: spawned with limited scope (max 30 requests, 300s timeout, no recursive sub-agents).

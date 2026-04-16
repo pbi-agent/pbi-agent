@@ -1,6 +1,6 @@
 from .routers import (
     board_router,
-    chat_router,
+    live_sessions_router,
     config_router,
     events_router,
     system_router,
@@ -9,7 +9,7 @@ from .routers import (
 
 __all__ = [
     "board_router",
-    "chat_router",
+    "live_sessions_router",
     "config_router",
     "events_router",
     "system_router",

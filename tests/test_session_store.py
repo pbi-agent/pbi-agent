@@ -47,10 +47,10 @@ def test_update_previous_id_and_title(tmp_path) -> None:
         assert rec is not None
         assert rec.previous_id == "resp_42"
 
-        store.update_session(sid, title="My chat")
+        store.update_session(sid, title="My session")
         rec = store.get_session(sid)
         assert rec is not None
-        assert rec.title == "My chat"
+        assert rec.title == "My session"
 
 
 def test_directory_scoped_listing(tmp_path) -> None:
@@ -194,7 +194,7 @@ def test_add_and_list_messages_preserve_image_attachments(tmp_path) -> None:
         name="chart.png",
         mime_type="image/png",
         byte_count=8,
-        preview_url="/api/chat/uploads/upload-1",
+        preview_url="/api/live-sessions/uploads/upload-1",
     )
 
     with SessionStore(db_path=db) as store:
@@ -275,7 +275,7 @@ def test_create_and_list_run_sessions(tmp_path) -> None:
         parent_run_id = store.create_run_session(
             session_id=session_id,
             agent_name="main",
-            agent_type="chat_turn",
+            agent_type="session_turn",
             provider="openai",
             provider_id="default",
             profile_id="analysis",
@@ -511,7 +511,7 @@ def test_get_dashboard_stats_returns_aggregated_data(tmp_path) -> None:
         run_id_1 = store.create_run_session(
             session_id=session_id,
             agent_name="main",
-            agent_type="chat_turn",
+            agent_type="session_turn",
             provider="openai",
             provider_id=None,
             profile_id=None,
@@ -574,7 +574,7 @@ def test_list_all_run_sessions_with_filters(tmp_path) -> None:
             run_id = store.create_run_session(
                 session_id=session_id,
                 agent_name="main",
-                agent_type="chat_turn",
+                agent_type="session_turn",
                 provider="openai" if i < 3 else "anthropic",
                 provider_id=None,
                 profile_id=None,

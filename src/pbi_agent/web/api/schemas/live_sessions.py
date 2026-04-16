@@ -6,14 +6,14 @@ from pbi_agent.web.api.schemas.common import ImageAttachmentModel
 from pbi_agent.web.api.schemas.system import LiveSessionModel
 
 
-class CreateChatSessionRequest(BaseModel):
+class CreateLiveSessionRequest(BaseModel):
     session_id: str | None = None
     resume_session_id: str | None = None
     live_session_id: str | None = None
     profile_id: str | None = None
 
 
-class ChatInputRequest(BaseModel):
+class LiveSessionInputRequest(BaseModel):
     text: str = ""
     file_paths: list[str] = Field(default_factory=list)
     image_paths: list[str] = Field(default_factory=list)
@@ -21,7 +21,7 @@ class ChatInputRequest(BaseModel):
     profile_id: str | None = None
 
 
-class NewChatRequest(BaseModel):
+class NewSessionRequest(BaseModel):
     profile_id: str | None = None
 
 
@@ -40,5 +40,5 @@ class ImageUploadResponse(BaseModel):
     uploads: list[ImageAttachmentModel]
 
 
-class ChatSessionResponse(BaseModel):
+class LiveSessionResponse(BaseModel):
     session: LiveSessionModel

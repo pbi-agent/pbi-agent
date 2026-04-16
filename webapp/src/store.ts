@@ -17,7 +17,7 @@ export type SubAgentState = {
   status: string;
 };
 
-export type ChatRuntimeState = {
+export type SessionRuntimeState = {
   liveSessionId: string | null;
   sessionId: string | null;
   runtime: LiveSessionRuntime | null;
@@ -34,29 +34,29 @@ export type ChatRuntimeState = {
   lastEventSeq: number;
 };
 
-type ChatStore = {
-  activeChatKey: string | null;
-  chatsByKey: Record<string, ChatRuntimeState>;
+type SessionStore = {
+  activeSessionKey: string | null;
+  sessionsByKey: Record<string, SessionRuntimeState>;
   liveSessionIndex: Record<string, string>;
   sessionIndex: Record<string, string>;
-  setActiveChat: (chatKey: string | null) => void;
-  hydrateSavedChat: (sessionId: string, items?: TimelineItem[], lastEventSeq?: number) => void;
+  setActiveSession: (sessionKey: string | null) => void;
+  hydrateSavedSession: (sessionId: string, items?: TimelineItem[], lastEventSeq?: number) => void;
   attachLiveSession: (
-    chatKey: string,
+    sessionKey: string,
     session: LiveSession,
     options?: { preserveItems?: boolean },
   ) => string;
   hydrateLiveSnapshot: (
-    chatKey: string,
+    sessionKey: string,
     session: LiveSession,
     snapshot: LiveSessionSnapshot,
   ) => string;
-  updateRuntimeFromSession: (chatKey: string, session: LiveSession) => void;
-  setConnection: (chatKey: string, connection: ConnectionState) => void;
-  applyEvent: (chatKey: string, event: WebEvent) => string;
+  updateRuntimeFromSession: (sessionKey: string, session: LiveSession) => void;
+  setConnection: (sessionKey: string, connection: ConnectionState) => void;
+  applyEvent: (sessionKey: string, event: WebEvent) => string;
 };
 
-function createEmptyChatState(sessionId: string | null = null): ChatRuntimeState {
+function createEmptySessionState(sessionId: string | null = null): SessionRuntimeState {
   return {
     liveSessionId: null,
     sessionId,
@@ -75,11 +75,11 @@ function createEmptyChatState(sessionId: string | null = null): ChatRuntimeState
   };
 }
 
-export function getSavedChatKey(sessionId: string): string {
+export function getSavedSessionKey(sessionId: string): string {
   return `session:${sessionId}`;
 }
 
-export function getLiveChatKey(liveSessionId: string): string {
+export function getLiveSessionKey(liveSessionId: string): string {
   return `live:${liveSessionId}`;
 }
 
@@ -177,18 +177,18 @@ function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
   return null;
 }
 
-function moveChatState(
-  state: ChatStore,
+function moveSessionState(
+  state: SessionStore,
   fromKey: string,
   toKey: string,
-): ChatStore {
-  if (fromKey === toKey || !(fromKey in state.chatsByKey)) {
+): SessionStore {
+  if (fromKey === toKey || !(fromKey in state.sessionsByKey)) {
     return state;
   }
-  const chatState = state.chatsByKey[fromKey];
-  const nextChatsByKey = { ...state.chatsByKey };
-  delete nextChatsByKey[fromKey];
-  nextChatsByKey[toKey] = chatState;
+  const sessionState = state.sessionsByKey[fromKey];
+  const nextSessionsByKey = { ...state.sessionsByKey };
+  delete nextSessionsByKey[fromKey];
+  nextSessionsByKey[toKey] = sessionState;
 
   const nextLiveSessionIndex = Object.fromEntries(
     Object.entries(state.liveSessionIndex).map(([id, key]) => [id, key === fromKey ? toKey : key]),
@@ -199,34 +199,34 @@ function moveChatState(
 
   return {
     ...state,
-    chatsByKey: nextChatsByKey,
+    sessionsByKey: nextSessionsByKey,
     liveSessionIndex: nextLiveSessionIndex,
     sessionIndex: nextSessionIndex,
-    activeChatKey: state.activeChatKey === fromKey ? toKey : state.activeChatKey,
+    activeSessionKey: state.activeSessionKey === fromKey ? toKey : state.activeSessionKey,
   };
 }
 
-export const useChatStore = create<ChatStore>((set) => ({
-  activeChatKey: null,
-  chatsByKey: {},
+export const useSessionStore = create<SessionStore>((set) => ({
+  activeSessionKey: null,
+  sessionsByKey: {},
   liveSessionIndex: {},
   sessionIndex: {},
-  setActiveChat: (chatKey) => set({ activeChatKey: chatKey }),
-  hydrateSavedChat: (sessionId, items = [], lastEventSeq) =>
+  setActiveSession: (sessionKey) => set({ activeSessionKey: sessionKey }),
+  hydrateSavedSession: (sessionId, items = [], lastEventSeq) =>
     set((state) => {
-      const chatKey = getSavedChatKey(sessionId);
-      const current = state.chatsByKey[chatKey] ?? createEmptyChatState(sessionId);
+      const sessionKey = getSavedSessionKey(sessionId);
+      const current = state.sessionsByKey[sessionKey] ?? createEmptySessionState(sessionId);
       return {
         ...state,
-        chatsByKey: {
-          ...state.chatsByKey,
-          [chatKey]: {
+        sessionsByKey: {
+          ...state.sessionsByKey,
+          [sessionKey]: {
             ...current,
             sessionId,
             items,
             itemsVersion: items.length,
             fatalError: null,
-            // Reset live-session state so revisiting a saved chat
+            // Reset live-session state so revisiting a saved session
             // does not keep stale liveSessionId / connection / flags
             // from a previously ended session.
             liveSessionId: null,
@@ -244,24 +244,24 @@ export const useChatStore = create<ChatStore>((set) => ({
               : 0,
           },
         },
-        sessionIndex: { ...state.sessionIndex, [sessionId]: chatKey },
+        sessionIndex: { ...state.sessionIndex, [sessionId]: sessionKey },
       };
     }),
-  attachLiveSession: (chatKey, session, options = {}) => {
-    let resolvedKey = chatKey;
+  attachLiveSession: (sessionKey, session, options = {}) => {
+    let resolvedKey = sessionKey;
     set((state) => {
-      resolvedKey = session.session_id ? getSavedChatKey(session.session_id) : chatKey;
+      resolvedKey = session.session_id ? getSavedSessionKey(session.session_id) : sessionKey;
       let nextState = state;
-      if (chatKey !== resolvedKey) {
-        nextState = moveChatState(state, chatKey, resolvedKey);
+      if (sessionKey !== resolvedKey) {
+        nextState = moveSessionState(state, sessionKey, resolvedKey);
       }
       const current =
-        nextState.chatsByKey[resolvedKey]
-        ?? createEmptyChatState(session.session_id);
+        nextState.sessionsByKey[resolvedKey]
+        ?? createEmptySessionState(session.session_id);
       return {
         ...nextState,
-        chatsByKey: {
-          ...nextState.chatsByKey,
+        sessionsByKey: {
+          ...nextState.sessionsByKey,
           [resolvedKey]: {
             ...current,
             liveSessionId: session.live_session_id,
@@ -301,24 +301,24 @@ export const useChatStore = create<ChatStore>((set) => ({
     });
     return resolvedKey;
   },
-  hydrateLiveSnapshot: (chatKey, session, snapshot) => {
-    let resolvedKey = chatKey;
+  hydrateLiveSnapshot: (sessionKey, session, snapshot) => {
+    let resolvedKey = sessionKey;
     set((state) => {
-      resolvedKey = snapshot.session_id ? getSavedChatKey(snapshot.session_id) : chatKey;
+      resolvedKey = snapshot.session_id ? getSavedSessionKey(snapshot.session_id) : sessionKey;
       let nextState = state;
-      if (chatKey !== resolvedKey) {
-        nextState = moveChatState(state, chatKey, resolvedKey);
+      if (sessionKey !== resolvedKey) {
+        nextState = moveSessionState(state, sessionKey, resolvedKey);
       }
       const current =
-        nextState.chatsByKey[resolvedKey]
-        ?? createEmptyChatState(snapshot.session_id);
+        nextState.sessionsByKey[resolvedKey]
+        ?? createEmptySessionState(snapshot.session_id);
       const items = snapshot.items
         .map((item) => mapSnapshotItem(item))
         .filter((item): item is TimelineItem => item !== null);
       return {
         ...nextState,
-        chatsByKey: {
-          ...nextState.chatsByKey,
+        sessionsByKey: {
+          ...nextState.sessionsByKey,
           [resolvedKey]: {
             ...current,
             liveSessionId: session.live_session_id,
@@ -355,56 +355,56 @@ export const useChatStore = create<ChatStore>((set) => ({
     });
     return resolvedKey;
   },
-  updateRuntimeFromSession: (chatKey, session) =>
+  updateRuntimeFromSession: (sessionKey, session) =>
     set((state) => {
-      const current = state.chatsByKey[chatKey];
+      const current = state.sessionsByKey[sessionKey];
       if (!current) return state;
       return {
         ...state,
-        chatsByKey: {
-          ...state.chatsByKey,
-          [chatKey]: {
+        sessionsByKey: {
+          ...state.sessionsByKey,
+          [sessionKey]: {
             ...current,
             runtime: runtimeFromSession(session),
           },
         },
       };
     }),
-  setConnection: (chatKey, connection) =>
+  setConnection: (sessionKey, connection) =>
     set((state) => {
-      const current = state.chatsByKey[chatKey] ?? createEmptyChatState();
+      const current = state.sessionsByKey[sessionKey] ?? createEmptySessionState();
       return {
         ...state,
-        chatsByKey: {
-          ...state.chatsByKey,
-          [chatKey]: { ...current, connection },
+        sessionsByKey: {
+          ...state.sessionsByKey,
+          [sessionKey]: { ...current, connection },
         },
       };
     }),
-  applyEvent: (chatKey, event) => {
-    let resolvedKey = chatKey;
+  applyEvent: (sessionKey, event) => {
+    let resolvedKey = sessionKey;
     set((state) => {
       const payload = event.payload;
       const nextSessionId =
         typeof payload.session_id === "string" ? payload.session_id : null;
-      resolvedKey = nextSessionId ? getSavedChatKey(nextSessionId) : chatKey;
+      resolvedKey = nextSessionId ? getSavedSessionKey(nextSessionId) : sessionKey;
       let nextState = state;
-      if (chatKey !== resolvedKey) {
-        nextState = moveChatState(state, chatKey, resolvedKey);
+      if (sessionKey !== resolvedKey) {
+        nextState = moveSessionState(state, sessionKey, resolvedKey);
       }
       const current =
-        nextState.chatsByKey[resolvedKey]
-        ?? createEmptyChatState(nextSessionId);
+        nextState.sessionsByKey[resolvedKey]
+        ?? createEmptySessionState(nextSessionId);
       // Skip events already processed — prevents duplicates when the
       // WebSocket reconnects and replays its snapshot over items that
       // were already hydrated from the API (which use different itemIds).
       if (event.seq <= current.lastEventSeq) {
         return nextState;
       }
-      const patch: Partial<ChatRuntimeState> = { lastEventSeq: event.seq };
+      const patch: Partial<SessionRuntimeState> = { lastEventSeq: event.seq };
 
       switch (event.type) {
-        case "chat_reset":
+        case "session_reset":
           patch.items = [];
           patch.itemsVersion = 0;
           patch.subAgents = {};
@@ -525,7 +525,7 @@ export const useChatStore = create<ChatStore>((set) => ({
           break;
       }
 
-      const nextChatState: ChatRuntimeState = {
+      const nextSessionState: SessionRuntimeState = {
         ...current,
         ...patch,
         sessionId: patch.sessionId ?? current.sessionId,
@@ -534,15 +534,15 @@ export const useChatStore = create<ChatStore>((set) => ({
       const nextLiveSessionIndex = current.liveSessionId
         ? { ...nextState.liveSessionIndex, [current.liveSessionId]: resolvedKey }
         : nextState.liveSessionIndex;
-      const nextSessionIndex = nextChatState.sessionId
-        ? { ...nextState.sessionIndex, [nextChatState.sessionId]: resolvedKey }
+      const nextSessionIndex = nextSessionState.sessionId
+        ? { ...nextState.sessionIndex, [nextSessionState.sessionId]: resolvedKey }
         : nextState.sessionIndex;
 
       return {
         ...nextState,
-        chatsByKey: {
-          ...nextState.chatsByKey,
-          [resolvedKey]: nextChatState,
+        sessionsByKey: {
+          ...nextState.sessionsByKey,
+          [resolvedKey]: nextSessionState,
         },
         liveSessionIndex: nextLiveSessionIndex,
         sessionIndex: nextSessionIndex,

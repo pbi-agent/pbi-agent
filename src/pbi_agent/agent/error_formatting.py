@@ -9,7 +9,7 @@ _GENERIC_ERROR_MESSAGES = {
     "provider returned error",
     "no error message",
 }
-_UNRECOGNIZED_CHAT_MESSAGE = "Unrecognized chat message."
+_UNRECOGNIZED_CHAT_MESSAGE = "Unrecognized session message."
 _MODEL_UNAVAILABLE_MESSAGE = (
     "No allowed providers are available for the selected model."
 )

@@ -4,7 +4,7 @@ import { fetchAllRuns } from "../../api";
 import type { AllRunsRun } from "../../types";
 import { StatusPill } from "../shared/StatusPill";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
-import { RunDetailModal } from "../chat/RunDetailModal";
+import { RunDetailModal } from "../session/RunDetailModal";
 
 type RunsTableProps = {
   startDate?: string;

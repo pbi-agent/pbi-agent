@@ -27,7 +27,7 @@ function waitForImages(container: HTMLElement): Promise<void> {
   ).then(() => {});
 }
 
-export function ChatTimeline({
+export function SessionTimeline({
   items,
   subAgents,
   connection,
@@ -103,7 +103,7 @@ export function ChatTimeline({
 
   if (items.length === 0 && connection === "connected") {
     return (
-      <div className="chat-scroll-area" ref={containerRef}>
+      <div className="session-scroll-area" ref={containerRef}>
         <div className="timeline">
           <EmptyState
             title="No messages yet"
@@ -115,7 +115,7 @@ export function ChatTimeline({
   }
 
   return (
-    <div className="chat-scroll-area" ref={containerRef}>
+    <div className="session-scroll-area" ref={containerRef}>
       <div className="timeline">
         {items.map((item) => (
           <TimelineEntry

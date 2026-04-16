@@ -33,7 +33,7 @@ export function DeleteSessionModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-card__header">
-          <h2 className="modal-card__title">Delete chat?</h2>
+          <h2 className="modal-card__title">Delete session?</h2>
           <button
             type="button"
             className="modal-card__close"
@@ -68,7 +68,7 @@ export function DeleteSessionModal({
               onClick={onConfirm}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Delete chat"}
+              {isDeleting ? "Deleting..." : "Delete session"}
             </button>
           </div>
         </div>

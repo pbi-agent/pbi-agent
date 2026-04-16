@@ -113,13 +113,13 @@ pbi-agent web --host 127.0.0.1 --port 8000
 When `--url` is omitted, the browser target is derived from `--host` and `--port`. Wildcard binds such as `0.0.0.0` and `::` are converted to loopback URLs for browser launch.
 :::
 
-The browser chat UI exposes local catalog commands without sending a model request:
+The browser session UI exposes local catalog commands without sending a model request:
 
 - `/skills` renders discovered project skills.
 - `/mcp` renders discovered project MCP servers.
 - `/agents` renders discovered project sub-agents.
 
-Image input in `web` mode is path-based and staged through chat commands:
+Image input in `web` mode is path-based and staged through session commands:
 
 ```text
 /image add ./screen.png

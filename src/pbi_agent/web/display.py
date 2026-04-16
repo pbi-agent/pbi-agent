@@ -134,14 +134,16 @@ class _EventDisplayBase(DisplayProtocol):
         del value, file_paths, image_paths, images, image_attachments
         return None
 
-    def request_new_chat(self) -> None:
-        raise RuntimeError("This display does not support interactive new-chat calls.")
+    def request_new_session(self) -> None:
+        raise RuntimeError(
+            "This display does not support interactive new-session calls."
+        )
 
-    def reset_chat(self) -> None:
+    def reset_session(self) -> None:
         self._waiting_message = None
         self._active_thinking_widget_id = None
         self._tool_group.reset()
-        self._publish("chat_reset", {})
+        self._publish("session_reset", {})
 
     def begin_sub_agent(
         self,
@@ -550,10 +552,10 @@ class WebDisplay(_EventDisplayBase):
         self._input_event.set()
         self._publish("input_state", {"enabled": False})
 
-    def request_new_chat(self) -> None:
-        from pbi_agent.agent.session import NEW_CHAT_SENTINEL
+    def request_new_session(self) -> None:
+        from pbi_agent.agent.session import NEW_SESSION_SENTINEL
 
-        self._input_queue.put(NEW_CHAT_SENTINEL)
+        self._input_queue.put(NEW_SESSION_SENTINEL)
         self._input_event.set()
         self._publish("input_state", {"enabled": False})
 
@@ -646,10 +648,10 @@ class KanbanTaskDisplay(_EventDisplayBase):
         if single_turn_hint:
             self._update_summary(single_turn_hint)
 
-    def request_new_chat(self) -> None:
-        raise RuntimeError("Kanban task display does not support interactive chat.")
+    def request_new_session(self) -> None:
+        raise RuntimeError("Kanban task display does not support interactive session.")
 
-    def reset_chat(self) -> None:
+    def reset_session(self) -> None:
         return None
 
     def user_prompt(self) -> str:

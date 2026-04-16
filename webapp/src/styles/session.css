@@ -1,6 +1,6 @@
-/* ── Chat Page Layout ─────────────────────────────────────────────── */
+/* ── Session Page Layout ─────────────────────────────────────────────── */
 
-.chat-layout {
+.session-layout {
   display: grid;
   grid-template-columns: 44px 1fr;
   height: calc(100vh - var(--topbar-height));
@@ -8,7 +8,7 @@
   transition: grid-template-columns var(--duration-slow) var(--ease-out);
 }
 
-.chat-layout--sidebar-open {
+.session-layout--sidebar-open {
   grid-template-columns: var(--sidebar-width) 1fr;
 }
 
@@ -257,8 +257,8 @@
   outline-offset: 2px;
 }
 
-/* ── Chat Panel ── */
-.chat-panel {
+/* ── Session Panel ── */
+.session-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -266,16 +266,16 @@
   background: var(--color-bg);
 }
 
-/* ── Chat Scroll Area ── */
-.chat-scroll-area {
+/* ── Session Scroll Area ── */
+.session-scroll-area {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   position: relative;
 }
 
-/* ── Chat Top Bar ── */
-.chat-topbar {
+/* ── Session Top Bar ── */
+.session-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -285,14 +285,14 @@
   flex-shrink: 0;
 }
 
-.chat-topbar__leading {
+.session-topbar__leading {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   min-width: 0;
 }
 
-.chat-topbar__actions {
+.session-topbar__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1369,7 +1369,7 @@
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  .chat-layout {
+  .session-layout {
     grid-template-columns: 1fr;
   }
 
@@ -1381,18 +1381,18 @@
     padding: var(--sp-4) var(--sp-4);
   }
 
-  .chat-topbar {
+  .session-topbar {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .chat-topbar__leading {
+  .session-topbar__leading {
     width: 100%;
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .chat-topbar__actions {
+  .session-topbar__actions {
     width: 100%;
     justify-content: space-between;
     flex-wrap: wrap;

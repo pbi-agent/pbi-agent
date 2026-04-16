@@ -51,7 +51,7 @@ class LiveSessionModel(BaseModel):
     session_id: str | None
     resume_session_id: str | None = None
     task_id: str | None
-    kind: Literal["chat", "task"]
+    kind: Literal["session", "task"]
     project_dir: str
     provider_id: str | None
     profile_id: str | None

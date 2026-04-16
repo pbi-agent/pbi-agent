@@ -87,7 +87,7 @@ export type LiveSession = LiveSessionRuntime & {
   live_session_id: string;
   session_id: string | null;
   task_id: string | null;
-  kind: "chat" | "task";
+  kind: "session" | "task";
   project_dir: string;
   created_at: string;
   status: "starting" | "running" | "ended";
@@ -150,7 +150,7 @@ export type ImageAttachment = {
   preview_url: string;
 };
 
-export type ExpandedChatInput = {
+export type ExpandedSessionInput = {
   text: string;
   file_paths: string[];
   image_paths: string[];
