@@ -2428,6 +2428,111 @@ def test_provider_model_discovery_endpoint_returns_openai_models(
     assert requests_seen[0].headers["Authorization"] == "Bearer env-openai-key"
 
 
+def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_AUTH_STORE_PATH", str(tmp_path / "auth.json"))
+    app = create_app(_settings(), runtime_args=_runtime_args("web"))
+
+    requests_seen: list[urllib.request.Request] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float = 0.0):
+        del timeout
+        requests_seen.append(request)
+        return _FakeHTTPResponse(
+            {
+                "models": [
+                    {
+                        "slug": "gpt-5.4",
+                        "display_name": "GPT-5.4",
+                        "input_modalities": ["text", "image"],
+                        "supported_reasoning_levels": [
+                            {"effort": "medium", "description": "balanced"}
+                        ],
+                        "visibility": "list",
+                        "supported_in_api": True,
+                    },
+                    {
+                        "slug": "gpt-hidden",
+                        "display_name": "Hidden",
+                        "visibility": "hide",
+                        "supported_in_api": True,
+                    },
+                    {
+                        "slug": "gpt-not-supported",
+                        "display_name": "Not Supported",
+                        "visibility": "list",
+                        "supported_in_api": False,
+                    },
+                ]
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with TestClient(app) as client:
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        create_provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "OpenAI ChatGPT",
+                "kind": "openai",
+                "auth_mode": "chatgpt_account",
+            },
+        )
+        assert create_provider_response.status_code == 200
+        save_auth_session(
+            build_auth_session(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token=_jwt(
+                    {
+                        "exp": 4102444800,
+                        "chatgpt_account_id": "acct_chatgpt",
+                        "email": "chatgpt@example.com",
+                    }
+                ),
+                refresh_token="refresh-chatgpt",
+                account_id="acct_chatgpt",
+                email="chatgpt@example.com",
+            )
+        )
+
+        response = client.get("/api/config/providers/openai-chatgpt/models")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider_id"] == "openai-chatgpt"
+    assert payload["provider_kind"] == "openai"
+    assert payload["discovery_supported"] is True
+    assert payload["manual_entry_required"] is False
+    assert payload["models"] == [
+        {
+            "id": "gpt-5.4",
+            "display_name": "GPT-5.4",
+            "created": None,
+            "owned_by": "openai",
+            "input_modalities": ["text", "image"],
+            "output_modalities": ["text"],
+            "aliases": [],
+            "supports_reasoning_effort": True,
+        }
+    ]
+    assert payload["error"] is None
+    assert len(requests_seen) == 1
+    assert (
+        requests_seen[0].full_url
+        == "https://chatgpt.com/backend-api/codex/models?client_version=0.99.0"
+    )
+    headers = {key.lower(): value for key, value in requests_seen[0].header_items()}
+    assert headers["authorization"].startswith("Bearer ")
+    assert headers["chatgpt-account-id"] == "acct_chatgpt"
+    assert headers["originator"] == "opencode"
+    assert headers["user-agent"].startswith("opencode/")
+
+
 def test_provider_model_discovery_endpoint_returns_auth_required_error(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -2604,6 +2709,11 @@ def test_provider_model_discovery_normalizes_xai_and_anthropic_payloads(
                             "id": "claude-sonnet-4-20250514",
                             "display_name": "Claude Sonnet 4",
                             "created_at": "2025-02-19T00:00:00Z",
+                            "capabilities": {
+                                "effort": {"supported": True},
+                                "image_input": {"supported": True},
+                                "pdf_input": {"supported": False},
+                            },
                         }
                     ],
                     "has_more": True,
@@ -2621,6 +2731,11 @@ def test_provider_model_discovery_normalizes_xai_and_anthropic_payloads(
                             "id": "claude-opus-4-20250514",
                             "display_name": "Claude Opus 4",
                             "created_at": "2025-02-19T00:00:00Z",
+                            "capabilities": {
+                                "effort": {"supported": False},
+                                "image_input": {"supported": True},
+                                "pdf_input": {"supported": True},
+                            },
                         }
                     ],
                     "has_more": False,
@@ -2681,8 +2796,16 @@ def test_provider_model_discovery_normalizes_xai_and_anthropic_payloads(
     ]
     assert anthropic_payload["models"][0]["display_name"] == "Claude Opus 4"
     assert anthropic_payload["models"][0]["created"] == "2025-02-19T00:00:00Z"
+    assert anthropic_payload["models"][0]["owned_by"] == "anthropic"
+    assert anthropic_payload["models"][0]["input_modalities"] == [
+        "text",
+        "image",
+        "pdf",
+    ]
     assert anthropic_payload["models"][0]["output_modalities"] == ["text"]
-    assert anthropic_payload["models"][0]["supports_reasoning_effort"] is True
+    assert anthropic_payload["models"][0]["supports_reasoning_effort"] is False
+    assert anthropic_payload["models"][1]["input_modalities"] == ["text", "image"]
+    assert anthropic_payload["models"][1]["supports_reasoning_effort"] is True
     assert requests_seen == [
         "https://api.x.ai/v1/language-models",
         "https://api.anthropic.com/v1/models?limit=1000",

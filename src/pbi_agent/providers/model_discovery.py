@@ -17,6 +17,7 @@ from pbi_agent.providers.chatgpt_codex_backend import chatgpt_user_agent
 
 _DISCOVERY_TIMEOUT_SECS = 30.0
 _SUPPORTED_DISCOVERY_PROVIDERS = frozenset({"openai", "xai", "google", "anthropic"})
+_OPENAI_CHATGPT_MIN_CLIENT_VERSION = "0.99.0"
 _MANUAL_ENTRY_ONLY_REASONS = {
     "generic": "Manual model entry is required for generic OpenAI-compatible providers.",
 }
@@ -133,6 +134,31 @@ def manual_entry_reason(provider_kind: str) -> str | None:
 
 
 def _discover_openai_models(settings: Settings) -> list[DiscoveredProviderModel]:
+    if settings.responses_url == OPENAI_CHATGPT_RESPONSES_URL:
+        response = _get_json(settings, _openai_chatgpt_models_url())
+        payload = response.get("models", [])
+        if not isinstance(payload, list):
+            return []
+        return [
+            DiscoveredProviderModel(
+                id=model_id,
+                display_name=_string_value(item.get("display_name")) or model_id,
+                created=_created_value(item.get("created")),
+                owned_by="openai",
+                input_modalities=_string_list(item.get("input_modalities")),
+                output_modalities=["text"],
+                aliases=_string_list(item.get("aliases")),
+                supports_reasoning_effort=_openai_chatgpt_supports_reasoning_effort(
+                    item
+                ),
+            )
+            for item in payload
+            if isinstance(item, dict)
+            if item.get("supported_in_api", True) is not False
+            if _string_value(item.get("visibility")) != "hide"
+            if (model_id := _string_value(item.get("slug")))
+        ]
+
     response = _get_json(
         settings, _replace_path_suffix(settings.responses_url, "models")
     )
@@ -201,11 +227,11 @@ def _discover_anthropic_models(settings: Settings) -> list[DiscoveredProviderMod
                 id=model_id,
                 display_name=_string_value(item.get("display_name")) or model_id,
                 created=_string_value(item.get("created_at")),
-                owned_by=_string_value(item.get("owned_by")),
-                input_modalities=[],
+                owned_by="anthropic",
+                input_modalities=_anthropic_input_modalities(item),
                 output_modalities=["text"],
                 aliases=[],
-                supports_reasoning_effort=True,
+                supports_reasoning_effort=_anthropic_supports_reasoning_effort(item),
             )
             for item in payload
             if isinstance(item, dict)
@@ -356,6 +382,13 @@ def _request_headers(
     return headers
 
 
+def _openai_chatgpt_models_url() -> str:
+    return _append_query_params(
+        _replace_path_suffix(OPENAI_CHATGPT_RESPONSES_URL, "models"),
+        {"client_version": _openai_chatgpt_client_version()},
+    )
+
+
 def _replace_path_suffix(url: str, replacement: str) -> str:
     parsed = urllib.parse.urlparse(url)
     path_parts = [part for part in parsed.path.split("/") if part]
@@ -422,11 +455,51 @@ def _read_error_body(exc: urllib.error.HTTPError) -> str:
         return ""
 
 
+def _whole_version(version: str) -> str:
+    return version.split("-", 1)[0]
+
+
+def _openai_chatgpt_client_version() -> str:
+    return _max_semver(
+        _whole_version(__version__),
+        _OPENAI_CHATGPT_MIN_CLIENT_VERSION,
+    )
+
+
+def _max_semver(*versions: str) -> str:
+    best = versions[0]
+    best_parts = _semver_parts(best)
+    for candidate in versions[1:]:
+        candidate_parts = _semver_parts(candidate)
+        if candidate_parts > best_parts:
+            best = candidate
+            best_parts = candidate_parts
+    return best
+
+
+def _semver_parts(version: str) -> tuple[int, int, int]:
+    parts = version.split(".")
+    numbers: list[int] = []
+    for index in range(3):
+        try:
+            numbers.append(int(parts[index]))
+        except (IndexError, ValueError):
+            numbers.append(0)
+    return (numbers[0], numbers[1], numbers[2])
+
+
 def _string_value(value: Any) -> str | None:
     if isinstance(value, str):
         stripped = value.strip()
         return stripped or None
     return None
+
+
+def _openai_chatgpt_supports_reasoning_effort(item: dict[str, Any]) -> bool | None:
+    supported_levels = item.get("supported_reasoning_levels")
+    if isinstance(supported_levels, list):
+        return bool(supported_levels)
+    return _bool_value(item.get("supports_reasoning_summaries"))
 
 
 def _string_list(value: Any) -> list[str]:
@@ -450,6 +523,36 @@ def _bool_value(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
     return None
+
+
+def _anthropic_supports_reasoning_effort(item: dict[str, Any]) -> bool | None:
+    capabilities = item.get("capabilities")
+    if not isinstance(capabilities, dict):
+        return None
+    effort = capabilities.get("effort")
+    if not isinstance(effort, dict):
+        return None
+    return _bool_value(effort.get("supported"))
+
+
+def _anthropic_input_modalities(item: dict[str, Any]) -> list[str]:
+    modalities = ["text"]
+    capabilities = item.get("capabilities")
+    if not isinstance(capabilities, dict):
+        return modalities
+    image_input = capabilities.get("image_input")
+    if _capability_supported(image_input):
+        modalities.append("image")
+    pdf_input = capabilities.get("pdf_input")
+    if _capability_supported(pdf_input):
+        modalities.append("pdf")
+    return modalities
+
+
+def _capability_supported(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    return bool(value.get("supported") is True)
 
 
 def _strip_models_prefix(value: str | None) -> str | None:
