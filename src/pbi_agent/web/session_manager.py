@@ -109,6 +109,7 @@ from pbi_agent.web.uploads import (
 APP_EVENT_STREAM_ID = "app"
 _MAX_EVENT_HISTORY = 1000
 _NON_RUNNABLE_BOARD_STAGE_IDS = frozenset({KANBAN_STAGE_BACKLOG, KANBAN_STAGE_DONE})
+_PROVIDER_AUTH_BROWSER_FLOW_TIMEOUT_SECS = 5 * 60
 
 
 def _now_iso() -> str:
@@ -416,6 +417,7 @@ class PendingProviderAuthFlow:
     updated_at: str
     browser_auth: BrowserAuthChallenge | None = None
     browser_callback_listener: BrowserAuthCallbackListener | None = None
+    browser_timeout_timer: threading.Timer | None = None
     device_auth: DeviceAuthChallenge | None = None
     authorization_url: str | None = None
     callback_url: str | None = None
@@ -1370,6 +1372,7 @@ class WebSessionManager:
         created_at = _now_iso()
         if method == AUTH_FLOW_METHOD_BROWSER:
             listener: BrowserAuthCallbackListener | None = None
+            timeout_timer: threading.Timer | None = None
             try:
                 listener = create_browser_auth_callback_listener(
                     callback_handler=lambda params: self._handle_provider_auth_browser_callback(
@@ -1394,13 +1397,33 @@ class WebSessionManager:
                     updated_at=created_at,
                     browser_auth=browser_auth,
                     browser_callback_listener=listener,
+                    browser_timeout_timer=None,
                     authorization_url=browser_auth.authorization_url,
                     callback_url=browser_auth.redirect_uri,
                 )
+                timeout_timer = threading.Timer(
+                    _PROVIDER_AUTH_BROWSER_FLOW_TIMEOUT_SECS,
+                    self._expire_provider_auth_flow,
+                    kwargs={
+                        "provider_id": provider.id,
+                        "flow_id": flow_id,
+                        "message": "Authorization timed out.",
+                    },
+                )
+                flow.browser_timeout_timer = timeout_timer
+                with self._lock:
+                    self._provider_auth_flows[flow.flow_id] = flow
+                timeout_timer.start()
                 listener.start()
             except Exception:
+                if timeout_timer is not None:
+                    timeout_timer.cancel()
                 if listener is not None:
                     listener.shutdown()
+                with self._lock:
+                    existing = self._provider_auth_flows.get(flow_id)
+                    if existing is not None and existing.provider_id == provider.id:
+                        self._provider_auth_flows.pop(flow_id, None)
                 raise
         elif method == AUTH_FLOW_METHOD_DEVICE:
             device_auth = start_provider_device_auth(
@@ -1424,8 +1447,9 @@ class WebSessionManager:
         else:
             raise ValueError(f"Unknown auth flow method '{method}'.")
 
-        with self._lock:
-            self._provider_auth_flows[flow.flow_id] = flow
+        if method != AUTH_FLOW_METHOD_BROWSER:
+            with self._lock:
+                self._provider_auth_flows[flow.flow_id] = flow
         return {
             "provider": self._provider_view(provider),
             "auth_status": self._auth_status_view(status),
@@ -1708,6 +1732,7 @@ class WebSessionManager:
             provider_auth_flows = list(self._provider_auth_flows.values())
             self._provider_auth_flows.clear()
         for flow in provider_auth_flows:
+            self._cancel_provider_auth_flow_browser_timeout(flow)
             self._shutdown_provider_auth_flow_browser_listener(flow)
 
     def _run_session_worker(self, live_session_id: str) -> None:
@@ -2355,6 +2380,7 @@ class WebSessionManager:
             error_description=params.error_description,
         )
         flow = self._require_provider_auth_flow(provider_id, flow_id)
+        self._cancel_provider_auth_flow_browser_timeout(flow)
         self._shutdown_provider_auth_flow_browser_listener(flow)
         if payload["flow"]["status"] == AUTH_FLOW_STATUS_COMPLETED:
             return BrowserAuthCallbackOutcome(completed=True)
@@ -2362,6 +2388,35 @@ class WebSessionManager:
             completed=False,
             error_message=payload["flow"].get("error_message") or "Authorization failed.",
         )
+
+    def _expire_provider_auth_flow(
+        self,
+        *,
+        provider_id: str,
+        flow_id: str,
+        message: str,
+    ) -> None:
+        try:
+            flow = self._require_provider_auth_flow(provider_id, flow_id)
+        except ConfigError:
+            return
+        if flow.method != AUTH_FLOW_METHOD_BROWSER:
+            return
+        if flow.status != AUTH_FLOW_STATUS_PENDING:
+            self._cancel_provider_auth_flow_browser_timeout(flow)
+            return
+        self._mark_provider_auth_flow_failed(flow, message)
+        self._cancel_provider_auth_flow_browser_timeout(flow)
+        self._shutdown_provider_auth_flow_browser_listener(flow)
+
+    def _cancel_provider_auth_flow_browser_timeout(
+        self, flow: PendingProviderAuthFlow
+    ) -> None:
+        timer = flow.browser_timeout_timer
+        if timer is None:
+            return
+        flow.browser_timeout_timer = None
+        timer.cancel()
 
     def _shutdown_provider_auth_flow_browser_listener(
         self, flow: PendingProviderAuthFlow

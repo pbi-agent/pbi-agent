@@ -7,3 +7,4 @@
 - [x] Append the implementation summary to `MEMORY.md`
 - [x] Normalize loopback redirect host to `localhost` for browser auth
 - [x] Replace web browser auth callback with a dedicated localhost listener
+- [x] Fix browser auth startup race and abandoned-listener cleanup

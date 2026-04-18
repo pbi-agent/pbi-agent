@@ -99,6 +99,25 @@ class _FakeBrowserAuthCallbackListener:
         )
 
 
+class _FakeTimer:
+    def __init__(self, interval, function, args=None, kwargs=None) -> None:
+        self.interval = interval
+        self.function = function
+        self.args = args or ()
+        self.kwargs = kwargs or {}
+        self.started = False
+        self.cancelled = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def fire(self) -> None:
+        self.function(*self.args, **self.kwargs)
+
+
 def test_web_server_prints_banner_and_starts_uvicorn() -> None:
     server = PBIWebServer(settings=_settings(), port=9001)
     output = StringIO()
@@ -1931,11 +1950,17 @@ def test_provider_auth_browser_flow_endpoints_round_trip(
 
     browser_auth_holder: dict[str, BrowserAuthChallenge] = {}
     listener_holder: dict[str, _FakeBrowserAuthCallbackListener] = {}
+    timer_holder: dict[str, _FakeTimer] = {}
 
     def fake_create_browser_auth_callback_listener(**kwargs):
         listener = _FakeBrowserAuthCallbackListener(kwargs["callback_handler"])
         listener_holder["listener"] = listener
         return listener
+
+    def fake_timer(*args, **kwargs):
+        timer = _FakeTimer(*args, **kwargs)
+        timer_holder["timer"] = timer
+        return timer
 
     def fake_start_browser_auth(**kwargs) -> BrowserAuthChallenge:
         browser_auth = BrowserAuthChallenge(
@@ -1970,6 +1995,7 @@ def test_provider_auth_browser_flow_endpoints_round_trip(
             "pbi_agent.web.session_manager.create_browser_auth_callback_listener",
             side_effect=fake_create_browser_auth_callback_listener,
         ),
+        patch("pbi_agent.web.session_manager.threading.Timer", side_effect=fake_timer),
         patch(
             "pbi_agent.web.session_manager.start_provider_browser_auth",
             side_effect=fake_start_browser_auth,
@@ -2005,6 +2031,7 @@ def test_provider_auth_browser_flow_endpoints_round_trip(
         )
         assert browser_auth_holder["auth"].redirect_uri == "http://localhost:1455/auth/callback"
         assert listener_holder["listener"].started is True
+        assert timer_holder["timer"].started is True
 
         callback_outcome = listener_holder["listener"].complete(
             code="auth-code-123",
@@ -2019,6 +2046,7 @@ def test_provider_auth_browser_flow_endpoints_round_trip(
         assert flow_payload["auth_status"]["session_status"] == "connected"
         assert flow_payload["session"]["email"] == "browser@example.com"
         assert listener_holder["listener"].stopped is True
+        assert timer_holder["timer"].cancelled is True
 
 
 def test_provider_auth_browser_flow_uses_dedicated_local_callback_listener(
@@ -2029,11 +2057,17 @@ def test_provider_auth_browser_flow_uses_dedicated_local_callback_listener(
     app = create_app(_settings(), runtime_args=_runtime_args("web"))
     listener_holder: dict[str, _FakeBrowserAuthCallbackListener] = {}
     captured_redirect_uris: list[str] = []
+    timer_holder: dict[str, _FakeTimer] = {}
 
     def fake_create_browser_auth_callback_listener(**kwargs):
         listener = _FakeBrowserAuthCallbackListener(kwargs["callback_handler"])
         listener_holder["listener"] = listener
         return listener
+
+    def fake_timer(*args, **kwargs):
+        timer = _FakeTimer(*args, **kwargs)
+        timer_holder["timer"] = timer
+        return timer
 
     def fake_start_browser_auth(**kwargs) -> BrowserAuthChallenge:
         captured_redirect_uris.append(kwargs["redirect_uri"])
@@ -2049,6 +2083,7 @@ def test_provider_auth_browser_flow_uses_dedicated_local_callback_listener(
             "pbi_agent.web.session_manager.create_browser_auth_callback_listener",
             side_effect=fake_create_browser_auth_callback_listener,
         ),
+        patch("pbi_agent.web.session_manager.threading.Timer", side_effect=fake_timer),
         patch(
             "pbi_agent.web.session_manager.start_provider_browser_auth",
             side_effect=fake_start_browser_auth,
@@ -2075,6 +2110,163 @@ def test_provider_auth_browser_flow_uses_dedicated_local_callback_listener(
 
     assert captured_redirect_uris == ["http://localhost:1455/auth/callback"]
     assert listener_holder["listener"].started is True
+    assert timer_holder["timer"].started is True
+
+
+def test_provider_auth_browser_flow_registers_before_listener_start(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_AUTH_STORE_PATH", str(tmp_path / "auth.json"))
+    app = create_app(_settings(), runtime_args=_runtime_args("web"))
+
+    timer_holder: dict[str, _FakeTimer] = {}
+
+    class _EagerListener(_FakeBrowserAuthCallbackListener):
+        def start(self) -> None:
+            super().start()
+            outcome = self.complete(code="auth-code-123", state="state-123")
+            assert outcome.completed is True
+
+    def fake_create_browser_auth_callback_listener(**kwargs):
+        return _EagerListener(kwargs["callback_handler"])
+
+    def fake_timer(*args, **kwargs):
+        timer = _FakeTimer(*args, **kwargs)
+        timer_holder["timer"] = timer
+        return timer
+
+    def fake_start_browser_auth(**kwargs) -> BrowserAuthChallenge:
+        return BrowserAuthChallenge(
+            authorization_url="https://auth.openai.com/oauth/authorize?state=state-123",
+            redirect_uri=kwargs["redirect_uri"],
+            state="state-123",
+            code_verifier="verifier-123",
+        )
+
+    def fake_complete_browser_auth(**kwargs):
+        session = build_auth_session(
+            provider_id=kwargs["provider_id"],
+            backend="openai_chatgpt",
+            access_token=_jwt(
+                {
+                    "exp": 4102444800,
+                    "chatgpt_account_id": "acct_browser",
+                    "email": "browser@example.com",
+                }
+            ),
+            refresh_token="refresh-browser",
+            account_id="acct_browser",
+            email="browser@example.com",
+        )
+        save_auth_session(session)
+        return session
+
+    with (
+        patch(
+            "pbi_agent.web.session_manager.create_browser_auth_callback_listener",
+            side_effect=fake_create_browser_auth_callback_listener,
+        ),
+        patch("pbi_agent.web.session_manager.threading.Timer", side_effect=fake_timer),
+        patch(
+            "pbi_agent.web.session_manager.start_provider_browser_auth",
+            side_effect=fake_start_browser_auth,
+        ),
+        patch(
+            "pbi_agent.web.session_manager.complete_provider_browser_auth",
+            side_effect=fake_complete_browser_auth,
+        ),
+        TestClient(app) as client,
+    ):
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        create_provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "OpenAI ChatGPT",
+                "kind": "openai",
+                "auth_mode": "chatgpt_account",
+            },
+        )
+        assert create_provider_response.status_code == 200
+
+        start_response = client.post(
+            "/api/provider-auth/openai-chatgpt/flows",
+            json={"method": "browser"},
+        )
+        assert start_response.status_code == 200
+        assert start_response.json()["flow"]["status"] == "completed"
+        assert timer_holder["timer"].cancelled is True
+
+
+def test_provider_auth_browser_flow_timeout_stops_listener(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_AUTH_STORE_PATH", str(tmp_path / "auth.json"))
+    app = create_app(_settings(), runtime_args=_runtime_args("web"))
+
+    listener_holder: dict[str, _FakeBrowserAuthCallbackListener] = {}
+    timer_holder: dict[str, _FakeTimer] = {}
+
+    def fake_create_browser_auth_callback_listener(**kwargs):
+        listener = _FakeBrowserAuthCallbackListener(kwargs["callback_handler"])
+        listener_holder["listener"] = listener
+        return listener
+
+    def fake_timer(*args, **kwargs):
+        timer = _FakeTimer(*args, **kwargs)
+        timer_holder["timer"] = timer
+        return timer
+
+    def fake_start_browser_auth(**kwargs) -> BrowserAuthChallenge:
+        return BrowserAuthChallenge(
+            authorization_url="https://auth.openai.com/oauth/authorize?state=state-123",
+            redirect_uri=kwargs["redirect_uri"],
+            state="state-123",
+            code_verifier="verifier-123",
+        )
+
+    with (
+        patch(
+            "pbi_agent.web.session_manager.create_browser_auth_callback_listener",
+            side_effect=fake_create_browser_auth_callback_listener,
+        ),
+        patch("pbi_agent.web.session_manager.threading.Timer", side_effect=fake_timer),
+        patch(
+            "pbi_agent.web.session_manager.start_provider_browser_auth",
+            side_effect=fake_start_browser_auth,
+        ),
+        TestClient(app) as client,
+    ):
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        create_provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "OpenAI ChatGPT",
+                "kind": "openai",
+                "auth_mode": "chatgpt_account",
+            },
+        )
+        assert create_provider_response.status_code == 200
+
+        start_response = client.post(
+            "/api/provider-auth/openai-chatgpt/flows",
+            json={"method": "browser"},
+        )
+        assert start_response.status_code == 200
+        flow_id = start_response.json()["flow"]["flow_id"]
+
+        timer_holder["timer"].fire()
+
+        flow_response = client.get(f"/api/provider-auth/openai-chatgpt/flows/{flow_id}")
+        assert flow_response.status_code == 200
+        flow_payload = flow_response.json()
+        assert flow_payload["flow"]["status"] == "failed"
+        assert flow_payload["flow"]["error_message"] == "Authorization timed out."
+        assert listener_holder["listener"].stopped is True
+        assert timer_holder["timer"].cancelled is True
 
 
 def test_provider_auth_device_flow_endpoints_round_trip(
