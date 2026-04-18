@@ -20,6 +20,9 @@ from pbi_agent.web.api.schemas.config import (
     ModelProfileUpdateRequest,
     ModelProfileViewModel,
     ProviderListResponse,
+    ProviderModelFetchErrorModel,
+    ProviderModelListResponse,
+    ProviderModelViewModel,
     ProviderMutationRequest,
     ProviderResponse,
     ProviderUpdateRequest,
@@ -110,6 +113,35 @@ def delete_provider(
     except Exception as exc:
         raise config_http_error(exc) from exc
     return Response(status_code=204)
+
+
+@router.get(
+    "/providers/{provider_id}/models",
+    response_model=ProviderModelListResponse,
+)
+def list_provider_models(
+    provider_id: str,
+    manager: SessionManagerDep,
+) -> ProviderModelListResponse:
+    try:
+        payload = manager.get_provider_models(provider_id)
+    except Exception as exc:
+        raise config_http_error(exc) from exc
+    return ProviderModelListResponse(
+        provider_id=payload["provider_id"],
+        provider_kind=payload["provider_kind"],
+        discovery_supported=payload["discovery_supported"],
+        manual_entry_required=payload["manual_entry_required"],
+        models=[
+            model_from_payload(ProviderModelViewModel, item)
+            for item in payload["models"]
+        ],
+        error=(
+            model_from_payload(ProviderModelFetchErrorModel, payload["error"])
+            if payload["error"] is not None
+            else None
+        ),
+    )
 
 
 @router.get("/model-profiles", response_model=ModelProfileListResponse)

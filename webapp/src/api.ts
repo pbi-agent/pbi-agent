@@ -15,6 +15,7 @@ import type {
   ProviderAuthFlowResponse,
   ProviderAuthLogoutResponse,
   ProviderAuthResponse,
+  ProviderModelListPayload,
   ProviderView,
   RunSession,
   SessionDetailPayload,
@@ -325,6 +326,12 @@ export async function deleteProvider(
     method: "DELETE",
     headers: { "If-Match": configRevision },
   });
+}
+
+export async function fetchProviderModels(
+  providerId: string,
+): Promise<ProviderModelListPayload> {
+  return requestJson(`/api/config/providers/${providerId}/models`);
 }
 
 export async function fetchProviderAuthStatus(

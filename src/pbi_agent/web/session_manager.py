@@ -61,6 +61,7 @@ from pbi_agent.config import (
     provider_ui_metadata,
     replace_model_profile_config,
     replace_provider_config,
+    resolve_runtime_for_provider_id,
     resolve_runtime_for_profile_id,
     resolve_web_runtime,
     select_active_model_profile,
@@ -70,6 +71,10 @@ from pbi_agent.display.formatting import shorten
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
 from pbi_agent.providers.capabilities import provider_supports_images
+from pbi_agent.providers.model_discovery import (
+    discover_provider_models,
+    manual_entry_reason,
+)
 from pbi_agent.session_store import (
     KANBAN_STAGE_BACKLOG,
     KANBAN_STAGE_DONE,
@@ -1578,6 +1583,32 @@ class WebSessionManager:
     ) -> str:
         return delete_provider_config(provider_id, expected_revision=expected_revision)
 
+    def get_provider_models(self, provider_id: str) -> dict[str, Any]:
+        config = load_internal_config()
+        provider = self._require_provider(config, provider_id)
+        runtime = resolve_runtime_for_provider_id(
+            provider.id,
+            verbose=self._default_runtime.settings.verbose,
+        )
+        result = discover_provider_models(runtime.settings)
+        error_payload = self._provider_model_error_view(result.error)
+        if error_payload is None:
+            reason = manual_entry_reason(provider.kind)
+            if reason and result.manual_entry_required:
+                error_payload = {
+                    "code": "manual_entry_required",
+                    "message": reason,
+                    "status_code": None,
+                }
+        return {
+            "provider_id": provider.id,
+            "provider_kind": provider.kind,
+            "discovery_supported": result.discovery_supported,
+            "manual_entry_required": result.manual_entry_required,
+            "models": [self._provider_model_view(model) for model in result.models],
+            "error": error_payload,
+        }
+
     def create_model_profile(
         self,
         *,
@@ -2352,6 +2383,27 @@ class WebSessionManager:
             "error_message": flow.error_message,
             "created_at": flow.created_at,
             "updated_at": flow.updated_at,
+        }
+
+    def _provider_model_view(self, model: Any) -> dict[str, Any]:
+        return {
+            "id": model.id,
+            "display_name": model.display_name,
+            "created": model.created,
+            "owned_by": model.owned_by,
+            "input_modalities": list(model.input_modalities),
+            "output_modalities": list(model.output_modalities),
+            "aliases": list(model.aliases),
+            "supports_reasoning_effort": model.supports_reasoning_effort,
+        }
+
+    def _provider_model_error_view(self, error: Any) -> dict[str, Any] | None:
+        if error is None:
+            return None
+        return {
+            "code": error.code,
+            "message": error.message,
+            "status_code": error.status_code,
         }
 
     def _require_provider_auth_flow(
