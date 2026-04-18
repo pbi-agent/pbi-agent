@@ -503,6 +503,28 @@ def resolve_runtime_for_profile_id(
     )
 
 
+def resolve_runtime_for_provider_id(
+    provider_id: str,
+    *,
+    verbose: bool = False,
+) -> ResolvedRuntime:
+    load_dotenv()
+    config = load_internal_config()
+    provider = _provider_map(config).get(slugify(provider_id))
+    if provider is None:
+        raise ConfigError(f"Unknown provider ID '{provider_id}'.")
+    settings = _settings_from_runtime_parts(
+        provider=provider,
+        profile=None,
+        verbose=verbose,
+    )
+    return ResolvedRuntime(
+        settings=settings,
+        provider_id=provider.id,
+        profile_id=None,
+    )
+
+
 def resolve_settings_for_profile_id(
     profile_id: str,
     *,
@@ -1099,7 +1121,7 @@ def _resolve_secret(
 def _settings_from_runtime_parts(
     *,
     provider: ProviderConfig,
-    profile: ModelProfileConfig,
+    profile: ModelProfileConfig | None,
     verbose: bool,
 ) -> Settings:
     secret = _ResolvedSecret(api_key="")
@@ -1128,23 +1150,29 @@ def _settings_from_runtime_parts(
         responses_url=provider.responses_url
         or _default_responses_url_for_auth(provider.kind, provider.auth_mode),
         generic_api_url=provider.generic_api_url or DEFAULT_GENERIC_API_URL,
-        model=_coalesce(profile.model, _default_model(provider.kind)),
+        model=_coalesce(
+            profile.model if profile else None, _default_model(provider.kind)
+        ),
         sub_agent_model=_coalesce(
-            profile.sub_agent_model,
+            profile.sub_agent_model if profile else None,
             _default_sub_agent_model(provider.kind),
         ),
-        max_tokens=_coalesce(profile.max_tokens, DEFAULT_MAX_TOKENS),
+        max_tokens=_coalesce(
+            profile.max_tokens if profile else None, DEFAULT_MAX_TOKENS
+        ),
         verbose=verbose,
-        max_tool_workers=_coalesce(profile.max_tool_workers, 4),
-        max_retries=_coalesce(profile.max_retries, 3),
+        max_tool_workers=_coalesce(profile.max_tool_workers if profile else None, 4),
+        max_retries=_coalesce(profile.max_retries if profile else None, 3),
         reasoning_effort=_coalesce(
-            profile.reasoning_effort,
+            profile.reasoning_effort if profile else None,
             _default_reasoning_effort(provider.kind),
         ),
-        compact_threshold=profile.compact_threshold or 150000,
+        compact_threshold=(profile.compact_threshold if profile else None) or 150000,
         provider=provider.kind,
-        service_tier=profile.service_tier,
-        web_search=True if profile.web_search is None else profile.web_search,
+        service_tier=profile.service_tier if profile else None,
+        web_search=True
+        if profile is None or profile.web_search is None
+        else profile.web_search,
     )
 
 

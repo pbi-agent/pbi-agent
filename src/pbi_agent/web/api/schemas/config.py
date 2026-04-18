@@ -93,6 +93,32 @@ class ProviderResponse(BaseModel):
     config_revision: str
 
 
+class ProviderModelFetchErrorModel(BaseModel):
+    code: str
+    message: str
+    status_code: int | None = None
+
+
+class ProviderModelViewModel(BaseModel):
+    id: str
+    display_name: str | None = None
+    created: int | str | None = None
+    owned_by: str | None = None
+    input_modalities: list[str] = Field(default_factory=list)
+    output_modalities: list[str] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
+    supports_reasoning_effort: bool | None = None
+
+
+class ProviderModelListResponse(BaseModel):
+    provider_id: str
+    provider_kind: str
+    discovery_supported: bool
+    manual_entry_required: bool
+    models: list[ProviderModelViewModel]
+    error: ProviderModelFetchErrorModel | None = None
+
+
 class ProviderAuthImportRequest(BaseModel):
     access_token: NonEmptyString
     refresh_token: str | None = None

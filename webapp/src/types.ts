@@ -241,6 +241,32 @@ export type ProviderAuthResponse = {
   session: ProviderAuthSession | null;
 };
 
+export type ProviderModelFetchError = {
+  code: string;
+  message: string;
+  status_code: number | null;
+};
+
+export type ProviderModelView = {
+  id: string;
+  display_name: string | null;
+  created: number | string | null;
+  owned_by: string | null;
+  input_modalities: string[];
+  output_modalities: string[];
+  aliases: string[];
+  supports_reasoning_effort: boolean | null;
+};
+
+export type ProviderModelListPayload = {
+  provider_id: string;
+  provider_kind: string;
+  discovery_supported: boolean;
+  manual_entry_required: boolean;
+  models: ProviderModelView[];
+  error: ProviderModelFetchError | null;
+};
+
 export type ProviderAuthLogoutResponse = {
   provider: ProviderView;
   auth_status: ProviderAuthStatus;

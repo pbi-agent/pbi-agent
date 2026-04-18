@@ -5,6 +5,7 @@ import { renderWithProviders } from "../../test/render";
 import {
   ApiError,
   fetchConfigBootstrap,
+  fetchProviderModels,
   fetchProviderAuthFlow,
   logoutProviderAuth,
   refreshProviderAuth,
@@ -18,6 +19,7 @@ vi.mock("../../api", async (importOriginal) => {
   return {
     ...actual,
     fetchConfigBootstrap: vi.fn(),
+    fetchProviderModels: vi.fn(),
     createProvider: vi.fn(),
     updateProvider: vi.fn(),
     deleteProvider: vi.fn(),
@@ -270,6 +272,35 @@ describe("SettingsPage", () => {
       auth_status: makeConfigBootstrap().providers[1].auth_status,
       removed: true,
     });
+    vi.mocked(fetchProviderModels).mockResolvedValue({
+      provider_id: "openai-main",
+      provider_kind: "openai",
+      discovery_supported: true,
+      manual_entry_required: false,
+      models: [
+        {
+          id: "gpt-5.4",
+          display_name: "GPT-5.4",
+          created: 1_713_000_000,
+          owned_by: "openai",
+          input_modalities: ["text"],
+          output_modalities: ["text"],
+          aliases: [],
+          supports_reasoning_effort: true,
+        },
+        {
+          id: "gpt-5.4-mini",
+          display_name: "GPT-5.4 mini",
+          created: 1_713_000_100,
+          owned_by: "openai",
+          input_modalities: ["text"],
+          output_modalities: ["text"],
+          aliases: ["gpt-5-mini"],
+          supports_reasoning_effort: true,
+        },
+      ],
+      error: null,
+    });
     vi.spyOn(window, "open").mockImplementation(() => null);
   });
 
@@ -435,6 +466,174 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(logoutProviderAuth).toHaveBeenCalledWith("openai-chatgpt"),
     );
+  });
+
+  it("fetches provider models when the profile modal opens and when the provider changes", async () => {
+    const user = userEvent.setup();
+    const bootstrap = makeConfigBootstrap({
+      providers: [
+        ...makeConfigBootstrap().providers,
+        {
+          id: "xai-main",
+          name: "xAI Main",
+          kind: "xai",
+          auth_mode: "api_key",
+          responses_url: null,
+          generic_api_url: null,
+          secret_source: "env_var",
+          secret_env_var: "XAI_API_KEY",
+          has_secret: true,
+          auth_status: {
+            auth_mode: "api_key",
+            backend: null,
+            session_status: "missing",
+            has_session: false,
+            can_refresh: false,
+            account_id: null,
+            email: null,
+            plan_type: null,
+            expires_at: null,
+          },
+        },
+      ],
+      options: {
+        ...makeConfigBootstrap().options,
+        provider_kinds: ["openai", "xai"],
+        provider_metadata: {
+          ...makeConfigBootstrap().options.provider_metadata,
+          xai: {
+            default_auth_mode: "api_key",
+            auth_modes: ["api_key"],
+            default_model: "grok-4.20",
+            default_sub_agent_model: "grok-4.1-fast",
+            default_responses_url: "https://api.x.ai/v1/responses",
+            default_generic_api_url: null,
+            supports_responses_url: true,
+            supports_generic_api_url: false,
+            supports_service_tier: false,
+            supports_native_web_search: true,
+            supports_image_inputs: false,
+          },
+        },
+      },
+    });
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(bootstrap);
+    vi.mocked(fetchProviderModels)
+      .mockResolvedValueOnce({
+        provider_id: "openai-main",
+        provider_kind: "openai",
+        discovery_supported: true,
+        manual_entry_required: false,
+        models: [],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        provider_id: "xai-main",
+        provider_kind: "xai",
+        discovery_supported: true,
+        manual_entry_required: false,
+        models: [],
+        error: null,
+      });
+
+    const { container } = renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "+ Add Profile" }));
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    const providerSelect = container.querySelector(
+      'select[name="provider-id"]',
+    ) as HTMLSelectElement;
+    await user.selectOptions(providerSelect, "xai-main");
+
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("xai-main"),
+    );
+  });
+
+  it("renders fetched provider models as dropdowns in the profile modal", async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "+ Add Profile" }));
+
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    const modelSelect = container.querySelector('select[name="model"]');
+    const subAgentModelSelect = container.querySelector(
+      'select[name="sub-agent-model"]',
+    );
+    expect(modelSelect).not.toBeNull();
+    expect(subAgentModelSelect).not.toBeNull();
+    expect(
+      screen.getAllByRole("option", { name: "GPT-5.4 (gpt-5.4)" }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("option", { name: "GPT-5.4 mini (gpt-5.4-mini)" }),
+    ).toHaveLength(2);
+  });
+
+  it("falls back to text input when provider model discovery fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchProviderModels).mockResolvedValue({
+      provider_id: "openai-main",
+      provider_kind: "openai",
+      discovery_supported: true,
+      manual_entry_required: true,
+      models: [],
+      error: {
+        code: "auth_required",
+        message: "Missing authentication for provider 'openai'.",
+        status_code: null,
+      },
+    });
+
+    const { container } = renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "+ Add Profile" }));
+
+    await screen.findByText("Missing authentication for provider 'openai'.");
+    expect(container.querySelector('input[name="model"]')).not.toBeNull();
+    expect(container.querySelector('select[name="model"]')).toBeNull();
+  });
+
+  it("keeps an existing unknown model editable when discovery does not return it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        model_profiles: [
+          {
+            ...makeConfigBootstrap().model_profiles[0],
+            id: "legacy",
+            name: "Legacy",
+            model: "legacy-model",
+            sub_agent_model: "legacy-sub-agent",
+          },
+        ],
+      }),
+    );
+
+    const { container } = renderWithProviders(<SettingsPage />);
+
+    await screen.findByRole("button", { name: "+ Add Profile" });
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[2]);
+
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
+    );
+
+    const modelInput = container.querySelector(
+      'input[name="model"]',
+    ) as HTMLInputElement | null;
+    const subAgentModelInput = container.querySelector(
+      'input[name="sub-agent-model"]',
+    ) as HTMLInputElement | null;
+    expect(modelInput?.value).toBe("legacy-model");
+    expect(subAgentModelInput?.value).toBe("legacy-sub-agent");
   });
 
   it("shows the stale-config banner when the active profile update conflicts", async () => {
