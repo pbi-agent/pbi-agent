@@ -16,6 +16,7 @@ import { ApiError } from "../../api";
 import type {
   CommandView,
   ConfigBootstrapPayload,
+  ConfigOptions,
   ModelProfileView,
   ProviderAuthStatus,
   ProviderView,
@@ -28,15 +29,15 @@ import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
 
-function authModeLabel(authMode: string): string {
-  switch (authMode) {
-    case "api_key":
-      return "API key";
-    case "chatgpt_account":
-      return "ChatGPT account";
-    default:
-      return authMode;
-  }
+function authModeLabel(provider: ProviderView, options: ConfigOptions): string {
+  return (
+    options.provider_metadata[provider.kind]?.auth_mode_metadata[provider.auth_mode]
+      ?.label ?? provider.auth_mode
+  );
+}
+
+function providerKindLabel(providerKind: string, options: ConfigOptions): string {
+  return options.provider_metadata[providerKind]?.label ?? providerKind;
 }
 
 function authStatusLabel(status: ProviderAuthStatus): string {
@@ -62,6 +63,7 @@ function formatAuthExpiry(expiresAt: number | null): string | null {
 
 function ProviderCard({
   provider,
+  options,
   isBusy,
   onEdit,
   onDelete,
@@ -70,6 +72,7 @@ function ProviderCard({
   onDisconnect,
 }: {
   provider: ProviderView;
+  options: ConfigOptions;
   isBusy: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -87,9 +90,9 @@ function ProviderCard({
         <div className="settings-item__name">{provider.name}</div>
         <div className="settings-item__id">{provider.id}</div>
         <div className="settings-item__meta">
-          <span className="settings-item__tag">{provider.kind}</span>
+          <span className="settings-item__tag">{providerKindLabel(provider.kind, options)}</span>
           <span className="settings-item__tag settings-item__tag--accent">
-            {authModeLabel(provider.auth_mode)}
+            {authModeLabel(provider, options)}
           </span>
           <span
             className={`settings-item__tag ${
@@ -178,10 +181,12 @@ function ProviderCard({
 
 function ProfileCard({
   profile,
+  options,
   onEdit,
   onDelete,
 }: {
   profile: ModelProfileView;
+  options: ConfigOptions;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -208,7 +213,9 @@ function ProfileCard({
         <div className="settings-item__id">{profile.id}</div>
         <div className="settings-item__meta">
           <span className="settings-item__tag">{profile.provider.name}</span>
-          <span className="settings-item__tag">{profile.provider.kind}</span>
+          <span className="settings-item__tag">
+            {providerKindLabel(profile.provider.kind, options)}
+          </span>
         </div>
         <div className="runtime-summary">{runtimeParts.join(" · ")}</div>
       </div>
@@ -262,6 +269,10 @@ type ModalState =
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
 
+function shouldPromptProviderAuth(provider: ProviderView): boolean {
+  return provider.auth_mode !== "api_key";
+}
+
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [modal, setModal] = useState<ModalState>({ type: "none" });
@@ -308,12 +319,20 @@ export function SettingsPage() {
     existingId?: string,
   ): Promise<void> {
     try {
+      const response = existingId
+        ? await updateProvider(existingId, payload, getRevision())
+        : await createProvider(payload, getRevision());
       if (existingId) {
-        await updateProvider(existingId, payload, getRevision());
-      } else {
-        await createProvider(payload, getRevision());
+        await invalidateBoth();
+        setModal({ type: "none" });
+        return;
       }
+
       await invalidateBoth();
+      if (shouldPromptProviderAuth(response.provider)) {
+        setModal({ type: "provider-auth", provider: response.provider });
+        return;
+      }
       setModal({ type: "none" });
     } catch (err) {
       wrapStale(err);
@@ -429,7 +448,7 @@ export function SettingsPage() {
             <strong>First-time setup:</strong> To start using the app, complete these
             steps:
             <ol>
-              <li>Add a provider with your API credentials</li>
+              <li>Add a provider and finish any sign-in step</li>
               <li>Create a model profile that uses that provider</li>
             </ol>
           </div>
@@ -466,6 +485,7 @@ export function SettingsPage() {
                 <ProviderCard
                   key={provider.id}
                   provider={provider}
+                  options={options}
                   isBusy={busyProviderId === provider.id}
                   onEdit={() => setModal({ type: "edit-provider", provider })}
                   onDelete={() => setModal({ type: "delete-provider", provider })}
@@ -532,6 +552,7 @@ export function SettingsPage() {
                 <ProfileCard
                   key={profile.id}
                   profile={profile}
+                  options={options}
                   onEdit={() => setModal({ type: "edit-profile", profile })}
                   onDelete={() => setModal({ type: "delete-profile", profile })}
                 />
@@ -600,6 +621,7 @@ export function SettingsPage() {
       {modal.type === "provider-auth" && (
         <ProviderAuthFlowModal
           provider={modal.provider}
+          options={options}
           onClose={() => setModal({ type: "none" })}
           onCompleted={invalidateBoth}
         />

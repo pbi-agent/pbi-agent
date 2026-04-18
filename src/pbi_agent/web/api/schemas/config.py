@@ -8,8 +8,11 @@ from pbi_agent.web.api.deps import NonEmptyString
 
 
 class ProviderKindMetadataModel(BaseModel):
+    label: str
+    description: str | None = None
     default_auth_mode: str
     auth_modes: list[str]
+    auth_mode_metadata: dict[str, "ProviderAuthModeMetadataModel"]
     default_model: str
     default_sub_agent_model: str | None
     default_responses_url: str | None
@@ -19,6 +22,12 @@ class ProviderKindMetadataModel(BaseModel):
     supports_service_tier: bool
     supports_native_web_search: bool
     supports_image_inputs: bool
+
+
+class ProviderAuthModeMetadataModel(BaseModel):
+    label: str
+    account_label: str | None
+    supported_methods: list[Literal["browser", "device"]]
 
 
 class ConfigOptionsModel(BaseModel):
@@ -66,7 +75,7 @@ class ProviderMutationRequest(BaseModel):
     id: str | None = None
     name: NonEmptyString
     kind: NonEmptyString
-    auth_mode: str = "api_key"
+    auth_mode: str | None = None
     api_key: str | None = None
     api_key_env: str | None = None
     responses_url: str | None = None

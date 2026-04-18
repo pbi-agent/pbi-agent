@@ -25,11 +25,14 @@ from pbi_agent.auth.models import (
     AUTH_FLOW_METHOD_DEVICE,
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
+    AUTH_MODE_COPILOT_ACCOUNT,
 )
 from pbi_agent.auth.service import (
     delete_provider_auth_session,
     get_provider_auth_status,
     import_provider_auth_session,
+    provider_auth_flow_methods,
+    provider_auth_modes,
     refresh_provider_auth_session,
 )
 from pbi_agent.config import (
@@ -394,8 +397,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     providers_create.add_argument(
         "--auth-mode",
-        choices=[AUTH_MODE_API_KEY, AUTH_MODE_CHATGPT_ACCOUNT],
-        default=AUTH_MODE_API_KEY,
+        choices=[
+            AUTH_MODE_API_KEY,
+            AUTH_MODE_CHATGPT_ACCOUNT,
+            AUTH_MODE_COPILOT_ACCOUNT,
+        ],
+        default=None,
         help="Provider authentication mode.",
     )
     providers_create.add_argument("--api-key", dest="provider_api_key")
@@ -420,7 +427,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     providers_update.add_argument(
         "--auth-mode",
-        choices=[AUTH_MODE_API_KEY, AUTH_MODE_CHATGPT_ACCOUNT],
+        choices=[
+            AUTH_MODE_API_KEY,
+            AUTH_MODE_CHATGPT_ACCOUNT,
+            AUTH_MODE_COPILOT_ACCOUNT,
+        ],
         default=None,
         help="Provider authentication mode.",
     )
@@ -458,7 +469,7 @@ def build_parser() -> argparse.ArgumentParser:
     providers_auth_login.add_argument(
         "--method",
         choices=[AUTH_FLOW_METHOD_BROWSER, AUTH_FLOW_METHOD_DEVICE],
-        default=AUTH_FLOW_METHOD_BROWSER,
+        default=None,
         help="Built-in auth flow method to run.",
     )
 
@@ -833,7 +844,7 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
                 id=slugify(args.id or args.name),
                 name=args.name,
                 kind=args.kind,
-                auth_mode=args.auth_mode,
+                auth_mode=args.auth_mode or provider_auth_modes(args.kind)[0],
                 api_key=args.provider_api_key or "",
                 api_key_env=args.api_key_env,
                 responses_url=args.responses_url,
@@ -869,7 +880,21 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
 
     if args.config_action == "auth-login":
         provider = _require_provider_config(args.provider_id)
-        if args.method == AUTH_FLOW_METHOD_BROWSER:
+        method = args.method
+        if method is None:
+            supported_methods = provider_auth_flow_methods(
+                provider.kind,
+                provider.auth_mode,
+            )
+            if AUTH_FLOW_METHOD_BROWSER in supported_methods:
+                method = AUTH_FLOW_METHOD_BROWSER
+            elif AUTH_FLOW_METHOD_DEVICE in supported_methods:
+                method = AUTH_FLOW_METHOD_DEVICE
+            else:
+                raise ConfigError(
+                    f"Provider '{provider.id}' does not support built-in auth flows."
+                )
+        if method == AUTH_FLOW_METHOD_BROWSER:
             result = run_provider_browser_auth_flow(
                 provider_kind=provider.kind,
                 provider_id=provider.id,

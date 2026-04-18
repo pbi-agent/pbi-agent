@@ -4,6 +4,7 @@ import { SettingsPage } from "./SettingsPage";
 import { renderWithProviders } from "../../test/render";
 import {
   ApiError,
+  createProvider,
   fetchConfigBootstrap,
   fetchProviderModels,
   fetchProviderAuthFlow,
@@ -64,9 +65,9 @@ function makeConfigBootstrap(
         },
       },
       {
-        id: "openai-chatgpt",
-        name: "OpenAI ChatGPT",
-        kind: "openai",
+        id: "chatgpt-main",
+        name: "ChatGPT Main",
+        kind: "chatgpt",
         auth_mode: "chatgpt_account",
         responses_url: null,
         generic_api_url: null,
@@ -156,13 +157,22 @@ function makeConfigBootstrap(
     ],
     commands: [],
     options: {
-      provider_kinds: ["openai"],
+      provider_kinds: ["openai", "chatgpt", "github_copilot"],
       reasoning_efforts: ["high", "medium"],
       openai_service_tiers: [],
       provider_metadata: {
         openai: {
+          label: "OpenAI API",
+          description: "Uses an OpenAI API key.",
           default_auth_mode: "api_key",
-          auth_modes: ["api_key", "chatgpt_account"],
+          auth_modes: ["api_key"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+          },
           default_model: "gpt-5.4",
           default_sub_agent_model: null,
           default_responses_url: null,
@@ -170,6 +180,50 @@ function makeConfigBootstrap(
           supports_responses_url: true,
           supports_generic_api_url: false,
           supports_service_tier: true,
+          supports_native_web_search: true,
+          supports_image_inputs: true,
+        },
+        chatgpt: {
+          label: "ChatGPT (Subscription)",
+          description: "Uses your ChatGPT subscription account.",
+          default_auth_mode: "chatgpt_account",
+          auth_modes: ["chatgpt_account"],
+          auth_mode_metadata: {
+            chatgpt_account: {
+              label: "ChatGPT account",
+              account_label: "ChatGPT subscription account",
+              supported_methods: ["browser", "device"],
+            },
+          },
+          default_model: "gpt-5.4",
+          default_sub_agent_model: null,
+          default_responses_url: null,
+          default_generic_api_url: null,
+          supports_responses_url: true,
+          supports_generic_api_url: false,
+          supports_service_tier: true,
+          supports_native_web_search: true,
+          supports_image_inputs: true,
+        },
+        github_copilot: {
+          label: "GitHub Copilot (Subscription)",
+          description: "Uses your GitHub Copilot subscription account.",
+          default_auth_mode: "copilot_account",
+          auth_modes: ["copilot_account"],
+          auth_mode_metadata: {
+            copilot_account: {
+              label: "GitHub Copilot account",
+              account_label: "GitHub Copilot subscription account",
+              supported_methods: ["device"],
+            },
+          },
+          default_model: "gpt-5.4",
+          default_sub_agent_model: "gpt-5-mini",
+          default_responses_url: "https://api.githubcopilot.com/responses",
+          default_generic_api_url: null,
+          supports_responses_url: true,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
           supports_native_web_search: true,
           supports_image_inputs: true,
         },
@@ -182,6 +236,31 @@ function makeConfigBootstrap(
 describe("SettingsPage", () => {
   beforeEach(() => {
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
+    vi.mocked(createProvider).mockResolvedValue({
+      provider: {
+        id: "chatgpt-new",
+        name: "ChatGPT New",
+        kind: "chatgpt",
+        auth_mode: "chatgpt_account",
+        responses_url: null,
+        generic_api_url: null,
+        secret_source: "none",
+        secret_env_var: null,
+        has_secret: false,
+        auth_status: {
+          auth_mode: "chatgpt_account",
+          backend: "openai-chatgpt",
+          session_status: "missing",
+          has_session: false,
+          can_refresh: false,
+          account_id: null,
+          email: null,
+          plan_type: null,
+          expires_at: null,
+        },
+      },
+      config_revision: "rev-2",
+    });
     vi.mocked(setActiveModelProfile).mockResolvedValue({
       active_profile_id: "qa",
       config_revision: "rev-2",
@@ -191,7 +270,7 @@ describe("SettingsPage", () => {
       auth_status: makeConfigBootstrap().providers[1].auth_status,
       flow: {
         flow_id: "flow-1",
-        provider_id: "openai-chatgpt",
+        provider_id: "chatgpt-main",
         backend: "openai-chatgpt",
         method: "browser",
         status: "pending",
@@ -228,7 +307,7 @@ describe("SettingsPage", () => {
       },
       flow: {
         flow_id: "flow-1",
-        provider_id: "openai-chatgpt",
+        provider_id: "chatgpt-main",
         backend: "openai-chatgpt",
         method: "browser",
         status: "completed",
@@ -242,7 +321,7 @@ describe("SettingsPage", () => {
         updated_at: "2026-04-16T00:00:02Z",
       },
       session: {
-        provider_id: "openai-chatgpt",
+        provider_id: "chatgpt-main",
         backend: "openai-chatgpt",
         expires_at: 1_800_000_000,
         account_id: "acct-1",
@@ -259,7 +338,7 @@ describe("SettingsPage", () => {
         can_refresh: true,
       },
       session: {
-        provider_id: "openai-chatgpt",
+        provider_id: "chatgpt-main",
         backend: "openai-chatgpt",
         expires_at: 1_800_000_000,
         account_id: "acct-1",
@@ -341,13 +420,13 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     const { queryClient } = renderWithProviders(<SettingsPage />);
 
-    expect(await screen.findByText("OpenAI ChatGPT")).toBeInTheDocument();
+    expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
 
     expect(await screen.findByText("Connect ChatGPT account")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
 
-    expect(startProviderAuthFlow).toHaveBeenCalledWith("openai-chatgpt", "browser");
+    expect(startProviderAuthFlow).toHaveBeenCalledWith("chatgpt-main", "browser");
     expect(window.open).toHaveBeenCalledWith(
       "https://chatgpt.com/auth",
       "_blank",
@@ -358,7 +437,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() =>
       expect(fetchProviderAuthFlow).toHaveBeenCalledWith(
-        "openai-chatgpt",
+        "chatgpt-main",
         "flow-1",
       ),
     );
@@ -366,6 +445,200 @@ describe("SettingsPage", () => {
       expect(queryClient.isFetching({ queryKey: ["config-bootstrap"] })).toBe(0),
     );
     expect(await screen.findByText(/Connected as user@example.com/)).toBeInTheDocument();
+  });
+
+  it("uses provider metadata to render a device-only Copilot auth flow", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [
+          {
+            id: "copilot-main",
+            name: "Copilot Main",
+            kind: "github_copilot",
+            auth_mode: "copilot_account",
+            responses_url: "https://api.githubcopilot.com/responses",
+            generic_api_url: null,
+            secret_source: "none",
+            secret_env_var: null,
+            has_secret: false,
+            auth_status: {
+              auth_mode: "copilot_account",
+              backend: "github_copilot",
+              session_status: "missing",
+              has_session: false,
+              can_refresh: false,
+              account_id: null,
+              email: null,
+              plan_type: null,
+              expires_at: null,
+            },
+          },
+        ],
+      }),
+    );
+    vi.mocked(startProviderAuthFlow).mockResolvedValue({
+      provider: makeConfigBootstrap({
+        providers: [
+          {
+            id: "copilot-main",
+            name: "Copilot Main",
+            kind: "github_copilot",
+            auth_mode: "copilot_account",
+            responses_url: "https://api.githubcopilot.com/responses",
+            generic_api_url: null,
+            secret_source: "none",
+            secret_env_var: null,
+            has_secret: false,
+            auth_status: {
+              auth_mode: "copilot_account",
+              backend: "github_copilot",
+              session_status: "missing",
+              has_session: false,
+              can_refresh: false,
+              account_id: null,
+              email: null,
+              plan_type: null,
+              expires_at: null,
+            },
+          },
+        ],
+      }).providers[0],
+      auth_status: {
+        auth_mode: "copilot_account",
+        backend: "github_copilot",
+        session_status: "missing",
+        has_session: false,
+        can_refresh: false,
+        account_id: null,
+        email: null,
+        plan_type: null,
+        expires_at: null,
+      },
+      flow: {
+        flow_id: "copilot-flow-1",
+        provider_id: "copilot-main",
+        backend: "github_copilot",
+        method: "device",
+        status: "pending",
+        authorization_url: null,
+        callback_url: null,
+        verification_url: "https://github.com/login/device",
+        user_code: "ABCD-EFGH",
+        interval_seconds: 5,
+        error_message: null,
+        created_at: "2026-04-18T00:00:00Z",
+        updated_at: "2026-04-18T00:00:00Z",
+      },
+      session: null,
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    expect(await screen.findByText("Copilot Main")).toBeInTheDocument();
+    expect(screen.getByText("GitHub Copilot account")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      await screen.findByText("Connect GitHub Copilot account"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((content, element) => {
+        return (
+          element?.textContent ===
+          "Authorize Copilot Main with your GitHub Copilot subscription account."
+        );
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Method")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Generate device code" }));
+    expect(startProviderAuthFlow).toHaveBeenCalledWith("copilot-main", "device");
+  });
+
+  it("uses provider kind labels and descriptions in the provider form", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "+ Add Provider" }));
+
+    expect(screen.getByRole("option", { name: "OpenAI API" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "ChatGPT (Subscription)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "GitHub Copilot (Subscription)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Uses an OpenAI API key.")).toBeInTheDocument();
+  });
+
+  it("opens provider auth immediately after creating a subscription-backed provider", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "+ Add Provider" }));
+    await user.selectOptions(screen.getAllByRole("combobox")[1], "chatgpt");
+    await user.type(screen.getByPlaceholderText("e.g. My OpenAI"), "ChatGPT Starter");
+
+    expect(
+      screen.getByText(
+        "Save this provider to continue directly into sign-in for your ChatGPT subscription account.",
+      ),
+    ).toBeInTheDocument();
+
+    vi.mocked(createProvider).mockResolvedValueOnce({
+      provider: {
+        id: "chatgpt-starter",
+        name: "ChatGPT Starter",
+        kind: "chatgpt",
+        auth_mode: "chatgpt_account",
+        responses_url: null,
+        generic_api_url: null,
+        secret_source: "none",
+        secret_env_var: null,
+        has_secret: false,
+        auth_status: {
+          auth_mode: "chatgpt_account",
+          backend: "openai-chatgpt",
+          session_status: "missing",
+          has_session: false,
+          can_refresh: false,
+          account_id: null,
+          email: null,
+          plan_type: null,
+          expires_at: null,
+        },
+      },
+      config_revision: "rev-2",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add Provider" }));
+
+    await waitFor(() =>
+      expect(createProvider).toHaveBeenCalledWith(
+        {
+          name: "ChatGPT Starter",
+          kind: "chatgpt",
+          auth_mode: "chatgpt_account",
+          api_key: null,
+          api_key_env: null,
+          responses_url: null,
+          generic_api_url: null,
+        },
+        "rev-1",
+      ),
+    );
+    expect(await screen.findByText("Connect ChatGPT account")).toBeInTheDocument();
+    expect(
+      screen.getByText((content, element) => {
+        return (
+          element?.textContent ===
+          "Authorize ChatGPT Starter with your ChatGPT subscription account."
+        );
+      }),
+    ).toBeInTheDocument();
   });
 
   it("refreshes settings after a manual auth status check completes the flow", async () => {
@@ -395,7 +668,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
-    expect(await screen.findByText("OpenAI ChatGPT")).toBeInTheDocument();
+    expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     expect(screen.getByText("not connected")).toBeInTheDocument();
 
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
@@ -420,7 +693,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
-    expect(await screen.findByText("OpenAI ChatGPT")).toBeInTheDocument();
+    expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
     await user.click(screen.getByRole("button", { name: "Check status" }));
@@ -456,15 +729,15 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
-    await screen.findByText("OpenAI ChatGPT");
+    await screen.findByText("ChatGPT Main");
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() =>
-      expect(refreshProviderAuth).toHaveBeenCalledWith("openai-chatgpt"),
+      expect(refreshProviderAuth).toHaveBeenCalledWith("chatgpt-main"),
     );
 
     await user.click(screen.getByRole("button", { name: "Disconnect" }));
     await waitFor(() =>
-      expect(logoutProviderAuth).toHaveBeenCalledWith("openai-chatgpt"),
+      expect(logoutProviderAuth).toHaveBeenCalledWith("chatgpt-main"),
     );
   });
 
@@ -502,8 +775,17 @@ describe("SettingsPage", () => {
         provider_metadata: {
           ...makeConfigBootstrap().options.provider_metadata,
           xai: {
+            label: "xAI",
+            description: "Uses an xAI API key.",
             default_auth_mode: "api_key",
             auth_modes: ["api_key"],
+            auth_mode_metadata: {
+              api_key: {
+                label: "API key",
+                account_label: null,
+                supported_methods: [],
+              },
+            },
             default_model: "grok-4.20",
             default_sub_agent_model: "grok-4.1-fast",
             default_responses_url: "https://api.x.ai/v1/responses",

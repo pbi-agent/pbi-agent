@@ -5,6 +5,7 @@ from typing import Any
 from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
+    AUTH_MODE_COPILOT_ACCOUNT,
     AUTH_FLOW_METHOD_BROWSER,
     AUTH_FLOW_METHOD_DEVICE,
     AuthFlowPollResult,
@@ -17,6 +18,10 @@ from pbi_agent.auth.models import (
     StoredAuthSession,
 )
 from pbi_agent.auth.providers.base import AuthProviderBackend
+from pbi_agent.auth.providers.github_copilot import (
+    GITHUB_COPILOT_BACKEND_ID,
+    GitHubCopilotAuthBackend,
+)
 from pbi_agent.auth.providers.openai_chatgpt import (
     OPENAI_CHATGPT_BACKEND_ID,
     OpenAIChatGPTAuthBackend,
@@ -29,15 +34,37 @@ from pbi_agent.auth.store import (
 
 
 def provider_auth_backend_id(provider_kind: str, auth_mode: str) -> str | None:
-    if provider_kind == "openai" and auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
+    if provider_kind == "chatgpt" and auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
         return OPENAI_CHATGPT_BACKEND_ID
+    if provider_kind == "github_copilot" and auth_mode == AUTH_MODE_COPILOT_ACCOUNT:
+        return GITHUB_COPILOT_BACKEND_ID
     return None
 
 
 def provider_auth_modes(provider_kind: str) -> tuple[str, ...]:
     if provider_kind == "openai":
-        return (AUTH_MODE_API_KEY, AUTH_MODE_CHATGPT_ACCOUNT)
+        return (AUTH_MODE_API_KEY,)
+    if provider_kind == "chatgpt":
+        return (AUTH_MODE_CHATGPT_ACCOUNT,)
+    if provider_kind == "github_copilot":
+        return (AUTH_MODE_COPILOT_ACCOUNT,)
     return (AUTH_MODE_API_KEY,)
+
+
+def provider_auth_mode_label(auth_mode: str) -> str:
+    if auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
+        return "ChatGPT account"
+    if auth_mode == AUTH_MODE_COPILOT_ACCOUNT:
+        return "GitHub Copilot account"
+    return "API key"
+
+
+def provider_auth_account_label(auth_mode: str) -> str | None:
+    if auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
+        return "ChatGPT subscription account"
+    if auth_mode == AUTH_MODE_COPILOT_ACCOUNT:
+        return "GitHub Copilot subscription account"
+    return None
 
 
 def provider_auth_flow_methods(provider_kind: str, auth_mode: str) -> tuple[str, ...]:
@@ -237,7 +264,8 @@ def refresh_runtime_auth(
     provider_kind: str,
     auth: OAuthSessionAuth,
 ) -> OAuthSessionAuth:
-    backend = _get_backend_for_provider(provider_kind, AUTH_MODE_CHATGPT_ACCOUNT)
+    del provider_kind
+    backend = _get_backend(auth.backend)
     refreshed = backend.refresh_session(
         StoredAuthSession(
             provider_id=auth.provider_id,
@@ -271,6 +299,8 @@ def _get_backend_for_provider(
 def _get_backend(backend_id: str) -> AuthProviderBackend:
     if backend_id == OPENAI_CHATGPT_BACKEND_ID:
         return OpenAIChatGPTAuthBackend()
+    if backend_id == GITHUB_COPILOT_BACKEND_ID:
+        return GitHubCopilotAuthBackend()
     raise ValueError(f"Unknown auth backend '{backend_id}'.")
 
 

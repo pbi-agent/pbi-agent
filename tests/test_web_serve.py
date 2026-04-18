@@ -255,9 +255,48 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert (
             refreshed_payload["providers"][0]["auth_status"]["auth_mode"] == "api_key"
         )
+        assert (
+            refreshed_payload["options"]["provider_metadata"]["openai"]["label"]
+            == "OpenAI API"
+        )
+        assert (
+            refreshed_payload["options"]["provider_metadata"]["openai"]["description"]
+            == "Uses an OpenAI API key."
+        )
         assert refreshed_payload["options"]["provider_metadata"]["openai"][
             "auth_modes"
-        ] == ["api_key", "chatgpt_account"]
+        ] == ["api_key"]
+        assert refreshed_payload["options"]["provider_metadata"]["openai"][
+            "auth_mode_metadata"
+        ] == {
+            "api_key": {
+                "label": "API key",
+                "account_label": None,
+                "supported_methods": [],
+            },
+        }
+        assert refreshed_payload["options"]["provider_metadata"]["chatgpt"] == {
+            "label": "ChatGPT (Subscription)",
+            "description": "Uses your ChatGPT subscription account.",
+            "default_auth_mode": "chatgpt_account",
+            "auth_modes": ["chatgpt_account"],
+            "auth_mode_metadata": {
+                "chatgpt_account": {
+                    "label": "ChatGPT account",
+                    "account_label": "ChatGPT subscription account",
+                    "supported_methods": ["browser", "device"],
+                }
+            },
+            "default_model": "gpt-5.4",
+            "default_sub_agent_model": "gpt-5.4-mini",
+            "default_responses_url": "https://chatgpt.com/backend-api/codex/responses",
+            "default_generic_api_url": None,
+            "supports_responses_url": True,
+            "supports_generic_api_url": False,
+            "supports_service_tier": False,
+            "supports_native_web_search": True,
+            "supports_image_inputs": True,
+        }
         analysis_profile = next(
             item
             for item in refreshed_payload["model_profiles"]
@@ -1920,8 +1959,7 @@ def test_provider_auth_endpoints_round_trip(monkeypatch, tmp_path: Path) -> None
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2031,8 +2069,7 @@ def test_provider_auth_browser_flow_endpoints_round_trip(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2118,8 +2155,7 @@ def test_provider_auth_browser_flow_uses_dedicated_local_callback_listener(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2206,8 +2242,7 @@ def test_provider_auth_browser_flow_registers_before_listener_start(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2267,8 +2302,7 @@ def test_provider_auth_browser_flow_timeout_stops_listener(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2342,8 +2376,7 @@ def test_provider_auth_device_flow_endpoints_round_trip(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2478,8 +2511,7 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2505,7 +2537,7 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
     assert response.status_code == 200
     payload = response.json()
     assert payload["provider_id"] == "openai-chatgpt"
-    assert payload["provider_kind"] == "openai"
+    assert payload["provider_kind"] == "chatgpt"
     assert payload["discovery_supported"] is True
     assert payload["manual_entry_required"] is False
     assert payload["models"] == [
@@ -2547,8 +2579,7 @@ def test_provider_model_discovery_endpoint_returns_auth_required_error(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2562,6 +2593,134 @@ def test_provider_model_discovery_endpoint_returns_auth_required_error(
     assert payload["models"] == []
     assert payload["error"]["code"] == "auth_required"
     assert "Missing authentication" in payload["error"]["message"]
+
+
+def test_provider_model_discovery_endpoint_discovers_github_copilot_models(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_AUTH_STORE_PATH", str(tmp_path / "auth.json"))
+    app = create_app(_settings(), runtime_args=_runtime_args("web"))
+
+    requests_seen: list[urllib.request.Request] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float = 0.0):
+        del timeout
+        requests_seen.append(request)
+        return _FakeHTTPResponse(
+            {
+                "data": [
+                    {
+                        "id": "gpt-5.4",
+                        "name": "GPT-5.4",
+                        "vendor": "openai",
+                        "version": "2026-04-01",
+                        "model_picker_enabled": True,
+                        "policy": {"state": "enabled"},
+                        "capabilities": {
+                            "type": "chat",
+                            "family": "gpt-5.4",
+                            "supports": {
+                                "vision": True,
+                                "reasoning_effort": ["low", "medium", "high"],
+                            },
+                        },
+                    },
+                    {
+                        "id": "claude-sonnet-4",
+                        "name": "Claude Sonnet 4",
+                        "vendor": "anthropic",
+                        "version": "2026-04-01",
+                        "model_picker_enabled": True,
+                        "policy": {"state": "enabled"},
+                        "capabilities": {
+                            "type": "chat",
+                            "family": "claude-sonnet-4",
+                            "supports": {
+                                "vision": True,
+                            },
+                        },
+                    },
+                    {
+                        "id": "gpt-hidden",
+                        "name": "Hidden",
+                        "vendor": "openai",
+                        "model_picker_enabled": False,
+                        "capabilities": {
+                            "type": "chat",
+                            "family": "gpt-hidden",
+                            "supports": {},
+                        },
+                    },
+                    {
+                        "id": "gemini-disabled",
+                        "name": "Gemini Disabled",
+                        "vendor": "google",
+                        "model_picker_enabled": True,
+                        "policy": {"state": "disabled"},
+                        "capabilities": {
+                            "type": "chat",
+                            "family": "gemini-disabled",
+                            "supports": {},
+                        },
+                    },
+                ]
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with TestClient(app) as client:
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        create_provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "Copilot",
+                "kind": "github_copilot",
+            },
+        )
+        assert create_provider_response.status_code == 200
+        save_auth_session(
+            build_auth_session(
+                provider_id="copilot",
+                backend="github_copilot",
+                access_token="gho_test_token",
+                plan_type="github_copilot",
+            )
+        )
+
+        response = client.get("/api/config/providers/copilot/models")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider_kind"] == "github_copilot"
+    assert payload["discovery_supported"] is True
+    assert payload["manual_entry_required"] is False
+    assert payload["models"] == [
+        {
+            "id": "claude-sonnet-4",
+            "display_name": "Claude Sonnet 4",
+            "created": None,
+            "owned_by": "anthropic",
+            "input_modalities": ["text", "image"],
+            "output_modalities": ["text"],
+            "aliases": ["2026-04-01"],
+            "supports_reasoning_effort": None,
+        },
+        {
+            "id": "gpt-5.4",
+            "display_name": "GPT-5.4",
+            "created": None,
+            "owned_by": "openai",
+            "input_modalities": ["text", "image"],
+            "output_modalities": ["text"],
+            "aliases": ["2026-04-01"],
+            "supports_reasoning_effort": True,
+        },
+    ]
+    assert requests_seen[0].full_url == "https://api.githubcopilot.com/models"
+    assert requests_seen[0].headers["Authorization"] == "Bearer gho_test_token"
 
 
 def test_provider_model_discovery_endpoint_discovers_generic_provider_models(

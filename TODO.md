@@ -1,5 +1,6 @@
 # TODO
 
-- [x] Inspect local branch/worktree state for safe reconciliation
-- [x] Rebase local `master` onto `origin/master`
-- [x] Validate final Git state and document the result in `MEMORY.md`
+- [x] Fetch `master` and surface PR #157 merge conflicts locally
+- [x] Resolve conflicts without dropping the Copilot branch work
+- [x] Run focused validation on the merged result
+- [x] Append the merge notes to `MEMORY.md`

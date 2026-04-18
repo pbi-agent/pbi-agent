@@ -20,8 +20,8 @@ export function OnboardingModal({ isOnSettingsPage, onDismissOnSettings }: Props
         <div className="confirm-modal">
           <div className="confirm-modal__body">
             {isOnSettingsPage
-              ? "No model profiles are configured yet. Add a provider below, then create a model profile to get started."
-              : "No model profiles are configured yet. You need to add at least one provider and model profile before you can use the app."}
+              ? "No model profiles are configured yet. Add a provider below, complete sign-in if prompted, then create a model profile to get started."
+              : "No model profiles are configured yet. You need to add at least one provider, complete sign-in if prompted, and create a model profile before you can use the app."}
           </div>
           <div className="confirm-modal__actions">
             {isOnSettingsPage ? (

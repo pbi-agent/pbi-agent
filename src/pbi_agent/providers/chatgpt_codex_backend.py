@@ -37,7 +37,7 @@ class ChatGPTCodexBackend:
     def __init__(self, *, responses_url: str) -> None:
         self._enabled = responses_url == OPENAI_CHATGPT_RESPONSES_URL
         self._turn_state: str | None = None
-        self._conversation_items: list[dict[str, Any]] = []
+        self._conversation = ResponsesConversationReplay()
 
     @property
     def enabled(self) -> bool:
@@ -45,12 +45,12 @@ class ChatGPTCodexBackend:
 
     def reset(self) -> None:
         self._turn_state = None
-        self._conversation_items.clear()
+        self._conversation.reset()
 
     def restore_conversation(self, items: list[dict[str, Any]]) -> None:
         if not self._enabled:
             return
-        self._conversation_items = [_clone_item(item) for item in items]
+        self._conversation.restore(items)
 
     def start_turn(self, input_items: list[dict[str, Any]]) -> None:
         if not self._enabled:
@@ -70,10 +70,7 @@ class ChatGPTCodexBackend:
     ) -> None:
         if not self._enabled:
             return
-        self._conversation_items.extend(_clone_item(item) for item in input_items)
-        self._conversation_items.extend(
-            _sanitize_output_item(item) for item in output_items(response.provider_data)
-        )
+        self._conversation.record_exchange(input_items, response)
 
     def serialize_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not self._enabled:
@@ -122,10 +119,7 @@ class ChatGPTCodexBackend:
     ) -> list[dict[str, Any]]:
         if not self._enabled:
             return list(input_items)
-        return [
-            *(_clone_item(item) for item in self._conversation_items),
-            *list(input_items),
-        ]
+        return self._conversation.build_input_payload(input_items)
 
     def tool_result_items_for_response(
         self,
@@ -134,6 +128,36 @@ class ChatGPTCodexBackend:
     ) -> list[dict[str, Any]]:
         del response
         return to_function_call_output_items(results)
+
+
+class ResponsesConversationReplay:
+    def __init__(self) -> None:
+        self._conversation_items: list[dict[str, Any]] = []
+
+    def reset(self) -> None:
+        self._conversation_items.clear()
+
+    def restore(self, items: list[dict[str, Any]]) -> None:
+        self._conversation_items = [_clone_item(item) for item in items]
+
+    def build_input_payload(
+        self,
+        input_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return [
+            *(_clone_item(item) for item in self._conversation_items),
+            *(_clone_item(item) for item in input_items),
+        ]
+
+    def record_exchange(
+        self,
+        input_items: list[dict[str, Any]],
+        response: CompletedResponse,
+    ) -> None:
+        self._conversation_items.extend(_clone_item(item) for item in input_items)
+        self._conversation_items.extend(
+            _sanitize_output_item(item) for item in output_items(response.provider_data)
+        )
 
 
 def output_items(provider_data: Any) -> list[dict[str, Any]]:

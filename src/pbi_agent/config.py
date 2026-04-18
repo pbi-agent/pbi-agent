@@ -15,11 +15,18 @@ from dotenv import load_dotenv
 from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
+    AUTH_MODE_COPILOT_ACCOUNT,
     ApiKeyAuth,
     ResolvedProviderAuth,
 )
+from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
 from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
 from pbi_agent.auth.service import provider_auth_modes, resolve_runtime_auth
+from pbi_agent.auth.service import (
+    provider_auth_account_label,
+    provider_auth_flow_methods,
+    provider_auth_mode_label,
+)
 
 DEFAULT_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_XAI_RESPONSES_URL = "https://api.x.ai/v1/responses"
@@ -44,7 +51,15 @@ PROVIDER_API_KEY_ENVS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "generic": "GENERIC_API_KEY",
 }
-PROVIDER_KINDS = tuple(PROVIDER_API_KEY_ENVS)
+PROVIDER_KINDS = (
+    "openai",
+    "chatgpt",
+    "github_copilot",
+    "xai",
+    "google",
+    "anthropic",
+    "generic",
+)
 INTERNAL_CONFIG_PATH_ENV = "PBI_AGENT_INTERNAL_CONFIG_PATH"
 PROFILE_ID_ENV = "PBI_AGENT_PROFILE_ID"
 DEFAULT_INTERNAL_CONFIG_PATH = Path.home() / ".pbi-agent" / "config.json"
@@ -104,10 +119,19 @@ class Settings:
             allowed = ", ".join(PROVIDER_KINDS)
             raise ConfigError(f"--provider must be one of: {allowed}.")
         if self.provider == "openai":
-            if self.auth is None and not self.api_key:
+            if not self.api_key:
+                raise ConfigError(missing_api_key_message(self.provider))
+        elif self.provider == "chatgpt":
+            if self.auth is None:
                 raise ConfigError(
-                    "Missing authentication for provider 'openai'. "
-                    "Configure an API key or a ChatGPT account session."
+                    "Missing authentication for provider 'chatgpt'. "
+                    "Configure a saved ChatGPT account session."
+                )
+        elif self.provider == "github_copilot":
+            if self.auth is None:
+                raise ConfigError(
+                    "Missing authentication for provider 'github_copilot'. "
+                    "Configure a saved GitHub Copilot account session."
                 )
         elif not self.api_key:
             raise ConfigError(missing_api_key_message(self.provider))
@@ -383,6 +407,10 @@ def _command_description_from_markdown(instructions: str, command_id: str) -> st
 
 
 def _default_responses_url(provider: str) -> str:
+    if provider == "chatgpt":
+        return OPENAI_CHATGPT_RESPONSES_URL
+    if provider == "github_copilot":
+        return GITHUB_COPILOT_RESPONSES_URL
     if provider == "xai":
         return DEFAULT_XAI_RESPONSES_URL
     if provider == "google":
@@ -391,14 +419,16 @@ def _default_responses_url(provider: str) -> str:
 
 
 def _default_responses_url_for_auth(provider_kind: str, auth_mode: str) -> str:
-    if provider_kind == "openai" and auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
-        return OPENAI_CHATGPT_RESPONSES_URL
+    if provider_kind in {"chatgpt", "github_copilot"}:
+        return _default_responses_url(provider_kind)
     return _default_responses_url(provider_kind)
 
 
 def _default_model(provider: str) -> str:
     if provider == "generic":
         return ""
+    if provider == "github_copilot":
+        return "gpt-5.4"
     if provider == "xai":
         return DEFAULT_XAI_MODEL
     if provider == "google":
@@ -411,6 +441,8 @@ def _default_model(provider: str) -> str:
 def _default_sub_agent_model(provider: str) -> str | None:
     if provider == "generic":
         return None
+    if provider == "github_copilot":
+        return "gpt-5-mini"
     if provider == "xai":
         return DEFAULT_XAI_SUB_AGENT_MODEL
     if provider == "google":
@@ -418,6 +450,14 @@ def _default_sub_agent_model(provider: str) -> str | None:
     if provider == "anthropic":
         return DEFAULT_ANTHROPIC_SUB_AGENT_MODEL
     return DEFAULT_SUB_AGENT_MODEL
+
+
+def _default_auth_mode(provider_kind: str) -> str:
+    if provider_kind == "chatgpt":
+        return AUTH_MODE_CHATGPT_ACCOUNT
+    if provider_kind == "github_copilot":
+        return AUTH_MODE_COPILOT_ACCOUNT
+    return AUTH_MODE_API_KEY
 
 
 def provider_secret_source(provider: ProviderConfig) -> str:
@@ -439,9 +479,36 @@ def provider_has_secret(provider: ProviderConfig) -> bool:
 
 
 def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
+    auth_mode_metadata = {
+        auth_mode: {
+            "label": provider_auth_mode_label(auth_mode),
+            "account_label": provider_auth_account_label(auth_mode),
+            "supported_methods": list(
+                provider_auth_flow_methods(provider_kind, auth_mode)
+            ),
+        }
+        for auth_mode in provider_auth_modes(provider_kind)
+    }
+    kind_label = {
+        "openai": "OpenAI API",
+        "chatgpt": "ChatGPT (Subscription)",
+        "github_copilot": "GitHub Copilot (Subscription)",
+        "xai": "xAI",
+        "google": "Google",
+        "anthropic": "Anthropic",
+        "generic": "OpenAI-compatible",
+    }.get(provider_kind, provider_kind)
+    kind_description = {
+        "openai": "Uses an OpenAI API key.",
+        "chatgpt": "Uses your ChatGPT subscription account.",
+        "github_copilot": "Uses your GitHub Copilot subscription account.",
+    }.get(provider_kind)
     return {
-        "default_auth_mode": AUTH_MODE_API_KEY,
+        "label": kind_label,
+        "description": kind_description,
+        "default_auth_mode": _default_auth_mode(provider_kind),
         "auth_modes": list(provider_auth_modes(provider_kind)),
+        "auth_mode_metadata": auth_mode_metadata,
         "default_model": _default_model(provider_kind),
         "default_sub_agent_model": _default_sub_agent_model(provider_kind),
         "default_responses_url": (
@@ -456,7 +523,8 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "supports_generic_api_url": provider_kind == "generic",
         "supports_service_tier": provider_kind == "openai",
         "supports_native_web_search": provider_kind != "generic",
-        "supports_image_inputs": provider_kind in {"openai", "google", "anthropic"},
+        "supports_image_inputs": provider_kind
+        in {"openai", "chatgpt", "google", "anthropic", "github_copilot"},
     }
 
 
@@ -893,7 +961,7 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
     default_auth_mode = (
         selected_provider.auth_mode
         if selected_provider is not None and selected_provider.kind == provider_kind
-        else AUTH_MODE_API_KEY
+        else _default_auth_mode(provider_kind)
     )
     responses_url = (
         getattr(args, "responses_url", None)
@@ -930,7 +998,7 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
     auth_mode = (
         resolved_provider.auth_mode
         if resolved_provider is not None
-        else AUTH_MODE_API_KEY
+        else _default_auth_mode(provider_kind)
     )
     provider_secret = _resolve_secret(args, provider_kind, resolved_provider)
 
@@ -1061,7 +1129,7 @@ def _resolve_int_setting(
 
 
 def _default_reasoning_effort(provider_kind: str) -> str:
-    return "xhigh" if provider_kind == "openai" else "high"
+    return "xhigh" if provider_kind in {"openai", "chatgpt"} else "high"
 
 
 def _resolve_web_search(
@@ -1086,7 +1154,7 @@ def _resolve_secret(
     provider_auth_mode = (
         selected_provider.auth_mode
         if selected_provider is not None
-        else AUTH_MODE_API_KEY
+        else _default_auth_mode(provider_kind)
     )
     if provider_auth_mode != AUTH_MODE_API_KEY:
         return _ResolvedSecret(api_key="")

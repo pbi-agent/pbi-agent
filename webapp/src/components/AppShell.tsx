@@ -47,10 +47,11 @@ export function AppShell() {
     ? configBootstrap.model_profiles.length === 0
     : false;
 
-  const [dismissedOnboardingRevision, setDismissedOnboardingRevision] = useState<string | null>(null);
+  const [dismissedOnboardingOnSettings, setDismissedOnboardingOnSettings] = useState(false);
   const isSettingsRoute = location.pathname === "/settings";
+
   const showOnboardingModal = requiresOnboarding && !(
-    isSettingsRoute && dismissedOnboardingRevision === configBootstrap?.config_revision
+    isSettingsRoute && dismissedOnboardingOnSettings
   );
 
   const folderLabel = bootstrap?.workspace_root
@@ -156,7 +157,7 @@ export function AppShell() {
         <OnboardingModal
           isOnSettingsPage={isSettingsRoute}
           onDismissOnSettings={() => {
-            setDismissedOnboardingRevision(configBootstrap?.config_revision ?? null);
+            setDismissedOnboardingOnSettings(true);
           }}
         />
       )}

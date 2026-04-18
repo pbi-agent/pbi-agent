@@ -154,7 +154,7 @@ class OpenAIProvider(Provider):
             tracer=tracer,
         )
         self._previous_response_id = result.response_id
-        self._chatgpt_backend.record_exchange(input_items, result)
+        self._record_exchange(input_items, result)
         if not result.has_tool_calls:
             # Only completed assistant responses are safe to branch from.
             self._branch_response_id = result.response_id
@@ -293,6 +293,7 @@ class OpenAIProvider(Provider):
             headers = self._request_headers(
                 request_auth=request_auth,
                 session_id=session_id,
+                input_items=input_items,
             )
             try:
                 req = urllib.request.Request(
@@ -303,7 +304,7 @@ class OpenAIProvider(Provider):
                 )
                 with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECS) as resp:
                     self._chatgpt_backend.capture_response_headers(resp)
-                    response_json = _decode_responses_body(
+                    response_json = self._decode_response_body(
                         resp.read().decode("utf-8"),
                         streamed=bool(request_body.get("stream")),
                     )
@@ -357,6 +358,7 @@ class OpenAIProvider(Provider):
                     exc.code == 401
                     and not retried_unauthorized_refresh
                     and isinstance(self._settings.auth, OAuthSessionAuth)
+                    and self._settings.auth.refresh_token
                 ):
                     self._settings.auth = refresh_runtime_auth(
                         provider_kind=self._settings.provider,
@@ -487,20 +489,10 @@ class OpenAIProvider(Provider):
         include_previous_response_id: bool = True,
     ) -> dict[str, Any]:
         request_options = self._responses_request_options()
-        input_payload = self._chatgpt_backend.build_input_payload(
-            input_items=input_items,
-        )
+        input_payload = self._build_input_payload(input_items)
         body: dict[str, Any] = {
             "model": self._settings.model,
-            "input": (
-                [*self._restored_input_items, *input_payload]
-                if (
-                    self._restored_input_items
-                    and not self._previous_response_id
-                    and not self._chatgpt_backend.enabled
-                )
-                else input_payload
-            ),
+            "input": input_payload,
             "tools": self._tools,
             "parallel_tool_calls": True,
             "store": request_options.store,
@@ -532,12 +524,37 @@ class OpenAIProvider(Provider):
         if (
             include_previous_response_id
             and self._previous_response_id
-            and not self._chatgpt_backend.enabled
+            and self._supports_previous_response_id()
         ):
             body["previous_response_id"] = self._previous_response_id
         if self._settings.service_tier:
             body["service_tier"] = self._settings.service_tier
         return body
+
+    def _build_input_payload(
+        self,
+        input_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        input_payload = self._chatgpt_backend.build_input_payload(
+            input_items=input_items,
+        )
+        if (
+            self._restored_input_items
+            and not self._previous_response_id
+            and not self._chatgpt_backend.enabled
+        ):
+            return [*self._restored_input_items, *input_payload]
+        return input_payload
+
+    def _supports_previous_response_id(self) -> bool:
+        return not self._chatgpt_backend.enabled
+
+    def _record_exchange(
+        self,
+        input_items: list[dict[str, Any]],
+        response: CompletedResponse,
+    ) -> None:
+        self._chatgpt_backend.record_exchange(input_items, response)
 
     def _responses_request_options(self) -> ResponsesRequestOptions:
         return self._chatgpt_backend.request_options()
@@ -554,7 +571,9 @@ class OpenAIProvider(Provider):
         *,
         request_auth: Any,
         session_id: str | None,
+        input_items: list[dict[str, Any]],
     ) -> dict[str, str]:
+        del input_items
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -563,6 +582,14 @@ class OpenAIProvider(Provider):
         }
         self._chatgpt_backend.apply_headers(headers, session_id=session_id)
         return headers
+
+    def _decode_response_body(
+        self,
+        raw_body: str,
+        *,
+        streamed: bool,
+    ) -> dict[str, Any]:
+        return _decode_responses_body(raw_body, streamed=streamed)
 
     def _parse_response(self, response_json: dict[str, Any]) -> CompletedResponse:
         text_parts: list[str] = []

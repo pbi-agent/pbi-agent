@@ -271,6 +271,10 @@ export function ModelProfileModal({
     setSubAgentModelMode(preferredModelMode(form.sub_agent_model, providerModels));
   }, [discoveredModelsAvailable, providerModels, form.provider_id, profile?.id]);
 
+  function providerKindLabel(providerKind: string): string {
+    return options.provider_metadata[providerKind]?.label ?? providerKind;
+  }
+
   function handleProviderChange(newProviderId: string) {
     const newProvider = providers.find((p) => p.id === newProviderId);
     const newMeta = newProvider
@@ -457,7 +461,7 @@ export function ModelProfileModal({
               )}
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.kind})
+                  {p.name} ({providerKindLabel(p.kind)})
                 </option>
               ))}
             </select>

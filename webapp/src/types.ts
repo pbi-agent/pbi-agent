@@ -222,8 +222,11 @@ export type ProviderView = {
 };
 
 export type ProviderKindMetadata = {
+  label: string;
+  description: string | null;
   default_auth_mode: string;
   auth_modes: string[];
+  auth_mode_metadata: Record<string, ProviderAuthModeMetadata>;
   default_model: string;
   default_sub_agent_model: string | null;
   default_responses_url: string | null;
@@ -233,6 +236,12 @@ export type ProviderKindMetadata = {
   supports_service_tier: boolean;
   supports_native_web_search: boolean;
   supports_image_inputs: boolean;
+};
+
+export type ProviderAuthModeMetadata = {
+  label: string;
+  account_label: string | null;
+  supported_methods: Array<"browser" | "device">;
 };
 
 export type ProviderAuthResponse = {

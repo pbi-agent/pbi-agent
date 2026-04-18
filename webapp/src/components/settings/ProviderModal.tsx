@@ -95,6 +95,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
 
   const kindMeta = options.provider_metadata[form.kind];
   const authModes = kindMeta?.auth_modes ?? ["api_key"];
+  const showAuthModePicker = authModes.length > 1;
   const isApiKeyAuth = form.auth_mode === "api_key";
 
   async function handleSubmit(e: FormEvent) {
@@ -158,10 +159,9 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
     { value: "none", label: "None" },
   ];
 
-  const authModeLabels: Record<string, string> = {
-    api_key: "API key",
-    chatgpt_account: "ChatGPT account",
-  };
+  const authModeMetadata = kindMeta?.auth_mode_metadata ?? {};
+  const selectedAuthModeMetadata = authModeMetadata[form.auth_mode];
+  const accountAuthLabel = selectedAuthModeMetadata?.account_label;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -225,27 +225,32 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
             >
               {options.provider_kinds.map((k) => (
                 <option key={k} value={k}>
-                  {k}
+                  {options.provider_metadata[k]?.label ?? k}
                 </option>
               ))}
             </select>
+            {kindMeta?.description && (
+              <span className="task-form__hint">{kindMeta.description}</span>
+            )}
           </div>
 
-          <div className="task-form__field">
-            <label className="task-form__label">Authentication</label>
-            <div className="secret-mode-tabs provider-auth-mode-tabs">
-              {authModes.map((authMode) => (
-                <button
-                  key={authMode}
-                  type="button"
-                  className={`secret-mode-tab${form.auth_mode === authMode ? " active" : ""}`}
-                  onClick={() => set({ auth_mode: authMode })}
-                >
-                  {authModeLabels[authMode] ?? authMode}
-                </button>
-              ))}
+          {showAuthModePicker && (
+            <div className="task-form__field">
+              <label className="task-form__label">Authentication</label>
+              <div className="secret-mode-tabs provider-auth-mode-tabs">
+                {authModes.map((authMode) => (
+                  <button
+                    key={authMode}
+                    type="button"
+                    className={`secret-mode-tab${form.auth_mode === authMode ? " active" : ""}`}
+                    onClick={() => set({ auth_mode: authMode })}
+                  >
+                    {authModeMetadata[authMode]?.label ?? authMode}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {isApiKeyAuth ? (
             <div className="task-form__field">
@@ -265,8 +270,8 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
             </div>
           ) : (
             <div className="settings-inline-note provider-auth-inline-note">
-              Save this provider, then use the Connect action from the provider card
-              to authorize it with your ChatGPT subscription account.
+              Save this provider to continue directly into sign-in for your{" "}
+              {accountAuthLabel ?? "account"}.
             </div>
           )}
 
