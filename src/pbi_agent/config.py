@@ -46,13 +46,20 @@ DEFAULT_MAX_TOKENS = 16384
 OPENAI_SERVICE_TIERS = ("auto", "default", "flex", "priority")
 PROVIDER_API_KEY_ENVS = {
     "openai": "OPENAI_API_KEY",
-    "github_copilot": "GITHUB_COPILOT_TOKEN",
     "xai": "XAI_API_KEY",
     "google": "GEMINI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "generic": "GENERIC_API_KEY",
 }
-PROVIDER_KINDS = tuple(PROVIDER_API_KEY_ENVS)
+PROVIDER_KINDS = (
+    "openai",
+    "chatgpt",
+    "github_copilot",
+    "xai",
+    "google",
+    "anthropic",
+    "generic",
+)
 INTERNAL_CONFIG_PATH_ENV = "PBI_AGENT_INTERNAL_CONFIG_PATH"
 PROFILE_ID_ENV = "PBI_AGENT_PROFILE_ID"
 DEFAULT_INTERNAL_CONFIG_PATH = Path.home() / ".pbi-agent" / "config.json"
@@ -112,10 +119,13 @@ class Settings:
             allowed = ", ".join(PROVIDER_KINDS)
             raise ConfigError(f"--provider must be one of: {allowed}.")
         if self.provider == "openai":
-            if self.auth is None and not self.api_key:
+            if not self.api_key:
+                raise ConfigError(missing_api_key_message(self.provider))
+        elif self.provider == "chatgpt":
+            if self.auth is None:
                 raise ConfigError(
-                    "Missing authentication for provider 'openai'. "
-                    "Configure an API key or a ChatGPT account session."
+                    "Missing authentication for provider 'chatgpt'. "
+                    "Configure a saved ChatGPT account session."
                 )
         elif self.provider == "github_copilot":
             if self.auth is None:
@@ -397,6 +407,10 @@ def _command_description_from_markdown(instructions: str, command_id: str) -> st
 
 
 def _default_responses_url(provider: str) -> str:
+    if provider == "chatgpt":
+        return OPENAI_CHATGPT_RESPONSES_URL
+    if provider == "github_copilot":
+        return GITHUB_COPILOT_RESPONSES_URL
     if provider == "xai":
         return DEFAULT_XAI_RESPONSES_URL
     if provider == "google":
@@ -405,10 +419,8 @@ def _default_responses_url(provider: str) -> str:
 
 
 def _default_responses_url_for_auth(provider_kind: str, auth_mode: str) -> str:
-    if provider_kind == "openai" and auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
-        return OPENAI_CHATGPT_RESPONSES_URL
-    if provider_kind == "github_copilot":
-        return GITHUB_COPILOT_RESPONSES_URL
+    if provider_kind in {"chatgpt", "github_copilot"}:
+        return _default_responses_url(provider_kind)
     return _default_responses_url(provider_kind)
 
 
@@ -441,6 +453,8 @@ def _default_sub_agent_model(provider: str) -> str | None:
 
 
 def _default_auth_mode(provider_kind: str) -> str:
+    if provider_kind == "chatgpt":
+        return AUTH_MODE_CHATGPT_ACCOUNT
     if provider_kind == "github_copilot":
         return AUTH_MODE_COPILOT_ACCOUNT
     return AUTH_MODE_API_KEY
@@ -476,7 +490,8 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         for auth_mode in provider_auth_modes(provider_kind)
     }
     kind_label = {
-        "openai": "OpenAI",
+        "openai": "OpenAI API",
+        "chatgpt": "ChatGPT",
         "github_copilot": "GitHub Copilot",
         "xai": "xAI",
         "google": "Google",
@@ -484,7 +499,8 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "generic": "OpenAI-compatible",
     }.get(provider_kind, provider_kind)
     kind_description = {
-        "openai": "Use Authentication below to choose between an OpenAI API key and a ChatGPT subscription account.",
+        "openai": "Uses an OpenAI API key.",
+        "chatgpt": "Uses your ChatGPT subscription account.",
         "github_copilot": "Uses your GitHub Copilot subscription account.",
     }.get(provider_kind)
     return {
@@ -508,7 +524,7 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "supports_service_tier": provider_kind == "openai",
         "supports_native_web_search": provider_kind != "generic",
         "supports_image_inputs": provider_kind
-        in {"openai", "google", "anthropic", "github_copilot"},
+        in {"openai", "chatgpt", "google", "anthropic", "github_copilot"},
     }
 
 
@@ -1091,7 +1107,7 @@ def _resolve_int_setting(
 
 
 def _default_reasoning_effort(provider_kind: str) -> str:
-    return "xhigh" if provider_kind == "openai" else "high"
+    return "xhigh" if provider_kind in {"openai", "chatgpt"} else "high"
 
 
 def _resolve_web_search(

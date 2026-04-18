@@ -62,9 +62,9 @@ function makeConfigBootstrap(
         },
       },
       {
-        id: "openai-chatgpt",
-        name: "OpenAI ChatGPT",
-        kind: "openai",
+        id: "chatgpt-main",
+        name: "ChatGPT Main",
+        kind: "chatgpt",
         auth_mode: "chatgpt_account",
         responses_url: null,
         generic_api_url: null,
@@ -154,22 +154,38 @@ function makeConfigBootstrap(
     ],
     commands: [],
     options: {
-      provider_kinds: ["openai", "github_copilot"],
+      provider_kinds: ["openai", "chatgpt", "github_copilot"],
       reasoning_efforts: ["high", "medium"],
       openai_service_tiers: [],
       provider_metadata: {
         openai: {
-          label: "OpenAI",
-          description:
-            "Use Authentication below to choose between an OpenAI API key and a ChatGPT subscription account.",
+          label: "OpenAI API",
+          description: "Uses an OpenAI API key.",
           default_auth_mode: "api_key",
-          auth_modes: ["api_key", "chatgpt_account"],
+          auth_modes: ["api_key"],
           auth_mode_metadata: {
             api_key: {
               label: "API key",
               account_label: null,
               supported_methods: [],
             },
+          },
+          default_model: "gpt-5.4",
+          default_sub_agent_model: null,
+          default_responses_url: null,
+          default_generic_api_url: null,
+          supports_responses_url: true,
+          supports_generic_api_url: false,
+          supports_service_tier: true,
+          supports_native_web_search: true,
+          supports_image_inputs: true,
+        },
+        chatgpt: {
+          label: "ChatGPT",
+          description: "Uses your ChatGPT subscription account.",
+          default_auth_mode: "chatgpt_account",
+          auth_modes: ["chatgpt_account"],
+          auth_mode_metadata: {
             chatgpt_account: {
               label: "ChatGPT account",
               account_label: "ChatGPT subscription account",
@@ -226,7 +242,7 @@ describe("SettingsPage", () => {
       auth_status: makeConfigBootstrap().providers[1].auth_status,
       flow: {
         flow_id: "flow-1",
-        provider_id: "openai-chatgpt",
+        provider_id: "chatgpt-main",
         backend: "openai-chatgpt",
         method: "browser",
         status: "pending",
@@ -263,7 +279,7 @@ describe("SettingsPage", () => {
       },
       flow: {
         flow_id: "flow-1",
-        provider_id: "openai-chatgpt",
+        provider_id: "chatgpt-main",
         backend: "openai-chatgpt",
         method: "browser",
         status: "completed",
@@ -277,7 +293,7 @@ describe("SettingsPage", () => {
         updated_at: "2026-04-16T00:00:02Z",
       },
       session: {
-        provider_id: "openai-chatgpt",
+        provider_id: "chatgpt-main",
         backend: "openai-chatgpt",
         expires_at: 1_800_000_000,
         account_id: "acct-1",
@@ -294,7 +310,7 @@ describe("SettingsPage", () => {
         can_refresh: true,
       },
       session: {
-        provider_id: "openai-chatgpt",
+        provider_id: "chatgpt-main",
         backend: "openai-chatgpt",
         expires_at: 1_800_000_000,
         account_id: "acct-1",
@@ -347,13 +363,13 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     const { queryClient } = renderWithProviders(<SettingsPage />);
 
-    expect(await screen.findByText("OpenAI ChatGPT")).toBeInTheDocument();
+    expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
 
     expect(await screen.findByText("Connect ChatGPT account")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
 
-    expect(startProviderAuthFlow).toHaveBeenCalledWith("openai-chatgpt", "browser");
+    expect(startProviderAuthFlow).toHaveBeenCalledWith("chatgpt-main", "browser");
     expect(window.open).toHaveBeenCalledWith(
       "https://chatgpt.com/auth",
       "_blank",
@@ -364,7 +380,7 @@ describe("SettingsPage", () => {
 
     await waitFor(() =>
       expect(fetchProviderAuthFlow).toHaveBeenCalledWith(
-        "openai-chatgpt",
+        "chatgpt-main",
         "flow-1",
       ),
     );
@@ -490,13 +506,10 @@ describe("SettingsPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "+ Add Provider" }));
 
-    expect(screen.getByRole("option", { name: "OpenAI" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "OpenAI API" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "ChatGPT" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "GitHub Copilot" })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Use Authentication below to choose between an OpenAI API key and a ChatGPT subscription account.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Uses an OpenAI API key.")).toBeInTheDocument();
   });
 
   it("refreshes settings after a manual auth status check completes the flow", async () => {
@@ -526,7 +539,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
-    expect(await screen.findByText("OpenAI ChatGPT")).toBeInTheDocument();
+    expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     expect(screen.getByText("not connected")).toBeInTheDocument();
 
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
@@ -551,7 +564,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
-    expect(await screen.findByText("OpenAI ChatGPT")).toBeInTheDocument();
+    expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
     await user.click(screen.getByRole("button", { name: "Check status" }));
@@ -587,15 +600,15 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
-    await screen.findByText("OpenAI ChatGPT");
+    await screen.findByText("ChatGPT Main");
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() =>
-      expect(refreshProviderAuth).toHaveBeenCalledWith("openai-chatgpt"),
+      expect(refreshProviderAuth).toHaveBeenCalledWith("chatgpt-main"),
     );
 
     await user.click(screen.getByRole("button", { name: "Disconnect" }));
     await waitFor(() =>
-      expect(logoutProviderAuth).toHaveBeenCalledWith("openai-chatgpt"),
+      expect(logoutProviderAuth).toHaveBeenCalledWith("chatgpt-main"),
     );
   });
 

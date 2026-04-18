@@ -95,6 +95,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
 
   const kindMeta = options.provider_metadata[form.kind];
   const authModes = kindMeta?.auth_modes ?? ["api_key"];
+  const showAuthModePicker = authModes.length > 1;
   const isApiKeyAuth = form.auth_mode === "api_key";
 
   async function handleSubmit(e: FormEvent) {
@@ -233,21 +234,23 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
             )}
           </div>
 
-          <div className="task-form__field">
-            <label className="task-form__label">Authentication</label>
-            <div className="secret-mode-tabs provider-auth-mode-tabs">
-              {authModes.map((authMode) => (
-                <button
-                  key={authMode}
-                  type="button"
-                  className={`secret-mode-tab${form.auth_mode === authMode ? " active" : ""}`}
-                  onClick={() => set({ auth_mode: authMode })}
-                >
-                  {authModeMetadata[authMode]?.label ?? authMode}
-                </button>
-              ))}
+          {showAuthModePicker && (
+            <div className="task-form__field">
+              <label className="task-form__label">Authentication</label>
+              <div className="secret-mode-tabs provider-auth-mode-tabs">
+                {authModes.map((authMode) => (
+                  <button
+                    key={authMode}
+                    type="button"
+                    className={`secret-mode-tab${form.auth_mode === authMode ? " active" : ""}`}
+                    onClick={() => set({ auth_mode: authMode })}
+                  >
+                    {authModeMetadata[authMode]?.label ?? authMode}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {isApiKeyAuth ? (
             <div className="task-form__field">

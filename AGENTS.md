@@ -40,9 +40,10 @@ uv tool install --reinstall .
 - After each implementation, append a brief entry to `MEMORY.md` describing what changed, why it changed, validation performed, and any context useful for the next session.
 - Always add new `MEMORY.md` entries at the end of the file in append mode. Never insert a new memory entry in the middle of existing history.
 - Use `TODO.md` for the current task session only.
+- Create or reset `TODO.md` before starting substantive work.
 - Track step progress there with checkboxes by default.
-- If `TODO.md` already contains a fully checked list, reset it before starting the new task.
-- `AUDIT-TODO.md` is separate: it is a product artifact used by `pbi-agent audit`, not the agent’s session checklist.
+- Update `TODO.md` as you work. Mark steps complete when they finish, and revise the list when scope changes.
+- If `TODO.md` contains an old completed or unrelated list, replace it before making new changes.
 
 ## Architecture Snapshot
 

@@ -1248,9 +1248,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                             "--name",
                             "OpenAI ChatGPT",
                             "--kind",
-                            "openai",
-                            "--auth-mode",
-                            "chatgpt_account",
+                            "chatgpt",
                         ]
                     ),
                     0,
@@ -1280,7 +1278,7 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         mock_login.assert_called_once()
-        self.assertEqual(mock_login.call_args.kwargs["provider_kind"], "openai")
+        self.assertEqual(mock_login.call_args.kwargs["provider_kind"], "chatgpt")
         self.assertEqual(mock_login.call_args.kwargs["provider_id"], "openai-chatgpt")
         self.assertEqual(mock_login.call_args.kwargs["auth_mode"], "chatgpt_account")
 
@@ -1302,9 +1300,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                             "--name",
                             "OpenAI ChatGPT",
                             "--kind",
-                            "openai",
-                            "--auth-mode",
-                            "chatgpt_account",
+                            "chatgpt",
                         ]
                     ),
                     0,
@@ -1334,7 +1330,7 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         mock_login.assert_called_once()
-        self.assertEqual(mock_login.call_args.kwargs["provider_kind"], "openai")
+        self.assertEqual(mock_login.call_args.kwargs["provider_kind"], "chatgpt")
         self.assertEqual(mock_login.call_args.kwargs["provider_id"], "openai-chatgpt")
         self.assertEqual(mock_login.call_args.kwargs["auth_mode"], "chatgpt_account")
 

@@ -18,6 +18,7 @@ from pbi_agent.providers.xai_provider import XAIProvider
     ("provider_name", "expected_type"),
     [
         ("openai", OpenAIProvider),
+        ("chatgpt", OpenAIProvider),
         ("github_copilot", GitHubCopilotProvider),
         ("xai", XAIProvider),
         ("google", GoogleProvider),
@@ -38,6 +39,16 @@ def test_create_provider_returns_expected_backend(
                 provider_id="copilot-main",
                 backend="github_copilot",
                 access_token="gho_test_token",
+            ),
+        )
+    elif provider_name == "chatgpt":
+        settings = Settings(
+            api_key="",
+            provider=provider_name,
+            auth=OAuthSessionAuth(
+                provider_id="chatgpt-main",
+                backend="openai_chatgpt",
+                access_token="access-token",
             ),
         )
     else:

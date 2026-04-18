@@ -610,6 +610,7 @@ data: {"type":"response.completed","response":{"id":"resp_chatgpt","model":"gpt-
 
     provider = OpenAIProvider(
         _make_settings(
+            provider="chatgpt",
             api_key="",
             auth=OAuthSessionAuth(
                 provider_id="openai-chatgpt",

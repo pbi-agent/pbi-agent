@@ -236,18 +236,17 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert (
             refreshed_payload["providers"][0]["auth_status"]["auth_mode"] == "api_key"
         )
-        assert refreshed_payload["options"]["provider_metadata"]["openai"][
-            "label"
-        ] == "OpenAI"
-        assert refreshed_payload["options"]["provider_metadata"]["openai"][
-            "description"
-        ] == (
-            "Use Authentication below to choose between an OpenAI API key and a "
-            "ChatGPT subscription account."
+        assert (
+            refreshed_payload["options"]["provider_metadata"]["openai"]["label"]
+            == "OpenAI API"
+        )
+        assert (
+            refreshed_payload["options"]["provider_metadata"]["openai"]["description"]
+            == "Uses an OpenAI API key."
         )
         assert refreshed_payload["options"]["provider_metadata"]["openai"][
             "auth_modes"
-        ] == ["api_key", "chatgpt_account"]
+        ] == ["api_key"]
         assert refreshed_payload["options"]["provider_metadata"]["openai"][
             "auth_mode_metadata"
         ] == {
@@ -256,11 +255,28 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
                 "account_label": None,
                 "supported_methods": [],
             },
-            "chatgpt_account": {
-                "label": "ChatGPT account",
-                "account_label": "ChatGPT subscription account",
-                "supported_methods": ["browser", "device"],
+        }
+        assert refreshed_payload["options"]["provider_metadata"]["chatgpt"] == {
+            "label": "ChatGPT",
+            "description": "Uses your ChatGPT subscription account.",
+            "default_auth_mode": "chatgpt_account",
+            "auth_modes": ["chatgpt_account"],
+            "auth_mode_metadata": {
+                "chatgpt_account": {
+                    "label": "ChatGPT account",
+                    "account_label": "ChatGPT subscription account",
+                    "supported_methods": ["browser", "device"],
+                }
             },
+            "default_model": "gpt-5.4",
+            "default_sub_agent_model": "gpt-5.4-mini",
+            "default_responses_url": "https://chatgpt.com/backend-api/codex/responses",
+            "default_generic_api_url": None,
+            "supports_responses_url": True,
+            "supports_generic_api_url": False,
+            "supports_service_tier": False,
+            "supports_native_web_search": True,
+            "supports_image_inputs": True,
         }
         analysis_profile = next(
             item
@@ -1924,8 +1940,7 @@ def test_provider_auth_endpoints_round_trip(monkeypatch, tmp_path: Path) -> None
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2035,8 +2050,7 @@ def test_provider_auth_browser_flow_endpoints_round_trip(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2122,8 +2136,7 @@ def test_provider_auth_browser_flow_uses_dedicated_local_callback_listener(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2210,8 +2223,7 @@ def test_provider_auth_browser_flow_registers_before_listener_start(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2271,8 +2283,7 @@ def test_provider_auth_browser_flow_timeout_stops_listener(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200
@@ -2346,8 +2357,7 @@ def test_provider_auth_device_flow_endpoints_round_trip(
             headers={"If-Match": revision},
             json={
                 "name": "OpenAI ChatGPT",
-                "kind": "openai",
-                "auth_mode": "chatgpt_account",
+                "kind": "chatgpt",
             },
         )
         assert create_provider_response.status_code == 200

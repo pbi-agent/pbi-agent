@@ -34,7 +34,7 @@ from pbi_agent.auth.store import (
 
 
 def provider_auth_backend_id(provider_kind: str, auth_mode: str) -> str | None:
-    if provider_kind == "openai" and auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
+    if provider_kind == "chatgpt" and auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
         return OPENAI_CHATGPT_BACKEND_ID
     if provider_kind == "github_copilot" and auth_mode == AUTH_MODE_COPILOT_ACCOUNT:
         return GITHUB_COPILOT_BACKEND_ID
@@ -43,7 +43,9 @@ def provider_auth_backend_id(provider_kind: str, auth_mode: str) -> str | None:
 
 def provider_auth_modes(provider_kind: str) -> tuple[str, ...]:
     if provider_kind == "openai":
-        return (AUTH_MODE_API_KEY, AUTH_MODE_CHATGPT_ACCOUNT)
+        return (AUTH_MODE_API_KEY,)
+    if provider_kind == "chatgpt":
+        return (AUTH_MODE_CHATGPT_ACCOUNT,)
     if provider_kind == "github_copilot":
         return (AUTH_MODE_COPILOT_ACCOUNT,)
     return (AUTH_MODE_API_KEY,)

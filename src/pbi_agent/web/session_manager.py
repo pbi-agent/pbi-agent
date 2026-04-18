@@ -1174,15 +1174,16 @@ class WebSessionManager:
         provider_id: str | None,
         name: str,
         kind: str,
-        auth_mode: str,
+        auth_mode: str | None,
         api_key: str | None,
         api_key_env: str | None,
         responses_url: str | None,
         generic_api_url: str | None,
         expected_revision: str,
     ) -> dict[str, Any]:
+        next_auth_mode = auth_mode or provider_ui_metadata(kind)["default_auth_mode"]
         self._validate_secret_inputs(
-            auth_mode=auth_mode,
+            auth_mode=next_auth_mode,
             api_key=api_key,
             api_key_env=api_key_env,
         )
@@ -1191,7 +1192,7 @@ class WebSessionManager:
                 id=slugify(provider_id or name),
                 name=name,
                 kind=kind,
-                auth_mode=auth_mode,
+                auth_mode=next_auth_mode,
                 api_key=api_key or "",
                 api_key_env=api_key_env,
                 responses_url=responses_url,
@@ -1223,9 +1224,12 @@ class WebSessionManager:
         provider = self._provider_map(config).get(slugify(provider_id))
         if provider is None:
             raise ConfigError(f"Unknown provider ID '{provider_id}'.")
+        next_kind = kind if "kind" in fields_set and kind is not None else provider.kind
         next_auth_mode = (
             auth_mode
             if "auth_mode" in fields_set and auth_mode is not None
+            else provider_ui_metadata(next_kind)["default_auth_mode"]
+            if "kind" in fields_set and kind is not None
             else provider.auth_mode
         )
         self._validate_secret_inputs(
@@ -1249,7 +1253,7 @@ class WebSessionManager:
         merged = replace(
             provider,
             name=name if "name" in fields_set else provider.name,
-            kind=kind if "kind" in fields_set else provider.kind,
+            kind=next_kind,
             auth_mode=next_auth_mode,
             api_key=next_api_key,
             api_key_env=next_api_key_env,
@@ -1375,10 +1379,12 @@ class WebSessionManager:
             timeout_timer: threading.Timer | None = None
             try:
                 listener = create_browser_auth_callback_listener(
-                    callback_handler=lambda params: self._handle_provider_auth_browser_callback(
-                        provider_id=provider.id,
-                        flow_id=flow_id,
-                        params=params,
+                    callback_handler=lambda params: (
+                        self._handle_provider_auth_browser_callback(
+                            provider_id=provider.id,
+                            flow_id=flow_id,
+                            params=params,
+                        )
                     )
                 )
                 browser_auth = start_provider_browser_auth(
@@ -2386,7 +2392,8 @@ class WebSessionManager:
             return BrowserAuthCallbackOutcome(completed=True)
         return BrowserAuthCallbackOutcome(
             completed=False,
-            error_message=payload["flow"].get("error_message") or "Authorization failed.",
+            error_message=payload["flow"].get("error_message")
+            or "Authorization failed.",
         )
 
     def _expire_provider_auth_flow(

@@ -280,7 +280,7 @@ def test_resolve_web_runtime_uses_saved_chatgpt_account_session(
         ProviderConfig(
             id="openai-chatgpt",
             name="OpenAI ChatGPT",
-            kind="openai",
+            kind="chatgpt",
             auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
         )
     )
@@ -293,7 +293,7 @@ def test_resolve_web_runtime_uses_saved_chatgpt_account_session(
         )
     )
     import_provider_auth_session(
-        provider_kind="openai",
+        provider_kind="chatgpt",
         provider_id="openai-chatgpt",
         auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
         payload={
@@ -314,6 +314,7 @@ def test_resolve_web_runtime_uses_saved_chatgpt_account_session(
     settings = runtime.settings
 
     assert settings.api_key == ""
+    assert settings.provider == "chatgpt"
     assert settings.responses_url == OPENAI_CHATGPT_RESPONSES_URL
     assert isinstance(settings.auth, OAuthSessionAuth)
     assert settings.auth.account_id == "acct_123"
@@ -507,7 +508,7 @@ def test_resolve_runtime_keeps_saved_chatgpt_account_profile_auth(monkeypatch) -
         ProviderConfig(
             id="openai-chatgpt",
             name="OpenAI ChatGPT",
-            kind="openai",
+            kind="chatgpt",
             auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
         )
     )
@@ -520,7 +521,7 @@ def test_resolve_runtime_keeps_saved_chatgpt_account_profile_auth(monkeypatch) -
         )
     )
     import_provider_auth_session(
-        provider_kind="openai",
+        provider_kind="chatgpt",
         provider_id="openai-chatgpt",
         auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
         payload={
@@ -540,6 +541,7 @@ def test_resolve_runtime_keeps_saved_chatgpt_account_profile_auth(monkeypatch) -
     )
 
     assert runtime.provider_id == "openai-chatgpt"
+    assert runtime.settings.provider == "chatgpt"
     assert isinstance(runtime.settings.auth, OAuthSessionAuth)
     assert runtime.settings.auth.account_id == "acct_123"
     assert runtime.settings.responses_url == OPENAI_CHATGPT_RESPONSES_URL
@@ -557,7 +559,7 @@ def test_resolve_runtime_allows_provider_override_api_key_over_chatgpt_profile(
         ProviderConfig(
             id="openai-chatgpt",
             name="OpenAI ChatGPT",
-            kind="openai",
+            kind="chatgpt",
             auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
         )
     )

@@ -75,7 +75,7 @@ class ProviderMutationRequest(BaseModel):
     id: str | None = None
     name: NonEmptyString
     kind: NonEmptyString
-    auth_mode: str = "api_key"
+    auth_mode: str | None = None
     api_key: str | None = None
     api_key_env: str | None = None
     responses_url: str | None = None

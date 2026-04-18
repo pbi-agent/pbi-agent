@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-IMAGE_ENABLED_PROVIDERS = frozenset({"openai", "anthropic", "google"})
+IMAGE_ENABLED_PROVIDERS = frozenset(
+    {"openai", "chatgpt", "github_copilot", "anthropic", "google"}
+)
 
 
 def provider_supports_images(provider: str) -> bool:
