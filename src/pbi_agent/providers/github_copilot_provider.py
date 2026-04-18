@@ -1,20 +1,42 @@
-"""GitHub Copilot Responses HTTP provider."""
+"""GitHub Copilot HTTP provider."""
 
 from __future__ import annotations
 
 import json
-from typing import Any
+import time
+import urllib.error
+import urllib.request
+from dataclasses import replace
+from typing import Any, TYPE_CHECKING
 
 from pbi_agent import __version__
+from pbi_agent.auth.service import build_runtime_request_auth
 from pbi_agent.config import Settings
+from pbi_agent.media import data_url_for_image
+from pbi_agent.models.messages import CompletedResponse, TokenUsage, UserTurnInput
+from pbi_agent.providers.base import Provider
 from pbi_agent.providers.chatgpt_codex_backend import ResponsesRequestOptions
+from pbi_agent.providers.generic_provider import (
+    GenericProvider,
+    _duration_ms,
+    _extract_retry_after,
+    _trace_provider_call,
+)
+from pbi_agent.providers.github_copilot_backend import (
+    GITHUB_COPILOT_CHAT_COMPLETIONS_URL,
+    github_copilot_backend_for_model,
+)
 from pbi_agent.providers.openai_provider import OpenAIProvider
+from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
+from pbi_agent.tools.types import ParentContextSnapshot
+from pbi_agent.display.protocol import DisplayProtocol
+
+if TYPE_CHECKING:
+    from pbi_agent.observability import RunTracer
 
 
-class GitHubCopilotProvider(OpenAIProvider):
-    """Provider backed by GitHub Copilot's Responses API."""
-
+class GitHubCopilotProvider(Provider):
     def __init__(
         self,
         settings: Settings,
@@ -23,13 +45,100 @@ class GitHubCopilotProvider(OpenAIProvider):
         excluded_tools: set[str] | None = None,
         tool_catalog: ToolCatalog | None = None,
     ) -> None:
-        super().__init__(
-            settings,
-            system_prompt=system_prompt,
-            excluded_tools=excluded_tools,
-            tool_catalog=tool_catalog,
+        backend = github_copilot_backend_for_model(settings.model)
+        if backend.mode == "responses":
+            self._delegate: Provider = _GitHubCopilotResponsesProvider(
+                settings,
+                system_prompt=system_prompt,
+                excluded_tools=excluded_tools,
+                tool_catalog=tool_catalog,
+            )
+        else:
+            self._delegate = _GitHubCopilotChatCompletionsProvider(
+                settings,
+                system_prompt=system_prompt,
+                excluded_tools=excluded_tools,
+                tool_catalog=tool_catalog,
+            )
+
+    @property
+    def settings(self) -> Settings:
+        return self._delegate.settings
+
+    def connect(self) -> None:
+        self._delegate.connect()
+
+    def close(self) -> None:
+        self._delegate.close()
+
+    def reset_conversation(self) -> None:
+        self._delegate.reset_conversation()
+
+    def request_turn(
+        self,
+        *,
+        user_message: str | None = None,
+        user_input: UserTurnInput | None = None,
+        tool_result_items: list[dict[str, Any]] | None = None,
+        instructions: str | None = None,
+        session_id: str | None = None,
+        display: DisplayProtocol,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        tracer: "RunTracer | None" = None,
+    ) -> CompletedResponse:
+        return self._delegate.request_turn(
+            user_message=user_message,
+            user_input=user_input,
+            tool_result_items=tool_result_items,
+            instructions=instructions,
+            session_id=session_id,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tracer=tracer,
         )
 
+    def execute_tool_calls(
+        self,
+        response: CompletedResponse,
+        *,
+        max_workers: int,
+        display: DisplayProtocol,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        sub_agent_depth: int = 0,
+        parent_context: ParentContextSnapshot | None = None,
+        tracer: "RunTracer | None" = None,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        return self._delegate.execute_tool_calls(
+            response,
+            max_workers=max_workers,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            sub_agent_depth=sub_agent_depth,
+            parent_context=parent_context,
+            tracer=tracer,
+        )
+
+    def set_previous_response_id(self, response_id: str | None) -> None:
+        self._delegate.set_previous_response_id(response_id)
+
+    def get_conversation_checkpoint(self) -> str | None:
+        return self._delegate.get_conversation_checkpoint()
+
+    def restore_messages(self, messages: list[MessageRecord]) -> None:
+        self._delegate.restore_messages(messages)
+
+    def set_system_prompt(self, system_prompt: str) -> None:
+        self._delegate.set_system_prompt(system_prompt)
+
+    def refresh_tools(self) -> None:
+        self._delegate.refresh_tools()
+
+
+class _GitHubCopilotResponsesProvider(OpenAIProvider):
     def _responses_request_options(self) -> ResponsesRequestOptions:
         return ResponsesRequestOptions(stream=True)
 
@@ -82,6 +191,282 @@ class GitHubCopilotProvider(OpenAIProvider):
         streamed: bool,
     ) -> dict[str, Any]:
         return _decode_copilot_responses_body(raw_body, streamed=streamed)
+
+
+class _GitHubCopilotChatCompletionsProvider(GenericProvider):
+    def connect(self) -> None:
+        if self._settings.auth is None:
+            raise ValueError(
+                "Missing authentication. Configure a saved GitHub Copilot account session."
+            )
+
+    def request_turn(
+        self,
+        *,
+        user_message: str | None = None,
+        user_input: UserTurnInput | None = None,
+        tool_result_items: list[dict[str, Any]] | None = None,
+        instructions: str | None = None,
+        session_id: str | None = None,
+        display: DisplayProtocol,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        tracer: "RunTracer | None" = None,
+    ) -> CompletedResponse:
+        del session_id
+        if user_input is None and user_message is not None:
+            user_input = UserTurnInput(text=user_message)
+
+        if user_input is not None:
+            self._messages.append(_build_chat_completions_user_message(user_input))
+        elif tool_result_items is not None:
+            self._messages.extend(tool_result_items)
+        else:
+            raise ValueError("Either user_input or tool_result_items is required")
+
+        result = self._http_request(
+            instructions=instructions or self._system_prompt,
+            display=display,
+            tracer=tracer,
+        )
+        session_usage.add(result.usage)
+        turn_usage.add(result.usage)
+        display.session_usage(session_usage)
+
+        if result.reasoning_summary or result.reasoning_content:
+            display.render_thinking(
+                result.reasoning_content or result.reasoning_summary,
+                title=result.reasoning_summary or None,
+            )
+
+        assistant_message = result.provider_data.get("assistant_message")
+        if isinstance(assistant_message, dict):
+            self._messages.append(assistant_message)
+
+        return result
+
+    def _http_request(
+        self,
+        *,
+        instructions: str,
+        display: DisplayProtocol,
+        tracer: "RunTracer | None" = None,
+    ) -> CompletedResponse:
+        display.wait_start("waiting for GitHub Copilot response...")
+
+        messages: list[dict[str, Any]] = [{"role": "system", "content": instructions}]
+        messages.extend(self._messages)
+
+        body: dict[str, Any] = {
+            "messages": messages,
+            "tools": self._tools,
+            "tool_choice": "auto",
+            "max_tokens": self._settings.max_tokens,
+            "stream": False,
+        }
+        if self._settings.model:
+            body["model"] = self._settings.model
+
+        request_data = json.dumps(body).encode("utf-8")
+        max_retries = self._settings.max_retries
+        last_error: Exception | None = None
+        request_url = GITHUB_COPILOT_CHAT_COMPLETIONS_URL
+
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                display.retry_notice(attempt, max_retries)
+
+            req_start = time.perf_counter()
+            request_auth = build_runtime_request_auth(
+                provider_kind=self._settings.provider,
+                request_url=request_url,
+                auth=self._settings.auth,
+            )
+            headers = _github_copilot_chat_completions_headers(
+                request_auth_headers=request_auth.headers,
+                has_image_inputs=_messages_include_image_inputs(messages),
+                user_initiated=_messages_are_user_initiated(messages),
+            )
+            try:
+                req = urllib.request.Request(
+                    request_auth.request_url,
+                    data=request_data,
+                    headers=headers,
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=300) as resp:
+                    response_json = json.loads(resp.read().decode("utf-8"))
+
+                result = self._parse_response(response_json)
+                _trace_provider_call(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=body,
+                    response_payload=response_json,
+                    duration_ms=_duration_ms(req_start),
+                    prompt_tokens=result.usage.input_tokens,
+                    completion_tokens=result.usage.output_tokens,
+                    total_tokens=result.usage.total_tokens,
+                    status_code=200,
+                    success=True,
+                    metadata={"attempt": attempt + 1},
+                )
+                display.wait_stop()
+
+                if result.text:
+                    display.render_markdown(result.text)
+
+                return result
+            except urllib.error.HTTPError as exc:
+                error_body = ""
+                try:
+                    error_body = exc.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+                _trace_provider_call(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=body,
+                    response_payload={"body": error_body},
+                    duration_ms=_duration_ms(req_start),
+                    status_code=exc.code,
+                    success=False,
+                    error_message=error_body or f"HTTP {exc.code}",
+                    metadata={"attempt": attempt + 1},
+                )
+
+                if exc.code == 429:
+                    if attempt >= max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            "GitHub Copilot rate limit exceeded after "
+                            f"{max_retries + 1} attempts: {error_body}"
+                        ) from exc
+                    wait = _extract_retry_after(exc, attempt)
+                    display.rate_limit_notice(
+                        wait_seconds=wait,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    time.sleep(wait)
+                    continue
+
+                if exc.code >= 500:
+                    last_error = exc
+                    continue
+
+                display.wait_stop()
+                raise RuntimeError(
+                    f"GitHub Copilot API error {exc.code}: {error_body}"
+                ) from exc
+            except urllib.error.URLError as exc:
+                last_error = exc
+                _trace_provider_call(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=body,
+                    response_payload={"error": str(exc)},
+                    duration_ms=_duration_ms(req_start),
+                    success=False,
+                    error_message=str(exc),
+                    metadata={"attempt": attempt + 1},
+                )
+                continue
+
+        display.wait_stop()
+        if last_error is not None:
+            raise RuntimeError(
+                "GitHub Copilot chat-completions request failed after "
+                f"{max_retries + 1} attempts: {last_error}"
+            ) from last_error
+        raise RuntimeError(
+            "GitHub Copilot chat-completions request failed after retries."
+        )
+
+    def _parse_response(self, response_json: dict[str, Any]) -> CompletedResponse:
+        response = super()._parse_response(response_json)
+        choices = response_json.get("choices", [])
+        first_choice = choices[0] if choices and isinstance(choices[0], dict) else {}
+        message = first_choice.get("message", {})
+        if not isinstance(message, dict):
+            return response
+        reasoning_text = message.get("reasoning_text")
+        if not isinstance(reasoning_text, str) or not reasoning_text.strip():
+            return response
+        provider_data = response.provider_data
+        if not isinstance(provider_data, dict):
+            provider_data = {}
+        provider_data = {**provider_data, "reasoning_text": reasoning_text.strip()}
+        return replace(
+            response,
+            reasoning_content=reasoning_text.strip(),
+            provider_data=provider_data,
+        )
+
+
+def _build_chat_completions_user_message(user_input: UserTurnInput) -> dict[str, Any]:
+    if not user_input.images:
+        return {"role": "user", "content": user_input.text}
+
+    content: list[dict[str, Any]] = []
+    if user_input.text:
+        content.append({"type": "text", "text": user_input.text})
+    for image in user_input.images:
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": data_url_for_image(image)},
+            }
+        )
+    return {"role": "user", "content": content}
+
+
+def _github_copilot_chat_completions_headers(
+    *,
+    request_auth_headers: dict[str, str],
+    has_image_inputs: bool,
+    user_initiated: bool,
+) -> dict[str, str]:
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": f"pbi-agent/{__version__}",
+        "Openai-Intent": "conversation-edits",
+        "x-initiator": "user" if user_initiated else "agent",
+        **request_auth_headers,
+    }
+    if has_image_inputs:
+        headers["Copilot-Vision-Request"] = "true"
+    return headers
+
+
+def _messages_include_image_inputs(messages: list[dict[str, Any]]) -> bool:
+    for message in messages:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "image_url":
+                return True
+    return False
+
+
+def _messages_are_user_initiated(messages: list[dict[str, Any]]) -> bool:
+    if not messages:
+        return False
+    last_message = messages[-1]
+    return last_message.get("role") == "user"
 
 
 def _is_user_initiated_request(input_items: list[dict[str, Any]]) -> bool:
@@ -331,11 +716,7 @@ def _ensure_copilot_reasoning_summary_index(
 ) -> None:
     item = output_items.get(output_index)
     if item is None:
-        item = {
-            "id": f"reasoning_{output_index}",
-            "type": "reasoning",
-            "summary": [],
-        }
+        item = {"type": "reasoning", "summary": []}
         output_items[output_index] = item
     summary = item.setdefault("summary", [])
     while len(summary) <= summary_index:
@@ -357,5 +738,4 @@ def _append_copilot_reasoning_summary_delta(
     summary = output_items[output_index]["summary"]
     summary_item = summary[summary_index]
     if isinstance(summary_item, dict):
-        summary_item["type"] = "summary_text"
         summary_item["text"] = f"{summary_item.get('text', '')}{delta}"

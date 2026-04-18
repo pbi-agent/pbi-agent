@@ -7,6 +7,9 @@ from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
 from pbi_agent.config import DEFAULT_MAX_TOKENS, Settings
 from pbi_agent.models.messages import TokenUsage, UserTurnInput
+from pbi_agent.providers.github_copilot_backend import (
+    GITHUB_COPILOT_CHAT_COMPLETIONS_URL,
+)
 from pbi_agent.providers.github_copilot_provider import GitHubCopilotProvider
 
 
@@ -87,7 +90,7 @@ def _make_settings(**overrides: object) -> Settings:
         ),
         "provider": "github_copilot",
         "responses_url": GITHUB_COPILOT_RESPONSES_URL,
-        "model": "gpt-5",
+        "model": "gpt-5.4",
         "max_tokens": DEFAULT_MAX_TOKENS,
         "reasoning_effort": "high",
         "max_retries": 0,
@@ -97,7 +100,7 @@ def _make_settings(**overrides: object) -> Settings:
     return Settings(**defaults)
 
 
-def test_github_copilot_request_turn_sets_expected_headers_and_omits_max_tokens(
+def test_github_copilot_openai_model_uses_responses_headers_and_omits_max_tokens(
     monkeypatch,
 ) -> None:
     request_details: dict[str, object] = {}
@@ -112,7 +115,7 @@ def test_github_copilot_request_turn_sets_expected_headers_and_omits_max_tokens(
         request_details["body"] = json.loads(request.data.decode("utf-8"))
         return _FakeHTTPResponse(
             """event: response.created
-data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5","created_at":1}}
+data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.4","created_at":1}}
 
 event: response.output_item.added
 data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1"}}
@@ -127,7 +130,7 @@ event: response.output_item.done
 data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1"}}
 
 event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":8}}}
+data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.4","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":8}}}
 
 """
         )
@@ -136,8 +139,8 @@ data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","us
 
     provider = GitHubCopilotProvider(_make_settings())
     display = _DisplayStub()
-    session_usage = TokenUsage(model="gpt-5")
-    turn_usage = TokenUsage(model="gpt-5")
+    session_usage = TokenUsage(model="gpt-5.4")
+    turn_usage = TokenUsage(model="gpt-5.4")
 
     response = provider.request_turn(
         user_input=UserTurnInput(text="Hello"),
@@ -160,6 +163,71 @@ data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","us
     assert body["stream"] is True
 
 
+def test_github_copilot_non_openai_model_uses_chat_completions(
+    monkeypatch,
+) -> None:
+    request_details: dict[str, object] = {}
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        request_details["url"] = request.full_url
+        request_details["headers"] = dict(request.header_items())
+        request_details["body"] = json.loads(request.data.decode("utf-8"))
+        return _FakeHTTPResponse(
+            json.dumps(
+                {
+                    "id": "chatcmpl_1",
+                    "model": "claude-sonnet-4",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "Hello from Claude",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 7,
+                        "completion_tokens": 4,
+                        "total_tokens": 11,
+                    },
+                }
+            )
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GitHubCopilotProvider(_make_settings(model="claude-sonnet-4"))
+    display = _DisplayStub()
+    session_usage = TokenUsage(model="claude-sonnet-4")
+    turn_usage = TokenUsage(model="claude-sonnet-4")
+
+    response = provider.request_turn(
+        user_input=UserTurnInput(text="Hello"),
+        display=display,
+        session_usage=session_usage,
+        turn_usage=turn_usage,
+    )
+
+    headers = request_details["headers"]
+    body = request_details["body"]
+
+    assert response.text == "Hello from Claude"
+    assert request_details["url"] == GITHUB_COPILOT_CHAT_COMPLETIONS_URL
+    assert headers["Authorization"] == "Bearer gho_test_token"
+    assert headers["Accept"] == "application/json"
+    assert headers["Openai-intent"] == "conversation-edits"
+    assert headers["X-initiator"] == "user"
+    assert body["model"] == "claude-sonnet-4"
+    assert body["stream"] is False
+    assert body["messages"][1] == {"role": "user", "content": "Hello"}
+
+
 def test_github_copilot_parser_uses_output_index_for_function_calls_and_reasoning(
     monkeypatch,
 ) -> None:
@@ -170,7 +238,7 @@ def test_github_copilot_parser_uses_output_index_for_function_calls_and_reasonin
         del request, timeout
         return _FakeHTTPResponse(
             """event: response.created
-data: {"type":"response.created","response":{"id":"resp_2","model":"gpt-5","created_at":1}}
+data: {"type":"response.created","response":{"id":"resp_2","model":"gpt-5.4","created_at":1}}
 
 event: response.output_item.added
 data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_1","encrypted_content":"opaque"}}
@@ -194,7 +262,7 @@ event: response.output_item.done
 data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_2","call_id":"call_1","name":"list_files","arguments":"{\\"path\\":\\".\\"}","status":"completed"}}
 
 event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":8}}}
+data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":8}}}
 
 """
         )
@@ -203,8 +271,8 @@ data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5","us
 
     provider = GitHubCopilotProvider(_make_settings())
     display = _DisplayStub()
-    session_usage = TokenUsage(model="gpt-5")
-    turn_usage = TokenUsage(model="gpt-5")
+    session_usage = TokenUsage(model="gpt-5.4")
+    turn_usage = TokenUsage(model="gpt-5.4")
 
     response = provider.request_turn(
         user_input=UserTurnInput(text="Inspect"),

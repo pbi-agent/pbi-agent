@@ -217,7 +217,7 @@ function makeConfigBootstrap(
               supported_methods: ["device"],
             },
           },
-          default_model: "gpt-5",
+          default_model: "gpt-5.4",
           default_sub_agent_model: "gpt-5-mini",
           default_responses_url: "https://api.githubcopilot.com/responses",
           default_generic_api_url: null,

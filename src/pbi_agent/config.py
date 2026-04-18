@@ -428,7 +428,7 @@ def _default_model(provider: str) -> str:
     if provider == "generic":
         return ""
     if provider == "github_copilot":
-        return "gpt-5"
+        return "gpt-5.4"
     if provider == "xai":
         return DEFAULT_XAI_MODEL
     if provider == "google":

@@ -1,6 +1,6 @@
 # TODO
 
-- [X] Analyze PR #158 merge and resolve conflicts on `github-copilot-phase1`
-- [X] Finish the cherry-pick and regenerate the web bundle
-- [X] Run focused validation on the merged model-discovery surface
-- [X] Append session notes to `MEMORY.md`
+- [>] Locate session `a15db21071bd4c4e87b3f0a00f8be2d6` and inspect its failure logs
+- [ ] Trace the failing GitHub Copilot request path back to the new backend routing
+- [ ] Implement and validate the fix if the failure is in the current branch
+- [ ] Append the diagnosis and validation to `MEMORY.md`

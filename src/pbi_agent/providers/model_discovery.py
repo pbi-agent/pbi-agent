@@ -14,10 +14,11 @@ from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_a
 from pbi_agent.config import ConfigError, Settings, missing_api_key_message
 from pbi_agent.providers.anthropic_provider import ANTHROPIC_VERSION
 from pbi_agent.providers.chatgpt_codex_backend import chatgpt_user_agent
+from pbi_agent.providers.github_copilot_backend import GITHUB_COPILOT_MODELS_URL
 
 _DISCOVERY_TIMEOUT_SECS = 30.0
 _SUPPORTED_DISCOVERY_PROVIDERS = frozenset(
-    {"openai", "chatgpt", "xai", "google", "anthropic", "generic"}
+    {"openai", "chatgpt", "github_copilot", "xai", "google", "anthropic", "generic"}
 )
 _OPENAI_CHATGPT_MIN_CLIENT_VERSION = "0.99.0"
 _MANUAL_ENTRY_ONLY_REASONS: dict[str, str] = {}
@@ -75,6 +76,8 @@ def discover_provider_models(settings: Settings) -> ProviderModelDiscoveryResult
     try:
         if provider_kind in {"openai", "chatgpt"}:
             models = _discover_openai_models(settings)
+        elif provider_kind == "github_copilot":
+            models = _discover_github_copilot_models(settings)
         elif provider_kind == "xai":
             models = _discover_xai_models(settings)
         elif provider_kind == "google":
@@ -207,6 +210,64 @@ def _discover_xai_models(settings: Settings) -> list[DiscoveredProviderModel]:
         if isinstance(item, dict)
         if (model_id := _string_value(item.get("id")))
     ]
+
+
+def _discover_github_copilot_models(
+    settings: Settings,
+) -> list[DiscoveredProviderModel]:
+    response = _get_json(settings, GITHUB_COPILOT_MODELS_URL)
+    payload = response.get("data", [])
+    if not isinstance(payload, list):
+        return []
+
+    models: list[DiscoveredProviderModel] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        model_id = _string_value(item.get("id"))
+        if not model_id:
+            continue
+        capabilities = item.get("capabilities")
+        if not isinstance(capabilities, dict):
+            continue
+        if _string_value(capabilities.get("type")) != "chat":
+            continue
+        if item.get("model_picker_enabled", True) is False:
+            continue
+        policy = item.get("policy")
+        if isinstance(policy, dict):
+            policy_state = _string_value(policy.get("state"))
+            if policy_state not in {None, "enabled"}:
+                continue
+        supports = item.get("capabilities", {}).get("supports", {})
+        if not isinstance(supports, dict):
+            supports = {}
+        aliases = [
+            alias
+            for alias in [
+                _string_value(capabilities.get("family")),
+                _string_value(item.get("version")),
+            ]
+            if alias and alias != model_id
+        ]
+        input_modalities = ["text"]
+        if _bool_value(supports.get("vision")):
+            input_modalities.append("image")
+        models.append(
+            DiscoveredProviderModel(
+                id=model_id,
+                display_name=_string_value(item.get("name")) or model_id,
+                created=None,
+                owned_by=_string_value(item.get("vendor")),
+                input_modalities=input_modalities,
+                output_modalities=["text"],
+                aliases=aliases,
+                supports_reasoning_effort=_supports_reasoning_effort(
+                    supports.get("reasoning_effort")
+                ),
+            )
+        )
+    return models
 
 
 def _discover_generic_models(settings: Settings) -> list[DiscoveredProviderModel]:
@@ -384,9 +445,7 @@ def _request_headers(
         "Accept": "application/json",
         "User-Agent": f"pbi-agent/{__version__}",
     }
-    if (
-        settings.responses_url == OPENAI_CHATGPT_RESPONSES_URL
-    ):
+    if settings.responses_url == OPENAI_CHATGPT_RESPONSES_URL:
         headers["originator"] = "opencode"
         headers["User-Agent"] = chatgpt_user_agent()
 
@@ -460,6 +519,16 @@ def _missing_auth_error(settings: Settings) -> ProviderModelDiscoveryError | Non
                 message=(
                     "Missing authentication for provider 'chatgpt'. "
                     "Connect a ChatGPT account session first."
+                ),
+            )
+        return None
+    if settings.provider == "github_copilot":
+        if settings.auth is None:
+            return ProviderModelDiscoveryError(
+                code="auth_required",
+                message=(
+                    "Missing authentication for provider 'github_copilot'. "
+                    "Connect a GitHub Copilot account session first."
                 ),
             )
         return None
@@ -545,6 +614,14 @@ def _openai_chatgpt_supports_reasoning_effort(item: dict[str, Any]) -> bool | No
     if isinstance(supported_levels, list):
         return bool(supported_levels)
     return _bool_value(item.get("supports_reasoning_summaries"))
+
+
+def _supports_reasoning_effort(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, list):
+        return bool(_string_list(value))
+    return None
 
 
 def _string_list(value: Any) -> list[str]:

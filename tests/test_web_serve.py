@@ -2595,6 +2595,134 @@ def test_provider_model_discovery_endpoint_returns_auth_required_error(
     assert "Missing authentication" in payload["error"]["message"]
 
 
+def test_provider_model_discovery_endpoint_discovers_github_copilot_models(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_AUTH_STORE_PATH", str(tmp_path / "auth.json"))
+    app = create_app(_settings(), runtime_args=_runtime_args("web"))
+
+    requests_seen: list[urllib.request.Request] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float = 0.0):
+        del timeout
+        requests_seen.append(request)
+        return _FakeHTTPResponse(
+            {
+                "data": [
+                    {
+                        "id": "gpt-5.4",
+                        "name": "GPT-5.4",
+                        "vendor": "openai",
+                        "version": "2026-04-01",
+                        "model_picker_enabled": True,
+                        "policy": {"state": "enabled"},
+                        "capabilities": {
+                            "type": "chat",
+                            "family": "gpt-5.4",
+                            "supports": {
+                                "vision": True,
+                                "reasoning_effort": ["low", "medium", "high"],
+                            },
+                        },
+                    },
+                    {
+                        "id": "claude-sonnet-4",
+                        "name": "Claude Sonnet 4",
+                        "vendor": "anthropic",
+                        "version": "2026-04-01",
+                        "model_picker_enabled": True,
+                        "policy": {"state": "enabled"},
+                        "capabilities": {
+                            "type": "chat",
+                            "family": "claude-sonnet-4",
+                            "supports": {
+                                "vision": True,
+                            },
+                        },
+                    },
+                    {
+                        "id": "gpt-hidden",
+                        "name": "Hidden",
+                        "vendor": "openai",
+                        "model_picker_enabled": False,
+                        "capabilities": {
+                            "type": "chat",
+                            "family": "gpt-hidden",
+                            "supports": {},
+                        },
+                    },
+                    {
+                        "id": "gemini-disabled",
+                        "name": "Gemini Disabled",
+                        "vendor": "google",
+                        "model_picker_enabled": True,
+                        "policy": {"state": "disabled"},
+                        "capabilities": {
+                            "type": "chat",
+                            "family": "gemini-disabled",
+                            "supports": {},
+                        },
+                    },
+                ]
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    with TestClient(app) as client:
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        create_provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "Copilot",
+                "kind": "github_copilot",
+            },
+        )
+        assert create_provider_response.status_code == 200
+        save_auth_session(
+            build_auth_session(
+                provider_id="copilot",
+                backend="github_copilot",
+                access_token="gho_test_token",
+                plan_type="github_copilot",
+            )
+        )
+
+        response = client.get("/api/config/providers/copilot/models")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider_kind"] == "github_copilot"
+    assert payload["discovery_supported"] is True
+    assert payload["manual_entry_required"] is False
+    assert payload["models"] == [
+        {
+            "id": "claude-sonnet-4",
+            "display_name": "Claude Sonnet 4",
+            "created": None,
+            "owned_by": "anthropic",
+            "input_modalities": ["text", "image"],
+            "output_modalities": ["text"],
+            "aliases": ["2026-04-01"],
+            "supports_reasoning_effort": None,
+        },
+        {
+            "id": "gpt-5.4",
+            "display_name": "GPT-5.4",
+            "created": None,
+            "owned_by": "openai",
+            "input_modalities": ["text", "image"],
+            "output_modalities": ["text"],
+            "aliases": ["2026-04-01"],
+            "supports_reasoning_effort": True,
+        },
+    ]
+    assert requests_seen[0].full_url == "https://api.githubcopilot.com/models"
+    assert requests_seen[0].headers["Authorization"] == "Bearer gho_test_token"
+
+
 def test_provider_model_discovery_endpoint_discovers_generic_provider_models(
     monkeypatch, tmp_path: Path
 ) -> None:
