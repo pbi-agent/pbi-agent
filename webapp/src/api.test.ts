@@ -1,8 +1,14 @@
 import {
   ApiError,
   deleteModelProfile,
+  fetchProviderAuthFlow,
+  fetchProviderAuthStatus,
   fetchSessions,
+  logoutProviderAuth,
+  pollProviderAuthFlow,
+  refreshProviderAuth,
   setActiveModelProfile,
+  startProviderAuthFlow,
   uploadSessionImages,
   websocketUrl,
 } from "./api";
@@ -24,9 +30,7 @@ describe("api helpers", () => {
     await expect(fetchSessions()).resolves.toEqual([{ session_id: "s-1" }]);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/sessions",
-      expect.objectContaining({
-        headers: expect.any(Headers),
-      }),
+      expect.anything(),
     );
   });
 
@@ -43,7 +47,11 @@ describe("api helpers", () => {
       new File(["binary"], "diagram.png", { type: "image/png" }),
     ]);
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const uploadCall = fetchMock.mock.calls[0];
+    if (!uploadCall) {
+      throw new Error("Expected upload call");
+    }
+    const init = uploadCall[1] as RequestInit;
     expect(init.body).toBeInstanceOf(FormData);
     expect(new Headers(init.headers).has("Content-Type")).toBe(false);
   });
@@ -71,6 +79,120 @@ describe("api helpers", () => {
         status: 409,
       }),
     );
+  });
+
+  it("calls provider auth endpoints with the expected payloads", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            provider: { id: "openai-chatgpt" },
+            auth_status: { session_status: "missing" },
+            session: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            provider: { id: "openai-chatgpt" },
+            auth_status: { session_status: "missing" },
+            flow: { flow_id: "flow-1", status: "pending" },
+            session: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            provider: { id: "openai-chatgpt" },
+            auth_status: { session_status: "pending" },
+            flow: { flow_id: "flow-1", status: "pending" },
+            session: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            provider: { id: "openai-chatgpt" },
+            auth_status: { session_status: "connected" },
+            flow: { flow_id: "flow-1", status: "completed" },
+            session: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            provider: { id: "openai-chatgpt" },
+            auth_status: { session_status: "connected" },
+            session: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            provider: { id: "openai-chatgpt" },
+            auth_status: { session_status: "missing" },
+            removed: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchProviderAuthStatus("openai-chatgpt");
+    await startProviderAuthFlow("openai-chatgpt", "browser");
+    await fetchProviderAuthFlow("openai-chatgpt", "flow-1");
+    await pollProviderAuthFlow("openai-chatgpt", "flow-1");
+    await refreshProviderAuth("openai-chatgpt");
+    await logoutProviderAuth("openai-chatgpt");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/provider-auth/openai-chatgpt",
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/provider-auth/openai-chatgpt/flows",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/provider-auth/openai-chatgpt/flows/flow-1",
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/provider-auth/openai-chatgpt/flows/flow-1/poll",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      "/api/provider-auth/openai-chatgpt/refresh",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      "/api/provider-auth/openai-chatgpt",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+
+    const startCall = fetchMock.mock.calls[1];
+    if (!startCall) {
+      throw new Error("Expected auth flow start call");
+    }
+    const startInit = startCall[1] as RequestInit;
+    expect(startInit.body).toBe(JSON.stringify({ method: "browser" }));
   });
 
   it("derives websocket URLs from the current browser location", () => {

@@ -1,6 +1,7 @@
 # TODO
 
-- [x] Inspect existing memory history and current task notes
-- [x] Remove low-value and obsolete `MEMORY.md` entries
-- [x] Consolidate repetitive implementation history into durable summaries
-- [x] Reset `TODO.md` to this task session
+- [x] Evaluate provider-auth manual status-check review feedback
+- [x] Fix modal completion refresh behavior if review is valid
+- [x] Add/update tests covering manual completed status checks
+- [x] Run frontend validation commands
+- [x] Append follow-up summary to `MEMORY.md`

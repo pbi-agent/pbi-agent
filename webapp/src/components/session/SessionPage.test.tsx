@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
 import { screen, waitFor } from "@testing-library/react";
@@ -137,11 +136,23 @@ function makeConfigBootstrap(
         id: "openai-main",
         name: "OpenAI Main",
         kind: "openai",
+        auth_mode: "api_key",
         responses_url: null,
         generic_api_url: null,
         secret_source: "env_var",
         secret_env_var: "OPENAI_API_KEY",
         has_secret: true,
+        auth_status: {
+          auth_mode: "api_key",
+          backend: null,
+          session_status: "missing",
+          has_session: false,
+          can_refresh: false,
+          account_id: null,
+          email: null,
+          plan_type: null,
+          expires_at: null,
+        },
       },
     ],
     model_profiles: [
@@ -186,6 +197,8 @@ function makeConfigBootstrap(
       openai_service_tiers: [],
       provider_metadata: {
         openai: {
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key", "chatgpt_account"],
           default_model: "gpt-5.4",
           default_sub_agent_model: null,
           default_responses_url: null,

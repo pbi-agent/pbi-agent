@@ -68,6 +68,10 @@
   border-color: var(--color-border-focus);
 }
 
+.settings-item--provider {
+  align-items: flex-start;
+}
+
 .settings-item--command {
   align-items: flex-start;
 }
@@ -153,10 +157,27 @@
   border-color: transparent;
 }
 
+.settings-item__tag--warning {
+  color: var(--color-warning, #f2b84b);
+  background: color-mix(in srgb, var(--color-warning, #f2b84b) 14%, transparent);
+  border-color: transparent;
+}
+
+.settings-item__tag--error {
+  color: var(--color-error);
+  background: var(--color-error-muted);
+  border-color: transparent;
+}
+
 .settings-item__actions {
   display: flex;
   gap: var(--sp-1);
   flex-shrink: 0;
+}
+
+.settings-item__actions--provider {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* ── Button overrides for settings context ── */
@@ -264,6 +285,79 @@
 .secret-mode-tab.active {
   background: var(--color-surface-0);
   color: var(--color-text);
+}
+
+.provider-auth-mode-tabs {
+  width: 100%;
+}
+
+.provider-auth-inline-note {
+  margin-top: 0;
+}
+
+.provider-auth-flow-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.provider-auth-flow-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.provider-auth-flow-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.provider-auth-flow-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+}
+
+.provider-auth-flow-link {
+  color: var(--color-accent);
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.provider-auth-flow-link:hover {
+  text-decoration: underline;
+}
+
+.provider-auth-code-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.provider-auth-code {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.provider-auth-actions-row {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
 
 /* ── Active default profile control ── */

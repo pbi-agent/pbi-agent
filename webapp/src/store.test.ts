@@ -45,12 +45,14 @@ describe("session store", () => {
       expect.objectContaining({
         liveSessionId: "live-1",
         sessionId: "session-9",
-        runtime: expect.objectContaining({
-          provider: "OpenAI",
-          model: "gpt-5.4",
-          reasoning_effort: "high",
-        }),
         lastEventSeq: 4,
+      }),
+    );
+    expect(state.sessionsByKey[savedKey]?.runtime).toEqual(
+      expect.objectContaining({
+        provider: "OpenAI",
+        model: "gpt-5.4",
+        reasoning_effort: "high",
       }),
     );
   });

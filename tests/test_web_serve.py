@@ -132,8 +132,12 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert create_provider_response.status_code == 200
         provider_payload = create_provider_response.json()
         assert provider_payload["provider"]["id"] == "openai-main"
+        assert provider_payload["provider"]["auth_mode"] == "api_key"
         assert provider_payload["provider"]["secret_source"] == "env_var"
         assert provider_payload["provider"]["has_secret"] is True
+        assert (
+            provider_payload["provider"]["auth_status"]["session_status"] == "missing"
+        )
         revision = provider_payload["config_revision"]
 
         create_profile_response = client.post(
@@ -174,6 +178,13 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert {item["id"] for item in refreshed_payload["providers"]} == {
             "openai-main"
         }
+        assert refreshed_payload["providers"][0]["auth_mode"] == "api_key"
+        assert (
+            refreshed_payload["providers"][0]["auth_status"]["auth_mode"] == "api_key"
+        )
+        assert refreshed_payload["options"]["provider_metadata"]["openai"][
+            "auth_modes"
+        ] == ["api_key", "chatgpt_account"]
         analysis_profile = next(
             item
             for item in refreshed_payload["model_profiles"]

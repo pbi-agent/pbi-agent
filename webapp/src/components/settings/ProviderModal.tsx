@@ -7,6 +7,7 @@ interface FormState {
   name: string;
   id: string;
   kind: string;
+  auth_mode: string;
   secretMode: SecretMode;
   api_key: string;
   api_key_env: string;
@@ -14,12 +15,13 @@ interface FormState {
   generic_api_url: string;
 }
 
-function initForm(provider?: ProviderView, kinds?: string[]): FormState {
+function initForm(provider?: ProviderView, options?: ConfigOptions): FormState {
   if (provider) {
     return {
       name: provider.name,
       id: provider.id,
       kind: provider.kind,
+      auth_mode: provider.auth_mode,
       secretMode:
         provider.secret_source === "env_var"
           ? "env_var"
@@ -32,10 +34,14 @@ function initForm(provider?: ProviderView, kinds?: string[]): FormState {
       generic_api_url: provider.generic_api_url ?? "",
     };
   }
+
+  const defaultKind = options?.provider_kinds[0] ?? "openai";
+  const defaultMeta = options?.provider_metadata[defaultKind];
   return {
     name: "",
     id: "",
-    kind: kinds?.[0] ?? "openai",
+    kind: defaultKind,
+    auth_mode: defaultMeta?.default_auth_mode ?? "api_key",
     secretMode: "env_var",
     api_key: "",
     api_key_env: "",
@@ -48,6 +54,7 @@ export type ProviderPayload = {
   id?: string | null;
   name: string;
   kind: string;
+  auth_mode?: string | null;
   api_key?: string | null;
   api_key_env?: string | null;
   responses_url?: string | null;
@@ -63,9 +70,7 @@ interface Props {
 
 export function ProviderModal({ provider, options, onSave, onClose }: Props) {
   const isEdit = !!provider;
-  const [form, setForm] = useState<FormState>(() =>
-    initForm(provider, options.provider_kinds),
-  );
+  const [form, setForm] = useState<FormState>(() => initForm(provider, options));
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,10 +83,19 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
   }, [onClose]);
 
   function set(updates: Partial<FormState>) {
-    setForm((prev) => ({ ...prev, ...updates }));
+    setForm((prev) => {
+      const next = { ...prev, ...updates };
+      if (updates.kind && updates.kind !== prev.kind) {
+        const nextMeta = options.provider_metadata[updates.kind];
+        next.auth_mode = nextMeta?.default_auth_mode ?? "api_key";
+      }
+      return next;
+    });
   }
 
   const kindMeta = options.provider_metadata[form.kind];
+  const authModes = kindMeta?.auth_modes ?? ["api_key"];
+  const isApiKeyAuth = form.auth_mode === "api_key";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -91,25 +105,29 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
     const payload: ProviderPayload = {
       name: form.name.trim(),
       kind: form.kind,
+      auth_mode: form.auth_mode,
     };
 
     if (!isEdit && form.id.trim()) {
       payload.id = form.id.trim();
     }
 
-    if (form.secretMode === "env_var") {
-      payload.api_key_env = form.api_key_env.trim() || null;
-      payload.api_key = null;
-    } else if (form.secretMode === "plaintext") {
-      const trimmedKey = form.api_key.trim();
-      if (trimmedKey) {
-        payload.api_key = trimmedKey;
-      } else if (!isEdit) {
-        // Create with no key supplied → explicit null
+    if (isApiKeyAuth) {
+      if (form.secretMode === "env_var") {
+        payload.api_key_env = form.api_key_env.trim() || null;
         payload.api_key = null;
+      } else if (form.secretMode === "plaintext") {
+        const trimmedKey = form.api_key.trim();
+        if (trimmedKey) {
+          payload.api_key = trimmedKey;
+        } else if (!isEdit) {
+          payload.api_key = null;
+        }
+        payload.api_key_env = null;
+      } else {
+        payload.api_key = null;
+        payload.api_key_env = null;
       }
-      // Edit with blank field → omit api_key so the existing key is preserved.
-      payload.api_key_env = null;
     } else {
       payload.api_key = null;
       payload.api_key_env = null;
@@ -139,6 +157,11 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
     { value: "plaintext", label: "API key" },
     { value: "none", label: "None" },
   ];
+
+  const authModeLabels: Record<string, string> = {
+    api_key: "API key",
+    chatgpt_account: "ChatGPT account",
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -210,21 +233,44 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
 
           <div className="task-form__field">
             <label className="task-form__label">Authentication</label>
-            <div className="secret-mode-tabs">
-              {secretModes.map(({ value, label }) => (
+            <div className="secret-mode-tabs provider-auth-mode-tabs">
+              {authModes.map((authMode) => (
                 <button
-                  key={value}
+                  key={authMode}
                   type="button"
-                  className={`secret-mode-tab${form.secretMode === value ? " active" : ""}`}
-                  onClick={() => set({ secretMode: value })}
+                  className={`secret-mode-tab${form.auth_mode === authMode ? " active" : ""}`}
+                  onClick={() => set({ auth_mode: authMode })}
                 >
-                  {label}
+                  {authModeLabels[authMode] ?? authMode}
                 </button>
               ))}
             </div>
           </div>
 
-          {form.secretMode === "env_var" && (
+          {isApiKeyAuth ? (
+            <div className="task-form__field">
+              <label className="task-form__label">Credential source</label>
+              <div className="secret-mode-tabs">
+                {secretModes.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`secret-mode-tab${form.secretMode === value ? " active" : ""}`}
+                    onClick={() => set({ secretMode: value })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="settings-inline-note provider-auth-inline-note">
+              Save this provider, then use the Connect action from the provider card
+              to authorize it with your ChatGPT subscription account.
+            </div>
+          )}
+
+          {isApiKeyAuth && form.secretMode === "env_var" && (
             <div className="task-form__field">
               <label className="task-form__label">
                 Environment variable name
@@ -239,7 +285,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
             </div>
           )}
 
-          {form.secretMode === "plaintext" && (
+          {isApiKeyAuth && form.secretMode === "plaintext" && (
             <div className="task-form__field">
               <label className="task-form__label">
                 API key

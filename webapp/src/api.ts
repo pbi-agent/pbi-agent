@@ -12,6 +12,9 @@ import type {
   LiveSessionSnapshot,
   ModelProfileView,
   ObservabilityEvent,
+  ProviderAuthFlowResponse,
+  ProviderAuthLogoutResponse,
+  ProviderAuthResponse,
   ProviderView,
   RunSession,
   SessionDetailPayload,
@@ -279,6 +282,7 @@ export async function createProvider(
     id?: string | null;
     name: string;
     kind: string;
+    auth_mode?: string | null;
     api_key?: string | null;
     api_key_env?: string | null;
     responses_url?: string | null;
@@ -298,6 +302,7 @@ export async function updateProvider(
   payload: Partial<{
     name: string | null;
     kind: string | null;
+    auth_mode: string | null;
     api_key: string | null;
     api_key_env: string | null;
     responses_url: string | null;
@@ -319,6 +324,54 @@ export async function deleteProvider(
   await requestJson(`/api/config/providers/${providerId}`, {
     method: "DELETE",
     headers: { "If-Match": configRevision },
+  });
+}
+
+export async function fetchProviderAuthStatus(
+  providerId: string,
+): Promise<ProviderAuthResponse> {
+  return requestJson(`/api/provider-auth/${providerId}`);
+}
+
+export async function startProviderAuthFlow(
+  providerId: string,
+  method: "browser" | "device",
+): Promise<ProviderAuthFlowResponse> {
+  return requestJson(`/api/provider-auth/${providerId}/flows`, {
+    method: "POST",
+    body: JSON.stringify({ method }),
+  });
+}
+
+export async function fetchProviderAuthFlow(
+  providerId: string,
+  flowId: string,
+): Promise<ProviderAuthFlowResponse> {
+  return requestJson(`/api/provider-auth/${providerId}/flows/${flowId}`);
+}
+
+export async function pollProviderAuthFlow(
+  providerId: string,
+  flowId: string,
+): Promise<ProviderAuthFlowResponse> {
+  return requestJson(`/api/provider-auth/${providerId}/flows/${flowId}/poll`, {
+    method: "POST",
+  });
+}
+
+export async function refreshProviderAuth(
+  providerId: string,
+): Promise<ProviderAuthResponse> {
+  return requestJson(`/api/provider-auth/${providerId}/refresh`, {
+    method: "POST",
+  });
+}
+
+export async function logoutProviderAuth(
+  providerId: string,
+): Promise<ProviderAuthLogoutResponse> {
+  return requestJson(`/api/provider-auth/${providerId}`, {
+    method: "DELETE",
   });
 }
 

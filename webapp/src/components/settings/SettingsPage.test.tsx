@@ -5,7 +5,11 @@ import { renderWithProviders } from "../../test/render";
 import {
   ApiError,
   fetchConfigBootstrap,
+  fetchProviderAuthFlow,
+  logoutProviderAuth,
+  refreshProviderAuth,
   setActiveModelProfile,
+  startProviderAuthFlow,
 } from "../../api";
 import type { ConfigBootstrapPayload } from "../../types";
 
@@ -21,6 +25,10 @@ vi.mock("../../api", async (importOriginal) => {
     updateModelProfile: vi.fn(),
     deleteModelProfile: vi.fn(),
     setActiveModelProfile: vi.fn(),
+    startProviderAuthFlow: vi.fn(),
+    fetchProviderAuthFlow: vi.fn(),
+    refreshProviderAuth: vi.fn(),
+    logoutProviderAuth: vi.fn(),
   };
 });
 
@@ -35,11 +43,45 @@ function makeConfigBootstrap(
         id: "openai-main",
         name: "OpenAI Main",
         kind: "openai",
+        auth_mode: "api_key",
         responses_url: null,
         generic_api_url: null,
         secret_source: "env_var",
         secret_env_var: "OPENAI_API_KEY",
         has_secret: true,
+        auth_status: {
+          auth_mode: "api_key",
+          backend: null,
+          session_status: "missing",
+          has_session: false,
+          can_refresh: false,
+          account_id: null,
+          email: null,
+          plan_type: null,
+          expires_at: null,
+        },
+      },
+      {
+        id: "openai-chatgpt",
+        name: "OpenAI ChatGPT",
+        kind: "openai",
+        auth_mode: "chatgpt_account",
+        responses_url: null,
+        generic_api_url: null,
+        secret_source: "none",
+        secret_env_var: null,
+        has_secret: false,
+        auth_status: {
+          auth_mode: "chatgpt_account",
+          backend: "openai-chatgpt",
+          session_status: "missing",
+          has_session: false,
+          can_refresh: false,
+          account_id: null,
+          email: null,
+          plan_type: null,
+          expires_at: null,
+        },
       },
     ],
     model_profiles: [
@@ -117,6 +159,8 @@ function makeConfigBootstrap(
       openai_service_tiers: [],
       provider_metadata: {
         openai: {
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key", "chatgpt_account"],
           default_model: "gpt-5.4",
           default_sub_agent_model: null,
           default_responses_url: null,
@@ -140,10 +184,98 @@ describe("SettingsPage", () => {
       active_profile_id: "qa",
       config_revision: "rev-2",
     });
+    vi.mocked(startProviderAuthFlow).mockResolvedValue({
+      provider: makeConfigBootstrap().providers[1],
+      auth_status: makeConfigBootstrap().providers[1].auth_status,
+      flow: {
+        flow_id: "flow-1",
+        provider_id: "openai-chatgpt",
+        backend: "openai-chatgpt",
+        method: "browser",
+        status: "pending",
+        authorization_url: "https://chatgpt.com/auth",
+        callback_url: "http://localhost/callback",
+        verification_url: null,
+        user_code: null,
+        interval_seconds: 1,
+        error_message: null,
+        created_at: "2026-04-16T00:00:00Z",
+        updated_at: "2026-04-16T00:00:00Z",
+      },
+      session: null,
+    });
+    vi.mocked(fetchProviderAuthFlow).mockResolvedValue({
+      provider: {
+        ...makeConfigBootstrap().providers[1],
+        auth_status: {
+          ...makeConfigBootstrap().providers[1].auth_status,
+          session_status: "connected",
+          has_session: true,
+          email: "user@example.com",
+          plan_type: "Plus",
+          expires_at: 1_800_000_000,
+        },
+      },
+      auth_status: {
+        ...makeConfigBootstrap().providers[1].auth_status,
+        session_status: "connected",
+        has_session: true,
+        email: "user@example.com",
+        plan_type: "Plus",
+        expires_at: 1_800_000_000,
+      },
+      flow: {
+        flow_id: "flow-1",
+        provider_id: "openai-chatgpt",
+        backend: "openai-chatgpt",
+        method: "browser",
+        status: "completed",
+        authorization_url: "https://chatgpt.com/auth",
+        callback_url: "http://localhost/callback",
+        verification_url: null,
+        user_code: null,
+        interval_seconds: 1,
+        error_message: null,
+        created_at: "2026-04-16T00:00:00Z",
+        updated_at: "2026-04-16T00:00:02Z",
+      },
+      session: {
+        provider_id: "openai-chatgpt",
+        backend: "openai-chatgpt",
+        expires_at: 1_800_000_000,
+        account_id: "acct-1",
+        email: "user@example.com",
+        plan_type: "Plus",
+      },
+    });
+    vi.mocked(refreshProviderAuth).mockResolvedValue({
+      provider: makeConfigBootstrap().providers[1],
+      auth_status: {
+        ...makeConfigBootstrap().providers[1].auth_status,
+        session_status: "connected",
+        has_session: true,
+        can_refresh: true,
+      },
+      session: {
+        provider_id: "openai-chatgpt",
+        backend: "openai-chatgpt",
+        expires_at: 1_800_000_000,
+        account_id: "acct-1",
+        email: "user@example.com",
+        plan_type: "Plus",
+      },
+    });
+    vi.mocked(logoutProviderAuth).mockResolvedValue({
+      provider: makeConfigBootstrap().providers[1],
+      auth_status: makeConfigBootstrap().providers[1].auth_status,
+      removed: true,
+    });
+    vi.spyOn(window, "open").mockImplementation(() => null);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("renders the onboarding and empty-provider states when config is blank", async () => {
@@ -171,6 +303,109 @@ describe("SettingsPage", () => {
 
     await waitFor(() =>
       expect(setActiveModelProfile).toHaveBeenCalledWith("qa", "rev-1"),
+    );
+  });
+
+  it("shows provider auth controls and starts the browser auth flow", async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderWithProviders(<SettingsPage />);
+
+    expect(await screen.findByText("OpenAI ChatGPT")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
+
+    expect(await screen.findByText("Connect ChatGPT account")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
+
+    expect(startProviderAuthFlow).toHaveBeenCalledWith("openai-chatgpt", "browser");
+    expect(window.open).toHaveBeenCalledWith(
+      "https://chatgpt.com/auth",
+      "_blank",
+      "noopener,noreferrer",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Check status" }));
+
+    await waitFor(() =>
+      expect(fetchProviderAuthFlow).toHaveBeenCalledWith(
+        "openai-chatgpt",
+        "flow-1",
+      ),
+    );
+    await waitFor(() =>
+      expect(queryClient.isFetching({ queryKey: ["config-bootstrap"] })).toBe(0),
+    );
+    expect(await screen.findByText(/Connected as user@example.com/)).toBeInTheDocument();
+  });
+
+  it("refreshes settings after a manual auth status check completes the flow", async () => {
+    const user = userEvent.setup();
+    const refreshedBootstrap = makeConfigBootstrap({
+      providers: [
+        {
+          ...makeConfigBootstrap().providers[0],
+        },
+        {
+          ...makeConfigBootstrap().providers[1],
+          auth_status: {
+            ...makeConfigBootstrap().providers[1].auth_status,
+            session_status: "connected",
+            has_session: true,
+            can_refresh: true,
+            email: "user@example.com",
+            plan_type: "plus",
+          },
+        },
+      ],
+    });
+    vi.mocked(fetchConfigBootstrap)
+      .mockResolvedValueOnce(makeConfigBootstrap())
+      .mockResolvedValueOnce(refreshedBootstrap)
+      .mockResolvedValue(refreshedBootstrap);
+
+    renderWithProviders(<SettingsPage />);
+
+    expect(await screen.findByText("OpenAI ChatGPT")).toBeInTheDocument();
+    expect(screen.getByText("not connected")).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
+    await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
+    await user.click(screen.getByRole("button", { name: "Check status" }));
+
+    expect(await screen.findByText(/Connected as user@example.com/)).toBeInTheDocument();
+    expect(await screen.findByText("connected")).toBeInTheDocument();
+    expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes and disconnects provider auth from the provider card", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [
+          makeConfigBootstrap().providers[0],
+          {
+            ...makeConfigBootstrap().providers[1],
+            auth_status: {
+              ...makeConfigBootstrap().providers[1].auth_status,
+              session_status: "connected",
+              has_session: true,
+              can_refresh: true,
+            },
+          },
+        ],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await screen.findByText("OpenAI ChatGPT");
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() =>
+      expect(refreshProviderAuth).toHaveBeenCalledWith("openai-chatgpt"),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await waitFor(() =>
+      expect(logoutProviderAuth).toHaveBeenCalledWith("openai-chatgpt"),
     );
   });
 
