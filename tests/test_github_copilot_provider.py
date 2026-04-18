@@ -160,7 +160,94 @@ data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.4","
     assert headers["Openai-intent"] == "conversation-edits"
     assert headers["X-initiator"] == "user"
     assert "max_output_tokens" not in body
+    assert "store" not in body
+    assert "prompt_cache_retention" not in body
+    assert "context_management" not in body
     assert body["stream"] is True
+
+
+def test_github_copilot_openai_model_replays_local_history_without_previous_response_id(
+    monkeypatch,
+) -> None:
+    request_bodies: list[dict[str, object]] = []
+    responses = [
+        """event: response.created
+data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.4","created_at":1}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"enc_a","delta":"First"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_1"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.4","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":6}}}
+
+""",
+        """event: response.created
+data: {"type":"response.created","response":{"id":"resp_2","model":"gpt-5.4","created_at":2}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_2"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"enc_b","delta":"Second"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_2"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","usage":{"input_tokens":9,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":10}}}
+
+""",
+    ]
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        request_bodies.append(json.loads(request.data.decode("utf-8")))
+        return _FakeHTTPResponse(responses[len(request_bodies) - 1])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GitHubCopilotProvider(_make_settings())
+    display = _DisplayStub()
+
+    provider.request_turn(
+        user_input=UserTurnInput(text="Hello"),
+        display=display,
+        session_usage=TokenUsage(model="gpt-5.4"),
+        turn_usage=TokenUsage(model="gpt-5.4"),
+    )
+    provider.request_turn(
+        user_input=UserTurnInput(text="Again"),
+        display=display,
+        session_usage=TokenUsage(model="gpt-5.4"),
+        turn_usage=TokenUsage(model="gpt-5.4"),
+    )
+
+    second_body = request_bodies[1]
+    second_input = second_body["input"]
+
+    assert "previous_response_id" not in second_body
+    assert isinstance(second_input, list)
+    assert len(second_input) >= 3
+    assert any(item.get("role") == "assistant" for item in second_input)
+    assert any(
+        item.get("role") == "user" and item.get("content") == "Hello"
+        for item in second_input
+        if isinstance(item, dict)
+    )
+    assert any(
+        item.get("role") == "user" and item.get("content") == "Again"
+        for item in second_input
+        if isinstance(item, dict)
+    )
 
 
 def test_github_copilot_non_openai_model_uses_chat_completions(

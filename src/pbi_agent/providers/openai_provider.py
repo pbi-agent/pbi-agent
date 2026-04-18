@@ -154,7 +154,7 @@ class OpenAIProvider(Provider):
             tracer=tracer,
         )
         self._previous_response_id = result.response_id
-        self._chatgpt_backend.record_exchange(input_items, result)
+        self._record_exchange(input_items, result)
         if not result.has_tool_calls:
             # Only completed assistant responses are safe to branch from.
             self._branch_response_id = result.response_id
@@ -489,20 +489,10 @@ class OpenAIProvider(Provider):
         include_previous_response_id: bool = True,
     ) -> dict[str, Any]:
         request_options = self._responses_request_options()
-        input_payload = self._chatgpt_backend.build_input_payload(
-            input_items=input_items,
-        )
+        input_payload = self._build_input_payload(input_items)
         body: dict[str, Any] = {
             "model": self._settings.model,
-            "input": (
-                [*self._restored_input_items, *input_payload]
-                if (
-                    self._restored_input_items
-                    and not self._previous_response_id
-                    and not self._chatgpt_backend.enabled
-                )
-                else input_payload
-            ),
+            "input": input_payload,
             "tools": self._tools,
             "parallel_tool_calls": True,
             "store": request_options.store,
@@ -534,12 +524,37 @@ class OpenAIProvider(Provider):
         if (
             include_previous_response_id
             and self._previous_response_id
-            and not self._chatgpt_backend.enabled
+            and self._supports_previous_response_id()
         ):
             body["previous_response_id"] = self._previous_response_id
         if self._settings.service_tier:
             body["service_tier"] = self._settings.service_tier
         return body
+
+    def _build_input_payload(
+        self,
+        input_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        input_payload = self._chatgpt_backend.build_input_payload(
+            input_items=input_items,
+        )
+        if (
+            self._restored_input_items
+            and not self._previous_response_id
+            and not self._chatgpt_backend.enabled
+        ):
+            return [*self._restored_input_items, *input_payload]
+        return input_payload
+
+    def _supports_previous_response_id(self) -> bool:
+        return not self._chatgpt_backend.enabled
+
+    def _record_exchange(
+        self,
+        input_items: list[dict[str, Any]],
+        response: CompletedResponse,
+    ) -> None:
+        self._chatgpt_backend.record_exchange(input_items, response)
 
     def _responses_request_options(self) -> ResponsesRequestOptions:
         return self._chatgpt_backend.request_options()

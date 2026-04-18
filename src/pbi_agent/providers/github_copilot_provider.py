@@ -15,7 +15,10 @@ from pbi_agent.config import Settings
 from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, UserTurnInput
 from pbi_agent.providers.base import Provider
-from pbi_agent.providers.chatgpt_codex_backend import ResponsesRequestOptions
+from pbi_agent.providers.chatgpt_codex_backend import (
+    ResponsesRequestOptions,
+    ResponsesConversationReplay,
+)
 from pbi_agent.providers.generic_provider import (
     GenericProvider,
     _duration_ms,
@@ -139,8 +142,37 @@ class GitHubCopilotProvider(Provider):
 
 
 class _GitHubCopilotResponsesProvider(OpenAIProvider):
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
+    ) -> None:
+        super().__init__(
+            settings,
+            system_prompt=system_prompt,
+            excluded_tools=excluded_tools,
+            tool_catalog=tool_catalog,
+        )
+        self._conversation = ResponsesConversationReplay()
+
     def _responses_request_options(self) -> ResponsesRequestOptions:
-        return ResponsesRequestOptions(stream=True)
+        return ResponsesRequestOptions(
+            store=False,
+            include_prompt_cache_retention=False,
+            include_context_management=False,
+            stream=True,
+        )
+
+    def reset_conversation(self) -> None:
+        super().reset_conversation()
+        self._conversation.reset()
+
+    def restore_messages(self, messages: list[MessageRecord]) -> None:
+        super().restore_messages(messages)
+        self._conversation.restore(self._restored_input_items)
 
     def _build_request_body(
         self,
@@ -156,10 +188,29 @@ class _GitHubCopilotResponsesProvider(OpenAIProvider):
             session_id=session_id,
             include_previous_response_id=include_previous_response_id,
         )
+        body.pop("store", None)
+        body.pop("prompt_cache_retention", None)
+        body.pop("context_management", None)
         body["stream"] = True
         if self._settings.model.startswith("gpt"):
             body.pop("max_output_tokens", None)
         return body
+
+    def _build_input_payload(
+        self,
+        input_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return self._conversation.build_input_payload(input_items)
+
+    def _supports_previous_response_id(self) -> bool:
+        return False
+
+    def _record_exchange(
+        self,
+        input_items: list[dict[str, Any]],
+        response: CompletedResponse,
+    ) -> None:
+        self._conversation.record_exchange(input_items, response)
 
     def _request_headers(
         self,
