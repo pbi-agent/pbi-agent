@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
 import pytest
 
 import pbi_agent.config as config_module
+from pbi_agent.auth.models import (
+    AUTH_MODE_CHATGPT_ACCOUNT,
+    ApiKeyAuth,
+    OAuthSessionAuth,
+)
+from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
+from pbi_agent.auth.service import import_provider_auth_session
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     ConfigConflictError,
@@ -33,6 +41,14 @@ from pbi_agent.config import (
 
 def _args(*argv: str):
     return build_parser().parse_args(list(argv))
+
+
+def _jwt(payload: dict[str, object]) -> str:
+    def encode(part: dict[str, object]) -> str:
+        raw = json.dumps(part, separators=(",", ":")).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    return f"{encode({'alg': 'none', 'typ': 'JWT'})}.{encode(payload)}."
 
 
 def _write_command(root: Path, name: str, content: str) -> Path:
@@ -252,6 +268,59 @@ def test_resolve_web_runtime_requires_active_profile(monkeypatch) -> None:
         resolve_web_runtime()
 
 
+def test_resolve_web_runtime_uses_saved_chatgpt_account_session(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    monkeypatch.setenv("PBI_AGENT_AUTH_STORE_PATH", str(tmp_path / "auth-store.json"))
+    monkeypatch.delenv("PBI_AGENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    create_provider_config(
+        ProviderConfig(
+            id="openai-chatgpt",
+            name="OpenAI ChatGPT",
+            kind="openai",
+            auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-chatgpt",
+            model="gpt-5.4",
+        )
+    )
+    import_provider_auth_session(
+        provider_kind="openai",
+        provider_id="openai-chatgpt",
+        auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
+        payload={
+            "access_token": _jwt(
+                {
+                    "exp": 4102444800,
+                    "chatgpt_account_id": "acct_123",
+                    "email": "user@example.com",
+                }
+            ),
+            "refresh_token": "refresh-token",
+            "plan_type": "chatgpt_plus",
+        },
+    )
+    select_active_model_profile("analysis")
+
+    runtime = resolve_web_runtime()
+    settings = runtime.settings
+
+    assert settings.api_key == ""
+    assert settings.responses_url == OPENAI_CHATGPT_RESPONSES_URL
+    assert isinstance(settings.auth, OAuthSessionAuth)
+    assert settings.auth.account_id == "acct_123"
+    assert settings.auth.email == "user@example.com"
+    assert settings.auth.plan_type == "chatgpt_plus"
+
+
 def test_resolve_settings_prefers_cli_profile_selector_over_env_and_active_profile(
     monkeypatch,
 ) -> None:
@@ -427,6 +496,98 @@ def test_runtime_overrides_do_not_persist_a_derived_profile(monkeypatch) -> None
     assert before == after
     config = load_internal_config()
     assert [profile.id for profile in config.model_profiles] == ["analysis"]
+
+
+def test_resolve_runtime_keeps_saved_chatgpt_account_profile_auth(monkeypatch) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    monkeypatch.delenv("PBI_AGENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    create_provider_config(
+        ProviderConfig(
+            id="openai-chatgpt",
+            name="OpenAI ChatGPT",
+            kind="openai",
+            auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-chatgpt",
+            model="gpt-5.4",
+        )
+    )
+    import_provider_auth_session(
+        provider_kind="openai",
+        provider_id="openai-chatgpt",
+        auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
+        payload={
+            "access_token": _jwt(
+                {
+                    "exp": 4102444800,
+                    "chatgpt_account_id": "acct_123",
+                    "email": "user@example.com",
+                }
+            ),
+            "refresh_token": "refresh-token",
+        },
+    )
+
+    runtime = resolve_runtime(
+        _args("--profile-id", "analysis", "run", "--prompt", "hi")
+    )
+
+    assert runtime.provider_id == "openai-chatgpt"
+    assert isinstance(runtime.settings.auth, OAuthSessionAuth)
+    assert runtime.settings.auth.account_id == "acct_123"
+    assert runtime.settings.responses_url == OPENAI_CHATGPT_RESPONSES_URL
+
+
+def test_resolve_runtime_allows_provider_override_api_key_over_chatgpt_profile(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    monkeypatch.delenv("PBI_AGENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+
+    create_provider_config(
+        ProviderConfig(
+            id="openai-chatgpt",
+            name="OpenAI ChatGPT",
+            kind="openai",
+            auth_mode=AUTH_MODE_CHATGPT_ACCOUNT,
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-chatgpt",
+            model="gpt-5.4",
+        )
+    )
+
+    runtime = resolve_runtime(
+        _args(
+            "--profile-id",
+            "analysis",
+            "--provider",
+            "xai",
+            "--api-key",
+            "xai-test-key",
+            "run",
+            "--prompt",
+            "hi",
+        )
+    )
+
+    assert runtime.provider_id is None
+    assert runtime.settings.provider == "xai"
+    assert runtime.settings.api_key == "xai-test-key"
+    assert isinstance(runtime.settings.auth, ApiKeyAuth)
 
 
 def test_save_internal_config_rejects_stale_revision() -> None:

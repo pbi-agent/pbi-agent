@@ -12,6 +12,15 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from pbi_agent.auth.models import (
+    AUTH_MODE_API_KEY,
+    AUTH_MODE_CHATGPT_ACCOUNT,
+    ApiKeyAuth,
+    ResolvedProviderAuth,
+)
+from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
+from pbi_agent.auth.service import provider_auth_modes, resolve_runtime_auth
+
 DEFAULT_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DEFAULT_XAI_RESPONSES_URL = "https://api.x.ai/v1/responses"
 DEFAULT_GOOGLE_INTERACTIONS_URL = (
@@ -68,7 +77,8 @@ def missing_api_key_message(provider: str) -> str:
 
 @dataclass(slots=True)
 class Settings:
-    api_key: str
+    api_key: str = ""
+    auth: ResolvedProviderAuth | None = None
     responses_url: str = DEFAULT_RESPONSES_URL
     model: str = DEFAULT_MODEL
     sub_agent_model: str | None = None
@@ -83,11 +93,23 @@ class Settings:
     service_tier: str | None = None
     web_search: bool = True
 
+    def __post_init__(self) -> None:
+        if self.auth is None and self.api_key:
+            self.auth = ApiKeyAuth(api_key=self.api_key)
+        elif isinstance(self.auth, ApiKeyAuth) and not self.api_key:
+            self.api_key = self.auth.api_key
+
     def validate(self) -> None:
         if self.provider not in PROVIDER_KINDS:
             allowed = ", ".join(PROVIDER_KINDS)
             raise ConfigError(f"--provider must be one of: {allowed}.")
-        if not self.api_key:
+        if self.provider == "openai":
+            if self.auth is None and not self.api_key:
+                raise ConfigError(
+                    "Missing authentication for provider 'openai'. "
+                    "Configure an API key or a ChatGPT account session."
+                )
+        elif not self.api_key:
             raise ConfigError(missing_api_key_message(self.provider))
         if self.max_tool_workers < 1:
             raise ConfigError("--max-tool-workers must be >= 1.")
@@ -116,6 +138,7 @@ class Settings:
         return {
             "provider": self.provider,
             "api_key": redact_secret(self.api_key),
+            "auth_kind": self.auth.kind if self.auth is not None else None,
             "responses_url": self.responses_url,
             "model": self.model,
             "sub_agent_model": self.sub_agent_model,
@@ -136,6 +159,7 @@ class ProviderConfig:
     id: str
     name: str
     kind: str
+    auth_mode: str = AUTH_MODE_API_KEY
     api_key: str = ""
     api_key_env: str | None = None
     responses_url: str | None = None
@@ -149,8 +173,16 @@ class ProviderConfig:
         if self.kind not in PROVIDER_KINDS:
             allowed = ", ".join(PROVIDER_KINDS)
             raise ConfigError(f"Provider kind must be one of: {allowed}.")
+        if self.auth_mode not in provider_auth_modes(self.kind):
+            allowed = ", ".join(provider_auth_modes(self.kind))
+            raise ConfigError(
+                f"Provider auth_mode must be one of: {allowed} for provider kind '{self.kind}'."
+            )
         if self.api_key_env is not None:
             self.api_key_env = self.api_key_env.strip() or None
+        if self.auth_mode != AUTH_MODE_API_KEY:
+            self.api_key = ""
+            self.api_key_env = None
 
 
 @dataclass(slots=True)
@@ -358,6 +390,12 @@ def _default_responses_url(provider: str) -> str:
     return DEFAULT_RESPONSES_URL
 
 
+def _default_responses_url_for_auth(provider_kind: str, auth_mode: str) -> str:
+    if provider_kind == "openai" and auth_mode == AUTH_MODE_CHATGPT_ACCOUNT:
+        return OPENAI_CHATGPT_RESPONSES_URL
+    return _default_responses_url(provider_kind)
+
+
 def _default_model(provider: str) -> str:
     if provider == "generic":
         return ""
@@ -383,6 +421,8 @@ def _default_sub_agent_model(provider: str) -> str | None:
 
 
 def provider_secret_source(provider: ProviderConfig) -> str:
+    if provider.auth_mode != AUTH_MODE_API_KEY:
+        return "none"
     if provider.api_key_env:
         return "env_var"
     if provider.api_key:
@@ -391,6 +431,8 @@ def provider_secret_source(provider: ProviderConfig) -> str:
 
 
 def provider_has_secret(provider: ProviderConfig) -> bool:
+    if provider.auth_mode != AUTH_MODE_API_KEY:
+        return False
     if provider.api_key_env:
         return bool(os.getenv(provider.api_key_env, ""))
     return bool(provider.api_key)
@@ -398,6 +440,8 @@ def provider_has_secret(provider: ProviderConfig) -> bool:
 
 def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
     return {
+        "default_auth_mode": AUTH_MODE_API_KEY,
+        "auth_modes": list(provider_auth_modes(provider_kind)),
         "default_model": _default_model(provider_kind),
         "default_sub_agent_model": _default_sub_agent_model(provider_kind),
         "default_responses_url": (
@@ -596,6 +640,7 @@ def update_provider_config(
     *,
     name: str | None = None,
     kind: str | None = None,
+    auth_mode: str | None = None,
     api_key: str | None = None,
     api_key_env: str | None = None,
     responses_url: str | None = None,
@@ -611,6 +656,7 @@ def update_provider_config(
         provider,
         name=name if name is not None else provider.name,
         kind=kind if kind is not None else provider.kind,
+        auth_mode=auth_mode if auth_mode is not None else provider.auth_mode,
         api_key=api_key if api_key is not None else provider.api_key,
         api_key_env=api_key_env if api_key_env is not None else provider.api_key_env,
         responses_url=(
@@ -822,17 +868,29 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         or os.getenv("PBI_AGENT_PROVIDER")
         or (selected_provider.kind if selected_provider else "openai")
     )
-    provider_secret = _resolve_secret(args, provider_kind, selected_provider)
+    default_auth_mode = (
+        selected_provider.auth_mode
+        if selected_provider is not None and selected_provider.kind == provider_kind
+        else AUTH_MODE_API_KEY
+    )
     responses_url = (
         getattr(args, "responses_url", None)
         or os.getenv("PBI_AGENT_RESPONSES_URL")
-        or (selected_provider.responses_url if selected_provider else None)
-        or _default_responses_url(provider_kind)
+        or (
+            selected_provider.responses_url
+            if selected_provider is not None and selected_provider.kind == provider_kind
+            else None
+        )
+        or _default_responses_url_for_auth(provider_kind, default_auth_mode)
     )
     generic_api_url = (
         getattr(args, "generic_api_url", None)
         or os.getenv("PBI_AGENT_GENERIC_API_URL")
-        or (selected_provider.generic_api_url if selected_provider else None)
+        or (
+            selected_provider.generic_api_url
+            if selected_provider is not None and selected_provider.kind == provider_kind
+            else None
+        )
         or DEFAULT_GENERIC_API_URL
     )
 
@@ -842,6 +900,17 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         responses_url=responses_url,
         generic_api_url=generic_api_url,
     )
+    resolved_provider = (
+        providers.get(resolved_provider_id)
+        if resolved_provider_id is not None
+        else None
+    )
+    auth_mode = (
+        resolved_provider.auth_mode
+        if resolved_provider is not None
+        else AUTH_MODE_API_KEY
+    )
+    provider_secret = _resolve_secret(args, provider_kind, resolved_provider)
 
     model = (
         getattr(args, "model", None)
@@ -891,9 +960,17 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         or (selected_profile.service_tier if selected_profile else None)
     )
     web_search = _resolve_web_search(args, selected_profile)
+    resolved_auth = resolve_runtime_auth(
+        provider_kind=provider_kind,
+        provider_id=resolved_provider_id,
+        auth_mode=auth_mode,
+        api_key=provider_secret.api_key,
+        api_key_env=provider_secret.api_key_env,
+    )
 
     settings = Settings(
         api_key=provider_secret.api_key,
+        auth=resolved_auth,
         responses_url=responses_url,
         generic_api_url=generic_api_url,
         model=model,
@@ -984,6 +1061,13 @@ def _resolve_secret(
     provider_kind: str,
     selected_provider: ProviderConfig | None,
 ) -> _ResolvedSecret:
+    provider_auth_mode = (
+        selected_provider.auth_mode
+        if selected_provider is not None
+        else AUTH_MODE_API_KEY
+    )
+    if provider_auth_mode != AUTH_MODE_API_KEY:
+        return _ResolvedSecret(api_key="")
     cli_api_key = getattr(args, "api_key", None)
     if cli_api_key:
         return _ResolvedSecret(api_key=cli_api_key)
@@ -1019,17 +1103,30 @@ def _settings_from_runtime_parts(
     verbose: bool,
 ) -> Settings:
     secret = _ResolvedSecret(api_key="")
-    if provider.api_key_env and os.getenv(provider.api_key_env):
+    if (
+        provider.auth_mode == AUTH_MODE_API_KEY
+        and provider.api_key_env
+        and os.getenv(provider.api_key_env)
+    ):
         secret = _ResolvedSecret(
             api_key=os.getenv(provider.api_key_env, ""),
             api_key_env=provider.api_key_env,
         )
-    elif provider.api_key:
+    elif provider.auth_mode == AUTH_MODE_API_KEY and provider.api_key:
         secret = _ResolvedSecret(api_key=provider.api_key)
+    auth = resolve_runtime_auth(
+        provider_kind=provider.kind,
+        provider_id=provider.id,
+        auth_mode=provider.auth_mode,
+        api_key=secret.api_key,
+        api_key_env=secret.api_key_env,
+    )
 
     return Settings(
         api_key=secret.api_key,
-        responses_url=provider.responses_url or _default_responses_url(provider.kind),
+        auth=auth,
+        responses_url=provider.responses_url
+        or _default_responses_url_for_auth(provider.kind, provider.auth_mode),
         generic_api_url=provider.generic_api_url or DEFAULT_GENERIC_API_URL,
         model=_coalesce(profile.model, _default_model(provider.kind)),
         sub_agent_model=_coalesce(
@@ -1061,7 +1158,13 @@ def _resolved_provider_id(
     if (
         selected_provider is not None
         and selected_provider.kind == provider_kind
-        and (selected_provider.responses_url or _default_responses_url(provider_kind))
+        and (
+            selected_provider.responses_url
+            or _default_responses_url_for_auth(
+                provider_kind,
+                selected_provider.auth_mode,
+            )
+        )
         == responses_url
         and (selected_provider.generic_api_url or DEFAULT_GENERIC_API_URL)
         == generic_api_url
@@ -1178,6 +1281,7 @@ def _provider_from_payload(payload: object) -> ProviderConfig | None:
         id=provider_id,
         name=name,
         kind=kind,
+        auth_mode=_optional_string(payload.get("auth_mode")) or AUTH_MODE_API_KEY,
         api_key=_optional_string(payload.get("api_key")) or "",
         api_key_env=_optional_string(payload.get("api_key_env")),
         responses_url=_optional_string(payload.get("responses_url")),

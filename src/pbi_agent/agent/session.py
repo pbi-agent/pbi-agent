@@ -190,6 +190,7 @@ def run_single_turn(
             response = _request_user_turn(
                 provider=provider,
                 user_input=user_input,
+                session_id=session_id,
                 instructions=turn_instructions,
                 display=display,
                 session_usage=session_usage,
@@ -444,6 +445,7 @@ def run_session_loop(
                     response = _request_user_turn(
                         provider=provider,
                         user_input=turn_input,
+                        session_id=session_id,
                         instructions=turn_instructions,
                         display=display,
                         session_usage=session_usage,
@@ -811,6 +813,7 @@ def _run_tool_iterations(
             response = provider.request_turn(
                 tool_result_items=tool_result_items,
                 instructions=instructions,
+                session_id=session_id,
                 display=display,
                 session_usage=session_usage,
                 turn_usage=turn_usage,
@@ -1193,6 +1196,7 @@ def _request_user_turn(
     *,
     provider: Any,
     user_input: UserTurnInput,
+    session_id: str | None,
     instructions: str | None,
     display: DisplayProtocol,
     session_usage: TokenUsage,
@@ -1202,6 +1206,7 @@ def _request_user_turn(
     return provider.request_turn(
         user_input=user_input,
         instructions=instructions,
+        session_id=session_id,
         display=display,
         session_usage=session_usage,
         turn_usage=turn_usage,

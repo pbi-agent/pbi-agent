@@ -139,6 +139,7 @@ class _ProviderStub:
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, object]] | None = None,
         instructions: str | None = None,
+        session_id: str | None = None,
         display,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
@@ -151,6 +152,7 @@ class _ProviderStub:
                 "user_message": user_message,
                 "tool_result_items": tool_result_items,
                 "instructions": instructions,
+                "session_id": session_id,
             }
         )
         del display, tracer
@@ -254,6 +256,7 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
             "user_message": "Inspect the workspace",
             "tool_result_items": None,
             "instructions": None,
+            "session_id": outcome.session_id,
         },
         {
             "user_message": None,
@@ -265,6 +268,7 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
                 }
             ],
             "instructions": None,
+            "session_id": outcome.session_id,
         },
     ]
     assert len(provider.execute_calls) == 1
@@ -320,12 +324,17 @@ def test_run_single_turn_uses_command_specific_instructions_for_full_turn(
 
     assert provider.request_calls[0]["user_message"] == "/plan inspect the workspace"
     assert provider.request_calls[0]["instructions"] is not None
+    assert provider.request_calls[0]["session_id"] is not None
     assert "<active_command>\nPlan before coding.\n</active_command>" in str(
         provider.request_calls[0]["instructions"]
     )
     assert (
         provider.request_calls[1]["instructions"]
         == provider.request_calls[0]["instructions"]
+    )
+    assert (
+        provider.request_calls[1]["session_id"]
+        == provider.request_calls[0]["session_id"]
     )
 
 
@@ -615,12 +624,13 @@ class _ChatProviderStub:
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, object]] | None = None,
         instructions: str | None = None,
+        session_id: str | None = None,
         display,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
         tracer=None,
     ) -> CompletedResponse:
-        del display, tool_result_items, tracer
+        del display, tool_result_items, tracer, session_id
         if user_input is not None:
             self.request_inputs.append(user_input)
         if user_input is not None and user_message is None:
@@ -709,6 +719,7 @@ def test_run_session_loop_failed_run_uses_current_turn_usage_only(
             user_input: UserTurnInput | None = None,
             tool_result_items: list[dict[str, object]] | None = None,
             instructions: str | None = None,
+            session_id: str | None = None,
             display,
             session_usage: TokenUsage,
             turn_usage: TokenUsage,
@@ -730,6 +741,7 @@ def test_run_session_loop_failed_run_uses_current_turn_usage_only(
                 user_input=user_input,
                 tool_result_items=tool_result_items,
                 instructions=instructions,
+                session_id=session_id,
                 display=display,
                 session_usage=session_usage,
                 turn_usage=turn_usage,
@@ -1031,6 +1043,7 @@ def test_run_session_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> 
             user_input: UserTurnInput | None = None,
             tool_result_items: list[dict[str, object]] | None = None,
             instructions: str | None = None,
+            session_id: str | None = None,
             display,
             session_usage: TokenUsage,
             turn_usage: TokenUsage,
@@ -1041,6 +1054,7 @@ def test_run_session_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> 
                 user_input,
                 tool_result_items,
                 instructions,
+                session_id,
                 display,
                 session_usage,
                 turn_usage,

@@ -142,11 +142,13 @@ class AnthropicProvider(Provider):
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
         instructions: str | None = None,
+        session_id: str | None = None,
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
+        del session_id
         # Build the new message to append to history.
         if user_input is None and user_message is not None:
             user_input = UserTurnInput(text=user_message)

@@ -8,6 +8,8 @@ from pbi_agent.web.api.deps import NonEmptyString
 
 
 class ProviderKindMetadataModel(BaseModel):
+    default_auth_mode: str
+    auth_modes: list[str]
     default_model: str
     default_sub_agent_model: str | None
     default_responses_url: str | None
@@ -30,17 +32,41 @@ class ProviderViewModel(BaseModel):
     id: str
     name: str
     kind: str
+    auth_mode: str
     responses_url: str | None
     generic_api_url: str | None
     secret_source: Literal["none", "plaintext", "env_var"]
     secret_env_var: str | None
     has_secret: bool
+    auth_status: "ProviderAuthStatusModel"
+
+
+class ProviderAuthStatusModel(BaseModel):
+    auth_mode: str
+    backend: str | None
+    session_status: str
+    has_session: bool
+    can_refresh: bool
+    account_id: str | None
+    email: str | None
+    plan_type: str | None
+    expires_at: int | None
+
+
+class ProviderAuthSessionModel(BaseModel):
+    provider_id: str
+    backend: str
+    expires_at: int | None
+    account_id: str | None
+    email: str | None
+    plan_type: str | None
 
 
 class ProviderMutationRequest(BaseModel):
     id: str | None = None
     name: NonEmptyString
     kind: NonEmptyString
+    auth_mode: str = "api_key"
     api_key: str | None = None
     api_key_env: str | None = None
     responses_url: str | None = None
@@ -50,6 +76,7 @@ class ProviderMutationRequest(BaseModel):
 class ProviderUpdateRequest(BaseModel):
     name: NonEmptyString | None = None
     kind: NonEmptyString | None = None
+    auth_mode: str | None = None
     api_key: str | None = None
     api_key_env: str | None = None
     responses_url: str | None = None
@@ -64,6 +91,55 @@ class ProviderListResponse(BaseModel):
 class ProviderResponse(BaseModel):
     provider: ProviderViewModel
     config_revision: str
+
+
+class ProviderAuthImportRequest(BaseModel):
+    access_token: NonEmptyString
+    refresh_token: str | None = None
+    account_id: str | None = None
+    email: str | None = None
+    plan_type: str | None = None
+    expires_at: int | None = None
+    id_token: str | None = None
+
+
+class ProviderAuthResponse(BaseModel):
+    provider: ProviderViewModel
+    auth_status: ProviderAuthStatusModel
+    session: ProviderAuthSessionModel | None = None
+
+
+class ProviderAuthLogoutResponse(BaseModel):
+    provider: ProviderViewModel
+    auth_status: ProviderAuthStatusModel
+    removed: bool
+
+
+class ProviderAuthFlowStartRequest(BaseModel):
+    method: Literal["browser", "device"]
+
+
+class ProviderAuthFlowViewModel(BaseModel):
+    flow_id: str
+    provider_id: str
+    backend: str
+    method: Literal["browser", "device"]
+    status: Literal["pending", "completed", "failed"]
+    authorization_url: str | None = None
+    callback_url: str | None = None
+    verification_url: str | None = None
+    user_code: str | None = None
+    interval_seconds: int | None = None
+    error_message: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class ProviderAuthFlowResponse(BaseModel):
+    provider: ProviderViewModel
+    auth_status: ProviderAuthStatusModel
+    flow: ProviderAuthFlowViewModel
+    session: ProviderAuthSessionModel | None = None
 
 
 class ModelProfileProviderModel(BaseModel):

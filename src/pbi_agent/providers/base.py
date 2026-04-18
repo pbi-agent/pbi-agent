@@ -43,6 +43,7 @@ class Provider(ABC):
         user_input: UserTurnInput | None = None,
         tool_result_items: list[dict[str, Any]] | None = None,
         instructions: str | None = None,
+        session_id: str | None = None,
         display: DisplayProtocol,
         session_usage: TokenUsage,
         turn_usage: TokenUsage,

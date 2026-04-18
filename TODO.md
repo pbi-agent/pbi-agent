@@ -1,5 +1,7 @@
 # TODO
 
-- [ ] Review current config/provider/web integration points
-- [ ] Draft modular auth architecture aligned to current code
-- [ ] Produce concrete file-by-file implementation plan
+- [x] Inspect the current auth-modal completion behavior and screenshot
+- [ ] Update the modal so completed flows stop showing in-progress auth instructions
+- [ ] Add a frontend regression test for the completed browser-auth state
+- [ ] Run frontend validation
+- [ ] Append the change summary to `MEMORY.md`

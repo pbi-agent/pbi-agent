@@ -17,6 +17,7 @@ from pbi_agent.web.api import (
     config_router,
     events_router,
     live_sessions_router,
+    provider_auth_router,
     system_router,
     tasks_router,
 )
@@ -94,6 +95,7 @@ def create_app(
 
     app.include_router(system_router)
     app.include_router(config_router)
+    app.include_router(provider_auth_router)
     app.include_router(live_sessions_router)
     app.include_router(tasks_router)
     app.include_router(board_router)

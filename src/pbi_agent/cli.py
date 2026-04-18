@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import dataclasses
 import logging
 import os
 import shutil
@@ -15,6 +16,22 @@ import webbrowser
 from pathlib import Path
 from urllib.parse import urlparse
 
+from pbi_agent.auth.cli_flow import (
+    run_provider_browser_auth_flow,
+    run_provider_device_auth_flow,
+)
+from pbi_agent.auth.models import (
+    AUTH_FLOW_METHOD_BROWSER,
+    AUTH_FLOW_METHOD_DEVICE,
+    AUTH_MODE_API_KEY,
+    AUTH_MODE_CHATGPT_ACCOUNT,
+)
+from pbi_agent.auth.service import (
+    delete_provider_auth_session,
+    get_provider_auth_status,
+    import_provider_auth_session,
+    refresh_provider_auth_session,
+)
 from pbi_agent.config import (
     ConfigError,
     ModelProfileConfig,
@@ -41,6 +58,24 @@ from pbi_agent.log_config import configure_logging
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_COMMAND = "web"
+WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS = 20.0
+WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS = 10.0
+WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS = 0.1
+WEB_SERVER_BROWSER_CONNECT_TIMEOUT_SECONDS = 0.2
+
+
+@dataclasses.dataclass(frozen=True)
+class WebServerWaitResult:
+    ready: bool
+    connect_host: str
+    port: int
+    timeout_seconds: float
+    elapsed_seconds: float
+    attempts: int
+    last_error: str | None = None
+
+    def __bool__(self) -> bool:
+        return self.ready
 
 
 class CleanHelpFormatter(argparse.HelpFormatter):
@@ -357,7 +392,14 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Provider backend kind.",
     )
+    providers_create.add_argument(
+        "--auth-mode",
+        choices=[AUTH_MODE_API_KEY, AUTH_MODE_CHATGPT_ACCOUNT],
+        default=AUTH_MODE_API_KEY,
+        help="Provider authentication mode.",
+    )
     providers_create.add_argument("--api-key", dest="provider_api_key")
+    providers_create.add_argument("--api-key-env", default=None)
     providers_create.add_argument("--responses-url")
     providers_create.add_argument("--generic-api-url")
 
@@ -376,7 +418,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Provider backend kind.",
     )
+    providers_update.add_argument(
+        "--auth-mode",
+        choices=[AUTH_MODE_API_KEY, AUTH_MODE_CHATGPT_ACCOUNT],
+        default=None,
+        help="Provider authentication mode.",
+    )
     providers_update.add_argument("--api-key", dest="provider_api_key", default=None)
+    providers_update.add_argument("--api-key-env", default=None)
     providers_update.add_argument("--responses-url", default=None)
     providers_update.add_argument("--generic-api-url", default=None)
 
@@ -388,6 +437,64 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=CleanHelpFormatter,
     )
     providers_delete.add_argument("provider_id", help="Provider ID.")
+
+    providers_auth_status = providers_actions.add_parser(
+        "auth-status",
+        prog="pbi-agent config providers auth-status",
+        description="Show stored auth session status for a provider.",
+        help="Show provider auth status.",
+        formatter_class=CleanHelpFormatter,
+    )
+    providers_auth_status.add_argument("provider_id", help="Provider ID.")
+
+    providers_auth_login = providers_actions.add_parser(
+        "auth-login",
+        prog="pbi-agent config providers auth-login",
+        description="Run a built-in browser or device login flow for a provider.",
+        help="Run provider auth login flow.",
+        formatter_class=CleanHelpFormatter,
+    )
+    providers_auth_login.add_argument("provider_id", help="Provider ID.")
+    providers_auth_login.add_argument(
+        "--method",
+        choices=[AUTH_FLOW_METHOD_BROWSER, AUTH_FLOW_METHOD_DEVICE],
+        default=AUTH_FLOW_METHOD_BROWSER,
+        help="Built-in auth flow method to run.",
+    )
+
+    providers_auth_import = providers_actions.add_parser(
+        "auth-import",
+        prog="pbi-agent config providers auth-import",
+        description="Import an account session for a provider.",
+        help="Import provider auth session.",
+        formatter_class=CleanHelpFormatter,
+    )
+    providers_auth_import.add_argument("provider_id", help="Provider ID.")
+    providers_auth_import.add_argument("--access-token", required=True)
+    providers_auth_import.add_argument("--refresh-token", default=None)
+    providers_auth_import.add_argument("--account-id", default=None)
+    providers_auth_import.add_argument("--email", default=None)
+    providers_auth_import.add_argument("--plan-type", default=None)
+    providers_auth_import.add_argument("--expires-at", type=int, default=None)
+    providers_auth_import.add_argument("--id-token", default=None)
+
+    providers_auth_refresh = providers_actions.add_parser(
+        "auth-refresh",
+        prog="pbi-agent config providers auth-refresh",
+        description="Refresh a stored account session for a provider.",
+        help="Refresh provider auth session.",
+        formatter_class=CleanHelpFormatter,
+    )
+    providers_auth_refresh.add_argument("provider_id", help="Provider ID.")
+
+    providers_auth_logout = providers_actions.add_parser(
+        "auth-logout",
+        prog="pbi-agent config providers auth-logout",
+        description="Delete a stored account session for a provider.",
+        help="Delete provider auth session.",
+        formatter_class=CleanHelpFormatter,
+    )
+    providers_auth_logout.add_argument("provider_id", help="Provider ID.")
 
     profiles_parser = config_subparsers.add_parser(
         "profiles",
@@ -690,7 +797,7 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
     from rich.console import Console
     from rich.table import Table
 
-    console = Console()
+    console = Console(width=160)
 
     if args.config_action == "list":
         providers = list_provider_configs()
@@ -701,6 +808,8 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
         table.add_column("ID", style="green")
         table.add_column("Name")
         table.add_column("Kind", style="yellow")
+        table.add_column("Auth Mode", style="yellow")
+        table.add_column("Auth Status")
         table.add_column("API Key")
         table.add_column("Responses URL")
         table.add_column("Generic API URL")
@@ -709,6 +818,8 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
                 provider.id,
                 provider.name,
                 provider.kind,
+                provider.auth_mode,
+                _format_provider_auth_status(provider),
                 _display_secret(provider.api_key),
                 provider.responses_url or "",
                 provider.generic_api_url or "",
@@ -722,7 +833,9 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
                 id=slugify(args.id or args.name),
                 name=args.name,
                 kind=args.kind,
+                auth_mode=args.auth_mode,
                 api_key=args.provider_api_key or "",
+                api_key_env=args.api_key_env,
                 responses_url=args.responses_url,
                 generic_api_url=args.generic_api_url,
             )
@@ -735,7 +848,9 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
             args.provider_id,
             name=args.name,
             kind=args.kind,
+            auth_mode=args.auth_mode,
             api_key=args.provider_api_key,
+            api_key_env=args.api_key_env,
             responses_url=args.responses_url,
             generic_api_url=args.generic_api_url,
         )
@@ -745,6 +860,92 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
     if args.config_action == "delete":
         delete_provider_config(args.provider_id)
         print(f"Deleted provider '{slugify(args.provider_id)}'.")
+        return 0
+
+    if args.config_action == "auth-status":
+        provider = _require_provider_config(args.provider_id)
+        _print_provider_auth_status(provider)
+        return 0
+
+    if args.config_action == "auth-login":
+        provider = _require_provider_config(args.provider_id)
+        if args.method == AUTH_FLOW_METHOD_BROWSER:
+            result = run_provider_browser_auth_flow(
+                provider_kind=provider.kind,
+                provider_id=provider.id,
+                auth_mode=provider.auth_mode,
+                open_browser=_open_browser_url,
+                on_ready=_print_browser_auth_instructions,
+            )
+            print(
+                f"Connected auth session for '{provider.id}'"
+                + (f" ({result.session.email})" if result.session.email else "")
+                + "."
+            )
+            _print_provider_auth_status(provider)
+            return 0
+
+        result = run_provider_device_auth_flow(
+            provider_kind=provider.kind,
+            provider_id=provider.id,
+            auth_mode=provider.auth_mode,
+            on_start=_print_device_auth_instructions,
+        )
+        print(
+            f"Connected auth session for '{provider.id}'"
+            + (f" ({result.session.email})" if result.session.email else "")
+            + "."
+        )
+        _print_provider_auth_status(provider)
+        return 0
+
+    if args.config_action == "auth-import":
+        provider = _require_provider_config(args.provider_id)
+        session = import_provider_auth_session(
+            provider_kind=provider.kind,
+            provider_id=provider.id,
+            auth_mode=provider.auth_mode,
+            payload={
+                "access_token": args.access_token,
+                "refresh_token": args.refresh_token,
+                "account_id": args.account_id,
+                "email": args.email,
+                "plan_type": args.plan_type,
+                "expires_at": args.expires_at,
+                "id_token": args.id_token,
+            },
+        )
+        print(
+            f"Imported auth session for '{provider.id}'"
+            + (f" ({session.email})" if session.email else "")
+            + "."
+        )
+        _print_provider_auth_status(provider)
+        return 0
+
+    if args.config_action == "auth-refresh":
+        provider = _require_provider_config(args.provider_id)
+        session = refresh_provider_auth_session(
+            provider_kind=provider.kind,
+            provider_id=provider.id,
+            auth_mode=provider.auth_mode,
+        )
+        print(
+            f"Refreshed auth session for '{provider.id}'"
+            + (f" ({session.email})" if session.email else "")
+            + "."
+        )
+        _print_provider_auth_status(provider)
+        return 0
+
+    if args.config_action == "auth-logout":
+        provider = _require_provider_config(args.provider_id)
+        removed = delete_provider_auth_session(provider.id)
+        if removed:
+            print(f"Deleted auth session for '{provider.id}'.")
+        else:
+            print(f"No stored auth session for '{provider.id}'.")
+        _print_provider_auth_status(provider)
         return 0
 
     raise ConfigError(f"Unknown providers action '{args.config_action}'.")
@@ -835,6 +1036,68 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
 
 def _display_secret(value: str) -> str:
     return value and f"{value[:4]}...{value[-4:]}" if value else ""
+
+
+def _require_provider_config(provider_id: str) -> ProviderConfig:
+    normalized_id = slugify(provider_id)
+    for provider in list_provider_configs():
+        if provider.id == normalized_id:
+            return provider
+    raise ConfigError(f"Unknown provider ID '{provider_id}'.")
+
+
+def _provider_auth_status(provider: ProviderConfig):
+    return get_provider_auth_status(
+        provider_kind=provider.kind,
+        provider_id=provider.id,
+        auth_mode=provider.auth_mode,
+    )
+
+
+def _format_provider_auth_status(provider: ProviderConfig) -> str:
+    if provider.auth_mode == AUTH_MODE_API_KEY:
+        if provider.api_key_env:
+            return f"env:{provider.api_key_env}"
+        if provider.api_key:
+            return "configured"
+        return "missing"
+    status = _provider_auth_status(provider)
+    if status.email:
+        return f"{status.session_status}:{status.email}"
+    if status.plan_type:
+        return f"{status.session_status}:{status.plan_type}"
+    return status.session_status
+
+
+def _print_provider_auth_status(provider: ProviderConfig) -> None:
+    status = _provider_auth_status(provider)
+    print(f"Provider: {provider.id}")
+    print(f"Kind: {provider.kind}")
+    print(f"Auth mode: {status.auth_mode}")
+    print(f"Session status: {status.session_status}")
+    print(f"Backend: {status.backend or 'n/a'}")
+    print(f"Can refresh: {'yes' if status.can_refresh else 'no'}")
+    if status.email:
+        print(f"Email: {status.email}")
+    if status.account_id:
+        print(f"Account ID: {status.account_id}")
+    if status.plan_type:
+        print(f"Plan: {status.plan_type}")
+    if status.expires_at is not None:
+        print(f"Expires at: {status.expires_at}")
+
+
+def _print_browser_auth_instructions(browser_auth) -> None:
+    print("Open this URL to complete provider authorization:")
+    print(browser_auth.authorization_url)
+    print(f"Waiting for callback on {browser_auth.redirect_uri} ...")
+
+
+def _print_device_auth_instructions(device_auth) -> None:
+    print("Open this URL and enter the one-time code to authorize the provider:")
+    print(device_auth.verification_url)
+    print(f"Code: {device_auth.user_code}")
+    print("Waiting for device authorization ...")
 
 
 def _handle_skills_flag(args: argparse.Namespace) -> int:
@@ -1148,21 +1411,49 @@ def _browser_target_url(args: argparse.Namespace) -> str:
     return f"http://{host}:{args.port}"
 
 
-def _wait_for_web_server(host: str, port: int, timeout_seconds: float = 10.0) -> bool:
+def _wait_for_web_server(
+    host: str,
+    port: int,
+    timeout_seconds: float = WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS,
+) -> WebServerWaitResult:
     connect_host = host
     if host == "0.0.0.0":
         connect_host = "127.0.0.1"
     elif host == "::":
         connect_host = "::1"
 
-    deadline = time.monotonic() + timeout_seconds
+    start_time = time.monotonic()
+    deadline = start_time + timeout_seconds
+    attempts = 0
+    last_error: str | None = None
     while time.monotonic() < deadline:
+        attempts += 1
         try:
-            with socket.create_connection((connect_host, port), timeout=0.2):
-                return True
-        except OSError:
-            time.sleep(0.1)
-    return False
+            with socket.create_connection(
+                (connect_host, port),
+                timeout=WEB_SERVER_BROWSER_CONNECT_TIMEOUT_SECONDS,
+            ):
+                return WebServerWaitResult(
+                    ready=True,
+                    connect_host=connect_host,
+                    port=port,
+                    timeout_seconds=timeout_seconds,
+                    elapsed_seconds=time.monotonic() - start_time,
+                    attempts=attempts,
+                    last_error=last_error,
+                )
+        except OSError as exc:
+            last_error = str(exc)
+            time.sleep(WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS)
+    return WebServerWaitResult(
+        ready=False,
+        connect_host=connect_host,
+        port=port,
+        timeout_seconds=timeout_seconds,
+        elapsed_seconds=time.monotonic() - start_time,
+        attempts=attempts,
+        last_error=last_error,
+    )
 
 
 def _start_browser_open_thread(host: str, port: int, browser_url: str) -> None:
@@ -1175,14 +1466,48 @@ def _start_browser_open_thread(host: str, port: int, browser_url: str) -> None:
 
 
 def _open_browser_when_ready(host: str, port: int, browser_url: str) -> None:
-    if _wait_for_web_server(host, port):
+    result = _wait_for_web_server(host, port)
+    if result:
         if not _open_browser_url(browser_url):
             LOGGER.warning("Failed to open browser for %s", browser_url)
         return
 
     LOGGER.warning(
-        "Timed out waiting for the web server to start before opening %s",
+        (
+            "Timed out waiting for the web server to start before opening %s "
+            "(host=%s port=%s waited=%.1fs attempts=%s last_error=%s). "
+            "Retrying browser launch for up to %.1fs."
+        ),
         browser_url,
+        result.connect_host,
+        result.port,
+        result.elapsed_seconds,
+        result.attempts,
+        result.last_error or "none",
+        WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS,
+    )
+
+    retry_result = _wait_for_web_server(
+        host,
+        port,
+        timeout_seconds=WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS,
+    )
+    if retry_result:
+        if not _open_browser_url(browser_url):
+            LOGGER.warning("Failed to open browser for %s", browser_url)
+        return
+
+    LOGGER.warning(
+        (
+            "Web server still was not reachable for browser launch: %s "
+            "(host=%s port=%s waited=%.1fs attempts=%s last_error=%s)."
+        ),
+        browser_url,
+        retry_result.connect_host,
+        retry_result.port,
+        retry_result.elapsed_seconds,
+        retry_result.attempts,
+        retry_result.last_error or "none",
     )
 
 
@@ -1211,8 +1536,14 @@ def _is_wsl_environment() -> bool:
 
 def _open_url_in_windows_browser(browser_url: str) -> bool:
     commands = (
-        ["explorer.exe", browser_url],
-        ["cmd.exe", "/c", "start", "", browser_url],
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f"Start-Process -FilePath {_powershell_single_quote(browser_url)}",
+        ],
+        ["cmd.exe", "/c", f'start "" "{browser_url}"'],
     )
 
     for command in commands:
@@ -1231,6 +1562,11 @@ def _open_url_in_windows_browser(browser_url: str) -> bool:
             return True
 
     return False
+
+
+def _powershell_single_quote(value: str) -> str:
+    escaped = value.replace("'", "''")
+    return f"'{escaped}'"
 
 
 def _create_web_server(

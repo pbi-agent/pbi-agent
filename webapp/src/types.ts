@@ -171,18 +171,59 @@ export type BootstrapPayload = {
   board_stages: BoardStage[];
 };
 
+export type ProviderAuthStatus = {
+  auth_mode: string;
+  backend: string | null;
+  session_status: "missing" | "connected" | "expired";
+  has_session: boolean;
+  can_refresh: boolean;
+  account_id: string | null;
+  email: string | null;
+  plan_type: string | null;
+  expires_at: number | null;
+};
+
+export type ProviderAuthSession = {
+  provider_id: string;
+  backend: string;
+  expires_at: number | null;
+  account_id: string | null;
+  email: string | null;
+  plan_type: string | null;
+};
+
+export type ProviderAuthFlow = {
+  flow_id: string;
+  provider_id: string;
+  backend: string;
+  method: "browser" | "device";
+  status: "pending" | "completed" | "failed";
+  authorization_url: string | null;
+  callback_url: string | null;
+  verification_url: string | null;
+  user_code: string | null;
+  interval_seconds: number | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ProviderView = {
   id: string;
   name: string;
   kind: string;
+  auth_mode: string;
   responses_url: string | null;
   generic_api_url: string | null;
   secret_source: "none" | "plaintext" | "env_var";
   secret_env_var: string | null;
   has_secret: boolean;
+  auth_status: ProviderAuthStatus;
 };
 
 export type ProviderKindMetadata = {
+  default_auth_mode: string;
+  auth_modes: string[];
   default_model: string;
   default_sub_agent_model: string | null;
   default_responses_url: string | null;
@@ -192,6 +233,25 @@ export type ProviderKindMetadata = {
   supports_service_tier: boolean;
   supports_native_web_search: boolean;
   supports_image_inputs: boolean;
+};
+
+export type ProviderAuthResponse = {
+  provider: ProviderView;
+  auth_status: ProviderAuthStatus;
+  session: ProviderAuthSession | null;
+};
+
+export type ProviderAuthLogoutResponse = {
+  provider: ProviderView;
+  auth_status: ProviderAuthStatus;
+  removed: boolean;
+};
+
+export type ProviderAuthFlowResponse = {
+  provider: ProviderView;
+  auth_status: ProviderAuthStatus;
+  flow: ProviderAuthFlow;
+  session: ProviderAuthSession | null;
 };
 
 export type ConfigOptions = {

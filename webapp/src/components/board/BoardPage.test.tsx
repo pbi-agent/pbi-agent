@@ -213,6 +213,8 @@ function makeConfigBootstrap(
       openai_service_tiers: [],
       provider_metadata: {
         openai: {
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key", "chatgpt_account"],
           default_model: "gpt-5.4",
           default_sub_agent_model: null,
           default_responses_url: null,

@@ -6,68 +6,160 @@ import {
   deleteModelProfile,
   deleteProvider,
   fetchConfigBootstrap,
+  logoutProviderAuth,
+  refreshProviderAuth,
   setActiveModelProfile,
   updateModelProfile,
   updateProvider,
 } from "../../api";
 import { ApiError } from "../../api";
 import type {
+  CommandView,
   ConfigBootstrapPayload,
   ModelProfileView,
-  CommandView,
+  ProviderAuthStatus,
   ProviderView,
 } from "../../types";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import type { ProfilePayload } from "./ModelProfileModal";
 import { ModelProfileModal } from "./ModelProfileModal";
+import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
 
-// ── Card sub-components ──────────────────────────────────────────────────────
+function authModeLabel(authMode: string): string {
+  switch (authMode) {
+    case "api_key":
+      return "API key";
+    case "chatgpt_account":
+      return "ChatGPT account";
+    default:
+      return authMode;
+  }
+}
+
+function authStatusLabel(status: ProviderAuthStatus): string {
+  if (status.auth_mode === "api_key") {
+    return "API key";
+  }
+  switch (status.session_status) {
+    case "connected":
+      return "connected";
+    case "expired":
+      return "expired";
+    default:
+      return "not connected";
+  }
+}
+
+function formatAuthExpiry(expiresAt: number | null): string | null {
+  if (!expiresAt) {
+    return null;
+  }
+  return new Date(expiresAt * 1000).toLocaleString();
+}
 
 function ProviderCard({
   provider,
+  isBusy,
   onEdit,
   onDelete,
+  onConnect,
+  onRefresh,
+  onDisconnect,
 }: {
   provider: ProviderView;
+  isBusy: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onConnect: () => void;
+  onRefresh: () => void;
+  onDisconnect: () => void;
 }) {
+  const authStatus = provider.auth_status;
+  const authExpires = formatAuthExpiry(authStatus.expires_at);
+  const showAuthActions = provider.auth_mode !== "api_key";
+
   return (
-    <div className="settings-item">
+    <div className="settings-item settings-item--provider">
       <div className="settings-item__info">
         <div className="settings-item__name">{provider.name}</div>
         <div className="settings-item__id">{provider.id}</div>
         <div className="settings-item__meta">
           <span className="settings-item__tag">{provider.kind}</span>
-          {provider.has_secret && (
+          <span className="settings-item__tag settings-item__tag--accent">
+            {authModeLabel(provider.auth_mode)}
+          </span>
+          <span
+            className={`settings-item__tag ${
+              authStatus.session_status === "connected"
+                ? "settings-item__tag--success"
+                : authStatus.session_status === "expired"
+                  ? "settings-item__tag--warning"
+                  : ""
+            }`}
+          >
+            {authStatusLabel(authStatus)}
+          </span>
+          {provider.auth_mode === "api_key" && provider.has_secret && (
             <span className="settings-item__tag settings-item__tag--success">
               {provider.secret_source === "env_var"
                 ? (provider.secret_env_var ?? "env var")
                 : "key: set"}
             </span>
           )}
+          {authStatus.plan_type && (
+            <span className="settings-item__tag">{authStatus.plan_type}</span>
+          )}
           {provider.responses_url && (
-            <span
-              className="settings-item__tag"
-              title={provider.responses_url}
-            >
+            <span className="settings-item__tag" title={provider.responses_url}>
               custom responses URL
             </span>
           )}
           {provider.generic_api_url && (
-            <span
-              className="settings-item__tag"
-              title={provider.generic_api_url}
-            >
+            <span className="settings-item__tag" title={provider.generic_api_url}>
               custom API URL
             </span>
           )}
         </div>
+        {(authStatus.email || authExpires || authStatus.backend) && (
+          <div className="settings-item__summary">
+            {authStatus.email && <div>{authStatus.email}</div>}
+            {authStatus.backend && <div>Backend: {authStatus.backend}</div>}
+            {authExpires && <div>Expires: {authExpires}</div>}
+          </div>
+        )}
       </div>
-      <div className="settings-item__actions">
+      <div className="settings-item__actions settings-item__actions--provider">
+        {showAuthActions && (
+          <>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={onConnect}
+              disabled={isBusy}
+            >
+              {authStatus.has_session ? "Reconnect" : "Connect"}
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={onRefresh}
+              disabled={isBusy || !authStatus.can_refresh}
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost-danger btn--sm"
+              onClick={onDisconnect}
+              disabled={isBusy || !authStatus.has_session}
+            >
+              Disconnect
+            </button>
+          </>
+        )}
         <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit}>
           Edit
         </button>
@@ -75,6 +167,7 @@ function ProviderCard({
           type="button"
           className="btn btn--ghost-danger btn--sm"
           onClick={onDelete}
+          disabled={isBusy}
         >
           Delete
         </button>
@@ -135,11 +228,7 @@ function ProfileCard({
   );
 }
 
-function CommandCard({
-  command,
-}: {
-  command: CommandView;
-}) {
+function CommandCard({ command }: { command: CommandView }) {
   return (
     <div className="settings-item settings-item--command">
       <div className="settings-item__info">
@@ -160,13 +249,12 @@ function CommandCard({
   );
 }
 
-// ── Modal state discriminated union ─────────────────────────────────────────
-
 type ModalState =
   | { type: "none" }
   | { type: "create-provider" }
   | { type: "edit-provider"; provider: ProviderView }
   | { type: "delete-provider"; provider: ProviderView }
+  | { type: "provider-auth"; provider: ProviderView }
   | { type: "create-profile" }
   | { type: "edit-profile"; profile: ModelProfileView }
   | { type: "delete-profile"; profile: ModelProfileView };
@@ -174,20 +262,17 @@ type ModalState =
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
 
-// ── SettingsPage ─────────────────────────────────────────────────────────────
-
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [pageError, setPageError] = useState<string | null>(null);
+  const [busyProviderId, setBusyProviderId] = useState<string | null>(null);
 
   const configQuery = useQuery({
     queryKey: ["config-bootstrap"],
     queryFn: fetchConfigBootstrap,
     staleTime: 30_000,
   });
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
 
   function getRevision(): string {
     return (
@@ -213,14 +298,10 @@ export function SettingsPage() {
         handleStale();
         throw new Error(STALE_MESSAGE);
       }
-      // Business-logic conflict (e.g. "still references it") – surface
-      // the real backend message so the user knows what to fix.
       throw err;
     }
     throw err;
   }
-
-  // ── Provider handlers ──────────────────────────────────────────────────────
 
   async function saveProvider(
     payload: ProviderPayload,
@@ -249,7 +330,31 @@ export function SettingsPage() {
     }
   }
 
-  // ── Profile handlers ───────────────────────────────────────────────────────
+  async function handleRefreshProviderAuth(providerId: string): Promise<void> {
+    setPageError(null);
+    setBusyProviderId(providerId);
+    try {
+      await refreshProviderAuth(providerId);
+      await invalidateBoth();
+    } catch (err) {
+      setPageError((err as Error).message);
+    } finally {
+      setBusyProviderId(null);
+    }
+  }
+
+  async function handleDisconnectProviderAuth(providerId: string): Promise<void> {
+    setPageError(null);
+    setBusyProviderId(providerId);
+    try {
+      await logoutProviderAuth(providerId);
+      await invalidateBoth();
+    } catch (err) {
+      setPageError((err as Error).message);
+    } finally {
+      setBusyProviderId(null);
+    }
+  }
 
   async function saveProfile(
     payload: ProfilePayload,
@@ -278,9 +383,7 @@ export function SettingsPage() {
     }
   }
 
-  async function handleSetActiveProfile(
-    profileId: string | null,
-  ): Promise<void> {
+  async function handleSetActiveProfile(profileId: string | null): Promise<void> {
     setPageError(null);
     try {
       await setActiveModelProfile(profileId, getRevision());
@@ -295,8 +398,6 @@ export function SettingsPage() {
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   if (configQuery.isLoading) {
     return (
       <div className="center-spinner">
@@ -310,28 +411,23 @@ export function SettingsPage() {
       <div className="settings-page">
         <div className="settings-page__inner">
           <div className="settings-error-banner">
-            Failed to load settings:{" "}
-            {(configQuery.error as Error)?.message ?? "Unknown error"}
+            Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
           </div>
         </div>
       </div>
     );
   }
 
-  const {
-    providers,
-    model_profiles,
-    commands,
-    active_profile_id,
-    options,
-  } = configQuery.data;
+  const { providers, model_profiles, commands, active_profile_id, options } =
+    configQuery.data;
 
   return (
     <div className="settings-page">
       <div className="settings-page__inner">
         {model_profiles.length === 0 && (
           <div className="settings-inline-note settings-onboarding-guide">
-            <strong>First-time setup:</strong> To start using the app, complete these steps:
+            <strong>First-time setup:</strong> To start using the app, complete these
+            steps:
             <ol>
               <li>Add a provider with your API credentials</li>
               <li>Create a model profile that uses that provider</li>
@@ -339,11 +435,8 @@ export function SettingsPage() {
           </div>
         )}
 
-        {pageError && (
-          <div className="settings-error-banner">{pageError}</div>
-        )}
+        {pageError && <div className="settings-error-banner">{pageError}</div>}
 
-        {/* ── Providers panel ── */}
         <div className="settings-panel">
           <div className="settings-panel__header">
             <div>
@@ -369,21 +462,26 @@ export function SettingsPage() {
                 </div>
               </div>
             ) : (
-              providers.map((p) => (
+              providers.map((provider) => (
                 <ProviderCard
-                  key={p.id}
-                  provider={p}
-                  onEdit={() => setModal({ type: "edit-provider", provider: p })}
-                  onDelete={() =>
-                    setModal({ type: "delete-provider", provider: p })
-                  }
+                  key={provider.id}
+                  provider={provider}
+                  isBusy={busyProviderId === provider.id}
+                  onEdit={() => setModal({ type: "edit-provider", provider })}
+                  onDelete={() => setModal({ type: "delete-provider", provider })}
+                  onConnect={() => setModal({ type: "provider-auth", provider })}
+                  onRefresh={() => {
+                    void handleRefreshProviderAuth(provider.id);
+                  }}
+                  onDisconnect={() => {
+                    void handleDisconnectProviderAuth(provider.id);
+                  }}
                 />
               ))
             )}
           </div>
         </div>
 
-        {/* ── Model Profiles panel ── */}
         <div className="settings-panel">
           <div className="settings-panel__header">
             <div>
@@ -397,32 +495,26 @@ export function SettingsPage() {
               className="btn btn--primary"
               onClick={() => setModal({ type: "create-profile" })}
               disabled={providers.length === 0}
-              title={
-                providers.length === 0
-                  ? "Add a provider first"
-                  : undefined
-              }
+              title={providers.length === 0 ? "Add a provider first" : undefined}
             >
               + Add Profile
             </button>
           </div>
           <div className="settings-panel__body">
             <div className="active-profile-control">
-              <span className="active-profile-control__label">
-                Active default
-              </span>
+              <span className="active-profile-control__label">Active default</span>
               <select
                 name="active-profile"
                 className="active-profile-control__select"
                 value={active_profile_id ?? ""}
-                onChange={(e) =>
-                  void handleSetActiveProfile(e.target.value || null)
-                }
+                onChange={(e) => {
+                  void handleSetActiveProfile(e.target.value || null);
+                }}
               >
                 <option value="">No default</option>
-                {model_profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+                {model_profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
                   </option>
                 ))}
               </select>
@@ -436,14 +528,12 @@ export function SettingsPage() {
                 </div>
               </div>
             ) : (
-              model_profiles.map((p) => (
+              model_profiles.map((profile) => (
                 <ProfileCard
-                  key={p.id}
-                  profile={p}
-                  onEdit={() => setModal({ type: "edit-profile", profile: p })}
-                  onDelete={() =>
-                    setModal({ type: "delete-profile", profile: p })
-                  }
+                  key={profile.id}
+                  profile={profile}
+                  onEdit={() => setModal({ type: "edit-profile", profile })}
+                  onDelete={() => setModal({ type: "delete-profile", profile })}
                 />
               ))
             )}
@@ -461,9 +551,8 @@ export function SettingsPage() {
           </div>
           <div className="settings-panel__body">
             <div className="settings-inline-note">
-              Add Markdown files under <code>.agents/commands/</code>; a file
-              like <code>.agents/commands/review.md</code> becomes{" "}
-              <code>/review</code>.
+              Add Markdown files under <code>.agents/commands/</code>; a file like
+              <code>.agents/commands/review.md</code> becomes <code>/review</code>.
             </div>
 
             {commands.length === 0 ? (
@@ -474,18 +563,12 @@ export function SettingsPage() {
                 </div>
               </div>
             ) : (
-              commands.map((command) => (
-                <CommandCard
-                  key={command.id}
-                  command={command}
-                />
-              ))
+              commands.map((command) => <CommandCard key={command.id} command={command} />)
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Modals ── */}
       {modal.type === "create-provider" && (
         <ProviderModal
           options={options}
@@ -506,12 +589,19 @@ export function SettingsPage() {
           title="Delete Provider"
           body={
             <>
-              Delete provider <strong>{modal.provider.name}</strong>? This
-              cannot be undone.
+              Delete provider <strong>{modal.provider.name}</strong>? This cannot be
+              undone.
             </>
           }
           onConfirm={() => deleteProviderById(modal.provider.id)}
           onClose={() => setModal({ type: "none" })}
+        />
+      )}
+      {modal.type === "provider-auth" && (
+        <ProviderAuthFlowModal
+          provider={modal.provider}
+          onClose={() => setModal({ type: "none" })}
+          onCompleted={invalidateBoth}
         />
       )}
       {modal.type === "create-profile" && (
@@ -536,8 +626,8 @@ export function SettingsPage() {
           title="Delete Profile"
           body={
             <>
-              Delete profile <strong>{modal.profile.name}</strong>? This cannot
-              be undone.
+              Delete profile <strong>{modal.profile.name}</strong>? This cannot be
+              undone.
             </>
           }
           onConfirm={() => deleteProfileById(modal.profile.id)}

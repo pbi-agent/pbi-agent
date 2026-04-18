@@ -7,6 +7,8 @@ from unittest.mock import Mock
 import pytest
 
 from pbi_agent.cli import build_parser
+from pbi_agent.auth.models import OAuthSessionAuth
+from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import (
@@ -24,7 +26,12 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
-from pbi_agent.providers.openai_provider import OpenAIProvider, _extract_retry_after
+from pbi_agent.providers.chatgpt_codex_backend import chatgpt_user_agent
+from pbi_agent.providers.openai_provider import (
+    OpenAIProvider,
+    _extract_retry_after,
+    _parse_sse_response,
+)
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog, ToolCatalogEntry
 from pbi_agent.tools.types import ToolSpec
@@ -120,10 +127,18 @@ class _DisplayStub:
 
 
 class _FakeHTTPResponse:
-    def __init__(self, payload: dict[str, object]) -> None:
+    def __init__(
+        self,
+        payload: dict[str, object] | str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self._payload = payload
+        self.headers = headers or {}
 
     def read(self) -> bytes:
+        if isinstance(self._payload, str):
+            return self._payload.encode("utf-8")
         return json.dumps(self._payload).encode("utf-8")
 
     def __enter__(self) -> _FakeHTTPResponse:
@@ -192,6 +207,73 @@ def test_openai_build_request_body_uses_http_responses_shape() -> None:
     assert body["input"] == [{"role": "user", "content": "hello"}]
     assert body["instructions"] == "be concise"
     assert "previous_response_id" not in body
+
+
+def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
+    provider = OpenAIProvider(
+        _make_settings(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    )
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "hello"}],
+        instructions="be concise",
+        session_id="session-123",
+    )
+
+    assert body["model"] == DEFAULT_MODEL
+    assert body["stream"] is True
+    assert body["store"] is False
+    assert body["parallel_tool_calls"] is True
+    assert body["tool_choice"] == "auto"
+    assert body["include"] == []
+    assert body["prompt_cache_key"] == "session-123"
+    assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
+    assert body["input"] == [{"role": "user", "content": "hello"}]
+    assert body["instructions"] == "be concise"
+    function_tools = [tool for tool in body["tools"] if tool.get("type") == "function"]
+    assert function_tools
+    assert all(tool["strict"] is True for tool in function_tools)
+    shell_tool = next(tool for tool in function_tools if tool["name"] == "shell")
+    shell_parameters = shell_tool["parameters"]
+    assert shell_parameters["required"] == [
+        "command",
+        "working_directory",
+        "timeout_ms",
+    ]
+    working_directory_schema = shell_parameters["properties"]["working_directory"]
+    assert working_directory_schema == {
+        "anyOf": [
+            {
+                "type": "string",
+                "description": (
+                    "Working directory for the command, relative to the "
+                    "workspace root. Defaults to the workspace root."
+                ),
+            },
+            {"type": "null"},
+        ]
+    }
+    assert "max_output_tokens" not in body
+    assert "prompt_cache_retention" not in body
+    assert "context_management" not in body
+    assert "previous_response_id" not in body
+
+
+def test_openai_build_request_body_omits_chatgpt_prompt_cache_key_without_session_id() -> (
+    None
+):
+    provider = OpenAIProvider(
+        _make_settings(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    )
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "hello"}],
+        instructions="be concise",
+    )
+
+    assert body["tool_choice"] == "auto"
+    assert body["include"] == []
+    assert "prompt_cache_key" not in body
 
 
 def test_openai_build_request_body_keeps_instructions_with_previous_response_id() -> (
@@ -502,6 +584,213 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     assert requests[1]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
 
 
+def test_openai_request_turn_uses_chatgpt_account_auth_headers(monkeypatch) -> None:
+    request_details: dict[str, object] = {}
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        request_details["url"] = request.full_url
+        request_details["authorization"] = request.get_header("Authorization")
+        request_details["headers"] = dict(request.header_items())
+        request_details["body"] = json.loads(request.data.decode("utf-8"))
+        return _FakeHTTPResponse(
+            """event: response.created
+data: {"type":"response.created","response":{"id":"resp_chatgpt"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_chatgpt","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}]}}
+
+"""
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = OpenAIProvider(
+        _make_settings(
+            api_key="",
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+                account_id="acct_123",
+                email="user@example.com",
+                plan_type="chatgpt_plus",
+            ),
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+        )
+    )
+    display = _DisplayStub()
+    session_usage = TokenUsage(model=DEFAULT_MODEL)
+    turn_usage = TokenUsage(model=DEFAULT_MODEL)
+
+    response = provider.request_turn(
+        user_input=UserTurnInput(text="Hello"),
+        session_id="session-123",
+        display=display,
+        session_usage=session_usage,
+        turn_usage=turn_usage,
+    )
+
+    assert response.text == "Done."
+    assert request_details["url"] == OPENAI_CHATGPT_RESPONSES_URL
+    assert request_details["authorization"] == "Bearer access-token"
+    assert request_details["body"]["stream"] is True
+    assert request_details["headers"]["Chatgpt-account-id"] == "acct_123"
+    assert request_details["headers"]["Accept"] == "text/event-stream"
+    assert request_details["headers"]["Originator"] == "opencode"
+    assert request_details["headers"]["Session_id"] == "session-123"
+    assert request_details["headers"]["User-agent"] == chatgpt_user_agent()
+
+
+def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
+    monkeypatch,
+) -> None:
+    requests: list[dict[str, object]] = []
+    responses = iter(
+        [
+            _FakeHTTPResponse(
+                """event: response.created
+data: {"type":"response.created","response":{"id":"resp_1"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"function_call","call_id":"call_1","name":"list_files","arguments":"{\\"path\\":\\".\\"}"}]}}
+
+""",
+                headers={"x-codex-turn-state": "ts-1"},
+            ),
+            _FakeHTTPResponse(
+                """event: response.created
+data: {"type":"response.created","response":{"id":"resp_2"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5","usage":{"input_tokens":4,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}]}}
+
+""",
+            ),
+            _FakeHTTPResponse(
+                """event: response.created
+data: {"type":"response.created","response":{"id":"resp_3"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_3","model":"gpt-5","usage":{"input_tokens":4,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Next."}]}]}}
+
+""",
+            ),
+        ]
+    )
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float = 0.0):
+        del timeout
+        requests.append(
+            {
+                "headers": dict(request.header_items()),
+                "body": json.loads(request.data.decode("utf-8")),
+            }
+        )
+        return next(responses)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+                account_id="acct_123",
+                expires_at=4070908800,
+                email="user@example.com",
+                plan_type="chatgpt_plus",
+            ),
+        )
+    )
+    display = _DisplayStub()
+    session_usage = TokenUsage(model=DEFAULT_MODEL)
+    turn_usage = TokenUsage(model=DEFAULT_MODEL)
+
+    tool_call_response = provider.request_turn(
+        user_input=UserTurnInput(text="Hello"),
+        session_id="session-123",
+        display=display,
+        session_usage=session_usage,
+        turn_usage=turn_usage,
+    )
+    assert tool_call_response.has_tool_calls is True
+
+    provider.request_turn(
+        tool_result_items=[
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "list_files",
+                "arguments": '{"path":"."}',
+            },
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": '{"ok": true, "result": []}',
+            },
+        ],
+        session_id="session-123",
+        display=display,
+        session_usage=session_usage,
+        turn_usage=turn_usage,
+    )
+
+    provider.request_turn(
+        user_input=UserTurnInput(text="Next turn"),
+        session_id="session-123",
+        display=display,
+        session_usage=session_usage,
+        turn_usage=turn_usage,
+    )
+
+    assert requests[0]["headers"].get("X-codex-turn-state") is None
+    assert requests[1]["headers"]["X-codex-turn-state"] == "ts-1"
+    assert requests[2]["headers"].get("X-codex-turn-state") is None
+
+
+def test_parse_sse_response_reconstructs_output_from_stream_events() -> None:
+    response = _parse_sse_response(
+        """event: response.created
+data: {"type":"response.created","response":{"id":"resp_chatgpt","created_at":1776340585,"model":"gpt-5"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_123"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_123","delta":"Hello"}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_123","delta":" world"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_123"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"completed","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}}}}
+
+"""
+    )
+
+    assert response["id"] == "resp_chatgpt"
+    assert response["model"] == "gpt-5"
+    assert response["status"] == "completed"
+    assert response["output"] == [
+        {
+            "type": "message",
+            "id": "msg_123",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "Hello world"}],
+        }
+    ]
+
+
 def test_openai_execute_tool_calls_returns_function_call_outputs(
     monkeypatch,
     display_spy,
@@ -578,6 +867,83 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
         },
     ]
     assert display_spy.tool_group_end_count == 1
+
+
+def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
+    monkeypatch,
+    display_spy,
+) -> None:
+    provider = OpenAIProvider(
+        _make_settings(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    )
+    response = CompletedResponse(
+        response_id="resp_1",
+        text="",
+        function_calls=[
+            ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
+            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+        ],
+        provider_data={
+            "function_call_items": {
+                "call_1": {
+                    "type": "function_call",
+                    "id": "fc_1",
+                    "call_id": "call_1",
+                    "name": "shell",
+                    "arguments": '{"command":"pwd"}',
+                    "status": "completed",
+                },
+                "call_2": {
+                    "type": "function_call",
+                    "id": "fc_2",
+                    "call_id": "call_2",
+                    "name": "init_report",
+                    "arguments": '{"dest":"."}',
+                    "status": "completed",
+                },
+            }
+        },
+    )
+    batch = ToolExecutionBatch(
+        results=[
+            ToolResult(
+                call_id="call_1",
+                output_json='{"ok": true, "result": "/workspace"}',
+            ),
+            ToolResult(
+                call_id="call_2",
+                output_json='{"ok": true, "result": {"created": true}}',
+            ),
+        ],
+        had_errors=False,
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider._execute_tool_calls",
+        lambda calls, max_workers, context=None, tool_catalog=None: batch,
+    )
+
+    tool_result_items, had_errors = provider.execute_tool_calls(
+        response,
+        max_workers=2,
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert had_errors is False
+    assert tool_result_items == [
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"ok": true, "result": "/workspace"}',
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "call_2",
+            "output": '{"ok": true, "result": {"created": true}}',
+        },
+    ]
 
 
 def test_openai_execute_tool_calls_skips_generic_display_for_sub_agent(
@@ -936,6 +1302,117 @@ def test_openai_request_turn_retries_with_restored_transcript_when_previous_resp
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "hi"},
         {"role": "user", "content": "continue"},
+    ]
+
+
+def test_openai_chatgpt_http_replays_explicit_transcript_with_reasoning(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+    responses = iter(
+        [
+            _FakeHTTPResponse(
+                """event: response.created
+data: {"type":"response.created","response":{"id":"resp_1"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1}},"output":[{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"Need to inspect files"}],"content":[{"type":"reasoning_text","text":"Checking the workspace before answering."}]},{"type":"function_call","id":"fc_1","call_id":"call_1","name":"list_files","status":"completed","arguments":"{\\"path\\":\\".\\"}"}]}}
+
+"""
+            ),
+            _FakeHTTPResponse(
+                """event: response.created
+data: {"type":"response.created","response":{"id":"resp_2"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5","usage":{"input_tokens":4,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}]}}
+
+"""
+            ),
+        ]
+    )
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        response = next(responses)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+                account_id="acct_123",
+                expires_at=4070908800,
+                email="user@example.com",
+                plan_type="chatgpt_plus",
+            ),
+        )
+    )
+
+    first = provider.request_turn(
+        user_input=UserTurnInput(text="Find instructions"),
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+    assert first.has_tool_calls is True
+
+    second = provider.request_turn(
+        tool_result_items=[
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": '{"ok": true, "result": []}',
+            },
+        ],
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert second.text == "Done."
+    assert "previous_response_id" not in requests[0]
+    assert "previous_response_id" not in requests[1]
+    assert requests[1]["input"] == [
+        {"role": "user", "content": "Find instructions"},
+        {
+            "type": "reasoning",
+            "summary": [{"type": "summary_text", "text": "Need to inspect files"}],
+            "content": [
+                {
+                    "type": "reasoning_text",
+                    "text": "Checking the workspace before answering.",
+                }
+            ],
+        },
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "list_files",
+            "status": "completed",
+            "arguments": '{"path":"."}',
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"ok": true, "result": []}',
+        },
     ]
 
 
