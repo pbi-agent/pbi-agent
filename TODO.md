@@ -1,6 +1,6 @@
 # TODO
 
-- [x] Locate session `a15db21071bd4c4e87b3f0a00f8be2d6` and inspect its failure logs
-- [x] Trace the failing GitHub Copilot request path back to the new backend routing
-- [x] Implement and validate the fix if the failure is in the current branch
-- [x] Append the diagnosis and validation to `MEMORY.md`
+- [x] Fetch `master` and surface PR #157 merge conflicts locally
+- [x] Resolve conflicts without dropping the Copilot branch work
+- [x] Run focused validation on the merged result
+- [x] Append the merge notes to `MEMORY.md`
