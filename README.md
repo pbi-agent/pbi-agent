@@ -16,11 +16,11 @@
 
 `pbi-agent` is a local CLI agent that creates, edits, and audits Power BI PBIP reports through natural language.
 
-Full documentation lives at [nasirus.github.io/pbi-agent](https://nasirus.github.io/pbi-agent/).
+Full documentation lives at [pbi-agent.github.io/pbi-agent](https://pbi-agent.github.io/pbi-agent/).
 
 ## Demo
 
-[![Watch the demo](https://img.youtube.com/vi/vw3RVwbILbE/maxresdefault.jpg)](https://nasirus.github.io/pbi-agent/#demo)
+[![Watch the demo](https://img.youtube.com/vi/vw3RVwbILbE/maxresdefault.jpg)](https://pbi-agent.github.io/pbi-agent/#demo)
 
 ## Quick Start
 
@@ -58,12 +58,12 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 
 ## Docs
 
-- [Installation](https://nasirus.github.io/pbi-agent/guide/installation)
-- [Provider Setup](https://nasirus.github.io/pbi-agent/guide/providers)
-- [CLI Reference](https://nasirus.github.io/pbi-agent/reference/cli)
-- [Environment Variables](https://nasirus.github.io/pbi-agent/reference/environment)
-- [Customization](https://nasirus.github.io/pbi-agent/guide/customization)
-- [Audit System](https://nasirus.github.io/pbi-agent/guide/audit)
+- [Installation](https://pbi-agent.github.io/pbi-agent/guide/installation)
+- [Provider Setup](https://pbi-agent.github.io/pbi-agent/guide/providers)
+- [CLI Reference](https://pbi-agent.github.io/pbi-agent/reference/cli)
+- [Environment Variables](https://pbi-agent.github.io/pbi-agent/reference/environment)
+- [Customization](https://pbi-agent.github.io/pbi-agent/guide/customization)
+- [Audit System](https://pbi-agent.github.io/pbi-agent/guide/audit)
 
 ## Customization
 
@@ -75,7 +75,7 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 - `.agents/<agent-name>.md` adds project-local sub-agents that can be selected through the `sub_agent` tool.
 - `.agents/mcp.json` declares MCP servers whose tools are exposed to the model at startup.
 
-See the full [Customization guide](https://nasirus.github.io/pbi-agent/guide/customization) for examples and behavior details.
+See the full [Customization guide](https://pbi-agent.github.io/pbi-agent/guide/customization) for examples and behavior details.
 
 ## Common Commands
 

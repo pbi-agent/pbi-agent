@@ -4,7 +4,7 @@ const siteName = 'pbi-agent'
 const siteDescription =
   'Multi-provider LLM CLI agent for Power BI report editing'
 const siteBase = '/pbi-agent/'
-const siteUrl = 'https://nasirus.github.io/pbi-agent/'
+const siteUrl = 'https://pbi-agent.github.io/pbi-agent/'
 const socialImageUrl = new URL('social-card.jpg', siteUrl).toString()
 const faviconUrl = `${siteBase}favicon.png`
 
