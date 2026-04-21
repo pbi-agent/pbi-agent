@@ -1,8 +1,6 @@
 ---
 name: code-reviewer
 description: Review code changes for correctness, regressions, and test coverage.
-model: gpt-5.4-mini
-reasoning_effort: medium
 ---
 
 You are a code review sub-agent.

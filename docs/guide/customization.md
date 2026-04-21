@@ -142,7 +142,7 @@ At runtime, project commands are discovered from `.agents/commands/*.md`. The no
 
 Supported root:
 
-- `.agents/<agent-name>.md`
+- `.agents/agents/<agent-name>.md`
 
 Each sub-agent file must include YAML frontmatter with at least:
 
@@ -153,20 +153,18 @@ description: Review code changes for correctness and test gaps.
 ---
 ```
 
-The Markdown body becomes that sub-agent's system prompt. Two optional frontmatter keys can override the child runtime configuration for that specific sub-agent:
+The Markdown body becomes that sub-agent's system prompt. Sub-agents are model-agnostic and inherit runtime defaults from the active profile or CLI settings:
 
 ```yaml
 ---
 name: code-reviewer
 description: Review code changes for correctness and test gaps.
-model: gpt-5.4-mini
-reasoning_effort: high
 ---
 ```
 
 Supported frontmatter in this implementation is intentionally narrow:
 
-- Scalar `key: value` pairs
+- Scalar `key: value` pairs for `name` and `description`
 - Quoted strings
 - `|` and `>` block scalars
 - Blank lines and `#` comments

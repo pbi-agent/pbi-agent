@@ -31,7 +31,7 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--no-web-search` | none | `false` | Disable the provider's native web search tool when that backend supports it. |
 | `--verbose` | none | `false` | Enable verbose logging. |
 | `--mcp` | none | `false` | List discovered project MCP servers from `.agents/mcp.json` and exit. |
-| `--agents` | none | `false` | List discovered project sub-agents from `.agents/*.md` and exit. |
+| `--agents` | none | `false` | List discovered project sub-agents from `.agents/agents/*.md` and exit. |
 
 Saved config is only mutated by `pbi-agent config ...` commands. Runtime commands such as `run`, `audit`, and `web` resolve settings but do not rewrite saved providers or profiles.
 

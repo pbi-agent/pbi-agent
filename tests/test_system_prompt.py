@@ -206,8 +206,8 @@ def test_get_sub_agent_system_prompt_with_project_skills(tmp_path, monkeypatch):
 
 
 def test_get_system_prompt_with_project_sub_agents(tmp_path, monkeypatch):
-    (tmp_path / ".agents").mkdir(parents=True)
-    (tmp_path / ".agents" / "code-reviewer.md").write_text(
+    (tmp_path / ".agents" / "agents").mkdir(parents=True)
+    (tmp_path / ".agents" / "agents" / "code-reviewer.md").write_text(
         "---\n"
         "name: code-reviewer\n"
         "description: Review code changes before merging.\n"

@@ -145,7 +145,7 @@ Delegate a focused task to a child agent that runs with the same provider and to
 | --- | --- | --- | --- |
 | `task_instruction` | `string` | yes | The delegated task and the context the child agent needs. |
 | `include_context` | `boolean` | no | When `true`, the child inherits the parent conversation context when the provider supports it directly, or via transcript replay otherwise. Defaults to `false`. |
-| `agent_type` | `string` | no | Optional project sub-agent name discovered from `.agents/*.md`. Use `default` or omit the field for the built-in generalist child agent. |
+| `agent_type` | `string` | no | Optional project sub-agent name discovered from `.agents/agents/*.md`. Use `default` or omit the field for the built-in generalist child agent. |
 
 ```json
 {
@@ -158,7 +158,7 @@ Delegate a focused task to a child agent that runs with the same provider and to
 Runtime behavior:
 
 - Child runs are isolated by default. Set `include_context` to `true` to inherit parent context.
-- The child uses `PBI_AGENT_SUB_AGENT_MODEL` or `--sub-agent-model` by default unless the selected project sub-agent overrides `model` in its frontmatter.
+- The child uses `PBI_AGENT_SUB_AGENT_MODEL` or `--sub-agent-model` by default. Project sub-agent files do not override model or reasoning settings.
 - The child inherits the parent provider and tool catalog, but `sub_agent` itself is disabled inside the child, so nested sub-agent calls fail fast.
 - OpenAI and Google reuse the parent conversation checkpoint when available; other providers fall back to replaying the visible parent transcript plus the current live user turn.
 - Unknown `agent_type` values are rejected before the child session starts.
