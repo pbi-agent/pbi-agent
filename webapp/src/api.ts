@@ -131,6 +131,7 @@ export async function createLiveSession(
   payload: Partial<{
     live_session_id: string;
     session_id: string;
+    resume_session_id: string;
     profile_id: string | null;
   }> = {},
 ): Promise<LiveSession> {

@@ -1004,6 +1004,7 @@ def _resume_session(
 ) -> None:
     if store is None or session_id is None:
         return
+    rec = None
     messages = []
     try:
         messages = store.list_messages(session_id)
@@ -1025,13 +1026,24 @@ def _resume_session(
             display.session_usage(session_usage)
     except Exception:
         _log.warning("Failed to restore session state", exc_info=True)
+    history_restored = False
     if messages:
         try:
             provider.restore_messages(messages)
+            history_restored = True
             if replay_history:
                 display.replay_history(messages)
         except Exception:
             _log.warning("Failed to apply restored session history", exc_info=True)
+    if history_restored or rec is None or not rec.previous_id:
+        return
+    try:
+        provider.set_previous_response_id(rec.previous_id)
+    except Exception:
+        _log.warning(
+            "Failed to restore provider conversation checkpoint",
+            exc_info=True,
+        )
 
 
 def _build_parent_context_snapshot(

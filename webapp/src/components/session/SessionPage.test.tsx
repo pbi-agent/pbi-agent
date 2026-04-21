@@ -5,6 +5,7 @@ import { SessionPage } from "./SessionPage";
 import { renderWithProviders } from "../../test/render";
 import {
   ApiError,
+  createLiveSession,
   expandSessionInput,
   fetchConfigBootstrap,
   fetchLiveSessionDetail,
@@ -404,5 +405,19 @@ describe("SessionPage", () => {
     expect(await screen.findByText("Session not found")).toBeInTheDocument();
     expect(screen.getByText("Session missing from this workspace.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start new session" })).toBeInTheDocument();
+  });
+
+  it("reopens saved sessions with the explicit resume_session_id payload", async () => {
+    vi.mocked(createLiveSession).mockResolvedValue(
+      makeLiveSession({ session_id: "session-1" }),
+    );
+
+    renderSessionRoute("/sessions/session-1");
+
+    await waitFor(() => {
+      expect(createLiveSession).toHaveBeenCalledWith({
+        resume_session_id: "session-1",
+      });
+    });
   });
 });

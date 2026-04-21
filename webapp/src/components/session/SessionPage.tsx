@@ -110,7 +110,8 @@ export function SessionPage({
   const createSessionMutation = useMutation({
     mutationFn: createLiveSession,
     onSuccess: (session, variables) => {
-      const requestSessionId = variables?.session_id ?? null;
+      const requestSessionId =
+        variables?.resume_session_id ?? variables?.session_id ?? null;
       const requestedKey = createRequestKeyRef.current
         ?? (requestSessionId
           ? getSavedSessionKey(requestSessionId)
@@ -232,7 +233,7 @@ export function SessionPage({
     if (sessionState?.liveSessionId && !sessionState.sessionEnded) return;
     if (createSessionMutation.isPending) return;
     createRequestKeyRef.current = getSavedSessionKey(routeSessionId);
-    createSessionMutation.mutate({ session_id: routeSessionId });
+    createSessionMutation.mutate({ resume_session_id: routeSessionId });
   }, [
     sessionState?.liveSessionId,
     sessionState?.sessionEnded,

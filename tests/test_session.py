@@ -13,6 +13,7 @@ from pbi_agent.agent.session import (
     AGENTS_RELOAD_COMMAND,
     MCP_COMMAND,
     NEW_SESSION_SENTINEL,
+    _resume_session,
     SKILLS_COMMAND,
     run_session_loop,
     run_sub_agent_task,
@@ -109,6 +110,7 @@ class _ProviderStub:
         self.connected = False
         self.request_calls: list[dict[str, object | None]] = []
         self.execute_calls: list[dict[str, object]] = []
+        self.previous_response_ids: list[str | None] = []
         self.conversation_checkpoint = "resp_current"
         self.settings = Settings(api_key="test-key", provider="openai")
         self.tool_name = tool_name
@@ -128,6 +130,9 @@ class _ProviderStub:
 
     def get_conversation_checkpoint(self) -> str | None:
         return self.conversation_checkpoint
+
+    def set_previous_response_id(self, response_id: str | None) -> None:
+        self.previous_response_ids.append(response_id)
 
     def restore_messages(self, messages) -> None:
         self.restored_messages = list(messages)
@@ -1255,6 +1260,37 @@ def test_run_single_turn_resumed_session_bootstraps_from_history_without_previou
         {"role": "assistant", "content": "hi"},
         {"role": "user", "content": "continue"},
     ]
+
+
+def test_resume_session_restores_previous_response_id_when_history_missing(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(
+            directory=os.getcwd(),
+            provider="openai",
+            model=DEFAULT_MODEL,
+            title="existing",
+        )
+        store.update_session(session_id, previous_id="resp_parent")
+
+        provider = _ProviderStub()
+        display = _DisplaySpy()
+
+        _resume_session(
+            provider=provider,
+            store=store,
+            session_id=session_id,
+            session_usage=TokenUsage(model=DEFAULT_MODEL),
+            display=display,
+        )
+
+    assert provider.previous_response_ids == ["resp_parent"]
 
 
 def test_run_single_turn_resumed_openai_session_increments_total_usage(
