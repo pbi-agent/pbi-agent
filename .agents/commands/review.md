@@ -1,7 +1,7 @@
 # Review guidelines:
 
 Act as reviewer for proposed code change by another engineer.
-Start by running `git status` to identify the current code change in the workspace, then review that diff.
+Start by running `git status --short --branch` to identify the current code change in the workspace, then review that diff.
 
 Below are default rules for whether original author would want issue flagged.
 

@@ -116,6 +116,8 @@ APP_EVENT_STREAM_ID = "app"
 _MAX_EVENT_HISTORY = 1000
 _NON_RUNNABLE_BOARD_STAGE_IDS = frozenset({KANBAN_STAGE_BACKLOG, KANBAN_STAGE_DONE})
 _PROVIDER_AUTH_BROWSER_FLOW_TIMEOUT_SECS = 5 * 60
+_WEB_MANAGER_LEASE_STALE_SECS = 30.0
+_WEB_MANAGER_LEASE_HEARTBEAT_SECS = 5.0
 _STRUCTURED_TASK_HEADER_PATTERN = re.compile(
     r"^#{1,6}\s+|^[-*]\s+|^\d+\.\s+", re.MULTILINE
 )
@@ -456,10 +458,14 @@ class WebSessionManager:
         self._app_stream = EventStream()
         self._live_sessions: dict[str, LiveSessionState] = {}
         self._provider_auth_flows: dict[str, PendingProviderAuthFlow] = {}
+        self._task_workers: dict[str, threading.Thread] = {}
         self._running_task_ids: set[str] = set()
+        self._manager_owner_id = uuid.uuid4().hex
+        self._lease_stop = threading.Event()
+        self._lease_thread: threading.Thread | None = None
+        self._started = False
+        self._shutdown_requested = False
         self._lock = threading.Lock()
-        with SessionStore() as store:
-            store.normalize_kanban_running_tasks(directory=self._directory_key)
 
     @property
     def workspace_root(self) -> Path:
@@ -471,6 +477,34 @@ class WebSessionManager:
         if runtime is not None:
             return runtime.settings
         return self._default_runtime.settings
+
+    def start(self) -> None:
+        with self._lock:
+            if self._started:
+                return
+        with SessionStore() as store:
+            acquired = store.acquire_web_manager_lease(
+                self._directory_key,
+                owner_id=self._manager_owner_id,
+                stale_after_seconds=_WEB_MANAGER_LEASE_STALE_SECS,
+            )
+            if not acquired:
+                raise RuntimeError(
+                    "Another web app instance is already managing this workspace."
+                )
+            store.normalize_kanban_running_tasks(directory=self._directory_key)
+        with self._lock:
+            if self._started:
+                return
+            self._shutdown_requested = False
+            self._lease_stop.clear()
+            self._lease_thread = threading.Thread(
+                target=self._renew_manager_lease_loop,
+                daemon=True,
+                name=f"pbi-agent-web-lease-{self._manager_owner_id[:8]}",
+            )
+            self._lease_thread.start()
+            self._started = True
 
     def warm_file_mentions_cache(self) -> None:
         self._mention_index.warm_cache()
@@ -1189,6 +1223,8 @@ class WebSessionManager:
             daemon=True,
             name=f"pbi-agent-web-task-{task_id[:8]}",
         )
+        with self._lock:
+            self._task_workers[task_id] = worker
         worker.start()
         return self._serialize_task_record(running_record)
 
@@ -1779,17 +1815,23 @@ class WebSessionManager:
         }
 
     def shutdown(self) -> None:
+        with self._lock:
+            self._shutdown_requested = True
         sessions = list(self._live_sessions.values())
         for session in sessions:
             session.display.request_shutdown()
         for session in sessions:
             session.worker.join(timeout=1.5)
+        task_workers = list(self._task_workers.values())
+        for worker in task_workers:
+            worker.join(timeout=1.5)
         with self._lock:
             provider_auth_flows = list(self._provider_auth_flows.values())
             self._provider_auth_flows.clear()
         for flow in provider_auth_flows:
             self._cancel_provider_auth_flow_browser_timeout(flow)
             self._shutdown_provider_auth_flow_browser_listener(flow)
+        self._finalize_shutdown_if_idle()
 
     def _run_session_worker(self, live_session_id: str) -> None:
         live_session = self._live_sessions[live_session_id]
@@ -1935,11 +1977,41 @@ class WebSessionManager:
         finally:
             with self._lock:
                 self._running_task_ids.discard(task_id)
+                self._task_workers.pop(task_id, None)
+            self._finalize_shutdown_if_idle()
 
     def _publish_task_updated(self, record: KanbanTaskRecord) -> dict[str, Any]:
         payload = self._serialize_task_record(record)
         self._app_stream.publish("task_updated", {"task": payload})
         return payload
+
+    def _renew_manager_lease_loop(self) -> None:
+        while not self._lease_stop.wait(_WEB_MANAGER_LEASE_HEARTBEAT_SECS):
+            with SessionStore() as store:
+                renewed = store.renew_web_manager_lease(
+                    self._directory_key,
+                    owner_id=self._manager_owner_id,
+                )
+            if not renewed:
+                return
+
+    def _finalize_shutdown_if_idle(self) -> None:
+        with self._lock:
+            if not self._started or not self._shutdown_requested:
+                return
+            if any(worker.is_alive() for worker in self._task_workers.values()):
+                return
+            lease_thread = self._lease_thread
+            self._lease_thread = None
+            self._lease_stop.set()
+            self._started = False
+        if lease_thread is not None and lease_thread.is_alive():
+            lease_thread.join(timeout=1.0)
+        with SessionStore() as store:
+            store.release_web_manager_lease(
+                self._directory_key,
+                owner_id=self._manager_owner_id,
+            )
 
     def _require_saved_session(self, session_id: str) -> SessionRecord:
         with SessionStore() as store:

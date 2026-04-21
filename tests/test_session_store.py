@@ -404,6 +404,28 @@ def test_default_kanban_stage_configs_are_neutral(tmp_path) -> None:
     assert all(stage.auto_start is False for stage in stages)
 
 
+def test_web_manager_lease_blocks_concurrent_owner(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        assert store.acquire_web_manager_lease(
+            "/w",
+            owner_id="owner-a",
+            stale_after_seconds=30,
+        )
+        assert not store.acquire_web_manager_lease(
+            "/w",
+            owner_id="owner-b",
+            stale_after_seconds=30,
+        )
+        assert store.renew_web_manager_lease("/w", owner_id="owner-a")
+        assert store.release_web_manager_lease("/w", owner_id="owner-a")
+        assert store.acquire_web_manager_lease(
+            "/w",
+            owner_id="owner-b",
+            stale_after_seconds=30,
+        )
+
+
 def test_move_kanban_task_reorders_within_stage(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

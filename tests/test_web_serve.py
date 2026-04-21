@@ -5,6 +5,7 @@ import base64
 import json
 from io import BytesIO, StringIO
 from pathlib import Path
+import threading
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -12,6 +13,7 @@ import urllib.error
 import urllib.request
 
 from fastapi.testclient import TestClient
+import pytest
 from rich.console import Console
 
 from pbi_agent.agent.session import NEW_SESSION_SENTINEL
@@ -37,6 +39,7 @@ from pbi_agent.config import (
 )
 from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
 from pbi_agent.display.protocol import QueuedInput, QueuedRuntimeChange
+from pbi_agent.web.session_manager import WebSessionManager
 from pbi_agent.web.serve import PBIWebServer, create_app
 
 
@@ -1023,6 +1026,88 @@ def test_auto_start_stage_runs_once_before_done(monkeypatch, tmp_path) -> None:
     assert task_payload["stage"] == "done"
     assert task_payload["run_status"] == "completed"
     assert task_payload["session_id"] == "session-2"
+
+
+def test_second_manager_start_does_not_mark_running_task_failed(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    started = threading.Event()
+    finish = threading.Event()
+
+    def blocking_run_single_turn_in_directory(*args, **kwargs):
+        started.set()
+        if not finish.wait(timeout=2):
+            raise AssertionError("task worker did not unblock in time")
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Completed.",
+            session_id="session-1",
+        )
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "implement", "name": "Implement"},
+                {"id": "done", "name": "Done"},
+            ]
+        )
+        task = manager.create_task(
+            title="Task A",
+            prompt="Investigate",
+            stage="implement",
+        )
+        task_id = str(task["task_id"])
+
+        with patch(
+            "pbi_agent.web.session_manager.run_single_turn_in_directory",
+            side_effect=blocking_run_single_turn_in_directory,
+        ):
+            manager.run_task(task_id)
+            assert started.wait(timeout=1)
+
+            deadline = time.monotonic() + 2
+            while True:
+                with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                    current = store.get_kanban_task(task_id)
+                assert current is not None
+                if current.run_status == "running":
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("task did not enter running state in time")
+                time.sleep(0.01)
+
+            second_manager = WebSessionManager(_settings())
+            with pytest.raises(
+                RuntimeError,
+                match="Another web app instance is already managing this workspace",
+            ):
+                second_manager.start()
+
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                current = store.get_kanban_task(task_id)
+            assert current is not None
+            assert current.run_status == "running"
+
+            finish.set()
+
+            deadline = time.monotonic() + 2
+            while True:
+                with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                    current = store.get_kanban_task(task_id)
+                assert current is not None
+                if current.run_status == "completed":
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("task did not finish in time")
+                time.sleep(0.01)
+    finally:
+        finish.set()
+        manager.shutdown()
 
 
 def test_run_task_rejects_backlog_when_no_next_stage(monkeypatch, tmp_path) -> None:

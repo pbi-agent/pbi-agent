@@ -40,6 +40,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        manager.start()
         threading.Thread(
             target=manager.warm_file_mentions_cache,
             daemon=True,
