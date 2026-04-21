@@ -445,6 +445,58 @@ def build_parser() -> argparse.ArgumentParser:
         help="Replace an existing local project command install.",
     )
 
+    agents_parser = add_command_parser(
+        "agents", "List or install project-scoped sub-agents."
+    )
+    agents_subparsers = agents_parser.add_subparsers(
+        dest="agents_action",
+        required=True,
+        metavar="<action>",
+    )
+    agents_subparsers.add_parser(
+        "list",
+        prog="pbi-agent agents list",
+        description="List installed project agents from .agents/agents.",
+        help="List installed project agents.",
+        formatter_class=CleanHelpFormatter,
+    )
+    agents_add_parser = agents_subparsers.add_parser(
+        "add",
+        prog="pbi-agent agents add",
+        description=(
+            "Install a project agent from the official catalog, a local path, "
+            "or a GitHub repository."
+        ),
+        help="Install a project agent.",
+        formatter_class=CleanHelpFormatter,
+    )
+    agents_add_parser.add_argument(
+        "source",
+        nargs="?",
+        default=None,
+        help=(
+            "Optional source. Omit to use the official pbi-agent/agents "
+            "catalog. Supports local paths, owner/repo, repository URLs, and "
+            "tree URLs."
+        ),
+    )
+    agents_add_parser.add_argument(
+        "--agent",
+        dest="agent_name",
+        default=None,
+        help="Select one agent from a multi-agent source.",
+    )
+    agents_add_parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List remote candidate agents without installing anything.",
+    )
+    agents_add_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing local project agent install.",
+    )
+
     config_parser = add_command_parser(
         "config", "Manage saved providers and model profiles."
     )
@@ -824,6 +876,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "commands":
         return _handle_commands_command(args)
+
+    if args.command == "agents":
+        return _handle_agents_command(args)
 
     if args.command == "init":
         return _handle_init_command(args)
@@ -1321,6 +1376,54 @@ def _handle_commands_add_command(args: argparse.Namespace) -> int:
         return 2
 
     print(f"Installed command '{result.slash_alias}' to {result.install_path}")
+    return 0
+
+
+def _handle_agents_command(args: argparse.Namespace) -> int:
+    if args.agents_action == "list":
+        return _handle_agents_list_command(args)
+    if args.agents_action == "add":
+        return _handle_agents_add_command(args)
+    print(f"Error: unknown agents action {args.agents_action!r}", file=sys.stderr)
+    return 2
+
+
+def _handle_agents_list_command(args: argparse.Namespace) -> int:
+    from pbi_agent.agents.project_catalog import render_installed_project_agents
+
+    return render_installed_project_agents(workspace=Path.cwd().resolve())
+
+
+def _handle_agents_add_command(args: argparse.Namespace) -> int:
+    from pbi_agent.agents.project_installer import (
+        DEFAULT_AGENTS_SOURCE,
+        ProjectAgentInstallError,
+        install_project_agent,
+        list_remote_project_agents,
+        render_remote_agent_listing,
+    )
+
+    effective_source = args.source or DEFAULT_AGENTS_SOURCE
+    try:
+        if args.source is None and args.agent_name is None:
+            listing = list_remote_project_agents(effective_source)
+            return render_remote_agent_listing(listing)
+
+        if args.list:
+            listing = list_remote_project_agents(effective_source)
+            return render_remote_agent_listing(listing)
+
+        result = install_project_agent(
+            effective_source,
+            agent_name=args.agent_name,
+            force=args.force,
+            workspace=Path.cwd().resolve(),
+        )
+    except ProjectAgentInstallError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"Installed agent '{result.agent_name}' to {result.install_path}")
     return 0
 
 

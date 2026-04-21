@@ -40,7 +40,7 @@ def test_registry_returns_none_for_unknown_tool() -> None:
 def test_registry_sub_agent_schema_uses_project_agent_enum(
     tmp_path, monkeypatch
 ) -> None:
-    agents_dir = tmp_path / ".agents"
+    agents_dir = tmp_path / ".agents" / "agents"
     agents_dir.mkdir(parents=True)
     (agents_dir / "reviewer.md").write_text(
         "---\nname: reviewer\ndescription: Reviews code.\n---\n\nReview prompt.\n",

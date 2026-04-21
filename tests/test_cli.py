@@ -280,6 +280,48 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertFalse(args.list)
         self.assertFalse(args.force)
 
+    def test_parser_accepts_agents_list_command(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["agents", "list"])
+
+        self.assertEqual(args.command, "agents")
+        self.assertEqual(args.agents_action, "list")
+
+    def test_parser_accepts_agents_add_command(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(
+            [
+                "agents",
+                "add",
+                "owner/repo",
+                "--agent",
+                "code-reviewer",
+                "--list",
+                "--force",
+            ]
+        )
+
+        self.assertEqual(args.command, "agents")
+        self.assertEqual(args.agents_action, "add")
+        self.assertEqual(args.source, "owner/repo")
+        self.assertEqual(args.agent_name, "code-reviewer")
+        self.assertTrue(args.list)
+        self.assertTrue(args.force)
+
+    def test_parser_accepts_agents_add_without_source(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["agents", "add"])
+
+        self.assertEqual(args.command, "agents")
+        self.assertEqual(args.agents_action, "add")
+        self.assertIsNone(args.source)
+        self.assertIsNone(args.agent_name)
+        self.assertFalse(args.list)
+        self.assertFalse(args.force)
+
     def test_parser_rejects_removed_skills_flag(self) -> None:
         with self.assertRaises(SystemExit) as exc_info:
             cli.build_parser().parse_args(["--skills"])
@@ -975,6 +1017,124 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 11)
         mock_list.assert_called_once_with("./commands/local")
+        mock_render.assert_called_once_with(listing)
+
+    def test_main_agents_list_lists_project_agents_without_settings(self) -> None:
+        stdout = io.StringIO()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = Path.cwd()
+            root_dir = Path(tmpdir).resolve()
+            agents_dir = root_dir / ".agents" / "agents"
+            agents_dir.mkdir(parents=True)
+            (agents_dir / "code-reviewer.md").write_text(
+                "---\n"
+                "name: code-reviewer\n"
+                "description: Reviews code changes.\n"
+                "---\n\n"
+                "You are a code reviewer.\n",
+                encoding="utf-8",
+            )
+
+            try:
+                os.chdir(root_dir)
+                with patch("sys.stdout", stdout):
+                    rc = cli.main(["agents", "list"])
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(rc, 0)
+        output = stdout.getvalue()
+        self.assertIn("Project Agents", output)
+        self.assertIn("code-reviewer", output)
+
+    def test_main_agents_add_routes_without_settings(self) -> None:
+        with (
+            patch(
+                "pbi_agent.cli._handle_agents_command", return_value=41
+            ) as mock_handle,
+            patch("pbi_agent.cli.resolve_runtime") as mock_resolve_runtime,
+            patch("pbi_agent.cli.resolve_web_runtime") as mock_resolve_web_runtime,
+        ):
+            rc = cli.main(["agents", "add", "owner/repo"])
+
+        self.assertEqual(rc, 41)
+        self.assertEqual(mock_handle.call_args.args[0].command, "agents")
+        self.assertEqual(mock_handle.call_args.args[0].agents_action, "add")
+        mock_resolve_runtime.assert_not_called()
+        mock_resolve_web_runtime.assert_not_called()
+
+    def test_handle_agents_add_without_source_lists_default_catalog(self) -> None:
+        args = cli.build_parser().parse_args(["agents", "add"])
+        listing = object()
+
+        with (
+            patch(
+                "pbi_agent.agents.project_installer.list_remote_project_agents",
+                return_value=listing,
+            ) as mock_list,
+            patch(
+                "pbi_agent.agents.project_installer.render_remote_agent_listing",
+                return_value=15,
+            ) as mock_render,
+            patch(
+                "pbi_agent.agents.project_installer.install_project_agent"
+            ) as mock_install,
+        ):
+            rc = cli._handle_agents_add_command(args)
+
+        self.assertEqual(rc, 15)
+        mock_list.assert_called_once_with("pbi-agent/agents")
+        mock_render.assert_called_once_with(listing)
+        mock_install.assert_not_called()
+
+    def test_handle_agents_add_with_agent_and_no_source_installs_default_catalog(
+        self,
+    ) -> None:
+        args = cli.build_parser().parse_args(
+            ["agents", "add", "--agent", "code-reviewer"]
+        )
+        result = Mock(name="result")
+        result.agent_name = "code-reviewer"
+        result.install_path = Path("/tmp/workspace/.agents/agents/code-reviewer.md")
+
+        with (
+            patch(
+                "pbi_agent.agents.project_installer.install_project_agent",
+                return_value=result,
+            ) as mock_install,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli._handle_agents_add_command(args)
+
+        self.assertEqual(rc, 0)
+        mock_install.assert_called_once()
+        self.assertEqual(mock_install.call_args.args[0], "pbi-agent/agents")
+        self.assertEqual(mock_install.call_args.kwargs["agent_name"], "code-reviewer")
+        self.assertIn("Installed agent 'code-reviewer'", stdout.getvalue())
+
+    def test_handle_agents_add_with_explicit_source_and_list_keeps_source(
+        self,
+    ) -> None:
+        args = cli.build_parser().parse_args(
+            ["agents", "add", "./agents/local", "--list"]
+        )
+        listing = object()
+
+        with (
+            patch(
+                "pbi_agent.agents.project_installer.list_remote_project_agents",
+                return_value=listing,
+            ) as mock_list,
+            patch(
+                "pbi_agent.agents.project_installer.render_remote_agent_listing",
+                return_value=17,
+            ) as mock_render,
+        ):
+            rc = cli._handle_agents_add_command(args)
+
+        self.assertEqual(rc, 17)
+        mock_list.assert_called_once_with("./agents/local")
         mock_render.assert_called_once_with(listing)
 
     def test_main_mcp_flag_lists_project_servers_without_settings(self) -> None:

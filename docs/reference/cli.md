@@ -125,6 +125,41 @@ Installs a command preset from the official catalog, a local path, or a GitHub r
 
 Public command catalogs are discovered from `commands/*.md` by default. If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
 
+## `pbi-agent agents`
+
+List installed project agents or install reusable sub-agent definitions into `.agents/agents/`.
+
+```bash
+pbi-agent agents list
+pbi-agent agents add
+pbi-agent agents add --agent code-reviewer
+pbi-agent agents add ./agents/local
+pbi-agent agents add owner/private-repo --agent repo-reviewer
+```
+
+### `pbi-agent agents list`
+
+Lists the currently installed project-local agent files discovered under `.agents/agents/`.
+
+### `pbi-agent agents add [source]`
+
+Installs an agent definition from the official catalog, a local path, or a GitHub repository.
+
+- Omitting `source` uses the official `pbi-agent/agents` catalog from `https://github.com/pbi-agent/agents`.
+- `pbi-agent agents add` lists the official catalog and exits.
+- `pbi-agent agents add --list` also lists candidate agents from the selected source.
+- `pbi-agent agents add --agent NAME` installs one named agent from the selected source.
+- Explicit multi-agent sources still require `--agent NAME` for installation.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `source` | `pbi-agent/agents` when omitted | Local path, GitHub `owner/repo`, GitHub repository URL, or GitHub tree URL. |
+| `--agent NAME` | none | Select one agent from a multi-agent source, or install one agent from the default catalog. |
+| `--list` | `false` | List candidate agents from the selected source without installing anything. |
+| `--force` | `false` | Replace an existing local install under `.agents/agents/<agent-name>.md`. |
+
+Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
+
 ## `pbi-agent config`
 
 Manage the saved internal config file under `~/.pbi-agent/config.json` (or `PBI_AGENT_INTERNAL_CONFIG_PATH` in tests and custom setups).

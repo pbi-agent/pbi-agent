@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
+from rich.console import Console
+from rich.table import Table
+
 _DISCOVERY_ROOT = Path(".agents") / "agents"
 
 
@@ -41,6 +44,30 @@ def format_project_sub_agents_markdown(
     for agent in agents:
         lines.append(f"- `{agent.name}`: {agent.description}")
     return "\n".join(lines)
+
+
+def render_installed_project_sub_agents(
+    workspace: Path | None = None,
+    *,
+    console: Console | None = None,
+) -> int:
+    agents = discover_project_sub_agents(workspace=workspace)
+    active_console = console or Console()
+
+    if not agents:
+        active_console.print(
+            "[dim]No project agents discovered under[/dim] .agents/agents/"
+        )
+        return 0
+
+    table = Table(title="Project Agents", title_style="bold cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Description")
+    table.add_column("Location", style="dim")
+    for agent in agents:
+        table.add_row(agent.name, agent.description, str(agent.location))
+    active_console.print(table)
+    return 0
 
 
 def _warn(message: str) -> None:

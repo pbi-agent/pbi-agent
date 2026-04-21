@@ -88,4 +88,6 @@ pbi-agent skills add
 pbi-agent skills add --skill openai-docs
 pbi-agent commands add
 pbi-agent commands add --command execute
+pbi-agent agents add
+pbi-agent agents add --agent code-reviewer
 ```

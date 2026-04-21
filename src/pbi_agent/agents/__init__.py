@@ -1,0 +1,1 @@
+"""Project sub-agent catalog and installation helpers."""

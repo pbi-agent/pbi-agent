@@ -140,6 +140,17 @@ At runtime, project commands are discovered from `.agents/commands/*.md`. The no
 
 `pbi-agent` can also discover project-local sub-agent definitions and advertise them to the main agent as specialized delegated worker choices for the `sub_agent` tool.
 
+You can manage project-local installs directly from the CLI:
+
+```bash
+pbi-agent agents add
+pbi-agent agents add --agent code-reviewer
+pbi-agent agents add ./agents/local
+pbi-agent agents add owner/private-repo --agent repo-reviewer
+```
+
+Omitting `source` uses the official `pbi-agent/agents` catalog from `https://github.com/pbi-agent/agents` and lists the available entries. Explicit multi-agent sources still require `--agent <name>` when installing.
+
 Supported root:
 
 - `.agents/agents/<agent-name>.md`
@@ -177,7 +188,6 @@ Project sub-agents:
 
 - Run in isolated child-agent contexts by default. Set `include_context: true` on the `sub_agent` tool call to inherit the parent conversation context.
 - Use the same provider as the parent session.
-- Can override the child `model` and `reasoning_effort` per sub-agent.
 - Cannot recursively spawn more sub-agents in this build.
 
 You can inspect the discovered catalog without starting a model request:
