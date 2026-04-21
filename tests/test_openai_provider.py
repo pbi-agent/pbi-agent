@@ -802,7 +802,9 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
         text="",
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
-            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+            ToolCall(
+                call_id="call_2", name="python_exec", arguments={"code": "print(1)"}
+            ),
         ],
     )
     batch = ToolExecutionBatch(
@@ -861,10 +863,10 @@ def test_openai_execute_tool_calls_returns_function_call_outputs(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "init_report",
+            "name": "python_exec",
             "success": False,
             "call_id": "call_2",
-            "arguments": {"dest": "."},
+            "arguments": {"code": "print(1)"},
         },
     ]
     assert display_spy.tool_group_end_count == 1
@@ -882,7 +884,9 @@ def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
         text="",
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
-            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+            ToolCall(
+                call_id="call_2", name="python_exec", arguments={"code": "print(1)"}
+            ),
         ],
         provider_data={
             "function_call_items": {
@@ -898,8 +902,8 @@ def test_openai_execute_tool_calls_returns_only_outputs_for_chatgpt_backend(
                     "type": "function_call",
                     "id": "fc_2",
                     "call_id": "call_2",
-                    "name": "init_report",
-                    "arguments": '{"dest":"."}',
+                    "name": "python_exec",
+                    "arguments": '{"code":"print(1)"}',
                     "status": "completed",
                 },
             }

@@ -8,8 +8,6 @@ from pbi_agent.tools.types import ToolHandler, ToolSpec
 _REGISTRY: dict[str, tuple[ToolSpec | Callable[[], ToolSpec], ToolHandler]] = {}
 
 # --- built-in function tools -----------------------------------------------
-from pbi_agent.tools.skill_knowledge import SPEC as _sk_spec, handle as _sk_handle  # noqa: E402
-from pbi_agent.tools.init_report import SPEC as _ir_spec, handle as _ir_handle  # noqa: E402
 from pbi_agent.tools.shell import SPEC as _sh_spec, handle as _sh_handle  # noqa: E402
 from pbi_agent.tools.python_exec import SPEC as _pe_spec, handle as _pe_handle  # noqa: E402
 from pbi_agent.tools.apply_patch import SPEC as _ap_spec, handle as _ap_handle  # noqa: E402
@@ -20,8 +18,6 @@ from pbi_agent.tools.read_image import SPEC as _ri_spec, handle as _ri_handle  #
 from pbi_agent.tools.read_web_url import SPEC as _rwu_spec, handle as _rwu_handle  # noqa: E402
 from pbi_agent.tools.sub_agent import build_spec as _sa_build_spec, handle as _sa_handle  # noqa: E402
 
-_REGISTRY[_sk_spec.name] = (_sk_spec, _sk_handle)
-_REGISTRY[_ir_spec.name] = (_ir_spec, _ir_handle)
 _REGISTRY[_sh_spec.name] = (_sh_spec, _sh_handle)
 _REGISTRY[_pe_spec.name] = (_pe_spec, _pe_handle)
 _REGISTRY[_ap_spec.name] = (_ap_spec, _ap_handle)

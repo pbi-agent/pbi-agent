@@ -57,7 +57,6 @@ from pbi_agent.config import (
     update_model_profile_config,
     update_provider_config,
 )
-from pbi_agent.init_command import init_report
 from pbi_agent.log_config import configure_logging
 
 LOGGER = logging.getLogger(__name__)
@@ -99,7 +98,7 @@ class CleanHelpFormatter(argparse.HelpFormatter):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pbi-agent",
-        description="Local CLI agent for creating, auditing, and editing Power BI PBIP reports.",
+        description="Lightweight local coding agent.",
         usage="%(prog)s [GLOBAL OPTIONS] [<command>] [COMMAND OPTIONS]",
         epilog=(
             "Run `pbi-agent <command> --help` for command-specific options. "
@@ -311,16 +310,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional public URL for reverse-proxy setups.",
     )
 
-    audit_parser = add_command_parser(
-        "audit", "Audit a report and write AUDIT-REPORT.md."
-    )
-    audit_parser.add_argument(
-        "--report-dir",
-        type=Path,
-        default=Path("."),
-        help="Relative report directory to audit (default: current directory).",
-    )
-
     sessions_parser = add_command_parser(
         "sessions", "List past sessions for the current directory."
     )
@@ -334,21 +323,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--all-dirs",
         action="store_true",
         help="Show sessions from all directories, not just the current one.",
-    )
-
-    init_parser = add_command_parser(
-        "init", "Create a report project from the bundled template."
-    )
-    init_parser.add_argument(
-        "--dest",
-        type=Path,
-        default=None,
-        help="Target directory (defaults to current directory).",
-    )
-    init_parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Overwrite existing files if they already exist.",
     )
 
     skills_parser = add_command_parser(
@@ -888,9 +862,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "agents":
         return _handle_agents_command(args)
 
-    if args.command == "init":
-        return _handle_init_command(args)
-
     if args.command == "sessions":
         return _handle_sessions_command(args)
 
@@ -912,7 +883,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 "Error: runtime provider/model flags are no longer supported with "
                 "`pbi-agent web`. Configure the web UI in Settings and use "
-                "`--profile-id` or explicit runtime flags only with `run` or `audit`.",
+                "`--profile-id` or explicit runtime flags only with `run`.",
                 file=sys.stderr,
             )
             return 2
@@ -947,9 +918,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         return _handle_run_command(args, runtime)
-
-    if args.command == "audit":
-        return _handle_audit_command(args, runtime)
 
     parser.error("Unknown command.")
     return 1
@@ -1490,8 +1458,6 @@ def _handle_agents_flag(args: argparse.Namespace) -> int:
 def _workspace_directory_for_args(args: argparse.Namespace) -> Path:
     if getattr(args, "command", None) == "run" and getattr(args, "project_dir", None):
         return (Path.cwd() / args.project_dir).resolve()
-    if getattr(args, "command", None) == "audit" and getattr(args, "report_dir", None):
-        return (Path.cwd() / args.report_dir).resolve()
     return Path.cwd().resolve()
 
 
@@ -1532,66 +1498,6 @@ def _handle_run_command(
         )
     finally:
         os.chdir(original_cwd)
-
-
-def _handle_audit_command(
-    args: argparse.Namespace,
-    settings: Settings | ResolvedRuntime,
-) -> int:
-    runtime = _coerce_runtime(settings)
-    from pbi_agent.agent.error_formatting import format_user_facing_error
-    from pbi_agent.agent.audit_prompt import (
-        AUDIT_REPORT_FILENAME,
-        AUDIT_TODO_FILENAME,
-        build_audit_prompt,
-        copy_audit_todo,
-    )
-
-    report_dir_input = args.report_dir or Path(".")
-    report_dir = (Path.cwd() / report_dir_input).resolve()
-
-    if not report_dir.exists():
-        print(f"Error: Report directory does not exist: {report_dir}", file=sys.stderr)
-        return 1
-    if not report_dir.is_dir():
-        print(f"Error: Report path is not a directory: {report_dir}", file=sys.stderr)
-        return 1
-
-    original_cwd = Path.cwd()
-    try:
-        os.chdir(report_dir)
-        copy_audit_todo(report_dir)
-        exit_code = _run_single_turn_command(
-            prompt=build_audit_prompt(),
-            settings=runtime,
-            single_turn_hint=(
-                f"Audit mode: Evaluating report and writing "
-                f"{AUDIT_TODO_FILENAME} progress tracker and "
-                f"{AUDIT_REPORT_FILENAME}."
-            ),
-        )
-    except KeyboardInterrupt:
-        return 130
-    except Exception as exc:
-        _print_error(format_user_facing_error(exc))
-        return 1
-    finally:
-        os.chdir(original_cwd)
-
-    if exit_code in {1, 130}:
-        return exit_code
-
-    report_path = report_dir / AUDIT_REPORT_FILENAME
-    if not report_path.exists():
-        print(
-            f"Error: Audit mode completed but did not produce "
-            f"{AUDIT_REPORT_FILENAME} in {report_dir}",
-            file=sys.stderr,
-        )
-        return exit_code or 1
-
-    print(f"Audit report written to {report_path}")
-    return exit_code
 
 
 def _run_single_turn_command(
@@ -1947,14 +1853,3 @@ def _handle_sessions_command(args: argparse.Namespace) -> int:
             f"{title:<24} {tokens:>10} {cost:>8} {updated}"
         )
     return 0
-
-
-def _handle_init_command(args: argparse.Namespace) -> int:
-    dest = args.dest or Path.cwd()
-    try:
-        init_report(dest, force=args.force)
-        print(f"Report template created in {dest}")
-        return 0
-    except FileExistsError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1

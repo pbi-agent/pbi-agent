@@ -1,6 +1,5 @@
-[X] Inspect OpenAI and ChatGPT subscription request ordering paths
-[X] Revert the unsafe OpenAI Responses first-turn patch
-[X] Keep ChatGPT subscription ordering behavior intact
-[X] Add or update focused regression coverage
-[X] Run targeted validation
-[X] Append task note to MEMORY.md
+[X] Run full Python test suite and capture failures
+[X] Diagnose failing tests and isolate root causes
+[X] Implement targeted fixes
+[X] Re-run affected tests, then full Python suite if needed
+[X] Append task summary to MEMORY.md

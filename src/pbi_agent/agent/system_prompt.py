@@ -7,15 +7,7 @@ from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 from pbi_agent.agent.skill_discovery import discover_project_skills
 
 _DEFAULT_SYSTEM_PROMPT = """
-You are pbi-agent, a local CLI agent for creating, auditing, and editing Power BI PBIP projects.
-
-<power_bi_rules>
-- Use explicit measures in visuals; never rely on implicit aggregations.
-- Dedicated measures table must be named `_Measures`, never `Measures`.
-- Never modify auto-generated date tables (`DateTableTemplate_*`, `LocalDateTable_*`); skip their descriptions — their TMDL schema is restricted.
-- Distribute visuals intentionally across the canvas unless the user specifies a layout.
-- Style priority: explicit user instruction > existing project/brand conventions > skill default preset.
-</power_bi_rules>
+You are an expert coding assistant. You help users with coding tasks by reading files, executing commands, editing code, and writing new files.
 """.strip()
 
 _SUB_AGENT_PROMPT = """
@@ -24,10 +16,6 @@ _SUB_AGENT_PROMPT = """
 - You are in background mode and will not interact with the user directly. Do not ask the user questions.
 </persona>
 """.strip()
-
-# Tools that are specific to the default Power BI mode and should be
-# excluded when a custom INSTRUCTIONS.md replaces the built-in prompt.
-_PBI_ONLY_TOOLS: frozenset[str] = frozenset({"skill_knowledge", "init_report"})
 
 _MAX_FILE_BYTES = 1_000_000  # 1 MB
 
@@ -188,6 +176,4 @@ def get_sub_agent_system_prompt(agent_prompt_override: str | None = None) -> str
 
 def get_custom_excluded_tools() -> set[str]:
     """Return tool names to exclude when custom instructions are active."""
-    if load_instructions() is not None:
-        return set(_PBI_ONLY_TOOLS)
     return set()

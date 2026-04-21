@@ -325,8 +325,8 @@ def test_no_excluded_tools_without_instructions(tmp_path, monkeypatch):
     assert get_custom_excluded_tools() == set()
 
 
-def test_skill_knowledge_excluded_with_instructions(tmp_path, monkeypatch):
+def test_no_excluded_tools_with_instructions(tmp_path, monkeypatch):
     (tmp_path / "INSTRUCTIONS.md").write_text("Custom agent.", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     excluded = get_custom_excluded_tools()
-    assert excluded == {"skill_knowledge", "init_report"}
+    assert excluded == set()

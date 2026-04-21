@@ -120,14 +120,14 @@ def test_google_build_request_body_uses_interactions_shape() -> None:
     assert "previous_interaction_id" not in body
 
 
-def test_google_provider_normalizes_empty_required_lists_in_tool_schemas() -> None:
+def test_google_provider_exposes_python_exec_required_schema() -> None:
     provider = GoogleProvider(_make_settings())
 
-    init_report_tool = next(
-        tool for tool in provider._tools if tool["name"] == "init_report"
+    python_exec_tool = next(
+        tool for tool in provider._tools if tool["name"] == "python_exec"
     )
 
-    assert "required" not in init_report_tool["parameters"]
+    assert python_exec_tool["parameters"]["required"] == ["code"]
 
 
 def test_google_parse_response_extracts_function_calls_thoughts_and_usage() -> None:
@@ -303,7 +303,9 @@ def test_google_execute_tool_calls_returns_function_results(
         text="",
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
-            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+            ToolCall(
+                call_id="call_2", name="python_exec", arguments={"code": "print(1)"}
+            ),
         ],
     )
     batch = ToolExecutionBatch(
@@ -347,7 +349,7 @@ def test_google_execute_tool_calls_returns_function_results(
         },
         {
             "type": "function_result",
-            "name": "init_report",
+            "name": "python_exec",
             "call_id": "call_2",
             "result": (
                 '{"ok": false, "error": {"type": "tool_execution_failed", '
@@ -365,10 +367,10 @@ def test_google_execute_tool_calls_returns_function_results(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "init_report",
+            "name": "python_exec",
             "success": False,
             "call_id": "call_2",
-            "arguments": {"dest": "."},
+            "arguments": {"code": "print(1)"},
         },
     ]
     assert display_spy.tool_group_end_count == 1

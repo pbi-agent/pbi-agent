@@ -60,8 +60,8 @@ def test_generic_parse_response_normalizes_assistant_message_and_tool_calls() ->
                                 "id": "call_2",
                                 "type": "function",
                                 "function": {
-                                    "name": "init_report",
-                                    "arguments": {"dest": "."},
+                                    "name": "python_exec",
+                                    "arguments": {"code": "print(1)"},
                                 },
                             },
                         ],
@@ -75,7 +75,7 @@ def test_generic_parse_response_normalizes_assistant_message_and_tool_calls() ->
     assert result.text == "First line. Second line."
     assert result.function_calls == [
         ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
-        ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+        ToolCall(call_id="call_2", name="python_exec", arguments={"code": "print(1)"}),
     ]
     assert result.usage.input_tokens == 21
     assert result.usage.output_tokens == 8
@@ -97,7 +97,7 @@ def test_generic_parse_response_normalizes_assistant_message_and_tool_calls() ->
         "command": "pwd"
     }
     assert json.loads(assistant_message["tool_calls"][1]["function"]["arguments"]) == {
-        "dest": "."
+        "code": "print(1)"
     }
 
 
@@ -321,7 +321,9 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
         text="",
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
-            ToolCall(call_id="call_2", name="init_report", arguments={"dest": "."}),
+            ToolCall(
+                call_id="call_2", name="python_exec", arguments={"code": "print(1)"}
+            ),
         ],
     )
     batch = ToolExecutionBatch(
@@ -380,10 +382,10 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "init_report",
+            "name": "python_exec",
             "success": False,
             "call_id": "call_2",
-            "arguments": {"dest": "."},
+            "arguments": {"code": "print(1)"},
         },
     ]
     assert display_spy.tool_group_end_count == 1

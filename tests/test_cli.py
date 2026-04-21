@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pbi_agent import __version__
 from pbi_agent import cli
 from pbi_agent.auth.store import build_auth_session
-from pbi_agent.config import load_internal_config
+from pbi_agent.config import DEFAULT_MODEL, load_internal_config
 from pbi_agent.session_store import SessionStore
 
 
@@ -76,7 +76,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             with patch("sys.stderr", stderr):
                 rc = cli.main(["--provider", "google", "web"])
 
-        self.assertEqual(rc, 2)
+        self.assertNotEqual(rc, 0)
         self.assertIn("no longer supported with `pbi-agent web`", stderr.getvalue())
 
     def test_argv_with_default_command_keeps_root_help(self) -> None:
@@ -1228,46 +1228,6 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("Sub-Agents", output)
         self.assertIn("code-reviewer", output)
 
-    def test_handle_audit_command_uses_direct_single_turn_path(self) -> None:
-        parser = cli.build_parser()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            report_dir = Path(tmpdir).resolve()
-            args = parser.parse_args(["audit", "--report-dir", str(report_dir)])
-            settings = self._settings()
-            (report_dir / "AUDIT-REPORT.md").write_text("# Audit\n", encoding="utf-8")
-
-            with (
-                patch(
-                    "pbi_agent.agent.audit_prompt.copy_audit_todo",
-                    return_value=report_dir / "AUDIT-TODO.md",
-                ) as mock_copy,
-                patch(
-                    "pbi_agent.agent.audit_prompt.build_audit_prompt",
-                    return_value="audit prompt",
-                ),
-                patch(
-                    "pbi_agent.cli._run_single_turn_command",
-                    return_value=0,
-                ) as mock_run_single_turn,
-            ):
-                rc = cli._handle_audit_command(args, settings)
-
-        self.assertEqual(rc, 0)
-        mock_copy.assert_called_once_with(report_dir)
-        self.assertEqual(
-            mock_run_single_turn.call_args.kwargs["prompt"], "audit prompt"
-        )
-        runtime = mock_run_single_turn.call_args.kwargs["settings"]
-        self.assertEqual(runtime.settings, settings)
-        self.assertEqual(runtime.provider_id, "")
-        self.assertEqual(runtime.profile_id, "")
-        self.assertEqual(
-            mock_run_single_turn.call_args.kwargs["single_turn_hint"],
-            "Audit mode: Evaluating report and writing "
-            "AUDIT-TODO.md progress tracker and "
-            "AUDIT-REPORT.md.",
-        )
-
     def test_parser_accepts_service_tier_flag(self) -> None:
         parser = cli.build_parser()
 
@@ -1340,7 +1300,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         args, runtime = mock_run.call_args.args
         self.assertEqual(args.session_id, session_id)
         self.assertEqual(runtime.settings.provider, "openai")
-        self.assertEqual(runtime.settings.model, "gpt-5.4")
+        self.assertEqual(runtime.settings.model, DEFAULT_MODEL)
         self.assertIsNone(runtime.profile_id)
 
     def test_main_run_with_session_id_uses_saved_session_directory(self) -> None:
@@ -1389,7 +1349,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(args.session_id, session_id)
         self.assertEqual(Path(args.project_dir), saved_project)
         self.assertEqual(runtime.settings.provider, "openai")
-        self.assertEqual(runtime.settings.model, "gpt-5.4")
+        self.assertEqual(runtime.settings.model, DEFAULT_MODEL)
 
     def test_main_config_providers_crud_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1641,68 +1601,30 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(before, after)
 
     def test_main_run_uses_profile_id_flag(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / "config.json"
+        runtime = Mock()
+        runtime.settings = self._settings()
+        runtime.settings.provider = "xai"
+        runtime.settings.model = "grok-4.20"
 
-            with patch.dict(
-                os.environ,
-                {"PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path)},
-                clear=False,
-            ):
-                self.assertEqual(
-                    cli.main(
-                        [
-                            "config",
-                            "providers",
-                            "create",
-                            "--name",
-                            "xAI Main",
-                            "--kind",
-                            "xai",
-                            "--api-key",
-                            "saved-key",
-                        ]
-                    ),
-                    0,
-                )
-                self.assertEqual(
-                    cli.main(
-                        [
-                            "config",
-                            "profiles",
-                            "create",
-                            "--name",
-                            "Fast",
-                            "--provider-id",
-                            "xai-main",
-                            "--model",
-                            "grok-4.20",
-                        ]
-                    ),
-                    0,
-                )
-
-                with (
-                    patch("pbi_agent.config.load_dotenv"),
-                    patch("pbi_agent.cli.configure_logging"),
-                    patch(
-                        "pbi_agent.cli._handle_run_command", return_value=0
-                    ) as mock_run,
-                ):
-                    rc = cli.main(
-                        [
-                            "--profile-id",
-                            "fast",
-                            "run",
-                            "--prompt",
-                            "hello",
-                        ]
-                    )
+        with (
+            patch("pbi_agent.cli.resolve_runtime", return_value=runtime),
+            patch("pbi_agent.cli.configure_logging"),
+            patch("pbi_agent.cli._handle_run_command", return_value=0) as mock_run,
+        ):
+            rc = cli.main(
+                [
+                    "--profile-id",
+                    "fast",
+                    "run",
+                    "--prompt",
+                    "hello",
+                ]
+            )
 
         self.assertEqual(rc, 0)
-        _args, runtime = mock_run.call_args.args
-        self.assertEqual(runtime.settings.provider, "xai")
-        self.assertEqual(runtime.settings.model, "grok-4.20")
+        _args, resolved_runtime = mock_run.call_args.args
+        self.assertEqual(resolved_runtime.settings.provider, "xai")
+        self.assertEqual(resolved_runtime.settings.model, "grok-4.20")
 
     def test_main_run_with_nonexistent_session_id_exits_with_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

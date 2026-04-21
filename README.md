@@ -4,7 +4,7 @@
 
 # PBI AGENT
 
-*Transform data into decisions.*
+*Lightweight local coding agent.*
 
 [![Tests](https://github.com/pbi-agent/pbi-agent/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/pbi-agent/pbi-agent/actions/workflows/tests.yml)
 [![Publish](https://github.com/pbi-agent/pbi-agent/actions/workflows/publish.yml/badge.svg)](https://github.com/pbi-agent/pbi-agent/actions/workflows/publish.yml)
@@ -14,7 +14,7 @@
 
 </div>
 
-`pbi-agent` is a local CLI agent that creates, edits, and audits Power BI PBIP reports through natural language.
+`pbi-agent` is a local CLI and browser-based coding agent for working directly in a repository through natural language.
 
 Repository: [https://github.com/pbi-agent/pbi-agent](https://github.com/pbi-agent/pbi-agent)
 
@@ -26,28 +26,22 @@ Full documentation lives at [pbi-agent.github.io/pbi-agent](https://pbi-agent.gi
 
 ## Quick Start
 
-> `pbi-agent` works with **PBIP** projects, not `.pbix` files.
-
 1. Install the CLI:
 
 ```bash
 uv tool install pbi-agent
 ```
 
-2. Set your API key:
+2. Set your provider credentials:
 
 ```bash
 export PBI_AGENT_API_KEY="sk-..."
 ```
 
-3. Open an existing PBIP project, or scaffold a new one:
+3. Open your project workspace:
 
 ```bash
-# existing PBIP project
-cd /path/to/my-report
-
-# or create a new project
-pbi-agent init --dest .
+cd /path/to/my-project
 ```
 
 4. Start the app:
@@ -65,7 +59,6 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 - [CLI Reference](https://pbi-agent.github.io/pbi-agent/reference/cli)
 - [Environment Variables](https://pbi-agent.github.io/pbi-agent/reference/environment)
 - [Customization](https://pbi-agent.github.io/pbi-agent/guide/customization)
-- [Audit System](https://pbi-agent.github.io/pbi-agent/guide/audit)
 
 ## Customization
 
@@ -84,8 +77,7 @@ See the full [Customization guide](https://pbi-agent.github.io/pbi-agent/guide/c
 ```bash
 pbi-agent
 pbi-agent web
-pbi-agent run --prompt "Summarize this PBIP project."
-pbi-agent audit --report-dir .
+pbi-agent run --prompt "Summarize this repository."
 pbi-agent skills add
 pbi-agent skills add --skill openai-docs
 pbi-agent commands add

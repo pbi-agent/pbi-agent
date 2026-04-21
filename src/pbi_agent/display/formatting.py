@@ -15,8 +15,6 @@ from pbi_agent.models.messages import TokenUsage, context_window_for_model
 TOOL_STYLE_MAP = {
     "shell": "shell",
     "apply_patch": "apply-patch",
-    "skill_knowledge": "skill-knowledge",
-    "init_report": "init-report",
     "list_files": "list-files",
     "search_files": "search-files",
     "read_file": "read-file",
@@ -30,8 +28,6 @@ TOOL_STYLE_MAP = {
 TOOL_ICONS: dict[str, str] = {
     "shell": "\u25b6",  # ▶
     "apply-patch": "\u25a0",  # ■
-    "skill-knowledge": "\u25c6",  # ◆
-    "init-report": "\u2605",  # ★
     "list-files": "\u2630",  # ☰
     "search-files": "\u2315",  # ⌕
     "read-file": "\u2610",  # ☐
@@ -47,8 +43,6 @@ TOOL_ICONS: dict[str, str] = {
 TOOL_BORDER_STYLES: dict[str, str] = {
     "shell": "blue",
     "apply-patch": "#F97316",
-    "skill-knowledge": "green",
-    "init-report": "cyan",
     "list-files": "#818CF8",
     "search-files": "#EC4899",
     "read-file": "#EAB308",
@@ -396,36 +390,6 @@ def format_patch_tool_item(
     return "\n".join(lines)
 
 
-def format_skill_knowledge_item(
-    skills: list[str],
-    *,
-    verbose: bool = False,
-    status: str,
-    call_id: str = "",
-) -> str:
-    skill_list = ", ".join(skills) if skills else "<none>"
-    lines = [
-        f"[dim]skills:[/dim] {escape_markup_text(shorten(skill_list, 120))}  {status}",
-    ]
-    _append_verbose_call_id(lines, call_id, verbose)
-    return "\n".join(lines)
-
-
-def format_init_report_item(
-    dest: str,
-    *,
-    verbose: bool = False,
-    status: str,
-    call_id: str = "",
-    force: bool = False,
-) -> str:
-    lines = [f"[bold]{escape_markup_text(format_informal_path(dest))}[/bold]  {status}"]
-    if force:
-        lines.append("[dim]force:[/dim] true")
-    _append_verbose_call_id(lines, call_id, verbose)
-    return "\n".join(lines)
-
-
 def format_python_exec_item(
     code: str,
     *,
@@ -671,25 +635,6 @@ def route_function_result(
             shorten_path=True,
         )
 
-    if name == "skill_knowledge":
-        raw_skills = args.get("skills", [])
-        skills = raw_skills if isinstance(raw_skills, list) else [str(raw_skills)]
-        return name, format_skill_knowledge_item(
-            skills,
-            verbose=verbose,
-            status=status,
-            call_id=call_id,
-        )
-
-    if name == "init_report":
-        return name, format_init_report_item(
-            str(args.get("dest", ".")),
-            verbose=verbose,
-            status=status,
-            call_id=call_id,
-            force=bool(args.get("force", False)),
-        )
-
     if name == "python_exec":
         return name, format_python_exec_item(
             str(args.get("code", "")),
@@ -774,7 +719,6 @@ __all__ = [
     "escape_markup_text",
     "format_context_tooltip",
     "format_generic_function_item",
-    "format_init_report_item",
     "format_list_files_item",
     "format_patch_tool_item",
     "format_python_exec_item",
@@ -785,7 +729,6 @@ __all__ = [
     "format_session_subtitle",
     "format_session_subtitle_parts",
     "format_shell_tool_item",
-    "format_skill_knowledge_item",
     "format_usage_summary",
     "format_web_search_sources_item",
     "format_wait_seconds",
