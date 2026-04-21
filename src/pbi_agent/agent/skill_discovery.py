@@ -115,6 +115,7 @@ def _parse_frontmatter(frontmatter: str, skill_path: Path) -> dict[str, str] | N
         return parse_simple_frontmatter(
             frontmatter,
             block_scalar_keys=frozenset({"description"}),
+            include_keys=frozenset({"name", "description"}),
         )
     except FrontmatterParseError as exc:
         _warn(f"Skipping skill at {skill_path}: {exc}")

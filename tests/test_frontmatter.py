@@ -23,3 +23,41 @@ def test_block_scalars_are_rejected_for_disallowed_keys() -> None:
             "name: >\n  foo\n  bar\ndescription: ok\n",
             block_scalar_keys=frozenset({"description"}),
         )
+
+
+def test_include_keys_ignores_unsupported_nested_metadata() -> None:
+    metadata = parse_simple_frontmatter(
+        (
+            "name: vitepress\n"
+            "description: VitePress docs skill.\n"
+            "metadata:\n"
+            "  author: Anthony Fu\n"
+            '  version: "2026.1.28"\n'
+        ),
+        block_scalar_keys=frozenset({"description"}),
+        include_keys=frozenset({"name", "description"}),
+    )
+
+    assert metadata == {
+        "name": "vitepress",
+        "description": "VitePress docs skill.",
+    }
+
+
+def test_include_keys_ignores_indentless_sequence_values() -> None:
+    metadata = parse_simple_frontmatter(
+        (
+            "name: compress\n"
+            "description: Compression skill.\n"
+            "tools:\n"
+            "- shell\n"
+            "- read_file\n"
+        ),
+        block_scalar_keys=frozenset({"description"}),
+        include_keys=frozenset({"name", "description"}),
+    )
+
+    assert metadata == {
+        "name": "compress",
+        "description": "Compression skill.",
+    }

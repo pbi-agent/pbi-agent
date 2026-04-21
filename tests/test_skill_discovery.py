@@ -118,6 +118,52 @@ def test_block_scalar_name_is_skipped(tmp_path: Path, capsys) -> None:
     assert "unsupported block scalar for key 'name'" in capsys.readouterr().err
 
 
+def test_nested_metadata_is_ignored_for_skill_discovery(tmp_path: Path) -> None:
+    skill_dir = tmp_path / ".agents" / "skills" / "vitepress"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: vitepress\n"
+        "description: VitePress static site generator skill.\n"
+        "metadata:\n"
+        "  author: Anthony Fu\n"
+        '  version: "2026.1.28"\n'
+        "---\n\n"
+        "# vitepress\n",
+        encoding="utf-8",
+    )
+
+    skills = discover_project_skills(tmp_path)
+
+    assert [skill.name for skill in skills] == ["vitepress"]
+    assert [skill.description for skill in skills] == [
+        "VitePress static site generator skill."
+    ]
+
+
+def test_indentless_sequence_fields_are_ignored_for_skill_discovery(
+    tmp_path: Path,
+) -> None:
+    skill_dir = tmp_path / ".agents" / "skills" / "compress"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: compress\n"
+        "description: Compress markdown-heavy notes.\n"
+        "tools:\n"
+        "- read_file\n"
+        "- apply_patch\n"
+        "---\n\n"
+        "# compress\n",
+        encoding="utf-8",
+    )
+
+    skills = discover_project_skills(tmp_path)
+
+    assert [skill.name for skill in skills] == ["compress"]
+    assert [skill.description for skill in skills] == ["Compress markdown-heavy notes."]
+
+
 def test_name_directory_mismatch_warns_but_loads(tmp_path: Path, capsys) -> None:
     _write_skill(
         tmp_path / ".agents" / "skills",

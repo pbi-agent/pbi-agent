@@ -127,6 +127,7 @@ def _parse_frontmatter(frontmatter: str) -> dict[str, str]:
         return parse_simple_frontmatter(
             frontmatter,
             block_scalar_keys=frozenset({"description"}),
+            include_keys=frozenset({"name", "description"}),
         )
     except FrontmatterParseError as exc:
         raise SkillManifestError(str(exc)) from exc

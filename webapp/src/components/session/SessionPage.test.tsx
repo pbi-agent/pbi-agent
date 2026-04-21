@@ -415,7 +415,8 @@ describe("SessionPage", () => {
     renderSessionRoute("/sessions/session-1");
 
     await waitFor(() => {
-      expect(createLiveSession).toHaveBeenCalledWith({
+      expect(createLiveSession).toHaveBeenCalled();
+      expect(vi.mocked(createLiveSession).mock.calls[0]?.[0]).toEqual({
         resume_session_id: "session-1",
       });
     });

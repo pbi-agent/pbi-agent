@@ -9,6 +9,7 @@ def parse_simple_frontmatter(
     frontmatter: str,
     *,
     block_scalar_keys: frozenset[str] | None = None,
+    include_keys: frozenset[str] | None = None,
 ) -> dict[str, str]:
     """Parse a limited YAML frontmatter subset.
 
@@ -43,7 +44,10 @@ def parse_simple_frontmatter(
         if not key:
             raise FrontmatterParseError("frontmatter contains an empty key.")
 
+        should_capture = include_keys is None or key in include_keys
+
         if not value:
+            skipped_ignored_nested_block = False
             next_index = index + 1
             while next_index < len(lines):
                 next_line = lines[next_index]
@@ -53,14 +57,40 @@ def parse_simple_frontmatter(
                     continue
                 next_indent = len(next_line) - len(next_line.lstrip(" "))
                 if next_indent > indent:
-                    raise FrontmatterParseError(
-                        f"unsupported YAML structure for key {key!r}; only scalar "
-                        "values and block scalars are supported."
+                    if should_capture:
+                        raise FrontmatterParseError(
+                            f"unsupported YAML structure for key {key!r}; only scalar "
+                            "values and block scalars are supported."
+                        )
+                    index = _skip_nested_block(
+                        lines,
+                        start_index=next_index,
+                        parent_indent=indent,
                     )
+                    skipped_ignored_nested_block = True
+                    break
+                if (
+                    not should_capture
+                    and next_indent == indent
+                    and _is_indentless_sequence_entry(next_stripped)
+                ):
+                    index = _skip_indentless_sequence_block(
+                        lines,
+                        start_index=next_index,
+                        parent_indent=indent,
+                    )
+                    skipped_ignored_nested_block = True
+                    break
                 break
+            if skipped_ignored_nested_block:
+                continue
 
         if value in {"|", ">"}:
-            if block_scalar_keys is not None and key not in block_scalar_keys:
+            if (
+                should_capture
+                and block_scalar_keys is not None
+                and key not in block_scalar_keys
+            ):
                 allowed = ", ".join(repr(item) for item in sorted(block_scalar_keys))
                 raise FrontmatterParseError(
                     f"unsupported block scalar for key {key!r}; only {allowed} may "
@@ -71,15 +101,17 @@ def parse_simple_frontmatter(
                 start_index=index + 1,
                 parent_indent=indent,
             )
-            if value == "|":
-                result[key] = "\n".join(block_lines)
-            else:
-                result[key] = " ".join(
-                    part.strip() for part in block_lines if part.strip()
-                )
+            if should_capture:
+                if value == "|":
+                    result[key] = "\n".join(block_lines)
+                else:
+                    result[key] = " ".join(
+                        part.strip() for part in block_lines if part.strip()
+                    )
             continue
 
-        result[key] = _parse_scalar(value)
+        if should_capture:
+            result[key] = _parse_scalar(value)
         index += 1
 
     if not result:
@@ -119,3 +151,51 @@ def _parse_block_scalar_lines(
         block_lines.append(next_line[block_indent:])
         index += 1
     return block_lines, index
+
+
+def _skip_nested_block(
+    lines: list[str],
+    *,
+    start_index: int,
+    parent_indent: int,
+) -> int:
+    index = start_index
+    while index < len(lines):
+        next_line = lines[index]
+        next_stripped = next_line.strip()
+        if not next_stripped or next_stripped.startswith("#"):
+            index += 1
+            continue
+        next_indent = len(next_line) - len(next_line.lstrip(" "))
+        if next_indent <= parent_indent:
+            break
+        index += 1
+    return index
+
+
+def _skip_indentless_sequence_block(
+    lines: list[str],
+    *,
+    start_index: int,
+    parent_indent: int,
+) -> int:
+    index = start_index
+    while index < len(lines):
+        next_line = lines[index]
+        next_stripped = next_line.strip()
+        if not next_stripped or next_stripped.startswith("#"):
+            index += 1
+            continue
+        next_indent = len(next_line) - len(next_line.lstrip(" "))
+        if next_indent < parent_indent:
+            break
+        if next_indent == parent_indent and not _is_indentless_sequence_entry(
+            next_stripped
+        ):
+            break
+        index += 1
+    return index
+
+
+def _is_indentless_sequence_entry(stripped: str) -> bool:
+    return stripped == "-" or stripped.startswith("- ")

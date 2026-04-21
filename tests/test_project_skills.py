@@ -706,3 +706,66 @@ def test_install_project_skill_rejects_block_scalar_name(
         install_project_skill("owner/repo", workspace=tmp_path)
 
     assert "unsupported block scalar for key 'name'" in capsys.readouterr().err
+
+
+def test_install_project_skill_ignores_nested_metadata_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive_bytes = _make_zip_archive(
+        {
+            "repo-main/skills/vitepress/SKILL.md": (
+                "---\n"
+                "name: vitepress\n"
+                "description: VitePress static site generator skill.\n"
+                "metadata:\n"
+                "  author: Anthony Fu\n"
+                '  version: "2026.1.28"\n'
+                "---\n\n"
+                "# VitePress\n"
+            ),
+            "repo-main/skills/vitepress/references/core-config.md": "# Config\n",
+        }
+    )
+    _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
+
+    result = install_project_skill(
+        "owner/repo",
+        workspace=tmp_path,
+        skill_name="vitepress",
+    )
+
+    assert result.name == "vitepress"
+    installed = tmp_path / ".agents" / "skills" / "vitepress" / "SKILL.md"
+    assert installed.is_file()
+
+
+def test_install_project_skill_ignores_indentless_sequence_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive_bytes = _make_zip_archive(
+        {
+            "repo-main/skills/compress/SKILL.md": (
+                "---\n"
+                "name: compress\n"
+                "description: Compress markdown-heavy notes.\n"
+                "tools:\n"
+                "- read_file\n"
+                "- apply_patch\n"
+                "---\n\n"
+                "# Compress\n"
+            )
+        }
+    )
+    _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
+
+    result = install_project_skill(
+        "owner/repo",
+        workspace=tmp_path,
+        skill_name="compress",
+    )
+
+    assert result.name == "compress"
+    installed = tmp_path / ".agents" / "skills" / "compress" / "SKILL.md"
+    assert installed.is_file()
