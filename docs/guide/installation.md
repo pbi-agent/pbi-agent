@@ -35,7 +35,7 @@ uv tool upgrade pbi-agent
 ## Install from Source
 
 ```bash
-git clone https://github.com/nasirus/pbi-agent.git
+git clone https://github.com/pbi-agent/pbi-agent.git
 cd pbi-agent
 uv sync
 ```

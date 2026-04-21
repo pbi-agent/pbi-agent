@@ -6,15 +6,17 @@
 
 *Transform data into decisions.*
 
-[![Tests](https://github.com/nasirus/pbi-agent/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/nasirus/pbi-agent/actions/workflows/tests.yml)
-[![Publish](https://github.com/nasirus/pbi-agent/actions/workflows/publish.yml/badge.svg)](https://github.com/nasirus/pbi-agent/actions/workflows/publish.yml)
-[![Release](https://github.com/nasirus/pbi-agent/actions/workflows/release.yml/badge.svg)](https://github.com/nasirus/pbi-agent/actions/workflows/release.yml)
+[![Tests](https://github.com/pbi-agent/pbi-agent/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/pbi-agent/pbi-agent/actions/workflows/tests.yml)
+[![Publish](https://github.com/pbi-agent/pbi-agent/actions/workflows/publish.yml/badge.svg)](https://github.com/pbi-agent/pbi-agent/actions/workflows/publish.yml)
+[![Release](https://github.com/pbi-agent/pbi-agent/actions/workflows/release.yml/badge.svg)](https://github.com/pbi-agent/pbi-agent/actions/workflows/release.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-gold)](LICENSE)
 
 </div>
 
 `pbi-agent` is a local CLI agent that creates, edits, and audits Power BI PBIP reports through natural language.
+
+Repository: [https://github.com/pbi-agent/pbi-agent](https://github.com/pbi-agent/pbi-agent)
 
 Full documentation lives at [pbi-agent.github.io/pbi-agent](https://pbi-agent.github.io/pbi-agent/).
 

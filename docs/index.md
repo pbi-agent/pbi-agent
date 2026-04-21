@@ -12,7 +12,7 @@ hero:
       link: '/guide/'
     - theme: alt
       text: 'GitHub'
-      link: 'https://github.com/nasirus/pbi-agent'
+      link: 'https://github.com/pbi-agent/pbi-agent'
 features:
   - title: 'Multi-Provider Support'
     details: 'Target OpenAI, xAI, Google Gemini, Anthropic, or an OpenAI-compatible gateway from the same CLI.'

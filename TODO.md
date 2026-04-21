@@ -1,4 +1,5 @@
-[X] Review gh-address-comments skill guidance
-[X] Patch agent install target validation
-[X] Add regression tests for invalid agent names
-[X] Run targeted validation
+[X] Update main repo GitHub URLs
+[X] Add canonical URLs to the three catalogue READMEs
+[X] Validate the edited files
+[X] Append task note to `MEMORY.md`
+[>] Commit and push each affected repo
