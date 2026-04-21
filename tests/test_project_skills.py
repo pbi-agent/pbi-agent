@@ -150,7 +150,7 @@ def _track_temporary_directories(
 
 
 def test_render_installed_project_skills_lists_table(tmp_path: Path) -> None:
-    _write_skill(
+    skill_dir = _write_skill(
         tmp_path / ".agents" / "skills",
         "repo-skill",
         "Repository workflow.",
@@ -167,6 +167,8 @@ def test_render_installed_project_skills_lists_table(tmp_path: Path) -> None:
     assert "Project Skills" in rendered
     assert "repo-skill" in rendered
     assert "Repository workflow." in rendered
+    assert "Location" not in rendered
+    assert str((skill_dir / "SKILL.md").resolve()) not in rendered
 
 
 def test_render_installed_project_skills_shows_empty_state(tmp_path: Path) -> None:

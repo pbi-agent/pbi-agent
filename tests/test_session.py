@@ -3,11 +3,13 @@ from __future__ import annotations
 from contextlib import contextmanager
 import json
 import os
+from pathlib import Path
 import urllib.error
 import urllib.request
 
 import pytest
 
+from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.agent.session import (
     AGENTS_COMMAND,
     AGENTS_RELOAD_COMMAND,
@@ -947,6 +949,23 @@ def test_run_session_loop_keeps_local_command_precedence_over_command_files(
     assert display.markdown_calls == [
         "### Project Skills\n\n- `repo-skill`: Demo skill"
     ]
+
+
+def test_format_project_skills_markdown_hides_skill_manifest_paths(
+    tmp_path: Path,
+) -> None:
+    skill_dir = tmp_path / ".agents" / "skills" / "repo-skill"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(
+        "---\nname: repo-skill\ndescription: Demo skill\n---\n\n# Repo Skill\n",
+        encoding="utf-8",
+    )
+
+    rendered = format_project_skills_markdown(workspace=tmp_path)
+
+    assert rendered == "### Project Skills\n\n- `repo-skill`: Demo skill"
+    assert str(skill_path.resolve()) not in rendered
 
 
 def test_run_session_loop_passes_queued_image_paths_to_provider(monkeypatch) -> None:

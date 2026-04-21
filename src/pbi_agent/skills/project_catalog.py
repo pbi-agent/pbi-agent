@@ -42,9 +42,8 @@ def render_installed_project_skills(
     table = Table(title="Project Skills", title_style="bold cyan")
     table.add_column("Name", style="green")
     table.add_column("Description")
-    table.add_column("Location", style="dim")
     for skill in project_skills:
-        table.add_row(skill.name, skill.description, str(skill.location))
+        table.add_row(skill.name, skill.description)
     active_console.print(table)
     return 0
 

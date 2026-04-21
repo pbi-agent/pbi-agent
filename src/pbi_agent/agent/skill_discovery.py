@@ -28,7 +28,6 @@ def format_project_skills_markdown(workspace: Path | None = None) -> str:
     lines = ["### Project Skills", ""]
     for skill in skills:
         lines.append(f"- `{skill.name}`: {skill.description}")
-        lines.append(f"  `{skill.location}`")
     return "\n".join(lines)
 
 

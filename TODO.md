@@ -1,5 +1,5 @@
-[X] Investigate skill/frontmatter edge case
-[X] Patch parser for ignored indentless lists
-[X] Add regression tests for requested skill layouts
+[X] Remove SKILL.md path from /skills markdown output
+[X] Remove Location column from CLI skills list output
+[X] Add/adjust regression tests for simplified skills display
 [X] Run focused validation
 [X] Append MEMORY entry
