@@ -361,13 +361,21 @@ def build_parser() -> argparse.ArgumentParser:
     skills_add_parser = skills_subparsers.add_parser(
         "add",
         prog="pbi-agent skills add",
-        description="Install a project skill bundle from a public GitHub repository.",
+        description=(
+            "Install a project skill bundle from the official catalog, a local "
+            "directory, or a GitHub repository."
+        ),
         help="Install a project skill bundle.",
         formatter_class=CleanHelpFormatter,
     )
     skills_add_parser.add_argument(
         "source",
-        help="GitHub source: owner/repo, repository URL, or tree URL.",
+        nargs="?",
+        default=None,
+        help=(
+            "Optional source. Omit to use the official pbi-agent/skills catalog. "
+            "Supports local paths, owner/repo, repository URLs, and tree URLs."
+        ),
     )
     skills_add_parser.add_argument(
         "--skill",
@@ -1180,19 +1188,26 @@ def _handle_skills_list_command(args: argparse.Namespace) -> int:
 
 def _handle_skills_add_command(args: argparse.Namespace) -> int:
     from pbi_agent.skills.project_installer import (
+        DEFAULT_SKILLS_SOURCE,
         ProjectSkillInstallError,
         install_project_skill,
         list_remote_project_skills,
         render_remote_skill_listing,
     )
 
+    effective_source = args.source or DEFAULT_SKILLS_SOURCE
+
     try:
+        if args.source is None and args.skill is None:
+            listing = list_remote_project_skills(effective_source)
+            return render_remote_skill_listing(listing)
+
         if args.list:
-            listing = list_remote_project_skills(args.source)
+            listing = list_remote_project_skills(effective_source)
             return render_remote_skill_listing(listing)
 
         result = install_project_skill(
-            args.source,
+            effective_source,
             skill_name=args.skill,
             force=args.force,
             workspace=Path.cwd().resolve(),

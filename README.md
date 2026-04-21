@@ -84,4 +84,6 @@ pbi-agent
 pbi-agent web
 pbi-agent run --prompt "Summarize this PBIP project."
 pbi-agent audit --report-dir .
+pbi-agent skills add
+pbi-agent skills add --skill openai-docs
 ```

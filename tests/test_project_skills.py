@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
+import subprocess
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -12,16 +15,22 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
+import pbi_agent.skills.project_installer as project_installer
 from pbi_agent.skills.project_catalog import (
     discover_installed_project_skills,
     render_installed_project_skills,
 )
 from pbi_agent.skills.project_installer import (
+    DEFAULT_SKILLS_SOURCE,
+    GitHubSkillSource,
+    LocalSkillSource,
     ProjectSkillInstallError,
     install_project_skill,
     list_remote_project_skills,
     parse_github_skill_source,
+    parse_project_skill_source,
     render_remote_skill_listing,
+    resolve_default_skills_source,
 )
 
 
@@ -69,15 +78,18 @@ def _install_fake_github(
     owner: str = "owner",
     repo: str = "repo",
     ref: str = "main",
-    archive_bytes: bytes,
+    archive_bytes: bytes | None = None,
     include_default_branch_lookup: bool = True,
     extra_responses: dict[str, bytes] | None = None,
     http_errors: dict[str, int] | None = None,
-) -> list[str]:
-    seen_urls: list[str] = []
-    responses: dict[str, bytes] = {
-        f"https://api.github.com/repos/{owner}/{repo}/zipball/{urllib.parse.quote(ref, safe='')}": archive_bytes,
-    }
+) -> list[urllib.request.Request]:
+    seen_requests: list[urllib.request.Request] = []
+    responses: dict[str, bytes] = {}
+    if archive_bytes is not None:
+        responses[
+            f"https://api.github.com/repos/{owner}/{repo}/zipball/"
+            f"{urllib.parse.quote(ref, safe='')}"
+        ] = archive_bytes
     if include_default_branch_lookup:
         responses[f"https://api.github.com/repos/{owner}/{repo}"] = json.dumps(
             {"default_branch": ref}
@@ -88,7 +100,7 @@ def _install_fake_github(
     def fake_urlopen(
         request: urllib.request.Request, timeout: float = 0.0
     ) -> _FakeResponse:
-        seen_urls.append(request.full_url)
+        seen_requests.append(request)
         if http_errors and request.full_url in http_errors:
             raise urllib.error.HTTPError(
                 request.full_url,
@@ -109,7 +121,32 @@ def _install_fake_github(
             ) from exc
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    return seen_urls
+    return seen_requests
+
+
+def _track_temporary_directories(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[Path]:
+    created_roots: list[Path] = []
+
+    class _TrackingTemporaryDirectory:
+        def __init__(self, *, prefix: str = "tmp") -> None:
+            self.path = Path(tempfile.mkdtemp(prefix=prefix))
+            created_roots.append(self.path)
+
+        def __enter__(self) -> str:
+            return str(self.path)
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            shutil.rmtree(self.path, ignore_errors=True)
+            return False
+
+    monkeypatch.setattr(
+        project_installer,
+        "TemporaryDirectory",
+        _TrackingTemporaryDirectory,
+    )
+    return created_roots
 
 
 def test_render_installed_project_skills_lists_table(tmp_path: Path) -> None:
@@ -163,115 +200,95 @@ def test_discover_installed_project_skills_is_workspace_scoped(tmp_path: Path) -
     assert [skill.name for skill in discovered] == ["one-skill"]
 
 
-def test_parse_github_skill_source_accepts_shorthand_repo_and_tree_urls() -> None:
-    shorthand = parse_github_skill_source("owner/repo")
-    repo_url = parse_github_skill_source("https://github.com/owner/repo")
-
-    assert shorthand.owner_repo == "owner/repo"
-    assert shorthand.ref is None
-    assert repo_url.owner_repo == "owner/repo"
-    assert repo_url.ref is None
+def test_default_skills_source_helper_returns_official_catalog() -> None:
+    assert DEFAULT_SKILLS_SOURCE == "pbi-agent/skills"
+    assert resolve_default_skills_source() == "pbi-agent/skills"
 
 
-def test_parse_github_skill_source_parses_tree_url(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    archive_bytes = _make_zip_archive({})
-    _install_fake_github(
-        monkeypatch,
-        archive_bytes=archive_bytes,
-        include_default_branch_lookup=False,
-        extra_responses={
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/main": json.dumps(
-                [{"ref": "refs/heads/main"}]
-            ).encode("utf-8"),
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/main": json.dumps(
-                []
-            ).encode("utf-8"),
-        },
-        http_errors={
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/main/skills/remote-skill": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/main/skills/remote-skill": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/main/skills": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/main/skills": 404,
-        },
-    )
-    tree_url = parse_github_skill_source(
-        "https://github.com/owner/repo/tree/main/skills/remote-skill"
-    )
+def test_parse_project_skill_source_accepts_local_paths_and_keeps_owner_repo() -> None:
+    local_relative = parse_project_skill_source("./skills")
+    local_current = parse_project_skill_source(".")
+    local_windows = parse_project_skill_source(r"C:\skills\repo")
+    github = parse_project_skill_source("owner/repo")
 
-    assert tree_url.owner_repo == "owner/repo"
-    assert tree_url.ref == "main"
-    assert tree_url.subpath == "skills/remote-skill"
+    assert isinstance(local_relative, LocalSkillSource)
+    assert isinstance(local_current, LocalSkillSource)
+    assert isinstance(local_windows, LocalSkillSource)
+    assert isinstance(github, GitHubSkillSource)
+    assert github.owner_repo == "owner/repo"
 
 
-def test_parse_github_skill_source_keeps_slashful_tree_ref(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    archive_bytes = _make_zip_archive({})
-    _install_fake_github(
-        monkeypatch,
-        archive_bytes=archive_bytes,
-        include_default_branch_lookup=False,
-        extra_responses={
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/feature%2Ffoo": json.dumps(
-                [{"ref": "refs/heads/feature/foo"}]
-            ).encode("utf-8"),
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/feature%2Ffoo": json.dumps(
-                []
-            ).encode("utf-8"),
-        },
-        http_errors={
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/feature%2Ffoo%2Fskills%2Fbar": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/feature%2Ffoo%2Fskills%2Fbar": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/feature%2Ffoo%2Fskills": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/feature%2Ffoo%2Fskills": 404,
-        },
-    )
-
-    parsed = parse_github_skill_source(
+def test_parse_github_skill_source_parses_repo_and_tree_urls() -> None:
+    repo_source = parse_github_skill_source("https://github.com/owner/repo")
+    tree_source = parse_github_skill_source(
         "https://github.com/owner/repo/tree/feature/foo/skills/bar"
     )
 
-    assert parsed.ref == "feature/foo"
-    assert parsed.subpath == "skills/bar"
+    assert repo_source.owner_repo == "owner/repo"
+    assert repo_source.tree_parts is None
+    assert tree_source.owner_repo == "owner/repo"
+    assert tree_source.tree_parts == ("feature", "foo", "skills", "bar")
 
 
-def test_parse_github_skill_source_rejects_unsafe_tree_subpaths(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    archive_bytes = _make_zip_archive({})
-    _install_fake_github(
-        monkeypatch,
-        archive_bytes=archive_bytes,
-        include_default_branch_lookup=False,
-        extra_responses={
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/main": json.dumps(
-                [{"ref": "refs/heads/main"}]
-            ).encode("utf-8"),
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/main": json.dumps(
-                []
-            ).encode("utf-8"),
-        },
-        http_errors={
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/main%2Fskills%2F..%2F..%2Fetc": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/main%2Fskills%2F..%2F..%2Fetc": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/main%2Fskills%2F..%2F..": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/main%2Fskills%2F..%2F..": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/main%2Fskills%2F..": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/main%2Fskills%2F..": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/main%2Fskills": 404,
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/main%2Fskills": 404,
-        },
+def test_list_and_install_local_single_skill_source(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    skill_root = _write_skill(source_root, "local-skill", "Local workflow.")
+
+    listing = list_remote_project_skills(str(skill_root))
+    output = io.StringIO()
+    render_remote_skill_listing(
+        listing,
+        console=Console(file=output, force_terminal=False, color_system=None),
     )
 
-    with pytest.raises(ProjectSkillInstallError, match="Unsafe subpath"):
-        parse_github_skill_source(
-            "https://github.com/owner/repo/tree/main/skills/../../etc"
-        )
+    result = install_project_skill(str(skill_root), workspace=tmp_path / "workspace")
+
+    assert listing.ref is None
+    assert [candidate.name for candidate in listing.candidates] == ["local-skill"]
+    assert "Available Skills" in output.getvalue()
+    assert result.name == "local-skill"
+    assert result.ref is None
+    assert (
+        tmp_path / "workspace" / ".agents" / "skills" / "local-skill" / "SKILL.md"
+    ).is_file()
 
 
-def test_install_project_skill_installs_single_skill_repo_and_preserves_assets(
+def test_local_multi_skill_source_lists_and_requires_skill_for_install(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source"
+    _write_skill(source_root / "skills", "alpha", "Alpha skill.")
+    _write_skill(source_root / "skills", "beta", "Beta skill.")
+
+    listing = list_remote_project_skills(str(source_root))
+
+    assert [candidate.name for candidate in listing.candidates] == ["alpha", "beta"]
+    with pytest.raises(
+        ProjectSkillInstallError,
+        match=r"--list or --skill <name>",
+    ):
+        install_project_skill(str(source_root), workspace=tmp_path / "workspace")
+
+
+def test_local_source_ignores_internal_dot_agents_skills(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    _write_skill(source_root / "skills", "alpha", "Alpha skill.")
+    _write_skill(
+        source_root / ".agents" / "skills",
+        "internal-only",
+        "Internal source skill.",
+    )
+
+    listing = list_remote_project_skills(str(source_root))
+
+    assert [candidate.name for candidate in listing.candidates] == ["alpha"]
+    assert all(
+        candidate.subpath != ".agents/skills/internal-only"
+        for candidate in listing.candidates
+    )
+
+
+def test_install_project_skill_attaches_bearer_auth_when_token_exists(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -279,211 +296,315 @@ def test_install_project_skill_installs_single_skill_repo_and_preserves_assets(
         {
             "repo-main/SKILL.md": (
                 "---\nname: repo-skill\ndescription: Remote workflow skill.\n---\n\n# Repo\n"
-            ),
-            "repo-main/scripts/setup.sh": "echo setup\n",
-            "repo-main/references/guide.md": "# Guide\n",
-            "repo-main/assets/icon.txt": "asset\n",
+            )
         }
     )
-    seen_urls = _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
+    seen_requests = _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
+    monkeypatch.setenv("GITHUB_TOKEN", "secret-token")
+
+    install_project_skill("owner/repo", workspace=tmp_path)
+
+    assert seen_requests[0].get_header("Authorization") == "Bearer secret-token"
+    assert seen_requests[1].get_header("Authorization") == "Bearer secret-token"
+
+
+def test_private_repo_404_falls_back_to_git_and_succeeds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_github(
+        monkeypatch,
+        archive_bytes=None,
+        http_errors={"https://api.github.com/repos/owner/repo": 404},
+    )
+    git_calls: list[tuple[tuple[str, ...], str | None]] = []
+
+    def fake_run(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        git_calls.append(
+            (tuple(args), None if env is None else env.get("GIT_TERMINAL_PROMPT"))
+        )
+        if args[:3] == ["gh", "auth", "token"]:
+            return subprocess.CompletedProcess(args, 1, "", "no auth")
+        if args[:3] == ["git", "clone", "--depth"]:
+            destination = Path(args[-1])
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination / "SKILL.md").write_text(
+                "---\nname: repo-skill\ndescription: Private skill.\n---\n\n# Repo\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(args, 0, "", "")
+        raise AssertionError(f"Unexpected subprocess args: {args}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     result = install_project_skill("owner/repo", workspace=tmp_path)
 
-    install_dir = tmp_path / ".agents" / "skills" / "repo-skill"
     assert result.name == "repo-skill"
-    assert result.install_path == install_dir
-    assert (install_dir / "SKILL.md").is_file()
-    assert (install_dir / "scripts" / "setup.sh").read_text(
-        encoding="utf-8"
-    ) == "echo setup\n"
-    assert (install_dir / "references" / "guide.md").is_file()
-    assert (install_dir / "assets" / "icon.txt").is_file()
-
-    assert not (install_dir / ".pbi-agent-skill-source.json").exists()
-    assert seen_urls == [
-        "https://api.github.com/repos/owner/repo",
-        "https://api.github.com/repos/owner/repo/zipball/main",
-    ]
+    assert result.ref is None
+    assert (tmp_path / ".agents" / "skills" / "repo-skill" / "SKILL.md").is_file()
+    clone_call = next(args for args, _ in git_calls if args[:2] == ("git", "clone"))
+    assert "https://github.com/owner/repo.git" in clone_call
+    assert "--branch" not in clone_call
+    assert any(prompt == "0" for _, prompt in git_calls if _[:2] == ("git", "clone"))
 
 
-def test_install_project_skill_supports_tree_url_with_slashful_ref(
-    tmp_path: Path,
+def test_remote_listing_ignores_internal_dot_agents_skills(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     archive_bytes = _make_zip_archive(
         {
-            "repo-main/skills/bar/SKILL.md": (
-                "---\nname: bar\ndescription: Branch skill.\n---\n\n# Bar\n"
+            "repo-main/skills/powerbi/SKILL.md": (
+                "---\nname: powerbi\ndescription: Public skill.\n---\n\n# PowerBI\n"
+            ),
+            "repo-main/.agents/skills/create-skill/SKILL.md": (
+                "---\nname: create-skill\ndescription: Internal skill.\n---\n\n# Internal\n"
             ),
         }
     )
-    seen_urls = _install_fake_github(
+    _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
+
+    listing = list_remote_project_skills("owner/repo")
+
+    assert [candidate.name for candidate in listing.candidates] == ["powerbi"]
+    assert all(
+        candidate.subpath != ".agents/skills/create-skill"
+        for candidate in listing.candidates
+    )
+
+
+def test_tree_url_with_slashful_ref_works_via_git_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_github(
         monkeypatch,
-        ref="feature/foo",
-        archive_bytes=archive_bytes,
         include_default_branch_lookup=False,
-        extra_responses={
-            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/feature%2Ffoo": json.dumps(
-                [{"ref": "refs/heads/feature/foo"}]
-            ).encode("utf-8"),
-            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/feature%2Ffoo": json.dumps(
-                []
-            ).encode("utf-8"),
-        },
         http_errors={
             "https://api.github.com/repos/owner/repo/git/matching-refs/heads/feature%2Ffoo%2Fskills%2Fbar": 404,
             "https://api.github.com/repos/owner/repo/git/matching-refs/tags/feature%2Ffoo%2Fskills%2Fbar": 404,
             "https://api.github.com/repos/owner/repo/git/matching-refs/heads/feature%2Ffoo%2Fskills": 404,
             "https://api.github.com/repos/owner/repo/git/matching-refs/tags/feature%2Ffoo%2Fskills": 404,
+            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/feature%2Ffoo": 404,
+            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/feature%2Ffoo": 404,
+            "https://api.github.com/repos/owner/repo/git/matching-refs/heads/feature": 404,
+            "https://api.github.com/repos/owner/repo/git/matching-refs/tags/feature": 404,
         },
     )
+    git_calls: list[tuple[str, ...]] = []
+
+    def fake_run(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        git_calls.append(tuple(args))
+        if args[:3] == ["gh", "auth", "token"]:
+            return subprocess.CompletedProcess(args, 1, "", "no auth")
+        if args[:4] == ["git", "ls-remote", "--heads", "--tags"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                "111111\trefs/heads/main\n222222\trefs/heads/feature/foo\n",
+                "",
+            )
+        if args[:3] == ["git", "clone", "--depth"]:
+            destination = Path(args[-1])
+            destination.mkdir(parents=True, exist_ok=True)
+            skill_dir = destination / "skills" / "bar"
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            (skill_dir / "SKILL.md").write_text(
+                "---\nname: bar\ndescription: Branch skill.\n---\n\n# Bar\n",
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(args, 0, "", "")
+        raise AssertionError(f"Unexpected subprocess args: {args}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     result = install_project_skill(
         "https://github.com/owner/repo/tree/feature/foo/skills/bar",
         workspace=tmp_path,
     )
 
-    assert result.name == "bar"
     assert result.ref == "feature/foo"
     assert result.subpath == "skills/bar"
-    assert (tmp_path / ".agents" / "skills" / "bar" / "SKILL.md").is_file()
-    assert "https://api.github.com/repos/owner/repo/zipball/feature%2Ffoo" in seen_urls
+    clone_call = next(args for args in git_calls if args[:2] == ("git", "clone"))
+    assert "--branch" in clone_call
+    assert "feature/foo" in clone_call
 
 
-def test_list_remote_project_skills_returns_candidates_without_installing(
+def test_https_auth_failure_retries_ssh_before_surfacing_final_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    archive_bytes = _make_zip_archive(
-        {
-            "repo-main/skills/alpha/SKILL.md": (
-                "---\nname: alpha\ndescription: Alpha skill.\n---\n\n# Alpha\n"
-            ),
-            "repo-main/skills/beta/SKILL.md": (
-                "---\nname: beta\ndescription: Beta skill.\n---\n\n# Beta\n"
-            ),
-        }
+    _install_fake_github(
+        monkeypatch,
+        archive_bytes=None,
+        http_errors={"https://api.github.com/repos/owner/repo": 404},
     )
-    _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
+    clone_calls: list[tuple[str, ...]] = []
 
-    listing = list_remote_project_skills("https://github.com/owner/repo")
-    output = io.StringIO()
-    render_remote_skill_listing(
-        listing,
-        console=Console(file=output, force_terminal=False, color_system=None),
-    )
+    def fake_run(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["gh", "auth", "token"]:
+            return subprocess.CompletedProcess(args, 1, "", "no auth")
+        if args[:3] == ["git", "clone", "--depth"]:
+            clone_calls.append(tuple(args))
+            if args[-2].startswith("https://github.com/"):
+                return subprocess.CompletedProcess(
+                    args,
+                    128,
+                    "",
+                    "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+                )
+            return subprocess.CompletedProcess(
+                args,
+                128,
+                "",
+                "git@github.com: Permission denied (publickey).",
+            )
+        raise AssertionError(f"Unexpected subprocess args: {args}")
 
-    assert listing.owner_repo == "owner/repo"
-    assert listing.ref == "main"
-    assert [candidate.name for candidate in listing.candidates] == ["alpha", "beta"]
-    assert "Available Skills" in output.getvalue()
-    assert "alpha" in output.getvalue()
-    assert not (tmp_path / ".agents" / "skills").exists()
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
-
-def test_list_remote_project_skills_skips_malformed_siblings(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    archive_bytes = _make_zip_archive(
-        {
-            "repo-main/skills/alpha/SKILL.md": (
-                "---\nname: alpha\ndescription: Alpha skill.\n---\n\n# Alpha\n"
-            ),
-            "repo-main/skills/broken/SKILL.md": "---\nname: broken\n---\n\n# Broken\n",
-        }
-    )
-    _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
-
-    listing = list_remote_project_skills("https://github.com/owner/repo")
-
-    assert [candidate.name for candidate in listing.candidates] == ["alpha"]
-    assert "Skipping remote skill" in capsys.readouterr().err
-
-
-def test_install_project_skill_requires_skill_for_multi_skill_repo(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    archive_bytes = _make_zip_archive(
-        {
-            "repo-main/skills/alpha/SKILL.md": (
-                "---\nname: alpha\ndescription: Alpha skill.\n---\n\n# Alpha\n"
-            ),
-            "repo-main/skills/beta/SKILL.md": (
-                "---\nname: beta\ndescription: Beta skill.\n---\n\n# Beta\n"
-            ),
-        }
-    )
-    _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
-
-    with pytest.raises(ProjectSkillInstallError, match="Multiple skills were found"):
+    with pytest.raises(
+        ProjectSkillInstallError,
+        match="Confirm repository access and git/SSH credentials are configured",
+    ):
         install_project_skill("owner/repo", workspace=tmp_path)
 
+    assert len(clone_calls) == 2
+    assert clone_calls[0][-2] == "https://github.com/owner/repo.git"
+    assert clone_calls[1][-2] == "git@github.com:owner/repo.git"
 
-def test_install_project_skill_rejects_unknown_skill(
-    tmp_path: Path,
+
+def test_temp_materialization_is_removed_after_successful_list(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    archive_bytes = _make_zip_archive(
-        {
-            "repo-main/skills/alpha/SKILL.md": (
-                "---\nname: alpha\ndescription: Alpha skill.\n---\n\n# Alpha\n"
-            ),
-            "repo-main/skills/beta/SKILL.md": (
-                "---\nname: beta\ndescription: Beta skill.\n---\n\n# Beta\n"
-            ),
-        }
-    )
-    _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
-
-    with pytest.raises(ProjectSkillInstallError, match="Unknown skill 'gamma'"):
-        install_project_skill("owner/repo", skill_name="gamma", workspace=tmp_path)
-
-
-def test_install_project_skill_blocks_overwrite_without_force_and_allows_force(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    install_dir = tmp_path / ".agents" / "skills" / "repo-skill"
-    install_dir.mkdir(parents=True)
-    (install_dir / "old.txt").write_text("old\n", encoding="utf-8")
-
+    created_roots = _track_temporary_directories(monkeypatch)
     archive_bytes = _make_zip_archive(
         {
             "repo-main/SKILL.md": (
-                "---\nname: repo-skill\ndescription: Updated skill.\n---\n\n# Repo\n"
-            ),
-            "repo-main/new.txt": "new\n",
+                "---\nname: repo-skill\ndescription: Remote workflow skill.\n---\n\n# Repo\n"
+            )
         }
     )
     _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
 
-    with pytest.raises(ProjectSkillInstallError, match="already installed"):
-        install_project_skill("owner/repo", workspace=tmp_path)
+    list_remote_project_skills("owner/repo")
 
-    result = install_project_skill("owner/repo", workspace=tmp_path, force=True)
-
-    assert result.install_path == install_dir
-    assert not (install_dir / "old.txt").exists()
-    assert (install_dir / "new.txt").read_text(encoding="utf-8") == "new\n"
+    assert created_roots
+    assert all(not root.exists() for root in created_roots)
 
 
-def test_install_project_skill_rejects_malicious_zip_members(
+def test_temp_materialization_is_removed_after_successful_install(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    created_roots = _track_temporary_directories(monkeypatch)
     archive_bytes = _make_zip_archive(
         {
             "repo-main/SKILL.md": (
-                "---\nname: repo-skill\ndescription: Safe.\n---\n\n# Repo\n"
-            ),
-            "repo-main/../../escape.txt": "boom\n",
+                "---\nname: repo-skill\ndescription: Remote workflow skill.\n---\n\n# Repo\n"
+            )
         }
     )
     _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
 
-    with pytest.raises(ProjectSkillInstallError, match="unsafe member path"):
-        install_project_skill("owner/repo", workspace=tmp_path)
+    install_project_skill("owner/repo", workspace=tmp_path)
+
+    assert created_roots
+    assert all(not root.exists() for root in created_roots)
+
+
+def test_temp_materialization_is_removed_after_archive_parse_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created_roots = _track_temporary_directories(monkeypatch)
+    _install_fake_github(
+        monkeypatch,
+        archive_bytes=b"not-a-zip",
+    )
+
+    def fake_run(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["gh", "auth", "token"]:
+            return subprocess.CompletedProcess(args, 1, "", "no auth")
+        if args[:3] == ["git", "clone", "--depth"]:
+            return subprocess.CompletedProcess(
+                args, 128, "", "fatal: repository not found"
+            )
+        raise AssertionError(f"Unexpected subprocess args: {args}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(ProjectSkillInstallError):
+        list_remote_project_skills("owner/repo")
+
+    assert created_roots
+    assert all(not root.exists() for root in created_roots)
+
+
+def test_temp_materialization_is_removed_after_clone_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created_roots = _track_temporary_directories(monkeypatch)
+    _install_fake_github(
+        monkeypatch,
+        archive_bytes=None,
+        http_errors={"https://api.github.com/repos/owner/repo": 404},
+    )
+
+    def fake_run(
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: int,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["gh", "auth", "token"]:
+            return subprocess.CompletedProcess(args, 1, "", "no auth")
+        if args[:3] == ["git", "clone", "--depth"]:
+            return subprocess.CompletedProcess(
+                args, 128, "", "fatal: repository not found"
+            )
+        raise AssertionError(f"Unexpected subprocess args: {args}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(ProjectSkillInstallError):
+        install_project_skill("owner/repo", workspace=Path.cwd())
+
+    assert created_roots
+    assert all(not root.exists() for root in created_roots)
 
 
 def test_install_project_skill_rejects_missing_name_or_description(

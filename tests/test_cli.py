@@ -197,6 +197,47 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertTrue(args.list)
         self.assertTrue(args.force)
 
+    def test_parser_accepts_skills_add_without_source(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["skills", "add"])
+
+        self.assertEqual(args.command, "skills")
+        self.assertEqual(args.skills_action, "add")
+        self.assertIsNone(args.source)
+        self.assertIsNone(args.skill)
+        self.assertFalse(args.list)
+        self.assertFalse(args.force)
+
+    def test_parser_accepts_skills_add_list_without_source(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["skills", "add", "--list"])
+
+        self.assertEqual(args.command, "skills")
+        self.assertEqual(args.skills_action, "add")
+        self.assertIsNone(args.source)
+        self.assertTrue(args.list)
+
+    def test_parser_accepts_skills_add_skill_without_source(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["skills", "add", "--skill", "powerbi"])
+
+        self.assertEqual(args.command, "skills")
+        self.assertEqual(args.skills_action, "add")
+        self.assertIsNone(args.source)
+        self.assertEqual(args.skill, "powerbi")
+
+    def test_parser_accepts_skills_add_local_path_source(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["skills", "add", "./skills/local"])
+
+        self.assertEqual(args.command, "skills")
+        self.assertEqual(args.skills_action, "add")
+        self.assertEqual(args.source, "./skills/local")
+
     def test_parser_rejects_removed_skills_flag(self) -> None:
         with self.assertRaises(SystemExit) as exc_info:
             cli.build_parser().parse_args(["--skills"])
@@ -710,6 +751,75 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(mock_handle.call_args.args[0].skills_action, "add")
         mock_resolve_runtime.assert_not_called()
         mock_resolve_web_runtime.assert_not_called()
+
+    def test_handle_skills_add_without_source_lists_default_catalog(self) -> None:
+        args = cli.build_parser().parse_args(["skills", "add"])
+        listing = object()
+
+        with (
+            patch(
+                "pbi_agent.skills.project_installer.list_remote_project_skills",
+                return_value=listing,
+            ) as mock_list,
+            patch(
+                "pbi_agent.skills.project_installer.render_remote_skill_listing",
+                return_value=17,
+            ) as mock_render,
+            patch(
+                "pbi_agent.skills.project_installer.install_project_skill"
+            ) as mock_install,
+        ):
+            rc = cli._handle_skills_add_command(args)
+
+        self.assertEqual(rc, 17)
+        mock_list.assert_called_once_with("pbi-agent/skills")
+        mock_render.assert_called_once_with(listing)
+        mock_install.assert_not_called()
+
+    def test_handle_skills_add_with_skill_and_no_source_installs_default_catalog(
+        self,
+    ) -> None:
+        args = cli.build_parser().parse_args(["skills", "add", "--skill", "powerbi"])
+        result = Mock(name="result")
+        result.name = "powerbi"
+        result.install_path = Path("/tmp/workspace/.agents/skills/powerbi")
+
+        with (
+            patch(
+                "pbi_agent.skills.project_installer.install_project_skill",
+                return_value=result,
+            ) as mock_install,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            rc = cli._handle_skills_add_command(args)
+
+        self.assertEqual(rc, 0)
+        mock_install.assert_called_once()
+        self.assertEqual(mock_install.call_args.args[0], "pbi-agent/skills")
+        self.assertEqual(mock_install.call_args.kwargs["skill_name"], "powerbi")
+        self.assertIn("Installed skill 'powerbi'", stdout.getvalue())
+
+    def test_handle_skills_add_with_explicit_source_and_list_keeps_source(self) -> None:
+        args = cli.build_parser().parse_args(
+            ["skills", "add", "./skills/local", "--list"]
+        )
+        listing = object()
+
+        with (
+            patch(
+                "pbi_agent.skills.project_installer.list_remote_project_skills",
+                return_value=listing,
+            ) as mock_list,
+            patch(
+                "pbi_agent.skills.project_installer.render_remote_skill_listing",
+                return_value=9,
+            ) as mock_render,
+        ):
+            rc = cli._handle_skills_add_command(args)
+
+        self.assertEqual(rc, 9)
+        mock_list.assert_called_once_with("./skills/local")
+        mock_render.assert_called_once_with(listing)
 
     def test_main_mcp_flag_lists_project_servers_without_settings(self) -> None:
         stdout = io.StringIO()

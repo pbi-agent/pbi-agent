@@ -81,6 +81,17 @@ The file contents are wrapped in `<project_rules>` tags and appended to the syst
 
 `pbi-agent` also discovers project-local Agent Skills and advertises them to the model through the system prompt. This is separate from the built-in Power BI `skill_knowledge` tool.
 
+You can manage project-local installs directly from the CLI:
+
+```bash
+pbi-agent skills add
+pbi-agent skills add --skill openai-docs
+pbi-agent skills add ./skills/local-skill
+pbi-agent skills add owner/private-repo --skill repo-review
+```
+
+Omitting `source` uses the official `pbi-agent/skills` catalog and lists the available entries. Explicit multi-skill sources still require `--skill <name>` when installing.
+
 Supported roots:
 
 - `.agents/skills/<skill-name>/SKILL.md`

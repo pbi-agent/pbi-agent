@@ -1,4 +1,4 @@
-[X] Inspect current `skills add` CLI and installer flow
-[X] Identify default-source behavior change for issue #163
-[X] Map required tests and docs updates
-[>] Write implementation plan
+[X] Review `AGENTS.md` task-memory rules and inspect current `MEMORY.md` / `TODO.md`
+[X] Compact historical memory into durable notes and preserve current-day detailed events
+[X] Rewrite `MEMORY.md` into the required three-section format
+[X] Reset `TODO.md` for this session and record completion

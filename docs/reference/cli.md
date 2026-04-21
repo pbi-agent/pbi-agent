@@ -30,7 +30,6 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--service-tier` | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier for request processing: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |
 | `--no-web-search` | none | `false` | Disable the provider's native web search tool when that backend supports it. |
 | `--verbose` | none | `false` | Enable verbose logging. |
-| `--skills` | none | `false` | List discovered project skills from `.agents/skills` and exit. |
 | `--mcp` | none | `false` | List discovered project MCP servers from `.agents/mcp.json` and exit. |
 | `--agents` | none | `false` | List discovered project sub-agents from `.agents/*.md` and exit. |
 
@@ -57,6 +56,39 @@ These flags exist in the parser but are suppressed from help output:
 | `--google-api-key` | `--api-key` |
 | `--anthropic-api-key` | `--api-key` |
 | `--generic-api-key` | `--api-key` |
+
+## `pbi-agent skills`
+
+List installed project skills or install new ones into `.agents/skills/`.
+
+```bash
+pbi-agent skills list
+pbi-agent skills add
+pbi-agent skills add --skill openai-docs
+pbi-agent skills add ./skills/local-skill
+pbi-agent skills add owner/private-repo --skill custom-review
+```
+
+### `pbi-agent skills list`
+
+Lists the currently installed project-local skills discovered under `.agents/skills/`.
+
+### `pbi-agent skills add [source]`
+
+Installs a skill bundle from the official catalog, a local directory, or a GitHub repository.
+
+- Omitting `source` uses the official `pbi-agent/skills` catalog.
+- `pbi-agent skills add` lists the official catalog and exits.
+- `pbi-agent skills add --list` also lists candidate skills from the selected source.
+- `pbi-agent skills add --skill NAME` installs one named skill from the selected source.
+- Explicit multi-skill sources still require `--skill NAME` for installation.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `source` | `pbi-agent/skills` when omitted | Local path, GitHub `owner/repo`, GitHub repository URL, or GitHub tree URL. |
+| `--skill NAME` | none | Select one skill from a multi-skill source, or install one skill from the default catalog. |
+| `--list` | `false` | List candidate skills from the selected source without installing anything. |
+| `--force` | `false` | Replace an existing local install under `.agents/skills/<skill-name>`. |
 
 ## `pbi-agent config`
 

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -23,12 +25,20 @@ from pbi_agent.skills.project_catalog import (
     load_project_skill_manifest,
 )
 
+DEFAULT_SKILLS_SOURCE = "pbi-agent/skills"
 _GITHUB_API_ROOT = "https://api.github.com"
+_GITHUB_WEB_ROOT = "https://github.com"
+_GITHUB_FALLBACK_STATUS_CODES = frozenset({401, 403, 404})
+_GIT_TIMEOUT_SECONDS = 60
 _INSTALL_ROOT = Path(".agents/skills")
+_PRIVATE_REPO_ERROR = (
+    "Could not access GitHub repository {owner_repo}. Confirm repository access "
+    "and git/SSH credentials are configured."
+)
 
 
 class ProjectSkillInstallError(ValueError):
-    """Raised when remote project skill installation fails."""
+    """Raised when project skill installation fails."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -37,8 +47,19 @@ class GitHubSkillSource:
     owner: str
     repo: str
     owner_repo: str
-    ref: str | None = None
-    subpath: str | None = None
+    tree_parts: tuple[str, ...] | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class LocalSkillSource:
+    source: str
+    path: Path
+
+
+@dataclass(slots=True, frozen=True)
+class ResolvedGitHubSelection:
+    ref: str | None
+    subpath: str | None
 
 
 @dataclass(slots=True, frozen=True)
@@ -51,8 +72,7 @@ class RemoteSkillCandidateSummary:
 @dataclass(slots=True, frozen=True)
 class RemoteSkillListing:
     source: str
-    owner_repo: str
-    ref: str
+    ref: str | None
     candidates: list[RemoteSkillCandidateSummary]
 
 
@@ -60,8 +80,8 @@ class RemoteSkillListing:
 class ProjectSkillInstallResult:
     name: str
     install_path: Path
-    owner_repo: str
-    ref: str
+    source: str
+    ref: str | None
     subpath: str | None
 
 
@@ -71,6 +91,44 @@ class _RemoteSkillCandidate:
     description: str
     skill_dir: Path
     repo_subpath: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class _MaterializedSkillSource:
+    repo_root: Path
+    resolved_root: Path
+    ref: str | None
+
+
+class _GitHubHttpFailure(Exception):
+    def __init__(self, *, url: str, status_code: int) -> None:
+        super().__init__(f"{url} -> HTTP {status_code}")
+        self.url = url
+        self.status_code = status_code
+
+
+class _GitHubArchiveFallbackNeeded(Exception):
+    def __init__(self, source: GitHubSkillSource) -> None:
+        super().__init__(source.source)
+        self.source = source
+
+
+class _GitCommandFailure(Exception):
+    def __init__(
+        self,
+        *,
+        args: tuple[str, ...],
+        returncode: int,
+        stderr: str,
+    ) -> None:
+        super().__init__(stderr)
+        self.args = args
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+def resolve_default_skills_source() -> str:
+    return DEFAULT_SKILLS_SOURCE
 
 
 def render_remote_skill_listing(
@@ -90,19 +148,15 @@ def render_remote_skill_listing(
 
 
 def list_remote_project_skills(source: str) -> RemoteSkillListing:
-    parsed_source = parse_github_skill_source(source)
-    resolved_ref = resolve_github_source_ref(parsed_source)
-
+    parsed_source = parse_project_skill_source(source)
     with TemporaryDirectory(prefix="pbi-agent-skill-") as temp_dir:
-        repo_root = _download_and_extract_github_archive(
+        materialized = _materialize_skill_source(
             parsed_source,
-            ref=resolved_ref,
-            destination=Path(temp_dir),
+            temp_root=Path(temp_dir),
         )
-        resolved_root = _resolve_repo_selection_root(repo_root, parsed_source.subpath)
         candidates = _discover_remote_skill_candidates(
-            repo_root=repo_root,
-            resolved_root=resolved_root,
+            repo_root=materialized.repo_root,
+            resolved_root=materialized.resolved_root,
         )
 
     if not candidates:
@@ -111,9 +165,8 @@ def list_remote_project_skills(source: str) -> RemoteSkillListing:
         )
 
     return RemoteSkillListing(
-        source=parsed_source.source,
-        owner_repo=parsed_source.owner_repo,
-        ref=resolved_ref,
+        source=source,
+        ref=materialized.ref,
         candidates=[
             RemoteSkillCandidateSummary(
                 name=candidate.name,
@@ -132,37 +185,48 @@ def install_project_skill(
     force: bool = False,
     workspace: Path | None = None,
 ) -> ProjectSkillInstallResult:
-    parsed_source = parse_github_skill_source(source)
-    resolved_ref = resolve_github_source_ref(parsed_source)
+    parsed_source = parse_project_skill_source(source)
     install_workspace = (workspace or Path.cwd()).resolve()
     install_root = (install_workspace / _INSTALL_ROOT).resolve()
 
     with TemporaryDirectory(prefix="pbi-agent-skill-") as temp_dir:
-        repo_root = _download_and_extract_github_archive(
+        materialized = _materialize_skill_source(
             parsed_source,
-            ref=resolved_ref,
-            destination=Path(temp_dir),
+            temp_root=Path(temp_dir),
         )
-        resolved_root = _resolve_repo_selection_root(repo_root, parsed_source.subpath)
         candidates = _discover_remote_skill_candidates(
-            repo_root=repo_root,
-            resolved_root=resolved_root,
+            repo_root=materialized.repo_root,
+            resolved_root=materialized.resolved_root,
         )
         selected = _select_remote_skill_candidate(candidates, skill_name=skill_name)
         target_dir = _resolve_install_target(
-            install_root=install_root, skill_name=selected.name
+            install_root=install_root,
+            skill_name=selected.name,
         )
-
         _prepare_install_target(target_dir, force=force)
         shutil.copytree(selected.skill_dir, target_dir)
 
     return ProjectSkillInstallResult(
         name=selected.name,
         install_path=target_dir,
-        owner_repo=parsed_source.owner_repo,
-        ref=resolved_ref,
+        source=source,
+        ref=materialized.ref,
         subpath=selected.repo_subpath,
     )
+
+
+def parse_project_skill_source(source: str) -> GitHubSkillSource | LocalSkillSource:
+    normalized = source.strip()
+    if not normalized:
+        raise ProjectSkillInstallError("Skill source must not be empty.")
+
+    if _looks_like_local_skill_source(normalized):
+        return LocalSkillSource(
+            source=normalized,
+            path=Path(normalized).expanduser(),
+        )
+
+    return parse_github_skill_source(normalized)
 
 
 def parse_github_skill_source(source: str) -> GitHubSkillSource:
@@ -187,8 +251,8 @@ def parse_github_skill_source(source: str) -> GitHubSkillSource:
 
     if parsed_url.scheme not in {"http", "https"} or parsed_url.netloc != "github.com":
         raise ProjectSkillInstallError(
-            "Unsupported skill source. Use owner/repo, a GitHub repository URL, "
-            "or a GitHub tree URL."
+            "Unsupported skill source. Use a local path, owner/repo, a GitHub "
+            "repository URL, or a GitHub tree URL."
         )
 
     parts = [urllib.parse.unquote(part) for part in parsed_url.path.split("/") if part]
@@ -213,18 +277,17 @@ def parse_github_skill_source(source: str) -> GitHubSkillSource:
         )
 
     if len(parts) >= 4 and parts[2] == "tree":
-        ref, subpath = _split_github_tree_ref_and_subpath(
-            owner=owner,
-            repo=repo,
-            tree_parts=parts[3:],
-        )
+        tree_parts = tuple(part for part in parts[3:] if part)
+        if not tree_parts:
+            raise ProjectSkillInstallError(
+                "Unsupported GitHub tree URL. Expected a ref after /tree/."
+            )
         return GitHubSkillSource(
             source=normalized,
             owner=owner,
             repo=repo,
             owner_repo=f"{owner}/{repo}",
-            ref=ref,
-            subpath=subpath,
+            tree_parts=tree_parts,
         )
 
     raise ProjectSkillInstallError(
@@ -242,62 +305,129 @@ def sanitize_skill_subpath(subpath: str) -> str:
     return normalized.strip("/")
 
 
-def _split_github_tree_ref_and_subpath(
-    *,
-    owner: str,
-    repo: str,
-    tree_parts: list[str],
-) -> tuple[str, str | None]:
-    if not tree_parts:
-        raise ProjectSkillInstallError(
-            "Unsupported GitHub tree URL. Expected a ref after /tree/."
-        )
-
-    for split_index in range(len(tree_parts), 0, -1):
-        ref_candidate = "/".join(tree_parts[:split_index])
-        if not _github_ref_exists(owner=owner, repo=repo, ref=ref_candidate):
-            continue
-
-        subpath = "/".join(tree_parts[split_index:]) or None
-        if subpath is not None:
-            subpath = sanitize_skill_subpath(subpath)
-        return ref_candidate, subpath
-
-    fallback_ref = tree_parts[0]
-    subpath = "/".join(tree_parts[1:]) or None
-    if subpath is not None:
-        subpath = sanitize_skill_subpath(subpath)
-    return fallback_ref, subpath
-
-
-def _github_ref_exists(*, owner: str, repo: str, ref: str) -> bool:
-    quoted_ref = urllib.parse.quote(ref, safe="")
-    for namespace in ("heads", "tags"):
-        url = (
-            f"{_GITHUB_API_ROOT}/repos/{owner}/{repo}/git/matching-refs/"
-            f"{namespace}/{quoted_ref}"
-        )
-        try:
-            payload = _read_json_value(url)
-        except ProjectSkillInstallError:
-            continue
-        if not isinstance(payload, list):
-            continue
-        expected_ref = f"refs/{namespace}/{ref}"
-        if any(
-            isinstance(entry, dict) and entry.get("ref") == expected_ref
-            for entry in payload
-        ):
-            return True
-    return False
-
-
 def resolve_github_source_ref(source: GitHubSkillSource) -> str:
-    if source.ref:
-        return source.ref
+    token = _lookup_github_token()
+    if source.tree_parts:
+        return _resolve_github_tree_selection_from_api(source, token=token).ref
+    return _resolve_default_branch_via_api(source, token=token)
 
+
+def _materialize_skill_source(
+    source: GitHubSkillSource | LocalSkillSource,
+    *,
+    temp_root: Path,
+) -> _MaterializedSkillSource:
+    if isinstance(source, LocalSkillSource):
+        resolved_root = _resolve_local_source_root(source.path)
+        return _MaterializedSkillSource(
+            repo_root=resolved_root,
+            resolved_root=resolved_root,
+            ref=None,
+        )
+
+    token = _lookup_github_token()
+    try:
+        return _materialize_github_archive(source, temp_root=temp_root, token=token)
+    except _GitHubArchiveFallbackNeeded:
+        return _materialize_github_with_git(source, temp_root=temp_root)
+
+
+def _materialize_github_archive(
+    source: GitHubSkillSource,
+    *,
+    temp_root: Path,
+    token: str | None,
+) -> _MaterializedSkillSource:
+    selection = _resolve_github_selection_from_api(source, token=token)
+    archive_url = (
+        f"{_GITHUB_API_ROOT}/repos/{source.owner}/{source.repo}/zipball/"
+        f"{urllib.parse.quote(selection.ref, safe='')}"
+    )
+    try:
+        archive_bytes = _read_github_bytes(archive_url, token=token)
+    except _GitHubHttpFailure as exc:
+        if exc.status_code in _GITHUB_FALLBACK_STATUS_CODES:
+            raise _GitHubArchiveFallbackNeeded(source) from exc
+        raise ProjectSkillInstallError(
+            f"GitHub request failed for {exc.url}: HTTP {exc.status_code}."
+        ) from exc
+
+    try:
+        repo_root = _extract_archive_bytes(
+            archive_bytes,
+            destination=temp_root / "archive",
+        )
+    except ProjectSkillInstallError as exc:
+        if "not a valid zip file" in str(exc):
+            raise _GitHubArchiveFallbackNeeded(source) from exc
+        raise
+
+    resolved_root = _resolve_repo_selection_root(repo_root, selection.subpath)
+    return _MaterializedSkillSource(
+        repo_root=repo_root,
+        resolved_root=resolved_root,
+        ref=selection.ref,
+    )
+
+
+def _materialize_github_with_git(
+    source: GitHubSkillSource,
+    *,
+    temp_root: Path,
+) -> _MaterializedSkillSource:
+    clone_root = temp_root / "clone"
+    clone_root.mkdir(parents=True, exist_ok=True)
+
+    selection = _resolve_github_selection_from_git(source)
+    repo_root = _clone_github_repo(
+        source,
+        destination=clone_root / "repo",
+        ref=selection.ref,
+    )
+    resolved_root = _resolve_repo_selection_root(repo_root, selection.subpath)
+    return _MaterializedSkillSource(
+        repo_root=repo_root,
+        resolved_root=resolved_root,
+        ref=selection.ref,
+    )
+
+
+def _resolve_github_selection_from_api(
+    source: GitHubSkillSource,
+    *,
+    token: str | None,
+) -> ResolvedGitHubSelection:
+    if source.tree_parts:
+        return _resolve_github_tree_selection_from_api(source, token=token)
+    return ResolvedGitHubSelection(
+        ref=_resolve_default_branch_via_api(source, token=token),
+        subpath=None,
+    )
+
+
+def _resolve_github_selection_from_git(
+    source: GitHubSkillSource,
+) -> ResolvedGitHubSelection:
+    if source.tree_parts:
+        return _resolve_github_tree_selection_from_git(source)
+    return ResolvedGitHubSelection(ref=None, subpath=None)
+
+
+def _resolve_default_branch_via_api(
+    source: GitHubSkillSource,
+    *,
+    token: str | None,
+) -> str:
     repo_url = f"{_GITHUB_API_ROOT}/repos/{source.owner}/{source.repo}"
-    payload = _read_json(repo_url)
+    try:
+        payload = _read_github_json(repo_url, token=token)
+    except _GitHubHttpFailure as exc:
+        if exc.status_code in _GITHUB_FALLBACK_STATUS_CODES:
+            raise _GitHubArchiveFallbackNeeded(source) from exc
+        raise ProjectSkillInstallError(
+            f"GitHub request failed for {exc.url}: HTTP {exc.status_code}."
+        ) from exc
+
     default_branch = payload.get("default_branch")
     if not isinstance(default_branch, str) or not default_branch.strip():
         raise ProjectSkillInstallError(
@@ -306,23 +436,111 @@ def resolve_github_source_ref(source: GitHubSkillSource) -> str:
     return default_branch
 
 
-def _download_and_extract_github_archive(
+def _resolve_github_tree_selection_from_api(
     source: GitHubSkillSource,
     *,
+    token: str | None,
+) -> ResolvedGitHubSelection:
+    tree_parts = list(source.tree_parts or ())
+    any_unavailable = False
+
+    for split_index in range(len(tree_parts), 0, -1):
+        ref_candidate = "/".join(tree_parts[:split_index])
+        exists = _github_ref_exists_via_api(
+            owner=source.owner,
+            repo=source.repo,
+            ref=ref_candidate,
+            token=token,
+        )
+        if exists is True:
+            subpath = "/".join(tree_parts[split_index:]) or None
+            if subpath is not None:
+                subpath = sanitize_skill_subpath(subpath)
+            return ResolvedGitHubSelection(ref=ref_candidate, subpath=subpath)
+        if exists is None:
+            any_unavailable = True
+
+    if any_unavailable:
+        raise _GitHubArchiveFallbackNeeded(source)
+
+    fallback_ref = tree_parts[0]
+    subpath = "/".join(tree_parts[1:]) or None
+    if subpath is not None:
+        subpath = sanitize_skill_subpath(subpath)
+    return ResolvedGitHubSelection(ref=fallback_ref, subpath=subpath)
+
+
+def _resolve_github_tree_selection_from_git(
+    source: GitHubSkillSource,
+) -> ResolvedGitHubSelection:
+    tree_parts = list(source.tree_parts or ())
+    refs = _git_ls_remote_refs(source)
+
+    for split_index in range(len(tree_parts), 0, -1):
+        ref_candidate = "/".join(tree_parts[:split_index])
+        if ref_candidate not in refs:
+            continue
+        subpath = "/".join(tree_parts[split_index:]) or None
+        if subpath is not None:
+            subpath = sanitize_skill_subpath(subpath)
+        return ResolvedGitHubSelection(ref=ref_candidate, subpath=subpath)
+
+    fallback_ref = tree_parts[0]
+    subpath = "/".join(tree_parts[1:]) or None
+    if subpath is not None:
+        subpath = sanitize_skill_subpath(subpath)
+    return ResolvedGitHubSelection(ref=fallback_ref, subpath=subpath)
+
+
+def _github_ref_exists_via_api(
+    *,
+    owner: str,
+    repo: str,
     ref: str,
-    destination: Path,
-) -> Path:
-    archive_url = (
-        f"{_GITHUB_API_ROOT}/repos/{source.owner}/{source.repo}/zipball/"
-        f"{urllib.parse.quote(ref, safe='')}"
-    )
-    archive_bytes = _read_bytes(archive_url)
-    extract_root = destination / "archive"
-    extract_root.mkdir(parents=True, exist_ok=True)
-    return _extract_archive_bytes(archive_bytes, destination=extract_root)
+    token: str | None,
+) -> bool | None:
+    quoted_ref = urllib.parse.quote(ref, safe="")
+    unavailable = False
+
+    for namespace in ("heads", "tags"):
+        url = (
+            f"{_GITHUB_API_ROOT}/repos/{owner}/{repo}/git/matching-refs/"
+            f"{namespace}/{quoted_ref}"
+        )
+        try:
+            payload = _read_github_json_value(url, token=token)
+        except _GitHubHttpFailure as exc:
+            if exc.status_code in _GITHUB_FALLBACK_STATUS_CODES:
+                unavailable = True
+                continue
+            raise ProjectSkillInstallError(
+                f"GitHub request failed for {exc.url}: HTTP {exc.status_code}."
+            ) from exc
+        if not isinstance(payload, list):
+            continue
+        expected_ref = f"refs/{namespace}/{ref}"
+        if any(
+            isinstance(entry, dict) and entry.get("ref") == expected_ref
+            for entry in payload
+        ):
+            return True
+
+    if unavailable:
+        return None
+    return False
+
+
+def _resolve_local_source_root(path: Path) -> Path:
+    resolved = path.resolve()
+    if not resolved.exists():
+        raise ProjectSkillInstallError(f"Local skill source {path} does not exist.")
+    if not resolved.is_dir():
+        raise ProjectSkillInstallError(f"Local skill source {path} is not a directory.")
+    return resolved
 
 
 def _extract_archive_bytes(archive_bytes: bytes, *, destination: Path) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
     try:
         archive = zipfile.ZipFile(io.BytesIO(archive_bytes))
     except zipfile.BadZipFile as exc:
@@ -345,7 +563,8 @@ def _extract_archive_bytes(archive_bytes: bytes, *, destination: Path) -> Path:
             unix_mode = member.external_attr >> 16
             if stat.S_ISLNK(unix_mode):
                 raise ProjectSkillInstallError(
-                    f"Archive contains unsupported symbolic link member: {member.filename!r}."
+                    "Archive contains unsupported symbolic link member: "
+                    f"{member.filename!r}."
                 )
 
             top_level_dirs.add(member_path.parts[0])
@@ -379,7 +598,7 @@ def _resolve_repo_selection_root(repo_root: Path, subpath: str | None) -> Path:
     _ensure_path_within_root(repo_root.resolve(), candidate)
     if not candidate.exists():
         raise ProjectSkillInstallError(
-            f"Remote path {subpath!r} was not found in the downloaded repository archive."
+            f"Remote path {subpath!r} was not found in the materialized repository."
         )
     if not candidate.is_dir():
         raise ProjectSkillInstallError(f"Remote path {subpath!r} is not a directory.")
@@ -404,7 +623,7 @@ def _discover_remote_skill_candidates(
     if (resolved_root / "SKILL.md").is_file():
         enqueue(resolved_root)
 
-    for container in (resolved_root / "skills", resolved_root / ".agents" / "skills"):
+    for container in (resolved_root / "skills",):
         if not container.is_dir():
             continue
         for child in sorted(container.iterdir(), key=lambda item: item.name.casefold()):
@@ -417,8 +636,7 @@ def _discover_remote_skill_candidates(
             manifest = load_project_skill_manifest(skill_dir / "SKILL.md")
         except SkillManifestError as exc:
             _warn(
-                f"Skipping remote skill at {skill_dir / 'SKILL.md'}: "
-                f"unsupported manifest: {exc}"
+                f"Skipping skill at {skill_dir / 'SKILL.md'}: unsupported manifest: {exc}"
             )
             continue
 
@@ -452,7 +670,8 @@ def _select_remote_skill_candidate(
     if skill_name is None:
         if len(candidates) != 1:
             raise ProjectSkillInstallError(
-                "Multiple skills were found in the remote source. Re-run with --skill <name>."
+                "Multiple skills were found in the source. Re-run with --list or "
+                "--skill <name>."
             )
         return candidates[0]
 
@@ -483,7 +702,8 @@ def _resolve_install_target(*, install_root: Path, skill_name: str) -> Path:
         or normalized_name in {".", ".."}
     ):
         raise ProjectSkillInstallError(
-            f"Unsupported skill name {skill_name!r}. Skill install names must be a single path segment."
+            "Unsupported skill name "
+            f"{skill_name!r}. Skill install names must be a single path segment."
         )
 
     install_root.mkdir(parents=True, exist_ok=True)
@@ -507,8 +727,8 @@ def _prepare_install_target(target_dir: Path, *, force: bool) -> None:
     shutil.rmtree(target_dir)
 
 
-def _read_json_value(url: str) -> object:
-    payload = _read_bytes(url)
+def _read_github_json_value(url: str, *, token: str | None) -> object:
+    payload = _read_github_bytes(url, token=token)
     try:
         return json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -517,32 +737,204 @@ def _read_json_value(url: str) -> object:
         ) from exc
 
 
-def _read_json(url: str) -> dict[str, object]:
-    data = _read_json_value(url)
+def _read_github_json(url: str, *, token: str | None) -> dict[str, object]:
+    data = _read_github_json_value(url, token=token)
     if not isinstance(data, dict):
         raise ProjectSkillInstallError(f"Unexpected JSON response from {url}.")
     return data
 
 
-def _read_bytes(url: str) -> bytes:
+def _read_github_bytes(url: str, *, token: str | None) -> bytes:
     request = urllib.request.Request(
         url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "pbi-agent-skills",
-        },
+        headers=_github_request_headers(token),
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.read()
     except urllib.error.HTTPError as exc:
-        raise ProjectSkillInstallError(
-            f"GitHub request failed for {url}: HTTP {exc.code}."
-        ) from exc
+        raise _GitHubHttpFailure(url=url, status_code=exc.code) from exc
     except urllib.error.URLError as exc:
         raise ProjectSkillInstallError(
             f"GitHub request failed for {url}: {exc.reason}."
         ) from exc
+
+
+def _github_request_headers(token: str | None) -> dict[str, str]:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "pbi-agent-skills",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _lookup_github_token() -> str | None:
+    for env_name in ("GITHUB_TOKEN", "GH_TOKEN"):
+        value = os.environ.get(env_name)
+        if value and value.strip():
+            return value.strip()
+
+    try:
+        completed = subprocess.run(
+            ["gh", "auth", "token"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+    if completed.returncode != 0:
+        return None
+
+    token = completed.stdout.strip()
+    return token or None
+
+
+def _clone_github_repo(
+    source: GitHubSkillSource,
+    *,
+    destination: Path,
+    ref: str | None,
+) -> Path:
+    https_url = f"{_GITHUB_WEB_ROOT}/{source.owner_repo}.git"
+    ssh_url = f"git@github.com:{source.owner_repo}.git"
+
+    try:
+        _run_git_clone(https_url, destination=destination, ref=ref)
+    except _GitCommandFailure as exc:
+        if not _git_error_is_auth_style(exc.stderr):
+            raise ProjectSkillInstallError(
+                f"Git clone failed for {source.owner_repo}: {_compact_git_error(exc.stderr)}"
+            ) from exc
+        try:
+            _run_git_clone(ssh_url, destination=destination, ref=ref)
+        except _GitCommandFailure as ssh_exc:
+            if _git_error_is_auth_style(ssh_exc.stderr):
+                raise ProjectSkillInstallError(
+                    _PRIVATE_REPO_ERROR.format(owner_repo=source.owner_repo)
+                ) from ssh_exc
+            raise ProjectSkillInstallError(
+                f"Git clone failed for {source.owner_repo}: "
+                f"{_compact_git_error(ssh_exc.stderr)}"
+            ) from ssh_exc
+
+    return destination.resolve()
+
+
+def _run_git_clone(remote_url: str, *, destination: Path, ref: str | None) -> None:
+    args = ["git", "clone", "--depth", "1"]
+    if ref:
+        args.extend(["--branch", ref])
+    args.extend([remote_url, str(destination)])
+    _run_git_command(args)
+
+
+def _git_ls_remote_refs(source: GitHubSkillSource) -> set[str]:
+    try:
+        output = _git_ls_remote(source, https=True, extra_args=("--heads", "--tags"))
+    except ProjectSkillInstallError as exc:
+        if _PRIVATE_REPO_ERROR.format(owner_repo=source.owner_repo) not in str(exc):
+            raise
+        output = _git_ls_remote(source, https=False, extra_args=("--heads", "--tags"))
+    refs: set[str] = set()
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        ref_name = parts[1]
+        if ref_name.startswith("refs/heads/"):
+            refs.add(ref_name.removeprefix("refs/heads/"))
+        elif ref_name.startswith("refs/tags/"):
+            refs.add(ref_name.removeprefix("refs/tags/"))
+    return refs
+
+
+def _git_ls_remote(
+    source: GitHubSkillSource,
+    *,
+    https: bool,
+    extra_args: tuple[str, ...],
+) -> str:
+    remote_url = (
+        f"{_GITHUB_WEB_ROOT}/{source.owner_repo}.git"
+        if https
+        else f"git@github.com:{source.owner_repo}.git"
+    )
+    args = ["git", "ls-remote", *extra_args, remote_url]
+    try:
+        return _run_git_command(args)
+    except _GitCommandFailure as exc:
+        if _git_error_is_auth_style(exc.stderr):
+            raise ProjectSkillInstallError(
+                _PRIVATE_REPO_ERROR.format(owner_repo=source.owner_repo)
+            ) from exc
+        raise ProjectSkillInstallError(
+            f"Git ls-remote failed for {source.owner_repo}: {_compact_git_error(exc.stderr)}"
+        ) from exc
+
+
+def _run_git_command(args: list[str]) -> str:
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_LFS_SKIP_SMUDGE"] = "1"
+    try:
+        completed = subprocess.run(
+            args,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+            env=env,
+        )
+    except OSError as exc:
+        raise ProjectSkillInstallError(
+            f"Failed to run git command: {' '.join(args)} ({exc})"
+        ) from exc
+
+    if completed.returncode != 0:
+        raise _GitCommandFailure(
+            args=tuple(args),
+            returncode=completed.returncode,
+            stderr=completed.stderr.strip() or completed.stdout.strip(),
+        )
+
+    return completed.stdout
+
+
+def _git_error_is_auth_style(message: str) -> bool:
+    normalized = message.casefold()
+    patterns = (
+        "authentication failed",
+        "repository not found",
+        "permission denied",
+        "could not read username",
+        "could not read password",
+        "could not read from remote repository",
+        "support for password authentication was removed",
+        "publickey",
+    )
+    return any(pattern in normalized for pattern in patterns)
+
+
+def _compact_git_error(message: str) -> str:
+    normalized = " ".join(line.strip() for line in message.splitlines() if line.strip())
+    return normalized or "unknown git error"
+
+
+def _looks_like_local_skill_source(value: str) -> bool:
+    if value in {".", ".."}:
+        return True
+    if value.startswith(("./", "../", ".\\", "..\\", "~/", "~\\")):
+        return True
+    if value.startswith("/"):
+        return True
+    if re.match(r"^[A-Za-z]:[\\/]", value):
+        return True
+    return False
 
 
 def _ensure_path_within_root(root: Path, candidate: Path) -> None:
