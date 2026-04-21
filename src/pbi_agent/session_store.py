@@ -429,6 +429,10 @@ def _is_stale_timestamp(timestamp: str, *, stale_after_seconds: float) -> bool:
     return age_seconds > stale_after_seconds
 
 
+class WebManagerLeaseBusyError(RuntimeError):
+    """Raised when lease acquisition cannot proceed due to transient DB contention."""
+
+
 def _serialize_image_attachments(
     image_attachments: list[MessageImageAttachment] | None,
 ) -> str:
@@ -659,7 +663,9 @@ class SessionStore:
                 if self._conn.in_transaction:
                     self._conn.rollback()
                 if "database is locked" in str(exc).lower():
-                    return False
+                    raise WebManagerLeaseBusyError(
+                        "Session database is busy while acquiring the web-manager lease."
+                    ) from exc
                 raise
             except Exception:
                 if self._conn.in_transaction:

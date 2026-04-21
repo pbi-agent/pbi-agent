@@ -5,6 +5,7 @@ import asyncio
 import json
 import re
 import threading
+import time
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -90,6 +91,7 @@ from pbi_agent.session_store import (
     RunSessionRecord,
     SessionRecord,
     SessionStore,
+    WebManagerLeaseBusyError,
 )
 from pbi_agent.task_runner import run_single_turn_in_directory
 from pbi_agent.web.command_registry import (
@@ -118,6 +120,8 @@ _NON_RUNNABLE_BOARD_STAGE_IDS = frozenset({KANBAN_STAGE_BACKLOG, KANBAN_STAGE_DO
 _PROVIDER_AUTH_BROWSER_FLOW_TIMEOUT_SECS = 5 * 60
 _WEB_MANAGER_LEASE_STALE_SECS = 30.0
 _WEB_MANAGER_LEASE_HEARTBEAT_SECS = 5.0
+_WEB_MANAGER_LEASE_BUSY_RETRY_SECS = 2.0
+_WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS = 0.1
 _STRUCTURED_TASK_HEADER_PATTERN = re.compile(
     r"^#{1,6}\s+|^[-*]\s+|^\d+\.\s+", re.MULTILINE
 )
@@ -482,17 +486,27 @@ class WebSessionManager:
         with self._lock:
             if self._started:
                 return
-        with SessionStore() as store:
-            acquired = store.acquire_web_manager_lease(
-                self._directory_key,
-                owner_id=self._manager_owner_id,
-                stale_after_seconds=_WEB_MANAGER_LEASE_STALE_SECS,
-            )
-            if not acquired:
-                raise RuntimeError(
-                    "Another web app instance is already managing this workspace."
-                )
-            store.normalize_kanban_running_tasks(directory=self._directory_key)
+        deadline = time.monotonic() + _WEB_MANAGER_LEASE_BUSY_RETRY_SECS
+        while True:
+            try:
+                with SessionStore() as store:
+                    acquired = store.acquire_web_manager_lease(
+                        self._directory_key,
+                        owner_id=self._manager_owner_id,
+                        stale_after_seconds=_WEB_MANAGER_LEASE_STALE_SECS,
+                    )
+                    if not acquired:
+                        raise RuntimeError(
+                            "Another web app instance is already managing this workspace."
+                        )
+                    store.normalize_kanban_running_tasks(directory=self._directory_key)
+                break
+            except WebManagerLeaseBusyError as exc:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError(
+                        "Session database is busy. Try starting the web app again."
+                    ) from exc
+                time.sleep(_WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS)
         with self._lock:
             if self._started:
                 return

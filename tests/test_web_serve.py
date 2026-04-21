@@ -37,7 +37,11 @@ from pbi_agent.config import (
     create_provider_config,
     delete_model_profile_config,
 )
-from pbi_agent.session_store import SESSION_DB_PATH_ENV, SessionStore
+from pbi_agent.session_store import (
+    SESSION_DB_PATH_ENV,
+    SessionStore,
+    WebManagerLeaseBusyError,
+)
 from pbi_agent.display.protocol import QueuedInput, QueuedRuntimeChange
 from pbi_agent.web.session_manager import WebSessionManager
 from pbi_agent.web.serve import PBIWebServer, create_app
@@ -1108,6 +1112,55 @@ def test_second_manager_start_does_not_mark_running_task_failed(
     finally:
         finish.set()
         manager.shutdown()
+
+
+def test_manager_start_retries_busy_lease_then_succeeds(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+
+    with (
+        patch(
+            "pbi_agent.web.session_manager.SessionStore.acquire_web_manager_lease",
+            side_effect=[
+                WebManagerLeaseBusyError("db busy"),
+                True,
+            ],
+        ) as mock_acquire,
+        patch("pbi_agent.web.session_manager.time.sleep") as mock_sleep,
+    ):
+        manager.start()
+
+    assert mock_acquire.call_count == 2
+    mock_sleep.assert_called_once()
+    manager.shutdown()
+
+
+def test_manager_start_reports_busy_database_after_retry_window(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+
+    with (
+        patch(
+            "pbi_agent.web.session_manager.SessionStore.acquire_web_manager_lease",
+            side_effect=WebManagerLeaseBusyError("db busy"),
+        ),
+        patch(
+            "pbi_agent.web.session_manager._WEB_MANAGER_LEASE_BUSY_RETRY_SECS",
+            0.0,
+        ),
+        patch("pbi_agent.web.session_manager.time.sleep") as mock_sleep,
+    ):
+        with pytest.raises(
+            RuntimeError,
+            match="Session database is busy. Try starting the web app again.",
+        ):
+            manager.start()
+
+    mock_sleep.assert_not_called()
 
 
 def test_run_task_rejects_backlog_when_no_next_stage(monkeypatch, tmp_path) -> None:
