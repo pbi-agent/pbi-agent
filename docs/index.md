@@ -19,7 +19,7 @@ features:
   - title: 'Parallel Tool Execution'
     details: 'Run multiple model-requested tool calls concurrently with a configurable worker limit.'
   - title: 'Project Sub-Agents'
-    details: 'Discover project-local sub-agent definitions from `.agents/*.md` and route delegated work through `sub_agent`.'
+    details: 'Discover project-local sub-agent definitions from `.agents/agents/*.md` and route delegated work through `sub_agent`.'
   - title: 'PBIP Template Scaffolding'
     details: 'Bootstrap a Power BI Project from the bundled template with the init command or the init_report tool.'
   - title: 'Browser UI & Headless Runs'

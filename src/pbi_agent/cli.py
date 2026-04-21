@@ -236,7 +236,7 @@ def build_parser() -> argparse.ArgumentParser:
     diagnostics_group.add_argument(
         "--agents",
         action="store_true",
-        help="List discovered project sub-agents from .agents/*.md and exit.",
+        help="List discovered project sub-agents from .agents/agents/*.md and exit.",
     )
 
     subparsers = parser.add_subparsers(
@@ -1362,21 +1362,16 @@ def _handle_agents_flag(args: argparse.Namespace) -> int:
     console = Console()
 
     if not agents:
-        console.print("[dim]No project sub-agents discovered under[/dim] .agents/*.md")
+        console.print(
+            "[dim]No project sub-agents discovered under[/dim] .agents/agents/*.md"
+        )
         return 0
 
     table = Table(title="Sub-Agents", title_style="bold cyan")
     table.add_column("Name", style="green")
     table.add_column("Description")
-    table.add_column("Model", style="yellow")
-    table.add_column("Reasoning", style="yellow")
     for agent in agents:
-        table.add_row(
-            agent.name,
-            agent.description,
-            agent.model or "default",
-            agent.reasoning_effort or "default",
-        )
+        table.add_row(agent.name, agent.description)
     console.print(table)
     return 0
 

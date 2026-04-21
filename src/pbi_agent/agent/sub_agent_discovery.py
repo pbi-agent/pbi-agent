@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
-_DISCOVERY_ROOT = Path(".agents")
+_DISCOVERY_ROOT = Path(".agents") / "agents"
 
 
 @dataclass(slots=True, frozen=True)
@@ -14,8 +14,6 @@ class ProjectSubAgent:
     description: str
     system_prompt: str
     location: Path
-    model: str | None = None
-    reasoning_effort: str | None = None
 
 
 def format_project_sub_agents_markdown(
@@ -26,13 +24,17 @@ def format_project_sub_agents_markdown(
     agents = discover_project_sub_agents(workspace)
     lines = ["### Sub-Agents", ""]
     if reloaded:
-        lines.append("Reloaded project sub-agent definitions from `.agents/*.md`.")
+        lines.append(
+            "Reloaded project sub-agent definitions from `.agents/agents/*.md`."
+        )
         lines.append("")
     lines.append(
         "Default: use `sub_agent` without `agent_type` for the built-in generalist sub-agent."
     )
     if not agents:
-        lines.extend(["", "No project sub-agents discovered under `.agents/*.md`."])
+        lines.extend(
+            ["", "No project sub-agents discovered under `.agents/agents/*.md`."]
+        )
         return "\n".join(lines)
 
     lines.append("")
@@ -100,31 +102,17 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
 
     name = metadata.get("name")
     description = metadata.get("description")
-    model = metadata.get("model")
-    reasoning_effort = metadata.get("reasoning_effort")
     if not isinstance(name, str) or not name.strip():
         _warn(f"Skipping sub-agent at {agent_path}: missing non-empty 'name'.")
         return None
     if not isinstance(description, str) or not description.strip():
         _warn(f"Skipping sub-agent at {agent_path}: missing non-empty 'description'.")
         return None
-    if model is not None and not isinstance(model, str):
-        _warn(f"Skipping sub-agent at {agent_path}: 'model' must be a string.")
-        return None
-    if reasoning_effort is not None and not isinstance(reasoning_effort, str):
+    unsupported_keys = sorted(set(metadata) - {"name", "description"})
+    if unsupported_keys:
         _warn(
-            f"Skipping sub-agent at {agent_path}: 'reasoning_effort' must be a string."
-        )
-        return None
-    if reasoning_effort is not None and reasoning_effort not in {
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-    }:
-        _warn(
-            f"Skipping sub-agent at {agent_path}: 'reasoning_effort' must be one of: "
-            "low, medium, high, xhigh."
+            f"Skipping sub-agent at {agent_path}: unsupported frontmatter keys: "
+            f"{', '.join(repr(key) for key in unsupported_keys)}."
         )
         return None
 
@@ -134,12 +122,6 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
         description=description.strip(),
         system_prompt=_extract_body(content).strip(),
         location=agent_path.resolve(),
-        model=model.strip() if isinstance(model, str) and model.strip() else None,
-        reasoning_effort=(
-            reasoning_effort.strip()
-            if isinstance(reasoning_effort, str) and reasoning_effort.strip()
-            else None
-        ),
     )
 
 
@@ -173,11 +155,10 @@ def _parse_frontmatter(frontmatter: str, agent_path: Path) -> dict[str, str] | N
     - ``key: value`` scalar pairs
     - blank lines and ``#`` comments
     - ``|`` and ``>`` block scalars with indented content
-    - optional ``model`` and ``reasoning_effort`` scalar keys used for runtime
-      child-agent configuration
+    - only ``name`` and ``description`` frontmatter keys are supported
 
     This is intentionally not a general YAML parser. Unsupported YAML constructs
-    such as lists, nested mappings, and anchors are rejected.
+    such as lists, nested mappings, anchors, and extra keys are rejected.
     """
     result: dict[str, str] = {}
     lines = frontmatter.splitlines()

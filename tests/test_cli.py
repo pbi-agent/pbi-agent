@@ -1015,7 +1015,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             original_cwd = Path.cwd()
             root_dir = Path(tmpdir).resolve()
-            agents_dir = root_dir / ".agents"
+            agents_dir = root_dir / ".agents" / "agents"
             agents_dir.mkdir(parents=True)
             (agents_dir / "code-reviewer.md").write_text(
                 "---\n"

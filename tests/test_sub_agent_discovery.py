@@ -15,7 +15,7 @@ from pbi_agent.agent.sub_agent_discovery import (
 
 
 def _write_sub_agent(root: Path, filename: str, content: str) -> Path:
-    agent_dir = root / ".agents"
+    agent_dir = root / ".agents" / "agents"
     agent_dir.mkdir(parents=True, exist_ok=True)
     path = agent_dir / filename
     path.write_text(content, encoding="utf-8")
@@ -41,8 +41,6 @@ def test_discovers_valid_project_sub_agent(tmp_path: Path) -> None:
         ProjectSubAgent(
             name="code-reviewer",
             description="Reviews code changes.",
-            model=None,
-            reasoning_effort=None,
             system_prompt="You are a code reviewer.",
             location=agent_path.resolve(),
         )
@@ -89,8 +87,6 @@ def test_duplicate_names_keep_first_loaded(tmp_path: Path, capsys) -> None:
         ProjectSubAgent(
             name="reviewer",
             description="First reviewer.",
-            model=None,
-            reasoning_effort=None,
             system_prompt="First prompt.",
             location=first.resolve(),
         )
@@ -140,7 +136,7 @@ def test_description_supports_simple_quoted_scalars(tmp_path: Path) -> None:
     ]
 
 
-def test_discovers_agent_model_and_reasoning_effort(tmp_path: Path) -> None:
+def test_skips_unsupported_frontmatter_keys(tmp_path: Path, capsys) -> None:
     _write_sub_agent(
         tmp_path,
         "reviewer.md",
@@ -157,16 +153,8 @@ def test_discovers_agent_model_and_reasoning_effort(tmp_path: Path) -> None:
 
     agents = discover_project_sub_agents(tmp_path)
 
-    assert agents == [
-        ProjectSubAgent(
-            name="reviewer",
-            description="Reviews code changes.",
-            model="gpt-5.4-mini",
-            reasoning_effort="high",
-            system_prompt="Review prompt.",
-            location=tmp_path.joinpath(".agents", "reviewer.md").resolve(),
-        )
-    ]
+    assert agents == []
+    assert "unsupported frontmatter keys" in capsys.readouterr().err
 
 
 def test_skips_unsupported_nested_yaml_structures(tmp_path: Path, capsys) -> None:
@@ -189,7 +177,7 @@ def test_format_project_sub_agents_markdown_includes_default_note(
 
     assert "### Sub-Agents" in result
     assert "Default: use `sub_agent` without `agent_type`" in result
-    assert "No project sub-agents discovered under `.agents/*.md`." in result
+    assert "No project sub-agents discovered under `.agents/agents/*.md`." in result
 
 
 def test_get_project_sub_agent_by_name_returns_match(tmp_path: Path) -> None:

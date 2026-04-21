@@ -548,10 +548,7 @@ def run_sub_agent_task(
 
     child_settings = replace(
         settings,
-        model=getattr(agent_definition, "model", None)
-        or _selected_sub_agent_model(settings),
-        reasoning_effort=getattr(agent_definition, "reasoning_effort", None)
-        or settings.reasoning_effort,
+        model=_selected_sub_agent_model(settings),
     )
     from pbi_agent.agent.names import pick_deity_name
 

@@ -530,8 +530,6 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
             {
                 "name": name,
                 "description": "Reviews code.",
-                "model": "gpt-5.4-mini",
-                "reasoning_effort": "high",
                 "system_prompt": "You are a code reviewer.",
             },
         )(),
@@ -554,8 +552,8 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
     assert parent_display.sub_agent_calls[0]["name"] == "code-reviewer"
     assert "You are a code reviewer." in str(captured["system_prompt"])
     assert isinstance(captured["settings"], Settings)
-    assert captured["settings"].model == "gpt-5.4-mini"
-    assert captured["settings"].reasoning_effort == "high"
+    assert captured["settings"].model == "gpt-5"
+    assert captured["settings"].reasoning_effort == settings.reasoning_effort
 
 
 def test_run_sub_agent_task_rejects_unknown_agent_type() -> None:
