@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
+from pbi_agent import __version__
+
 if TYPE_CHECKING:
     from rich.align import Align
 
@@ -79,11 +81,13 @@ def startup_panel() -> "Align":
     text = Text()
     accent_style = f"bold {PBI_AGENT_ACCENT}"
     cutout_style = "bold white"
+    version_label = f"v{__version__}"
     if PBI_AGENT_LOGO_ROWS:
         logo_lines = list(PBI_AGENT_LOGO_ROWS)
         content_width = max(
             *[len(line) for line in logo_lines],
             len(PBI_AGENT_TAGLINE.strip()),
+            len(version_label),
         )
         for row in logo_lines:
             for segment, role in _iter_logo_spans(row.center(content_width)):
@@ -97,7 +101,11 @@ def startup_panel() -> "Align":
                 text.append(segment, style=style)
             text.append("\n")
         text.append("\n")
+    else:
+        content_width = max(len(PBI_AGENT_TAGLINE.strip()), len(version_label))
     text.append(PBI_AGENT_TAGLINE.strip().center(content_width), style="bold")
+    text.append("\n")
+    text.append(version_label.center(content_width), style="dim")
 
     panel = Panel(
         text,
