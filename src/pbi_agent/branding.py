@@ -8,18 +8,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from rich.align import Align
 
-PBI_AGENT_ACCENT = "#1C2A39"
-PBI_AGENT_NAME = "pbi-agent"
-PBI_AGENT_TAGLINE = "work smart."
+PBI_AGENT_ACCENT = "#1477E0"
+PBI_AGENT_TAGLINE = " >_ work smart"
 PBI_AGENT_LOGO_ROWS = (
-    "  >_  BBBBBB   IIIII",
-    "      BB   BB  II >I",
-    "      BBBBBB   II/ I",
-    "      BB   BB  II  I",
-    "      BBBBBB   IIIII",
+    "PPPPPP  BBBBBB  IIIII",
+    "PP  PP  BB   BB   I  ",
+    "PPPPPP  BBBBBB    I  ",
+    "PP      BB   BB   I  ",
+    "PP      BBBBBB  IIIII",
 )
 
-_ACCENT_GLYPHS = frozenset({"B", "I"})
+_ACCENT_GLYPHS = frozenset({"P", "B", "I"})
 _CUTOUT_GLYPHS = frozenset({">", "_", "/"})
 
 
@@ -64,7 +63,6 @@ def rich_brand_block(*, accent: str = PBI_AGENT_ACCENT) -> str:
     lines.extend(
         [
             "",
-            f"[bold {accent}]{PBI_AGENT_NAME}[/bold {accent}]",
             f"[bold]{PBI_AGENT_TAGLINE}[/bold]",
         ]
     )
@@ -78,12 +76,17 @@ def startup_panel() -> "Align":
     from rich.panel import Panel
     from rich.text import Text
 
-    text = Text(justify="center")
+    text = Text()
     accent_style = f"bold {PBI_AGENT_ACCENT}"
     cutout_style = "bold white"
     if PBI_AGENT_LOGO_ROWS:
-        for row in PBI_AGENT_LOGO_ROWS:
-            for segment, role in _iter_logo_spans(row):
+        logo_lines = list(PBI_AGENT_LOGO_ROWS)
+        content_width = max(
+            *[len(line) for line in logo_lines],
+            len(PBI_AGENT_TAGLINE.strip()),
+        )
+        for row in logo_lines:
+            for segment, role in _iter_logo_spans(row.center(content_width)):
                 style = (
                     accent_style
                     if role == "accent"
@@ -94,8 +97,7 @@ def startup_panel() -> "Align":
                 text.append(segment, style=style)
             text.append("\n")
         text.append("\n")
-    text.append(PBI_AGENT_NAME + "\n", style=accent_style)
-    text.append(PBI_AGENT_TAGLINE, style="bold")
+    text.append(PBI_AGENT_TAGLINE.strip().center(content_width), style="bold")
 
     panel = Panel(
         text,

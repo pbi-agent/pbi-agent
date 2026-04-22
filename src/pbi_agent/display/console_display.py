@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
 
-from pbi_agent.branding import PBI_AGENT_ACCENT, PBI_AGENT_NAME
+from pbi_agent.branding import PBI_AGENT_ACCENT
 from pbi_agent.models.messages import TokenUsage, WebSearchSource
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.display.protocol import DisplayProtocol, PendingToolGroup
@@ -145,11 +145,6 @@ class ConsoleDisplay(DisplayProtocol):
         self._console.print(
             Panel(
                 f"[dim]{escape_markup_text(mode)}[/dim]",
-                title=(
-                    f"[bold {PBI_AGENT_ACCENT}]"
-                    f"{escape_markup_text(PBI_AGENT_NAME)}"
-                    f"[/bold {PBI_AGENT_ACCENT}]"
-                ),
                 subtitle=subtitle,
                 border_style=PBI_AGENT_ACCENT,
                 expand=False,

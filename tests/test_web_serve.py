@@ -27,7 +27,7 @@ from pbi_agent.auth.models import (
     DeviceAuthChallenge,
 )
 from pbi_agent.auth.store import build_auth_session, save_auth_session
-from pbi_agent.branding import PBI_AGENT_NAME, PBI_AGENT_TAGLINE
+from pbi_agent.branding import PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     ModelProfileConfig,
@@ -153,8 +153,7 @@ def test_web_server_prints_banner_and_starts_uvicorn() -> None:
         server.serve(debug=False)
 
     rendered = output.getvalue()
-    assert ">_  BBBBBB   IIIII" in rendered
-    assert PBI_AGENT_NAME in rendered
+    assert "PPPPPP  BBBBBB  IIIII" in rendered
     assert PBI_AGENT_TAGLINE in rendered
     assert "http://127.0.0.1:9001" in rendered
     mock_run.assert_called_once()
