@@ -14,7 +14,7 @@
 
 </div>
 
-`pbi-agent` is a local CLI and browser-based coding agent for working directly in a repository through natural language.
+`pbi-agent` is a lightweight, model-agnostic coding agent that runs in your terminal for orchestrating work through multi-agent collaboration and kanban-style coordination.
 
 Repository: [https://github.com/pbi-agent/pbi-agent](https://github.com/pbi-agent/pbi-agent)
 
