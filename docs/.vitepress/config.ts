@@ -1,5 +1,6 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig, type HeadConfig } from 'vitepress'
-import logoUrl from '../../src/pbi_agent/web/static/logo.jpg'
 
 const siteName = 'pbi-agent'
 const siteDescription =
@@ -7,7 +8,9 @@ const siteDescription =
 const siteBase = '/pbi-agent/'
 const siteUrl = 'https://pbi-agent.github.io/pbi-agent/'
 const socialImageUrl = new URL('social-card.jpg', siteUrl).toString()
-const faviconUrl = logoUrl
+const faviconUrl = '/logo.jpg'
+const docsDir = path.dirname(fileURLToPath(import.meta.url))
+const sharedPublicDir = path.resolve(docsDir, '../../src/pbi_agent/web/static')
 
 function resolvePageUrl(page: string): string {
   if (page === 'index.md') {
@@ -75,6 +78,9 @@ export default defineConfig({
     image: {
       lazyLoading: true
     }
+  },
+  vite: {
+    publicDir: sharedPublicDir
   },
   transformHead(context) {
     return buildSocialHead(

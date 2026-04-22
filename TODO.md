@@ -1,3 +1,3 @@
-[X] Center the middle I stroke in the branding logo
-[X] Verify rendered banner spacing
+[X] Fix VitePress docs logo asset loading
+[!] Run docs build
 [X] Append task note to MEMORY.md
