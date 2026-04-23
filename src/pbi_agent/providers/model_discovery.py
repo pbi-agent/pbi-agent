@@ -20,7 +20,7 @@ _DISCOVERY_TIMEOUT_SECS = 30.0
 _SUPPORTED_DISCOVERY_PROVIDERS = frozenset(
     {"openai", "chatgpt", "github_copilot", "xai", "google", "anthropic", "generic"}
 )
-_OPENAI_CHATGPT_MIN_CLIENT_VERSION = "0.99.0"
+_OPENAI_CHATGPT_MIN_CLIENT_VERSION = "0.124.0"
 _MANUAL_ENTRY_ONLY_REASONS: dict[str, str] = {}
 
 
