@@ -1,4 +1,4 @@
-[X] Fix task session directory binding regression
-[X] Add focused regression coverage
-[X] Run focused validation
+[X] Remove incorrect main-turn tool-loop cap
+[X] Remove related runaway-loop regression test
+[X] Revalidate focused tests
 [X] Update task memory

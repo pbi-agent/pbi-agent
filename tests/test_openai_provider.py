@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.request
 from unittest.mock import Mock
@@ -753,7 +754,67 @@ data: {"type":"response.completed","response":{"id":"resp_3","model":"gpt-5","us
 
     assert requests[0]["headers"].get("X-codex-turn-state") is None
     assert requests[1]["headers"]["X-codex-turn-state"] == "ts-1"
+    assert requests[1]["body"]["input"][0] == {"role": "user", "content": "Hello"}
+    assert requests[1]["body"]["input"][-1] == {
+        "type": "function_call_output",
+        "call_id": "call_1",
+        "output": '{"ok": true, "result": []}',
+    }
     assert requests[2]["headers"].get("X-codex-turn-state") is None
+    assert requests[2]["body"]["input"][-1] == {
+        "role": "user",
+        "content": "Next turn",
+    }
+
+
+def test_openai_request_turn_retries_incomplete_chunked_response(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    response_payload = {
+        "id": "resp_recovered",
+        "model": DEFAULT_MODEL,
+        "usage": {
+            "input_tokens": 6,
+            "input_tokens_details": {"cached_tokens": 0},
+            "output_tokens": 4,
+            "output_tokens_details": {"reasoning_tokens": 0},
+        },
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "Recovered."}],
+            },
+        ],
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            raise http.client.IncompleteRead(b'{"id":"partial"')
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = OpenAIProvider(_make_settings(max_retries=1))
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert display_spy.retry_notices == [(1, 1)]
 
 
 def test_parse_sse_response_reconstructs_output_from_stream_events() -> None:

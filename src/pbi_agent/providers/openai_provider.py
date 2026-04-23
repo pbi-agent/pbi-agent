@@ -6,6 +6,7 @@ history is managed server-side via ``previous_response_id``.
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -303,9 +304,10 @@ class OpenAIProvider(Provider):
                     method="POST",
                 )
                 with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECS) as resp:
+                    raw_body = resp.read().decode("utf-8")
                     self._chatgpt_backend.capture_response_headers(resp)
                     response_json = self._decode_response_body(
-                        resp.read().decode("utf-8"),
+                        raw_body,
                         streamed=bool(request_body.get("stream")),
                     )
 
@@ -450,6 +452,27 @@ class OpenAIProvider(Provider):
                 raise RuntimeError(
                     _format_error_message("OpenAI Responses API error", error_payload)
                 ) from exc
+            except (http.client.IncompleteRead, TimeoutError, ConnectionError) as exc:
+                last_error = exc
+                _trace_provider_call(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=_sanitize_request_payload_for_observability(
+                        request_body
+                    ),
+                    response_payload={"error": str(exc)},
+                    duration_ms=_duration_ms(req_start),
+                    success=False,
+                    error_message=str(exc),
+                    metadata={"attempt": attempt + 1},
+                )
+                if attempt >= max_retries:
+                    break
+                retry_notice_max_retries = max_retries
+                continue
             except urllib.error.URLError as exc:
                 last_error = exc
                 _trace_provider_call(

@@ -855,6 +855,12 @@ def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) 
             assert active_live_session["session_id"] == session_id
 
             live_session_id = active_live_session["live_session_id"]
+            manager = app.state.manager
+            assert (
+                manager._live_sessions[live_session_id].worker
+                is manager._task_workers[task_id]
+            )
+            assert manager._live_sessions[live_session_id].worker is not None
             with client.websocket_connect(
                 f"/api/events/{live_session_id}"
             ) as websocket:

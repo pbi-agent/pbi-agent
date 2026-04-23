@@ -533,6 +533,51 @@ def test_move_kanban_task_reorders_within_stage(tmp_path) -> None:
     assert second.task_id != third.task_id
 
 
+def test_list_kanban_tasks_orders_done_by_created_at_desc(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        store.create_kanban_task(
+            directory="/w",
+            title="Backlog First",
+            prompt="One",
+        )
+        store.create_kanban_task(
+            directory="/w",
+            title="Backlog Second",
+            prompt="Two",
+        )
+        old_done = store.create_kanban_task(
+            directory="/w",
+            title="Old Done",
+            prompt="Old",
+            stage=KANBAN_STAGE_DONE,
+        )
+        new_done = store.create_kanban_task(
+            directory="/w",
+            title="New Done",
+            prompt="New",
+            stage=KANBAN_STAGE_DONE,
+        )
+        with store._lock:
+            store._conn.execute(
+                "UPDATE kanban_tasks SET created_at = ? WHERE task_id = ?",
+                ("2026-04-01T00:00:00+00:00", old_done.task_id),
+            )
+            store._conn.execute(
+                "UPDATE kanban_tasks SET created_at = ? WHERE task_id = ?",
+                ("2026-04-20T00:00:00+00:00", new_done.task_id),
+            )
+            store._conn.commit()
+        tasks = store.list_kanban_tasks("/w")
+
+    assert [task.title for task in tasks] == [
+        "Backlog First",
+        "Backlog Second",
+        "New Done",
+        "Old Done",
+    ]
+
+
 def test_set_kanban_task_result_preserves_stage(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

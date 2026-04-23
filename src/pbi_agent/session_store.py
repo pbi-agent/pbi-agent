@@ -1502,8 +1502,16 @@ class SessionStore:
                 "WHERE task.directory = ? "
                 "ORDER BY "
                 "CASE WHEN stage_cfg.position IS NULL THEN 1 ELSE 0 END ASC, "
-                "stage_cfg.position ASC, task.position ASC, task.updated_at DESC",
-                (normalized_directory,),
+                "stage_cfg.position ASC, "
+                "CASE WHEN task.stage = ? THEN task.created_at END DESC, "
+                "CASE WHEN task.stage != ? THEN task.position END ASC, "
+                "CASE WHEN task.stage != ? THEN task.updated_at END DESC",
+                (
+                    normalized_directory,
+                    KANBAN_STAGE_DONE,
+                    KANBAN_STAGE_DONE,
+                    KANBAN_STAGE_DONE,
+                ),
             ).fetchall()
         return [KanbanTaskRecord(**dict(row)) for row in rows]
 

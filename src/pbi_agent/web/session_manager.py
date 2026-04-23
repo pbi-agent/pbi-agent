@@ -387,7 +387,7 @@ class LiveSessionState:
     event_stream: EventStream
     snapshot: LiveSessionSnapshot
     display: WebDisplay
-    worker: threading.Thread
+    worker: threading.Thread | None
     runtime: ResolvedRuntime
     bound_session_id: str | None
     created_at: str
@@ -1258,6 +1258,7 @@ class WebSessionManager:
             name=f"pbi-agent-web-task-{task_id[:8]}",
         )
         with self._lock:
+            live_session.worker = worker
             self._task_workers[task_id] = worker
         worker.start()
         return self._serialize_task_record(running_record)
@@ -1855,7 +1856,8 @@ class WebSessionManager:
         for session in sessions:
             session.display.request_shutdown()
         for session in sessions:
-            session.worker.join(timeout=1.5)
+            if session.worker is not None:
+                session.worker.join(timeout=1.5)
         task_workers = list(self._task_workers.values())
         for worker in task_workers:
             worker.join(timeout=1.5)
@@ -2106,7 +2108,7 @@ class WebSessionManager:
             event_stream=event_stream,
             snapshot=snapshot,
             display=display,
-            worker=threading.current_thread(),
+            worker=None,
             runtime=runtime,
             bound_session_id=bound_session_id,
             created_at=_now_iso(),
