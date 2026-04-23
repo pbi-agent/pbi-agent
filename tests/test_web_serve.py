@@ -891,6 +891,68 @@ def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) 
     assert final_task["last_result_summary"] == "Done."
 
 
+def test_run_task_precreated_session_uses_project_directory(
+    monkeypatch, tmp_path
+) -> None:
+    project_dir = tmp_path / "packages" / "api"
+    project_dir.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    def fake_run_single_turn(_prompt, _runtime, _display, **kwargs):
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Done.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    with patch(
+        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        side_effect=fake_run_single_turn,
+    ):
+        with TestClient(app) as client:
+            client.put(
+                "/api/board/stages",
+                json={
+                    "board_stages": [
+                        {"id": "backlog", "name": "Backlog"},
+                        {"id": "plan", "name": "Plan"},
+                    ]
+                },
+            )
+            create_response = client.post(
+                "/api/tasks",
+                json={
+                    "title": "Task A",
+                    "prompt": "Investigate",
+                    "stage": "plan",
+                    "project_dir": "packages/api",
+                },
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+            session_id = run_response.json()["task"]["session_id"]
+
+            deadline = time.monotonic() + 2
+            while True:
+                task_payload = client.get("/api/tasks").json()["tasks"][0]
+                if task_payload["run_status"] == "completed":
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("task run did not finish in time")
+                time.sleep(0.01)
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        saved_session = store.get_session(session_id)
+
+    assert saved_session is not None
+    assert saved_session.directory == str(project_dir).lower()
+
+
 def test_run_task_from_backlog_moves_to_next_stage_before_execution(
     monkeypatch, tmp_path
 ) -> None:

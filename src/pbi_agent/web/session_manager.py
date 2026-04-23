@@ -1228,7 +1228,7 @@ class WebSessionManager:
             )
             if record.session_id is None:
                 session_id = store.create_session(
-                    directory=self._directory_key,
+                    directory=self._task_session_directory(record.project_dir),
                     provider=runtime.settings.provider,
                     provider_id=runtime.provider_id or None,
                     model=runtime.settings.model,
@@ -2468,6 +2468,12 @@ class WebSessionManager:
             raise FileNotFoundError(f"Project directory does not exist: {target}")
         if not target.is_dir():
             raise NotADirectoryError(f"Project path is not a directory: {target}")
+
+    def _task_session_directory(self, project_dir: str) -> str:
+        candidate = project_dir.strip() or "."
+        target = (self._workspace_root / candidate).resolve()
+        target.relative_to(self._workspace_root)
+        return str(target)
 
     def _resolve_runtime(self, profile_id: str | None) -> ResolvedRuntime:
         if profile_id is None:
