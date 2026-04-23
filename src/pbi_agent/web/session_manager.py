@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import re
 import threading
 import time
 import uuid
@@ -122,9 +121,6 @@ _WEB_MANAGER_LEASE_STALE_SECS = 30.0
 _WEB_MANAGER_LEASE_HEARTBEAT_SECS = 5.0
 _WEB_MANAGER_LEASE_BUSY_RETRY_SECS = 2.0
 _WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS = 0.1
-_STRUCTURED_TASK_HEADER_PATTERN = re.compile(
-    r"^#{1,6}\s+|^[-*]\s+|^\d+\.\s+", re.MULTILINE
-)
 
 
 def _now_iso() -> str:
@@ -1968,7 +1964,7 @@ class WebSessionManager:
                     allow_fallback=False,
                 )
                 outcome = run_single_turn_in_directory(
-                    self._task_prompt_for_run(record.prompt, stage_record),
+                    self._task_prompt_for_run(record, stage_record),
                     runtime,
                     live_session.display
                     if live_session is not None
@@ -2389,11 +2385,12 @@ class WebSessionManager:
 
     def _task_prompt_for_run(
         self,
-        prompt: str,
+        record: KanbanTaskRecord,
         stage_record: KanbanStageConfigRecord | None,
         *,
         store: SessionStore | None = None,
     ) -> str:
+        prompt = record.prompt
         stripped_prompt = prompt.strip()
         if (
             not stripped_prompt
@@ -2408,7 +2405,9 @@ class WebSessionManager:
         first_runnable_stage_id = self._first_runnable_board_stage_id(store=store)
         if stage_record.stage_id != first_runnable_stage_id:
             return command.slash_alias
-        return f"{command.slash_alias} {prompt}"
+        return (
+            f"{command.slash_alias}\n{self._format_task_prompt(record.title, prompt)}"
+        )
 
     def _normalize_task_content(
         self,
@@ -2420,25 +2419,8 @@ class WebSessionManager:
         normalized_prompt = prompt.strip() if isinstance(prompt, str) else prompt
         if normalized_prompt is None:
             return normalized_title, None
-        if self._prompt_looks_structured(normalized_prompt):
-            derived_title = normalized_title or self._derive_task_title(
-                normalized_prompt
-            )
-            if normalized_title and prompt is not None:
-                return derived_title, self._replace_structured_task_title(
-                    normalized_prompt,
-                    derived_title,
-                )
-            return derived_title, normalized_prompt
         derived_title = normalized_title or self._derive_task_title(normalized_prompt)
-        return derived_title, self._format_task_prompt(derived_title, normalized_prompt)
-
-    def _prompt_looks_structured(self, prompt: str) -> bool:
-        if not prompt:
-            return False
-        if prompt.startswith("# ") or "\n## " in prompt:
-            return True
-        return bool(_STRUCTURED_TASK_HEADER_PATTERN.search(prompt))
+        return derived_title, normalized_prompt
 
     def _derive_task_title(self, prompt: str) -> str:
         lines = [line.strip(" -*\t") for line in prompt.splitlines() if line.strip()]
@@ -2448,14 +2430,6 @@ class WebSessionManager:
 
     def _format_task_prompt(self, title: str, prompt: str) -> str:
         return f"# Task\n{title}\n\n## Goal\n{prompt}"
-
-    def _replace_structured_task_title(self, prompt: str, title: str) -> str:
-        if prompt.startswith("# Task\n"):
-            _header, separator, remainder = prompt.partition("\n\n")
-            if separator:
-                return f"# Task\n{title}{separator}{remainder}"
-            return f"# Task\n{title}"
-        return prompt
 
     def _maybe_auto_start_task(self, record: KanbanTaskRecord) -> dict[str, Any] | None:
         if not self._should_auto_start_stage(record.stage):

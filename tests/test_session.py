@@ -345,6 +345,36 @@ def test_run_single_turn_uses_command_specific_instructions_for_full_turn(
     )
 
 
+def test_run_single_turn_uses_command_instructions_when_body_starts_on_next_line(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub()
+    display = _DisplaySpy()
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=3)
+    monotonic_values = iter([10.0, 13.5])
+    _write_command(tmp_path, "plan", "Plan before coding.")
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    prompt = "/plan\n# Task\nTask A\n\n## Goal\nInvestigate"
+    run_single_turn(prompt, settings, display)
+
+    assert provider.request_calls[0]["user_message"] == prompt
+    assert provider.request_calls[0]["instructions"] is not None
+    assert "<active_command>\nPlan before coding.\n</active_command>" in str(
+        provider.request_calls[0]["instructions"]
+    )
+
+
 def test_run_single_turn_does_not_activate_command_when_command_file_is_missing(
     monkeypatch,
     tmp_path,
@@ -902,6 +932,32 @@ def test_run_session_loop_keeps_command_alias_and_uses_turn_specific_instruction
 
     assert exit_code == 0
     assert provider.request_messages == ["/plan draft the approach"]
+    assert provider.request_instructions[0] is not None
+    assert "<active_command>\nPlan before coding.\n</active_command>" in str(
+        provider.request_instructions[0]
+    )
+
+
+def test_run_session_loop_uses_command_instructions_when_body_starts_on_next_line(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ChatProviderStub()
+    prompt = "/plan\n# Task\nTask A\n\n## Goal\nInvestigate"
+    display = _SessionDisplaySpy([prompt, "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    _write_command(tmp_path, "plan", "Plan before coding.")
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == [prompt]
     assert provider.request_instructions[0] is not None
     assert "<active_command>\nPlan before coding.\n</active_command>" in str(
         provider.request_instructions[0]

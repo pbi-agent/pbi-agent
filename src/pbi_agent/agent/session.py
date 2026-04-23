@@ -100,7 +100,7 @@ def _extract_active_command_instructions(value: str) -> str | None:
     stripped = value.strip()
     if not stripped.startswith("/"):
         return None
-    head = stripped.partition(" ")[0]
+    head = stripped.split(maxsplit=1)[0]
     try:
         command = find_command_config_by_alias(head)
     except Exception:
