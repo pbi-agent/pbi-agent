@@ -127,8 +127,8 @@ def test_execute_tool_calls_serializes_truncated_shell_output(
     monkeypatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    stdout = f"stdout-start-{'a' * (MAX_OUTPUT_CHARS + 50)}-stdout-end"
-    stderr = f"stderr-start-{'b' * (MAX_OUTPUT_CHARS + 50)}-stderr-end"
+    stdout = f"stdout-start-{'a' * (shell_tool.MAX_STDOUT_CHARS + 50)}-stdout-end"
+    stderr = f"stderr-start-{'b' * (shell_tool.MAX_STDERR_CHARS + 50)}-stderr-end"
 
     def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         del args, kwargs
@@ -158,8 +158,8 @@ def test_execute_tool_calls_serializes_truncated_shell_output(
     assert result["exit_code"] == 0
     assert result["stdout_truncated"] is True
     assert result["stderr_truncated"] is True
-    assert len(result["stdout"]) <= MAX_OUTPUT_CHARS
-    assert len(result["stderr"]) <= MAX_OUTPUT_CHARS
+    assert len(result["stdout"]) <= shell_tool.MAX_STDOUT_CHARS
+    assert len(result["stderr"]) <= shell_tool.MAX_STDERR_CHARS
     assert result["stdout"].startswith("stdout-start-")
     assert result["stdout"].endswith("-stdout-end")
     assert result["stderr"].startswith("stderr-start-")
