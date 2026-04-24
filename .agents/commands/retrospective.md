@@ -1,35 +1,35 @@
 # Retrospective Mode
 
-Evaluate the workflow that just happened and identify the most precise customization change for the next rep.
+Evaluate workflow that just happened and identify most precise customization change for next rep.
 
-Your job is not to continue the task. Your job is to inspect the completed workflow, use the local session trace as evidence, and recommend improvements at the correct layer of the pbi-agent customization stack.
+Do not continue task. Inspect completed workflow, use local session trace as evidence, and recommend improvements at correct pbi-agent customization stack layer.
 
 ## Mission
 
-Turn one workflow run into a better next run.
+Turn one workflow run into better next run.
 
 Optimize for:
 1. reliability
 2. wall-clock time
 3. adaptability to a changing codebase
 
-Do not invent success. Determine whether the workflow actually closed the loop.
+Do not invent success. Determine whether workflow closed loop.
 
 ## Primary evidence sources
 
 Use concrete evidence first, narrative second.
 
 Inspect:
-- the resumed session transcript
-- the local SQLite session database
-- the latest run chain for the current workflow/session
+- resumed session transcript
+- local SQLite session database
+- latest run chain for current workflow/session
 - relevant workspace customization files if present
 
 Find the session database from:
 1. `PBI_AGENT_SESSION_DB_PATH` if set
 2. otherwise `~/.pbi-agent/sessions.db`
 
-Prefer the current/resumed `session_id`. If multiple runs exist, focus on the latest run chain associated with this workflow pass.
+Prefer current/resumed `session_id`. If multiple runs exist, focus latest run chain tied to this workflow pass.
 
 Relevant tables may include:
 - `sessions`
@@ -41,60 +41,60 @@ Relevant tables may include:
 
 ## The pbi-agent customization stack
 
-When recommending improvements, classify them into the correct layer instead of giving generic advice.
+When recommending improvements, classify into correct layer instead of generic advice.
 
 ### 1) `INSTRUCTIONS.md` — workspace role / main prompt system
 
-Treat `INSTRUCTIONS.md` as the workspace’s main role definition and operating contract.
+Treat `INSTRUCTIONS.md` as workspace main role definition and operating contract.
 
 Use this layer for problems like:
-- the agent chose the wrong overall strategy
-- the agent was too passive or too eager
-- the agent did not prioritize validation strongly enough
-- the agent used tools in the wrong general way
-- the agent should consistently think in a different mode across the whole project
+- agent chose wrong overall strategy
+- agent was too passive or too eager
+- agent did not prioritize validation enough
+- agent used tools in wrong general way
+- agent should consistently think in different mode across whole project
 
-Recommend `INSTRUCTIONS.md` changes only when the improvement should apply to nearly every task in this workspace.
+Recommend `INSTRUCTIONS.md` changes only when improvement should apply to nearly every workspace task.
 
 ### 2) `AGENTS.md` — project context and repository rules
 
-Treat `AGENTS.md` as the project-specific rules and conventions layer.
+Treat `AGENTS.md` as project-specific rules and conventions layer.
 
 Use this layer for problems like:
 - missing repo conventions
 - missing test / validation commands
 - missing architecture context
 - incorrect assumptions about directories, ownership, boundaries, or workflows
-- policies that every session in this repo should follow
+- policies every session in this repo should follow
 
-Recommend `AGENTS.md` changes when the lesson is repository-specific and should be consistently available in all sessions.
+Recommend `AGENTS.md` changes when lesson is repo-specific and should be available in all sessions.
 
 ### 3) Skills — reusable knowledge base / workflow recipes
 
-Treat skills as reusable know-how the agent can load when a task matches a recurring workflow.
+Treat skills as reusable know-how agent can load when task matches recurring workflow.
 
-Use a skill when the run revealed:
+Use skill when run revealed:
 - repeated multi-step procedures
-- stable workflows that should be reusable
+- stable reusable workflows
 - domain-specific troubleshooting playbooks
 - validation recipes
 - environment-specific operational knowledge
-- decision trees that are too detailed for `AGENTS.md`
+- decision trees too detailed for `AGENTS.md`
 
-Recommend a new skill or skill update when the lesson is procedural knowledge that should be reused selectively, not forced into every prompt.
+Recommend new skill or skill update when lesson is procedural knowledge reused selectively, not forced into every prompt.
 
 ### 4) Commands — stage-specific prompt presets
 
-Treat commands as stage-entry behavior presets, especially for kanban stages.
+Treat commands as stage-entry behavior presets, especially kanban stages.
 
-Use a command when the improvement is about:
-- how a stage should start
-- what a stage should focus on
+Use command when improvement is about:
+- how stage should start
+- what stage should focus on
 - what inputs to inspect first
 - how to format outputs for that stage
 - what “done” means for that stage
 
-Recommend command changes when the fix is specific to a workflow step such as execute, validate, review, or retrospective.
+Recommend command changes when fix is specific to workflow step such as execute, validate, review, or retrospective.
 
 ## Precision rule
 
@@ -104,18 +104,18 @@ For every recommendation, choose exactly one primary layer:
 - skill
 - command
 
-Only recommend multiple layers for the same issue if there is a clear split of responsibilities. Avoid vague “update prompt and maybe add a skill” advice.
+Only recommend multiple layers for same issue when responsibilities clearly split. Avoid vague “update prompt and maybe add a skill” advice.
 
 ## What to evaluate
 
 Figure out:
-- What was the actual win condition?
-- Was it validated, assumed, partially met, or not met?
-- What concrete trace evidence proves that?
+- Actual win condition?
+- Validated, assumed, partially met, or not met?
+- What concrete trace evidence proves it?
 - Where did time go?
 - Which loops, retries, or dead ends happened?
 - Which failures came from missing role guidance, missing project context, missing reusable knowledge, or weak stage setup?
-- Which change would most improve the next rep?
+- Which change most improves next rep?
 
 ## Diagnostic lens
 
@@ -124,7 +124,7 @@ Look for these failure classes:
 ### Validation failures
 - “done” claimed without proof
 - no explicit acceptance test
-- validation happened too late
+- validation too late
 - weak or indirect evidence
 
 ### Planning / execution failures
@@ -149,12 +149,12 @@ Recommendations must be:
 - high leverage
 - specific enough to implement directly
 
-Prefer a few strong changes over a long list.
+Prefer few strong changes over long list.
 
 When proposing edits:
-- give the target layer
-- explain why that layer is the right one
-- write the exact instruction or summary of the skill/command to add
+- give target layer
+- explain why that layer is right
+- write exact instruction or summary of skill/command to add
 - describe how it would have changed this run
 
 ## Output format
@@ -168,25 +168,25 @@ State one:
 - partial
 - failed
 
-Give a one-sentence explanation.
+Give one-sentence explanation.
 
 ## Evidence from Trace
-List the strongest concrete observations from transcript, runs, and observability events.
+List strongest concrete observations from transcript, runs, and observability events.
 
 ## Where the Workflow Broke Down
-Call out the main sources of time loss, ambiguity, retries, or unvalidated claims.
+Call out main sources of time loss, ambiguity, retries, or unvalidated claims.
 
 ## Customization Diagnosis
-For each major issue, classify the correct target layer:
+For each major issue, classify correct target layer:
 - `INSTRUCTIONS.md`
 - `AGENTS.md`
 - skill
 - command
 
-For each classification, explain why that is the most precise layer.
+For each classification, explain why this is most precise layer.
 
 ## Recommended Changes
-Provide only the highest-leverage changes.
+Provide only highest-leverage changes.
 
 For each change, use this format:
 - **Target layer:** `INSTRUCTIONS.md` | `AGENTS.md` | skill | command
@@ -195,10 +195,10 @@ For each change, use this format:
 - **Expected effect on next rep:** reliability / speed / adaptability impact
 
 ## Prompt / Skill / Command Mutations
-Write the concrete text or near-final draft for the most important changes.
+Write concrete text or near-final draft for most important changes.
 
 ## Next Rep
-Give a short improved workflow for the next attempt, including where validation happens and what should be reused.
+Give short improved workflow for next attempt, including where validation happens and what should be reused.
 
 ## Quality bar
 - Be specific.
@@ -206,4 +206,4 @@ Give a short improved workflow for the next attempt, including where validation 
 - Pick the right customization layer.
 - Do not confuse project-wide rules with reusable skills.
 - Do not confuse reusable skills with stage-specific commands.
-- If the trace is incomplete, say so explicitly.
+- If trace is incomplete, say so explicitly.

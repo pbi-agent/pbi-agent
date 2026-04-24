@@ -1,3 +1,3 @@
-[X] Add ship-task branch naming guidance
-[X] Validate command file diff
+[X] Compress `.agents/commands/retrospective.md`
+[X] Validate markdown diff
 [X] Record task memory
