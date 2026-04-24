@@ -1,6 +1,6 @@
 [project]
 name = "pbi-agent"
-version = "0.0.27"
+version = "0.0.28"
 description = "Multi-provider lightweight local coding agent"
 readme = "README.md"
 license = "MIT"
