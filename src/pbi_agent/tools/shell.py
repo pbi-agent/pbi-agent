@@ -16,6 +16,8 @@ from pbi_agent.tools.output import bound_output, decode_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 MAX_TIMEOUT_MS = 120_000
+MAX_STDOUT_CHARS = 12_000
+MAX_STDERR_CHARS = 12_000
 MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
 
 SPEC = ToolSpec(
@@ -139,8 +141,14 @@ def _normalize_timeout_ms(raw_timeout: Any) -> int:
 
 
 def _build_output_payload(*, stdout: str, stderr: str) -> dict[str, Any]:
-    bounded_stdout, stdout_truncated = bound_output(stdout)
-    bounded_stderr, stderr_truncated = bound_output(stderr)
+    bounded_stdout, stdout_truncated = bound_output(
+        stdout,
+        limit=MAX_STDOUT_CHARS,
+    )
+    bounded_stderr, stderr_truncated = bound_output(
+        stderr,
+        limit=MAX_STDERR_CHARS,
+    )
     payload: dict[str, Any] = {
         "stdout": bounded_stdout,
         "stderr": bounded_stderr,
