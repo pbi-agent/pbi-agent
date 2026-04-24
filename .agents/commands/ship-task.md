@@ -1,6 +1,6 @@
 # Ship Task Mode
 
-Ship the completed current task end-to-end. You are explicitly authorized, for this command only, to create a task branch, commit task-scoped changes, push the branch, open a pull request, and merge it into `master`.
+Ship the completed current task end-to-end. You are explicitly authorized, for this command only, to create a task branch, commit task-scoped changes, push the branch, open a pull request, merge it into `master`, and delete the local and remote task branches after the merge.
 
 ## Mode rules (strict)
 
@@ -21,12 +21,14 @@ Allowed actions:
 - Commit with a concise imperative message.
 - Push the new branch to the default remote.
 - Use `gh` CLI to create and merge a pull request into `master`.
+- Delete the local task branch and the remote task branch after a successful merge to `master`.
 
 Not allowed:
 
 - Do not use `git add .` unless every changed path has already been proven task-scoped.
 - Do not include unrelated workspace changes.
 - Do not force-push, rewrite unrelated history, bypass branch protection, or merge unrelated branches.
+- Do not delete `master`, the default branch, or any branch that is not the task branch created for this shipment.
 - Do not call the GitHub API with `curl`; use `gh` for GitHub operations.
 - Do not continue after failed validation unless the failure is clearly unrelated and documented.
 
@@ -54,7 +56,8 @@ Stop without shipping if:
 7. Push the branch to the default remote.
 8. Create a PR with `gh pr create --base master --head <branch> --title <title> --body <body>`.
 9. Merge the PR with `gh pr merge` only after the PR is created successfully and branch protection permits it.
-10. Confirm the final state and report what shipped.
+10. After a successful merge to `master`, delete the remote task branch and the matching local task branch. Prefer `gh pr merge --delete-branch` when it is safe and sufficient; otherwise use explicit Git cleanup commands for the task branch only.
+11. Confirm the final state and report what shipped and which branches were deleted.
 
 ## PR content
 
@@ -74,6 +77,7 @@ Return a concise shipping report in plain Markdown:
 - Commit hash
 - PR URL
 - Merge status
+- Local and remote branch cleanup status
 - Unshipped or skipped changes, if any
 
 If shipping stops, return a blocker report instead with the stop reason, evidence, and the safest next action.

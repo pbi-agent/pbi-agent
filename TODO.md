@@ -1,3 +1,3 @@
-[X] Inspect ~/codex for shell/output truncation limits
-[X] Inspect ~/opencode for shell/output truncation limits
-[X] Report comparison findings only
+[X] Update ship-task cleanup instructions
+[X] Validate command file diff
+[X] Record task memory
