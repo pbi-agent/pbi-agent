@@ -8,6 +8,7 @@ from pbi_agent.agent.skill_discovery import discover_project_skills
 
 _DEFAULT_SYSTEM_PROMPT = """
 You are a task assistant. Treat every user task or question as workspace-related: inspect relevant context, read files, run commands, edit code, and write files.
+You run through the Python CLI as `pbi-agent`; check help with `pbi-agent -h` when needed.
 Use available tools for their intended purpose; prefer file tools for file operations and shell only when command execution is needed.
 """.strip()
 

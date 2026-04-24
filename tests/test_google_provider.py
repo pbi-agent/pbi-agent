@@ -120,14 +120,12 @@ def test_google_build_request_body_uses_interactions_shape() -> None:
     assert "previous_interaction_id" not in body
 
 
-def test_google_provider_exposes_python_exec_required_schema() -> None:
+def test_google_provider_exposes_shell_required_schema() -> None:
     provider = GoogleProvider(_make_settings())
 
-    python_exec_tool = next(
-        tool for tool in provider._tools if tool["name"] == "python_exec"
-    )
+    shell_tool = next(tool for tool in provider._tools if tool["name"] == "shell")
 
-    assert python_exec_tool["parameters"]["required"] == ["code"]
+    assert shell_tool["parameters"]["required"] == ["command"]
 
 
 def test_google_parse_response_extracts_function_calls_thoughts_and_usage() -> None:
@@ -304,7 +302,7 @@ def test_google_execute_tool_calls_returns_function_results(
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
-                call_id="call_2", name="python_exec", arguments={"code": "print(1)"}
+                call_id="call_2", name="read_file", arguments={"path": "README.md"}
             ),
         ],
     )
@@ -349,7 +347,7 @@ def test_google_execute_tool_calls_returns_function_results(
         },
         {
             "type": "function_result",
-            "name": "python_exec",
+            "name": "read_file",
             "call_id": "call_2",
             "result": (
                 '{"ok": false, "error": {"type": "tool_execution_failed", '
@@ -367,10 +365,10 @@ def test_google_execute_tool_calls_returns_function_results(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "python_exec",
+            "name": "read_file",
             "success": False,
             "call_id": "call_2",
-            "arguments": {"code": "print(1)"},
+            "arguments": {"path": "README.md"},
         },
     ]
     assert display_spy.tool_group_end_count == 1

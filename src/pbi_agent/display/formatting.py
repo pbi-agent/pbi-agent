@@ -20,7 +20,6 @@ TOOL_STYLE_MAP = {
     "read_file": "read-file",
     "read_image": "read-image",
     "read_web_url": "read-web-url",
-    "python_exec": "python-exec",
     "sub_agent": "sub-agent",
     "mcp": "mcp",
     "web_search": "web-search",
@@ -33,7 +32,6 @@ TOOL_ICONS: dict[str, str] = {
     "read-file": "\u2610",  # ☐
     "read-image": "\U0001f5bc",  # 🖼
     "read-web-url": "\U0001f310",  # 🌐
-    "python-exec": "\u2699",  # ⚙
     "sub-agent": "\u25c9",  # ◉
     "mcp": "\u25a7",  # ▧
     "web-search": "\U0001f50d",  # 🔍
@@ -48,7 +46,6 @@ TOOL_BORDER_STYLES: dict[str, str] = {
     "read-file": "#EAB308",
     "read-image": "#FB7185",
     "read-web-url": "#06B6D4",
-    "python-exec": "#A855F7",
     "sub-agent": "#F59E0B",
     "mcp": "#14B8A6",
     "web-search": "#0EA5E9",
@@ -390,33 +387,6 @@ def format_patch_tool_item(
     return "\n".join(lines)
 
 
-def format_python_exec_item(
-    code: str,
-    *,
-    verbose: bool = False,
-    status: str,
-    call_id: str = "",
-    working_directory: str = ".",
-    timeout_seconds: int | str = 30,
-    capture_result: bool = False,
-) -> str:
-    first_line = next(
-        (line.strip() for line in code.splitlines() if line.strip()), "<empty>"
-    )
-    flags: list[str] = [
-        f"[dim]wd:[/dim] {escape_markup_text(format_informal_path(working_directory))}",
-        f"[dim]timeout:[/dim] {escape_markup_text(str(timeout_seconds))}s",
-    ]
-    if capture_result:
-        flags.append("[dim]capture_result[/dim]")
-    lines = [
-        f"[#A855F7]\u2699[/#A855F7] [bold]{escape_markup_text(shorten(first_line, 96))}[/bold]  {status}",
-        "  ".join(flags),
-    ]
-    _append_verbose_call_id(lines, call_id, verbose)
-    return "\n".join(lines)
-
-
 def format_generic_function_item(
     name: str,
     *,
@@ -635,17 +605,6 @@ def route_function_result(
             shorten_path=True,
         )
 
-    if name == "python_exec":
-        return name, format_python_exec_item(
-            str(args.get("code", "")),
-            verbose=verbose,
-            status=status,
-            call_id=call_id,
-            working_directory=str(args.get("working_directory", ".")),
-            timeout_seconds=args.get("timeout_seconds", 30),
-            capture_result=bool(args.get("capture_result", False)),
-        )
-
     if name == "list_files":
         return name, format_list_files_item(
             str(args.get("path", ".")),
@@ -721,7 +680,6 @@ __all__ = [
     "format_generic_function_item",
     "format_list_files_item",
     "format_patch_tool_item",
-    "format_python_exec_item",
     "format_read_file_item",
     "format_read_web_url_item",
     "format_reasoning_title",

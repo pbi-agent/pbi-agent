@@ -6,7 +6,6 @@ from pbi_agent.tools import registry
 def test_registry_exposes_expected_built_in_tools() -> None:
     expected = {
         "shell",
-        "python_exec",
         "apply_patch",
         "list_files",
         "search_files",

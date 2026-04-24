@@ -324,8 +324,8 @@ def test_anthropic_execute_tool_calls_returns_tool_result_blocks(
                 {
                     "type": "tool_use",
                     "id": "toolu_2",
-                    "name": "python_exec",
-                    "input": {"code": "print(1)"},
+                    "name": "read_file",
+                    "input": {"path": "README.md"},
                 },
             ]
         },
@@ -387,10 +387,10 @@ def test_anthropic_execute_tool_calls_returns_tool_result_blocks(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "python_exec",
+            "name": "read_file",
             "success": False,
             "call_id": "toolu_2",
-            "arguments": {"code": "print(1)"},
+            "arguments": {"path": "README.md"},
         },
     ]
     assert display_spy.tool_group_end_count == 1

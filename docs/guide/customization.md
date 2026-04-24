@@ -21,7 +21,7 @@ my-project/
 **When `INSTRUCTIONS.md` is present:**
 
 - Its content becomes the agent's system prompt verbatim.
-- All other tools (`shell`, `python_exec`, `apply_patch`, `read_file`, `search_files`, `list_files`, `read_web_url`, `sub_agent`, `read_image`) remain available.
+- All other tools (`shell`, `apply_patch`, `read_file`, `search_files`, `list_files`, `read_web_url`, `sub_agent`, `read_image`) remain available.
 - `AGENTS.md` project rules are still appended if present (see below).
 
 **Example — Python coding agent:**

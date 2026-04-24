@@ -60,8 +60,8 @@ def test_generic_parse_response_normalizes_assistant_message_and_tool_calls() ->
                                 "id": "call_2",
                                 "type": "function",
                                 "function": {
-                                    "name": "python_exec",
-                                    "arguments": {"code": "print(1)"},
+                                    "name": "read_file",
+                                    "arguments": {"path": "README.md"},
                                 },
                             },
                         ],
@@ -75,7 +75,7 @@ def test_generic_parse_response_normalizes_assistant_message_and_tool_calls() ->
     assert result.text == "First line. Second line."
     assert result.function_calls == [
         ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
-        ToolCall(call_id="call_2", name="python_exec", arguments={"code": "print(1)"}),
+        ToolCall(call_id="call_2", name="read_file", arguments={"path": "README.md"}),
     ]
     assert result.usage.input_tokens == 21
     assert result.usage.output_tokens == 8
@@ -97,7 +97,7 @@ def test_generic_parse_response_normalizes_assistant_message_and_tool_calls() ->
         "command": "pwd"
     }
     assert json.loads(assistant_message["tool_calls"][1]["function"]["arguments"]) == {
-        "code": "print(1)"
+        "path": "README.md"
     }
 
 
@@ -322,7 +322,7 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
-                call_id="call_2", name="python_exec", arguments={"code": "print(1)"}
+                call_id="call_2", name="read_file", arguments={"path": "README.md"}
             ),
         ],
     )
@@ -382,10 +382,10 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "python_exec",
+            "name": "read_file",
             "success": False,
             "call_id": "call_2",
-            "arguments": {"code": "print(1)"},
+            "arguments": {"path": "README.md"},
         },
     ]
     assert display_spy.tool_group_end_count == 1

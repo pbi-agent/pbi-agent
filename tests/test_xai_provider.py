@@ -372,7 +372,7 @@ def test_xai_execute_tool_calls_returns_function_call_outputs(
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
-                call_id="call_2", name="python_exec", arguments={"code": "print(1)"}
+                call_id="call_2", name="read_file", arguments={"path": "README.md"}
             ),
         ],
     )
@@ -432,10 +432,10 @@ def test_xai_execute_tool_calls_returns_function_call_outputs(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "python_exec",
+            "name": "read_file",
             "success": False,
             "call_id": "call_2",
-            "arguments": {"code": "print(1)"},
+            "arguments": {"path": "README.md"},
         },
     ]
     assert display_spy.tool_group_end_count == 1

@@ -12,7 +12,6 @@ Project-local MCP servers are discovered from `.agents/mcp.json` and their tools
 | Tool | Destructive | Purpose |
 | --- | --- | --- |
 | `shell` | yes | Run a shell command in the workspace and return stdout, stderr, and exit code. |
-| `python_exec` | yes | Run trusted local Python code with the same interpreter/environment as the CLI, including `pandas`, `pypdf`, and `python-docx`, and optionally capture a structured `result`. |
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `sub_agent` | no | Delegate a scoped task to a child agent, optionally selecting a discovered project sub-agent type and inheriting parent context. |
 | `list_files` | no | List files and directories in the workspace, with optional glob and type filtering. |
@@ -76,30 +75,6 @@ The `apply_patch` tool is different from this coding environment's patch helper.
 :::
 
 Tool output is capped to a bounded result that preserves both the beginning and end of long output while marking omitted content.
-
-## `python_exec`
-
-Execute trusted local Python snippets in a subprocess using the same Python interpreter and environment variables as the CLI process. This includes installed libraries such as `pandas` for data manipulation and `pypdf` plus `python-docx` for PDF or DOCX analysis.
-
-| Parameter | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `code` | `string` | yes | Python source code to execute. |
-| `working_directory` | `string` | no | Relative directory inside the workspace. Absolute paths are only allowed if they stay within the workspace root. |
-| `timeout_seconds` | `integer` | no | Timeout in seconds, capped at `120`. Defaults to `30`. |
-| `capture_result` | `boolean` | no | When `true`, return the top-level `result` variable if it is JSON-serializable. |
-
-```json
-{
-  "code": "result = {'status': 'ok', 'value': 42}",
-  "working_directory": ".",
-  "timeout_seconds": 30,
-  "capture_result": true
-}
-```
-
-::: danger
-`python_exec` is trusted local execution, not a sandbox. Executed code can read and write files the CLI can access, import installed packages from the active Python environment, including `pandas`, `pypdf`, and `python-docx`, and make any Python standard-library or package calls available to that interpreter. The subprocess boundary is for runtime stability and timeout enforcement, not for security isolation.
-:::
 
 ## `sub_agent`
 

@@ -34,7 +34,7 @@ uv run pbi-agent --help
 uv tool install --reinstall .
 ```
 
-## Task Memory
+## Task Memory Protocol
 
 - Use a single `MEMORY.md` file for both durable memory and recent task history.
 - Keep `MEMORY.md` in three sections only: `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
@@ -46,6 +46,9 @@ uv tool install --reinstall .
 - During compaction, promote durable facts into `Long-Term Memory`, carry unresolved items into an open-thread bullet if still relevant, and remove prior-day detail that is no longer needed.
 - Avoid duplicating long-term bullets. Merge with existing bullets when the fact already exists.
 - Keep the file token-efficient: prefer short bullets, avoid command noise, and do not preserve obsolete troubleshooting detail once compacted.
+
+## Session TODO Protocol
+
 - Use `TODO.md` for the current task session only.
 - Create or reset `TODO.md` before starting substantive work.
 - Use compact TODO markers: `[ ]` pending, `[>]` in progress, `[X]` done, `[!]` blocked, `[-]` dropped.
@@ -64,7 +67,7 @@ uv tool install --reinstall .
 - Display abstraction: `src/pbi_agent/display/protocol.py` defines `DisplayProtocol`; console output lives in `src/pbi_agent/display/console_display.py`; tests commonly use `tests/conftest.py::DisplaySpy`.
 - Providers: `src/pbi_agent/providers/base.py` defines the abstract `Provider`; `src/pbi_agent/providers/__init__.py` exposes `create_provider()`. API shapes are OpenAI/xAI `Responses`, Google `Interactions`, Anthropic `Messages`, and generic OpenAI-compatible `Chat Completions`.
 - Agent loop: `src/pbi_agent/agent/session.py` runs turns and tool follow-ups, `src/pbi_agent/agent/system_prompt.py` composes workspace instructions into the runtime prompt, and `src/pbi_agent/agent/tool_runtime.py` executes tool calls in parallel. Sub-agents are capped at 100 requests, 1200 seconds, and cannot recurse.
-- Tools: `src/pbi_agent/tools/registry.py` registers all tools. Handlers receive `ToolContext` (`settings`, `display`, usage, tracer, parent context). Core tools include `apply_patch`, `shell`, `python_exec`, `sub_agent`, `read_file`, `read_image`, `search_files`, `list_files`, and `read_web_url`.
+- Tools: `src/pbi_agent/tools/registry.py` registers all tools. Handlers receive `ToolContext` (`settings`, `display`, usage, tracer, parent context). Core tools include `apply_patch`, `shell`, `sub_agent`, `read_file`, `read_image`, `search_files`, `list_files`, and `read_web_url`.
 - Settings: `src/pbi_agent/config.py` resolves runtime field-by-field from CLI flags, `PBI_AGENT_*` env vars, provider-specific env vars, saved providers/model profiles in `~/.pbi-agent/config.json`, then defaults, and loads `.env` via `python-dotenv`.
 - Models and usage accounting: `src/pbi_agent/models/messages.py` defines `TokenUsage`, `ToolCall`, and `CompletedResponse`, and also loads model pricing/context windows (with optional user overrides from `~/.pbi-agent/model_catalog.json`).
 
@@ -87,7 +90,6 @@ uv tool install --reinstall .
 - Provider and tool HTTP communication must use `urllib.request`; do not add `requests` or alternate HTTP clients for those paths.
 - Internal data files (indexes, caches, config, session DB) go in `~/.pbi-agent/`, never in the user's workspace.
 - Workspace confinement: `shell` tool rejects path traversal; all file tools validate paths against workspace boundaries.
-- `python_exec` runs trusted local Python — it is not a sandbox.
 - Keep the web implementation aligned with the current FastAPI backend plus Vite/React frontend; do not introduce a parallel web framework or client stack.
 - Validation by touched surface:
   - Python changes: `uv run ruff check .`, `uv run ruff format --check .`, and the relevant `uv run pytest ...` scope.

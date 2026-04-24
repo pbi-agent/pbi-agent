@@ -1,3 +1,3 @@
-[X] Compress `.agents/commands/retrospective.md`
-[X] Validate markdown diff
-[X] Record task memory
+[X] Merge CLI runtime/help prompt text into one concise line.
+[X] Validate focused system prompt tests/checks.
+[X] Record task in memory.

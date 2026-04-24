@@ -33,7 +33,7 @@ CLI
 | Agent Session | Runs interactive sessions, single-turn execution, and delegated `sub_agent` child sessions. |
 | Tool Runtime | Executes requested tools serially or in parallel based on `--max-tool-workers`. |
 | Tool Catalog | Merges built-in tools with any discovered MCP tools and project sub-agent choices before provider setup. |
-| Tools | Exposes `shell`, `python_exec`, `apply_patch`, `sub_agent`, workspace file/image/web tools, and discovered MCP tools. |
+| Tools | Exposes `shell`, `apply_patch`, `sub_agent`, workspace file/image/web tools, and discovered MCP tools. |
 
 ## Supported Providers
 
