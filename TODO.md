@@ -1,3 +1,4 @@
-[X] Restore pytest in selected workspace environment
-[X] Verify pytest discovery command
+[X] Reproduce failing web test
+[X] Fix live session event handling or test isolation
+[X] Run focused validation
 [X] Update memory

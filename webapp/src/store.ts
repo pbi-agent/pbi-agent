@@ -399,6 +399,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       if (
         existingSession
         && eventLiveSessionId
+        && (current.liveSessionId || current.sessionId)
         && current.liveSessionId !== eventLiveSessionId
       ) {
         return nextState;
@@ -410,6 +411,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
         return nextState;
       }
       const patch: Partial<SessionRuntimeState> = { lastEventSeq: event.seq };
+      if (eventLiveSessionId && !current.liveSessionId && !current.sessionId) {
+        patch.liveSessionId = eventLiveSessionId;
+      }
 
       switch (event.type) {
         case "session_reset":
