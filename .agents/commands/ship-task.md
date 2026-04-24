@@ -50,7 +50,7 @@ Stop without shipping if:
    - Frontend: `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build`.
    - Docs: `bun run docs:build`.
    - Broad changes: run the repo-level checks from project instructions.
-4. Create a branch from the current task summary, usually `ship/<short-slug>` or `task/<short-slug>`.
+4. Create a branch from the current task summary. The branch name must always start with a common standard change prefix, such as `fix/`, `feat/`, `docs/`, `test/`, `refactor/`, `chore/`, `ci/`, `build/`, `perf/`, or `style/`, followed by a short kebab-case slug; for example, `fix/session-resume-error` or `feat/settings-import`.
 5. Stage only scoped files, then re-check `git diff --cached` before committing.
 6. Commit the scoped changes with a concise imperative commit message.
 7. Push the branch to the default remote.

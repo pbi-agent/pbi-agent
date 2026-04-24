@@ -1,4 +1,3 @@
-[X] Raise shell stdout/stderr truncation limits
-[X] Update focused tests
-[X] Run scoped validation
+[X] Add ship-task branch naming guidance
+[X] Validate command file diff
 [X] Record task memory
