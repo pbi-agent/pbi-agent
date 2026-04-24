@@ -85,7 +85,8 @@ def parse_simple_frontmatter(
             if skipped_ignored_nested_block:
                 continue
 
-        if value in {"|", ">"}:
+        block_scalar_style = _parse_block_scalar_style(value)
+        if block_scalar_style is not None:
             if (
                 should_capture
                 and block_scalar_keys is not None
@@ -102,7 +103,7 @@ def parse_simple_frontmatter(
                 parent_indent=indent,
             )
             if should_capture:
-                if value == "|":
+                if block_scalar_style == "|":
                     result[key] = "\n".join(block_lines)
                 else:
                     result[key] = " ".join(
@@ -123,6 +124,12 @@ def _parse_scalar(value: str) -> str:
     if len(value) >= 2 and value[:1] == value[-1:] and value[0] in {"'", '"'}:
         return value[1:-1]
     return value
+
+
+def _parse_block_scalar_style(value: str) -> str | None:
+    if value in {"|", ">", "|-", ">-", "|+", ">+"}:
+        return value[0]
+    return None
 
 
 def _parse_block_scalar_lines(

@@ -14,6 +14,24 @@ def test_literal_block_scalars_strip_shared_indent() -> None:
     assert metadata["description"] == "line1\nline2"
 
 
+def test_literal_block_scalars_accept_chomping_indicators() -> None:
+    metadata = parse_simple_frontmatter(
+        "description: |-\n  line1\n  line2\nname: compress\n",
+        block_scalar_keys=frozenset({"description"}),
+    )
+
+    assert metadata["description"] == "line1\nline2"
+
+
+def test_folded_block_scalars_accept_chomping_indicators() -> None:
+    metadata = parse_simple_frontmatter(
+        "description: >-\n  line1\n  line2\nname: compress\n",
+        block_scalar_keys=frozenset({"description"}),
+    )
+
+    assert metadata["description"] == "line1 line2"
+
+
 def test_block_scalars_are_rejected_for_disallowed_keys() -> None:
     with pytest.raises(
         FrontmatterParseError,

@@ -1,4 +1,3 @@
-[X] Reproduce failing web test
-[X] Fix live session event handling or test isolation
-[X] Run focused validation
-[X] Update memory
+[X] Rewrite `.agents/commands/ship-task.md` as an action/system-prompt style command
+[X] Validate Markdown diff
+[X] Update task memory

@@ -742,6 +742,38 @@ def test_install_project_skill_ignores_nested_metadata_fields(
     assert installed.is_file()
 
 
+def test_install_project_skill_accepts_description_block_chomping_indicator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    archive_bytes = _make_zip_archive(
+        {
+            "repo-main/skills/dependabot/SKILL.md": (
+                "---\n"
+                "name: dependabot\n"
+                "description: >-\n"
+                "  Comprehensive guide for configuring GitHub Dependabot.\n"
+                "  Use this skill for dependabot.yml files.\n"
+                "---\n\n"
+                "# Dependabot\n"
+            )
+        }
+    )
+    _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
+
+    result = install_project_skill(
+        "owner/repo",
+        workspace=tmp_path,
+        skill_name="dependabot",
+    )
+
+    assert result.name == "dependabot"
+    assert not capsys.readouterr().err
+    installed = tmp_path / ".agents" / "skills" / "dependabot" / "SKILL.md"
+    assert installed.is_file()
+
+
 def test_install_project_skill_ignores_indentless_sequence_fields(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
