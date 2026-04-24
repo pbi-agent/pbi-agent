@@ -1,4 +1,5 @@
-[X] Compact 2026-04-22 memory details
-[X] Preserve 2026-04-23 task history
-[X] Validate memory structure
-[X] Append compaction task note
+[X] Inspect shell submit focus flow
+[X] Refocus composer after successful shell command
+[X] Add/update focused tests
+[X] Run validation
+[X] Update memory

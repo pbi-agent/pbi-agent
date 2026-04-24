@@ -42,7 +42,11 @@ export function useLiveSessionEvents(
         if (typeof message.data !== "string") {
           return;
         }
-        applyEvent(currentSessionKey, JSON.parse(message.data) as WebEvent);
+        applyEvent(
+          currentSessionKey,
+          JSON.parse(message.data) as WebEvent,
+          currentLiveSessionId,
+        );
       };
 
       socket.onclose = () => {

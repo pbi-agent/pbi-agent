@@ -123,7 +123,12 @@ export function BoardPage() {
       boardStages.reduce<Record<string, TaskRecord[]>>((acc, stage) => {
         acc[stage.id] = tasks
           .filter((task) => task.stage === stage.id)
-          .sort((left, right) => left.position - right.position);
+          .sort((left, right) => {
+            if (stage.id === DONE_STAGE_ID) {
+              return Date.parse(right.created_at) - Date.parse(left.created_at);
+            }
+            return left.position - right.position;
+          });
         return acc;
       }, {}),
     [boardStages, tasks],

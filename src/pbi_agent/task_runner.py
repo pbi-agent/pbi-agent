@@ -16,6 +16,7 @@ def run_single_turn_in_directory(
     single_turn_hint: str | None = None,
     resume_session_id: str | None = None,
     image_paths: list[str] | None = None,
+    persisted_user_message_id: int | None = None,
 ):
     from pbi_agent.agent.session import run_single_turn
 
@@ -48,4 +49,5 @@ def run_single_turn_in_directory(
         single_turn_hint=resolved_hint,
         resume_session_id=resume_session_id,
         image_paths=image_paths,
+        persisted_user_message_id=persisted_user_message_id,
     )

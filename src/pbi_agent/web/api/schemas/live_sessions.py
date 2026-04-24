@@ -21,6 +21,10 @@ class LiveSessionInputRequest(BaseModel):
     profile_id: str | None = None
 
 
+class LiveSessionShellCommandRequest(BaseModel):
+    command: str = ""
+
+
 class NewSessionRequest(BaseModel):
     profile_id: str | None = None
 

@@ -17,6 +17,7 @@ from pbi_agent.web.api.errors import bad_request, config_http_error, not_found
 from pbi_agent.web.api.schemas.live_sessions import (
     LiveSessionInputRequest,
     LiveSessionResponse,
+    LiveSessionShellCommandRequest,
     CreateLiveSessionRequest,
     ExpandInputRequest,
     ExpandInputResponse,
@@ -73,6 +74,26 @@ def submit_session_input(
         raise not_found("Live session not found.") from exc
     except ConfigError as exc:
         raise config_http_error(exc) from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(
+        session=model_from_payload(LiveSessionModel, session),
+    )
+
+
+@router.post("/{live_session_id}/shell-command", response_model=LiveSessionResponse)
+def run_shell_command(
+    live_session_id: LiveSessionIdPath,
+    request: LiveSessionShellCommandRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.run_shell_command(
+            live_session_id,
+            command=request.command,
+        )
+    except KeyError as exc:
+        raise not_found("Live session not found.") from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
     return LiveSessionResponse(

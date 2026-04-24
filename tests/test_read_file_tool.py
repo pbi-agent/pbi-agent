@@ -31,6 +31,46 @@ def test_read_file_returns_requested_line_window(tmp_path: Path, monkeypatch) ->
     }
 
 
+def test_read_file_allows_start_line_above_max_return_limit(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "large.txt").write_text(
+        "".join(f"line {number}\n" for number in range(1, 1206)),
+        encoding="utf-8",
+    )
+
+    result = read_file_tool.handle(
+        {"path": "large.txt", "start_line": 1200, "max_lines": 3},
+        ToolContext(),
+    )
+
+    assert result["start_line"] == 1200
+    assert result["end_line"] == 1202
+    assert result["content"] == "line 1200\nline 1201\nline 1202\n"
+    assert result["has_more_lines"] is True
+    assert result["windowed"] is True
+
+
+def test_read_file_allows_start_line_above_one_million(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "notes.txt").write_text("one\ntwo\n", encoding="utf-8")
+
+    result = read_file_tool.handle(
+        {"path": "notes.txt", "start_line": 1_000_001, "max_lines": 3},
+        ToolContext(),
+    )
+
+    assert result["start_line"] == 0
+    assert result["end_line"] == 0
+    assert result["total_lines"] == 2
+    assert result["content"] == ""
+    assert result["has_more_lines"] is False
+    assert result["windowed"] is True
+
+
 def test_read_file_auto_detects_utf16_bom(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "utf16.txt").write_bytes("hello\nworld\n".encode("utf-16"))

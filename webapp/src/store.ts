@@ -53,7 +53,7 @@ type SessionStore = {
   ) => string;
   updateRuntimeFromSession: (sessionKey: string, session: LiveSession) => void;
   setConnection: (sessionKey: string, connection: ConnectionState) => void;
-  applyEvent: (sessionKey: string, event: WebEvent) => string;
+  applyEvent: (sessionKey: string, event: WebEvent, liveSessionId?: string | null) => string;
 };
 
 function createEmptySessionState(sessionId: string | null = null): SessionRuntimeState {
@@ -381,7 +381,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
         },
       };
     }),
-  applyEvent: (sessionKey, event) => {
+  applyEvent: (sessionKey, event, eventLiveSessionId = null) => {
     let resolvedKey = sessionKey;
     set((state) => {
       const payload = event.payload;
@@ -392,9 +392,17 @@ export const useSessionStore = create<SessionStore>((set) => ({
       if (sessionKey !== resolvedKey) {
         nextState = moveSessionState(state, sessionKey, resolvedKey);
       }
+      const existingSession = nextState.sessionsByKey[resolvedKey];
       const current =
-        nextState.sessionsByKey[resolvedKey]
+        existingSession
         ?? createEmptySessionState(nextSessionId);
+      if (
+        existingSession
+        && eventLiveSessionId
+        && current.liveSessionId !== eventLiveSessionId
+      ) {
+        return nextState;
+      }
       // Skip events already processed — prevents duplicates when the
       // WebSocket reconnects and replays its snapshot over items that
       // were already hydrated from the API (which use different itemIds).

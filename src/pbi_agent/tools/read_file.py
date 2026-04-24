@@ -79,7 +79,10 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         return {"error": "'path' must be a non-empty string."}
 
     root = Path.cwd().resolve()
-    start_line = normalize_positive_int(arguments.get("start_line"), default=1)
+    raw_start_line = arguments.get("start_line")
+    start_line = (
+        raw_start_line if isinstance(raw_start_line, int) and raw_start_line >= 1 else 1
+    )
     max_lines = normalize_positive_int(
         arguments.get("max_lines"), default=DEFAULT_MAX_LINES
     )

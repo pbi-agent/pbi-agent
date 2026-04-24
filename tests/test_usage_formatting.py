@@ -80,6 +80,12 @@ def test_known_model_pricing() -> None:
     pricing = _pricing_for_model("gpt-5.3-codex")
     assert pricing == (1.75, 1.75, 1.75, 0.175, 14.00)
 
+    pricing = _pricing_for_model("gpt-5.5")
+    assert pricing == (5.00, 5.00, 5.00, 0.50, 30.00)
+
+    pricing = _pricing_for_model("gpt-5.5-pro")
+    assert pricing == (30.00, 30.00, 30.00, 3.00, 180.00)
+
 
 def test_prefix_matching() -> None:
     pricing = _pricing_for_model("gpt-5.3-codex-some-variant")
@@ -87,6 +93,18 @@ def test_prefix_matching() -> None:
 
     ctx = context_window_for_model("gpt-5.3-codex-some-variant")
     assert ctx == 272_000
+
+    pricing = _pricing_for_model("gpt-5.5-2026-04-23")
+    assert pricing == (5.00, 5.00, 5.00, 0.50, 30.00)
+
+    ctx = context_window_for_model("gpt-5.5-2026-04-23")
+    assert ctx == 1_000_000
+
+    pricing = _pricing_for_model("gpt-5.5-pro-2026-04-23")
+    assert pricing == (30.00, 30.00, 30.00, 3.00, 180.00)
+
+    ctx = context_window_for_model("gpt-5.5-pro-2026-04-23")
+    assert ctx == 1_000_000
 
 
 def test_unknown_model_context_window_returns_default() -> None:

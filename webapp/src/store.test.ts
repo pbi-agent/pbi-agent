@@ -28,6 +28,15 @@ function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
 }
 
 describe("session store", () => {
+  beforeEach(() => {
+    useSessionStore.setState({
+      activeSessionKey: null,
+      sessionsByKey: {},
+      liveSessionIndex: {},
+      sessionIndex: {},
+    });
+  });
+
   it("moves live state onto the saved-session key when a session id is attached", () => {
     const liveKey = getLiveSessionKey("live-1");
 
@@ -96,6 +105,44 @@ describe("session store", () => {
     );
     expect(state.itemsVersion).toBe(1);
     expect(state.lastEventSeq).toBe(5);
+  });
+
+  it("ignores events from a stale live session after saved hydration", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+    useSessionStore.getState().hydrateSavedSession("session-1", [
+      {
+        kind: "message",
+        itemId: "history-1",
+        role: "assistant",
+        content: "stored",
+        markdown: true,
+      },
+    ]);
+
+    useSessionStore.getState().applyEvent(
+      sessionKey,
+      {
+        seq: 5,
+        type: "message_added",
+        created_at: "2026-04-16T12:00:02Z",
+        payload: {
+          item_id: "message-1",
+          role: "assistant",
+          content: "stored",
+        },
+      },
+      "live-1",
+    );
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0]).toEqual(
+      expect.objectContaining({
+        itemId: "history-1",
+        content: "stored",
+      }),
+    );
   });
 
   it("captures turn usage updates with elapsed time", () => {

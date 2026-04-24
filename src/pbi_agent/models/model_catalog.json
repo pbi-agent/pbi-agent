@@ -4,6 +4,14 @@
       "context_window": 272000,
       "pricing": { "input": 1.75, "cache_write_5m": 1.75, "cache_write_1h": 1.75, "cache_hit": 0.175, "output": 14.00 }
     },
+    "gpt-5.5-pro": {
+      "context_window": 1000000,
+      "pricing": { "input": 30.00, "cache_write_5m": 30.00, "cache_write_1h": 30.00, "cache_hit": 3.00, "output": 180.00 }
+    },
+    "gpt-5.5": {
+      "context_window": 1000000,
+      "pricing": { "input": 5.00, "cache_write_5m": 5.00, "cache_write_1h": 5.00, "cache_hit": 0.50, "output": 30.00 }
+    },
     "gpt-5.4-mini": {
       "context_window": 272000,
       "pricing": { "input": 0.75, "cache_write_5m": 0.75, "cache_write_1h": 0.75, "cache_hit": 0.075, "output": 4.50 }

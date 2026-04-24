@@ -155,6 +155,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [completionSelectedIndex, setCompletionSelectedIndex] = useState(0);
   const completionRequestIdRef = useRef(0);
   const pendingImagesRef = useRef<PendingImage[]>([]);
+  const refocusAfterSubmitRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
@@ -172,7 +173,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const canSend =
     Boolean(liveSessionId) && inputEnabled && !sessionEnded && !isSubmitting;
-  const isActionMenuOpen = canSend && actionMenuOpen;
+  const shellInput = input.trimStart();
+  const isShellMode = shellInput.startsWith("!");
+  const shellCommandPreview = shellInput.slice(1).trim();
+  const isActionMenuOpen = canSend && !isShellMode && actionMenuOpen;
   const activeSlashCommand = parseActiveSlashCommand(input, cursorIndex);
   const activeMention = activeSlashCommand
     ? null
@@ -321,6 +325,18 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }, [pendingImages]);
 
   useEffect(() => {
+    if (!refocusAfterSubmitRef.current || !canSend) {
+      return undefined;
+    }
+
+    refocusAfterSubmitRef.current = false;
+    const animationFrame = window.requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [canSend]);
+
+  useEffect(() => {
     return () => {
       for (const image of pendingImagesRef.current) {
         URL.revokeObjectURL(image.previewUrl);
@@ -370,8 +386,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     async (textValue: string) => {
       const trimmed = textValue.trim();
       if (!trimmed && pendingImages.length === 0) return;
-      if (trimmed.startsWith("/") && pendingImages.length > 0) {
-        setAttachmentMessage("Slash commands cannot include image attachments.");
+      if ((trimmed.startsWith("/") || trimmed.startsWith("!")) && pendingImages.length > 0) {
+        setAttachmentMessage(
+          trimmed.startsWith("!")
+            ? "Shell commands cannot include image attachments."
+            : "Slash commands cannot include image attachments.",
+        );
         return;
       }
 
@@ -380,6 +400,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           text: trimmed,
           images: pendingImages.map((image) => image.file),
         });
+        refocusAfterSubmitRef.current = true;
         clearPendingImages();
         setInput("");
         setAttachmentMessage(null);
@@ -578,9 +599,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         return;
       }
       event.preventDefault();
+      if (isShellMode) {
+        setAttachmentMessage("Images cannot be attached to shell commands.");
+        return;
+      }
       appendFiles(clipboardImages, "clipboard");
     },
-    [appendFiles],
+    [appendFiles, isShellMode],
   );
 
   const showCompletionStatus = completionLoading && completionItems.length > 0;
@@ -624,16 +649,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         }}
       />
 
-      <div className="composer__input-row">
+      <div
+        className={`composer__input-row ${isShellMode ? "composer__input-row--shell" : ""}`}
+      >
         <div className="composer__action-menu" ref={actionMenuRef}>
           <button
             type="button"
             className={`composer__action-trigger ${isActionMenuOpen ? "composer__action-trigger--open" : ""}`}
             onClick={() => setActionMenuOpen((current) => !current)}
-            disabled={!canSend}
+            disabled={!canSend || isShellMode}
             aria-haspopup="menu"
             aria-expanded={isActionMenuOpen}
             aria-label="Actions"
+            title={isShellMode ? "Images cannot be attached to shell commands" : "Actions"}
           >
             <span className="composer__action-trigger-icon" aria-hidden="true">+</span>
           </button>
@@ -662,10 +690,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             </div>
           ) : null}
         </div>
+        {isShellMode ? (
+          <div className="composer__mode-pill composer__mode-pill--shell" aria-label="Shell command mode">
+            <span className="composer__mode-icon" aria-hidden="true">$</span>
+            <span>Shell</span>
+          </div>
+        ) : null}
         <div className="composer__textarea-wrap">
           <textarea
             ref={textareaRef}
             name="message"
+            aria-label="Message"
             className="composer__textarea"
             value={input}
             onChange={(event) => {
@@ -678,20 +713,35 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             onKeyUp={syncCursor}
             onPaste={handleTextareaPaste}
             onSelect={syncCursor}
-            placeholder={sessionEnded ? "Start a new session to continue..." : "Send a message..."}
+            placeholder={
+              sessionEnded
+                ? "Start a new session to continue..."
+                : isShellMode
+                  ? "Run a shell command..."
+                  : "Send a message..."
+            }
             rows={1}
             disabled={!canSend}
           />
         </div>
         <button
           type="submit"
+          aria-label={isShellMode ? "Run command" : "Send message"}
           className="composer__send"
           disabled={!canSend}
-          title="Send (Enter)"
+          title={isShellMode ? "Run command (Enter)" : "Send (Enter)"}
         >
-          &#8593;
+          {isShellMode ? "$" : "↑"}
         </button>
       </div>
+
+      {isShellMode ? (
+        <div className="composer__mode-status composer__mode-status--shell">
+          {shellCommandPreview
+            ? "Enter will run this command in the workspace shell."
+            : "Shell command mode: type a command after !"}
+        </div>
+      ) : null}
 
       {completionOpen ? (
         <div className="composer__completions" role="listbox" aria-label={completionLabel}>

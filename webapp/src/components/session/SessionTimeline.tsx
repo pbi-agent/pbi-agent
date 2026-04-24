@@ -106,8 +106,8 @@ export function SessionTimeline({
       <div className="session-scroll-area" ref={containerRef}>
         <div className="timeline">
           <EmptyState
-            title="No messages yet"
-            description="Send a message to start the conversation"
+            title="Session started. Waiting for updates…"
+            description="Live events will appear here as soon as the session produces output."
           />
         </div>
       </div>

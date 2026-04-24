@@ -70,8 +70,6 @@ export function TaskCard({
           <a
             className="btn btn--ghost btn--sm"
             href={`/sessions/${encodeURIComponent(task.session_id)}`}
-            target="_blank"
-            rel="noopener noreferrer"
           >
             Session
           </a>

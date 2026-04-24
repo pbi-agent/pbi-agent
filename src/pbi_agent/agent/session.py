@@ -39,7 +39,7 @@ from pbi_agent.providers.base import Provider
 if TYPE_CHECKING:
     from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.providers.capabilities import provider_supports_images
-from pbi_agent.session_store import MessageImageAttachment, SessionStore
+from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.display.protocol import (
     DisplayProtocol,
@@ -100,7 +100,7 @@ def _extract_active_command_instructions(value: str) -> str | None:
     stripped = value.strip()
     if not stripped.startswith("/"):
         return None
-    head = stripped.partition(" ")[0]
+    head = stripped.split(maxsplit=1)[0]
     try:
         command = find_command_config_by_alias(head)
     except Exception:
@@ -124,6 +124,7 @@ def run_single_turn(
     single_turn_hint: str | None = None,
     resume_session_id: str | None = None,
     image_paths: list[str] | None = None,
+    persisted_user_message_id: int | None = None,
 ) -> AgentOutcome:
     runtime = _coerce_runtime(settings)
     store = _open_store(runtime.settings)
@@ -182,7 +183,16 @@ def run_single_turn(
                 session_id=resume_session_id,
                 session_usage=session_usage,
                 display=display,
+                before_message_id=persisted_user_message_id,
             )
+            if persisted_user_message_id is None:
+                _add_message(
+                    store,
+                    session_id,
+                    runtime,
+                    "user",
+                    user_turn_history_text,
+                )
             tracer.log_event(
                 "agent_step_start",
                 metadata={"step": "initial_model_request"},
@@ -213,13 +223,6 @@ def run_single_turn(
                 current_user_turn_text=user_turn_history_text,
                 instructions=turn_instructions,
                 tracer=tracer,
-            )
-            _add_message(
-                store,
-                session_id,
-                runtime,
-                "user",
-                user_turn_history_text,
             )
             _add_message(store, session_id, runtime, "assistant", response.text)
             _update_session_after_turn(
@@ -438,6 +441,15 @@ def run_session_loop(
                 )
                 display.assistant_start()
                 try:
+                    _add_message(
+                        store,
+                        session_id,
+                        current_runtime,
+                        "user",
+                        turn_history_text,
+                        file_paths=file_paths,
+                        image_attachments=message_image_attachments,
+                    )
                     turn_tracer.log_event(
                         "agent_step_start",
                         metadata={"step": "initial_model_request"},
@@ -470,15 +482,6 @@ def run_session_loop(
                         tracer=turn_tracer,
                     )
 
-                    _add_message(
-                        store,
-                        session_id,
-                        current_runtime,
-                        "user",
-                        turn_history_text,
-                        file_paths=file_paths,
-                        image_attachments=message_image_attachments,
-                    )
                     _add_message(
                         store,
                         session_id,
@@ -976,11 +979,11 @@ def _add_message(
     *,
     file_paths: list[str] | None = None,
     image_attachments: list[MessageImageAttachment] | None = None,
-) -> None:
+) -> int | None:
     if store is None or session_id is None:
-        return
+        return None
     try:
-        store.add_message(
+        return store.add_message(
             session_id,
             role,
             content,
@@ -991,6 +994,7 @@ def _add_message(
         )
     except Exception:
         _log.warning("Failed to add message to session store", exc_info=True)
+        return None
 
 
 def _resume_session(
@@ -1001,6 +1005,7 @@ def _resume_session(
     session_usage: TokenUsage,
     display: DisplayProtocol,
     replay_history: bool = True,
+    before_message_id: int | None = None,
 ) -> None:
     if store is None or session_id is None:
         return
@@ -1008,6 +1013,10 @@ def _resume_session(
     messages = []
     try:
         messages = store.list_messages(session_id)
+        if before_message_id is not None:
+            messages = [
+                message for message in messages if message.id < before_message_id
+            ]
     except Exception:
         _log.warning("Failed to restore session history", exc_info=True)
 
@@ -1028,9 +1037,11 @@ def _resume_session(
         _log.warning("Failed to restore session state", exc_info=True)
     history_restored = False
     if messages:
+        provider_messages = _messages_for_provider_restore(messages)
         try:
-            provider.restore_messages(messages)
-            history_restored = True
+            if provider_messages:
+                provider.restore_messages(provider_messages)
+                history_restored = True
             if replay_history:
                 display.replay_history(messages)
         except Exception:
@@ -1044,6 +1055,15 @@ def _resume_session(
             "Failed to restore provider conversation checkpoint",
             exc_info=True,
         )
+
+
+def _messages_for_provider_restore(
+    messages: list[MessageRecord],
+) -> list[MessageRecord]:
+    restored = list(messages)
+    while restored and restored[-1].role == "user":
+        restored.pop()
+    return restored
 
 
 def _build_parent_context_snapshot(

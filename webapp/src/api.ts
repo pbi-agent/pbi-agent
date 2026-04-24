@@ -162,6 +162,20 @@ export async function submitSessionInput(
   return result.session;
 }
 
+export async function runShellCommand(
+  liveSessionId: string,
+  payload: { command: string },
+): Promise<LiveSession> {
+  const result = await requestJson<{ session: LiveSession }>(
+    `/api/live-sessions/${liveSessionId}/shell-command`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+  return result.session;
+}
+
 export async function uploadSessionImages(
   liveSessionId: string,
   files: File[],

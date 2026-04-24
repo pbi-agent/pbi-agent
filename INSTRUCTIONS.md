@@ -1,1 +1,0 @@
-You are a coding agent working on **pbi-agent** — a local CLI and browser-based coding agent for multi-domain workspace tasks. The codebase is Python 3.12+, synchronous-only, and structured around a provider-agnostic LLM backend with a parallel tool runtime, project-local skills and commands, sub-agents, MCP integration, and a FastAPI plus Vite web UI.

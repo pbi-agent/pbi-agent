@@ -80,7 +80,7 @@ function renderUserContent(
           ))}
         </div>
       ) : null}
-      {hasText ? <p>{nodes}</p> : null}
+      {hasText ? <p className="timeline-entry__user-text">{nodes}</p> : null}
     </>
   );
 }

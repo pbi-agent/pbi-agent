@@ -7,7 +7,8 @@ from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 from pbi_agent.agent.skill_discovery import discover_project_skills
 
 _DEFAULT_SYSTEM_PROMPT = """
-You are an expert coding assistant. You help users with coding tasks by reading files, executing commands, editing code, and writing new files.
+You are a task assistant. Treat every user task or question as workspace-related: inspect relevant context, read files, run commands, edit code, and write files.
+Use available tools for their intended purpose; prefer file tools for file operations and shell only when command execution is needed.
 """.strip()
 
 _SUB_AGENT_PROMPT = """

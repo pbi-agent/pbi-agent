@@ -11,6 +11,7 @@ import {
   fetchLiveSessionDetail,
   fetchSessionDetail,
   fetchSessions,
+  runShellCommand,
   submitSessionInput,
   uploadSessionImages,
 } from "../../api";
@@ -69,9 +70,11 @@ vi.mock("./Composer", async () => {
     Composer: React.forwardRef(function MockComposer(
       {
         supportsImageInputs,
+        isSubmitting,
         onSubmit,
       }: {
         supportsImageInputs: boolean;
+        isSubmitting: boolean;
         onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
       },
       ref,
@@ -83,6 +86,7 @@ vi.mock("./Composer", async () => {
       return (
         <div>
           <div>Composer images {String(supportsImageInputs)}</div>
+          <div>Composer submitting {String(isSubmitting)}</div>
           <button
             type="button"
             onClick={() => {
@@ -102,6 +106,14 @@ vi.mock("./Composer", async () => {
           >
             Submit Slash
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              void onSubmit({ text: "!ls -la", images: [] });
+            }}
+          >
+            Submit Shell
+          </button>
         </div>
       );
     }),
@@ -119,6 +131,7 @@ vi.mock("../../api", async (importOriginal) => {
     fetchLiveSessionDetail: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
+    runShellCommand: vi.fn(),
     setActiveModelProfile: vi.fn(),
     setLiveSessionProfile: vi.fn(),
     submitSessionInput: vi.fn(),
@@ -343,6 +356,7 @@ describe("SessionPage", () => {
         preview_url: "/api/uploads/upload-1",
       },
     ]);
+    vi.mocked(runShellCommand).mockResolvedValue(makeLiveSession());
     vi.mocked(submitSessionInput).mockResolvedValue(makeLiveSession());
   });
 
@@ -393,6 +407,37 @@ describe("SessionPage", () => {
       image_upload_ids: [],
       profile_id: "analysis",
     });
+  });
+
+  it("runs bang-prefixed shell commands without expansion, uploads, or model input", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/live/live-1");
+
+    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit Shell" }));
+
+    await waitFor(() => expect(runShellCommand).toHaveBeenCalledTimes(1));
+    expect(expandSessionInput).not.toHaveBeenCalled();
+    expect(uploadSessionImages).not.toHaveBeenCalled();
+    expect(submitSessionInput).not.toHaveBeenCalled();
+    expect(runShellCommand).toHaveBeenCalledWith("live-1", { command: "ls -la" });
+  });
+
+  it("marks the composer as submitting while shell commands are pending", async () => {
+    const user = userEvent.setup();
+    vi.mocked(runShellCommand).mockReturnValue(new Promise(() => undefined));
+
+    renderSessionRoute("/sessions/live/live-1");
+
+    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
+    expect(screen.getByText("Composer submitting false")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit Shell" }));
+
+    await waitFor(() => expect(runShellCommand).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Composer submitting true")).toBeInTheDocument();
   });
 
   it("renders the not-found state for missing saved sessions", async () => {

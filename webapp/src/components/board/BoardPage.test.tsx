@@ -293,6 +293,36 @@ describe("BoardPage", () => {
     expect(await screen.findByText("Board Editor new")).toBeInTheDocument();
   });
 
+  it("orders done tasks by creation date descending", async () => {
+    vi.mocked(fetchTasks).mockResolvedValue([
+      makeTask({
+        task_id: "done-old",
+        title: "Old done task",
+        stage: "done",
+        position: 0,
+        created_at: "2026-04-01T00:00:00Z",
+      }),
+      makeTask({
+        task_id: "done-new",
+        title: "New done task",
+        stage: "done",
+        position: 1,
+        created_at: "2026-04-20T00:00:00Z",
+      }),
+    ]);
+
+    renderWithProviders(<BoardPage />);
+
+    const doneStage = await screen.findByTestId("stage-done");
+    const doneTasks = screen.getAllByRole("button", { name: /Run .* done task/ });
+
+    expect(doneStage).toContainElement(doneTasks[0]);
+    expect(doneTasks.map((task) => task.textContent)).toEqual([
+      "Run New done task",
+      "Run Old done task",
+    ]);
+  });
+
   it("refreshes config and retries board-stage saves when references are stale", async () => {
     const user = userEvent.setup();
 

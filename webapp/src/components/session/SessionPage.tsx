@@ -10,6 +10,7 @@ import {
   fetchLiveSessionDetail,
   fetchSessionDetail,
   fetchSessions,
+  runShellCommand,
   setActiveModelProfile,
   setLiveSessionProfile,
   submitSessionInput,
@@ -139,6 +140,18 @@ export function SessionPage({
     }) => {
       if (!sessionState?.liveSessionId) throw new Error("No live session available.");
       return submitSessionInput(sessionState.liveSessionId, payload);
+    },
+    onSuccess: (session) => {
+      if (selectedRouteSessionKey) {
+        updateRuntimeFromSession(selectedRouteSessionKey, session);
+      }
+    },
+  });
+
+  const shellCommandMutation = useMutation({
+    mutationFn: (payload: { command: string }) => {
+      if (!sessionState?.liveSessionId) throw new Error("No live session available.");
+      return runShellCommand(sessionState.liveSessionId, payload);
     },
     onSuccess: (session) => {
       if (selectedRouteSessionKey) {
@@ -361,6 +374,17 @@ export function SessionPage({
   const handleSubmit = async (payload: { text: string; images: File[] }) => {
     const { text, images } = payload;
     setInputWarnings([]);
+    if (text.startsWith("!")) {
+      if (images.length > 0) {
+        throw new Error("Shell commands cannot include image attachments.");
+      }
+      const command = text.slice(1).trim();
+      if (!command) {
+        throw new Error("Shell command must be a non-empty string.");
+      }
+      await shellCommandMutation.mutateAsync({ command });
+      return;
+    }
     if (text.startsWith("/")) {
       await sendInputMutation.mutateAsync({
         text,
@@ -558,7 +582,7 @@ export function SessionPage({
               sessionEnded={sessionState?.sessionEnded ?? false}
               liveSessionId={sessionState?.liveSessionId ?? null}
               supportsImageInputs={providerSupportsImages}
-              isSubmitting={sendInputMutation.isPending}
+              isSubmitting={sendInputMutation.isPending || shellCommandMutation.isPending}
               onSubmit={handleSubmit}
             />
           </>
