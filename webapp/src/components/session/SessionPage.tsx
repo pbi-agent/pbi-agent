@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangleIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  CpuIcon,
+  Trash2Icon,
+} from "lucide-react";
+import {
   ApiError,
   createLiveSession,
   deleteSession,
@@ -30,6 +37,16 @@ import { SessionSidebar } from "./SessionSidebar";
 import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
 import { Composer, type ComposerHandle } from "./Composer";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { EmptyState } from "../shared/EmptyState";
 
 export function SessionPage({
   workspaceRoot,
@@ -510,10 +527,12 @@ export function SessionPage({
               <RunHistory sessionId={routeSessionId} />
             ) : null}
             {canDeleteActiveSession ? (
-              <button
+              <Button
                 type="button"
-                className="btn btn--ghost btn--icon btn--danger"
+                variant="destructive"
+                size="icon-sm"
                 title="Delete session"
+                aria-label="Delete session"
                 onClick={() => {
                   if (activeSessionRecord) {
                     deleteSessionMutation.reset();
@@ -521,52 +540,63 @@ export function SessionPage({
                   }
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
-                </svg>
-              </button>
+                <Trash2Icon />
+              </Button>
             ) : null}
           </div>
         </div>
 
         {inputWarnings.length > 0 ? (
-          <div className="banner banner--notice">{inputWarnings.join(" ")}</div>
+          <Alert className="banner banner--notice">
+            <AlertTriangleIcon />
+            <AlertDescription>{inputWarnings.join(" ")}</AlertDescription>
+          </Alert>
         ) : null}
         {sessionState?.fatalError ? (
-          <div className="banner banner--error">{sessionState.fatalError}</div>
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{sessionState.fatalError}</AlertDescription>
+          </Alert>
         ) : null}
         {createSessionMutation.error ? (
-          <div className="banner banner--error">{createSessionMutation.error.message}</div>
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{createSessionMutation.error.message}</AlertDescription>
+          </Alert>
         ) : null}
         {setSessionProfileMutation.error ? (
-          <div className="banner banner--error">{setSessionProfileMutation.error.message}</div>
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{setSessionProfileMutation.error.message}</AlertDescription>
+          </Alert>
         ) : null}
         {setActiveProfileMutation.error ? (
-          <div className="banner banner--error">{setActiveProfileMutation.error.message}</div>
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{setActiveProfileMutation.error.message}</AlertDescription>
+          </Alert>
         ) : null}
         {sessionDetailLoadError ? (
-          <div className="banner banner--error">{sessionDetailLoadError}</div>
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{sessionDetailLoadError}</AlertDescription>
+          </Alert>
         ) : null}
 
         {sessionNotFound ? (
-          <div className="empty-state">
-            <div className="empty-state__title">Session not found</div>
-            <div className="empty-state__description">
-              {sessionDetailError instanceof Error
+          <EmptyState
+            title="Session not found"
+            description={
+              sessionDetailError instanceof Error
                 ? sessionDetailError.message
-                : "This session does not exist in the current workspace."}
-            </div>
-            <button
-              type="button"
-              className="btn btn--primary empty-state__action"
-              onClick={handleNewSession}
-            >
-              Start new session
-            </button>
-          </div>
+                : "This session does not exist in the current workspace."
+            }
+            action={
+              <Button type="button" onClick={handleNewSession}>
+                Start new session
+              </Button>
+            }
+          />
         ) : (
           <>
             <SessionTimeline
@@ -644,22 +674,6 @@ function ProfileSelector({
   onChange: (profileId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (
-        containerRef.current
-        && event.target instanceof Node
-        && !containerRef.current.contains(event.target)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [isOpen]);
 
   const selectedProfile = modelProfiles.find((profile) => profile.id === selectedProfileId);
   const label = isLoading && modelProfiles.length === 0
@@ -673,80 +687,63 @@ function ProfileSelector({
           : "Select profile";
 
   return (
-    <div className={`profile-selector${isOpen ? " is-open" : ""}`} ref={containerRef}>
-      <button
-        type="button"
-        className="profile-selector__trigger"
-        onClick={() => setIsOpen((value) => !value)}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-label={`Model profile: ${label}`}
-      >
-        <svg className="profile-selector__icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-          <rect x="9" y="9" width="6" height="6" />
-          <line x1="9" y1="2" x2="9" y2="4" />
-          <line x1="15" y1="2" x2="15" y2="4" />
-          <line x1="9" y1="20" x2="9" y2="22" />
-          <line x1="15" y1="20" x2="15" y2="22" />
-          <line x1="2" y1="9" x2="4" y2="9" />
-          <line x1="2" y1="15" x2="4" y2="15" />
-          <line x1="20" y1="9" x2="22" y2="9" />
-          <line x1="20" y1="15" x2="22" y2="15" />
-        </svg>
-        <span className="profile-selector__name">{label}</span>
-        <svg className="profile-selector__chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="profile-selector__trigger"
+          disabled={disabled}
+          aria-label={`Model profile: ${label}`}
+        >
+          <CpuIcon data-icon="inline-start" />
+          <span className="profile-selector__name">{label}</span>
+          <ChevronDownIcon data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
 
-      {isOpen && modelProfiles.length > 0 ? (
-        <div className="profile-selector__dropdown" role="listbox" aria-label="Model profiles">
-          {modelProfiles.map((profile) => {
-            const isSelected = profile.id === selectedProfileId;
-            return (
-              <button
-                key={profile.id}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                className={`profile-selector__option${isSelected ? " is-selected" : ""}`}
-                onClick={() => {
-                  onChange(profile.id);
-                  setIsOpen(false);
-                }}
-              >
-                <span className="profile-selector__option-check">
-                  {isSelected ? (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="profile-selector__check" aria-hidden="true">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  ) : null}
-                </span>
-                <span className="profile-selector__option-body">
-                  <span className="profile-selector__option-name">{profile.name}</span>
-                  <span className="profile-selector__option-meta">
-                    <span>{profile.provider.name}</span>
-                    {profile.model ? (
-                      <>
-                        <span className="profile-selector__dot" aria-hidden="true">·</span>
-                        <span>{profile.model}</span>
-                      </>
-                    ) : null}
-                    {profile.reasoning_effort ? (
-                      <>
-                        <span className="profile-selector__dot" aria-hidden="true">·</span>
-                        <span>{profile.reasoning_effort}</span>
-                      </>
-                    ) : null}
+      {modelProfiles.length > 0 ? (
+        <DropdownMenuContent className="profile-selector__dropdown" align="start">
+          <DropdownMenuGroup>
+            {modelProfiles.map((profile) => {
+              const isSelected = profile.id === selectedProfileId;
+              return (
+                <DropdownMenuItem
+                  key={profile.id}
+                  className="profile-selector__option"
+                  onClick={() => {
+                    onChange(profile.id);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="profile-selector__option-check">
+                    {isSelected ? <CheckIcon aria-hidden="true" /> : null}
                   </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                  <span className="profile-selector__option-body">
+                    <span className="profile-selector__option-name">{profile.name}</span>
+                    <span className="profile-selector__option-meta">
+                      <span>{profile.provider.name}</span>
+                      {profile.model ? (
+                        <>
+                          <span className="profile-selector__dot" aria-hidden="true">·</span>
+                          <span>{profile.model}</span>
+                        </>
+                      ) : null}
+                      {profile.reasoning_effort ? (
+                        <>
+                          <span className="profile-selector__dot" aria-hidden="true">·</span>
+                          <span>{profile.reasoning_effort}</span>
+                        </>
+                      ) : null}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
       ) : null}
-    </div>
+    </DropdownMenu>
   );
 }

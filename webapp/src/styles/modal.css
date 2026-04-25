@@ -164,3 +164,19 @@
   justify-content: flex-end;
   gap: var(--sp-2);
 }
+
+.modal-icon-shell {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  background: var(--color-accent-muted);
+}
+
+.modal-icon-shell svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}

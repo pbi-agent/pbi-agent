@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { DailyBucket, DashboardOverview } from "../../types";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Sparkline } from "./Sparkline";
 
 type MetricsCardsProps = {
@@ -89,23 +90,25 @@ export function MetricsCards({ overview, daily }: MetricsCardsProps) {
   return (
     <div className="metrics-grid">
       {cards.map((card) => (
-        <div className="metric-card" key={card.label}>
-          <div className="metric-card__header">
-            <span className="metric-card__label">{card.label}</span>
+        <Card className="metric-card" key={card.label}>
+          <CardHeader className="metric-card__header">
+            <CardTitle className="metric-card__label">{card.label}</CardTitle>
             <Sparkline
               values={card.sparkValues}
               width={80}
               height={24}
               color={card.accent}
             />
-          </div>
+          </CardHeader>
+          <CardContent>
           <span
             className="metric-card__value"
             style={card.accent ? { color: card.accent } : undefined}
           >
             {card.value}
           </span>
-        </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );

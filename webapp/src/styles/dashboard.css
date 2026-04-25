@@ -17,16 +17,20 @@
 /* ── Controls bar ──────────────────────────────────────────────────── */
 
 .dashboard-controls {
+  padding: var(--sp-4);
+}
+
+.dashboard-controls__content {
   display: flex;
-  align-items: center;
+  align-items: end;
   justify-content: space-between;
   gap: var(--sp-4);
   flex-wrap: wrap;
 }
 
 .dashboard-controls__dates {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-3);
 }
 
@@ -39,19 +43,7 @@
 }
 
 .dashboard-date-input {
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  padding: var(--sp-1) var(--sp-2);
-  outline: none;
-  transition: border-color var(--duration-fast) var(--ease);
-}
-
-.dashboard-date-input:focus {
-  border-color: var(--color-border-focus);
 }
 
 /* Webkit date input icon colour fix for dark theme */
@@ -61,30 +53,7 @@
 }
 
 .dashboard-controls__scope {
-  display: flex;
-  gap: var(--sp-1);
-}
-
-.dashboard-controls__scope .btn {
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--sp-1) var(--sp-3);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease);
-}
-
-.dashboard-controls__scope .btn:hover {
-  border-color: var(--color-border-focus);
-  color: var(--color-text-primary);
-}
-
-.dashboard-controls__scope .btn--active {
-  background: var(--color-accent-muted);
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  align-self: end;
 }
 
 /* ── Metric cards grid ─────────────────────────────────────────────── */
@@ -102,12 +71,7 @@
 }
 
 .metric-card {
-  background: var(--color-surface-0);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
   padding: var(--sp-3) var(--sp-4);
-  display: flex;
-  flex-direction: column;
   gap: var(--sp-1);
   transition: border-color var(--duration-fast) var(--ease);
 }
@@ -120,6 +84,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 0;
 }
 
 .metric-card__label {
@@ -140,9 +105,6 @@
 /* ── Panels (breakdown, runs table) ────────────────────────────────── */
 
 .dashboard-panel {
-  background: var(--color-surface-0);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
   overflow: hidden;
 }
 
@@ -191,8 +153,6 @@
 }
 
 .dashboard-table {
-  width: 100%;
-  border-collapse: collapse;
   font-size: var(--text-xs);
 }
 
@@ -206,7 +166,6 @@
   font-size: var(--text-2xs);
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
-  cursor: pointer;
   user-select: none;
   transition: color var(--duration-fast) var(--ease);
 }
@@ -260,26 +219,9 @@
 
 .runs-filter-select,
 .runs-filter-input {
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  padding: var(--sp-1) var(--sp-2);
-  outline: none;
   min-width: 120px;
-  transition: border-color var(--duration-fast) var(--ease);
-}
-
-.runs-filter-select:focus,
-.runs-filter-input:focus {
-  border-color: var(--color-border-focus);
-}
-
-.runs-filter-select option {
-  background: var(--color-surface-1);
-  color: var(--color-text-primary);
 }
 
 /* ── Runs table row specifics ──────────────────────────────────────── */
@@ -303,27 +245,6 @@
   gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-5);
   border-top: 1px solid var(--color-border);
-}
-
-.runs-pagination .btn {
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--sp-1) var(--sp-3);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease);
-}
-
-.runs-pagination .btn:hover:not(:disabled) {
-  border-color: var(--color-border-focus);
-  color: var(--color-text-primary);
-}
-
-.runs-pagination .btn:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 .runs-pagination__info {

@@ -1,6 +1,9 @@
 import { useState, type JSX, type ReactNode } from "react";
+import { ChevronRightIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type { ImageAttachment, TimelineItem } from "../../types";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 
 function renderUserContent(
   content: string,
@@ -144,15 +147,16 @@ export function TimelineEntry({
         data-timeline-item-id={item.itemId}
       >
         {subAgentBanner}
-        <div
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           className="timeline-entry__header"
           onClick={() => setCollapsed((prev) => !prev)}
         >
-          <span className={`timeline-entry__chevron ${collapsed ? "" : "timeline-entry__chevron--open"}`}>
-            &#9654;
-          </span>
+          <ChevronRightIcon className={`timeline-entry__chevron ${collapsed ? "" : "timeline-entry__chevron--open"}`} />
           <span>{item.title}</span>
-        </div>
+        </Button>
         {!collapsed ? (
           <div className="timeline-entry__body">
             <ReactMarkdown>{item.content}</ReactMarkdown>
@@ -168,16 +172,17 @@ export function TimelineEntry({
       data-timeline-item-id={item.itemId}
     >
       {subAgentBanner}
-      <div
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
         className="timeline-entry__header"
         onClick={() => setCollapsed((prev) => !prev)}
       >
-        <span className={`timeline-entry__chevron ${collapsed ? "" : "timeline-entry__chevron--open"}`}>
-          &#9654;
-        </span>
+        <ChevronRightIcon className={`timeline-entry__chevron ${collapsed ? "" : "timeline-entry__chevron--open"}`} />
         <span>{item.label}</span>
-        <span className="timeline-entry__count">{item.items.length}</span>
-      </div>
+        <Badge variant="secondary" className="timeline-entry__count">{item.items.length}</Badge>
+      </Button>
       {!collapsed ? (
         <div className="timeline-entry__body">
           {item.items.map((toolItem, index) => (

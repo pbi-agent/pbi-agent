@@ -1,3 +1,5 @@
+import { Badge } from "../ui/badge";
+
 export function StatusPill({
   status,
 }: {
@@ -10,8 +12,8 @@ export function StatusPill({
     : "idle";
 
   return (
-    <span className={`status-pill status-pill--${modifier}`}>
+    <Badge variant="secondary" className={`status-pill status-pill--${modifier}`}>
       {status}
-    </span>
+    </Badge>
   );
 }

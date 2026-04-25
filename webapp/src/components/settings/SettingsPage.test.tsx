@@ -543,12 +543,7 @@ describe("SettingsPage", () => {
       await screen.findByText("Connect GitHub Copilot account"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText((content, element) => {
-        return (
-          element?.textContent ===
-          "Authorize Copilot Main with your GitHub Copilot subscription account."
-        );
-      }),
+      screen.getByText("Authorize Copilot Main with your GitHub Copilot subscription account."),
     ).toBeInTheDocument();
     expect(screen.queryByText("Method")).not.toBeInTheDocument();
 
@@ -563,12 +558,12 @@ describe("SettingsPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "+ Add Provider" }));
 
-    expect(screen.getByRole("option", { name: "OpenAI API" })).toBeInTheDocument();
+    expect(screen.getAllByRole("option", { name: "OpenAI API" })[0]).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: "ChatGPT (Subscription)" }),
+      screen.getAllByRole("option", { name: "ChatGPT (Subscription)" })[0],
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: "GitHub Copilot (Subscription)" }),
+      screen.getAllByRole("option", { name: "GitHub Copilot (Subscription)" })[0],
     ).toBeInTheDocument();
     expect(screen.getByText("Uses an OpenAI API key.")).toBeInTheDocument();
   });
@@ -579,7 +574,10 @@ describe("SettingsPage", () => {
     renderWithProviders(<SettingsPage />);
 
     await user.click(await screen.findByRole("button", { name: "+ Add Provider" }));
-    await user.selectOptions(screen.getAllByRole("combobox")[1], "chatgpt");
+    await user.selectOptions(
+      document.querySelector('select[name="provider-kind"]') as HTMLSelectElement,
+      "chatgpt",
+    );
     await user.type(screen.getByPlaceholderText("e.g. My OpenAI"), "ChatGPT Starter");
 
     expect(
@@ -632,12 +630,7 @@ describe("SettingsPage", () => {
     );
     expect(await screen.findByText("Connect ChatGPT account")).toBeInTheDocument();
     expect(
-      screen.getByText((content, element) => {
-        return (
-          element?.textContent ===
-          "Authorize ChatGPT Starter with your ChatGPT subscription account."
-        );
-      }),
+      screen.getByText("Authorize ChatGPT Starter with your ChatGPT subscription account."),
     ).toBeInTheDocument();
   });
 
@@ -818,14 +811,14 @@ describe("SettingsPage", () => {
         error: null,
       });
 
-    const { container } = renderWithProviders(<SettingsPage />);
+    renderWithProviders(<SettingsPage />);
 
     await user.click(await screen.findByRole("button", { name: "+ Add Profile" }));
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
     );
 
-    const providerSelect = container.querySelector(
+    const providerSelect = document.querySelector(
       'select[name="provider-id"]',
     ) as HTMLSelectElement;
     await user.selectOptions(providerSelect, "xai-main");
@@ -837,7 +830,7 @@ describe("SettingsPage", () => {
 
   it("renders fetched provider models as dropdowns in the profile modal", async () => {
     const user = userEvent.setup();
-    const { container } = renderWithProviders(<SettingsPage />);
+    renderWithProviders(<SettingsPage />);
 
     await user.click(await screen.findByRole("button", { name: "+ Add Profile" }));
 
@@ -845,8 +838,8 @@ describe("SettingsPage", () => {
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
     );
 
-    const modelSelect = container.querySelector('select[name="model"]');
-    const subAgentModelSelect = container.querySelector(
+    const modelSelect = document.querySelector('select[name="model"]');
+    const subAgentModelSelect = document.querySelector(
       'select[name="sub-agent-model"]',
     );
     expect(modelSelect).not.toBeNull();
@@ -874,13 +867,13 @@ describe("SettingsPage", () => {
       },
     });
 
-    const { container } = renderWithProviders(<SettingsPage />);
+    renderWithProviders(<SettingsPage />);
 
     await user.click(await screen.findByRole("button", { name: "+ Add Profile" }));
 
     await screen.findByText("Missing authentication for provider 'openai'.");
-    expect(container.querySelector('input[name="model"]')).not.toBeNull();
-    expect(container.querySelector('select[name="model"]')).toBeNull();
+    expect(document.querySelector('input[name="model"]')).not.toBeNull();
+    expect(document.querySelector('select[name="model"]')).toBeNull();
   });
 
   it("keeps an existing unknown model editable when discovery does not return it", async () => {
@@ -899,7 +892,7 @@ describe("SettingsPage", () => {
       }),
     );
 
-    const { container } = renderWithProviders(<SettingsPage />);
+    renderWithProviders(<SettingsPage />);
 
     await screen.findByRole("button", { name: "+ Add Profile" });
     await user.click(screen.getAllByRole("button", { name: "Edit" })[2]);
@@ -908,12 +901,12 @@ describe("SettingsPage", () => {
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
     );
 
-    const modelInput = container.querySelector(
+    const modelInput = document.querySelector<HTMLInputElement>(
       'input[name="model"]',
-    ) as HTMLInputElement | null;
-    const subAgentModelInput = container.querySelector(
+    );
+    const subAgentModelInput = document.querySelector<HTMLInputElement>(
       'input[name="sub-agent-model"]',
-    ) as HTMLInputElement | null;
+    );
     expect(modelInput?.value).toBe("legacy-model");
     expect(subAgentModelInput?.value).toBe("legacy-sub-agent");
   });

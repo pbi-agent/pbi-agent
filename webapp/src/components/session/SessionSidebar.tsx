@@ -1,27 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import {
+  FolderGit2Icon,
+  MoreHorizontalIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+  PlusIcon,
+  Trash2Icon,
+} from "lucide-react";
 import type { SessionRecord } from "../../types";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../shared/EmptyState";
-
-function TrashIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-      <line x1="10" y1="11" x2="10" y2="17" />
-      <line x1="14" y1="11" x2="14" y2="17" />
-    </svg>
-  );
-}
-
-function MoreIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-      <circle cx="5" cy="12" r="2" />
-      <circle cx="12" cy="12" r="2" />
-      <circle cx="19" cy="12" r="2" />
-    </svg>
-  );
-}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -60,50 +57,30 @@ export function SessionSidebar({
   isOpen: boolean;
 }) {
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        event.target instanceof Node &&
-        !containerRef.current.contains(event.target)
-      ) {
-        setOpenMenuSessionId(null);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpenMenuSessionId(null);
-      }
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
 
   if (!isOpen) {
     return (
       <div className="sidebar__collapsed">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           className="sidebar__toggle"
           onClick={onToggle}
           title="Show sessions"
+          aria-label="Show sessions"
         >
-          &#9654;
-        </button>
-        <button
+          <PanelLeftOpenIcon />
+        </Button>
+        <Button
           type="button"
-          className="btn btn--primary btn--icon"
+          size="icon-sm"
           onClick={onNewSession}
           title="New session"
+          aria-label="New session"
         >
-          +
-        </button>
+          <PlusIcon />
+        </Button>
       </div>
     );
   }
@@ -113,34 +90,39 @@ export function SessionSidebar({
       <div className="sidebar__header">
         <span className="sidebar__title">Session History</span>
         <div className="sidebar__header-actions">
-          <button type="button" className="btn btn--primary btn--sm" onClick={onNewSession}>
-            + New
-          </button>
-          <button
+          <Button type="button" size="sm" onClick={onNewSession}>
+            <PlusIcon data-icon="inline-start" />
+            New
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             className="sidebar__toggle"
             onClick={onToggle}
             title="Hide sessions"
+            aria-label="Hide sessions"
           >
-            &#9664;
-          </button>
+            <PanelLeftCloseIcon />
+          </Button>
         </div>
       </div>
 
       {workspaceRoot ? (
         <div className="sidebar__workspace">
-          <span className="sidebar__workspace-path" title={workspaceRoot}>
+          <Badge variant="outline" className="sidebar__workspace-path" title={workspaceRoot}>
+            <FolderGit2Icon data-icon="inline-start" />
             {workspaceRoot}
-          </span>
+          </Badge>
         </div>
       ) : null}
 
-      <div className="sidebar__list" ref={containerRef}>
+      <div className="sidebar__list">
         {isLoading ? (
           <>
-            <div className="skeleton skeleton--card" />
-            <div className="skeleton skeleton--card" />
-            <div className="skeleton skeleton--card" />
+            <Skeleton className="skeleton skeleton--card" />
+            <Skeleton className="skeleton skeleton--card" />
+            <Skeleton className="skeleton skeleton--card" />
           </>
         ) : sessions.length === 0 ? (
           <EmptyState
@@ -155,8 +137,9 @@ export function SessionSidebar({
                 key={session.session_id}
                 className={`session-card ${activeSessionId === session.session_id ? "session-card--active" : ""}${menuOpen ? " session-card--menu-open" : ""}`}
               >
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   className="session-card__main"
                   onClick={() => {
                     setOpenMenuSessionId(null);
@@ -168,41 +151,44 @@ export function SessionSidebar({
                   </span>
                   <div className="session-card__meta">
                     <time className="session-card__time">{formatDate(session.updated_at)}</time>
-                    <span className="session-card__model">{session.model}</span>
+                    <Badge variant="secondary" className="session-card__model">{session.model}</Badge>
                   </div>
-                </button>
+                </Button>
 
-                <button
-                  type="button"
-                  className="session-card__menu-trigger"
-                  aria-label={`Open actions for ${session.title || "Untitled session"}`}
-                  aria-expanded={menuOpen}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setOpenMenuSessionId((current) =>
-                      current === session.session_id ? null : session.session_id,
-                    );
+                <DropdownMenu
+                  open={menuOpen}
+                  onOpenChange={(open) => {
+                    setOpenMenuSessionId(open ? session.session_id : null);
                   }}
                 >
-                  <MoreIcon />
-                </button>
-
-                {menuOpen ? (
-                  <div className="session-card__menu" role="menu">
-                    <button
+                  <DropdownMenuTrigger asChild>
+                    <Button
                       type="button"
-                      className="session-card__menu-item session-card__menu-item--danger"
-                      role="menuitem"
-                      onClick={() => {
-                        setOpenMenuSessionId(null);
-                        onDeleteSession(session);
-                      }}
+                      variant="ghost"
+                      size="icon-sm"
+                      className="session-card__menu-trigger"
+                      aria-label={`Open actions for ${session.title || "Untitled session"}`}
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      <TrashIcon />
-                      Delete session
-                    </button>
-                  </div>
-                ) : null}
+                      <MoreHorizontalIcon />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="session-card__menu">
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        className="session-card__menu-item"
+                        onClick={() => {
+                          setOpenMenuSessionId(null);
+                          onDeleteSession(session);
+                        }}
+                      >
+                        <Trash2Icon />
+                        Delete session
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             );
           })

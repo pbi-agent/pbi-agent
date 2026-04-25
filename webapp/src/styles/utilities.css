@@ -92,14 +92,12 @@
 .spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid var(--color-surface-3);
-  border-top-color: var(--color-accent);
-  border-radius: 50%;
+  color: var(--primary);
   animation: spin 0.7s linear infinite;
 }
 
-.spinner--sm { width: 14px; height: 14px; border-width: 1.5px; }
-.spinner--lg { width: 28px; height: 28px; border-width: 2.5px; }
+.spinner--sm { width: 14px; height: 14px; }
+.spinner--lg { width: 28px; height: 28px; }
 
 /* Skeleton loading */
 .skeleton {

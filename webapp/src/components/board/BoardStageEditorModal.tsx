@@ -1,5 +1,24 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { BoardStage, CommandView, ModelProfileView } from "../../types";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "../ui/field";
+import { Input } from "../ui/input";
+import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { type EditableBoardStage, toEditableBoardStages } from "./stageConfig";
 
 const BACKLOG_STAGE_ID = "backlog";
@@ -59,14 +78,6 @@ export function BoardStageEditorModal({
     setItems(buildInitialItems(stages, startWithNewStage));
   }, [stages, startWithNewStage]);
 
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
   const updateItem = (index: number, updates: Partial<EditableBoardStage>) => {
     setItems((current) => current.map((item, itemIndex) => (
       itemIndex === index ? { ...item, ...updates } : item
@@ -125,14 +136,13 @@ export function BoardStageEditorModal({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card modal-card--board-editor" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-card__header">
-          <h2 className="modal-card__title">Board Stages</h2>
-          <button type="button" className="modal-card__close" onClick={onClose} disabled={isSaving}>
-            &times;
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => {
+      if (!open && !isSaving) onClose();
+    }}>
+      <DialogContent className="modal-card--board-editor">
+        <DialogHeader>
+          <DialogTitle>Board Stages</DialogTitle>
+        </DialogHeader>
 
         <form
           className="task-form"
@@ -152,101 +162,109 @@ export function BoardStageEditorModal({
               return (
                 <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
                 <div className="board-stage-editor__ordering">
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={() => moveItem(index, -1)} disabled={index === 0 || isSaving || fixedStage}>
-                    ↑
-                  </button>
-                  <button
+                  <Button type="button" variant="outline" size="icon-sm" onClick={() => moveItem(index, -1)} disabled={index === 0 || isSaving || fixedStage}>
+                    <ArrowUpIcon />
+                  </Button>
+                  <Button
                     type="button"
-                    className="btn btn--ghost btn--sm"
+                    variant="outline"
+                    size="icon-sm"
                     onClick={() => moveItem(index, 1)}
                     disabled={index === items.length - 1 || isSaving || fixedStage}
                   >
-                    ↓
-                  </button>
+                    <ArrowDownIcon />
+                  </Button>
                 </div>
 
-                <div className="board-stage-editor__fields">
-                  <div className="task-form__field">
-                    <label className="task-form__label">Name</label>
-                    <input
+                <FieldGroup className="board-stage-editor__fields">
+                  <Field>
+                    <FieldLabel>Name</FieldLabel>
+                    <Input
                       className="task-form__input"
                       value={item.name}
                       onChange={(event) => updateItem(index, { name: event.target.value })}
                       required
                       disabled={fixedStage}
                     />
-                  </div>
+                  </Field>
                   {fixedStageLabel ? (
-                    <p className="task-form__hint">{fixedStageLabel}</p>
+                    <FieldDescription>{fixedStageLabel}</FieldDescription>
                   ) : null}
 
                   <div className="task-form__row">
-                    <div className="task-form__field">
-                      <label className="task-form__label">Default Profile</label>
-                      <select
+                    <Field>
+                      <FieldLabel>Default Profile</FieldLabel>
+                      <NativeSelect
                         className="task-form__select"
                         value={item.profile_id}
                         onChange={(event) => updateItem(index, { profile_id: event.target.value })}
                         disabled={fixedStage}
                       >
-                        <option value="">No default profile</option>
+                        <NativeSelectOption value="">No default profile</NativeSelectOption>
                         {profiles.map((profile) => (
-                          <option key={profile.id} value={profile.id}>
+                          <NativeSelectOption key={profile.id} value={profile.id}>
                             {profile.name}
-                          </option>
+                          </NativeSelectOption>
                         ))}
-                      </select>
-                    </div>
+                      </NativeSelect>
+                    </Field>
 
-                    <div className="task-form__field">
-                      <label className="task-form__label">Default Command</label>
-                      <select
+                    <Field>
+                      <FieldLabel>Default Command</FieldLabel>
+                      <NativeSelect
                         className="task-form__select"
                         value={item.command_id}
                         onChange={(event) => updateItem(index, { command_id: event.target.value })}
                         disabled={fixedStage}
                       >
-                        <option value="">No default command</option>
+                        <NativeSelectOption value="">No default command</NativeSelectOption>
                         {commands.map((command) => (
-                          <option key={command.id} value={command.id}>
+                          <NativeSelectOption key={command.id} value={command.id}>
                             {command.name} ({command.slash_alias})
-                          </option>
+                          </NativeSelectOption>
                         ))}
-                      </select>
-                    </div>
+                      </NativeSelect>
+                    </Field>
                   </div>
 
-                  <label className="board-stage-editor__toggle">
-                    <input
-                      type="checkbox"
+                  <Field orientation="horizontal" className="board-stage-editor__toggle">
+                    <Checkbox
                       checked={item.auto_start}
-                      onChange={(event) => updateItem(index, { auto_start: event.target.checked })}
+                      onCheckedChange={(checked) => updateItem(index, { auto_start: checked === true })}
                       disabled={fixedStage}
                     />
+                    <FieldLabel>
                     Auto-start when a task enters this stage
-                  </label>
-                </div>
+                    </FieldLabel>
+                  </Field>
+                </FieldGroup>
 
-                <button type="button" className="btn btn--ghost-danger btn--sm" onClick={() => removeStage(index)} disabled={isSaving || items.length === 1 || fixedStage}>
+                <Button type="button" variant="destructive" size="sm" onClick={() => removeStage(index)} disabled={isSaving || items.length === 1 || fixedStage}>
+                  <Trash2Icon data-icon="inline-start" />
                   Remove
-                </button>
+                </Button>
                 </div>
               );
             })}
           </div>
 
-          {error ? <div className="settings-error-banner">{error}</div> : null}
+          {error ? (
+            <Alert variant="destructive" className="settings-error-banner">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
 
-          <div className="board-stage-editor__actions">
-            <button type="button" className="btn btn--ghost" onClick={addStage} disabled={isSaving}>
-              + Add Stage
-            </button>
-            <button type="submit" className="task-form__submit" disabled={isSaving}>
+          <DialogFooter className="board-stage-editor__actions">
+            <Button type="button" variant="outline" onClick={addStage} disabled={isSaving}>
+              <PlusIcon data-icon="inline-start" />
+              Add Stage
+            </Button>
+            <Button type="submit" disabled={isSaving}>
               {isSaving ? "Saving..." : "Save Board"}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

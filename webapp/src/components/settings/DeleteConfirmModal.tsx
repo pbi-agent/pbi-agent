@@ -1,4 +1,17 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Trash2Icon } from "lucide-react";
+import { Alert, AlertDescription } from "../ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 
 interface Props {
   title: string;
@@ -18,14 +31,6 @@ export function DeleteConfirmModal({
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
   async function handleConfirm() {
     setIsPending(true);
     setError(null);
@@ -38,47 +43,41 @@ export function DeleteConfirmModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal-card modal-card--confirm"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-card__header">
-          <h2 className="modal-card__title">{title}</h2>
-          <button
-            type="button"
-            className="modal-card__close"
-            onClick={onClose}
+    <AlertDialog open onOpenChange={(open) => {
+      if (!open && !isPending) onClose();
+    }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogMedia>
+            <Trash2Icon />
+          </AlertDialogMedia>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div>{body}</div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={isPending}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={() => {
+              void handleConfirm();
+            }}
             disabled={isPending}
           >
-            &times;
-          </button>
-        </div>
-        <div className="confirm-modal">
-          <div className="confirm-modal__body">{body}</div>
-          {error && <div className="confirm-modal__error">{error}</div>}
-          <div className="confirm-modal__actions">
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={onClose}
-              disabled={isPending}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={() => {
-                void handleConfirm();
-              }}
-              disabled={isPending}
-            >
-              {isPending ? "Deleting…" : confirmLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+            {isPending ? "Deleting…" : confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

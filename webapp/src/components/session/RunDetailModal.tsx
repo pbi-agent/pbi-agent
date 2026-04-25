@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronRightIcon, XIcon } from "lucide-react";
 import { fetchRunDetail } from "../../api";
 import type { ObservabilityEvent, RunSession } from "../../types";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 
 export function RunDetailModal({
@@ -27,25 +36,23 @@ export function RunDetailModal({
   });
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
-      <div
-        className="modal-card modal-card--wide"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Run detail"
-      >
-        <div className="modal-card__header">
-          <h2 className="modal-card__title">Run Detail</h2>
-          <button
+    <Dialog open onOpenChange={(open) => {
+      if (!open) onClose();
+    }}>
+      <DialogContent className="modal-card--wide">
+        <DialogHeader>
+          <DialogTitle>Run Detail</DialogTitle>
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             className="modal-card__close"
             onClick={onClose}
             aria-label="Close"
           >
-            &times;
-          </button>
-        </div>
+            <XIcon />
+          </Button>
+        </DialogHeader>
 
         <div className="run-detail">
           {detailQuery.isLoading ? (
@@ -61,8 +68,8 @@ export function RunDetailModal({
             </>
           ) : null}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -81,7 +88,7 @@ function RunSummary({ run }: { run: RunSession }) {
     <div className="run-summary">
       <div className="run-summary__row">
         <SummaryField label="Status">
-          <span className={`status-pill status-pill--${statusModifier}`}>{run.status}</span>
+          <Badge variant="secondary" className={`status-pill status-pill--${statusModifier}`}>{run.status}</Badge>
         </SummaryField>
         <SummaryField label="Agent">{run.agent_name ?? run.agent_type ?? "--"}</SummaryField>
         <SummaryField label="Provider">{run.provider ?? "--"}</SummaryField>
@@ -158,8 +165,9 @@ function EventRow({ event }: { event: ObservabilityEvent }) {
 
   return (
     <div className={`event-row event-row--${typeModifier}`}>
-      <button
+      <Button
         type="button"
+        variant="ghost"
         className="event-row__header"
         onClick={() => { if (hasPayload) setExpanded((v) => !v); }}
         aria-expanded={hasPayload ? expanded : undefined}
@@ -179,15 +187,15 @@ function EventRow({ event }: { event: ObservabilityEvent }) {
         <span className="event-row__spacer" />
 
         {event.success === false ? (
-          <span className="event-row__badge event-row__badge--error">fail</span>
+          <Badge variant="destructive" className="event-row__badge event-row__badge--error">fail</Badge>
         ) : event.success === true ? (
-          <span className="event-row__badge event-row__badge--ok">ok</span>
+          <Badge variant="secondary" className="event-row__badge event-row__badge--ok">ok</Badge>
         ) : null}
 
         {event.status_code != null ? (
-          <span className={`event-row__badge${event.status_code >= 400 ? " event-row__badge--error" : ""}`}>
+          <Badge variant={event.status_code >= 400 ? "destructive" : "secondary"} className={`event-row__badge${event.status_code >= 400 ? " event-row__badge--error" : ""}`}>
             {event.status_code}
-          </span>
+          </Badge>
         ) : null}
 
         {event.duration_ms != null ? (
@@ -201,11 +209,9 @@ function EventRow({ event }: { event: ObservabilityEvent }) {
         ) : null}
 
         {hasPayload ? (
-          <svg className={`event-row__chevron${expanded ? " event-row__chevron--open" : ""}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="9 6 15 12 9 18" />
-          </svg>
+          <ChevronRightIcon className={`event-row__chevron${expanded ? " event-row__chevron--open" : ""}`} aria-hidden="true" />
         ) : null}
-      </button>
+      </Button>
 
       {expanded && hasPayload ? (
         <div className="event-row__body">

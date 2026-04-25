@@ -9,8 +9,30 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
+import {
+  ArrowUpIcon,
+  BadgeDollarSignIcon,
+  ImageIcon,
+  PlusIcon,
+  TerminalIcon,
+  XIcon,
+} from "lucide-react";
 import { searchFileMentions, searchSlashCommands } from "../../api";
 import type { FileMentionItem, SlashCommandItem } from "../../types";
+import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "../ui/input-group";
 
 export interface ComposerHandle {
   focus: () => void;
@@ -652,52 +674,49 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       <div
         className={`composer__input-row ${isShellMode ? "composer__input-row--shell" : ""}`}
       >
-        <div className="composer__action-menu" ref={actionMenuRef}>
-          <button
-            type="button"
-            className={`composer__action-trigger ${isActionMenuOpen ? "composer__action-trigger--open" : ""}`}
-            onClick={() => setActionMenuOpen((current) => !current)}
-            disabled={!canSend || isShellMode}
-            aria-haspopup="menu"
-            aria-expanded={isActionMenuOpen}
-            aria-label="Actions"
-            title={isShellMode ? "Images cannot be attached to shell commands" : "Actions"}
-          >
-            <span className="composer__action-trigger-icon" aria-hidden="true">+</span>
-          </button>
-          {isActionMenuOpen ? (
-            <div className="composer__action-popover" role="menu" aria-label="Input actions">
-              <button
+        <DropdownMenu
+          open={isActionMenuOpen}
+          onOpenChange={(open) => setActionMenuOpen(canSend && !isShellMode && open)}
+        >
+          <div className="composer__action-menu" ref={actionMenuRef}>
+            <DropdownMenuTrigger asChild>
+              <Button
                 type="button"
+                variant="outline"
+                size="icon-sm"
+                className="composer__action-trigger"
+                disabled={!canSend || isShellMode}
+                aria-label="Actions"
+                title={isShellMode ? "Images cannot be attached to shell commands" : "Actions"}
+              >
+                <PlusIcon />
+              </Button>
+            </DropdownMenuTrigger>
+          </div>
+          <DropdownMenuContent className="composer__action-popover" align="start">
+            <DropdownMenuGroup>
+              <DropdownMenuItem
                 className="composer__action-item"
                 onClick={() => {
                   setActionMenuOpen(false);
                   fileInputRef.current?.click();
                 }}
                 disabled={!supportsImageInputs}
-                role="menuitem"
               >
-                <span className="composer__action-item-icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
-                    <rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2" />
-                    <circle cx="5.4" cy="5.4" r="1.1" fill="currentColor" stroke="none" />
-                    <path d="M3.75 11.2 6.7 8.35a1 1 0 0 1 1.38 0l1.35 1.28" />
-                    <path d="m8.9 10.1 1.35-1.3a1 1 0 0 1 1.41.03l1.59 1.67" />
-                  </svg>
-                </span>
+                <ImageIcon />
                 <span className="composer__action-item-label">Image</span>
-              </button>
-            </div>
-          ) : null}
-        </div>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         {isShellMode ? (
           <div className="composer__mode-pill composer__mode-pill--shell" aria-label="Shell command mode">
-            <span className="composer__mode-icon" aria-hidden="true">$</span>
+            <TerminalIcon data-icon="inline-start" />
             <span>Shell</span>
           </div>
         ) : null}
-        <div className="composer__textarea-wrap">
-          <textarea
+        <InputGroup className="composer__textarea-wrap">
+          <InputGroupTextarea
             ref={textareaRef}
             name="message"
             aria-label="Message"
@@ -723,16 +742,21 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             rows={1}
             disabled={!canSend}
           />
-        </div>
-        <button
-          type="submit"
-          aria-label={isShellMode ? "Run command" : "Send message"}
-          className="composer__send"
-          disabled={!canSend}
-          title={isShellMode ? "Run command (Enter)" : "Send (Enter)"}
-        >
-          {isShellMode ? "$" : "↑"}
-        </button>
+        </InputGroup>
+        <InputGroup className="composer__send-group">
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              type="submit"
+              aria-label={isShellMode ? "Run command" : "Send message"}
+              className="composer__send"
+              disabled={!canSend}
+              title={isShellMode ? "Run command (Enter)" : "Send (Enter)"}
+              size="icon-sm"
+            >
+              {isShellMode ? <BadgeDollarSignIcon /> : <ArrowUpIcon />}
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
       </div>
 
       {isShellMode ? (
@@ -747,9 +771,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         <div className="composer__completions" role="listbox" aria-label={completionLabel}>
           {completionItems.length > 0 ? (
             completionItems.map((item, index) => (
-              <button
+              <Button
                 key={item.key}
                 type="button"
+                variant="ghost"
                 className={`composer__completion-item ${index === completionSelectedIndex ? "composer__completion-item--active" : ""}`}
                 onMouseDown={(event) => {
                   event.preventDefault();
@@ -773,7 +798,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                     {item.mention.kind}
                   </span>
                 ) : null}
-              </button>
+              </Button>
             ))
           ) : showCompletionEmptyState ? (
             <div className="composer__completion-empty">{completionEmptyText}</div>
@@ -803,15 +828,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   {Math.max(1, Math.round(image.file.size / 1024))} KB
                 </span>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
                 className="composer__attachment-remove"
                 onClick={() => removePendingImage(image.id)}
                 aria-label={`Remove ${image.file.name}`}
                 disabled={!canSend}
               >
-                ×
-              </button>
+                <XIcon aria-hidden="true" />
+              </Button>
             </div>
           ))}
         </div>

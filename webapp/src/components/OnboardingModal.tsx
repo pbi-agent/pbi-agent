@@ -1,4 +1,14 @@
 import { useNavigate } from "react-router-dom";
+import { SparklesIcon } from "lucide-react";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 interface Props {
   isOnSettingsPage: boolean;
@@ -9,43 +19,36 @@ export function OnboardingModal({ isOnSettingsPage, onDismissOnSettings }: Props
   const navigate = useNavigate();
 
   return (
-    <div className="modal-backdrop">
-      <div
-        className="modal-card modal-card--confirm"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-card__header">
-          <h2 className="modal-card__title">Setup Required</h2>
-        </div>
-        <div className="confirm-modal">
-          <div className="confirm-modal__body">
+    <Dialog open>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <div className="modal-icon-shell">
+            <SparklesIcon />
+          </div>
+          <DialogTitle>Setup Required</DialogTitle>
+          <DialogDescription>
             {isOnSettingsPage
               ? "No model profiles are configured yet. Add a provider below, complete sign-in if prompted, then create a model profile to get started."
               : "No model profiles are configured yet. You need to add at least one provider, complete sign-in if prompted, and create a model profile before you can use the app."}
-          </div>
-          <div className="confirm-modal__actions">
-            {isOnSettingsPage ? (
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={onDismissOnSettings}
-              >
-                Configure below
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={() => {
-                  void navigate("/settings");
-                }}
-              >
-                Go to Settings
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          {isOnSettingsPage ? (
+            <Button type="button" onClick={onDismissOnSettings}>
+              Configure below
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={() => {
+                void navigate("/settings");
+              }}
+            >
+              Go to Settings
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

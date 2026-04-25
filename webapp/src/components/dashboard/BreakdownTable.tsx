@@ -1,5 +1,15 @@
 import { useState } from "react";
 import type { ProviderBreakdown } from "../../types";
+import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
 
 type SortKey =
   | "provider"
@@ -63,68 +73,82 @@ export function BreakdownTable({ breakdown }: BreakdownTableProps) {
 
   if (breakdown.length === 0) {
     return (
-      <div className="dashboard-panel">
-        <div className="dashboard-panel__header">
-          <h2 className="dashboard-panel__title">Provider / Model Breakdown</h2>
-        </div>
-        <div className="dashboard-panel__body dashboard-panel__empty">
+      <Card className="dashboard-panel">
+        <CardHeader className="dashboard-panel__header">
+          <CardTitle className="dashboard-panel__title">Provider / Model Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent className="dashboard-panel__body dashboard-panel__empty">
           No run data available.
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="dashboard-panel">
-      <div className="dashboard-panel__header">
-        <h2 className="dashboard-panel__title">Provider / Model Breakdown</h2>
-      </div>
-      <div className="dashboard-panel__body">
+    <Card className="dashboard-panel">
+      <CardHeader className="dashboard-panel__header">
+        <CardTitle className="dashboard-panel__title">Provider / Model Breakdown</CardTitle>
+      </CardHeader>
+      <CardContent className="dashboard-panel__body">
         <div className="dashboard-table-wrap">
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th onClick={() => toggleSort("provider")}>
+          <Table className="dashboard-table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => toggleSort("provider")}>
                   Provider {sortIndicator("provider")}
-                </th>
-                <th onClick={() => toggleSort("model")}>
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => toggleSort("model")}>
                   Model {sortIndicator("model")}
-                </th>
-                <th onClick={() => toggleSort("run_count")}>
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => toggleSort("run_count")}>
                   Runs {sortIndicator("run_count")}
-                </th>
-                <th onClick={() => toggleSort("total_tokens")}>
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => toggleSort("total_tokens")}>
                   Tokens {sortIndicator("total_tokens")}
-                </th>
-                <th onClick={() => toggleSort("total_cost")}>
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => toggleSort("total_cost")}>
                   Cost {sortIndicator("total_cost")}
-                </th>
-                <th onClick={() => toggleSort("avg_duration_ms")}>
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => toggleSort("avg_duration_ms")}>
                   Avg Duration {sortIndicator("avg_duration_ms")}
-                </th>
-                <th onClick={() => toggleSort("error_count")}>
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" onClick={() => toggleSort("error_count")}>
                   Errors {sortIndicator("error_count")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                  </Button>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {sorted.map((row, i) => (
-                <tr key={i}>
-                  <td>{row.provider ?? "--"}</td>
-                  <td className="mono">{row.model ?? "--"}</td>
-                  <td>{row.run_count}</td>
-                  <td>{formatNumber(row.total_tokens)}</td>
-                  <td>{formatCost(row.total_cost)}</td>
-                  <td>{formatDuration(row.avg_duration_ms)}</td>
-                  <td className={row.error_count > 0 ? "text-error" : ""}>
+                <TableRow key={`${row.provider ?? "provider"}-${row.model ?? "model"}-${i}`}>
+                  <TableCell>{row.provider ?? "--"}</TableCell>
+                  <TableCell className="mono">{row.model ?? "--"}</TableCell>
+                  <TableCell>{row.run_count}</TableCell>
+                  <TableCell>{formatNumber(row.total_tokens)}</TableCell>
+                  <TableCell>{formatCost(row.total_cost)}</TableCell>
+                  <TableCell>{formatDuration(row.avg_duration_ms)}</TableCell>
+                  <TableCell className={row.error_count > 0 ? "text-error" : ""}>
                     {row.error_count}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

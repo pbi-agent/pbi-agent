@@ -1,5 +1,17 @@
-import { useEffect } from "react";
+import { Trash2Icon } from "lucide-react";
 import type { SessionRecord } from "../../types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
+import { Alert, AlertDescription } from "../ui/alert";
 
 export function DeleteSessionModal({
   session,
@@ -14,65 +26,43 @@ export function DeleteSessionModal({
   onConfirm: () => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !isDeleting) {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [isDeleting, onClose]);
-
   const title = session.title || "Untitled session";
 
   return (
-    <div className="modal-backdrop" onClick={isDeleting ? undefined : onClose}>
-      <div
-        className="modal-card modal-card--confirm"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-card__header">
-          <h2 className="modal-card__title">Delete session?</h2>
-          <button
-            type="button"
-            className="modal-card__close"
-            onClick={onClose}
-            disabled={isDeleting}
-            aria-label="Close"
-          >
-            &times;
-          </button>
-        </div>
-
-        <div className="confirm-modal">
-          <p className="confirm-modal__body">
+    <AlertDialog open onOpenChange={(open) => {
+      if (!open && !isDeleting) onClose();
+    }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogMedia>
+            <Trash2Icon />
+          </AlertDialogMedia>
+          <AlertDialogTitle>Delete session?</AlertDialogTitle>
+          <AlertDialogDescription>
             This will permanently delete <strong>{title}</strong> and all of its
             saved messages.
-          </p>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
 
-          {error ? <div className="confirm-modal__error">{error}</div> : null}
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
 
-          <div className="confirm-modal__actions">
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={onClose}
-              disabled={isDeleting}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger"
-              onClick={onConfirm}
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete session"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={isDeleting}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={isDeleting}
+          >
+            {isDeleting ? "Deleting..." : "Delete session"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

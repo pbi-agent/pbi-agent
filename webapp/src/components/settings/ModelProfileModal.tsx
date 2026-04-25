@@ -7,6 +7,23 @@ import type {
   ProviderModelView,
   ProviderView,
 } from "../../types";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "../ui/field";
+import { Input } from "../ui/input";
+import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 
 type WebSearchMode = "default" | "true" | "false";
 
@@ -173,14 +190,6 @@ export function ModelProfileModal({
   const [subAgentModelMode, setSubAgentModelMode] =
     useState<ModelFieldMode>("custom");
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
   function set(updates: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...updates }));
   }
@@ -225,51 +234,58 @@ export function ModelProfileModal({
   useEffect(() => {
     let cancelled = false;
     if (!form.provider_id) {
-      setProviderModels(null);
-      setProviderModelsError(null);
-      setProviderModelsPending(false);
       return () => {
         cancelled = true;
       };
     }
 
-    setProviderModelsPending(true);
-    setProviderModels(null);
-    setProviderModelsError(null);
-    void fetchProviderModels(form.provider_id)
-      .then((payload) => {
-        if (cancelled) {
-          return;
-        }
-        setProviderModels(payload);
-      })
-      .catch((err) => {
-        if (cancelled) {
-          return;
-        }
-        setProviderModels(null);
-        setProviderModelsError((err as Error).message);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setProviderModelsPending(false);
-        }
-      });
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
+      }
+      setProviderModelsPending(true);
+      setProviderModels(null);
+      setProviderModelsError(null);
+      void fetchProviderModels(form.provider_id)
+        .then((payload) => {
+          if (cancelled) {
+            return;
+          }
+          setProviderModels(payload);
+          const nextDiscoveredModelsAvailable = Boolean(
+            payload.discovery_supported && !payload.error && payload.models.length > 0,
+          );
+          setModelMode(
+            nextDiscoveredModelsAvailable
+              ? preferredModelMode(form.model, payload)
+              : "custom",
+          );
+          setSubAgentModelMode(
+            nextDiscoveredModelsAvailable
+              ? preferredModelMode(form.sub_agent_model, payload)
+              : "custom",
+          );
+        })
+        .catch((err) => {
+          if (cancelled) {
+            return;
+          }
+          setProviderModels(null);
+          setProviderModelsError((err as Error).message);
+          setModelMode("custom");
+          setSubAgentModelMode("custom");
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setProviderModelsPending(false);
+          }
+        });
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [form.provider_id]);
-
-  useEffect(() => {
-    if (!discoveredModelsAvailable) {
-      setModelMode("custom");
-      setSubAgentModelMode("custom");
-      return;
-    }
-    setModelMode(preferredModelMode(form.model, providerModels));
-    setSubAgentModelMode(preferredModelMode(form.sub_agent_model, providerModels));
-  }, [discoveredModelsAvailable, providerModels, form.provider_id, profile?.id]);
+  }, [form.model, form.provider_id, form.sub_agent_model]);
 
   function providerKindLabel(providerKind: string): string {
     return options.provider_metadata[providerKind]?.label ?? providerKind;
@@ -307,35 +323,36 @@ export function ModelProfileModal({
     if (discoveredModelsAvailable && args.mode === "select") {
       return (
         <>
-          <label className="task-form__label">{args.label}</label>
-          <select
+          <FieldLabel>{args.label}</FieldLabel>
+          <NativeSelect
             name={args.name}
             className="task-form__select"
             value={args.value}
             onChange={(e) => args.onChange(e.target.value)}
           >
-            <option value="">Provider default</option>
+            <NativeSelectOption value="">Provider default</NativeSelectOption>
             {args.options.map((option) => (
-              <option key={option.value} value={option.value}>
+              <NativeSelectOption key={option.value} value={option.value}>
                 {option.label}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-          <button
+          </NativeSelect>
+          <Button
             type="button"
-            className="btn btn--ghost btn--sm"
+            variant="outline"
+            size="sm"
             onClick={() => args.setMode("custom")}
           >
             Custom value
-          </button>
+          </Button>
         </>
       );
     }
 
     return (
       <>
-        <label className="task-form__label">{args.label}</label>
-        <input
+        <FieldLabel>{args.label}</FieldLabel>
+        <Input
           name={args.name}
           className="task-form__input"
           value={args.value}
@@ -343,13 +360,14 @@ export function ModelProfileModal({
           placeholder={args.placeholder}
         />
         {discoveredModelsAvailable && (
-          <button
+          <Button
             type="button"
-            className="btn btn--ghost btn--sm"
+            variant="outline"
+            size="sm"
             onClick={() => args.setMode("select")}
           >
             Choose from provider
-          </button>
+          </Button>
         )}
       </>
     );
@@ -394,21 +412,15 @@ export function ModelProfileModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-card__header">
-          <h2 className="modal-card__title">
+    <Dialog open onOpenChange={(open) => {
+      if (!open && !isPending) onClose();
+    }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
             {isEdit ? "Edit Profile" : "Add Profile"}
-          </h2>
-          <button
-            type="button"
-            className="modal-card__close"
-            onClick={onClose}
-            disabled={isPending}
-          >
-            &times;
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         <form
           className="task-form"
@@ -416,9 +428,11 @@ export function ModelProfileModal({
             void handleSubmit(event);
           }}
         >
-          <div className="task-form__field">
-            <label className="task-form__label">Name</label>
-            <input
+
+          <FieldGroup>
+          <Field>
+            <FieldLabel>Name</FieldLabel>
+            <Input
               name="profile-name"
               className="task-form__input"
               value={form.name}
@@ -427,27 +441,27 @@ export function ModelProfileModal({
               autoFocus
               placeholder="e.g. GPT-4o Production"
             />
-          </div>
+          </Field>
 
           {!isEdit && (
-            <div className="task-form__field">
-              <label className="task-form__label">ID (optional)</label>
-              <input
+            <Field>
+              <FieldLabel>ID (optional)</FieldLabel>
+              <Input
                 name="profile-id"
                 className="task-form__input"
                 value={form.id}
                 onChange={(e) => set({ id: e.target.value })}
                 placeholder="Auto-generated from name"
               />
-              <span className="task-form__hint">
+              <FieldDescription>
                 Leave blank to auto-generate from the name.
-              </span>
-            </div>
+              </FieldDescription>
+            </Field>
           )}
 
-          <div className="task-form__field">
-            <label className="task-form__label">Provider</label>
-            <select
+          <Field>
+            <FieldLabel>Provider</FieldLabel>
+            <NativeSelect
               name="provider-id"
               className="task-form__select"
               value={form.provider_id}
@@ -455,20 +469,20 @@ export function ModelProfileModal({
               required
             >
               {providers.length === 0 && (
-                <option value="" disabled>
+                <NativeSelectOption value="" disabled>
                   No providers configured
-                </option>
+                </NativeSelectOption>
               )}
               {providers.map((p) => (
-                <option key={p.id} value={p.id}>
+                <NativeSelectOption key={p.id} value={p.id}>
                   {p.name} ({providerKindLabel(p.kind)})
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
-          </div>
+            </NativeSelect>
+          </Field>
 
           <div className="task-form__row">
-            <div className="task-form__field">
+            <Field>
               {renderModelControl({
                 label: "Model",
                 name: "model",
@@ -479,8 +493,8 @@ export function ModelProfileModal({
                 options: modelOptions,
                 onChange: (value) => set({ model: value }),
               })}
-            </div>
-            <div className="task-form__field">
+            </Field>
+            <Field>
               {renderModelControl({
                 label: "Sub-agent model",
                 name: "sub-agent-model",
@@ -491,41 +505,42 @@ export function ModelProfileModal({
                 options: subAgentModelOptions,
                 onChange: (value) => set({ sub_agent_model: value }),
               })}
-            </div>
+            </Field>
           </div>
 
           {(providerModelsPending || discoveryMessage) && (
-            <div
-              className={
-                discoveryMessage ? "task-form__error" : "task-form__hint"
-              }
+            <Alert
+              variant={discoveryMessage ? "destructive" : "default"}
+              className={discoveryMessage ? "task-form__error" : "task-form__hint"}
             >
+              <AlertDescription>
               {providerModelsPending
                 ? "Loading available models…"
                 : discoveryMessage}
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="task-form__row">
-            <div className="task-form__field">
-              <label className="task-form__label">Reasoning effort</label>
-              <select
+            <Field>
+              <FieldLabel>Reasoning effort</FieldLabel>
+              <NativeSelect
                 name="reasoning-effort"
                 className="task-form__select"
                 value={form.reasoning_effort}
                 onChange={(e) => set({ reasoning_effort: e.target.value })}
               >
-                <option value="">Provider default</option>
+                <NativeSelectOption value="">Provider default</NativeSelectOption>
                 {options.reasoning_efforts.map((r) => (
-                  <option key={r} value={r}>
+                  <NativeSelectOption key={r} value={r}>
                     {r}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
-            </div>
-            <div className="task-form__field">
-              <label className="task-form__label">Max tokens</label>
-              <input
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel>Max tokens</FieldLabel>
+              <Input
                 name="max-tokens"
                 className="task-form__input"
                 type="number"
@@ -534,34 +549,34 @@ export function ModelProfileModal({
                 onChange={(e) => set({ max_tokens: e.target.value })}
                 placeholder="Provider default"
               />
-            </div>
+            </Field>
           </div>
 
           <div className="task-form__row">
             {kindMeta?.supports_service_tier ? (
-              <div className="task-form__field">
-                <label className="task-form__label">Service tier</label>
-                <select
+              <Field>
+                <FieldLabel>Service tier</FieldLabel>
+                <NativeSelect
                   name="service-tier"
                   className="task-form__select"
                   value={form.service_tier}
                   onChange={(e) => set({ service_tier: e.target.value })}
                 >
-                  <option value="">Provider default</option>
+                  <NativeSelectOption value="">Provider default</NativeSelectOption>
                   {options.openai_service_tiers.map((t) => (
-                    <option key={t} value={t}>
+                    <NativeSelectOption key={t} value={t}>
                       {t}
-                    </option>
+                    </NativeSelectOption>
                   ))}
-                </select>
-              </div>
+                </NativeSelect>
+              </Field>
             ) : (
-              <div className="task-form__field" />
+              <Field />
             )}
 
-            <div className="task-form__field">
-              <label className="task-form__label">Web search</label>
-              <select
+            <Field>
+              <FieldLabel>Web search</FieldLabel>
+              <NativeSelect
                 name="web-search"
                 className="task-form__select"
                 value={form.web_search}
@@ -569,17 +584,17 @@ export function ModelProfileModal({
                   set({ web_search: e.target.value as WebSearchMode })
                 }
               >
-                <option value="default">Provider default</option>
-                <option value="true">Enabled</option>
-                <option value="false">Disabled</option>
-              </select>
-            </div>
+                <NativeSelectOption value="default">Provider default</NativeSelectOption>
+                <NativeSelectOption value="true">Enabled</NativeSelectOption>
+                <NativeSelectOption value="false">Disabled</NativeSelectOption>
+              </NativeSelect>
+            </Field>
           </div>
 
           <div className="task-form__row">
-            <div className="task-form__field">
-              <label className="task-form__label">Max tool workers</label>
-              <input
+            <Field>
+              <FieldLabel>Max tool workers</FieldLabel>
+              <Input
                 name="max-tool-workers"
                 className="task-form__input"
                 type="number"
@@ -588,10 +603,10 @@ export function ModelProfileModal({
                 onChange={(e) => set({ max_tool_workers: e.target.value })}
                 placeholder="Default"
               />
-            </div>
-            <div className="task-form__field">
-              <label className="task-form__label">Max retries</label>
-              <input
+            </Field>
+            <Field>
+              <FieldLabel>Max retries</FieldLabel>
+              <Input
                 name="max-retries"
                 className="task-form__input"
                 type="number"
@@ -600,12 +615,12 @@ export function ModelProfileModal({
                 onChange={(e) => set({ max_retries: e.target.value })}
                 placeholder="Default"
               />
-            </div>
+            </Field>
           </div>
 
-          <div className="task-form__field">
-            <label className="task-form__label">Compact threshold</label>
-            <input
+          <Field>
+            <FieldLabel>Compact threshold</FieldLabel>
+            <Input
               name="compact-threshold"
               className="task-form__input"
               type="number"
@@ -614,26 +629,32 @@ export function ModelProfileModal({
               onChange={(e) => set({ compact_threshold: e.target.value })}
               placeholder="Default"
             />
-            <span className="task-form__hint">
+            <FieldDescription>
               Token count at which context is compacted.
-            </span>
-          </div>
+            </FieldDescription>
+          </Field>
+          </FieldGroup>
 
-          {error && <div className="task-form__error">{error}</div>}
+          {error && (
+            <Alert variant="destructive" className="task-form__error">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-          <button
-            type="submit"
-            className="task-form__submit"
-            disabled={isPending || providers.length === 0}
-          >
-            {isPending
-              ? "Saving…"
-              : isEdit
-                ? "Save Changes"
-                : "Add Profile"}
-          </button>
+          <DialogFooter className="task-form__footer">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending || providers.length === 0}>
+              {isPending
+                ? "Saving…"
+                : isEdit
+                  ? "Save Changes"
+                  : "Add Profile"}
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

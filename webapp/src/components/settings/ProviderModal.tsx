@@ -1,5 +1,23 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { ConfigOptions, ProviderView } from "../../types";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "../ui/field";
+import { Input } from "../ui/input";
+import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 
 type SecretMode = "none" | "env_var" | "plaintext";
 
@@ -73,14 +91,6 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
   const [form, setForm] = useState<FormState>(() => initForm(provider, options));
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
 
   function set(updates: Partial<FormState>) {
     setForm((prev) => {
@@ -164,21 +174,15 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
   const accountAuthLabel = selectedAuthModeMetadata?.account_label;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-card__header">
-          <h2 className="modal-card__title">
+    <Dialog open onOpenChange={(open) => {
+      if (!open && !isPending) onClose();
+    }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
             {isEdit ? "Edit Provider" : "Add Provider"}
-          </h2>
-          <button
-            type="button"
-            className="modal-card__close"
-            onClick={onClose}
-            disabled={isPending}
-          >
-            &times;
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         <form
           className="task-form"
@@ -186,9 +190,10 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
             void handleSubmit(event);
           }}
         >
-          <div className="task-form__field">
-            <label className="task-form__label">Name</label>
-            <input
+          <FieldGroup>
+          <Field>
+            <FieldLabel>Name</FieldLabel>
+            <Input
               name="provider-name"
               className="task-form__input"
               value={form.name}
@@ -197,106 +202,122 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
               autoFocus
               placeholder="e.g. My OpenAI"
             />
-          </div>
+          </Field>
 
           {!isEdit && (
-            <div className="task-form__field">
-              <label className="task-form__label">ID (optional)</label>
-              <input
+            <Field>
+              <FieldLabel>ID (optional)</FieldLabel>
+              <Input
                 name="provider-id"
                 className="task-form__input"
                 value={form.id}
                 onChange={(e) => set({ id: e.target.value })}
                 placeholder="Auto-generated from name"
               />
-              <span className="task-form__hint">
+              <FieldDescription>
                 Leave blank to auto-generate from the name.
-              </span>
-            </div>
+              </FieldDescription>
+            </Field>
           )}
 
-          <div className="task-form__field">
-            <label className="task-form__label">Kind</label>
-            <select
+          <Field>
+            <FieldLabel>Kind</FieldLabel>
+            <NativeSelect
               name="provider-kind"
               className="task-form__select"
               value={form.kind}
               onChange={(e) => set({ kind: e.target.value })}
             >
               {options.provider_kinds.map((k) => (
-                <option key={k} value={k}>
+                <NativeSelectOption key={k} value={k}>
                   {options.provider_metadata[k]?.label ?? k}
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
             {kindMeta?.description && (
-              <span className="task-form__hint">{kindMeta.description}</span>
+              <FieldDescription>{kindMeta.description}</FieldDescription>
             )}
-          </div>
+          </Field>
 
           {showAuthModePicker && (
-            <div className="task-form__field">
-              <label className="task-form__label">Authentication</label>
-              <div className="secret-mode-tabs provider-auth-mode-tabs">
+            <Field>
+              <FieldLabel>Authentication</FieldLabel>
+              <ToggleGroup
+                type="single"
+                value={form.auth_mode}
+                onValueChange={(value) => {
+                  if (value) set({ auth_mode: value });
+                }}
+                className="secret-mode-tabs provider-auth-mode-tabs"
+                spacing={1}
+                variant="outline"
+              >
                 {authModes.map((authMode) => (
-                  <button
+                  <ToggleGroupItem
                     key={authMode}
-                    type="button"
-                    className={`secret-mode-tab${form.auth_mode === authMode ? " active" : ""}`}
-                    onClick={() => set({ auth_mode: authMode })}
+                    value={authMode}
                   >
                     {authModeMetadata[authMode]?.label ?? authMode}
-                  </button>
+                  </ToggleGroupItem>
                 ))}
-              </div>
-            </div>
+              </ToggleGroup>
+            </Field>
           )}
 
           {isApiKeyAuth ? (
-            <div className="task-form__field">
-              <label className="task-form__label">Credential source</label>
-              <div className="secret-mode-tabs">
+            <Field>
+              <FieldLabel>Credential source</FieldLabel>
+              <ToggleGroup
+                type="single"
+                value={form.secretMode}
+                onValueChange={(value) => {
+                  if (value) set({ secretMode: value as SecretMode });
+                }}
+                className="secret-mode-tabs"
+                spacing={1}
+                variant="outline"
+              >
                 {secretModes.map(({ value, label }) => (
-                  <button
+                  <ToggleGroupItem
                     key={value}
-                    type="button"
-                    className={`secret-mode-tab${form.secretMode === value ? " active" : ""}`}
-                    onClick={() => set({ secretMode: value })}
+                    value={value}
                   >
                     {label}
-                  </button>
+                  </ToggleGroupItem>
                 ))}
-              </div>
-            </div>
+              </ToggleGroup>
+            </Field>
           ) : (
-            <div className="settings-inline-note provider-auth-inline-note">
+            <Alert className="settings-inline-note provider-auth-inline-note">
+              <AlertDescription>
               Save this provider to continue directly into sign-in for your{" "}
               {accountAuthLabel ?? "account"}.
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
 
           {isApiKeyAuth && form.secretMode === "env_var" && (
-            <div className="task-form__field">
-              <label className="task-form__label">
+            <Field>
+              <FieldLabel>
                 Environment variable name
-              </label>
-              <input
+              </FieldLabel>
+              <Input
                 name="api-key-env"
                 className="task-form__input"
                 value={form.api_key_env}
                 onChange={(e) => set({ api_key_env: e.target.value })}
                 placeholder="e.g. OPENAI_API_KEY"
               />
-            </div>
+            </Field>
           )}
 
           {isApiKeyAuth && form.secretMode === "plaintext" && (
-            <div className="task-form__field">
-              <label className="task-form__label">
+            <Field>
+              <FieldLabel>
                 API key
                 {isEdit ? " (leave blank to keep current)" : ""}
-              </label>
-              <input
+              </FieldLabel>
+              <Input
                 name="api-key"
                 className="task-form__input"
                 type="password"
@@ -305,15 +326,15 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                 placeholder={isEdit ? "Enter new key to update" : "sk-…"}
                 autoComplete="new-password"
               />
-            </div>
+            </Field>
           )}
 
           {kindMeta?.supports_responses_url && (
-            <div className="task-form__field">
-              <label className="task-form__label">
+            <Field>
+              <FieldLabel>
                 Responses URL override
-              </label>
-              <input
+              </FieldLabel>
+              <Input
                 name="responses-url"
                 className="task-form__input"
                 type="text"
@@ -324,16 +345,16 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   "https://api.example.com/v1/responses"
                 }
               />
-              <span className="task-form__hint">
+              <FieldDescription>
                 Leave blank to use the provider default.
-              </span>
-            </div>
+              </FieldDescription>
+            </Field>
           )}
 
           {kindMeta?.supports_generic_api_url && (
-            <div className="task-form__field">
-              <label className="task-form__label">API base URL</label>
-              <input
+            <Field>
+              <FieldLabel>API base URL</FieldLabel>
+              <Input
                 name="generic-api-url"
                 className="task-form__input"
                 type="text"
@@ -344,27 +365,33 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                   "https://api.example.com/v1"
                 }
               />
-              <span className="task-form__hint">
+              <FieldDescription>
                 Leave blank to use the provider default.
-              </span>
-            </div>
+              </FieldDescription>
+            </Field>
+          )}
+          </FieldGroup>
+
+          {error && (
+            <Alert variant="destructive" className="task-form__error">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
 
-          {error && <div className="task-form__error">{error}</div>}
-
-          <button
-            type="submit"
-            className="task-form__submit"
-            disabled={isPending}
-          >
-            {isPending
-              ? "Saving…"
-              : isEdit
-                ? "Save Changes"
-                : "Add Provider"}
-          </button>
+          <DialogFooter className="task-form__footer">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending
+                ? "Saving…"
+                : isEdit
+                  ? "Save Changes"
+                  : "Add Provider"}
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

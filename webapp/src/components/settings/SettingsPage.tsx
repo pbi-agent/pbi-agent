@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangleIcon, CheckCircle2Icon, EditIcon, PlugZapIcon, PlusIcon, Trash2Icon, UnplugIcon } from "lucide-react";
 import {
   createModelProfile,
   createProvider,
@@ -28,6 +29,12 @@ import { ModelProfileModal } from "./ModelProfileModal";
 import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { EmptyState } from "../shared/EmptyState";
+import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 
 function authModeLabel(provider: ProviderView, options: ConfigOptions): string {
   return (
@@ -85,16 +92,17 @@ function ProviderCard({
   const showAuthActions = provider.auth_mode !== "api_key";
 
   return (
-    <div className="settings-item settings-item--provider">
+    <Card className="settings-item settings-item--provider">
       <div className="settings-item__info">
         <div className="settings-item__name">{provider.name}</div>
         <div className="settings-item__id">{provider.id}</div>
         <div className="settings-item__meta">
-          <span className="settings-item__tag">{providerKindLabel(provider.kind, options)}</span>
-          <span className="settings-item__tag settings-item__tag--accent">
+          <Badge variant="secondary" className="settings-item__tag">{providerKindLabel(provider.kind, options)}</Badge>
+          <Badge variant="outline" className="settings-item__tag settings-item__tag--accent">
             {authModeLabel(provider, options)}
-          </span>
-          <span
+          </Badge>
+          <Badge
+            variant="secondary"
             className={`settings-item__tag ${
               authStatus.session_status === "connected"
                 ? "settings-item__tag--success"
@@ -104,26 +112,26 @@ function ProviderCard({
             }`}
           >
             {authStatusLabel(authStatus)}
-          </span>
+          </Badge>
           {provider.auth_mode === "api_key" && provider.has_secret && (
-            <span className="settings-item__tag settings-item__tag--success">
+            <Badge variant="secondary" className="settings-item__tag settings-item__tag--success">
               {provider.secret_source === "env_var"
                 ? (provider.secret_env_var ?? "env var")
                 : "key: set"}
-            </span>
+            </Badge>
           )}
           {authStatus.plan_type && (
-            <span className="settings-item__tag">{authStatus.plan_type}</span>
+            <Badge variant="secondary" className="settings-item__tag">{authStatus.plan_type}</Badge>
           )}
           {provider.responses_url && (
-            <span className="settings-item__tag" title={provider.responses_url}>
+            <Badge variant="outline" className="settings-item__tag" title={provider.responses_url}>
               custom responses URL
-            </span>
+            </Badge>
           )}
           {provider.generic_api_url && (
-            <span className="settings-item__tag" title={provider.generic_api_url}>
+            <Badge variant="outline" className="settings-item__tag" title={provider.generic_api_url}>
               custom API URL
-            </span>
+            </Badge>
           )}
         </div>
         {(authStatus.email || authExpires || authStatus.backend) && (
@@ -137,45 +145,54 @@ function ProviderCard({
       <div className="settings-item__actions settings-item__actions--provider">
         {showAuthActions && (
           <>
-            <button
+            <Button
               type="button"
-              className="btn btn--ghost btn--sm"
+              variant="outline"
+              size="sm"
               onClick={onConnect}
               disabled={isBusy}
             >
+              <PlugZapIcon data-icon="inline-start" />
               {authStatus.has_session ? "Reconnect" : "Connect"}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn--ghost btn--sm"
+              variant="outline"
+              size="sm"
               onClick={onRefresh}
               disabled={isBusy || !authStatus.can_refresh}
             >
+              <CheckCircle2Icon data-icon="inline-start" />
               Refresh
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn btn--ghost-danger btn--sm"
+              variant="destructive"
+              size="sm"
               onClick={onDisconnect}
               disabled={isBusy || !authStatus.has_session}
             >
+              <UnplugIcon data-icon="inline-start" />
               Disconnect
-            </button>
+            </Button>
           </>
         )}
-        <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit}>
+        <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+          <EditIcon data-icon="inline-start" />
           Edit
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="btn btn--ghost-danger btn--sm"
+          variant="destructive"
+          size="sm"
           onClick={onDelete}
           disabled={isBusy}
         >
+          <Trash2Icon data-icon="inline-start" />
           Delete
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -200,59 +217,62 @@ function ProfileCard({
   }
 
   return (
-    <div className="settings-item">
+    <Card className="settings-item">
       <div className="settings-item__info">
         <div className="settings-item__name">
           {profile.name}
           {profile.is_active_default && (
-            <span className="settings-item__tag settings-item__tag--accent">
+            <Badge variant="outline" className="settings-item__tag settings-item__tag--accent">
               default
-            </span>
+            </Badge>
           )}
         </div>
         <div className="settings-item__id">{profile.id}</div>
         <div className="settings-item__meta">
-          <span className="settings-item__tag">{profile.provider.name}</span>
-          <span className="settings-item__tag">
+          <Badge variant="secondary" className="settings-item__tag">{profile.provider.name}</Badge>
+          <Badge variant="outline" className="settings-item__tag">
             {providerKindLabel(profile.provider.kind, options)}
-          </span>
+          </Badge>
         </div>
         <div className="runtime-summary">{runtimeParts.join(" · ")}</div>
       </div>
       <div className="settings-item__actions">
-        <button type="button" className="btn btn--ghost btn--sm" onClick={onEdit}>
+        <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+          <EditIcon data-icon="inline-start" />
           Edit
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="btn btn--ghost-danger btn--sm"
+          variant="destructive"
+          size="sm"
           onClick={onDelete}
         >
+          <Trash2Icon data-icon="inline-start" />
           Delete
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 
 function CommandCard({ command }: { command: CommandView }) {
   return (
-    <div className="settings-item settings-item--command">
+    <Card className="settings-item settings-item--command">
       <div className="settings-item__info">
         <div className="settings-item__name">{command.name}</div>
         <div className="settings-item__id">{command.id}</div>
         <div className="settings-item__meta">
-          <span className="settings-item__tag settings-item__tag--accent">
+          <Badge variant="outline" className="settings-item__tag settings-item__tag--accent">
             {command.slash_alias}
-          </span>
-          <span className="settings-item__tag">{command.path}</span>
+          </Badge>
+          <Badge variant="secondary" className="settings-item__tag">{command.path}</Badge>
         </div>
         {command.description && (
           <div className="settings-item__summary">{command.description}</div>
         )}
         <pre className="settings-item__instructions">{command.instructions}</pre>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -429,9 +449,12 @@ export function SettingsPage() {
     return (
       <div className="settings-page">
         <div className="settings-page__inner">
-          <div className="settings-error-banner">
+          <Alert variant="destructive" className="settings-error-banner">
+            <AlertTriangleIcon />
+            <AlertDescription>
             Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
-          </div>
+            </AlertDescription>
+          </Alert>
         </div>
       </div>
     );
@@ -444,42 +467,47 @@ export function SettingsPage() {
     <div className="settings-page">
       <div className="settings-page__inner">
         {model_profiles.length === 0 && (
-          <div className="settings-inline-note settings-onboarding-guide">
+          <Alert className="settings-inline-note settings-onboarding-guide">
+            <AlertDescription>
             <strong>First-time setup:</strong> To start using the app, complete these
             steps:
             <ol>
               <li>Add a provider and finish any sign-in step</li>
               <li>Create a model profile that uses that provider</li>
             </ol>
-          </div>
+            </AlertDescription>
+          </Alert>
         )}
 
-        {pageError && <div className="settings-error-banner">{pageError}</div>}
+        {pageError && (
+          <Alert variant="destructive" className="settings-error-banner">
+            <AlertTriangleIcon />
+            <AlertDescription>{pageError}</AlertDescription>
+          </Alert>
+        )}
 
-        <div className="settings-panel">
-          <div className="settings-panel__header">
+        <Card className="settings-panel">
+          <CardHeader className="settings-panel__header">
             <div>
-              <div className="settings-panel__title">Providers</div>
+              <CardTitle className="settings-panel__title">Providers</CardTitle>
               <div className="settings-panel__subtitle">
                 LLM provider connections and credentials
               </div>
             </div>
-            <button
+            <Button
               type="button"
-              className="btn btn--primary"
               onClick={() => setModal({ type: "create-provider" })}
             >
+              <PlusIcon data-icon="inline-start" />
               + Add Provider
-            </button>
-          </div>
-          <div className="settings-panel__body">
+            </Button>
+          </CardHeader>
+          <CardContent className="settings-panel__body">
             {providers.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state__title">No providers configured</div>
-                <div className="empty-state__description">
-                  Add a provider to start using model profiles.
-                </div>
-              </div>
+              <EmptyState
+                title="No providers configured"
+                description="Add a provider to start using model profiles."
+              />
             ) : (
               providers.map((provider) => (
                 <ProviderCard
@@ -499,31 +527,31 @@ export function SettingsPage() {
                 />
               ))
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="settings-panel">
-          <div className="settings-panel__header">
+        <Card className="settings-panel">
+          <CardHeader className="settings-panel__header">
             <div>
-              <div className="settings-panel__title">Model Profiles</div>
+              <CardTitle className="settings-panel__title">Model Profiles</CardTitle>
               <div className="settings-panel__subtitle">
                 Runtime configuration combining a provider with model settings
               </div>
             </div>
-            <button
+            <Button
               type="button"
-              className="btn btn--primary"
               onClick={() => setModal({ type: "create-profile" })}
               disabled={providers.length === 0}
               title={providers.length === 0 ? "Add a provider first" : undefined}
             >
+              <PlusIcon data-icon="inline-start" />
               + Add Profile
-            </button>
-          </div>
-          <div className="settings-panel__body">
+            </Button>
+          </CardHeader>
+          <CardContent className="settings-panel__body">
             <div className="active-profile-control">
               <span className="active-profile-control__label">Active default</span>
-              <select
+              <NativeSelect
                 name="active-profile"
                 className="active-profile-control__select"
                 value={active_profile_id ?? ""}
@@ -531,22 +559,20 @@ export function SettingsPage() {
                   void handleSetActiveProfile(e.target.value || null);
                 }}
               >
-                <option value="">No default</option>
+                <NativeSelectOption value="">No default</NativeSelectOption>
                 {model_profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
+                  <NativeSelectOption key={profile.id} value={profile.id}>
                     {profile.name}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
 
             {model_profiles.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state__title">No profiles configured</div>
-                <div className="empty-state__description">
-                  Add a model profile to configure runtime settings.
-                </div>
-              </div>
+              <EmptyState
+                title="No profiles configured"
+                description="Add a model profile to configure runtime settings."
+              />
             ) : (
               model_profiles.map((profile) => (
                 <ProfileCard
@@ -558,36 +584,36 @@ export function SettingsPage() {
                 />
               ))
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        <div className="settings-panel">
-          <div className="settings-panel__header">
+        <Card className="settings-panel">
+          <CardHeader className="settings-panel__header">
             <div>
-              <div className="settings-panel__title">Commands</div>
+              <CardTitle className="settings-panel__title">Commands</CardTitle>
               <div className="settings-panel__subtitle">
                 Project command files for single-turn prompt presets
               </div>
             </div>
-          </div>
-          <div className="settings-panel__body">
-            <div className="settings-inline-note">
+          </CardHeader>
+          <CardContent className="settings-panel__body">
+            <Alert className="settings-inline-note">
+              <AlertDescription>
               Add Markdown files under <code>.agents/commands/</code>; a file like
               <code>.agents/commands/review.md</code> becomes <code>/review</code>.
-            </div>
+              </AlertDescription>
+            </Alert>
 
             {commands.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state__title">No commands found</div>
-                <div className="empty-state__description">
-                  Add project command files under .agents/commands/.
-                </div>
-              </div>
+              <EmptyState
+                title="No commands found"
+                description="Add project command files under .agents/commands/."
+              />
             ) : (
               commands.map((command) => <CommandCard key={command.id} command={command} />)
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {modal.type === "create-provider" && (

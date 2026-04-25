@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { TimelineItem } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
+import { Button } from "../ui/button";
 import { TimelineEntry } from "./TimelineEntry";
 
 const USER_MESSAGE_TOP_OFFSET = 8;
@@ -132,13 +133,15 @@ export function SessionTimeline({
           </div>
         ) : null}
         {showNewMessages ? (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             className="timeline__new-messages"
             onClick={scrollToBottom}
           >
             New messages below
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>

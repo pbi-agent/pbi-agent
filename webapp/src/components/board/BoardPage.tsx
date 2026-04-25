@@ -12,6 +12,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangleIcon, Columns3Icon, PlusIcon, Settings2Icon } from "lucide-react";
 import {
   ApiError,
   createTask,
@@ -24,6 +25,17 @@ import {
   updateTask,
 } from "../../api";
 import type { BoardStage, TaskRecord } from "../../types";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
+import { Card, CardHeader } from "../ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { EmptyState } from "../shared/EmptyState";
 import { DeleteConfirmModal } from "../settings/DeleteConfirmModal";
@@ -304,9 +316,12 @@ export function BoardPage() {
             <h2 className="board-layout__title">Kanban</h2>
           </div>
         </div>
-        <div className="settings-error-banner">
-          Failed to load board data.
-        </div>
+        <Alert variant="destructive" className="settings-error-banner">
+          <AlertTriangleIcon />
+          <AlertDescription>
+            Failed to load board data.
+          </AlertDescription>
+        </Alert>
       </section>
     );
   }
@@ -321,25 +336,33 @@ export function BoardPage() {
           </p>
         </div>
         <div className="board-layout__actions">
-          <button type="button" className="btn btn--ghost" onClick={() => openBoardEditor(false)}>
+          <Button type="button" variant="outline" onClick={() => openBoardEditor(false)}>
+            <Settings2Icon data-icon="inline-start" />
             Edit Stages
-          </button>
-          <button type="button" className="btn btn--primary" onClick={openNewTask}>
+          </Button>
+          <Button type="button" onClick={openNewTask}>
+            <PlusIcon data-icon="inline-start" />
             + Add Task
-          </button>
+          </Button>
         </div>
       </div>
 
-      {runError ? <div className="settings-error-banner">{runError}</div> : null}
+      {runError ? (
+        <Alert variant="destructive" className="settings-error-banner">
+          <AlertTriangleIcon />
+          <AlertDescription>{runError}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {tasks.length === 0 ? (
         <EmptyState
           title="No tasks yet"
           description="Create your first task to get started"
           action={
-            <button type="button" className="btn btn--primary" onClick={openNewTask}>
+            <Button type="button" onClick={openNewTask}>
+              <PlusIcon data-icon="inline-start" />
               + Add Task
-            </button>
+            </Button>
           }
         />
       ) : (
@@ -371,21 +394,21 @@ export function BoardPage() {
           </SortableContext>
           <DragOverlay dropAnimation={null}>
             {activeTask ? (
-              <article className="task-card task-card--overlay">
+              <Card className="task-card task-card--overlay">
                 <TaskCardContent task={activeTask} />
-              </article>
+              </Card>
             ) : null}
             {activeDragStage ? (
-              <section className="board-column board-column--overlay">
-                <header className="board-column__header">
+              <Card className="board-column board-column--overlay">
+                <CardHeader className="board-column__header">
                   <div className="board-column__heading">
                     <span className="board-column__name">{activeDragStage.name}</span>
                   </div>
                   <span className="board-column__count">
                     {(tasksByStage[activeDragStage.id] ?? []).length}
                   </span>
-                </header>
-              </section>
+                </CardHeader>
+              </Card>
             ) : null}
           </DragOverlay>
         </DndContext>
@@ -438,48 +461,38 @@ export function BoardPage() {
       ) : null}
 
       {isCreateStagePromptOpen ? (
-        <div className="modal-backdrop" onClick={() => setIsCreateStagePromptOpen(false)}>
-          <div
-            className="modal-card modal-card--confirm"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-card__header">
-              <h2 className="modal-card__title">Create Runnable Stage</h2>
-              <button
-                type="button"
-                className="modal-card__close"
-                onClick={() => setIsCreateStagePromptOpen(false)}
-              >
-                &times;
-              </button>
-            </div>
-            <div className="confirm-modal">
-              <p className="confirm-modal__body">
+        <Dialog open onOpenChange={(open) => setIsCreateStagePromptOpen(open)}>
+          <DialogContent>
+            <DialogHeader>
+              <div className="modal-icon-shell">
+                <Columns3Icon />
+              </div>
+              <DialogTitle>Create Runnable Stage</DialogTitle>
+              <DialogDescription>
                 This board only has <strong>Backlog</strong> and <strong>Done</strong>.
                 Add a stage between them before starting backlog tasks.
-              </p>
-              <div className="confirm-modal__actions">
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  onClick={() => setIsCreateStagePromptOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  onClick={() => {
-                    setIsCreateStagePromptOpen(false);
-                    openBoardEditor(true);
-                  }}
-                >
-                  Create Stage
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateStagePromptOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setIsCreateStagePromptOpen(false);
+                  openBoardEditor(true);
+                }}
+              >
+                Create Stage
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </section>
   );

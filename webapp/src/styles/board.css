@@ -49,9 +49,6 @@
 .board-column {
   display: flex;
   flex-direction: column;
-  background: var(--color-surface-0);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
   min-height: 200px;
   overflow: hidden;
   transition: border-color var(--duration-normal) var(--ease-out),
@@ -132,30 +129,16 @@
 }
 
 .board-column__count {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   min-width: 20px;
   height: 20px;
-  padding: 0 var(--sp-1);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
-  font-weight: var(--weight-medium);
-  color: var(--color-text-tertiary);
-  background: var(--color-surface-2);
-  border-radius: var(--radius-pill);
 }
 
 .board-column__label {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 var(--sp-1);
   height: 18px;
   font-size: var(--text-2xs);
   font-family: var(--font-mono);
-  color: var(--color-text-tertiary);
-  background: var(--color-surface-2);
-  border-radius: var(--radius-pill);
 }
 
 .board-column__body {
@@ -169,13 +152,8 @@
 
 /* ── Task Card ── */
 .task-card {
-  display: flex;
-  flex-direction: column;
   gap: var(--sp-2);
   padding: var(--sp-3);
-  background: var(--color-surface-1);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
   transition: border-color var(--duration-fast),
               box-shadow var(--duration-fast),
               transform var(--duration-fast);
@@ -186,7 +164,15 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  padding: 0;
   cursor: grab;
+}
+
+.task-card__grip {
+  align-self: flex-start;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-text-tertiary);
 }
 
 .task-card:hover {

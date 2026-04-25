@@ -1,1 +1,0 @@
-import{n as e}from"./markdown-CmNnf72W.js";var t=e();function n({title:e,description:n,action:r}){return(0,t.jsxs)(`div`,{className:`empty-state`,children:[(0,t.jsx)(`div`,{className:`empty-state__title`,children:e}),n?(0,t.jsx)(`div`,{className:`empty-state__description`,children:n}):null,r?(0,t.jsx)(`div`,{className:`empty-state__action`,children:r}):null]})}export{n as t};

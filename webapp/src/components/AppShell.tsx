@@ -1,11 +1,16 @@
 import { lazy, Suspense, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { BarChart3Icon, KanbanSquareIcon, MessageSquareTextIcon, SettingsIcon } from "lucide-react";
 import { fetchBootstrap, fetchConfigBootstrap } from "../api";
 import { useTaskEvents } from "../hooks/useTaskEvents";
 import { useSessionStore } from "../store";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
+import { themeOptions, useTheme, type AppTheme } from "./ThemeProvider";
 
 const SessionPage = lazy(() =>
   import("./session/SessionPage").then((m) => ({ default: m.SessionPage })),
@@ -20,8 +25,16 @@ const DashboardPage = lazy(() =>
   import("./dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })),
 );
 
+const navItems = [
+  { to: "/sessions", label: "Sessions", icon: MessageSquareTextIcon },
+  { to: "/board", label: "Kanban", icon: KanbanSquareIcon },
+  { to: "/dashboard", label: "Dashboard", icon: BarChart3Icon },
+  { to: "/settings", label: "Settings", icon: SettingsIcon },
+];
+
 export function AppShell() {
   useTaskEvents();
+  const { theme, setTheme } = useTheme();
   const location = useLocation();
   const activeSessionKey = useSessionStore((state) => state.activeSessionKey);
   const activeSession = useSessionStore((state) =>
@@ -86,27 +99,60 @@ export function AppShell() {
       : (activeRuntime?.reasoning_effort ?? null);
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
+    <div className="app-shell bg-background text-foreground">
+      <header className="topbar border-b border-border bg-sidebar/90 backdrop-blur-xl">
         <div className="topbar__brand">
-          <strong>Agent</strong> Control Room
+          <span className="topbar__brand-mark">P</span>
+          <span className="topbar__brand-copy">
+            <strong>Prism</strong>
+            <span>Agent</span>
+          </span>
           {folderLabel ? (
-            <span className="topbar__folder" title={bootstrap?.workspace_root}>{folderLabel}</span>
+            <Badge variant="outline" className="topbar__folder" title={bootstrap?.workspace_root}>
+              {folderLabel}
+            </Badge>
           ) : null}
         </div>
-        <nav className="topnav">
-          <NavLink to="/sessions">Sessions</NavLink>
-          <NavLink to="/board">Kanban</NavLink>
-          <NavLink to="/dashboard">Dashboard</NavLink>
-          <NavLink to="/settings">Settings</NavLink>
+
+        <nav className="topnav" aria-label="Primary navigation">
+          {navItems.map(({ to, label, icon: Icon }) => (
+            <Button key={to} variant="ghost" size="sm" asChild>
+              <NavLink to={to}>
+                <Icon data-icon="inline-start" />
+                {label}
+              </NavLink>
+            </Button>
+          ))}
         </nav>
+
         <div className="runtime-meta">
-          <span className="runtime-meta__pill">{displayedProvider}</span>
-          {displayedModel && <span className="runtime-meta__pill">{displayedModel}</span>}
+          <Badge variant={requiresOnboarding ? "destructive" : "secondary"} className="runtime-meta__pill">
+            {displayedProvider}
+          </Badge>
+          {displayedModel && <Badge variant="outline" className="runtime-meta__pill">{displayedModel}</Badge>}
           {displayedReasoningEffort && displayedReasoningEffort !== "none" && (
-            <span className="runtime-meta__pill">{displayedReasoningEffort}</span>
+            <Badge variant="outline" className="runtime-meta__pill">{displayedReasoningEffort}</Badge>
           )}
         </div>
+
+        <ToggleGroup
+          type="single"
+          value={theme}
+          onValueChange={(value) => {
+            if (value) setTheme(value as AppTheme);
+          }}
+          className="theme-switcher"
+          aria-label="Theme"
+          spacing={1}
+          size="sm"
+          variant="outline"
+        >
+          {themeOptions.map((option) => (
+            <ToggleGroupItem key={option.value} value={option.value} aria-label={`${option.label} theme`}>
+              {option.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
       </header>
 
       <main className="app-main">

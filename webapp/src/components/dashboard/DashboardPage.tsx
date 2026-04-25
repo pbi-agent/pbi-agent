@@ -1,6 +1,12 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AlertTriangleIcon } from "lucide-react";
 import { fetchDashboardStats } from "../../api";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Field, FieldGroup, FieldLabel } from "../ui/field";
+import { Input } from "../ui/input";
+import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { MetricsCards } from "./MetricsCards";
 import { BreakdownTable } from "./BreakdownTable";
@@ -47,44 +53,46 @@ export function DashboardPage() {
     <div className="dashboard-page">
       <div className="dashboard-page__inner">
         {/* ── Controls ──────────────────────────────── */}
-        <div className="dashboard-controls">
-          <div className="dashboard-controls__dates">
-            <label className="dashboard-date-label">
-              From
-              <input
+        <Card className="dashboard-controls">
+          <CardHeader>
+            <CardTitle>Observability</CardTitle>
+          </CardHeader>
+          <CardContent className="dashboard-controls__content">
+          <FieldGroup className="dashboard-controls__dates">
+            <Field>
+              <FieldLabel>From</FieldLabel>
+              <Input
                 type="date"
                 className="dashboard-date-input"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
-            </label>
-            <label className="dashboard-date-label">
-              To
-              <input
+            </Field>
+            <Field>
+              <FieldLabel>To</FieldLabel>
+              <Input
                 type="date"
                 className="dashboard-date-input"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
-            </label>
-          </div>
-          <div className="dashboard-controls__scope">
-            <button
-              type="button"
-              className={`btn btn--sm ${scope === "workspace" ? "btn--active" : ""}`}
-              onClick={() => setScope("workspace")}
-            >
-              Workspace
-            </button>
-            <button
-              type="button"
-              className={`btn btn--sm ${scope === "global" ? "btn--active" : ""}`}
-              onClick={() => setScope("global")}
-            >
-              Global
-            </button>
-          </div>
-        </div>
+            </Field>
+          </FieldGroup>
+          <ToggleGroup
+            type="single"
+            value={scope}
+            onValueChange={(value) => {
+              if (value === "workspace" || value === "global") setScope(value);
+            }}
+            className="dashboard-controls__scope"
+            spacing={1}
+            variant="outline"
+          >
+            <ToggleGroupItem value="workspace">Workspace</ToggleGroupItem>
+            <ToggleGroupItem value="global">Global</ToggleGroupItem>
+          </ToggleGroup>
+          </CardContent>
+        </Card>
 
         {/* ── L1: Overview KPIs ─────────────────────── */}
         {statsQuery.isLoading ? (
@@ -92,9 +100,12 @@ export function DashboardPage() {
             <LoadingSpinner size="lg" />
           </div>
         ) : statsQuery.isError ? (
-          <div className="dashboard-error">
-            Failed to load dashboard data. Please try again.
-          </div>
+          <Alert variant="destructive" className="dashboard-error">
+            <AlertTriangleIcon />
+            <AlertDescription>
+              Failed to load dashboard data. Please try again.
+            </AlertDescription>
+          </Alert>
         ) : statsQuery.data ? (
           <>
             <MetricsCards

@@ -1,9 +1,24 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AlertTriangleIcon } from "lucide-react";
 import { fetchAllRuns } from "../../api";
 import type { AllRunsRun } from "../../types";
 import { StatusPill } from "../shared/StatusPill";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Input } from "../ui/input";
+import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
 import { RunDetailModal } from "../session/RunDetailModal";
 
 type RunsTableProps = {
@@ -130,15 +145,15 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
   }
 
   return (
-    <div className="dashboard-panel">
-      <div className="dashboard-panel__header">
-        <h2 className="dashboard-panel__title">All Runs</h2>
-        <span className="dashboard-panel__count">{totalCount} total</span>
-      </div>
+    <Card className="dashboard-panel">
+      <CardHeader className="dashboard-panel__header">
+        <CardTitle className="dashboard-panel__title">All Runs</CardTitle>
+        <Badge variant="secondary" className="dashboard-panel__count">{totalCount} total</Badge>
+      </CardHeader>
 
       {/* Filters */}
       <div className="runs-filters">
-        <select
+        <NativeSelect
           className="runs-filter-select"
           value={statusFilter}
           onChange={(e) => {
@@ -146,12 +161,12 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
             handleFilterChange();
           }}
         >
-          <option value="">All statuses</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-          <option value="started">Running</option>
-        </select>
-        <input
+          <NativeSelectOption value="">All statuses</NativeSelectOption>
+          <NativeSelectOption value="completed">Completed</NativeSelectOption>
+          <NativeSelectOption value="failed">Failed</NativeSelectOption>
+          <NativeSelectOption value="started">Running</NativeSelectOption>
+        </NativeSelect>
+        <Input
           className="runs-filter-input"
           type="text"
           placeholder="Filter provider..."
@@ -161,7 +176,7 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
             handleFilterChange();
           }}
         />
-        <input
+        <Input
           className="runs-filter-input"
           type="text"
           placeholder="Filter model..."
@@ -173,15 +188,16 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
         />
       </div>
 
-      <div className="dashboard-panel__body">
+      <CardContent className="dashboard-panel__body">
         {runsQuery.isLoading ? (
           <div className="dashboard-panel__loading">
             <LoadingSpinner size="md" />
           </div>
         ) : runsQuery.isError ? (
-          <div className="dashboard-panel__error">
-            Failed to load runs.
-          </div>
+          <Alert variant="destructive" className="dashboard-panel__error">
+            <AlertTriangleIcon />
+            <AlertDescription>Failed to load runs.</AlertDescription>
+          </Alert>
         ) : runs.length === 0 ? (
           <div className="dashboard-panel__empty">
             No runs match the current filters.
@@ -189,89 +205,103 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
         ) : (
           <>
             <div className="dashboard-table-wrap">
-              <table className="dashboard-table dashboard-table--clickable">
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Session</th>
-                    <th>Agent</th>
-                    <th>Model</th>
-                    <th>Provider</th>
-                    <th onClick={() => toggleSort("total_duration_ms")}>
+              <Table className="dashboard-table dashboard-table--clickable">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Session</TableHead>
+                    <TableHead>Agent</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("total_duration_ms")}>
                       Duration {sortIndicator("total_duration_ms")}
-                    </th>
-                    <th onClick={() => toggleSort("input_tokens")}>
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("input_tokens")}>
                       In Tokens {sortIndicator("input_tokens")}
-                    </th>
-                    <th onClick={() => toggleSort("output_tokens")}>
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("output_tokens")}>
                       Out Tokens {sortIndicator("output_tokens")}
-                    </th>
-                    <th onClick={() => toggleSort("estimated_cost_usd")}>
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("estimated_cost_usd")}>
                       Cost {sortIndicator("estimated_cost_usd")}
-                    </th>
-                    <th onClick={() => toggleSort("error_count")}>
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("error_count")}>
                       Errors {sortIndicator("error_count")}
-                    </th>
-                    <th onClick={() => toggleSort("started_at")}>
+                      </Button>
+                    </TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" onClick={() => toggleSort("started_at")}>
                       Time {sortIndicator("started_at")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
+                      </Button>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {runs.map((run) => (
-                    <tr
+                    <TableRow
                       key={run.run_session_id}
                       className="runs-row"
                       onClick={() => handleRowClick(run)}
                     >
-                      <td>
+                      <TableCell>
                         <StatusPill status={run.status} />
-                      </td>
-                      <td className="runs-row__session" title={run.session_title ?? undefined}>
+                      </TableCell>
+                      <TableCell className="runs-row__session" title={run.session_title ?? undefined}>
                         {run.session_title || "--"}
-                      </td>
-                      <td>{run.agent_name ?? "--"}</td>
-                      <td className="mono">{run.model ?? "--"}</td>
-                      <td>{run.provider ?? "--"}</td>
-                      <td>{formatDuration(run.total_duration_ms)}</td>
-                      <td>{formatNumber(run.input_tokens)}</td>
-                      <td>{formatNumber(run.output_tokens)}</td>
-                      <td>{formatCost(run.estimated_cost_usd)}</td>
-                      <td className={run.error_count > 0 ? "text-error" : ""}>
+                      </TableCell>
+                      <TableCell>{run.agent_name ?? "--"}</TableCell>
+                      <TableCell className="mono">{run.model ?? "--"}</TableCell>
+                      <TableCell>{run.provider ?? "--"}</TableCell>
+                      <TableCell>{formatDuration(run.total_duration_ms)}</TableCell>
+                      <TableCell>{formatNumber(run.input_tokens)}</TableCell>
+                      <TableCell>{formatNumber(run.output_tokens)}</TableCell>
+                      <TableCell>{formatCost(run.estimated_cost_usd)}</TableCell>
+                      <TableCell className={run.error_count > 0 ? "text-error" : ""}>
                         {run.error_count}
-                      </td>
-                      <td className="runs-row__time">
+                      </TableCell>
+                      <TableCell className="runs-row__time">
                         {formatTimestamp(run.started_at)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
 
             {/* Pagination */}
             <div className="runs-pagination">
-              <button
-                className="btn btn--sm"
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={page === 0}
                 onClick={() => setPage(page - 1)}
               >
                 Previous
-              </button>
+              </Button>
               <span className="runs-pagination__info">
                 Page {page + 1} of {totalPages}
               </span>
-              <button
-                className="btn btn--sm"
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage(page + 1)}
               >
                 Next
-              </button>
+              </Button>
             </div>
           </>
         )}
-      </div>
+      </CardContent>
 
       {/* Run detail modal */}
       {selectedRunId && (
@@ -281,6 +311,6 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
           scope={scope}
         />
       )}
-    </div>
+    </Card>
   );
 }

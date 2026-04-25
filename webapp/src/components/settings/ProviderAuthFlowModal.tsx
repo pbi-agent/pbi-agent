@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2Icon, CopyIcon, ExternalLinkIcon, RefreshCcwIcon } from "lucide-react";
 import {
   fetchProviderAuthFlow,
   pollProviderAuthFlow,
@@ -9,6 +10,18 @@ import type {
   ProviderAuthFlowResponse,
   ProviderView,
 } from "../../types";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Field, FieldLabel } from "../ui/field";
+import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 
 interface Props {
   provider: ProviderView;
@@ -41,16 +54,6 @@ export function ProviderAuthFlowModal({
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
 
   useEffect(() => {
     if (!copyFeedback) {
@@ -147,49 +150,54 @@ export function ProviderAuthFlowModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-card__header">
-          <h2 className="modal-card__title">Connect {authModeLabel}</h2>
-          <button
-            type="button"
-            className="modal-card__close"
-            onClick={onClose}
-            disabled={isStarting}
-          >
-            &times;
-          </button>
-        </div>
+    <Dialog open onOpenChange={(open) => {
+      if (!open && !isStarting) onClose();
+    }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Connect {authModeLabel}</DialogTitle>
+        </DialogHeader>
 
         <div className="task-form provider-auth-flow-modal">
-          <div className="settings-inline-note provider-auth-inline-note">
-            Authorize <strong>{provider.name}</strong> with your {accountLabel}.
-          </div>
+          <p className="sr-only">
+            Authorize {provider.name} with your {accountLabel}.
+          </p>
+          <Alert className="settings-inline-note provider-auth-inline-note">
+            <AlertDescription>
+              Sign in with {accountLabel} for <strong>{provider.name}</strong>.
+            </AlertDescription>
+          </Alert>
 
           {methods.length > 1 && (
-            <div className="task-form__field">
-              <label className="task-form__label">Method</label>
-              <div className="secret-mode-tabs provider-auth-mode-tabs">
+            <Field>
+              <FieldLabel>Method</FieldLabel>
+              <ToggleGroup
+                type="single"
+                value={method}
+                onValueChange={(value) => {
+                  if (value === "browser" || value === "device") setMethod(value);
+                }}
+                className="secret-mode-tabs provider-auth-mode-tabs"
+                spacing={1}
+                variant="outline"
+              >
                 {methods.map((value) => (
-                  <button
+                  <ToggleGroupItem
                     key={value}
-                    type="button"
-                    className={`secret-mode-tab${method === value ? " active" : ""}`}
-                    onClick={() => setMethod(value)}
+                    value={value}
                     disabled={isStarting}
                   >
                     {value === "browser" ? "Browser" : "Device code"}
-                  </button>
+                  </ToggleGroupItem>
                 ))}
-              </div>
-            </div>
+              </ToggleGroup>
+            </Field>
           )}
 
           {!flow && (
             <div className="provider-auth-actions-row">
-              <button
+              <Button
                 type="button"
-                className="btn btn--primary"
                 onClick={() => {
                   void handleStart(method);
                 }}
@@ -200,17 +208,18 @@ export function ProviderAuthFlowModal({
                   : method === "browser"
                     ? "Start browser sign-in"
                     : "Generate device code"}
-              </button>
+              </Button>
             </div>
           )}
 
           {flow && (
             <div className="provider-auth-flow-panel">
               <div className="settings-item__meta">
-                <span className="settings-item__tag">
+                <Badge variant="secondary" className="settings-item__tag">
                   {flow.method === "browser" ? "Browser flow" : "Device code"}
-                </span>
-                <span
+                </Badge>
+                <Badge
+                  variant="secondary"
                   className={`settings-item__tag ${
                     flow.status === "completed"
                       ? "settings-item__tag--success"
@@ -220,9 +229,9 @@ export function ProviderAuthFlowModal({
                   }`}
                 >
                   {flow.status}
-                </span>
+                </Badge>
                 {flow.backend && (
-                  <span className="settings-item__tag">{flow.backend}</span>
+                  <Badge variant="outline" className="settings-item__tag">{flow.backend}</Badge>
                 )}
               </div>
 
@@ -235,6 +244,7 @@ export function ProviderAuthFlowModal({
                     rel="noreferrer"
                     className="provider-auth-flow-link"
                   >
+                    <ExternalLinkIcon aria-hidden="true" />
                     Open authorization
                   </a>
                   <div className="task-form__hint">
@@ -259,15 +269,17 @@ export function ProviderAuthFlowModal({
                   {flow.user_code && (
                     <div className="provider-auth-code-row">
                       <code className="provider-auth-code">{flow.user_code}</code>
-                      <button
+                      <Button
                         type="button"
-                        className="btn btn--ghost btn--sm"
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           void copyDeviceCode();
                         }}
                       >
+                        <CopyIcon data-icon="inline-start" />
                         Copy code
-                      </button>
+                      </Button>
                     </div>
                   )}
                   {copyFeedback && (
@@ -277,29 +289,37 @@ export function ProviderAuthFlowModal({
               )}
 
               {flow.status === "pending" && (
-                <div className="settings-inline-note provider-auth-inline-note">
+                <Alert className="settings-inline-note provider-auth-inline-note">
+                  <AlertDescription>
                   Waiting for authorization… The page will update automatically.
-                </div>
+                  </AlertDescription>
+                </Alert>
               )}
 
               {flow.status === "failed" && flow.error_message && (
-                <div className="task-form__error">{flow.error_message}</div>
+                <Alert variant="destructive" className="task-form__error">
+                  <AlertDescription>{flow.error_message}</AlertDescription>
+                </Alert>
               )}
 
               {flow.status === "completed" && (
-                <div className="settings-inline-note provider-auth-inline-note">
+                <Alert className="settings-inline-note provider-auth-inline-note">
+                  <CheckCircle2Icon />
+                  <AlertDescription>
                   Connected
                   {session?.email ? ` as ${session.email}` : ""}
                   {session?.plan_type ? ` (${session.plan_type})` : ""}.
                   {sessionExpires ? ` Expires ${sessionExpires}.` : ""}
-                </div>
+                  </AlertDescription>
+                </Alert>
               )}
 
               <div className="provider-auth-actions-row">
                 {flow.status === "pending" && (
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn--ghost btn--sm"
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       const next =
                         flow.method === "browser"
@@ -311,36 +331,44 @@ export function ProviderAuthFlowModal({
                       );
                     }}
                   >
+                    <CheckCircle2Icon data-icon="inline-start" />
                     Check status
-                  </button>
+                  </Button>
                 )}
                 {flow.status !== "completed" && (
-                  <button
+                  <Button
                     type="button"
-                    className="btn btn--ghost btn--sm"
+                    variant="outline"
+                    size="sm"
                     onClick={() => {
                       void handleStart(method);
                     }}
                     disabled={isStarting}
                   >
+                    <RefreshCcwIcon data-icon="inline-start" />
                     {isStarting ? "Restarting…" : "Restart flow"}
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button
                   type="button"
-                  className="btn btn--primary btn--sm"
+                  size="sm"
                   onClick={onClose}
                   disabled={isStarting}
                 >
                   {flow.status === "completed" ? "Done" : "Close"}
-                </button>
+                </Button>
               </div>
             </div>
           )}
 
-          {error && <div className="task-form__error">{error}</div>}
+          {error && (
+            <Alert variant="destructive" className="task-form__error">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
         </div>
-      </div>
-    </div>
+        <DialogFooter className="sr-only" />
+      </DialogContent>
+    </Dialog>
   );
 }
