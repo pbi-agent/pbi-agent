@@ -159,6 +159,8 @@ The design system adopts a **Rounded** (Level 2) approach to humanize the techni
 ### Buttons
 Primary buttons are solid Cobalt Blue with white text. Secondary buttons are "ghost" style with a 1px Slate border and a subtle background fill on hover.
 
+Buttons embedded in dense chrome (sidebars, toolbars, compact headers) should use the compact button scale: `--text-xs` with normal line-height, small icons, and tight but readable horizontal padding. This keeps action labels such as `+ New Session` visually aligned with surrounding navigation, metadata, and controls instead of reading like page-level calls to action.
+
 ### Input Fields
 Inputs use a dark background (#020617) with a subtle 1px border. On focus, the border transitions to Cobalt Blue with a very soft blue outer glow (3px spread, 10% opacity).
 

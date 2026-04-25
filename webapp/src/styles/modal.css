@@ -53,11 +53,22 @@
 }
 
 /* ── Task Form ── */
+.task-form-dialog {
+  max-height: calc(100dvh - 2rem);
+  overflow: hidden;
+}
+
 .task-form {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  padding: var(--sp-5);
+  min-height: 0;
+}
+
+.task-form__body {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--sp-1);
 }
 
 .task-form__field {
@@ -94,7 +105,9 @@
 }
 
 .task-form__textarea {
-  min-height: 120px;
+  min-height: 12rem;
+  max-height: min(40dvh, 24rem);
+  overflow-y: auto;
   resize: vertical;
   line-height: var(--leading-relaxed);
 }

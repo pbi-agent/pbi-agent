@@ -62,6 +62,8 @@
 
 .sidebar__new-button {
   max-width: 9rem;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
 }
 
 .sidebar__header .sidebar__toggle {
