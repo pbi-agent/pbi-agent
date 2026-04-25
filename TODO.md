@@ -1,3 +1,3 @@
-[X] Remove deprecated TypeScript options from webapp config.
-[X] Validate frontend TypeScript config.
+[X] Update AGENTS.md for shadcn webapp conventions.
+[X] Validate markdown diff.
 [X] Update task memory.

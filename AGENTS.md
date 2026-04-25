@@ -61,7 +61,8 @@ uv tool install --reinstall .
 - CLI commands: `web`, `run`, `sessions`, `config`, `skills`, `commands`, and `agents`. When no command is provided, the CLI defaults to `web`.
 - `pbi-agent web` uses saved web settings/profile resolution; provider/model runtime flags are for `run`, not `web`.
 - Web backend: FastAPI under `src/pbi_agent/web/`, with routes in `src/pbi_agent/web/api/routes/`, orchestration in `src/pbi_agent/web/session_manager.py`, event/display publishing in `src/pbi_agent/web/display.py`, and Uvicorn startup helpers in `src/pbi_agent/web/server_runtime.py`.
-- Frontend: Vite + React + TypeScript in `webapp/`, using `react-router-dom`, `@tanstack/react-query`, `zustand`, and `@dnd-kit/core`. `bun run web:build` writes the SPA bundle to `src/pbi_agent/web/static/app`.
+- Frontend: Vite + React + TypeScript in `webapp/`, using `react-router-dom`, `@tanstack/react-query`, `zustand`, `@dnd-kit/core`, Tailwind CSS v4, and shadcn/ui. `bun run web:build` writes the SPA bundle to `src/pbi_agent/web/static/app`.
+- shadcn/ui config lives at `webapp/components.json`: style `radix-nova`, Tailwind CSS file `webapp/src/styles/index.css`, aliases `@/components`, `@/components/ui`, `@/lib`, `@/hooks`, and icon library `lucide` (`lucide-react`). Shared UI primitives live in `webapp/src/components/ui/`; `cn()` lives in `webapp/src/lib/utils.ts`.
 - When changing web API contracts, keep `src/pbi_agent/web/api/routes/`, `src/pbi_agent/web/api/schemas/`, `src/pbi_agent/web/session_manager.py`, `webapp/src/api.ts`, and `webapp/src/types.ts` aligned.
 - Docs site: VitePress in `docs/`; build separately with `bun run docs:build`.
 - Display abstraction: `src/pbi_agent/display/protocol.py` defines `DisplayProtocol`; console output lives in `src/pbi_agent/display/console_display.py`; tests commonly use `tests/conftest.py::DisplaySpy`.
@@ -84,6 +85,15 @@ uv tool install --reinstall .
 - Provider changes must update `test_<provider>_provider.py`; tool changes must update `test_<tool>.py`.
 - Register new custom markers in `pyproject.toml` under `tool.pytest.ini_options.markers`.
 - Import from `pbi_agent` directly — pytest adds `src/` to `sys.path`.
+
+## Frontend UI Conventions
+
+- Prefer shadcn/ui primitives from `webapp/src/components/ui/` before custom markup; add missing primitives with `bunx --bun shadcn@latest add <component> --cwd webapp` and read generated files before use.
+- For shadcn docs/examples, use `bunx --bun shadcn@latest docs <component> --cwd webapp`; preview upstream changes with `--dry-run` / `--diff` and do not overwrite local component changes unless explicitly asked.
+- Compose with shadcn patterns: full `Card` structure, `Alert` for callouts, `Empty` for empty states, `Separator` instead of ad-hoc borders, `Skeleton` for loading placeholders, `Badge` for labels, and `FieldGroup`/`Field` for forms.
+- Styling should use semantic Tailwind/shadcn tokens (`bg-background`, `text-muted-foreground`, `border-border`, etc.) and `cn()` for conditionals; avoid raw color utilities, manual dark-mode color overrides, custom overlay z-indexes, and `space-x-*`/`space-y-*` utilities.
+- For icons, use `lucide-react`; icons inside `Button` should use `data-icon="inline-start"` or `data-icon="inline-end"` and avoid manual sizing classes when the component styles them.
+- Dialog, Sheet, and Drawer content must include an accessible title; use a visually hidden title only when the visible design already provides equivalent context.
 
 ## Key Constraints
 

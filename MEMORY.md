@@ -33,3 +33,4 @@
 - Condense `Long-Term Memory` after prior compaction left verbose; keep durable repo facts, reduce bullets. Validation: read `MEMORY.md`; `git diff --check -- MEMORY.md TODO.md`.
 - Audit removed 2026-04-24 log; promote missing durable facts into `Long-Term Memory`. Validation: compared removed diff vs memory; `git diff --check -- MEMORY.md TODO.md`.
 - Compress whole `MEMORY.md` with local `compress` skill; preserve headings, inline code, paths, commands, URLs, dates, structure. Validation: `git diff --check -- MEMORY.md TODO.md`; `wc -l MEMORY.md`.
+- Update `AGENTS.md` for shadcn switch: frontend stack/config paths plus UI conventions for primitives, docs, semantic tokens, icons, and accessible overlay titles. Validation: `git diff --check -- AGENTS.md TODO.md`.
