@@ -1,3 +1,3 @@
-[X] Make profile dropdown width dynamic with max width
+[X] Center header navigation menu
 [X] Validate frontend change
 [X] Update task memory

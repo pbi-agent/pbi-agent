@@ -22,7 +22,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
@@ -96,25 +95,21 @@ export function AppShell() {
       <header className="header">
         <div className="header__left">
           {folderLabel && (
-            <>
-              <Badge variant="outline" className="header__workspace overflow-visible" title={bootstrap?.workspace_root}>
-                {folderLabel}
-              </Badge>
-            </>
+            <Badge variant="outline" className="header__workspace overflow-visible" title={bootstrap?.workspace_root}>
+              {folderLabel}
+            </Badge>
           )}
-
-          <Separator orientation="vertical" className="header__sep" />
-
-          {/* Navigation */}
-          <nav className="header__nav" aria-label="Primary navigation">
-            {navItems.map(({ to, label, icon: Icon }) => (
-              <NavLink key={to} to={to} className="header__nav-link">
-                <Icon />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          </nav>
         </div>
+
+        {/* Navigation */}
+        <nav className="header__nav" aria-label="Primary navigation">
+          {navItems.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to} className="header__nav-link">
+              <Icon />
+              <span>{label}</span>
+            </NavLink>
+          ))}
+        </nav>
 
         <div className="header__right">
           {/* Theme dropdown */}

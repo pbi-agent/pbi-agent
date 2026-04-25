@@ -27,6 +27,7 @@
 
 ## Detailed Task Events
 ## 2026-04-25
+- Header nav centering: moved primary nav out of left cluster into a centered header grid column, removed unused separator, preserved responsive wrap, and fixed existing `ConnectionBadge` lint by using its label as `aria-label`; rebuilt packaged SPA. Validation: `bun run typecheck`; `bun run lint`; `bun run web:build`.
 - Settings Add Provider icon fix: removed redundant literal `+` from Providers header button label so only the `PlusIcon` renders; updated settings tests for accessible name. Validation: `bun run typecheck`; `bun run test:web -- --run webapp/src/components/settings/SettingsPage.test.tsx`.
 - Session profile dropdown fix: made Radix dropdown dynamic `max-content` with trigger-based min width and viewport-capped max width, allowed profile name/meta wrapping, relaxed line-height/padding, and reduced profile trigger/name/meta text sizing for less cropping and better alignment. Validation: `bun run typecheck`; `bun run lint`; `bun run web:build`; `git diff --check -- webapp/src/styles/session.css TODO.md`.
 - Kanban crop/density fix: expanded board header padding/min-height, columns to 320px min with larger gaps, stage headers to 7.25rem min, badges/counts to 2rem min-height with padding/line-height, task cards/body/actions spacing, and overflow-visible for column/card shells. Validation: `bun run typecheck`; `bun run lint`; `bun run web:build`.
