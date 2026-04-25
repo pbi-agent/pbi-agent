@@ -27,6 +27,7 @@
 
 ## Detailed Task Events
 ## 2026-04-25
+- Remove deprecated webapp TypeScript options: dropped `baseUrl` and now-unused `ignoreDeprecations` from `webapp/tsconfig.json`; `@/*` remains via `paths` + Vite alias. Validation: `bun run typecheck`.
 - Continue shadcn webapp refactor: added ThemeProvider/theme switcher, mapped DESIGN.md Prism/light/dark tokens, refactored app shell/session/board/dashboard/settings UI to shadcn components, fixed test setup for shadcn/Radix. Validation: `bunx --bun shadcn@latest docs dialog --cwd webapp`; `bun run typecheck`; `bun run lint`; `bun run test:web -- --reporter dot`; `bun run web:build`; `git diff --check`.
 - Init shadcn/ui for existing Vite webapp: add Tailwind v4/Vite plugin + `@/*` alias prereqs; generate `webapp/components.json`, shadcn theme CSS in `webapp/src/styles/index.css`, `webapp/src/lib/utils.ts`; no components added. Validation: `bunx --bun shadcn@latest info --cwd webapp`; `bun run typecheck`; `git diff --check` on touched files.
 - Condense `Long-Term Memory` after prior compaction left verbose; keep durable repo facts, reduce bullets. Validation: read `MEMORY.md`; `git diff --check -- MEMORY.md TODO.md`.
