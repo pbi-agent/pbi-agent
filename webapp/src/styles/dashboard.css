@@ -163,7 +163,7 @@
   font-weight: var(--weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
   user-select: none;
@@ -202,7 +202,7 @@
 }
 
 .sort-arrow {
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   margin-left: var(--sp-1);
   color: var(--color-accent);
 }

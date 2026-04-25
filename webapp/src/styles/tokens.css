@@ -70,7 +70,7 @@
   --font-sans: var(--font-ui);
   --font-heading: var(--font-ui);
 
-  --text-2xs: 0.6875rem;
+  --text-2xs: 0.75rem;
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
@@ -84,7 +84,7 @@
   --weight-semibold: 600;
   --weight-bold: 700;
 
-  --leading-tight: 1.25;
+  --leading-tight: 1.35;
   --leading-normal: 1.5;
   --leading-relaxed: 1.65;
 
@@ -119,7 +119,7 @@
   --duration-slow: 300ms;
 
   --sidebar-width: 300px;
-  --topbar-height: 48px;
+  --topbar-height: 64px;
 }
 
 :root[data-theme='light'] {

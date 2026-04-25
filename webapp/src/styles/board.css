@@ -11,36 +11,40 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-4) var(--sp-5);
+  gap: var(--sp-4);
+  min-height: 5rem;
+  padding: var(--sp-5) var(--sp-6);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
 .board-layout__actions {
   display: flex;
-  gap: var(--sp-2);
+  align-items: center;
+  gap: var(--sp-3);
 }
 
 .board-layout__title {
   font-size: var(--text-lg);
+  line-height: var(--leading-normal);
   font-weight: var(--weight-semi);
 }
 
 .board-layout__subtitle {
   font-size: var(--text-xs);
+  line-height: var(--leading-normal);
   color: var(--color-text-tertiary);
-  margin-top: 2px;
+  margin-top: var(--sp-1);
 }
 
 /* ── Board Grid ── */
 .board-grid {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(260px, 1fr);
-  gap: var(--sp-3);
+  grid-auto-columns: minmax(320px, 1fr);
+  gap: var(--sp-4);
   flex: 1;
-  padding: var(--sp-4) var(--sp-4);
+  padding: var(--sp-5) var(--sp-4);
   overflow-x: auto;
   min-height: 0;
 }
@@ -50,7 +54,7 @@
   display: flex;
   flex-direction: column;
   min-height: 200px;
-  overflow: hidden;
+  overflow: visible;
   transition: border-color var(--duration-normal) var(--ease-out),
               background var(--duration-normal) var(--ease-out);
 }
@@ -79,8 +83,9 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4);
+  gap: var(--sp-3);
+  min-height: 7.25rem;
+  padding: var(--sp-4) var(--sp-5);
   border-bottom: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
 }
@@ -89,6 +94,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
   padding: var(--sp-1);
   cursor: grab;
   color: var(--color-text-tertiary);
@@ -110,12 +117,14 @@
 .board-column__heading {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
   min-width: 0;
+  flex: 1;
 }
 
 .board-column__name {
   font-size: var(--text-xs);
+  line-height: var(--leading-normal);
   font-weight: var(--weight-semi);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -125,19 +134,23 @@
 .board-column__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
 }
 
 .board-column__count {
-  min-width: 20px;
-  height: 20px;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: var(--sp-1) var(--sp-2);
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
 }
 
 .board-column__label {
-  height: 18px;
-  font-size: var(--text-2xs);
+  min-height: 2rem;
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
   font-family: var(--font-mono);
 }
 
@@ -145,15 +158,16 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-3);
+  gap: var(--sp-3);
+  padding: var(--sp-4);
   overflow-y: auto;
 }
 
 /* ── Task Card ── */
 .task-card {
-  gap: var(--sp-2);
-  padding: var(--sp-3);
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  overflow: visible;
   transition: border-color var(--duration-fast),
               box-shadow var(--duration-fast),
               transform var(--duration-fast);
@@ -170,8 +184,8 @@
 
 .task-card__grip {
   align-self: flex-start;
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;
+  height: 1.25rem;
   color: var(--color-text-tertiary);
 }
 
@@ -205,6 +219,7 @@
 
 .task-card__title {
   font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   font-weight: var(--weight-medium);
   color: var(--color-text);
   overflow: hidden;
@@ -228,8 +243,10 @@
 .task-card__meta {
   display: none;
   gap: var(--sp-2);
+  flex-wrap: wrap;
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
   color: var(--color-text-tertiary);
 }
 
@@ -243,7 +260,7 @@
   background: var(--color-surface-2);
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
   color: var(--color-text-secondary);
   white-space: pre-wrap;
   max-height: 80px;
@@ -257,8 +274,9 @@
 
 .task-card__actions {
   display: none;
-  gap: var(--sp-1);
-  padding-top: var(--sp-1);
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding-top: var(--sp-2);
   border-top: 1px solid var(--color-border-subtle);
 }
 

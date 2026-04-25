@@ -63,8 +63,55 @@
   * {
     @apply border-border outline-ring/50;
     }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  div,
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  label,
+  code,
+  pre,
+  small {
+    text-box-trim: none;
+    text-box-edge: auto;
+    leading-trim: normal;
+  }
+  :where(
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    p,
+    span,
+    div,
+    a,
+    button,
+    input,
+    textarea,
+    select,
+    label,
+    code,
+    pre,
+    small
+  ):where(:not([class*="leading-"])) {
+    line-height: var(--leading-normal);
+  }
+  :where([data-slot="badge"], [data-slot="button"]):where(:not([class*="leading-"])) {
+    line-height: var(--leading-normal);
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground leading-normal;
     }
   html {
     @apply font-sans;

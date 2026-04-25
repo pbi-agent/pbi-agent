@@ -5,10 +5,12 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
-  padding: 2px var(--sp-2);
+  min-height: 1.75rem;
+  padding: var(--sp-1) var(--sp-2);
   border-radius: var(--radius-pill);
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
   font-weight: var(--weight-medium);
   letter-spacing: 0.02em;
   text-transform: uppercase;

@@ -95,17 +95,8 @@ export function AppShell() {
     <div className="app-shell bg-background text-foreground">
       <header className="header">
         <div className="header__left">
-          {/* Brand */}
-          <div className="header__brand">
-            <span className="header__brand-mark" aria-hidden="true">P</span>
-            <span className="header__brand-name">
-              <strong>Prism</strong> Agent
-            </span>
-          </div>
-
           {folderLabel && (
             <>
-              <Separator orientation="vertical" className="header__sep" />
               <Badge variant="outline" className="header__workspace overflow-visible" title={bootstrap?.workspace_root}>
                 {folderLabel}
               </Badge>
@@ -167,10 +158,10 @@ export function AppShell() {
               path="/sessions"
               element={
                 requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                <SessionPage
-                  workspaceRoot={bootstrap?.workspace_root}
-                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                />
+                  <SessionPage
+                    workspaceRoot={bootstrap?.workspace_root}
+                    supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                  />
                 )
               }
             />
@@ -178,10 +169,10 @@ export function AppShell() {
               path="/sessions/:sessionId"
               element={
                 requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                <SessionPage
-                  workspaceRoot={bootstrap?.workspace_root}
-                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                />
+                  <SessionPage
+                    workspaceRoot={bootstrap?.workspace_root}
+                    supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                  />
                 )
               }
             />
@@ -189,10 +180,10 @@ export function AppShell() {
               path="/sessions/live/:liveSessionId"
               element={
                 requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                <SessionPage
-                  workspaceRoot={bootstrap?.workspace_root}
-                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                />
+                  <SessionPage
+                    workspaceRoot={bootstrap?.workspace_root}
+                    supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                  />
                 )
               }
             />

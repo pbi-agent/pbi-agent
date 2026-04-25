@@ -1,4 +1,4 @@
-[X] Diagnose text crop / missing margin source.
-[X] Apply focused badge text breathing-room fix.
-[X] Run focused frontend validation.
+[X] Diagnose Kanban text crop / density issues.
+[X] Fix Kanban header, stage badges, counts, and task cards breathing room.
+[X] Validate frontend build/lint/typecheck.
 [X] Update task memory.

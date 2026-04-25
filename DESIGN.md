@@ -1,5 +1,5 @@
 ---
-name: Prism Agent
+name: pbi-agent design system
 colors:
   surface: '#0b1326'
   surface-dim: '#0b1326'
