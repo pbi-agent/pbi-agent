@@ -11,7 +11,6 @@ export function ConnectionBadge({
   return (
     <div className="connection-badge">
       <span className={`indicator-dot indicator-dot--${connection}`} />
-      <span>{label}</span>
     </div>
   );
 }

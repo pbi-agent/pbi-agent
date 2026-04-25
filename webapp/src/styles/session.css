@@ -306,6 +306,8 @@
   min-width: 160px;
   max-width: min(40vw, 300px);
   justify-content: flex-start;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
 }
 
 .profile-selector__name {
@@ -317,17 +319,26 @@
 }
 
 .profile-selector__dropdown {
-  min-width: 100%;
+  width: max-content;
+  min-width: max(14rem, var(--radix-dropdown-menu-trigger-width));
+  max-width: min(24rem, calc(100vw - var(--sp-4)));
+  overflow-x: visible;
 }
 
 .profile-selector__option {
   gap: var(--sp-2);
   width: 100%;
+  align-items: flex-start;
+  min-height: 0;
+  padding-block: var(--sp-2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
 }
 
 .profile-selector__option-check {
   flex-shrink: 0;
   width: 16px;
+  min-height: 1.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -338,24 +349,30 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 
 .profile-selector__option-name {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .profile-selector__option-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
-  font-size: var(--text-xs);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-normal);
   color: var(--color-text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .profile-selector__option.is-selected .profile-selector__option-meta {
