@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRightIcon, XIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  BotIcon,
+  BrainIcon,
+  ChevronRightIcon,
+  CircleDollarSignIcon,
+  ClockIcon,
+  DatabaseIcon,
+  ServerIcon,
+  TerminalIcon,
+  TriangleAlertIcon,
+  WrenchIcon,
+  XIcon,
+} from "lucide-react";
 import { fetchRunDetail } from "../../api";
 import type { ObservabilityEvent, RunSession } from "../../types";
 import { Badge } from "../ui/badge";
@@ -8,6 +21,7 @@ import { Button } from "../ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
@@ -42,6 +56,7 @@ export function RunDetailModal({
       <DialogContent className="modal-card--wide" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Run Detail</DialogTitle>
+          <DialogDescription className="sr-only">Detailed metrics and event timeline for this agent run</DialogDescription>
           <Button
             type="button"
             variant="ghost"
@@ -85,49 +100,80 @@ function RunSummary({ run }: { run: RunSession }) {
     : "--";
 
   return (
-    <div className="run-summary">
-      <div className="run-summary__grid" aria-label="Run key performance indicators">
-        <SummaryField label="Status" emphasis="strong">
+    <div className="run-kpi" aria-label="Run key performance indicators">
+      {/* Hero row */}
+      <div className="run-kpi__hero">
+        <div className="run-kpi__hero-card">
+          <span className="run-kpi__hero-label">Status</span>
           <Badge variant="secondary" className={`status-pill status-pill--${statusModifier}`}>{run.status}</Badge>
-        </SummaryField>
-        <SummaryField label="Duration" emphasis="strong">{durationLabel}</SummaryField>
-        <SummaryField label="Cost" emphasis="strong">{run.estimated_cost_usd > 0 ? `$${run.estimated_cost_usd.toFixed(4)}` : "--"}</SummaryField>
-        <SummaryField label="API calls">{String(run.total_api_calls)}</SummaryField>
-        <SummaryField label="Tool calls">{String(run.total_tool_calls)}</SummaryField>
-        <SummaryField label="Errors">{String(run.error_count)}</SummaryField>
-        <SummaryField label="Input tok">{fmt(run.input_tokens)}</SummaryField>
-        <SummaryField label="Output tok">{fmt(run.output_tokens)}</SummaryField>
-        <SummaryField label="Reasoning tok">{fmt(run.reasoning_tokens)}</SummaryField>
-        <SummaryField label="Cached tok">{fmt(run.cached_input_tokens)}</SummaryField>
-        <SummaryField label="Tool-use tok">{fmt(run.tool_use_tokens)}</SummaryField>
-        <SummaryField label="Agent">{run.agent_name ?? run.agent_type ?? "--"}</SummaryField>
-        <SummaryField label="Provider">{run.provider ?? "--"}</SummaryField>
-        <SummaryField label="Model" className="run-summary__field--wide">
-          <span className="run-summary__mono">{run.model ?? "--"}</span>
-        </SummaryField>
-        {run.started_at ? <SummaryField label="Started" className="run-summary__field--wide">{formatFullTimestamp(run.started_at)}</SummaryField> : null}
-        {run.ended_at ? <SummaryField label="Ended" className="run-summary__field--wide">{formatFullTimestamp(run.ended_at)}</SummaryField> : null}
+        </div>
+        <div className="run-kpi__hero-card">
+          <span className="run-kpi__hero-label"><ClockIcon data-icon="inline-start" /> Duration</span>
+          <span className="run-kpi__hero-value">{durationLabel}</span>
+        </div>
+        <div className="run-kpi__hero-card">
+          <span className="run-kpi__hero-label"><CircleDollarSignIcon data-icon="inline-start" /> Cost</span>
+          <span className="run-kpi__hero-value">{run.estimated_cost_usd > 0 ? `$${run.estimated_cost_usd.toFixed(4)}` : "--"}</span>
+        </div>
+      </div>
+
+      {/* Counters row */}
+      <div className="run-kpi__counters">
+        <KpiCounter icon={ServerIcon} label="API calls" value={run.total_api_calls} />
+        <KpiCounter icon={WrenchIcon} label="Tool calls" value={run.total_tool_calls} />
+        <KpiCounter icon={TriangleAlertIcon} label="Errors" value={run.error_count} variant={run.error_count > 0 ? "danger" : undefined} />
+      </div>
+
+      {/* Token breakdown */}
+      <div className="run-kpi__tokens">
+        <h4 className="run-kpi__tokens-heading"><ActivityIcon data-icon="inline-start" /> Tokens</h4>
+        <div className="run-kpi__tokens-grid">
+          <TokenStat label="Input" value={run.input_tokens} />
+          <TokenStat label="Output" value={run.output_tokens} />
+          <TokenStat label="Reasoning" value={run.reasoning_tokens} icon={BrainIcon} />
+          <TokenStat label="Cached" value={run.cached_input_tokens} icon={DatabaseIcon} />
+          <TokenStat label="Tool-use" value={run.tool_use_tokens} icon={TerminalIcon} />
+        </div>
+      </div>
+
+      {/* Meta footer */}
+      <div className="run-kpi__meta">
+        <MetaItem icon={BotIcon} label="Agent" value={run.agent_name ?? run.agent_type ?? "--"} />
+        <MetaItem icon={ServerIcon} label="Provider" value={run.provider ?? "--"} />
+        <MetaItem label="Model" value={run.model ?? "--"} mono />
+        {run.started_at ? <MetaItem icon={ClockIcon} label="Started" value={formatFullTimestamp(run.started_at)} /> : null}
+        {run.ended_at ? <MetaItem icon={ClockIcon} label="Ended" value={formatFullTimestamp(run.ended_at)} /> : null}
       </div>
     </div>
   );
 }
 
-function SummaryField({
-  label,
-  children,
-  className = "",
-  emphasis,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-  emphasis?: "strong";
-}) {
+function KpiCounter({ icon: Icon, label, value, variant }: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; label: string; value: number; variant?: "danger" }) {
   return (
-    <div className={`run-summary__field${emphasis === "strong" ? " run-summary__field--strong" : ""}${className ? ` ${className}` : ""}`}>
-      <span className="run-summary__label">{label}</span>
-      <span className="run-summary__value">{children}</span>
+    <span className={`run-kpi__counter${variant === "danger" ? " run-kpi__counter--danger" : ""}`}>
+      <Icon data-icon="inline-start" />
+      <span className="run-kpi__counter-value">{value}</span>
+      <span className="run-kpi__counter-label">{label}</span>
+    </span>
+  );
+}
+
+function TokenStat({ label, value, icon: Icon }: { label: string; value: number; icon?: React.ComponentType<React.SVGProps<SVGSVGElement>> }) {
+  return (
+    <div className="run-kpi__token-stat">
+      <span className="run-kpi__token-label">{Icon ? <Icon data-icon="inline-start" /> : null}{label}</span>
+      <span className="run-kpi__token-value">{fmt(value)}</span>
     </div>
+  );
+}
+
+function MetaItem({ icon: Icon, label, value, mono }: { icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>; label: string; value: string; mono?: boolean }) {
+  return (
+    <span className="run-kpi__meta-item">
+      {Icon ? <Icon data-icon="inline-start" /> : null}
+      <span className="run-kpi__meta-label">{label}:</span>
+      <span className={mono ? "run-kpi__meta-value--mono" : undefined}>{value}</span>
+    </span>
   );
 }
 
