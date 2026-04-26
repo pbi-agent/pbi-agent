@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Callable, Literal
 
 ApplyDiffMode = Literal["default", "create"]
+DiffLineNumber = dict[str, int | None]
 
 
 @dataclass
@@ -71,6 +72,109 @@ def apply_diff(input: str, diff: str, mode: ApplyDiffMode = "default") -> str:
     normalized_input = _normalize_text_newlines(input)
     parsed = _parse_update_diff(diff_lines, normalized_input)
     return _apply_chunks(normalized_input, parsed.chunks, newline=newline)
+
+
+def diff_line_numbers(
+    input: str,
+    diff: str,
+    mode: ApplyDiffMode = "default",
+) -> list[DiffLineNumber]:
+    """Return old/new line numbers for each normalized V4A diff line.
+
+    The web diff viewer receives compact V4A patches rather than full unified
+    diffs. V4A hunks do not encode line numbers, so this mirrors the patch
+    parser's context matching against the original file and produces display
+    gutters from the actual location the patch matched.
+    """
+    lines = _normalize_diff_lines(diff)
+    if mode == "create":
+        return _create_diff_line_numbers(lines)
+    return _update_diff_line_numbers(_normalize_text_newlines(input), lines)
+
+
+def _create_diff_line_numbers(lines: list[str]) -> list[DiffLineNumber]:
+    line_numbers: list[DiffLineNumber] = []
+    new_number = 1
+    for raw_line in lines:
+        if raw_line.startswith("+"):
+            line_numbers.append({"old": None, "new": new_number})
+            new_number += 1
+            continue
+        line_numbers.append(_empty_line_number())
+    return line_numbers
+
+
+def _update_diff_line_numbers(input: str, lines: list[str]) -> list[DiffLineNumber]:
+    parser = ParserState(lines=[*lines, END_PATCH])
+    input_lines = input.split("\n")
+    line_numbers: list[DiffLineNumber] = []
+    cursor = 0
+    new_delta = 0
+
+    while not _is_done(parser, END_SECTION_MARKERS):
+        anchor = _read_str(parser, "@@ ")
+        if anchor != "":
+            line_numbers.append(_empty_line_number())
+        has_bare_anchor = (
+            anchor == ""
+            and parser.index < len(parser.lines)
+            and parser.lines[parser.index] == "@@"
+        )
+        if has_bare_anchor:
+            parser.index += 1
+            line_numbers.append(_empty_line_number())
+
+        if not (anchor or has_bare_anchor or cursor == 0):
+            current_line = (
+                parser.lines[parser.index] if parser.index < len(parser.lines) else ""
+            )
+            raise ValueError(f"Invalid Line:\n{current_line}")
+
+        if anchor.strip():
+            cursor = _advance_cursor_to_anchor(anchor, input_lines, cursor, parser)
+
+        section_start = parser.index
+        section = _read_section(parser.lines, parser.index)
+        find_result = _find_context(
+            input_lines, section.next_context, cursor, section.eof
+        )
+        if find_result.new_index == -1:
+            ctx_text = "\n".join(section.next_context)
+            if section.eof:
+                raise ValueError(f"Invalid EOF Context {cursor}:\n{ctx_text}")
+            raise ValueError(f"Invalid Context {cursor}:\n{ctx_text}")
+
+        old_cursor = find_result.new_index
+        new_cursor = find_result.new_index + new_delta
+        section_line_end = section.end_index - 1 if section.eof else section.end_index
+        for raw_line in lines[section_start:section_line_end]:
+            line = raw_line if raw_line else " "
+            prefix = line[0]
+            if prefix == "+":
+                line_numbers.append({"old": None, "new": new_cursor + 1})
+                new_cursor += 1
+            elif prefix == "-":
+                line_numbers.append({"old": old_cursor + 1, "new": None})
+                old_cursor += 1
+            elif prefix == " ":
+                line_numbers.append({"old": old_cursor + 1, "new": new_cursor + 1})
+                old_cursor += 1
+                new_cursor += 1
+            else:
+                line_numbers.append(_empty_line_number())
+
+        if section.eof:
+            line_numbers.append(_empty_line_number())
+
+        cursor = find_result.new_index + len(section.next_context)
+        new_delta = new_cursor - old_cursor
+        parser.index = section.end_index
+
+    return line_numbers
+
+
+def _empty_line_number() -> DiffLineNumber:
+    return {"old": None, "new": None}
 
 
 def _normalize_diff_lines(diff: str) -> list[str]:
@@ -381,4 +485,4 @@ def _v4a_prefix_escape_hint(context: list[str]) -> str | None:
     )
 
 
-__all__ = ["apply_diff"]
+__all__ = ["apply_diff", "diff_line_numbers"]

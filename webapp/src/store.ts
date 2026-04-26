@@ -180,6 +180,30 @@ function readBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
+function readLineNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : null;
+}
+
+function readDiffLineNumbers(
+  value: unknown,
+): Array<{ old: number | null; new: number | null }> | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.map((item) => {
+    if (item === null || typeof item !== "object") {
+      return { old: null, new: null };
+    }
+    const record = item as Record<string, unknown>;
+    return {
+      old: readLineNumber(record.old),
+      new: readLineNumber(record.new),
+    };
+  });
+}
+
 function readApplyPatchMetadata(value: unknown): ApplyPatchToolMetadata | undefined {
   if (value === null || typeof value !== "object") {
     return undefined;
@@ -192,6 +216,7 @@ function readApplyPatchMetadata(value: unknown): ApplyPatchToolMetadata | undefi
     success: readBoolean(record.success),
     detail: readOptionalString(record.detail),
     diff: readOptionalString(record.diff),
+    diff_line_numbers: readDiffLineNumbers(record.diff_line_numbers),
     call_id: readOptionalString(record.call_id),
     status: readToolCallStatus(record.status),
   };

@@ -8,10 +8,11 @@ and execution pipeline.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from pbi_agent.tools.apply_diff import ApplyDiffMode, apply_diff
+from pbi_agent.tools.apply_diff import ApplyDiffMode, apply_diff, diff_line_numbers
 from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
@@ -78,8 +79,12 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         replaced_existing_file = False
         if operation_type == "create_file":
             replaced_existing_file = _create_file(target_path, diff)
+            _store_diff_line_numbers(context, "", diff, mode="create")
         elif operation_type == "update_file":
+            current = _read_update_display_input(target_path, diff)
             _update_file(target_path, diff)
+            if current is not None:
+                _store_diff_line_numbers(context, current, diff, mode="default")
         elif operation_type == "delete_file":
             _delete_file(target_path)
         else:
@@ -109,7 +114,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
 def _create_file(path: Path, diff: str | None) -> bool:
     if not isinstance(diff, str) or not diff:
         raise ValueError("'diff' is required for create_file and must be non-empty.")
-    content = _apply_diff_with_unified_fallback("", diff, mode="create")
+    content, _display_diff = _apply_diff_with_unified_fallback("", diff, mode="create")
     replaced_existing_file = path.exists()
     if path.is_dir():
         raise IsADirectoryError(f"path is a directory: {path}")
@@ -124,8 +129,18 @@ def _update_file(path: Path, diff: str | None) -> None:
     if not isinstance(diff, str) or not diff:
         raise ValueError("'diff' is required for update_file and must be non-empty.")
     current = path.read_text(encoding="utf-8")
-    updated = _apply_diff_with_unified_fallback(current, diff, mode="default")
+    updated, _display_diff = _apply_diff_with_unified_fallback(
+        current, diff, mode="default"
+    )
     path.write_text(updated, encoding="utf-8")
+
+
+def _read_update_display_input(path: Path, diff: Any) -> str | None:
+    if not isinstance(diff, str) or not diff:
+        return None
+    if not path.exists() or path.is_dir():
+        return None
+    return path.read_text(encoding="utf-8")
 
 
 def _delete_file(path: Path) -> None:
@@ -146,14 +161,14 @@ def _apply_diff_with_unified_fallback(
     diff: str,
     *,
     mode: ApplyDiffMode,
-) -> str:
+) -> tuple[str, str]:
     try:
-        return apply_diff(input_text, diff, mode=mode)
+        return apply_diff(input_text, diff, mode=mode), diff
     except ValueError as exc:
         if diff.startswith("\n"):
             stripped_diff = diff.lstrip("\n")
             try:
-                return apply_diff(input_text, stripped_diff, mode=mode)
+                return apply_diff(input_text, stripped_diff, mode=mode), stripped_diff
             except ValueError as stripped_exc:
                 if not _looks_like_unified_diff(diff):
                     raise ValueError(
@@ -165,7 +180,7 @@ def _apply_diff_with_unified_fallback(
             raise
         try:
             v4a_diff = _unified_diff_to_v4a(diff, create=mode == "create")
-            return apply_diff(input_text, v4a_diff, mode=mode)
+            return apply_diff(input_text, v4a_diff, mode=mode), v4a_diff
         except ValueError as fallback_exc:
             raise ValueError(
                 "Received unified diff syntax and attempted to convert it to "
@@ -179,6 +194,52 @@ def _looks_like_unified_diff(diff: str) -> bool:
     return any(line.startswith("--- ") for line in lines) and any(
         line.startswith("+++ ") for line in lines
     )
+
+
+def _store_diff_line_numbers(
+    context: ToolContext | None,
+    input_text: str,
+    diff: Any,
+    *,
+    mode: ApplyDiffMode,
+) -> None:
+    if context is None:
+        return
+    if not isinstance(diff, str) or not diff:
+        return
+    _content, display_diff = _apply_diff_with_unified_fallback(
+        input_text,
+        diff,
+        mode=mode,
+    )
+    context.display_metadata["diff"] = display_diff
+    line_numbers = diff_line_numbers(
+        input_text,
+        display_diff,
+        mode=mode,
+    )
+    if line_numbers:
+        context.display_metadata["diff_line_numbers"] = line_numbers
+
+
+def diff_line_numbers_metadata(value: Any) -> list[dict[str, int | None]]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    line_numbers: list[dict[str, int | None]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        line_numbers.append(
+            {
+                "old": _optional_line_number(item.get("old")),
+                "new": _optional_line_number(item.get("new")),
+            }
+        )
+    return line_numbers
+
+
+def _optional_line_number(value: Any) -> int | None:
+    return value if isinstance(value, int) and value > 0 else None
 
 
 def _unified_diff_to_v4a(diff: str, *, create: bool) -> str:

@@ -8,7 +8,10 @@ from typing import Any
 from pbi_agent.display.protocol import DisplayProtocol
 from pbi_agent.display.protocol import PendingToolCall
 from pbi_agent.models.messages import ToolCall
-from pbi_agent.tools.apply_patch import SPEC as APPLY_PATCH_SPEC
+from pbi_agent.tools.apply_patch import (
+    SPEC as APPLY_PATCH_SPEC,
+    diff_line_numbers_metadata,
+)
 from pbi_agent.tools.types import ToolResult
 
 _APPLY_PATCH_TOOL_NAME = APPLY_PATCH_SPEC.name
@@ -120,13 +123,19 @@ def _display_apply_patch_result(
     arguments = _arguments_dict(call.arguments)
     payload = _output_payload(result.output_json)
     success = _patch_success(result, payload)
+    display_diff = result.display_metadata.get("diff")
+    if not isinstance(display_diff, str):
+        display_diff = str(arguments.get("diff") or "")
     display.patch_result(
         str(arguments.get("path") or "<missing path>"),
         str(arguments.get("operation_type") or "<missing operation_type>"),
         success,
         call_id=result.call_id,
         detail=_patch_detail(payload),
-        diff=str(arguments.get("diff") or ""),
+        diff=display_diff,
+        diff_line_numbers=diff_line_numbers_metadata(
+            result.display_metadata.get("diff_line_numbers")
+        ),
     )
 
 

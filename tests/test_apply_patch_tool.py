@@ -80,6 +80,76 @@ def test_apply_patch_handle_update_file_accepts_unified_diff_fallback(
     assert target.read_text(encoding="utf-8") == "hello\nthere\n"
 
 
+def test_apply_patch_handle_stores_display_line_numbers(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes" / "example.txt"
+    target.parent.mkdir()
+    target.write_text("alpha\nbeta\ngamma\ndelta", encoding="utf-8")
+    context = ToolContext()
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "update_file",
+            "path": "notes/example.txt",
+            "diff": " gamma\n-delta\n+DELTA",
+        },
+        context,
+    )
+
+    assert result["status"] == "completed"
+    assert "diff_line_numbers" not in result
+    assert target.read_text(encoding="utf-8") == "alpha\nbeta\ngamma\nDELTA"
+    assert context.display_metadata == {
+        "diff": " gamma\n-delta\n+DELTA",
+        "diff_line_numbers": [
+            {"old": 3, "new": 3},
+            {"old": 4, "new": None},
+            {"old": None, "new": 4},
+        ],
+    }
+
+
+def test_apply_patch_handle_unified_diff_display_metadata_uses_v4a_fallback(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes" / "example.txt"
+    target.parent.mkdir()
+    target.write_text("alpha\nbeta\ngamma\n", encoding="utf-8")
+    context = ToolContext()
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "update_file",
+            "path": "notes/example.txt",
+            "diff": (
+                "--- a/notes/example.txt\n"
+                "+++ b/notes/example.txt\n"
+                "@@ -2,2 +2,2 @@\n"
+                " beta\n"
+                "-gamma\n"
+                "+GAMMA"
+            ),
+        },
+        context,
+    )
+
+    assert result["status"] == "completed"
+    assert context.display_metadata == {
+        "diff": "@@\n beta\n-gamma\n+GAMMA",
+        "diff_line_numbers": [
+            {"old": None, "new": None},
+            {"old": 2, "new": 2},
+            {"old": 3, "new": None},
+            {"old": None, "new": 3},
+        ],
+    }
+
+
 def test_apply_patch_handle_create_file_accepts_unified_diff_fallback(
     tmp_path: Path,
     monkeypatch,
@@ -263,6 +333,7 @@ def test_apply_patch_handle_validates_required_arguments() -> None:
 
 def test_apply_patch_handle_bounds_long_error_output(monkeypatch) -> None:
     def raise_long_error(path: Path, diff: str | None) -> None:
+        del path, diff
         raise ValueError(f"start-{'x' * (MAX_OUTPUT_CHARS + 200)}-end")
 
     monkeypatch.setattr(apply_patch_tool, "_create_file", raise_long_error)

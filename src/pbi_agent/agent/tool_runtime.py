@@ -5,7 +5,7 @@ import logging
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from pbi_agent.media import data_url_for_image
@@ -150,11 +150,14 @@ def _execute_one_tool_call(
         return result
 
     try:
-        output = handler(args_or_error, context or ToolContext())
+        tool_context = _tool_context_for_call(context)
+        output = handler(args_or_error, tool_context)
         attachments = []
+        display_metadata = dict(tool_context.display_metadata)
         if isinstance(output, ToolOutput):
             payload = {"ok": True, "result": output.result}
             attachments = list(output.attachments)
+            display_metadata.update(output.display_metadata)
         else:
             payload = {"ok": True, "result": output}
         result = ToolResult(
@@ -162,6 +165,7 @@ def _execute_one_tool_call(
             output_json=json.dumps(payload),
             is_error=False,
             attachments=attachments,
+            display_metadata=display_metadata,
         )
         _log_tool_call(
             tracer=tracer,
@@ -229,6 +233,12 @@ def _error_result(call: ToolCall, error_type: str, message: str) -> ToolResult:
         output_json=json.dumps(payload),
         is_error=True,
     )
+
+
+def _tool_context_for_call(context: ToolContext | None) -> ToolContext:
+    if context is None:
+        return ToolContext()
+    return replace(context, display_metadata={})
 
 
 def _duration_ms(start: float) -> int:

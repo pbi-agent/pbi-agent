@@ -30,6 +30,8 @@ type DiffLine = {
   newNumber: number | null;
 };
 
+type DiffLineNumber = { old: number | null; new: number | null };
+
 type ParsedDiff = {
   lines: DiffLine[];
   blocks: DiffBlock[];
@@ -75,7 +77,11 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
     return <DeletedFileResult metadata={metadata} />;
   }
 
-  const parsed = parseV4aDiff(metadata.diff ?? "", metadata.operation);
+  const parsed = parseV4aDiff(
+    metadata.diff ?? "",
+    metadata.operation,
+    metadata.diff_line_numbers,
+  );
   const operationLabel = operationLabelFor(metadata);
   const statusLabel = metadata.success === false ? "Failed" : "Done";
   const visibleBlocks =
@@ -207,7 +213,11 @@ function operationLabelFor(metadata: ApplyPatchToolMetadata): string {
   return OPERATION_LABELS[metadata.operation ?? ""] ?? metadata.operation ?? "Edited";
 }
 
-function parseV4aDiff(diff: string, operation: string | undefined): ParsedDiff {
+function parseV4aDiff(
+  diff: string,
+  operation: string | undefined,
+  lineNumbers: DiffLineNumber[] | undefined,
+): ParsedDiff {
   // The apply_patch tool uses V4A diffs rather than unified git patches. Map
   // those compact +/-/context lines into a git-diff-like view.
   const lines = diff.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
@@ -223,6 +233,7 @@ function parseV4aDiff(diff: string, operation: string | undefined): ParsedDiff {
 
   const parsedLines: DiffLine[] = lines.map((rawLine, index) => {
     const key = `${index}-${rawLine}`;
+    const metadataLineNumber = lineNumbers?.[index];
     if (rawLine.startsWith("@@")) {
       hunks += 1;
       const anchor = rawLine.slice(2).trim();
@@ -249,8 +260,8 @@ function parseV4aDiff(diff: string, operation: string | undefined): ParsedDiff {
         key,
         kind: "added",
         text: rawLine.slice(1),
-        oldNumber: null,
-        newNumber: newNumber > 0 ? newNumber : null,
+        oldNumber: metadataLineNumber?.old ?? null,
+        newNumber: metadataLineNumber?.new ?? (newNumber > 0 ? newNumber : null),
       };
       newNumber += 1;
       return line;
@@ -261,8 +272,8 @@ function parseV4aDiff(diff: string, operation: string | undefined): ParsedDiff {
         key,
         kind: "removed",
         text: rawLine.slice(1),
-        oldNumber,
-        newNumber: null,
+        oldNumber: metadataLineNumber?.old ?? oldNumber,
+        newNumber: metadataLineNumber?.new ?? null,
       };
       oldNumber += 1;
       return line;
@@ -272,8 +283,8 @@ function parseV4aDiff(diff: string, operation: string | undefined): ParsedDiff {
         key,
         kind: "context",
         text: rawLine.slice(1),
-        oldNumber,
-        newNumber: newNumber > 0 ? newNumber : null,
+        oldNumber: metadataLineNumber?.old ?? oldNumber,
+        newNumber: metadataLineNumber?.new ?? (newNumber > 0 ? newNumber : null),
       };
       oldNumber += 1;
       newNumber += 1;

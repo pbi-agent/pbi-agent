@@ -3824,6 +3824,10 @@ def test_live_session_apply_patch_event_includes_diff_metadata() -> None:
             True,
             call_id="call_patch_1",
             diff="-[ ] Old\n+[X] New",
+            diff_line_numbers=[
+                {"old": 12, "new": None},
+                {"old": None, "new": 12},
+            ],
         )
         display.tool_group_end()
         display.user_prompt()
@@ -3850,6 +3854,10 @@ def test_live_session_apply_patch_event_includes_diff_metadata() -> None:
         "success": True,
         "detail": "",
         "diff": "-[ ] Old\n+[X] New",
+        "diff_line_numbers": [
+            {"old": 12, "new": None},
+            {"old": None, "new": 12},
+        ],
         "call_id": "call_patch_1",
     }
 

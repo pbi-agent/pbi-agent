@@ -324,7 +324,9 @@ class ConsoleDisplay(DisplayProtocol):
         call_id: str = "",
         detail: str = "",
         diff: str = "",
+        diff_line_numbers: list[dict[str, int | None]] | None = None,
     ) -> None:
+        del diff_line_numbers
         if self._tool_group.function_count:
             self._tool_group.update_for_function("apply_patch")
         self._append_tool_line(

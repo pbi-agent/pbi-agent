@@ -401,6 +401,7 @@ class _EventDisplayBase(DisplayProtocol):
         call_id: str = "",
         detail: str = "",
         diff: str = "",
+        diff_line_numbers: list[dict[str, int | None]] | None = None,
     ) -> None:
         if self._tool_group.function_count:
             self._tool_group.update_for_function("apply_patch")
@@ -416,19 +417,23 @@ class _EventDisplayBase(DisplayProtocol):
                 "diff": diff,
             },
         )
+        metadata = {
+            "tool_name": tool_name,
+            "path": path,
+            "operation": operation,
+            "success": success,
+            "detail": detail,
+            "diff": diff,
+            "call_id": call_id,
+        }
+        if diff_line_numbers:
+            metadata["diff_line_numbers"] = diff_line_numbers
+
         self._tool_group.upsert_item(
             _plain_text(text),
             call_id=call_id,
             classes=tool_item_class(tool_name),
-            metadata={
-                "tool_name": tool_name,
-                "path": path,
-                "operation": operation,
-                "success": success,
-                "detail": detail,
-                "diff": diff,
-                "call_id": call_id,
-            },
+            metadata=metadata,
         )
         self._publish_tool_group_update()
 

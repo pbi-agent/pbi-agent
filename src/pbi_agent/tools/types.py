@@ -46,6 +46,7 @@ class ToolContext:
     tool_catalog: ToolCatalog | None = None
     parent_context: ParentContextSnapshot | None = None
     tracer: RunTracer | None = None
+    display_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -54,12 +55,14 @@ class ToolResult:
     output_json: str
     is_error: bool = False
     attachments: list[ImageAttachment] = field(default_factory=list)
+    display_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
 class ToolOutput:
     result: dict[str, Any] | str
     attachments: list[ImageAttachment] = field(default_factory=list)
+    display_metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class ToolHandler(Protocol):

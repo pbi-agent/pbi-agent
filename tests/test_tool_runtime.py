@@ -308,6 +308,47 @@ def test_execute_tool_calls_serializes_truncated_apply_patch_error(
     assert "chars omitted" in result["error"]
 
 
+def test_execute_tool_calls_keeps_apply_patch_display_metadata_out_of_output(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes.txt"
+    target.write_text("alpha\nbeta\ngamma", encoding="utf-8")
+    monkeypatch.setattr(
+        tool_runtime,
+        "get_tool_handler",
+        lambda name: apply_patch_tool.handle if name == "apply_patch" else None,
+    )
+
+    batch = tool_runtime.execute_tool_calls(
+        [
+            ToolCall(
+                call_id="call_1",
+                name="apply_patch",
+                arguments={
+                    "operation_type": "update_file",
+                    "path": "notes.txt",
+                    "diff": " beta\n-gamma\n+GAMMA",
+                },
+            )
+        ],
+        max_workers=1,
+    )
+
+    payload = json.loads(batch.results[0].output_json)
+
+    assert "diff_line_numbers" not in payload["result"]
+    assert batch.results[0].display_metadata == {
+        "diff": " beta\n-gamma\n+GAMMA",
+        "diff_line_numbers": [
+            {"old": 2, "new": 2},
+            {"old": 3, "new": None},
+            {"old": None, "new": 3},
+        ],
+    }
+
+
 def test_execute_tool_calls_serializes_tabular_read_file_output(
     tmp_path: Path,
     monkeypatch,
@@ -426,6 +467,53 @@ def test_display_tool_results_routes_apply_patch_with_diff_to_patch_display(
                 "operation_type": "update_file",
                 "detail": "",
                 "diff": "-[ ] Old\n+[X] New",
+            },
+        }
+    ]
+
+
+def test_display_tool_results_forwards_apply_patch_line_numbers(
+    display_spy,
+) -> None:
+    call = ToolCall(
+        call_id="call_patch_1",
+        name="apply_patch",
+        arguments={
+            "operation_type": "update_file",
+            "path": "TODO.md",
+            "diff": "-[ ] Old\n+[X] New",
+        },
+    )
+
+    result = ToolResult(
+        call_id="call_patch_1",
+        output_json=json.dumps(
+            {"ok": True, "result": {"status": "completed", "message": "ok"}}
+        ),
+        display_metadata={
+            "diff_line_numbers": [
+                {"old": 12, "new": None},
+                {"old": None, "new": 12},
+            ],
+        },
+    )
+
+    display_tool_results(display_spy, [call], [result])
+
+    assert display_spy.function_results == [
+        {
+            "name": "apply_patch",
+            "success": True,
+            "call_id": "call_patch_1",
+            "arguments": {
+                "path": "TODO.md",
+                "operation_type": "update_file",
+                "detail": "",
+                "diff": "-[ ] Old\n+[X] New",
+                "diff_line_numbers": [
+                    {"old": 12, "new": None},
+                    {"old": None, "new": 12},
+                ],
             },
         }
     ]

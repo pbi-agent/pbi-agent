@@ -215,6 +215,7 @@ class DisplayProtocol(Protocol):
         call_id: str = "",
         detail: str = "",
         diff: str = "",
+        diff_line_numbers: list[dict[str, int | None]] | None = None,
     ) -> None: ...
 
     def function_start(self, count: int) -> None: ...

@@ -155,6 +155,53 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText(/update_file TODO.md/)).not.toBeInTheDocument();
   });
 
+  it("renders real apply_patch diff line numbers from metadata", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "apply_patch",
+            items: [
+              {
+                text: "update_file src/config.ts done",
+                classes: "tool-call-apply-patch",
+                metadata: {
+                  tool_name: "apply_patch",
+                  path: "src/config.ts",
+                  operation: "update_file",
+                  success: true,
+                  diff: " before\n-old value\n+new value\n after",
+                  diff_line_numbers: [
+                    { old: 41, new: 41 },
+                    { old: 42, new: null },
+                    { old: null, new: 42 },
+                    { old: 43, new: 43 },
+                  ],
+                  call_id: "call_patch_numbers",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const rows = Array.from(document.querySelectorAll(".git-diff-result__line"));
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "4141before",
+      "42-old value",
+      "42+new value",
+      "4343after",
+    ]);
+  });
+
   it("renders successful apply_patch delete results as a compact deleted filename", () => {
     render(
       <SessionTimeline

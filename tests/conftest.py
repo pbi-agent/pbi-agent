@@ -132,18 +132,22 @@ class DisplaySpy:
         call_id: str = "",
         detail: str = "",
         diff: str = "",
+        diff_line_numbers: list[dict[str, int | None]] | None = None,
     ) -> None:
+        arguments = {
+            "path": path,
+            "operation_type": operation,
+            "detail": detail,
+            "diff": diff,
+        }
+        if diff_line_numbers:
+            arguments["diff_line_numbers"] = diff_line_numbers
         self.function_results.append(
             {
                 "name": "apply_patch",
                 "success": success,
                 "call_id": call_id,
-                "arguments": {
-                    "path": path,
-                    "operation_type": operation,
-                    "detail": detail,
-                    "diff": diff,
-                },
+                "arguments": arguments,
             }
         )
 

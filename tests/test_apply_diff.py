@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pbi_agent.tools.apply_diff import apply_diff
+from pbi_agent.tools.apply_diff import apply_diff, diff_line_numbers
 
 
 def test_apply_diff_create_mode_builds_new_file_content() -> None:
@@ -20,6 +20,46 @@ def test_apply_diff_update_mode_preserves_existing_newline_style() -> None:
     result = apply_diff(original, diff)
 
     assert result == "alpha\r\ndelta\r\ngamma"
+
+
+def test_diff_line_numbers_reports_real_update_offsets() -> None:
+    original = "one\ntwo\nthree\nfour\nfive"
+    diff = " three\n-four\n+FOUR\n five"
+
+    result = diff_line_numbers(original, diff)
+
+    assert result == [
+        {"old": 3, "new": 3},
+        {"old": 4, "new": None},
+        {"old": None, "new": 4},
+        {"old": 5, "new": 5},
+    ]
+
+
+def test_diff_line_numbers_tracks_line_delta_between_sections() -> None:
+    original = "one\ntwo\nthree\nfour\nfive\nsix"
+    diff = " one\n+one-and-half\n@@ four\n-five\n+FIVE"
+
+    result = diff_line_numbers(original, diff)
+
+    assert result == [
+        {"old": 1, "new": 1},
+        {"old": None, "new": 2},
+        {"old": None, "new": None},
+        {"old": 5, "new": None},
+        {"old": None, "new": 6},
+    ]
+
+
+def test_diff_line_numbers_reports_create_offsets() -> None:
+    diff = "+alpha\n+beta"
+
+    result = diff_line_numbers("", diff, mode="create")
+
+    assert result == [
+        {"old": None, "new": 1},
+        {"old": None, "new": 2},
+    ]
 
 
 def test_apply_diff_raises_for_context_mismatch() -> None:
