@@ -106,9 +106,8 @@ function RunCard({
     run.input_tokens + run.output_tokens + run.reasoning_tokens + run.tool_use_tokens;
 
   return (
-    <Button
+    <button
       type="button"
-      variant="ghost"
       className="run-card"
       onClick={onSelect}
     >
@@ -157,7 +156,7 @@ function RunCard({
         <CheckCircle2Icon aria-hidden="true" />
         {formatTimestamp(run.started_at)}
       </div>
-    </Button>
+    </button>
   );
 }
 
