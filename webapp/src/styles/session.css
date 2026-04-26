@@ -889,6 +889,19 @@
   border-color: color-mix(in srgb, var(--color-error) 34%, var(--color-border));
 }
 
+.git-diff-result--delete {
+  border-color: color-mix(in srgb, var(--color-error) 24%, var(--color-border));
+}
+
+.git-diff-result__delete-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 4.25rem;
+  padding: var(--sp-3);
+}
+
 .git-diff-result__header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -922,6 +935,11 @@
   height: 16px;
 }
 
+.git-diff-result__file-icon--delete {
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-error);
+}
+
 .git-diff-result__title-copy {
   display: flex;
   min-width: 0;
@@ -936,6 +954,14 @@
   line-height: var(--leading-normal);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.git-diff-result__title--deleted {
+  color: var(--color-error);
+  line-height: var(--leading-normal);
+  text-decoration-line: line-through;
+  text-decoration-thickness: 0.08em;
+  text-decoration-color: currentColor;
 }
 
 .git-diff-result__description {
@@ -967,6 +993,10 @@
 
 .git-diff-result__actions {
   justify-content: flex-end;
+}
+
+.git-diff-result__actions--delete {
+  flex: 0 0 auto;
 }
 
 .git-diff-result__status,

@@ -71,6 +71,10 @@ export function isApplyPatchToolMetadata(
 }
 
 export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }) {
+  if (isSuccessfulDeleteFile(metadata)) {
+    return <DeletedFileResult metadata={metadata} />;
+  }
+
   const parsed = parseV4aDiff(metadata.diff ?? "", metadata.operation);
   const operationLabel = operationLabelFor(metadata);
   const statusLabel = metadata.success === false ? "Failed" : "Done";
@@ -155,6 +159,45 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
       </CardContent>
     </Card>
   );
+}
+
+function DeletedFileResult({ metadata }: { metadata: ApplyPatchToolMetadata }) {
+  const fileName = metadata.path ?? "Unknown file";
+
+  return (
+    <Card
+      size="sm"
+      className="git-diff-result git-diff-result--delete"
+      data-operation="delete_file"
+      data-status="done"
+    >
+      <CardContent className="git-diff-result__delete-body">
+        <div className="git-diff-result__title-row">
+          <span
+            className="git-diff-result__file-icon git-diff-result__file-icon--delete"
+            aria-hidden="true"
+          >
+            <FileCode2Icon />
+          </span>
+          <div className="git-diff-result__title-copy">
+            <CardTitle className="git-diff-result__title git-diff-result__title--deleted">
+              {fileName}
+            </CardTitle>
+          </div>
+        </div>
+        <div className="git-diff-result__actions git-diff-result__actions--delete">
+          <Badge variant="secondary" className="git-diff-result__status">
+            <CheckCircle2Icon data-icon="inline-start" />
+            Done
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function isSuccessfulDeleteFile(metadata: ApplyPatchToolMetadata): boolean {
+  return metadata.operation === "delete_file" && metadata.success !== false;
 }
 
 function operationLabelFor(metadata: ApplyPatchToolMetadata): string {

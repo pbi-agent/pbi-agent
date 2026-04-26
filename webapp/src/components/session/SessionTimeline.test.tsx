@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionTimeline } from "./SessionTimeline";
 
+const EMPTY_DIFF_TEXT = "No diff content was provided for this operation.";
+
 describe("SessionTimeline", () => {
   beforeEach(() => {
     HTMLElement.prototype.scrollTo = vi.fn();
@@ -150,6 +152,51 @@ describe("SessionTimeline", () => {
     expect(screen.getByText(/New/).closest("code")?.textContent).toBe("[X] New");
     expect(screen.getByText("call_patch_1")).toBeInTheDocument();
     expect(screen.queryByText(/update_file TODO.md/)).not.toBeInTheDocument();
+  });
+
+  it("renders successful apply_patch delete results as a compact deleted filename", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "apply_patch",
+            items: [
+              {
+                text: "delete_file TODO.md done",
+                classes: "tool-call-apply-patch",
+                metadata: {
+                  tool_name: "apply_patch",
+                  path: "TODO.md",
+                  operation: "delete_file",
+                  success: true,
+                  diff: "",
+                  call_id: "call_patch_delete",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const title = screen.getByText("TODO.md");
+    const card = title.closest(".git-diff-result");
+
+    expect(title).toHaveClass("git-diff-result__title--deleted");
+    expect(card).toHaveAttribute("data-operation", "delete_file");
+    expect(card).toHaveClass("git-diff-result--delete");
+    expect(screen.getByText("Done")).toBeInTheDocument();
+    expect(screen.queryByText("Deleted")).not.toBeInTheDocument();
+    expect(screen.queryByText(EMPTY_DIFF_TEXT)).not.toBeInTheDocument();
+    expect(screen.queryByText("call_patch_delete")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Diff summary")).not.toBeInTheDocument();
   });
 
   it("highlights only the edited span for paired apply_patch replacements", () => {
