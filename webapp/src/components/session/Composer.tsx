@@ -782,12 +782,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 <span className="composer__completion-copy">
                   <span className="composer__completion-label">
                     {item.kind === "slash" ? item.command.name : `@${item.mention.path}`}
+                    {item.kind === "slash" && item.command.description ? (
+                      <span className="composer__completion-description">
+                        {` (${item.command.description})`}
+                      </span>
+                    ) : null}
                   </span>
-                  {item.kind === "slash" ? (
-                    <span className="composer__completion-description">
-                      {item.command.description}
-                    </span>
-                  ) : null}
                 </span>
                 {item.kind === "mention" ? (
                   <span

@@ -2,6 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { Composer } from "./Composer";
+import { searchSlashCommands } from "../../api";
 import { renderWithProviders } from "../../test/render";
 
 vi.mock("../../api", async (importOriginal) => {
@@ -70,6 +71,10 @@ function renderSubmittingComposer() {
 }
 
 describe("Composer", () => {
+  beforeEach(() => {
+    vi.mocked(searchSlashCommands).mockResolvedValue([]);
+  });
+
   it("shows shell command affordances while typing a bang-prefixed input", async () => {
     const user = userEvent.setup();
     renderComposer();
@@ -127,5 +132,26 @@ describe("Composer", () => {
     await waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
     });
+  });
+
+  it("renders slash command descriptions inline in parentheses", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchSlashCommands).mockResolvedValue([
+      {
+        name: "/plan",
+        description: "Plan Mode Non-Interactive",
+        kind: "local_command",
+      },
+    ]);
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "/");
+
+    expect(
+      await screen.findByRole("listbox", { name: "Slash command suggestions" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("/plan", { exact: false })).toHaveTextContent(
+      "/plan (Plan Mode Non-Interactive)",
+    );
   });
 });
