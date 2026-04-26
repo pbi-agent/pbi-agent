@@ -239,6 +239,51 @@ describe("SessionTimeline", () => {
     );
   });
 
+  it("pairs equal-count multi-line replacements for intraline highlights", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "apply_patch",
+            items: [
+              {
+                text: "update_file webapp/src/styles/session.css done",
+                classes: "tool-call-apply-patch",
+                metadata: {
+                  tool_name: "apply_patch",
+                  path: "webapp/src/styles/session.css",
+                  operation: "update_file",
+                  success: true,
+                  diff: "-.panel { padding: 48px; }\n-.panel { gap: var(--sp-5); }\n+.panel { padding: 32px; }\n+.panel { gap: var(--sp-4); }",
+                  call_id: "call_patch_multi",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByText("1 focused change")).toBeInTheDocument();
+    expect(screen.getByText("48")).toHaveClass("git-diff-result__token--removed");
+    expect(screen.getByText("32")).toHaveClass("git-diff-result__token--added");
+    expect(screen.getByText("5")).toHaveClass("git-diff-result__token--removed");
+    expect(screen.getByText("4")).toHaveClass("git-diff-result__token--added");
+    expect(screen.getByText("48").closest("tr")?.nextElementSibling).toBe(
+      screen.getByText("32").closest("tr"),
+    );
+    expect(screen.getByText("5").closest("tr")?.nextElementSibling).toBe(
+      screen.getByText("4").closest("tr"),
+    );
+  });
+
   it("does not pair ambiguous multi-line delete and insert blocks", () => {
     render(
       <SessionTimeline
@@ -256,7 +301,7 @@ describe("SessionTimeline", () => {
                   path: "src/config.ts",
                   operation: "update_file",
                   success: true,
-                  diff: "-const first = oldValue;\n-const second = oldOther;\n+const inserted = newValue;\n+const extra = newOther;",
+                  diff: "-const first = oldValue;\n-const second = oldOther;\n+const inserted = newValue;",
                   call_id: "call_patch_ambiguous",
                 },
               },

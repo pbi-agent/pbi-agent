@@ -28,3 +28,18 @@ def test_apply_diff_raises_for_context_mismatch() -> None:
 
     with pytest.raises(ValueError, match="Invalid Context"):
         apply_diff(original, diff)
+
+
+def test_apply_diff_invalid_context_hints_for_literal_diff_prefix_lines() -> None:
+    original = "- Apply-patch UI: old\n"
+    diff = "- Apply-patch UI: old\n+- Apply-patch UI: new"
+
+    with pytest.raises(ValueError) as exc_info:
+        apply_diff(original, diff)
+
+    message = str(exc_info.value)
+    assert "Invalid Context" in message
+    assert "first character of each diff line as the patch marker" in message
+    assert "-- item" in message
+    assert "+- item" in message
+    assert " - item" in message

@@ -394,20 +394,21 @@ function renderBlock(block: DiffBlock): ReactElement[] {
 }
 
 function renderChangeBlock(block: Extract<DiffBlock, { kind: "change" }>): ReactElement[] {
-  if (block.removed.length === 1 && block.added.length === 1) {
-    const removed = block.removed[0];
-    const added = block.added[0];
-    const inline = diffInline(removed.text, added.text);
-    return [
-      renderLine(removed, {
-        key: `${block.key}-removed-${removed.key}`,
-        inlineParts: inline.oldParts,
-      }),
-      renderLine(added, {
-        key: `${block.key}-added-${added.key}`,
-        inlineParts: inline.newParts,
-      }),
-    ];
+  if (isPairableReplacementBlock(block)) {
+    return block.removed.flatMap((removed, index) => {
+      const added = block.added[index];
+      const inline = diffInline(removed.text, added.text);
+      return [
+        renderLine(removed, {
+          key: `${block.key}-removed-${removed.key}`,
+          inlineParts: inline.oldParts,
+        }),
+        renderLine(added, {
+          key: `${block.key}-added-${added.key}`,
+          inlineParts: inline.newParts,
+        }),
+      ];
+    });
   }
 
   const rows: ReactElement[] = [];
@@ -419,6 +420,10 @@ function renderChangeBlock(block: Extract<DiffBlock, { kind: "change" }>): React
   }
 
   return rows;
+}
+
+function isPairableReplacementBlock(block: Extract<DiffBlock, { kind: "change" }>): boolean {
+  return block.removed.length > 0 && block.removed.length === block.added.length;
 }
 
 function renderLine(

@@ -30,6 +30,14 @@ class ParsedUpdateDiff:
     fuzz: int
 
 
+class InvalidContextError(ValueError):
+    """Raised when a V4A context block cannot be matched."""
+
+    def __init__(self, cursor: int, context: list[str], eof: bool = False) -> None:
+        label = "Invalid EOF Context" if eof else "Invalid Context"
+        super().__init__(_format_invalid_context_message(label, cursor, context))
+
+
 @dataclass
 class ReadSectionResult:
     next_context: list[str]
@@ -153,10 +161,7 @@ def _parse_update_diff(lines: list[str], input: str) -> ParsedUpdateDiff:
             input_lines, section.next_context, cursor, section.eof
         )
         if find_result.new_index == -1:
-            ctx_text = "\n".join(section.next_context)
-            if section.eof:
-                raise ValueError(f"Invalid EOF Context {cursor}:\n{ctx_text}")
-            raise ValueError(f"Invalid Context {cursor}:\n{ctx_text}")
+            raise InvalidContextError(cursor, section.next_context, eof=section.eof)
 
         cursor = find_result.new_index + len(section.next_context)
         parser.fuzz += find_result.fuzz
@@ -354,6 +359,26 @@ def _apply_chunks(input: str, chunks: list[Chunk], newline: str) -> str:
 
     dest_lines.extend(orig_lines[cursor:])
     return newline.join(dest_lines)
+
+
+def _format_invalid_context_message(label: str, cursor: int, context: list[str]) -> str:
+    ctx_text = "\n".join(context)
+    hint = _v4a_prefix_escape_hint(context)
+    if hint:
+        return f"{label} {cursor}:\n{ctx_text}\n\nHint: {hint}"
+    return f"{label} {cursor}:\n{ctx_text}"
+
+
+def _v4a_prefix_escape_hint(context: list[str]) -> str | None:
+    if not any(line.startswith((" ", "+", "-")) for line in context):
+        return None
+    return (
+        "V4A uses the first character of each diff line as the patch marker. "
+        "If the target file line literally starts with '-', '+', or a leading "
+        "space, include both the patch marker and the literal character. "
+        "Examples: delete '- item' as '-- item', insert it as '+- item', "
+        "and use it as context as ' - item'."
+    )
 
 
 __all__ = ["apply_diff"]
