@@ -39,7 +39,7 @@ export function RunDetailModal({
     <Dialog open onOpenChange={(open) => {
       if (!open) onClose();
     }}>
-      <DialogContent className="modal-card--wide">
+      <DialogContent className="modal-card--wide" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Run Detail</DialogTitle>
           <Button
@@ -86,46 +86,45 @@ function RunSummary({ run }: { run: RunSession }) {
 
   return (
     <div className="run-summary">
-      <div className="run-summary__row">
-        <SummaryField label="Status">
+      <div className="run-summary__grid" aria-label="Run key performance indicators">
+        <SummaryField label="Status" emphasis="strong">
           <Badge variant="secondary" className={`status-pill status-pill--${statusModifier}`}>{run.status}</Badge>
         </SummaryField>
-        <SummaryField label="Agent">{run.agent_name ?? run.agent_type ?? "--"}</SummaryField>
-        <SummaryField label="Provider">{run.provider ?? "--"}</SummaryField>
-        <SummaryField label="Model">
-          <span className="run-summary__mono">{run.model ?? "--"}</span>
-        </SummaryField>
-        <SummaryField label="Duration">{durationLabel}</SummaryField>
-      </div>
-
-      <div className="run-summary__row">
+        <SummaryField label="Duration" emphasis="strong">{durationLabel}</SummaryField>
+        <SummaryField label="Cost" emphasis="strong">{run.estimated_cost_usd > 0 ? `$${run.estimated_cost_usd.toFixed(4)}` : "--"}</SummaryField>
+        <SummaryField label="API calls">{String(run.total_api_calls)}</SummaryField>
+        <SummaryField label="Tool calls">{String(run.total_tool_calls)}</SummaryField>
+        <SummaryField label="Errors">{String(run.error_count)}</SummaryField>
         <SummaryField label="Input tok">{fmt(run.input_tokens)}</SummaryField>
         <SummaryField label="Output tok">{fmt(run.output_tokens)}</SummaryField>
         <SummaryField label="Reasoning tok">{fmt(run.reasoning_tokens)}</SummaryField>
         <SummaryField label="Cached tok">{fmt(run.cached_input_tokens)}</SummaryField>
         <SummaryField label="Tool-use tok">{fmt(run.tool_use_tokens)}</SummaryField>
+        <SummaryField label="Agent">{run.agent_name ?? run.agent_type ?? "--"}</SummaryField>
+        <SummaryField label="Provider">{run.provider ?? "--"}</SummaryField>
+        <SummaryField label="Model" className="run-summary__field--wide">
+          <span className="run-summary__mono">{run.model ?? "--"}</span>
+        </SummaryField>
+        {run.started_at ? <SummaryField label="Started" className="run-summary__field--wide">{formatFullTimestamp(run.started_at)}</SummaryField> : null}
+        {run.ended_at ? <SummaryField label="Ended" className="run-summary__field--wide">{formatFullTimestamp(run.ended_at)}</SummaryField> : null}
       </div>
-
-      <div className="run-summary__row">
-        <SummaryField label="API calls">{String(run.total_api_calls)}</SummaryField>
-        <SummaryField label="Tool calls">{String(run.total_tool_calls)}</SummaryField>
-        <SummaryField label="Errors">{String(run.error_count)}</SummaryField>
-        <SummaryField label="Cost">{run.estimated_cost_usd > 0 ? `$${run.estimated_cost_usd.toFixed(4)}` : "--"}</SummaryField>
-      </div>
-
-      {run.started_at || run.ended_at ? (
-        <div className="run-summary__row">
-          <SummaryField label="Started">{formatFullTimestamp(run.started_at)}</SummaryField>
-          <SummaryField label="Ended">{run.ended_at ? formatFullTimestamp(run.ended_at) : "--"}</SummaryField>
-        </div>
-      ) : null}
     </div>
   );
 }
 
-function SummaryField({ label, children }: { label: string; children: React.ReactNode }) {
+function SummaryField({
+  label,
+  children,
+  className = "",
+  emphasis,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+  emphasis?: "strong";
+}) {
   return (
-    <div className="run-summary__field">
+    <div className={`run-summary__field${emphasis === "strong" ? " run-summary__field--strong" : ""}${className ? ` ${className}` : ""}`}>
       <span className="run-summary__label">{label}</span>
       <span className="run-summary__value">{children}</span>
     </div>

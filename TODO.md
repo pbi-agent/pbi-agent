@@ -1,3 +1,3 @@
-[X] Fix slash completion description font-weight token
-[X] Run focused frontend validation
+[X] Make Run Detail modal wide enough for 4 KPI columns
+[X] Rebuild packaged web app
 [X] Update memory
