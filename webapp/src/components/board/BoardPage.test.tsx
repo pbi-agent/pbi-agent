@@ -275,7 +275,7 @@ describe("BoardPage", () => {
     renderWithProviders(<BoardPage />);
 
     expect(await screen.findByText("No tasks yet")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "+ Add Task" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Add Task" })).toHaveLength(2);
   });
 
   it("prompts for runnable stage creation before running backlog tasks", async () => {

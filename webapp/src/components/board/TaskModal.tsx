@@ -44,6 +44,11 @@ export function TaskModal({
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
 }) {
+  const titleId = "task-form-title";
+  const promptId = "task-form-prompt";
+  const stageId = "task-form-stage";
+  const profileId = "task-form-profile";
+
   return (
     <Dialog open onOpenChange={(open) => {
       if (!open) onClose();
@@ -59,8 +64,9 @@ export function TaskModal({
           <div className="task-form__body">
             <FieldGroup>
               <Field>
-                <FieldLabel>Title</FieldLabel>
+                <FieldLabel htmlFor={titleId}>Title</FieldLabel>
                 <Input
+                  id={titleId}
                   className="task-form__input"
                   value={task.title}
                   onChange={(e) => onChange({ title: e.target.value })}
@@ -70,8 +76,9 @@ export function TaskModal({
               </Field>
 
               <Field>
-                <FieldLabel>Prompt</FieldLabel>
+                <FieldLabel htmlFor={promptId}>Prompt</FieldLabel>
                 <Textarea
+                  id={promptId}
                   className="task-form__textarea"
                   value={task.prompt}
                   onChange={(e) => onChange({ prompt: e.target.value })}
@@ -80,8 +87,9 @@ export function TaskModal({
               </Field>
 
               <Field>
-                <FieldLabel>Stage</FieldLabel>
+                <FieldLabel htmlFor={stageId}>Stage</FieldLabel>
                 <NativeSelect
+                  id={stageId}
                   className="task-form__select"
                   value={task.stage}
                   onChange={(e) => onChange({ stage: e.target.value })}
@@ -96,8 +104,9 @@ export function TaskModal({
               </Field>
 
               <Field>
-                <FieldLabel>Profile Override</FieldLabel>
+                <FieldLabel htmlFor={profileId}>Profile Override</FieldLabel>
                 <NativeSelect
+                  id={profileId}
                   className="task-form__select"
                   value={task.profileId}
                   onChange={(e) => onChange({ profileId: e.target.value })}
@@ -114,11 +123,22 @@ export function TaskModal({
           </div>
 
           <DialogFooter className="task-form__footer">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSaving}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="task-form__action-button"
+              onClick={onClose}
+              disabled={isSaving}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Task"}
+            <Button
+              type="submit"
+              variant="ghost"
+              className="task-form__action-button"
+              disabled={isSaving}
+            >
+              {isSaving ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </form>

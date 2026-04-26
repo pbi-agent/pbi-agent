@@ -162,13 +162,21 @@ export function BoardStageEditorModal({
               return (
                 <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
                 <div className="board-stage-editor__ordering">
-                  <Button type="button" variant="outline" size="icon-sm" onClick={() => moveItem(index, -1)} disabled={index === 0 || isSaving || fixedStage}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="board-stage-editor__icon-button"
+                    onClick={() => moveItem(index, -1)}
+                    disabled={index === 0 || isSaving || fixedStage}
+                  >
                     <ArrowUpIcon />
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="icon-sm"
+                    className="board-stage-editor__icon-button"
                     onClick={() => moveItem(index, 1)}
                     disabled={index === items.length - 1 || isSaving || fixedStage}
                   >
@@ -193,7 +201,7 @@ export function BoardStageEditorModal({
 
                   <div className="task-form__row">
                     <Field>
-                      <FieldLabel>Default Profile</FieldLabel>
+                      <FieldLabel>Profile</FieldLabel>
                       <NativeSelect
                         className="task-form__select"
                         value={item.profile_id}
@@ -210,7 +218,7 @@ export function BoardStageEditorModal({
                     </Field>
 
                     <Field>
-                      <FieldLabel>Default Command</FieldLabel>
+                      <FieldLabel>Command</FieldLabel>
                       <NativeSelect
                         className="task-form__select"
                         value={item.command_id}
@@ -229,6 +237,7 @@ export function BoardStageEditorModal({
 
                   <Field orientation="horizontal" className="board-stage-editor__toggle">
                     <Checkbox
+                      className="board-stage-editor__checkbox"
                       checked={item.auto_start}
                       onCheckedChange={(checked) => updateItem(index, { auto_start: checked === true })}
                       disabled={fixedStage}
@@ -239,7 +248,13 @@ export function BoardStageEditorModal({
                   </Field>
                 </FieldGroup>
 
-                <Button type="button" variant="destructive" size="sm" onClick={() => removeStage(index)} disabled={isSaving || items.length === 1 || fixedStage}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="task-form__action-button board-stage-editor__remove-button"
+                  onClick={() => removeStage(index)}
+                  disabled={isSaving || items.length === 1 || fixedStage}
+                >
                   <Trash2Icon data-icon="inline-start" />
                   Remove
                 </Button>
@@ -255,11 +270,22 @@ export function BoardStageEditorModal({
           ) : null}
 
           <DialogFooter className="board-stage-editor__actions">
-            <Button type="button" variant="outline" onClick={addStage} disabled={isSaving}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="task-form__action-button"
+              onClick={addStage}
+              disabled={isSaving}
+            >
               <PlusIcon data-icon="inline-start" />
               Add Stage
             </Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button
+              type="submit"
+              variant="ghost"
+              className="task-form__action-button"
+              disabled={isSaving}
+            >
               {isSaving ? "Saving..." : "Save Board"}
             </Button>
           </DialogFooter>

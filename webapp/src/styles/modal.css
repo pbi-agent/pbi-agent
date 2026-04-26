@@ -54,71 +54,155 @@
 
 /* ── Task Form ── */
 .task-form-dialog {
+  width: min(35rem, calc(100dvw - 2rem));
+  max-width: none;
   max-height: calc(100dvh - 2rem);
-  overflow: hidden;
+  display: flex;
+  grid-template-columns: minmax(0, 1fr);
+  flex-direction: column;
+  gap: var(--sp-5);
+  overflow: visible;
+  padding: var(--sp-6);
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-1) 88%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.task-form-dialog [data-slot="dialog-header"] {
+  padding-right: 2.5rem;
+}
+
+.task-form-dialog [data-slot="dialog-title"] {
+  min-height: 1.5rem;
+  line-height: var(--leading-normal);
 }
 
 .task-form {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  flex: 1 1 auto;
+  gap: var(--sp-5);
   min-height: 0;
 }
 
 .task-form__body {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding-right: var(--sp-1);
+  overflow-x: visible;
+  padding: 0.25rem;
+  margin: -0.25rem;
+  scrollbar-gutter: stable;
 }
 
-.task-form__field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+.task-form__body [data-slot="field-group"] {
+  gap: var(--sp-4);
 }
 
-.task-form__label {
+.task-form__body [data-slot="field"] {
+  gap: var(--sp-2);
+}
+
+.task-form__body [data-slot="field-label"] {
+  min-height: 1rem;
   font-size: var(--text-xs);
   font-weight: var(--weight-semi);
+  line-height: var(--leading-normal);
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-tertiary);
 }
 
 .task-form__input,
 .task-form__textarea,
 .task-form__select {
   width: 100%;
-  padding: var(--sp-2) var(--sp-3);
+  padding-inline: var(--sp-3);
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   color: var(--color-text);
-  transition: border-color var(--duration-fast);
 }
 
-.task-form__input:focus,
-.task-form__textarea:focus,
-.task-form__select:focus {
+.task-form__input,
+.task-form__select {
+  min-height: 2.25rem;
+}
+
+.task-form__input:focus-visible,
+.task-form__textarea:focus-visible,
+.task-form__select:focus-visible {
   border-color: var(--color-accent-border);
 }
 
 .task-form__textarea {
-  min-height: 12rem;
-  max-height: min(40dvh, 24rem);
+  min-height: clamp(8rem, 28dvh, 14rem);
+  max-height: min(36dvh, 22rem);
+  padding-block: var(--sp-3);
   overflow-y: auto;
   resize: vertical;
   line-height: var(--leading-relaxed);
 }
 
-.task-form__select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238080a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: var(--sp-8);
+.task-form__select[data-slot="native-select"] {
+  padding-left: var(--sp-3);
+  padding-right: var(--sp-10);
   cursor: pointer;
+}
+
+.task-form__body [data-slot="native-select-icon"] {
+  right: var(--sp-3);
+}
+
+.task-form__body [data-slot="native-select-wrapper"] {
+  width: 100%;
+}
+
+.task-form__footer {
+  flex: 0 0 auto;
+  gap: 0.125rem;
+  margin: 0 calc(var(--sp-6) * -1) calc(var(--sp-6) * -1);
+  padding-inline: var(--sp-6);
+}
+
+.task-form__action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  min-height: 2.25rem;
+  margin: 0;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  font-weight: var(--weight-semi);
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease);
+  vertical-align: middle;
+}
+
+.task-form__action-button:not(:disabled):hover,
+.task-form__action-button:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: var(--muted) !important;
+}
+
+@media (max-width: 40rem) {
+  .task-form-dialog {
+    width: min(35rem, calc(100dvw - 1rem));
+    padding: var(--sp-4);
+  }
+
+  .task-form__footer {
+    margin: 0 calc(var(--sp-4) * -1) calc(var(--sp-4) * -1);
+    padding-inline: var(--sp-4);
+  }
 }
 
 .task-form__submit {

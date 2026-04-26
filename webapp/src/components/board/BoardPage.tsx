@@ -342,7 +342,7 @@ export function BoardPage() {
           </Button>
           <Button type="button" onClick={openNewTask}>
             <PlusIcon data-icon="inline-start" />
-            + Add Task
+            Add Task
           </Button>
         </div>
       </div>
@@ -361,7 +361,7 @@ export function BoardPage() {
           action={
             <Button type="button" onClick={openNewTask}>
               <PlusIcon data-icon="inline-start" />
-              + Add Task
+              Add Task
             </Button>
           }
         />

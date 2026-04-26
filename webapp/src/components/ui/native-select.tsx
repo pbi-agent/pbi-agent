@@ -19,7 +19,6 @@ function NativeSelect({
       data-slot="native-select-wrapper"
       data-size={size}
       data-name={name}
-      id={id}
     >
       <select
         data-slot="native-select"
