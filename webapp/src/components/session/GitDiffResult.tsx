@@ -56,6 +56,12 @@ const OPERATION_LABELS: Record<string, string> = {
   delete_file: "Deleted",
 };
 
+const FAILED_OPERATION_LABELS: Record<string, string> = {
+  create_file: "Create failed",
+  update_file: "Update failed",
+  delete_file: "Delete failed",
+};
+
 export function isApplyPatchToolMetadata(
   metadata: ApplyPatchToolMetadata | undefined,
 ): metadata is ApplyPatchToolMetadata {
@@ -66,10 +72,7 @@ export function isApplyPatchToolMetadata(
 
 export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }) {
   const parsed = parseV4aDiff(metadata.diff ?? "", metadata.operation);
-  const operationLabel =
-    metadata.success === false
-      ? "Patch failed"
-      : OPERATION_LABELS[metadata.operation ?? ""] ?? metadata.operation ?? "Edited";
+  const operationLabel = operationLabelFor(metadata);
   const statusLabel = metadata.success === false ? "Failed" : "Done";
   const visibleBlocks =
     parsed.blocks.length > 0
@@ -152,6 +155,13 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
       </CardContent>
     </Card>
   );
+}
+
+function operationLabelFor(metadata: ApplyPatchToolMetadata): string {
+  if (metadata.success === false) {
+    return FAILED_OPERATION_LABELS[metadata.operation ?? ""] ?? "Patch failed";
+  }
+  return OPERATION_LABELS[metadata.operation ?? ""] ?? metadata.operation ?? "Edited";
 }
 
 function parseV4aDiff(diff: string, operation: string | undefined): ParsedDiff {

@@ -293,7 +293,7 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("Patch failed")).toBeInTheDocument();
+    expect(screen.getByText("Update failed")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.queryByText("Updated")).not.toBeInTheDocument();
   });

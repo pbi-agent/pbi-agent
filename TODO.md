@@ -1,5 +1,5 @@
-[X] Fix review finding: avoid misleading multi-line diff pairings
-[X] Render intraline highlights only for simple one-line replacements
-[X] Add regression test for multi-line delete/insert groups
-[X] Run focused frontend validation
+[X] Inspect current apply_patch diff-card implementation
+[X] Fix failed operation description label
+[X] Add regression coverage
+[X] Run frontend validation
 [X] Update task memory
