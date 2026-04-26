@@ -55,7 +55,9 @@ Execute shell commands within the workspace root by default.
 
 ## `apply_patch`
 
-Apply one file operation at a time with a V4A diff payload.
+Apply one file operation at a time with a V4A diff payload. For create/update
+operations, a standard unified diff for the same single file is accepted as a
+fallback and converted internally to V4A.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -63,15 +65,42 @@ Apply one file operation at a time with a V4A diff payload.
 | `path` | `string` | yes | Relative path, or absolute path that still resolves within the workspace root. |
 | `diff` | `string` | for create/update | Required for `create_file` and `update_file`; omitted for `delete_file`. |
 
+Do not add a leading blank line to V4A diff bodies unless the target file really
+contains that blank line in the matched context. If a V4A body accidentally
+starts with a blank line, the tool retries once after stripping leading blank
+lines and otherwise returns a targeted hint.
+
+Create-file V4A body:
+
 ```text
-*** Begin Patch
-*** Add File: notes.txt
 +hello
-*** End Patch
++world
+```
+
+Update-file V4A body:
+
+```text
+ hello
+-world
++there
+```
+
+Unified diff fallback for an update:
+
+```diff
+--- a/notes.txt
++++ b/notes.txt
+@@ -1,2 +1,2 @@
+ hello
+-world
++there
 ```
 
 ::: warning
-The `apply_patch` tool is different from this coding environment's patch helper. Inside `pbi-agent`, it is a provider-agnostic function tool backed by `pbi_agent.tools.apply_diff`.
+The `apply_patch` tool still performs one declared operation on one path per
+call. It does not accept a full `*** Begin Patch` multi-file envelope. Inside
+`pbi-agent`, it is a provider-agnostic function tool backed by
+`pbi_agent.tools.apply_diff`.
 :::
 
 Tool output is capped to a bounded result that preserves both the beginning and end of long output while marking omitted content.

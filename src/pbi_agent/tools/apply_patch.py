@@ -11,13 +11,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pbi_agent.tools.apply_diff import apply_diff
+from pbi_agent.tools.apply_diff import ApplyDiffMode, apply_diff
 from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 SPEC = ToolSpec(
     name="apply_patch",
-    description="Create, update, or delete workspace files using V4A diff format.",
+    description=(
+        "Create, update, or delete one workspace file. Prefer V4A diff format; "
+        "create/update also accept a standard unified diff for the same single "
+        "file as a fallback."
+    ),
     parameters_schema={
         "type": "object",
         "properties": {
@@ -40,7 +44,11 @@ SPEC = ToolSpec(
                     "update_file operations. For create_file, lines must be "
                     "prefixed with '+'. For update_file, use context lines "
                     "(prefixed ' '), deletion lines ('-'), and insertion "
-                    "lines ('+')."
+                    "lines ('+'); do not add a leading blank line unless the "
+                    "file context really contains one. As a fallback for "
+                    "create_file/update_file, a standard unified diff for this "
+                    "same single path is also accepted. Full multi-file patch "
+                    "envelopes are not accepted."
                 ),
             },
         },
@@ -67,8 +75,9 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     try:
         target_path = _resolve_safe_path(root, path_value)
 
+        replaced_existing_file = False
         if operation_type == "create_file":
-            _create_file(target_path, diff)
+            replaced_existing_file = _create_file(target_path, diff)
         elif operation_type == "update_file":
             _update_file(target_path, diff)
         elif operation_type == "delete_file":
@@ -76,9 +85,14 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         else:
             return {"error": f"Unsupported operation_type '{operation_type}'."}
 
+        if operation_type == "create_file" and replaced_existing_file:
+            message = f"file exists and was replaced: '{path_value}'"
+        else:
+            message = f"{operation_type} succeeded for '{path_value}'"
+
         return {
             "status": "completed",
-            "message": f"{operation_type} succeeded for '{path_value}'",
+            "message": message,
         }
     except Exception as exc:
         return {
@@ -92,14 +106,16 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _create_file(path: Path, diff: str | None) -> None:
-    if path.exists():
-        raise FileExistsError(f"file already exists: {path}")
+def _create_file(path: Path, diff: str | None) -> bool:
     if not isinstance(diff, str) or not diff:
         raise ValueError("'diff' is required for create_file and must be non-empty.")
-    content = apply_diff("", diff, mode="create")
+    content = _apply_diff_with_unified_fallback("", diff, mode="create")
+    replaced_existing_file = path.exists()
+    if path.is_dir():
+        raise IsADirectoryError(f"path is a directory: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    return replaced_existing_file
 
 
 def _update_file(path: Path, diff: str | None) -> None:
@@ -108,7 +124,7 @@ def _update_file(path: Path, diff: str | None) -> None:
     if not isinstance(diff, str) or not diff:
         raise ValueError("'diff' is required for update_file and must be non-empty.")
     current = path.read_text(encoding="utf-8")
-    updated = apply_diff(current, diff, mode="default")
+    updated = _apply_diff_with_unified_fallback(current, diff, mode="default")
     path.write_text(updated, encoding="utf-8")
 
 
@@ -118,6 +134,95 @@ def _delete_file(path: Path) -> None:
     if path.is_dir():
         raise IsADirectoryError(f"path is a directory: {path}")
     path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# Unified diff compatibility
+# ---------------------------------------------------------------------------
+
+
+def _apply_diff_with_unified_fallback(
+    input_text: str,
+    diff: str,
+    *,
+    mode: ApplyDiffMode,
+) -> str:
+    try:
+        return apply_diff(input_text, diff, mode=mode)
+    except ValueError as exc:
+        if diff.startswith("\n"):
+            stripped_diff = diff.lstrip("\n")
+            try:
+                return apply_diff(input_text, stripped_diff, mode=mode)
+            except ValueError as stripped_exc:
+                if not _looks_like_unified_diff(diff):
+                    raise ValueError(
+                        "V4A diff begins with an empty context line; remove the "
+                        "leading blank line unless the file actually contains "
+                        f"one. Details: {stripped_exc}"
+                    ) from exc
+        if not _looks_like_unified_diff(diff):
+            raise
+        try:
+            v4a_diff = _unified_diff_to_v4a(diff, create=mode == "create")
+            return apply_diff(input_text, v4a_diff, mode=mode)
+        except ValueError as fallback_exc:
+            raise ValueError(
+                "Received unified diff syntax and attempted to convert it to "
+                "V4A, but applying the converted diff failed. Use a V4A body "
+                f"or a unified diff for this one file. Details: {fallback_exc}"
+            ) from exc
+
+
+def _looks_like_unified_diff(diff: str) -> bool:
+    lines = diff.splitlines()
+    return any(line.startswith("--- ") for line in lines) and any(
+        line.startswith("+++ ") for line in lines
+    )
+
+
+def _unified_diff_to_v4a(diff: str, *, create: bool) -> str:
+    lines = diff.splitlines()
+    v4a_lines: list[str] = []
+    in_hunk = False
+    saw_hunk = False
+
+    for line in lines:
+        if line.startswith("@@ "):
+            saw_hunk = True
+            in_hunk = True
+            if not create:
+                v4a_lines.append("@@")
+            continue
+
+        if not in_hunk:
+            continue
+
+        if line.startswith(("diff --git ", "index ", "--- ", "+++ ")):
+            in_hunk = False
+            continue
+        if line.startswith("\\ No newline at end of file"):
+            continue
+        if line == "":
+            # Unified diffs represent an empty context line as a single space;
+            # a truly empty physical line is not a valid hunk line.
+            continue
+
+        prefix = line[0]
+        if prefix not in {" ", "-", "+"}:
+            in_hunk = False
+            continue
+        if create:
+            if prefix == "+":
+                v4a_lines.append(line)
+        else:
+            v4a_lines.append(line)
+
+    if not saw_hunk:
+        raise ValueError("unified diff is missing a hunk header ('@@ ... @@').")
+    if not v4a_lines:
+        raise ValueError("unified diff did not contain applicable hunk lines.")
+    return "\n".join(v4a_lines)
 
 
 # ---------------------------------------------------------------------------

@@ -51,6 +51,173 @@ def test_apply_patch_handle_create_update_and_delete_file(
     assert not created_file.exists()
 
 
+def test_apply_patch_handle_update_file_accepts_unified_diff_fallback(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes" / "example.txt"
+    target.parent.mkdir()
+    target.write_text("hello\nworld\n", encoding="utf-8")
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "update_file",
+            "path": "notes/example.txt",
+            "diff": (
+                "--- a/notes/example.txt\n"
+                "+++ b/notes/example.txt\n"
+                "@@ -1,2 +1,2 @@\n"
+                " hello\n"
+                "-world\n"
+                "+there"
+            ),
+        },
+        ToolContext(),
+    )
+
+    assert result["status"] == "completed"
+    assert target.read_text(encoding="utf-8") == "hello\nthere\n"
+
+
+def test_apply_patch_handle_create_file_accepts_unified_diff_fallback(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "create_file",
+            "path": "notes/example.txt",
+            "diff": (
+                "--- /dev/null\n"
+                "+++ b/notes/example.txt\n"
+                "@@ -0,0 +1,2 @@\n"
+                "+hello\n"
+                "+world"
+            ),
+        },
+        ToolContext(),
+    )
+
+    assert result["status"] == "completed"
+    assert (tmp_path / "notes" / "example.txt").read_text(encoding="utf-8") == (
+        "hello\nworld"
+    )
+
+
+def test_apply_patch_handle_create_file_replaces_existing_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes" / "example.txt"
+    target.parent.mkdir()
+    target.write_text("old\ncontent", encoding="utf-8")
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "create_file",
+            "path": "notes/example.txt",
+            "diff": "+new\n+content",
+        },
+        ToolContext(),
+    )
+
+    assert result == {
+        "status": "completed",
+        "message": "file exists and was replaced: 'notes/example.txt'",
+    }
+    assert target.read_text(encoding="utf-8") == "new\ncontent"
+
+
+def test_apply_patch_handle_unified_diff_fallback_reports_conversion_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes.txt"
+    target.write_text("hello\nworld", encoding="utf-8")
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "update_file",
+            "path": "notes.txt",
+            "diff": (
+                "--- a/notes.txt\n"
+                "+++ b/notes.txt\n"
+                "@@ -1,2 +1,2 @@\n"
+                " hello\n"
+                "-missing\n"
+                "+there"
+            ),
+        },
+        ToolContext(),
+    )
+
+    assert result["status"] == "failed"
+    assert "Received unified diff syntax" in result["error"]
+    assert "Use a V4A body" in result["error"]
+
+
+def test_apply_patch_handle_update_file_strips_accidental_leading_blank_line(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "TODO.md"
+    target.write_text(
+        "[X] Add focused tests and validate\n[X] Update memory",
+        encoding="utf-8",
+    )
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "update_file",
+            "path": "TODO.md",
+            "diff": (
+                "\n"
+                " [X] Add focused tests and validate\n"
+                " [X] Update memory\n"
+                "+\n"
+                "+<!-- Test comment: apply_patch tool is working! -->"
+            ),
+        },
+        ToolContext(),
+    )
+
+    assert result["status"] == "completed"
+    assert target.read_text(encoding="utf-8") == (
+        "[X] Add focused tests and validate\n"
+        "[X] Update memory\n"
+        "\n"
+        "<!-- Test comment: apply_patch tool is working! -->"
+    )
+
+
+def test_apply_patch_handle_update_file_reports_leading_blank_line_hint(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes.txt"
+    target.write_text("hello\nworld", encoding="utf-8")
+
+    result = apply_patch_tool.handle(
+        {
+            "operation_type": "update_file",
+            "path": "notes.txt",
+            "diff": "\n missing\n+there",
+        },
+        ToolContext(),
+    )
+
+    assert result["status"] == "failed"
+    assert "V4A diff begins with an empty context line" in result["error"]
+    assert "remove the leading blank line" in result["error"]
+
+
 def test_apply_patch_handle_rejects_paths_outside_workspace(
     tmp_path: Path,
     monkeypatch,
