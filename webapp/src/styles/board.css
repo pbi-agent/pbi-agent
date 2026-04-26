@@ -182,8 +182,16 @@
   cursor: grab;
 }
 
+.task-card__chrome-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
 .task-card__grip {
-  align-self: flex-start;
+  flex: 0 0 auto;
   width: 1.25rem;
   height: 1.25rem;
   color: var(--color-text-tertiary);
@@ -208,13 +216,6 @@
 
 .task-card--readonly .task-card__drag-handle {
   cursor: default;
-}
-
-.task-card__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-2);
 }
 
 .task-card__title {

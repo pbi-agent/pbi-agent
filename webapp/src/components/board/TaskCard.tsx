@@ -9,10 +9,7 @@ import { StatusPill } from "../shared/StatusPill";
 export function TaskCardContent({ task }: { task: TaskRecord }) {
   return (
     <>
-      <div className="task-card__top">
-        <CardTitle className="task-card__title">{task.title}</CardTitle>
-        <StatusPill status={task.run_status} />
-      </div>
+      <CardTitle className="task-card__title">{task.title}</CardTitle>
       <p className="task-card__prompt">{task.prompt}</p>
       <div className="task-card__meta">
         <span>{task.project_dir}</span>
@@ -52,7 +49,10 @@ export function TaskCard({
     >
       {/* Drag handle — only this region initiates drag */}
       <CardHeader className="task-card__drag-handle" {...listeners} {...attributes}>
-        <GripVerticalIcon className="task-card__grip" aria-hidden="true" />
+        <div className="task-card__chrome-row">
+          <GripVerticalIcon className="task-card__grip" aria-hidden="true" />
+          <StatusPill status={task.run_status} />
+        </div>
         <TaskCardContent task={task} />
       </CardHeader>
 
