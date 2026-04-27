@@ -69,3 +69,15 @@
 
 - AlertDialog destructive usage: delete dialogs now use `AlertDialogContent size="sm"`, destructive media icon classes (`bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive`), and existing `AlertDialogAction variant="destructive"`. Added `alert-dialog.test.tsx` to assert destructive action/media variants. Validation: focused alert-dialog test, `bun run typecheck`, `bun run lint`, `bun run web:build`.
 - Input mention warnings: `@` paths that resolve outside workspace are ignored without warnings, so pasted aliases like `@/components/ui/button` do not produce noisy "path outside workspace" alerts; missing in-workspace mentions still warn. Validation: focused input-mentions pytest + Ruff check/format.
+
+- Shadcn import alignment: destructive delete dialogs now import UI primitives via shadcn alias paths (`@/components/ui/alert-dialog`, `@/components/ui/alert`) matching examples; `alert-dialog.tsx` already imports `Button` from `@/components/ui/button`. Validation: focused alert-dialog test, `bun run typecheck`, `bun run lint`.
+
+- AlertDialog Button usage check: no source change needed; `webapp/src/components/ui/alert-dialog.tsx` already imports shadcn `Button` from `@/components/ui/button` and wraps `AlertDialogAction`/`AlertDialogCancel` with `<Button ... asChild>`, so destructive actions use the shadcn Button variant.
+
+- AlertDialog hover polish: `AlertDialogAction` and `AlertDialogCancel` keep using shadcn `Button` and now add app-style enabled hover/focus lift + shadow classes (`not-disabled:hover:-translate-y-0.5`, `not-disabled:hover:shadow-sm`, focus-visible equivalents). Test asserts destructive/cancel buttons include hover classes. Validation: focused alert-dialog test, `bun run typecheck`, `bun run lint`, `bun run web:build`.
+
+- AlertDialog hover background fix: analyzed app action hover CSS (`task-card__action-button`/dashboard use `color: var(--foreground); background: var(--muted)`, task cards use `!important`). Moved AlertDialog action/cancel hover from Tailwind classes to `overlays.css` slot selectors with `background: var(--muted) !important`, foreground text, shadow, and lift so it beats shadcn Button variant hover utilities. Added CSS test. Validation: focused alert-dialog+overlays tests, `bun run typecheck`, `bun run lint`, `bun run web:build`.
+
+- AlertDialog outside-click close: Radix AlertDialog prevents pointer-down outside by design, so added app-level overlay click handling in `alert-dialog.tsx`; root now supports controlled/uncontrolled open state via context and overlay calls `setOpen(false)` when clicking backdrop. Added test for overlay click close. Validation: focused alert-dialog test, `bun run typecheck`, `bun run lint`, `bun run web:build`.
+
+- AlertDialog outside-click revert: removed app-level overlay click close/context state and restored Radix AlertDialog default behavior so users must click Cancel/action. Removed overlay-click test. Validation: focused alert-dialog+overlays tests, `bun run typecheck`, `bun run lint`, `bun run web:build`.

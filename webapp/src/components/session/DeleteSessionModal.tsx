@@ -10,8 +10,8 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
-} from "../ui/alert-dialog";
-import { Alert, AlertDescription } from "../ui/alert";
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function DeleteSessionModal({
   session,

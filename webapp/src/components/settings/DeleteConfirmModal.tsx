@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Trash2Icon } from "lucide-react";
-import { Alert, AlertDescription } from "../ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
-} from "../ui/alert-dialog";
+} from "@/components/ui/alert-dialog";
 
 interface Props {
   title: string;
