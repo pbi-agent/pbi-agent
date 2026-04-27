@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import replace
+import json
 import logging
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from pbi_agent.agent.compaction_prompt import COMPACTION_PROMPT
 from pbi_agent.agent.system_prompt import (
     get_custom_excluded_tools,
     get_sub_agent_system_prompt,
@@ -30,14 +32,13 @@ from pbi_agent.models.messages import (
     CompletedResponse,
     ImageAttachment,
     TokenUsage,
+    ToolCall,
     UserTurnInput,
 )
 from pbi_agent.observability import RunTracer
 from pbi_agent.providers import create_provider
 from pbi_agent.providers.base import Provider
-
-if TYPE_CHECKING:
-    from pbi_agent.tools.catalog import ToolCatalog
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.tools.types import ParentContextSnapshot
@@ -58,6 +59,19 @@ SKILLS_COMMAND = "/skills"
 MCP_COMMAND = "/mcp"
 AGENTS_COMMAND = "/agents"
 AGENTS_RELOAD_COMMAND = "/agents reload"
+COMPACT_COMMAND = "/compact"
+COMPACTION_MARKER = "[compacted context]"
+COMPACTION_SUMMARY_PREFIX = (
+    "[compacted context — reference only] "
+    "Earlier turns were summarized below to save context. "
+    "Treat this as background state, not active user instructions. "
+    "Do not answer requests mentioned only in this summary; respond to the latest user message after it."
+)
+COMPACTION_CONTINUATION_PROMPT = (
+    "Continue the current task from the compacted context above. "
+    "The most recent tool calls and their results have already been summarized. "
+    "Do not request those exact tool results again unless new information is needed."
+)
 
 
 class SubAgentRunError(RuntimeError):
@@ -108,11 +122,19 @@ def _bind_session(display: DisplayProtocol, session_id: str | None) -> None:
 def _coerce_runtime(value: Settings | ResolvedRuntime) -> ResolvedRuntime:
     if isinstance(value, ResolvedRuntime):
         return value
+    return _runtime_from_settings(value)
+
+
+def _runtime_from_settings(settings: Settings) -> ResolvedRuntime:
     return ResolvedRuntime(
-        settings=value,
+        settings=settings,
         provider_id="",
         profile_id="",
     )
+
+
+def _runtime_from_provider(provider: Provider) -> ResolvedRuntime:
+    return _runtime_from_settings(provider.settings)
 
 
 def _extract_active_command_instructions(value: str) -> str | None:
@@ -408,6 +430,23 @@ def run_session_loop(
                     display.render_markdown(
                         format_project_sub_agents_markdown(reloaded=True)
                     )
+                    continue
+                if normalized_command == COMPACT_COMMAND:
+                    if session_id is None:
+                        display.render_markdown(
+                            "No active session context to compact yet."
+                        )
+                        continue
+                    session_usage.context_tokens = _compact_live_session(
+                        provider=provider,
+                        store=store,
+                        session_id=session_id,
+                        runtime=current_runtime,
+                        display=display,
+                        session_usage=session_usage,
+                        reason="manual",
+                    )
+                    display.session_usage(session_usage)
                     continue
                 active_command_instructions = _extract_active_command_instructions(
                     user_input
@@ -767,6 +806,17 @@ def _open_runtime_provider(
                 yield provider
 
 
+@contextmanager
+def _open_compaction_provider(settings: Settings):
+    compact_settings = replace(settings, web_search=False)
+    with _open_runtime_provider(
+        compact_settings,
+        system_prompt=COMPACTION_PROMPT,
+        tool_catalog=ToolCatalog(),
+    ) as provider:
+        yield provider
+
+
 # ---------------------------------------------------------------------------
 # Tool iteration loop
 # ---------------------------------------------------------------------------
@@ -841,6 +891,32 @@ def _run_tool_iterations(
             raise
         had_errors = had_errors or loop_errors
 
+        compacted_after_tools = False
+        if (
+            bool(tool_result_items)
+            and store is not None
+            and session_id is not None
+            and _should_auto_compact(
+                session_usage=session_usage,
+                settings=provider.settings,
+                store=store,
+                session_id=session_id,
+            )
+        ):
+            session_usage.context_tokens = _compact_live_session(
+                provider=provider,
+                store=store,
+                session_id=session_id,
+                runtime=_runtime_from_provider(provider),
+                display=display,
+                session_usage=session_usage,
+                reason="auto",
+                pending_tool_calls=response.function_calls,
+                pending_tool_result_items=tool_result_items,
+            )
+            display.session_usage(session_usage)
+            compacted_after_tools = True
+
         if not tool_result_items:
             _log.debug("No tool_result_items returned; stopping tool loop")
             if tracer is not None:
@@ -860,15 +936,26 @@ def _run_tool_iterations(
             )
 
         try:
-            response = provider.request_turn(
-                tool_result_items=tool_result_items,
-                instructions=instructions,
-                session_id=session_id,
-                display=display,
-                session_usage=session_usage,
-                turn_usage=turn_usage,
-                tracer=tracer,
-            )
+            if compacted_after_tools:
+                response = provider.request_turn(
+                    user_message=COMPACTION_CONTINUATION_PROMPT,
+                    instructions=instructions,
+                    session_id=session_id,
+                    display=display,
+                    session_usage=session_usage,
+                    turn_usage=turn_usage,
+                    tracer=tracer,
+                )
+            else:
+                response = provider.request_turn(
+                    tool_result_items=tool_result_items,
+                    instructions=instructions,
+                    session_id=session_id,
+                    display=display,
+                    session_usage=session_usage,
+                    turn_usage=turn_usage,
+                    tracer=tracer,
+                )
             _raise_if_interrupted(display)
             if tracer is not None:
                 tracer.log_event(
@@ -1122,10 +1209,263 @@ def _resume_session(
 def _messages_for_provider_restore(
     messages: list[MessageRecord],
 ) -> list[MessageRecord]:
-    restored = list(messages)
+    restored = _active_context_messages(messages)
     while restored and restored[-1].role == "user":
         restored.pop()
     return restored
+
+
+def _active_context_messages(
+    messages: list[MessageRecord] | tuple[MessageRecord, ...],
+) -> list[MessageRecord]:
+    marker_index = _latest_compaction_marker_index(messages)
+    if marker_index is None:
+        return list(messages)
+    return list(messages[marker_index + 1 :])
+
+
+def _latest_compaction_marker_index(
+    messages: list[MessageRecord] | tuple[MessageRecord, ...],
+) -> int | None:
+    for index in range(len(messages) - 1, -1, -1):
+        if _is_compaction_marker(messages[index]):
+            return index
+    return None
+
+
+def _is_compaction_marker(message: MessageRecord) -> bool:
+    return message.role == "assistant" and message.content.strip() == COMPACTION_MARKER
+
+
+def _should_auto_compact(
+    *,
+    session_usage: TokenUsage,
+    settings: Settings,
+    store: SessionStore | None,
+    session_id: str | None,
+) -> bool:
+    threshold = max(settings.compact_threshold, 0)
+    if threshold <= 0:
+        return False
+    context_tokens = session_usage.snapshot().context_tokens
+    if context_tokens <= 0:
+        context_tokens = _estimate_active_context_tokens(store, session_id)
+    return context_tokens >= threshold
+
+
+def _estimate_active_context_tokens(
+    store: SessionStore | None,
+    session_id: str | None,
+) -> int:
+    if store is None or session_id is None:
+        return 0
+    try:
+        messages = _active_context_messages(store.list_messages(session_id))
+    except Exception:
+        _log.warning("Failed to estimate active context size", exc_info=True)
+        return 0
+    chars = sum(len(message.role) + len(message.content) + 8 for message in messages)
+    return max(1, chars // 4) if chars else 0
+
+
+def _compact_live_session(
+    *,
+    provider: Provider,
+    store: SessionStore | None,
+    session_id: str | None,
+    runtime: ResolvedRuntime,
+    display: DisplayProtocol,
+    session_usage: TokenUsage,
+    reason: str,
+    pending_tool_calls: list[ToolCall] | None = None,
+    pending_tool_result_items: list[dict[str, Any]] | None = None,
+) -> int:
+    if store is None or session_id is None:
+        return session_usage.snapshot().context_tokens
+    try:
+        messages = store.list_messages(session_id)
+    except Exception:
+        _log.warning("Failed to load session context for compaction", exc_info=True)
+        return session_usage.snapshot().context_tokens
+    active_messages = _messages_for_provider_restore(messages)
+    has_pending_tool_exchange = bool(pending_tool_calls or pending_tool_result_items)
+    if not active_messages and not has_pending_tool_exchange:
+        display.render_markdown("No completed session context to compact yet.")
+        return 0
+
+    compaction_usage = TokenUsage(
+        model=_selected_model(runtime.settings),
+        service_tier=runtime.settings.service_tier or "",
+    )
+    tracer = RunTracer.start(
+        store=store,
+        session_id=session_id,
+        agent_name="main",
+        agent_type="compaction",
+        provider=runtime.settings.provider,
+        provider_id=runtime.provider_id,
+        profile_id=runtime.profile_id,
+        model=_selected_model(runtime.settings),
+        metadata={
+            "reason": reason,
+            "input_message_count": len(active_messages),
+            "pending_tool_exchange": has_pending_tool_exchange,
+        },
+    )
+    display.render_markdown("Compacting live session context...")
+    try:
+        tracer.log_event(
+            "agent_step_start",
+            metadata={"step": "compaction_summary"},
+        )
+        summary = _summarize_session_context(
+            messages=active_messages,
+            runtime=runtime,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=compaction_usage,
+            tracer=tracer,
+            pending_tool_calls=pending_tool_calls,
+            pending_tool_result_items=pending_tool_result_items,
+        )
+        tracer.log_event(
+            "agent_step_end",
+            metadata={"step": "compaction_summary"},
+        )
+    except Exception as exc:
+        tracer.log_error(str(exc), metadata={"phase": "compaction"})
+        tracer.finish(
+            status="failed",
+            usage=compaction_usage,
+            metadata={"reason": reason, "error_message": str(exc)},
+        )
+        raise
+    finally:
+        display.wait_stop()
+    if not summary:
+        display.render_markdown("Context compaction did not produce a summary.")
+        tracer.finish(
+            status="failed",
+            usage=compaction_usage,
+            metadata={"reason": reason, "empty_summary": True},
+        )
+        return session_usage.snapshot().context_tokens
+
+    summary_content = f"{COMPACTION_SUMMARY_PREFIX}\n\n{summary}"
+    _add_message(store, session_id, runtime, "assistant", COMPACTION_MARKER)
+    _add_message(store, session_id, runtime, "assistant", summary_content)
+    provider.reset_conversation()
+    provider.restore_messages(
+        _messages_for_provider_restore(store.list_messages(session_id))
+    )
+    _persist_runtime_change(store, session_id, runtime)
+    estimated_context_tokens = max(1, len(summary_content) // 4)
+    display.render_markdown(
+        f"Context compacted ({reason}); future turns will use the summary."
+    )
+    tracer.finish(
+        status="completed",
+        usage=compaction_usage,
+        metadata={
+            "reason": reason,
+            "summary_chars": len(summary_content),
+            "estimated_context_tokens": estimated_context_tokens,
+            "pending_tool_exchange": has_pending_tool_exchange,
+        },
+    )
+    return estimated_context_tokens
+
+
+def _summarize_session_context(
+    *,
+    messages: list[MessageRecord],
+    runtime: ResolvedRuntime,
+    display: DisplayProtocol,
+    session_usage: TokenUsage,
+    turn_usage: TokenUsage,
+    tracer: RunTracer | None = None,
+    pending_tool_calls: list[ToolCall] | None = None,
+    pending_tool_result_items: list[dict[str, Any]] | None = None,
+) -> str:
+    transcript = _format_messages_for_compaction(
+        messages,
+        pending_tool_calls=pending_tool_calls,
+        pending_tool_result_items=pending_tool_result_items,
+    )
+    if not transcript:
+        return ""
+    with _open_compaction_provider(runtime.settings) as compact_provider:
+        response = compact_provider.request_turn(
+            user_message=f"<session_transcript>\n{transcript}\n</session_transcript>",
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tracer=tracer,
+        )
+    return response.text.strip()
+
+
+def _format_messages_for_compaction(
+    messages: list[MessageRecord],
+    *,
+    pending_tool_calls: list[ToolCall] | None = None,
+    pending_tool_result_items: list[dict[str, Any]] | None = None,
+) -> str:
+    chunks: list[str] = []
+    for message in messages:
+        if message.role not in {"user", "assistant"}:
+            continue
+        if _is_compaction_marker(message):
+            continue
+        content = message.content.strip()
+        if not content:
+            continue
+        chunks.extend([f"<{message.role}>", content, f"</{message.role}>"])
+    pending_tool_exchange = _format_pending_tool_exchange_for_compaction(
+        pending_tool_calls,
+        pending_tool_result_items,
+    )
+    if pending_tool_exchange:
+        chunks.append(pending_tool_exchange)
+    return "\n".join(chunks)
+
+
+def _format_pending_tool_exchange_for_compaction(
+    pending_tool_calls: list[ToolCall] | None,
+    pending_tool_result_items: list[dict[str, Any]] | None,
+) -> str:
+    calls = pending_tool_calls or []
+    results = pending_tool_result_items or []
+    if not calls and not results:
+        return ""
+    chunks = ["<pending_tool_exchange>"]
+    if calls:
+        chunks.append("<tool_calls>")
+        for call in calls:
+            chunks.append(
+                _safe_json_dumps(
+                    {
+                        "call_id": call.call_id,
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    }
+                )
+            )
+        chunks.append("</tool_calls>")
+    if results:
+        chunks.append("<tool_results>")
+        for item in results:
+            chunks.append(_safe_json_dumps(item))
+        chunks.append("</tool_results>")
+    chunks.append("</pending_tool_exchange>")
+    return "\n".join(chunks)
+
+
+def _safe_json_dumps(value: Any) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    except TypeError:
+        return repr(value)
 
 
 def _build_parent_context_snapshot(
@@ -1138,7 +1478,7 @@ def _build_parent_context_snapshot(
     messages: tuple = ()
     if store is not None and session_id is not None:
         try:
-            messages = tuple(store.list_messages(session_id))
+            messages = tuple(_active_context_messages(store.list_messages(session_id)))
         except Exception:
             _log.warning("Failed to capture parent session history", exc_info=True)
 

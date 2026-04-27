@@ -41,7 +41,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             reasoning_effort="medium",
             max_tool_workers=4,
             max_retries=3,
-            compact_threshold=150000,
+            compact_threshold=200000,
             service_tier=None,
         )
 

@@ -102,7 +102,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--reasoning-effort", default="xhigh")
     parser.add_argument("--max-tool-workers", type=int, default=4)
     parser.add_argument("--max-retries", type=int, default=3)
-    parser.add_argument("--compact-threshold", type=int, default=150000)
+    parser.add_argument("--compact-threshold", type=int, default=200000)
     parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--service-tier", default=None)

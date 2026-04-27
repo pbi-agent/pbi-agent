@@ -24,7 +24,7 @@ class ToolCatalog:
         return len(self._entries)
 
     def __bool__(self) -> bool:
-        return bool(self._entries)
+        return True
 
     @classmethod
     def from_builtin_registry(cls) -> "ToolCatalog":

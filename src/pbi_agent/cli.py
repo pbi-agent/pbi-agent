@@ -234,7 +234,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--compact-threshold",
         type=int,
         default=None,
-        help="Context compaction token threshold (default: 150000).",
+        help="Context compaction token threshold (default: 200000).",
     )
 
     diagnostics_group = parser.add_argument_group("Diagnostics")

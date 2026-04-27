@@ -94,7 +94,7 @@ def _make_settings(**overrides: object) -> Settings:
         "max_tokens": DEFAULT_MAX_TOKENS,
         "reasoning_effort": "high",
         "max_retries": 0,
-        "compact_threshold": 150000,
+        "compact_threshold": 200000,
     }
     defaults.update(overrides)
     return Settings(**defaults)

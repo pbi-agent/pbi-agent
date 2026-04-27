@@ -20,7 +20,7 @@ The CLI calls `load_dotenv()` during settings resolution, so a local `.env` file
 | `PBI_AGENT_REASONING_EFFORT` | `xhigh` for OpenAI; `high` otherwise | Requested reasoning effort. Providers may map this to provider-specific values internally. |
 | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum tool execution workers. |
 | `PBI_AGENT_MAX_RETRIES` | `3` | Retry count for transient provider failures. |
-| `PBI_AGENT_COMPACT_THRESHOLD` | `150000` | Intended context compaction threshold for OpenAI. |
+| `PBI_AGENT_COMPACT_THRESHOLD` | `200000` | Intended context compaction threshold for OpenAI. |
 | `PBI_AGENT_RESPONSES_URL` | provider-specific | Responses or Interactions endpoint override for OpenAI, xAI, or Google. |
 | `PBI_AGENT_GENERIC_API_URL` | `https://openrouter.ai/api/v1/chat/completions` | Chat Completions endpoint override for the Generic backend. |
 | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |

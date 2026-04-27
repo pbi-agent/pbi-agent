@@ -158,7 +158,7 @@ def _make_settings(**overrides: object) -> Settings:
         "max_tokens": DEFAULT_MAX_TOKENS,
         "reasoning_effort": "xhigh",
         "max_retries": 0,
-        "compact_threshold": 150000,
+        "compact_threshold": 200000,
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -260,7 +260,7 @@ def test_openai_build_request_body_uses_http_responses_shape() -> None:
     assert body["parallel_tool_calls"] is True
     assert body["prompt_cache_retention"] == "24h"
     assert body["context_management"] == [
-        {"type": "compaction", "compact_threshold": 150000}
+        {"type": "compaction", "compact_threshold": 200000}
     ]
     assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert body["input"] == [{"role": "user", "content": "hello"}]

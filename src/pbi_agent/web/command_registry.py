@@ -32,6 +32,11 @@ COMMANDS: tuple[SlashCommand, ...] = (
         description="Show discovered project sub-agents",
         hidden_keywords="sub-agent subagent agent agents reload list",
     ),
+    SlashCommand(
+        name="/compact",
+        description="Summarize the live session to reduce model context",
+        hidden_keywords="compact context summarize summary token tokens",
+    ),
 )
 
 SlashCommandTuple = tuple[str, str, str, str]

@@ -67,7 +67,7 @@ uv run pbi-agent web
       "web_search": true,
       "max_tool_workers": 4,
       "max_retries": 3,
-      "compact_threshold": 150000
+      "compact_threshold": 200000
     }
   ],
   "active_model_profile": "analysis"

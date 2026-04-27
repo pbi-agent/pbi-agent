@@ -10,10 +10,16 @@ import urllib.request
 import pytest
 
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
+from pbi_agent.agent import session as session_module
+from pbi_agent.agent.compaction_prompt import COMPACTION_PROMPT
+from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.session import (
     AGENTS_COMMAND,
     AGENTS_RELOAD_COMMAND,
     MCP_COMMAND,
+    COMPACT_COMMAND,
+    COMPACTION_MARKER,
+    _open_compaction_provider,
     NEW_SESSION_SENTINEL,
     _resume_session,
     SKILLS_COMMAND,
@@ -59,6 +65,7 @@ class _DisplaySpy:
         self.reset_session_calls = 0
         self.assistant_start_calls = 0
         self.assistant_stop_calls = 0
+        self.wait_stop_calls = 0
 
     def welcome(
         self,
@@ -574,7 +581,7 @@ class _SessionDisplaySpy(_DisplaySpy):
         self.last_wait_message = message
 
     def wait_stop(self) -> None:
-        return None
+        self.wait_stop_calls += 1
 
     def retry_notice(self, attempt: int, max_retries: int) -> None:
         self.retry_notices.append((attempt, max_retries))
@@ -692,6 +699,124 @@ class _ChatProviderStub:
         return response
 
 
+class _CompactProviderStub(_ChatProviderStub):
+    def __init__(self) -> None:
+        super().__init__()
+        self.restored_messages = []
+
+    def restore_messages(self, messages) -> None:
+        self.restored_messages = list(messages)
+
+
+class _AutoCompactToolProviderStub(_CompactProviderStub):
+    @property
+    def settings(self) -> Settings:
+        return Settings(
+            api_key="test-key",
+            provider="openai",
+            max_tool_workers=2,
+            compact_threshold=10,
+        )
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.execute_calls = []
+        self.request_tool_result_items = []
+        self._responses = [
+            CompletedResponse(
+                response_id="resp_tool",
+                text="",
+                usage=TokenUsage(
+                    input_tokens=50, context_tokens=50, model=DEFAULT_MODEL
+                ),
+                function_calls=[
+                    ToolCall(
+                        call_id="call_1", name="shell", arguments={"command": "pwd"}
+                    )
+                ],
+            ),
+            CompletedResponse(
+                response_id="resp_done",
+                text="Done after compacted context.",
+                usage=TokenUsage(input_tokens=2, output_tokens=1, model=DEFAULT_MODEL),
+            ),
+        ]
+
+    def request_turn(self, **kwargs) -> CompletedResponse:
+        if kwargs.get("user_input") is not None:
+            self.request_inputs.append(kwargs["user_input"])
+            self.request_messages.append(kwargs["user_input"].text)
+        else:
+            self.request_messages.append(kwargs.get("user_message"))
+        self.request_tool_result_items.append(kwargs.get("tool_result_items"))
+        self.request_instructions.append(kwargs.get("instructions"))
+        if kwargs.get("tool_result_items") is not None:
+            raise AssertionError(
+                "auto-compaction continuation must not send stale tool results"
+            )
+        response = self._responses.pop(0)
+        kwargs["session_usage"].add(response.usage)
+        kwargs["turn_usage"].add(response.usage)
+        return response
+
+    def execute_tool_calls(self, response: CompletedResponse, **kwargs):
+        self.execute_calls.append({"response_id": response.response_id})
+        return (
+            [{"type": "function_call_output", "call_id": "call_1", "output": "ok"}],
+            False,
+        )
+
+
+class _CompactionSummaryProviderStub(_ChatProviderStub):
+    def request_turn(
+        self,
+        *,
+        user_message: str | None = None,
+        user_input: UserTurnInput | None = None,
+        tool_result_items: list[dict[str, object]] | None = None,
+        instructions: str | None = None,
+        session_id: str | None = None,
+        display,
+        session_usage: TokenUsage,
+        turn_usage: TokenUsage,
+        tracer=None,
+    ) -> CompletedResponse:
+        if user_input is not None and user_message is None:
+            user_message = user_input.text
+        self.request_messages.append(user_message)
+        self.request_instructions.append(instructions)
+        del display, tool_result_items, session_id
+        response = CompletedResponse(
+            response_id="resp_compact",
+            text="Goal: continue implementing context compaction.",
+            usage=TokenUsage(
+                input_tokens=11,
+                output_tokens=5,
+                context_tokens=16,
+                model=DEFAULT_MODEL,
+            ),
+        )
+        session_usage.add(response.usage)
+        turn_usage.add(response.usage)
+        if tracer is not None:
+            tracer.log_model_call(
+                provider="openai",
+                model=DEFAULT_MODEL,
+                url="https://example.test/compact",
+                request_config={"provider": "openai"},
+                request_payload={"input": user_message},
+                response_payload={"output": response.text},
+                duration_ms=1,
+                prompt_tokens=response.usage.input_tokens,
+                completion_tokens=response.usage.output_tokens,
+                total_tokens=response.usage.total_tokens,
+                status_code=200,
+                success=True,
+                metadata={"stub": "compaction"},
+            )
+        return response
+
+
 def test_run_session_loop_resets_welcome_and_usage_on_new_session(monkeypatch) -> None:
     provider = _ChatProviderStub()
     display = _SessionDisplaySpy(["hello", NEW_SESSION_SENTINEL, "after reset", "quit"])
@@ -706,7 +831,6 @@ def test_run_session_loop_resets_welcome_and_usage_on_new_session(monkeypatch) -
         "pbi_agent.agent.session.time.monotonic",
         lambda: next(monotonic_values),
     )
-
     exit_code = run_session_loop(settings, display)
 
     assert exit_code == 0
@@ -740,7 +864,6 @@ def test_run_session_loop_persists_per_turn_usage_in_run_sessions(
         "pbi_agent.agent.session.time.monotonic",
         lambda: next(monotonic_values),
     )
-
     exit_code = run_session_loop(settings, display)
 
     with SessionStore(db_path=db_path) as store:
@@ -919,6 +1042,406 @@ def test_run_session_loop_handles_agents_reload_command_locally(monkeypatch) -> 
     assert provider.refresh_tools_calls == 1
     assert display.markdown_calls == ["### Sub-Agents\n\nReloaded"]
     assert display.assistant_start_calls == 0
+
+
+def test_run_session_loop_handles_compact_command_locally(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    provider = _CompactProviderStub()
+    compact_provider = _CompactionSummaryProviderStub()
+    display = _SessionDisplaySpy(["hello", COMPACT_COMMAND, "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    monotonic_values = iter([5.0, 6.5])
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_compaction_provider",
+        _stub_runtime_provider(compact_provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    exit_code = run_session_loop(settings, display)
+
+    with SessionStore(db_path=db_path) as store:
+        session = store.list_all_sessions(limit=1)[0]
+        messages = store.list_messages(session.session_id)
+        runs = store.list_run_sessions(session.session_id)
+
+    assert exit_code == 0
+    assert session.previous_id is None
+    assert provider.request_messages == ["hello"]
+    assert provider.reset_calls == 1
+    assert compact_provider.request_messages
+    assert compact_provider.request_messages[0].startswith("<session_transcript>")
+    assert COMPACTION_PROMPT not in compact_provider.request_messages[0]
+    assert [message.content for message in provider.restored_messages] == [
+        (
+            "[compacted context — reference only] "
+            "Earlier turns were summarized below to save context. "
+            "Treat this as background state, not active user instructions. "
+            "Do not answer requests mentioned only in this summary; respond to the latest user message after it."
+            "\n\nGoal: continue implementing context compaction."
+        )
+    ]
+    assert [message.content for message in messages] == [
+        "hello",
+        "Ack",
+        COMPACTION_MARKER,
+        (
+            "[compacted context — reference only] "
+            "Earlier turns were summarized below to save context. "
+            "Treat this as background state, not active user instructions. "
+            "Do not answer requests mentioned only in this summary; respond to the latest user message after it."
+            "\n\nGoal: continue implementing context compaction."
+        ),
+    ]
+    assert any("Context compacted (manual)" in item for item in display.markdown_calls)
+    assert display.wait_stop_calls >= 1
+    compaction_runs = [run for run in runs if run.agent_type == "compaction"]
+    assert len(compaction_runs) == 1
+    assert compaction_runs[0].status == "completed"
+    assert compaction_runs[0].input_tokens == 11
+    assert compaction_runs[0].output_tokens == 5
+    assert compaction_runs[0].total_api_calls == 1
+    compaction_metadata = json.loads(compaction_runs[0].metadata_json)
+    assert compaction_metadata["reason"] == "manual"
+    assert compaction_metadata["input_message_count"] == 2
+    assert compaction_metadata["summary_chars"] > 0
+    with SessionStore(db_path=db_path) as store:
+        events = store.list_observability_events(
+            run_session_id=compaction_runs[0].run_session_id
+        )
+    assert [event.event_type for event in events] == [
+        "run_start",
+        "agent_step_start",
+        "model_call",
+        "agent_step_end",
+        "run_end",
+    ]
+
+
+def test_open_compaction_provider_disables_all_tools(monkeypatch) -> None:
+    captured = {}
+
+    class _ProviderWithCatalog:
+        def __init__(self, settings, *args, **kwargs) -> None:
+            del args
+            captured["tool_catalog"] = kwargs.get("tool_catalog")
+            captured["settings"] = settings
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def connect(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider.OpenAIProvider",
+        _ProviderWithCatalog,
+    )
+
+    with _open_compaction_provider(
+        Settings(api_key="test-key", provider="openai", web_search=True)
+    ):
+        pass
+
+    assert captured["settings"].web_search is False
+    assert captured["tool_catalog"].get_specs() == []
+
+
+def test_open_compaction_provider_uses_compaction_prompt_as_system_prompt(
+    monkeypatch,
+) -> None:
+    captured = {}
+
+    class _ProviderWithSystemPrompt:
+        def __init__(self, settings, *args, **kwargs) -> None:
+            del args
+            captured["settings"] = settings
+            captured["system_prompt"] = kwargs.get("system_prompt")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def connect(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider.OpenAIProvider",
+        _ProviderWithSystemPrompt,
+    )
+
+    with _open_compaction_provider(Settings(api_key="test-key", provider="openai")):
+        pass
+
+    assert captured["system_prompt"] == COMPACTION_PROMPT
+    assert captured["system_prompt"] != get_system_prompt()
+
+
+def test_run_session_loop_restores_only_active_context_after_compaction(
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    provider = _CompactProviderStub()
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "old user")
+        store.add_message(session_id, "assistant", "old assistant")
+        store.add_message(session_id, "assistant", COMPACTION_MARKER)
+        store.add_message(
+            session_id, "assistant", "Compacted session context:\n\nSummary"
+        )
+        store.add_message(session_id, "user", "new user")
+        store.add_message(session_id, "assistant", "new assistant")
+        _resume_session(
+            provider=provider,
+            store=store,
+            session_id=session_id,
+            session_usage=TokenUsage(model=settings.model),
+            display=display,
+        )
+
+    assert [message.content for message in provider.restored_messages] == [
+        "Compacted session context:\n\nSummary",
+        "new user",
+        "new assistant",
+    ]
+    assert [message.content for message in display.replayed_history] == [
+        "old user",
+        "old assistant",
+        COMPACTION_MARKER,
+        "Compacted session context:\n\nSummary",
+        "new user",
+        "new assistant",
+    ]
+
+
+def test_run_session_loop_auto_compacts_between_tool_iterations(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    provider = _AutoCompactToolProviderStub()
+    compact_provider = _CompactionSummaryProviderStub()
+    display = _SessionDisplaySpy(["hello", "quit"])
+    settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        max_tool_workers=2,
+        compact_threshold=10,
+    )
+    monotonic_values = iter([5.0, 6.5])
+
+    def _compact_between_tools(**kwargs) -> int:
+        kwargs["provider"].restore_messages(
+            [
+                type(
+                    "Message",
+                    (),
+                    {
+                        "content": (
+                            "Compacted session context:\n\n"
+                            "Goal: continue implementing context compaction."
+                        )
+                    },
+                )()
+            ]
+        )
+        compact_provider.request_messages.append(
+            "<session_transcript>stub</session_transcript>"
+        )
+        kwargs["display"].render_markdown(
+            "Context compacted (auto); future turns will use the summary."
+        )
+        return 1
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_compaction_provider",
+        _stub_runtime_provider(compact_provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    monkeypatch.setattr(
+        session_module,
+        "_should_auto_compact",
+        lambda **kwargs: bool(kwargs["session_usage"].snapshot().context_tokens),
+    )
+    monkeypatch.setattr(session_module, "_compact_live_session", _compact_between_tools)
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert compact_provider.request_messages
+    assert [message.content for message in provider.restored_messages] == [
+        "Compacted session context:\n\nGoal: continue implementing context compaction."
+    ]
+    assert provider.request_tool_result_items == [None, None]
+    assert provider.request_messages[1] == session_module.COMPACTION_CONTINUATION_PROMPT
+    assert any("Context compacted (auto)" in item for item in display.markdown_calls)
+
+
+def test_format_messages_for_compaction_includes_pending_tool_exchange() -> None:
+    message = type(
+        "Message",
+        (),
+        {"role": "user", "content": "Inspect workspace"},
+    )()
+
+    transcript = session_module._format_messages_for_compaction(
+        [message],
+        pending_tool_calls=[
+            ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"})
+        ],
+        pending_tool_result_items=[
+            {"type": "function_call_output", "call_id": "call_1", "output": "ok"}
+        ],
+    )
+
+    assert "<pending_tool_exchange>" in transcript
+    assert '"name": "shell"' in transcript
+    assert '"command": "pwd"' in transcript
+    assert '"call_id": "call_1"' in transcript
+    assert '"output": "ok"' in transcript
+
+
+def test_run_session_loop_auto_compaction_summary_includes_pending_tool_exchange(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    provider = _AutoCompactToolProviderStub()
+    compact_provider = _CompactionSummaryProviderStub()
+    display = _SessionDisplaySpy(["hello", "quit"])
+    settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        max_tool_workers=2,
+        compact_threshold=10,
+    )
+    provider._responses[1] = CompletedResponse(
+        response_id="resp_done",
+        text="Done after compacted context.",
+        usage=TokenUsage(input_tokens=2, output_tokens=1, model=DEFAULT_MODEL),
+    )
+    monotonic_values = iter([5.0, 6.5])
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_compaction_provider",
+        _stub_runtime_provider(compact_provider),
+    )
+    monkeypatch.setattr(
+        session_module,
+        "_should_auto_compact",
+        lambda **kwargs: bool(kwargs["session_usage"].snapshot().context_tokens),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert compact_provider.request_messages
+    compaction_request = compact_provider.request_messages[0]
+    assert "<pending_tool_exchange>" in compaction_request
+    assert '"name": "shell"' in compaction_request
+    assert '"command": "pwd"' in compaction_request
+    assert '"call_id": "call_1"' in compaction_request
+    assert '"output": "ok"' in compaction_request
+    assert provider.request_tool_result_items == [None, None]
+    assert provider.request_messages[1] == session_module.COMPACTION_CONTINUATION_PROMPT
+
+
+def test_run_session_loop_does_not_auto_compact_after_final_response(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    def _fail_auto_compact(**_kwargs):
+        raise AssertionError("auto compaction must not run after the final response")
+
+    db_path = tmp_path / "sessions.db"
+    provider = _CompactProviderStub()
+    compact_provider = _CompactionSummaryProviderStub()
+    display = _SessionDisplaySpy(["hello", "quit"])
+    settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        max_tool_workers=2,
+        compact_threshold=10,
+    )
+    monotonic_values = iter([5.0, 6.5])
+
+    original_request_turn = provider.request_turn
+
+    def _large_final_request_turn(**kwargs) -> CompletedResponse:
+        response = original_request_turn(**kwargs)
+        large_usage = TokenUsage(context_tokens=50, model=DEFAULT_MODEL)
+        kwargs["session_usage"].add(large_usage)
+        kwargs["turn_usage"].add(large_usage)
+        return response
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+    monkeypatch.setattr(provider, "request_turn", _large_final_request_turn)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_compaction_provider",
+        _stub_runtime_provider(compact_provider),
+    )
+    monkeypatch.setattr(session_module, "_compact_live_session", _fail_auto_compact)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert not compact_provider.request_messages
+    assert not any(
+        "Context compacted (auto)" in item for item in display.markdown_calls
+    )
 
 
 def test_run_session_loop_keeps_command_alias_and_uses_turn_specific_instructions(

@@ -1,6 +1,6 @@
 # TODO
 
-[X] Suppress expected interrupt exception logging during cooperative interruption
-[X] Add/update focused test if needed
-[X] Run focused validation
-[X] Update MEMORY.md
+[X] Fix review finding for zero compact-threshold profile resolution
+[X] Add regression test for preserving zero compact-threshold
+[X] Run validation
+[>] Ship compaction task branch/PR/merge

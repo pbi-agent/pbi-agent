@@ -300,6 +300,12 @@ class _EventDisplayBase(DisplayProtocol):
             return
         self._waiting_message = None
         self._publish("wait_state", {"active": False})
+        if self._processing_phase == "model_wait":
+            self._processing_phase = None
+            self._publish(
+                "processing_state",
+                {"active": False, "phase": None, "message": None},
+            )
 
     def render_markdown(self, text: str) -> None:
         self._publish(

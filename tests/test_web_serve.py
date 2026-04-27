@@ -44,6 +44,7 @@ from pbi_agent.session_store import (
     WebManagerLeaseBusyError,
 )
 from pbi_agent.display.protocol import PendingToolCall, QueuedInput, QueuedRuntimeChange
+from pbi_agent.web.display import WebDisplay
 from pbi_agent.web.session_manager import WebSessionManager
 from pbi_agent.web.serve import PBIWebServer, create_app
 
@@ -453,6 +454,11 @@ def test_slash_command_search_endpoint_returns_web_commands(
             "description": "Show discovered project sub-agents",
             "kind": "local_command",
         },
+        {
+            "name": "/compact",
+            "description": "Summarize the live session to reduce model context",
+            "kind": "local_command",
+        },
     ]
 
 
@@ -483,6 +489,11 @@ def test_slash_command_search_endpoint_includes_command_file_commands(
         {
             "name": "/agents",
             "description": "Show discovered project sub-agents",
+            "kind": "local_command",
+        },
+        {
+            "name": "/compact",
+            "description": "Summarize the live session to reduce model context",
             "kind": "local_command",
         },
         {
@@ -1649,6 +1660,23 @@ def test_session_stream_replays_state_events() -> None:
         {"starting"}
     )
     assert {event["payload"]["state"] for event in state_events} & {"running", "ended"}
+
+
+def test_web_display_wait_stop_clears_model_wait_processing() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+
+    display.wait_start("analyzing your request...")
+    display.wait_stop()
+
+    assert published[-2:] == [
+        ("wait_state", {"active": False}),
+        ("processing_state", {"active": False, "phase": None, "message": None}),
+    ]
 
 
 def test_interrupt_live_session_requires_active_processing() -> None:

@@ -282,6 +282,37 @@ def test_resolve_web_runtime_uses_selected_web_profile(monkeypatch) -> None:
     assert runtime.profile_id == "analysis"
 
 
+def test_resolve_web_runtime_preserves_zero_compact_threshold(monkeypatch) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    _clear_runtime_env(monkeypatch)
+    monkeypatch.delenv("PBI_AGENT_PROVIDER", raising=False)
+    monkeypatch.delenv("PBI_AGENT_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="saved-openai-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="no-compact",
+            name="No Compact",
+            provider_id="openai-main",
+            model="gpt-5.4-2026-03-05",
+            compact_threshold=0,
+        )
+    )
+    select_active_model_profile("no-compact")
+
+    runtime = resolve_web_runtime()
+
+    assert runtime.settings.compact_threshold == 0
+
+
 def test_resolve_web_runtime_requires_active_profile(monkeypatch) -> None:
     monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
 

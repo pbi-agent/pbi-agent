@@ -151,8 +151,8 @@ class Settings:
             raise ConfigError(
                 "--reasoning-effort must be one of: low, medium, high, xhigh."
             )
-        if self.compact_threshold < 1:
-            raise ConfigError("--compact-threshold must be >= 1.")
+        if self.compact_threshold < 0:
+            raise ConfigError("--compact-threshold must be >= 0.")
         if self.max_tokens < 1:
             raise ConfigError("--max-tokens must be >= 1.")
         if self.service_tier is not None and self.provider != "openai":
@@ -253,8 +253,8 @@ class ModelProfileConfig:
             raise ConfigError("--max-tool-workers must be >= 1.")
         if self.max_retries is not None and self.max_retries < 0:
             raise ConfigError("--max-retries must be >= 0.")
-        if self.compact_threshold is not None and self.compact_threshold < 1:
-            raise ConfigError("--compact-threshold must be >= 1.")
+        if self.compact_threshold is not None and self.compact_threshold < 0:
+            raise ConfigError("--compact-threshold must be >= 0.")
         if self.service_tier is not None and provider_kind not in {None, "openai"}:
             raise ConfigError(
                 "--service-tier is only supported with the OpenAI provider."
@@ -1073,7 +1073,7 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         cli_value=getattr(args, "compact_threshold", None),
         env_name="PBI_AGENT_COMPACT_THRESHOLD",
         profile_value=selected_profile.compact_threshold if selected_profile else None,
-        default=150000,
+        default=200000,
     )
     max_tokens = _resolve_int_setting(
         cli_value=getattr(args, "max_tokens", None),
@@ -1286,7 +1286,10 @@ def _settings_from_runtime_parts(
             profile.reasoning_effort if profile else None,
             _default_reasoning_effort(provider.kind),
         ),
-        compact_threshold=(profile.compact_threshold if profile else None) or 150000,
+        compact_threshold=_coalesce(
+            profile.compact_threshold if profile else None,
+            200000,
+        ),
         provider=provider.kind,
         service_tier=profile.service_tier if profile else None,
         web_search=True
@@ -1369,7 +1372,7 @@ def _concrete_profile_for_saved_profile(
         web_search=True if profile.web_search is None else profile.web_search,
         max_tool_workers=_coalesce(profile.max_tool_workers, 4),
         max_retries=_coalesce(profile.max_retries, 3),
-        compact_threshold=_coalesce(profile.compact_threshold, 150000),
+        compact_threshold=_coalesce(profile.compact_threshold, 200000),
     )
 
 
