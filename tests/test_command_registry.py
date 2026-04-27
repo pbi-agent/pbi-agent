@@ -12,6 +12,7 @@ def test_list_slash_commands_for_web_excludes_local_only_commands() -> None:
         "/skills",
         "/mcp",
         "/agents",
+        "/compact",
     ]
 
 

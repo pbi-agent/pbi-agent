@@ -1,6 +1,6 @@
 # TODO
 
-[X] Fix review finding for zero compact-threshold profile resolution
-[X] Add regression test for preserving zero compact-threshold
-[X] Run validation
-[>] Ship compaction task branch/PR/merge
+[X] Reproduce failing command registry test
+[X] Update command registry test expectations for /compact
+[X] Run focused validation
+[>] Ship hotfix to master
