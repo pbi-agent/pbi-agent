@@ -17,6 +17,7 @@ import {
   fetchLiveSessionDetail,
   fetchSessionDetail,
   fetchSessions,
+  interruptLiveSession,
   runShellCommand,
   setActiveModelProfile,
   setLiveSessionProfile,
@@ -94,6 +95,7 @@ export function SessionPage({
   const attachLiveSession = useSessionStore((state) => state.attachLiveSession);
   const hydrateLiveSnapshot = useSessionStore((state) => state.hydrateLiveSnapshot);
   const updateRuntimeFromSession = useSessionStore((state) => state.updateRuntimeFromSession);
+  const consumeRestoredInput = useSessionStore((state) => state.consumeRestoredInput);
 
   useEffect(() => {
     setActiveSession(selectedRouteSessionKey);
@@ -169,6 +171,18 @@ export function SessionPage({
     mutationFn: (payload: { command: string }) => {
       if (!sessionState?.liveSessionId) throw new Error("No live session available.");
       return runShellCommand(sessionState.liveSessionId, payload);
+    },
+    onSuccess: (session) => {
+      if (selectedRouteSessionKey) {
+        updateRuntimeFromSession(selectedRouteSessionKey, session);
+      }
+    },
+  });
+
+  const interruptMutation = useMutation({
+    mutationFn: () => {
+      if (!sessionState?.liveSessionId) throw new Error("No live session available.");
+      return interruptLiveSession(sessionState.liveSessionId);
     },
     onSuccess: (session) => {
       if (selectedRouteSessionKey) {
@@ -477,6 +491,12 @@ export function SessionPage({
   };
 
   const canDeleteActiveSession = Boolean(routeSessionId && activeSessionRecord);
+  const canInterruptActiveTurn = Boolean(
+    sessionState?.liveSessionId
+    && !sessionState.sessionEnded
+    && sessionState.processing?.active
+    && !sessionState.inputEnabled,
+  );
   const isDeleteBusy = deleteSessionMutation.isPending || createSessionMutation.isPending;
   const sessionDetailError = routeSessionId ? sessionDetailQuery.error : liveSessionDetailQuery.error;
   const sessionNotFound =
@@ -579,6 +599,12 @@ export function SessionPage({
             <AlertDescription>{setActiveProfileMutation.error.message}</AlertDescription>
           </Alert>
         ) : null}
+        {interruptMutation.error ? (
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{interruptMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
         {sessionDetailLoadError ? (
           <Alert variant="destructive" className="banner banner--error">
             <AlertTriangleIcon />
@@ -618,6 +644,18 @@ export function SessionPage({
               supportsImageInputs={providerSupportsImages}
               isSubmitting={sendInputMutation.isPending || shellCommandMutation.isPending}
               onSubmit={handleSubmit}
+              isProcessing={Boolean(sessionState?.processing?.active)}
+              canInterrupt={canInterruptActiveTurn}
+              isInterrupting={interruptMutation.isPending}
+              restoredInput={sessionState?.restoredInput ?? null}
+              onRestoredInputConsumed={() => {
+                if (selectedRouteSessionKey) {
+                  consumeRestoredInput(selectedRouteSessionKey);
+                }
+              }}
+              onInterrupt={() => {
+                interruptMutation.mutate();
+              }}
             />
           </>
         )}

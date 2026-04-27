@@ -101,6 +101,22 @@ def run_shell_command(
     )
 
 
+@router.post("/{live_session_id}/interrupt", response_model=LiveSessionResponse)
+def interrupt_live_session(
+    live_session_id: LiveSessionIdPath,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.interrupt_live_session(live_session_id)
+    except KeyError as exc:
+        raise not_found("Live session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(
+        session=model_from_payload(LiveSessionModel, session),
+    )
+
+
 @router.post(
     "/{live_session_id}/images",
     response_model=ImageUploadResponse,

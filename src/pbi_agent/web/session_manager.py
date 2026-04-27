@@ -69,6 +69,7 @@ from pbi_agent.config import (
     slugify,
 )
 from pbi_agent.display.formatting import shorten
+from pbi_agent.display.protocol import QueuedInput
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
 from pbi_agent.providers.capabilities import provider_supports_images
@@ -273,6 +274,10 @@ def _resolved_runtime_view(runtime: ResolvedRuntime) -> dict[str, Any]:
         "generic_api_url": runtime.settings.generic_api_url,
         "supports_image_inputs": provider_supports_images(runtime.settings.provider),
     }
+
+
+def _snapshot_item_id(item: dict[str, Any]) -> str:
+    return str(item.get("itemId") or item.get("item_id") or "")
 
 
 def _serialize_task(
@@ -1040,12 +1045,13 @@ class WebSessionManager:
             message_image_attachments.append(
                 _message_image_attachment(load_uploaded_image_record(upload_id))
             )
+        optimistic_item_id = f"user-{uuid.uuid4().hex}"
         if message_text or message_image_attachments:
             self._publish_live_event(
                 live_session_id,
                 "message_added",
                 {
-                    "item_id": f"user-{uuid.uuid4().hex}",
+                    "item_id": optimistic_item_id,
                     "role": "user",
                     "content": message_text,
                     "file_paths": list(file_paths or []),
@@ -1061,6 +1067,22 @@ class WebSessionManager:
             file_paths=file_paths,
             images=resolved_images or None,
             image_attachments=message_image_attachments or None,
+        )
+        self._set_latest_queued_input_item_id(live_session, optimistic_item_id)
+        return self._serialize_live_session(live_session)
+
+    def interrupt_live_session(self, live_session_id: str) -> dict[str, Any]:
+        live_session = self._require_live_session(live_session_id)
+        if live_session.status == "ended":
+            raise RuntimeError("Live session has already ended.")
+        if not (live_session.snapshot.processing or {}).get("active"):
+            raise RuntimeError("Live session is not currently processing a turn.")
+        item = self._latest_live_user_item(live_session)
+        item_id = _snapshot_item_id(item) if item is not None else None
+        input_text = str((item or {}).get("content") or "")
+        live_session.display.request_interrupt(
+            item_id=item_id,
+            input_text=input_text,
         )
         return self._serialize_live_session(live_session)
 
@@ -2797,6 +2819,15 @@ class WebSessionManager:
             item["itemId"] = str(payload.get("item_id") or "")
             snapshot.items = self._upsert_snapshot_item(snapshot.items, item)
             return
+        if event_type == "message_removed":
+            item_id = str(payload.get("item_id") or "")
+            if item_id:
+                snapshot.items = [
+                    item
+                    for item in snapshot.items
+                    if _snapshot_item_id(item) != item_id
+                ]
+            return
         if event_type == "sub_agent_state":
             sub_agent_id = str(payload.get("sub_agent_id") or "")
             snapshot.sub_agents[sub_agent_id] = {
@@ -2847,6 +2878,35 @@ class WebSessionManager:
             updated[index] = next_item
             return updated
         return [*items, next_item]
+
+    def _latest_live_user_item(
+        self,
+        live_session: LiveSessionState,
+    ) -> dict[str, Any] | None:
+        for item in reversed(live_session.snapshot.items):
+            if item.get("kind") != "message":
+                continue
+            if item.get("role") != "user":
+                continue
+            item_id = _snapshot_item_id(item)
+            if item_id and not item_id.startswith("history-"):
+                return item
+        return None
+
+    def _set_latest_queued_input_item_id(
+        self,
+        live_session: LiveSessionState,
+        item_id: str,
+    ) -> None:
+        queued = getattr(live_session.display, "_input_queue", None)
+        mutex = getattr(queued, "mutex", None)
+        if queued is None or mutex is None:
+            return
+        with mutex:
+            for item in reversed(list(queued.queue)):
+                if isinstance(item, QueuedInput) and item.item_id is None:
+                    item.item_id = item_id
+                    return
 
     def _publish_live_session_lifecycle(
         self,

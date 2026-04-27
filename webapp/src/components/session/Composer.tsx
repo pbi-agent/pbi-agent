@@ -14,6 +14,7 @@ import {
   BadgeDollarSignIcon,
   ImageIcon,
   PlusIcon,
+  SquareIcon,
   TerminalIcon,
   XIcon,
 } from "lucide-react";
@@ -45,6 +46,12 @@ interface ComposerProps {
   supportsImageInputs: boolean;
   isSubmitting: boolean;
   onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
+  isProcessing?: boolean;
+  canInterrupt?: boolean;
+  isInterrupting?: boolean;
+  restoredInput?: string | null;
+  onRestoredInputConsumed?: () => void;
+  onInterrupt?: () => void;
 }
 
 type ActiveCompletionRange = {
@@ -163,7 +170,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   supportsImageInputs,
   isSubmitting,
   onSubmit,
+  isProcessing = false,
+  canInterrupt = false,
+  isInterrupting = false,
+  restoredInput = null,
+  onRestoredInputConsumed,
+  onInterrupt,
 }, ref) {
+  const showStopButton = isProcessing && canInterrupt;
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);
@@ -345,6 +359,24 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useEffect(() => {
     pendingImagesRef.current = pendingImages;
   }, [pendingImages]);
+
+  useEffect(() => {
+    if (!restoredInput) {
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setInput(restoredInput);
+      setCursorIndex(restoredInput.length);
+      onRestoredInputConsumed?.();
+      const element = textareaRef.current;
+      if (!element) return;
+      element.focus();
+      element.selectionStart = restoredInput.length;
+      element.selectionEnd = restoredInput.length;
+      autoResize();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [autoResize, onRestoredInputConsumed, restoredInput]);
 
   useEffect(() => {
     if (!refocusAfterSubmitRef.current || !canSend) {
@@ -743,16 +775,35 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         </InputGroup>
         <InputGroup className="composer__send-group">
           <InputGroupAddon align="inline-end">
-            <InputGroupButton
-              type="submit"
-              aria-label={isShellMode ? "Run command" : "Send message"}
-              className="composer__send"
-              disabled={!canSend}
-              title={isShellMode ? "Run command (Enter)" : "Send (Enter)"}
-              size="icon-sm"
-            >
-              {isShellMode ? <BadgeDollarSignIcon /> : <ArrowUpIcon />}
-            </InputGroupButton>
+            {showStopButton ? (
+              <InputGroupButton
+                type="button"
+                aria-label="Interrupt assistant turn"
+                title={isInterrupting ? "Interrupting current turn\u2026" : "Stop the assistant"}
+                className="composer__stop"
+                disabled={isInterrupting}
+                onClick={onInterrupt}
+                size="icon-sm"
+              >
+                <SquareIcon
+                  aria-hidden="true"
+                  className="composer__stop-icon"
+                  fill="currentColor"
+                  strokeWidth={0}
+                />
+              </InputGroupButton>
+            ) : (
+              <InputGroupButton
+                type="submit"
+                aria-label={isShellMode ? "Run command" : "Send message"}
+                className="composer__send"
+                disabled={!canSend}
+                title={isShellMode ? "Run command (Enter)" : "Send (Enter)"}
+                size="icon-sm"
+              >
+                {isShellMode ? <BadgeDollarSignIcon /> : <ArrowUpIcon />}
+              </InputGroupButton>
+            )}
           </InputGroupAddon>
         </InputGroup>
       </div>

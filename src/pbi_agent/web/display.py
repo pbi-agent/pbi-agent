@@ -126,6 +126,18 @@ class _EventDisplayBase(DisplayProtocol):
     def request_shutdown(self) -> None:
         return None
 
+    def request_interrupt(
+        self, *, item_id: str | None = None, input_text: str | None = None
+    ) -> None:
+        del item_id, input_text
+        return None
+
+    def clear_interrupt(self) -> None:
+        return None
+
+    def interrupt_requested(self) -> bool:
+        return False
+
     def submit_input(
         self,
         value: str,
@@ -648,6 +660,7 @@ class WebDisplay(_EventDisplayBase):
         )
         self._input_event = threading.Event()
         self._shutdown = threading.Event()
+        self._interrupt = threading.Event()
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._bind_session_callback = bind_session
@@ -655,6 +668,33 @@ class WebDisplay(_EventDisplayBase):
     def request_shutdown(self) -> None:
         self._shutdown.set()
         self._input_event.set()
+
+    def request_interrupt(
+        self, *, item_id: str | None = None, input_text: str | None = None
+    ) -> None:
+        self._interrupt.set()
+        self._publish(
+            "processing_state",
+            {
+                "active": True,
+                "phase": "interrupting",
+                "message": "interrupting assistant turn...",
+            },
+        )
+        if item_id:
+            self._publish(
+                "message_removed",
+                {
+                    "item_id": item_id,
+                    "restore_input": input_text or "",
+                },
+            )
+
+    def clear_interrupt(self) -> None:
+        self._interrupt.clear()
+
+    def interrupt_requested(self) -> bool:
+        return self._interrupt.is_set()
 
     def bind_session(self, session_id: str | None) -> None:
         if self._bind_session_callback is not None:
@@ -673,15 +713,14 @@ class WebDisplay(_EventDisplayBase):
         images=None,
         image_attachments=None,
     ) -> None:
-        queued: str | QueuedInput = value
-        if file_paths or image_paths or images or image_attachments:
-            queued = QueuedInput(
-                text=value,
-                file_paths=list(file_paths or []),
-                image_paths=list(image_paths or []),
-                images=list(images or []),
-                image_attachments=list(image_attachments or []),
-            )
+        self.clear_interrupt()
+        queued = QueuedInput(
+            text=value,
+            file_paths=list(file_paths or []),
+            image_paths=list(image_paths or []),
+            images=list(images or []),
+            image_attachments=list(image_attachments or []),
+        )
         self._input_queue.put(queued)
         self._input_event.set()
         self._publish("input_state", {"enabled": False})

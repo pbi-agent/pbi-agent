@@ -1651,6 +1651,82 @@ def test_session_stream_replays_state_events() -> None:
     assert {event["payload"]["state"] for event in state_events} & {"running", "ended"}
 
 
+def test_interrupt_live_session_requires_active_processing() -> None:
+    release = threading.Event()
+
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+        del _settings, display, resume_session_id
+        release.wait(timeout=2)
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            response = client.post("/api/live-sessions", json={})
+            assert response.status_code == 200
+            live_session_id = response.json()["session"]["live_session_id"]
+
+            interrupt_response = client.post(
+                f"/api/live-sessions/{live_session_id}/interrupt"
+            )
+            release.set()
+
+    assert interrupt_response.status_code == 400
+    assert "not currently processing" in interrupt_response.json()["detail"]
+
+
+def test_interrupt_live_session_sets_interrupt_and_removes_latest_user_item() -> None:
+    release = threading.Event()
+
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        display.bind_session("session-1")
+        display.submit_input("queued")
+        display.user_prompt()
+        display.assistant_start()
+        release.wait(timeout=2)
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            response = client.post("/api/live-sessions", json={})
+            assert response.status_code == 200
+            live_session_id = response.json()["session"]["live_session_id"]
+            manager = app.state.manager
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                live_session = manager._require_live_session(live_session_id)
+                if (live_session.snapshot.processing or {}).get("active"):
+                    break
+                time.sleep(0.01)
+            user_event = manager._publish_live_event(
+                live_session_id,
+                "message_added",
+                {
+                    "item_id": "user-test",
+                    "role": "user",
+                    "content": "queued",
+                    "markdown": False,
+                },
+            )
+            assert user_event["type"] == "message_added"
+
+            interrupt_response = client.post(
+                f"/api/live-sessions/{live_session_id}/interrupt"
+            )
+            events = manager.get_event_stream(live_session_id).snapshot()
+            release.set()
+
+    assert interrupt_response.status_code == 200
+    assert any(event["type"] == "message_removed" for event in events)
+    assert events[-1]["type"] == "message_removed"
+    assert events[-1]["payload"]["item_id"] == "user-test"
+    assert events[-1]["payload"]["restore_input"] == "queued"
+
+
 def test_session_creation_with_model_profile_exposes_runtime_binding(
     monkeypatch,
 ) -> None:
@@ -1741,11 +1817,12 @@ def test_session_input_profile_override_emits_runtime_update(monkeypatch) -> Non
                     "profile_id": "analysis",
                 },
             )
-            assert submit_response.status_code == 200
+            assert submit_response.status_code == 200, submit_response.text
             events = app.state.manager.get_event_stream(live_session_id).snapshot()
 
     assert isinstance(queued_values[0], QueuedRuntimeChange)
-    assert queued_values[1] == "hello"
+    assert isinstance(queued_values[1], QueuedInput)
+    assert queued_values[1].text == "hello"
     runtime_events = [
         event for event in events if event["type"] == "session_runtime_updated"
     ]
@@ -4216,3 +4293,52 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
         payload = response.json()
         assert payload["total_count"] == 2
         assert all(run["status"] == "failed" for run in payload["runs"])
+
+
+def test_interrupt_live_session_removes_queued_input_item() -> None:
+    release = threading.Event()
+
+    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+        del _settings, resume_session_id
+        display.bind_session("session-1")
+        queued = display.user_prompt()
+        assert isinstance(queued, QueuedInput)
+        display.assistant_start()
+        release.wait(timeout=2)
+        return 0
+
+    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
+        app = create_app(_settings())
+
+        with TestClient(app) as client:
+            response = client.post("/api/live-sessions", json={})
+            assert response.status_code == 200
+            live_session_id = response.json()["session"]["live_session_id"]
+            submit_response = client.post(
+                f"/api/live-sessions/{live_session_id}/input",
+                json={
+                    "text": "queued from user",
+                    "file_paths": [],
+                    "image_paths": [],
+                    "image_upload_ids": [],
+                },
+            )
+            assert submit_response.status_code == 200, submit_response.text
+            manager = app.state.manager
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                live_session = manager._require_live_session(live_session_id)
+                if (live_session.snapshot.processing or {}).get("active"):
+                    break
+                time.sleep(0.01)
+
+            interrupt_response = client.post(
+                f"/api/live-sessions/{live_session_id}/interrupt"
+            )
+            events = manager.get_event_stream(live_session_id).snapshot()
+            release.set()
+
+    assert interrupt_response.status_code == 200
+    removed = [event for event in events if event["type"] == "message_removed"]
+    assert removed
+    assert removed[-1]["payload"]["restore_input"] == "queued from user"

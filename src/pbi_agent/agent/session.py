@@ -67,6 +67,25 @@ class SubAgentRunError(RuntimeError):
         self.message = message
 
 
+class SessionTurnInterrupted(RuntimeError):
+    """Raised internally when a live-session user interrupts the active turn."""
+
+    def __init__(self) -> None:
+        super().__init__("Assistant turn interrupted.")
+
+
+def _interrupt_requested(display: DisplayProtocol) -> bool:
+    checker = getattr(display, "interrupt_requested", None)
+    if not callable(checker):
+        return False
+    return bool(checker())
+
+
+def _raise_if_interrupted(display: DisplayProtocol) -> None:
+    if _interrupt_requested(display):
+        raise SessionTurnInterrupted()
+
+
 # ---------------------------------------------------------------------------
 # Public entry-points
 # ---------------------------------------------------------------------------
@@ -445,6 +464,7 @@ def run_session_loop(
                 display.assistant_start()
                 user_message_id: int | None = None
                 try:
+                    _raise_if_interrupted(display)
                     user_message_id = _add_message(
                         store,
                         session_id,
@@ -468,6 +488,7 @@ def run_session_loop(
                         turn_usage=turn_usage,
                         tracer=turn_tracer,
                     )
+                    _raise_if_interrupted(display)
                     turn_tracer.log_event(
                         "agent_step_end",
                         metadata={"step": "initial_model_request"},
@@ -485,6 +506,7 @@ def run_session_loop(
                         instructions=turn_instructions,
                         tracer=turn_tracer,
                     )
+                    _raise_if_interrupted(display)
 
                     _add_message(
                         store,
@@ -513,6 +535,22 @@ def run_session_loop(
                         usage=turn_usage,
                         metadata={"tool_errors": loop_had_errors},
                     )
+                except SessionTurnInterrupted:
+                    display.assistant_stop()
+                    turn_tracer.log_event(
+                        "turn_interrupted",
+                        metadata={"phase": "run_session_loop"},
+                    )
+                    turn_tracer.finish(
+                        status="interrupted",
+                        usage=turn_usage,
+                    )
+                    if user_message_id is not None:
+                        _delete_message(store, user_message_id)
+                    clear_interrupt = getattr(display, "clear_interrupt", None)
+                    if callable(clear_interrupt):
+                        clear_interrupt()
+                    continue
                 except Exception as exc:
                     display.assistant_stop()
                     turn_tracer.log_error(
@@ -756,6 +794,7 @@ def _run_tool_iterations(
     had_errors = False
 
     while response.has_tool_calls:
+        _raise_if_interrupted(display)
         if started_at is not None and max_elapsed_seconds is not None:
             _raise_if_sub_agent_timed_out(
                 started_at,
@@ -794,6 +833,9 @@ def _run_tool_iterations(
                 parent_context=parent_context,
                 tracer=tracer,
             )
+            _raise_if_interrupted(display)
+        except SessionTurnInterrupted:
+            raise
         except Exception:
             _log.exception("Tool execution failed inside provider.execute_tool_calls")
             raise
@@ -827,12 +869,15 @@ def _run_tool_iterations(
                 turn_usage=turn_usage,
                 tracer=tracer,
             )
+            _raise_if_interrupted(display)
             if tracer is not None:
                 tracer.log_event(
                     "agent_step_end",
                     metadata={"step": "tool_iteration"},
                 )
             request_count += 1
+        except SessionTurnInterrupted:
+            raise
         except Exception:
             _log.exception("Follow-up request after tool execution failed")
             raise

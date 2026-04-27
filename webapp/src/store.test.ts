@@ -107,6 +107,32 @@ describe("session store", () => {
     expect(state.lastEventSeq).toBe(5);
   });
 
+  it("removes timeline items when a message_removed event arrives", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 5,
+      type: "message_added",
+      created_at: "2026-04-16T12:00:02Z",
+      payload: {
+        item_id: "user-1",
+        role: "user",
+        content: "remove me",
+      },
+    });
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 6,
+      type: "message_removed",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: { item_id: "user-1", restore_input: "remove me" },
+    });
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.items).toHaveLength(0);
+    expect(state.itemsVersion).toBe(2);
+    expect(state.restoredInput).toBe("remove me");
+  });
+
   it("ignores events from a stale live session after saved hydration", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());

@@ -137,6 +137,7 @@ export type ProcessingPhase =
   | "model_wait"
   | "tool_execution"
   | "finalizing"
+  | "interrupting"
   | "retry_wait";
 
 export type ProcessingState = {

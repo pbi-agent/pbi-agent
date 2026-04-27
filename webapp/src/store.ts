@@ -31,6 +31,7 @@ export type SessionRuntimeState = {
   inputEnabled: boolean;
   waitMessage: string | null;
   processing: ProcessingState | null;
+  restoredInput: string | null;
   sessionUsage: UsagePayload | null;
   turnUsage: { usage: UsagePayload | null; elapsedSeconds?: number } | null;
   sessionEnded: boolean;
@@ -61,6 +62,7 @@ type SessionStore = {
   updateRuntimeFromSession: (sessionKey: string, session: LiveSession) => void;
   setConnection: (sessionKey: string, connection: ConnectionState) => void;
   applyEvent: (sessionKey: string, event: WebEvent, liveSessionId?: string | null) => string;
+  consumeRestoredInput: (sessionKey: string) => void;
 };
 
 function createEmptySessionState(sessionId: string | null = null): SessionRuntimeState {
@@ -72,6 +74,7 @@ function createEmptySessionState(sessionId: string | null = null): SessionRuntim
     inputEnabled: false,
     waitMessage: null,
     processing: null,
+    restoredInput: null,
     sessionUsage: null,
     turnUsage: null,
     sessionEnded: false,
@@ -140,6 +143,7 @@ function readProcessingPhase(value: unknown): ProcessingPhase | null {
     case "model_wait":
     case "tool_execution":
     case "finalizing":
+    case "interrupting":
     case "retry_wait":
       return value;
     default:
@@ -354,6 +358,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             inputEnabled: false,
             waitMessage: null,
             processing: null,
+            restoredInput: null,
             sessionEnded: false,
             // Set lastEventSeq from the server so the WS snapshot
             // replay skips events already covered by API history.
@@ -391,6 +396,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             inputEnabled: false,
             waitMessage: null,
             processing: null,
+            restoredInput: options.preserveItems ? current.restoredInput : null,
             sessionUsage: options.preserveItems ? current.sessionUsage : null,
             turnUsage: options.preserveItems ? current.turnUsage : null,
             sessionEnded: session.status === "ended",
@@ -449,6 +455,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             inputEnabled: snapshot.input_enabled,
             waitMessage: snapshot.wait_message,
             processing: snapshot.processing,
+            restoredInput: current.restoredInput,
             sessionUsage: snapshot.session_usage,
             turnUsage: snapshot.turn_usage
               ? {
@@ -504,6 +511,18 @@ export const useSessionStore = create<SessionStore>((set) => ({
         },
       };
     }),
+  consumeRestoredInput: (sessionKey) =>
+    set((state) => {
+      const current = state.sessionsByKey[sessionKey];
+      if (!current?.restoredInput) return state;
+      return {
+        ...state,
+        sessionsByKey: {
+          ...state.sessionsByKey,
+          [sessionKey]: { ...current, restoredInput: null },
+        },
+      };
+    }),
   applyEvent: (sessionKey, event, eventLiveSessionId = null) => {
     let resolvedKey = sessionKey;
     set((state) => {
@@ -545,6 +564,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
           patch.subAgents = {};
           patch.waitMessage = null;
           patch.processing = null;
+          patch.restoredInput = null;
           patch.turnUsage = null;
           patch.sessionEnded = false;
           patch.fatalError = null;
@@ -562,6 +582,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
           break;
         case "processing_state":
           patch.processing = readProcessingState(payload);
+          if (patch.processing === null && current.restoredInput) {
+            patch.inputEnabled = true;
+          }
           break;
         case "usage_updated":
           if (payload.scope === "session") {
@@ -575,6 +598,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
           }
           break;
         case "message_added": {
+          patch.restoredInput = null;
           const item: TimelineItem = {
             kind: "message",
             itemId: String(payload.item_id),
@@ -591,6 +615,18 @@ export const useSessionStore = create<SessionStore>((set) => ({
           };
           patch.items = upsertItem(current.items, item);
           patch.itemsVersion = current.itemsVersion + 1;
+          break;
+        }
+        case "message_removed": {
+          const itemId = readString(payload.item_id);
+          if (itemId) {
+            patch.items = current.items.filter((item) => item.itemId !== itemId);
+            patch.itemsVersion = current.itemsVersion + 1;
+          }
+          const restoredInput = readString(payload.restore_input);
+          if (restoredInput) {
+            patch.restoredInput = restoredInput;
+          }
           break;
         }
         case "thinking_updated": {

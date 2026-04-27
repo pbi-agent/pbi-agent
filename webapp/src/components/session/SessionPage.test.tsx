@@ -11,6 +11,7 @@ import {
   fetchLiveSessionDetail,
   fetchSessionDetail,
   fetchSessions,
+  interruptLiveSession,
   runShellCommand,
   submitSessionInput,
   uploadSessionImages,
@@ -72,10 +73,20 @@ vi.mock("./Composer", async () => {
         supportsImageInputs,
         isSubmitting,
         onSubmit,
+        isProcessing,
+        canInterrupt,
+        isInterrupting,
+        onInterrupt,
+        restoredInput,
       }: {
         supportsImageInputs: boolean;
         isSubmitting: boolean;
         onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
+        isProcessing?: boolean;
+        canInterrupt?: boolean;
+        isInterrupting?: boolean;
+        onInterrupt?: () => void;
+        restoredInput?: string | null;
       },
       ref,
     ) {
@@ -87,6 +98,17 @@ vi.mock("./Composer", async () => {
         <div>
           <div>Composer images {String(supportsImageInputs)}</div>
           <div>Composer submitting {String(isSubmitting)}</div>
+          <div>Composer restored {restoredInput ?? ""}</div>
+          {isProcessing && canInterrupt ? (
+            <button
+              type="button"
+              aria-label="Interrupt assistant turn"
+              disabled={Boolean(isInterrupting)}
+              onClick={() => onInterrupt?.()}
+            >
+              Stop
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -134,6 +156,7 @@ vi.mock("../../api", async (importOriginal) => {
     fetchLiveSessionDetail: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
+    interruptLiveSession: vi.fn(),
     runShellCommand: vi.fn(),
     setActiveModelProfile: vi.fn(),
     setLiveSessionProfile: vi.fn(),
@@ -362,6 +385,7 @@ describe("SessionPage", () => {
     ]);
     vi.mocked(runShellCommand).mockResolvedValue(makeLiveSession());
     vi.mocked(submitSessionInput).mockResolvedValue(makeLiveSession());
+    vi.mocked(interruptLiveSession).mockResolvedValue(makeLiveSession());
   });
 
   afterEach(() => {
@@ -390,6 +414,37 @@ describe("SessionPage", () => {
       image_upload_ids: ["upload-1"],
       profile_id: "analysis",
     });
+  });
+
+  it("shows interrupt only while processing and calls interrupt endpoint", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchLiveSessionDetail).mockResolvedValue({
+      live_session: makeLiveSession(),
+      snapshot: makeSnapshot({
+        input_enabled: false,
+        processing: {
+          active: true,
+          phase: "model_wait",
+          message: "Working...",
+        },
+      }),
+    });
+
+    renderSessionRoute("/sessions/live/live-1");
+
+    const button = await screen.findByRole("button", {
+      name: "Interrupt assistant turn",
+    });
+    await user.click(button);
+
+    await waitFor(() => expect(interruptLiveSession).toHaveBeenCalledWith("live-1"));
+  });
+
+  it("hides interrupt while idle", async () => {
+    renderSessionRoute("/sessions/live/live-1");
+
+    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Interrupt assistant turn" })).toBeNull();
   });
 
   it("sends slash commands directly with image uploads and without expansion", async () => {

@@ -1378,10 +1378,9 @@ def test_openai_request_turn_retries_when_api_is_overloaded(
     assert display_spy.markdown_calls == ["Recovered."]
 
 
-def test_openai_request_turn_retries_with_restored_transcript_when_previous_response_is_missing(
+def test_openai_request_turn_replays_restored_transcript_without_previous_id(
     monkeypatch,
     display_spy,
-    make_http_error,
     make_http_response,
 ) -> None:
     requests: list[dict[str, object]] = []
@@ -1393,16 +1392,6 @@ def test_openai_request_turn_retries_with_restored_transcript_when_previous_resp
         del timeout
         payload = request.data.decode("utf-8") if request.data else "{}"
         requests.append(json.loads(payload))
-        if len(requests) == 1:
-            raise make_http_error(
-                url=DEFAULT_RESPONSES_URL,
-                code=400,
-                body=(
-                    '{"error":{"type":"invalid_request_error","message":"Previous '
-                    'response with id \\"resp_parent\\" not found."},'
-                    '"request_id":"req_missing_previous"}'
-                ),
-            )
         return make_http_response(
             {
                 "id": "resp_recovered",
@@ -1454,11 +1443,9 @@ def test_openai_request_turn_retries_with_restored_transcript_when_previous_resp
     )
 
     assert response.text == "Recovered."
-    assert len(requests) == 2
-    assert requests[0]["previous_response_id"] == "resp_parent"
-    assert requests[0]["input"] == [{"role": "user", "content": "continue"}]
-    assert "previous_response_id" not in requests[1]
-    assert requests[1]["input"] == [
+    assert len(requests) == 1
+    assert "previous_response_id" not in requests[0]
+    assert requests[0]["input"] == [
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "hi"},
         {"role": "user", "content": "continue"},

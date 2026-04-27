@@ -1167,6 +1167,104 @@ def test_run_session_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> 
         assert store.list_messages(sessions[0].session_id) == []
 
 
+def test_run_session_loop_interrupt_deletes_user_turn_and_accepts_next_input(
+    monkeypatch,
+) -> None:
+    class _InterruptThenSucceedProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def reset_conversation(self) -> None:
+            return None
+
+        def get_conversation_checkpoint(self) -> str | None:
+            return "checkpoint-ok"
+
+        def request_turn(
+            self,
+            *,
+            user_message: str | None = None,
+            user_input: UserTurnInput | None = None,
+            tool_result_items: list[dict[str, object]] | None = None,
+            instructions: str | None = None,
+            session_id: str | None = None,
+            display,
+            session_usage: TokenUsage,
+            turn_usage: TokenUsage,
+            tracer=None,
+        ) -> CompletedResponse:
+            del user_message, tool_result_items, instructions, session_id, tracer
+            self.calls += 1
+            if self.calls == 1:
+                display.request_interrupt(item_id="user-optimistic")
+                response = CompletedResponse(
+                    response_id="interrupted-response",
+                    text="discard me",
+                    usage=TokenUsage(
+                        input_tokens=1, output_tokens=1, model=DEFAULT_MODEL
+                    ),
+                )
+            else:
+                assert user_input is not None
+                response = CompletedResponse(
+                    response_id="final-response",
+                    text=f"Ack {user_input.text}",
+                    usage=TokenUsage(
+                        input_tokens=2, output_tokens=3, model=DEFAULT_MODEL
+                    ),
+                )
+            session_usage.add(response.usage)
+            turn_usage.add(response.usage)
+            return response
+
+    class _InterruptDisplay(_SessionDisplaySpy):
+        def __init__(self) -> None:
+            super().__init__(["first", "second", "exit"])
+            self.interrupt = False
+            self.clear_interrupt_calls = 0
+
+        def request_interrupt(
+            self, *, item_id: str | None = None, input_text: str | None = None
+        ) -> None:
+            del item_id, input_text
+            self.interrupt = True
+
+        def clear_interrupt(self) -> None:
+            self.clear_interrupt_calls += 1
+            self.interrupt = False
+
+        def interrupt_requested(self) -> bool:
+            return self.interrupt
+
+    provider = _InterruptThenSucceedProvider()
+    display = _InterruptDisplay()
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    assert run_session_loop(settings, display) == 0
+
+    with SessionStore() as store:
+        sessions = store.list_sessions(os.getcwd(), limit=10)
+        assert len(sessions) == 1
+        messages = store.list_messages(sessions[0].session_id)
+        assert [(message.role, message.content) for message in messages] == [
+            ("user", "second"),
+            ("assistant", "Ack second"),
+        ]
+        assert sessions[0].previous_id == "checkpoint-ok"
+    assert display.clear_interrupt_calls == 1
+    assert display.assistant_stop_calls == 2
+
+
 def test_run_single_turn_passes_parent_context_snapshot_to_tool_execution(
     monkeypatch, tmp_path
 ) -> None:
@@ -1611,7 +1709,7 @@ def test_run_single_turn_resumed_google_session_restores_provider_total_tokens(
     assert display.session_usage_calls[-1].total_tokens == 25
 
 
-def test_run_session_loop_resumed_session_bootstraps_once_then_uses_previous_response_id(
+def test_run_session_loop_resumed_session_bootstraps_without_previous_id_between_turns(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -1718,5 +1816,148 @@ def test_run_session_loop_resumed_session_bootstraps_once_then_uses_previous_res
         {"role": "assistant", "content": "hi"},
         {"role": "user", "content": "continue"},
     ]
-    assert requests[1]["previous_response_id"] == "resp_recovered"
-    assert requests[1]["input"] == [{"role": "user", "content": "more"}]
+    assert "previous_response_id" not in requests[1]
+    assert requests[1]["input"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi"},
+        {"role": "user", "content": "continue"},
+        {"role": "assistant", "content": "Recovered."},
+        {"role": "user", "content": "more"},
+    ]
+
+
+def test_run_session_loop_interrupted_openai_tool_call_does_not_poison_next_turn(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(
+            directory=os.getcwd(),
+            provider="openai",
+            model=DEFAULT_MODEL,
+            title="existing",
+        )
+        store.update_session(session_id, previous_id="resp_completed")
+        store.add_message(session_id, "user", "summerize LICENSE")
+        store.add_message(session_id, "assistant", "summary")
+
+    provider = OpenAIProvider(Settings(api_key="test-key", provider="openai"))
+
+    class _InterruptDisplay(_SessionDisplaySpy):
+        def __init__(self) -> None:
+            super().__init__(["read file", "summarize memory", "quit"])
+            self.interrupt = False
+
+        def request_interrupt(
+            self, *, item_id: str | None = None, input_text: str | None = None
+        ) -> None:
+            del item_id, input_text
+            self.interrupt = True
+
+        def clear_interrupt(self) -> None:
+            self.interrupt = False
+
+        def interrupt_requested(self) -> bool:
+            return self.interrupt
+
+    display = _InterruptDisplay()
+    requests: list[dict[str, object]] = []
+
+    class _FakeHTTPResponse:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def read(self) -> bytes:
+            return json.dumps(self._payload).encode("utf-8")
+
+        def __enter__(self) -> _FakeHTTPResponse:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            display.request_interrupt()
+            return _FakeHTTPResponse(
+                {
+                    "id": "resp_tool",
+                    "model": DEFAULT_MODEL,
+                    "usage": {
+                        "input_tokens": 7,
+                        "input_tokens_details": {"cached_tokens": 0},
+                        "output_tokens": 3,
+                        "output_tokens_details": {"reasoning_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "arguments": '{"path":"README.md"}',
+                            "call_id": "call_1",
+                            "id": "fc_1",
+                            "name": "read_file",
+                            "status": "completed",
+                            "type": "function_call",
+                        }
+                    ],
+                }
+            )
+        return _FakeHTTPResponse(
+            {
+                "id": "resp_ok",
+                "model": DEFAULT_MODEL,
+                "usage": {
+                    "input_tokens": 8,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 2,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                },
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "ok"}],
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    assert (
+        run_session_loop(
+            Settings(api_key="test-key", provider="openai"),
+            display,
+            resume_session_id=session_id,
+        )
+        == 0
+    )
+
+    assert len(requests) == 2
+    assert "previous_response_id" not in requests[1]
+    assert requests[1]["input"] == [
+        {"role": "user", "content": "summerize LICENSE"},
+        {"role": "assistant", "content": "summary"},
+        {"role": "user", "content": "summarize memory"},
+    ]
+    with SessionStore(db_path=db_path) as store:
+        sessions = store.list_sessions(os.getcwd(), limit=1)
+        messages = store.list_messages(sessions[0].session_id)
+    assert [(message.role, message.content) for message in messages] == [
+        ("user", "summerize LICENSE"),
+        ("assistant", "summary"),
+        ("user", "summarize memory"),
+        ("assistant", "ok"),
+    ]

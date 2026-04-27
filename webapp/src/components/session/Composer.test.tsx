@@ -72,6 +72,11 @@ function renderSubmittingComposer() {
 
 describe("Composer", () => {
   beforeEach(() => {
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 0;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
     vi.mocked(searchSlashCommands).mockResolvedValue([]);
   });
 
@@ -132,6 +137,20 @@ describe("Composer", () => {
     await waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
     });
+  });
+
+  it("restores interrupted input into the textbox", async () => {
+    const onConsumed = vi.fn();
+    renderComposer({
+      inputEnabled: true,
+      restoredInput: "restore this",
+      onRestoredInputConsumed: onConsumed,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("restore this");
+    });
+    expect(onConsumed).toHaveBeenCalledTimes(1);
   });
 
   it("renders slash command descriptions inline in parentheses", async () => {

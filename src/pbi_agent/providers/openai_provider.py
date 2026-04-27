@@ -102,6 +102,7 @@ class OpenAIProvider(Provider):
         self._previous_response_id: str | None = None
         self._branch_response_id: str | None = None
         self._restored_input_items: list[dict[str, Any]] = []
+        self._turn_input_items: list[dict[str, Any]] = []
 
     @property
     def settings(self) -> Settings:
@@ -128,6 +129,7 @@ class OpenAIProvider(Provider):
         self._branch_response_id = None
         self._chatgpt_backend.reset()
         self._restored_input_items.clear()
+        self._turn_input_items.clear()
 
     def set_system_prompt(self, system_prompt: str) -> None:
         self._instructions = system_prompt
@@ -164,8 +166,11 @@ class OpenAIProvider(Provider):
         if user_input is None and user_message is not None:
             user_input = UserTurnInput(text=user_message)
 
+        is_user_turn = user_input is not None
         if user_input is not None:
             input_items = [_build_user_input_item(user_input)]
+            self._previous_response_id = None
+            self._turn_input_items = list(input_items)
             self._chatgpt_backend.start_turn(input_items)
         elif tool_result_items is not None:
             input_items = tool_result_items
@@ -178,12 +183,15 @@ class OpenAIProvider(Provider):
             session_id=session_id,
             display=display,
             tracer=tracer,
+            is_user_turn=is_user_turn,
         )
         self._previous_response_id = result.response_id
         self._record_exchange(input_items, result)
         if not result.has_tool_calls:
             # Only completed assistant responses are safe to branch from.
             self._branch_response_id = result.response_id
+            self._record_completed_turn(result)
+            self._turn_input_items.clear()
             self._chatgpt_backend.finish_turn()
         session_usage.add(result.usage)
         turn_usage.add(result.usage)
@@ -285,9 +293,10 @@ class OpenAIProvider(Provider):
         session_id: str | None,
         display: DisplayProtocol,
         tracer: "RunTracer | None" = None,
+        is_user_turn: bool = False,
     ) -> CompletedResponse:
         display.wait_start(_waiting_message_for_input_items(input_items))
-        include_previous_response_id = True
+        include_previous_response_id = not is_user_turn
 
         request_body = self._build_request_body(
             input_items=input_items,
@@ -491,8 +500,13 @@ class OpenAIProvider(Provider):
                 ):
                     self._previous_response_id = None
                     self._branch_response_id = None
+                    retry_input_items = (
+                        [*self._restored_input_items, *self._turn_input_items]
+                        if self._turn_input_items
+                        else input_items
+                    )
                     request_body = self._build_request_body(
-                        input_items=input_items,
+                        input_items=retry_input_items,
                         instructions=instructions,
                         session_id=session_id,
                         include_previous_response_id=include_previous_response_id,
@@ -633,6 +647,21 @@ class OpenAIProvider(Provider):
 
     def _responses_request_options(self) -> ResponsesRequestOptions:
         return self._chatgpt_backend.request_options()
+
+    def _record_completed_turn(self, response: CompletedResponse) -> None:
+        if self._chatgpt_backend.enabled:
+            return
+        turn_input_items = self._turn_input_items
+        if not turn_input_items:
+            return
+        self._restored_input_items.extend(
+            _clone_input_item(item) for item in turn_input_items
+        )
+        assistant_text = response.text or "".join(response.assistant_messages)
+        if assistant_text:
+            self._restored_input_items.append(
+                {"role": "assistant", "content": assistant_text}
+            )
 
     def _tool_result_items_for_response(
         self,
@@ -1200,6 +1229,10 @@ def _nested_response_status(response_json: dict[str, Any]) -> str | None:
         return None
     status = nested_response.get("status")
     return status if isinstance(status, str) else None
+
+
+def _clone_input_item(item: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(json.dumps(item))
 
 
 def _format_response_failed_message(code: str, message: str) -> str:

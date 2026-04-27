@@ -32,6 +32,7 @@ class QueuedInput:
     image_paths: list[str] = field(default_factory=list)
     images: list[ImageAttachment] = field(default_factory=list)
     image_attachments: list[MessageImageAttachment] = field(default_factory=list)
+    item_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -124,6 +125,14 @@ class DisplayProtocol(Protocol):
     def bind_session(self, session_id: str | None) -> None: ...
 
     def request_shutdown(self) -> None: ...
+
+    def request_interrupt(
+        self, *, item_id: str | None = None, input_text: str | None = None
+    ) -> None: ...
+
+    def clear_interrupt(self) -> None: ...
+
+    def interrupt_requested(self) -> bool: ...
 
     def submit_input(
         self,

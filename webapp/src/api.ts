@@ -176,6 +176,16 @@ export async function runShellCommand(
   return result.session;
 }
 
+export async function interruptLiveSession(
+  liveSessionId: string,
+): Promise<LiveSession> {
+  const result = await requestJson<{ session: LiveSession }>(
+    `/api/live-sessions/${liveSessionId}/interrupt`,
+    { method: "POST" },
+  );
+  return result.session;
+}
+
 export async function uploadSessionImages(
   liveSessionId: string,
   files: File[],
