@@ -7,6 +7,8 @@ def test_registry_exposes_expected_built_in_tools() -> None:
     expected = {
         "shell",
         "apply_patch",
+        "replace_in_file",
+        "write_file",
         "list_files",
         "search_files",
         "read_file",
@@ -32,6 +34,15 @@ def test_registry_exposes_expected_built_in_tools() -> None:
 def test_registry_returns_none_for_unknown_tool() -> None:
     assert registry.get_tool_handler("missing_tool") is None
     assert registry.get_tool_spec("missing_tool") is None
+
+
+def test_apply_patch_schema_accepts_patch_only() -> None:
+    spec = registry.get_tool_spec("apply_patch")
+
+    assert spec is not None
+    assert set(spec.parameters_schema["properties"]) == {"patch"}
+    assert spec.parameters_schema["required"] == ["patch"]
+    assert "Codex" not in spec.description
 
 
 def test_registry_sub_agent_schema_uses_project_agent_enum(

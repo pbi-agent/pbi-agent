@@ -10,11 +10,12 @@ from pbi_agent.display.protocol import PendingToolCall
 from pbi_agent.models.messages import ToolCall
 from pbi_agent.tools.apply_patch import (
     SPEC as APPLY_PATCH_SPEC,
-    diff_line_numbers_metadata,
 )
+from pbi_agent.tools.file_edit import diff_line_numbers_metadata
 from pbi_agent.tools.types import ToolResult
 
 _APPLY_PATCH_TOOL_NAME = APPLY_PATCH_SPEC.name
+_PATCH_DISPLAY_TOOL_NAMES = {_APPLY_PATCH_TOOL_NAME, "replace_in_file", "write_file"}
 
 
 def display_tool_execution_start(
@@ -39,7 +40,7 @@ def display_tool_result(
     result: ToolResult,
 ) -> None:
     """Render one completed tool call through the appropriate display hook."""
-    if call is not None and call.name == _APPLY_PATCH_TOOL_NAME:
+    if call is not None and call.name in _PATCH_DISPLAY_TOOL_NAMES:
         _display_apply_patch_result(display, call, result)
         return
     _display_function_result(display, call, result)
@@ -125,10 +126,18 @@ def _display_apply_patch_result(
     success = _patch_success(result, payload)
     display_diff = result.display_metadata.get("diff")
     if not isinstance(display_diff, str):
-        display_diff = str(arguments.get("diff") or "")
+        display_diff = str(arguments.get("diff") or arguments.get("patch") or "")
+    display_path = result.display_metadata.get("path")
+    if not isinstance(display_path, str) or not display_path:
+        display_path = str(arguments.get("path") or "<missing path>")
+    display_operation = result.display_metadata.get("operation_type")
+    if not isinstance(display_operation, str) or not display_operation:
+        display_operation = str(
+            arguments.get("operation_type") or "<missing operation_type>"
+        )
     display.patch_result(
-        str(arguments.get("path") or "<missing path>"),
-        str(arguments.get("operation_type") or "<missing operation_type>"),
+        display_path,
+        display_operation,
         success,
         call_id=result.call_id,
         detail=_patch_detail(payload),
