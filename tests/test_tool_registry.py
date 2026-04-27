@@ -9,26 +9,29 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "apply_patch",
         "replace_in_file",
         "write_file",
-        "list_files",
-        "search_files",
         "read_file",
+        "read_image",
         "read_web_url",
         "sub_agent",
     }
 
-    assert expected.issubset({spec.name for spec in registry.get_tool_specs()})
-    assert expected.issubset(
-        {item["name"] for item in registry.get_openai_tool_definitions()}
-    )
-    assert expected.issubset(
-        {item["name"] for item in registry.get_anthropic_tool_definitions()}
-    )
-    assert expected.issubset(
-        {
-            item["function"]["name"]
-            for item in registry.get_openai_chat_tool_definitions()
-        }
-    )
+    tool_names = {spec.name for spec in registry.get_tool_specs()}
+    assert tool_names == expected
+
+    openai_tool_names = {
+        item["name"] for item in registry.get_openai_tool_definitions()
+    }
+    assert openai_tool_names == expected
+
+    anthropic_tool_names = {
+        item["name"] for item in registry.get_anthropic_tool_definitions()
+    }
+    assert anthropic_tool_names == expected
+
+    chat_tool_names = {
+        item["function"]["name"] for item in registry.get_openai_chat_tool_definitions()
+    }
+    assert chat_tool_names == expected
 
 
 def test_registry_returns_none_for_unknown_tool() -> None:

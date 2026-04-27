@@ -16,12 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "../ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 
@@ -185,7 +180,9 @@ export function ModelProfileModal({
   const [providerModels, setProviderModels] =
     useState<ProviderModelListPayload | null>(null);
   const [providerModelsPending, setProviderModelsPending] = useState(false);
-  const [providerModelsError, setProviderModelsError] = useState<string | null>(null);
+  const [providerModelsError, setProviderModelsError] = useState<string | null>(
+    null,
+  );
   const [modelMode, setModelMode] = useState<ModelFieldMode>("custom");
   const [subAgentModelMode, setSubAgentModelMode] =
     useState<ModelFieldMode>("custom");
@@ -200,9 +197,9 @@ export function ModelProfileModal({
     : null;
   const discoveredModelsAvailable = Boolean(
     providerModels &&
-      providerModels.discovery_supported &&
-      !providerModels.error &&
-      providerModels.models.length > 0,
+    providerModels.discovery_supported &&
+    !providerModels.error &&
+    providerModels.models.length > 0,
   );
   const modelOptions = useMemo(() => {
     if (!providerModels) {
@@ -212,7 +209,9 @@ export function ModelProfileModal({
       value: model.id,
       label: formatModelLabel(model),
     }));
-    const extraOptions = [currentModelOption(form.model, providerModels)].filter(
+    const extraOptions = [
+      currentModelOption(form.model, providerModels),
+    ].filter(
       (option): option is { value: string; label: string } => option !== null,
     );
     return [...extraOptions, ...options];
@@ -227,7 +226,9 @@ export function ModelProfileModal({
     }));
     const extraOptions = [
       currentModelOption(form.sub_agent_model, providerModels),
-    ].filter((option): option is { value: string; label: string } => option !== null);
+    ].filter(
+      (option): option is { value: string; label: string } => option !== null,
+    );
     return [...extraOptions, ...options];
   }, [form.sub_agent_model, providerModels]);
 
@@ -253,7 +254,9 @@ export function ModelProfileModal({
           }
           setProviderModels(payload);
           const nextDiscoveredModelsAvailable = Boolean(
-            payload.discovery_supported && !payload.error && payload.models.length > 0,
+            payload.discovery_supported &&
+            !payload.error &&
+            payload.models.length > 0,
           );
           setModelMode(
             nextDiscoveredModelsAvailable
@@ -309,6 +312,10 @@ export function ModelProfileModal({
     (providerModels?.manual_entry_required
       ? "Manual model entry is required for this provider."
       : null);
+  const modelFieldHint =
+    selectedProvider?.kind === "azure"
+      ? "Enter your Azure deployment name. Model discovery is not available for Azure — use a custom value."
+      : null;
 
   function renderModelControl(args: {
     label: string;
@@ -415,14 +422,15 @@ export function ModelProfileModal({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => {
-      if (!open && !isPending) onClose();
-    }}>
-      <DialogContent>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isPending) onClose();
+      }}
+    >
+      <DialogContent className="task-form-dialog">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Profile" : "Add Profile"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Profile" : "Add Profile"}</DialogTitle>
         </DialogHeader>
 
         <form
@@ -431,233 +439,256 @@ export function ModelProfileModal({
             void handleSubmit(event);
           }}
         >
-
-          <FieldGroup>
-          <Field>
-            <FieldLabel>Name</FieldLabel>
-            <Input
-              name="profile-name"
-              className="task-form__input"
-              value={form.name}
-              onChange={(e) => set({ name: e.target.value })}
-              required
-              autoFocus
-              placeholder="e.g. GPT-4o Production"
-            />
-          </Field>
-
-          {!isEdit && (
-            <Field>
-              <FieldLabel>ID (optional)</FieldLabel>
-              <Input
-                name="profile-id"
-                className="task-form__input"
-                value={form.id}
-                onChange={(e) => set({ id: e.target.value })}
-                placeholder="Auto-generated from name"
-              />
-              <FieldDescription>
-                Leave blank to auto-generate from the name.
-              </FieldDescription>
-            </Field>
-          )}
-
-          <Field>
-            <FieldLabel>Provider</FieldLabel>
-            <NativeSelect
-              name="provider-id"
-              className="task-form__select"
-              value={form.provider_id}
-              onChange={(e) => handleProviderChange(e.target.value)}
-              required
-            >
-              {providers.length === 0 && (
-                <NativeSelectOption value="" disabled>
-                  No providers configured
-                </NativeSelectOption>
-              )}
-              {providers.map((p) => (
-                <NativeSelectOption key={p.id} value={p.id}>
-                  {p.name} ({providerKindLabel(p.kind)})
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-
-          <div className="task-form__row">
-            <Field>
-              {renderModelControl({
-                label: "Model",
-                name: "model",
-                value: form.model,
-                placeholder: kindMeta?.default_model ?? "provider default",
-                mode: modelMode,
-                setMode: setModelMode,
-                options: modelOptions,
-                onChange: (value) => set({ model: value }),
-              })}
-            </Field>
-            <Field>
-              {renderModelControl({
-                label: "Sub-agent model",
-                name: "sub-agent-model",
-                value: form.sub_agent_model,
-                placeholder: form.model.trim() || "same as model",
-                defaultOptionLabel: "Profile main model",
-                mode: subAgentModelMode,
-                setMode: setSubAgentModelMode,
-                options: subAgentModelOptions,
-                onChange: (value) => set({ sub_agent_model: value }),
-              })}
-              <FieldDescription>
-                Leave blank to use this profile&apos;s main model.
-              </FieldDescription>
-            </Field>
-          </div>
-
-          {(providerModelsPending || discoveryMessage) && (
-            <Alert
-              variant={discoveryMessage ? "destructive" : "default"}
-              className={discoveryMessage ? "task-form__error" : "task-form__hint"}
-            >
-              <AlertDescription>
-              {providerModelsPending
-                ? "Loading available models…"
-                : discoveryMessage}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <div className="task-form__row">
-            <Field>
-              <FieldLabel>Reasoning effort</FieldLabel>
-              <NativeSelect
-                name="reasoning-effort"
-                className="task-form__select"
-                value={form.reasoning_effort}
-                onChange={(e) => set({ reasoning_effort: e.target.value })}
-              >
-                <NativeSelectOption value="">Provider default</NativeSelectOption>
-                {options.reasoning_efforts.map((r) => (
-                  <NativeSelectOption key={r} value={r}>
-                    {r}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel>Max tokens</FieldLabel>
-              <Input
-                name="max-tokens"
-                className="task-form__input"
-                type="number"
-                min="0"
-                value={form.max_tokens}
-                onChange={(e) => set({ max_tokens: e.target.value })}
-                placeholder="Provider default"
-              />
-            </Field>
-          </div>
-
-          <div className="task-form__row">
-            {kindMeta?.supports_service_tier ? (
+          <div className="task-form__body">
+            <FieldGroup>
               <Field>
-                <FieldLabel>Service tier</FieldLabel>
+                <FieldLabel>Name</FieldLabel>
+                <Input
+                  name="profile-name"
+                  className="task-form__input"
+                  value={form.name}
+                  onChange={(e) => set({ name: e.target.value })}
+                  required
+                  autoFocus
+                  placeholder="e.g. GPT-4o Production"
+                />
+              </Field>
+
+              {!isEdit && (
+                <Field>
+                  <FieldLabel>ID (optional)</FieldLabel>
+                  <Input
+                    name="profile-id"
+                    className="task-form__input"
+                    value={form.id}
+                    onChange={(e) => set({ id: e.target.value })}
+                    placeholder="Auto-generated from name"
+                  />
+                  <FieldDescription>
+                    Leave blank to auto-generate from the name.
+                  </FieldDescription>
+                </Field>
+              )}
+
+              <Field>
+                <FieldLabel>Provider</FieldLabel>
                 <NativeSelect
-                  name="service-tier"
+                  name="provider-id"
                   className="task-form__select"
-                  value={form.service_tier}
-                  onChange={(e) => set({ service_tier: e.target.value })}
+                  value={form.provider_id}
+                  onChange={(e) => handleProviderChange(e.target.value)}
+                  required
                 >
-                  <NativeSelectOption value="">Provider default</NativeSelectOption>
-                  {options.openai_service_tiers.map((t) => (
-                    <NativeSelectOption key={t} value={t}>
-                      {t}
+                  {providers.length === 0 && (
+                    <NativeSelectOption value="" disabled>
+                      No providers configured
+                    </NativeSelectOption>
+                  )}
+                  {providers.map((p) => (
+                    <NativeSelectOption key={p.id} value={p.id}>
+                      {p.name} ({providerKindLabel(p.kind)})
                     </NativeSelectOption>
                   ))}
                 </NativeSelect>
               </Field>
-            ) : (
-              <Field />
+
+              <div className="task-form__row">
+                <Field>
+                  {renderModelControl({
+                    label: "Model",
+                    name: "model",
+                    value: form.model,
+                    placeholder: kindMeta?.default_model ?? "provider default",
+                    mode: modelMode,
+                    setMode: setModelMode,
+                    options: modelOptions,
+                    onChange: (value) => set({ model: value }),
+                  })}
+                  {modelFieldHint && (
+                    <FieldDescription>{modelFieldHint}</FieldDescription>
+                  )}
+                </Field>
+                <Field>
+                  {renderModelControl({
+                    label: "Sub-agent model",
+                    name: "sub-agent-model",
+                    value: form.sub_agent_model,
+                    placeholder: form.model.trim() || "same as model",
+                    defaultOptionLabel: "Profile main model",
+                    mode: subAgentModelMode,
+                    setMode: setSubAgentModelMode,
+                    options: subAgentModelOptions,
+                    onChange: (value) => set({ sub_agent_model: value }),
+                  })}
+                  <FieldDescription>
+                    Leave blank to use this profile&apos;s main model.
+                  </FieldDescription>
+                </Field>
+              </div>
+
+              {(providerModelsPending || discoveryMessage) && (
+                <Alert
+                  variant={discoveryMessage ? "destructive" : "default"}
+                  className={
+                    discoveryMessage ? "task-form__error" : "task-form__hint"
+                  }
+                >
+                  <AlertDescription>
+                    {providerModelsPending
+                      ? "Loading available models…"
+                      : discoveryMessage}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="task-form__row">
+                <Field>
+                  <FieldLabel>Reasoning effort</FieldLabel>
+                  <NativeSelect
+                    name="reasoning-effort"
+                    className="task-form__select"
+                    value={form.reasoning_effort}
+                    onChange={(e) => set({ reasoning_effort: e.target.value })}
+                  >
+                    <NativeSelectOption value="">
+                      Provider default
+                    </NativeSelectOption>
+                    {options.reasoning_efforts.map((r) => (
+                      <NativeSelectOption key={r} value={r}>
+                        {r}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field>
+                  <FieldLabel>Max tokens</FieldLabel>
+                  <Input
+                    name="max-tokens"
+                    className="task-form__input"
+                    type="number"
+                    min="0"
+                    value={form.max_tokens}
+                    onChange={(e) => set({ max_tokens: e.target.value })}
+                    placeholder="Provider default"
+                  />
+                </Field>
+              </div>
+
+              <div className="task-form__row">
+                {kindMeta?.supports_service_tier ? (
+                  <Field>
+                    <FieldLabel>Service tier</FieldLabel>
+                    <NativeSelect
+                      name="service-tier"
+                      className="task-form__select"
+                      value={form.service_tier}
+                      onChange={(e) => set({ service_tier: e.target.value })}
+                    >
+                      <NativeSelectOption value="">
+                        Provider default
+                      </NativeSelectOption>
+                      {options.openai_service_tiers.map((t) => (
+                        <NativeSelectOption key={t} value={t}>
+                          {t}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                ) : (
+                  <Field />
+                )}
+
+                <Field>
+                  <FieldLabel>Web search</FieldLabel>
+                  <NativeSelect
+                    name="web-search"
+                    className="task-form__select"
+                    value={form.web_search}
+                    onChange={(e) =>
+                      set({ web_search: e.target.value as WebSearchMode })
+                    }
+                  >
+                    <NativeSelectOption value="default">
+                      Provider default
+                    </NativeSelectOption>
+                    <NativeSelectOption value="true">
+                      Enabled
+                    </NativeSelectOption>
+                    <NativeSelectOption value="false">
+                      Disabled
+                    </NativeSelectOption>
+                  </NativeSelect>
+                </Field>
+              </div>
+
+              <div className="task-form__row">
+                <Field>
+                  <FieldLabel>Max tool workers</FieldLabel>
+                  <Input
+                    name="max-tool-workers"
+                    className="task-form__input"
+                    type="number"
+                    min="0"
+                    value={form.max_tool_workers}
+                    onChange={(e) => set({ max_tool_workers: e.target.value })}
+                    placeholder="Default"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Max retries</FieldLabel>
+                  <Input
+                    name="max-retries"
+                    className="task-form__input"
+                    type="number"
+                    min="0"
+                    value={form.max_retries}
+                    onChange={(e) => set({ max_retries: e.target.value })}
+                    placeholder="Default"
+                  />
+                </Field>
+              </div>
+
+              <Field>
+                <FieldLabel>Compact threshold</FieldLabel>
+                <Input
+                  name="compact-threshold"
+                  className="task-form__input"
+                  type="number"
+                  min="0"
+                  value={form.compact_threshold}
+                  onChange={(e) => set({ compact_threshold: e.target.value })}
+                  placeholder="Default"
+                />
+                <FieldDescription>
+                  Token count at which context is compacted.
+                </FieldDescription>
+              </Field>
+            </FieldGroup>
+
+            {error && (
+              <Alert variant="destructive" className="task-form__error">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
-
-            <Field>
-              <FieldLabel>Web search</FieldLabel>
-              <NativeSelect
-                name="web-search"
-                className="task-form__select"
-                value={form.web_search}
-                onChange={(e) =>
-                  set({ web_search: e.target.value as WebSearchMode })
-                }
-              >
-                <NativeSelectOption value="default">Provider default</NativeSelectOption>
-                <NativeSelectOption value="true">Enabled</NativeSelectOption>
-                <NativeSelectOption value="false">Disabled</NativeSelectOption>
-              </NativeSelect>
-            </Field>
           </div>
-
-          <div className="task-form__row">
-            <Field>
-              <FieldLabel>Max tool workers</FieldLabel>
-              <Input
-                name="max-tool-workers"
-                className="task-form__input"
-                type="number"
-                min="0"
-                value={form.max_tool_workers}
-                onChange={(e) => set({ max_tool_workers: e.target.value })}
-                placeholder="Default"
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Max retries</FieldLabel>
-              <Input
-                name="max-retries"
-                className="task-form__input"
-                type="number"
-                min="0"
-                value={form.max_retries}
-                onChange={(e) => set({ max_retries: e.target.value })}
-                placeholder="Default"
-              />
-            </Field>
-          </div>
-
-          <Field>
-            <FieldLabel>Compact threshold</FieldLabel>
-            <Input
-              name="compact-threshold"
-              className="task-form__input"
-              type="number"
-              min="0"
-              value={form.compact_threshold}
-              onChange={(e) => set({ compact_threshold: e.target.value })}
-              placeholder="Default"
-            />
-            <FieldDescription>
-              Token count at which context is compacted.
-            </FieldDescription>
-          </Field>
-          </FieldGroup>
-
-          {error && (
-            <Alert variant="destructive" className="task-form__error">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
 
           <DialogFooter className="task-form__footer">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+            <Button
+              type="button"
+              variant="outline"
+              className="task-form__action-button"
+              onClick={onClose}
+              disabled={isPending}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending || providers.length === 0}>
-              {isPending
-                ? "Saving…"
-                : isEdit
-                  ? "Save Changes"
-                  : "Add Profile"}
+            <Button
+              type="submit"
+              variant="default"
+              className="task-form__action-button"
+              disabled={isPending || providers.length === 0}
+            >
+              {isPending ? "Saving…" : isEdit ? "Save Changes" : "Add Profile"}
             </Button>
           </DialogFooter>
         </form>

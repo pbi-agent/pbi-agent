@@ -21,6 +21,7 @@ from pbi_agent.agent.tool_display import (
 )
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
+from pbi_agent.providers.azure import azure_chat_completions_url
 from pbi_agent.models.messages import (
     CompletedResponse,
     TokenUsage,
@@ -217,6 +218,9 @@ class GenericProvider(Provider):
             "Authorization": f"Bearer {self._settings.api_key}",
             "User-Agent": f"pbi-agent/{__version__}",
         }
+        if self._settings.provider == "azure":
+            headers.pop("Authorization", None)
+            headers["api-key"] = self._settings.api_key
 
         max_retries = self._settings.max_retries
         last_error: Exception | None = None
@@ -228,7 +232,7 @@ class GenericProvider(Provider):
             req_start = time.perf_counter()
             try:
                 req = urllib.request.Request(
-                    self._settings.generic_api_url,
+                    _request_url(self._settings),
                     data=request_data,
                     headers=headers,
                     method="POST",
@@ -241,7 +245,7 @@ class GenericProvider(Provider):
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
-                    url=self._settings.generic_api_url,
+                    url=_request_url(self._settings),
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload=response_json,
@@ -269,7 +273,7 @@ class GenericProvider(Provider):
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
-                    url=self._settings.generic_api_url,
+                    url=_request_url(self._settings),
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload={"body": error_body},
@@ -310,7 +314,7 @@ class GenericProvider(Provider):
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
-                    url=self._settings.generic_api_url,
+                    url=_request_url(self._settings),
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload={"error": str(exc)},
@@ -390,6 +394,12 @@ def _extract_choice_messages(choices: Any) -> list[dict[str, Any]]:
 
 def _should_send_model(settings: Settings) -> bool:
     return bool(settings.model)
+
+
+def _request_url(settings: Settings) -> str:
+    if settings.provider == "azure":
+        return azure_chat_completions_url(settings.responses_url)
+    return settings.generic_api_url
 
 
 def _extract_message_text(content: Any) -> str:

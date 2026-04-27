@@ -115,7 +115,7 @@ Project skills use progressive disclosure: the catalog contains only each skill'
 - Before applying a matched skill, load its SKILL.md with read_file using the listed location.
 - Treat loaded skill instructions as task guidance for the current session.
 - Resolve relative paths against the skill directory, which is the parent directory of SKILL.md.
-- Load referenced resources only when needed with read_file, list_files, or search_files.
+- Load referenced resources only when needed.
 </skill_loading_rules>
 """.strip()
 

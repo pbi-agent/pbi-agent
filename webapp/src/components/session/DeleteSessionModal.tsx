@@ -10,8 +10,8 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
-} from "../ui/alert-dialog";
-import { Alert, AlertDescription } from "../ui/alert";
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function DeleteSessionModal({
   session,
@@ -32,9 +32,9 @@ export function DeleteSessionModal({
     <AlertDialog open onOpenChange={(open) => {
       if (!open && !isDeleting) onClose();
     }}>
-      <AlertDialogContent>
+      <AlertDialogContent size="sm">
         <AlertDialogHeader>
-          <AlertDialogMedia>
+          <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
             <Trash2Icon />
           </AlertDialogMedia>
           <AlertDialogTitle>Delete session?</AlertDialogTitle>

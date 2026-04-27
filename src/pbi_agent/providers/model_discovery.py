@@ -18,7 +18,16 @@ from pbi_agent.providers.github_copilot_backend import GITHUB_COPILOT_MODELS_URL
 
 _DISCOVERY_TIMEOUT_SECS = 30.0
 _SUPPORTED_DISCOVERY_PROVIDERS = frozenset(
-    {"openai", "chatgpt", "github_copilot", "xai", "google", "anthropic", "generic"}
+    {
+        "openai",
+        "azure",
+        "chatgpt",
+        "github_copilot",
+        "xai",
+        "google",
+        "anthropic",
+        "generic",
+    }
 )
 _OPENAI_CHATGPT_MIN_CLIENT_VERSION = "0.124.0"
 _MANUAL_ENTRY_ONLY_REASONS: dict[str, str] = {}
@@ -55,6 +64,17 @@ class ProviderModelDiscoveryResult:
 def discover_provider_models(settings: Settings) -> ProviderModelDiscoveryResult:
     provider_kind = settings.provider
     if provider_kind not in _SUPPORTED_DISCOVERY_PROVIDERS:
+        return ProviderModelDiscoveryResult(
+            provider_kind=provider_kind,
+            discovery_supported=False,
+            manual_entry_required=True,
+            models=[],
+            error=None,
+        )
+
+    # Azure requires user-configured deployment names; skip discovery before
+    # checking auth so Settings can always show manual entry.
+    if provider_kind == "azure":
         return ProviderModelDiscoveryResult(
             provider_kind=provider_kind,
             discovery_supported=False,
@@ -293,7 +313,11 @@ def _discover_generic_models(settings: Settings) -> list[DiscoveredProviderModel
 
 
 def _discover_anthropic_models(settings: Settings) -> list[DiscoveredProviderModel]:
-    url = "https://api.anthropic.com/v1/models"
+    url = (
+        _replace_path_suffix(settings.responses_url, "models")
+        if settings.provider == "azure"
+        else "https://api.anthropic.com/v1/models"
+    )
     models: list[DiscoveredProviderModel] = []
     after_id: str | None = None
     while True:
@@ -417,7 +441,7 @@ def _get_json(
             if (
                 exc.code == 401
                 and not retried_unauthorized_refresh
-                and settings.provider in {"openai", "chatgpt"}
+                and settings.provider in {"openai", "azure", "chatgpt"}
                 and isinstance(settings.auth, OAuthSessionAuth)
             ):
                 settings.auth = refresh_runtime_auth(
@@ -502,14 +526,11 @@ def _append_query_params(url: str, params: dict[str, str | None]) -> str:
 
 
 def _missing_auth_error(settings: Settings) -> ProviderModelDiscoveryError | None:
-    if settings.provider == "openai":
+    if settings.provider in {"openai", "azure"}:
         if settings.auth is None:
             return ProviderModelDiscoveryError(
                 code="auth_required",
-                message=(
-                    "Missing authentication for provider 'openai'. Configure an API key "
-                    "or a ChatGPT account session."
-                ),
+                message=missing_api_key_message(settings.provider),
             )
         return None
     if settings.provider == "chatgpt":

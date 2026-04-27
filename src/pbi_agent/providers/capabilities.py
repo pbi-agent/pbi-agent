@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 IMAGE_ENABLED_PROVIDERS = frozenset(
-    {"openai", "chatgpt", "github_copilot", "anthropic", "google"}
+    {"openai", "azure", "chatgpt", "github_copilot", "anthropic", "google"}
 )
 
 

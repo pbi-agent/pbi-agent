@@ -3170,6 +3170,37 @@ def test_provider_model_discovery_endpoint_returns_openai_models(
     assert requests_seen[0].headers["Authorization"] == "Bearer env-openai-key"
 
 
+def test_azure_provider_model_discovery_returns_manual_entry_required(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Azure requires deployment names — discovery is disabled."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("AZURE_API_KEY", raising=False)
+    app = create_app(_settings(), runtime_args=_runtime_args("web"))
+
+    with TestClient(app) as client:
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        create_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "Azure Chat",
+                "kind": "azure",
+                "api_key_env": "AZURE_API_KEY",
+                "responses_url": "https://mca-resource.openai.azure.com/openai/v1",
+            },
+        )
+        assert create_response.status_code == 200
+        response = client.get("/api/config/providers/azure-chat/models")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider_kind"] == "azure"
+    assert payload["discovery_supported"] is False
+    assert payload["manual_entry_required"] is True
+    assert payload["models"] == []
+
+
 def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
     monkeypatch, tmp_path: Path
 ) -> None:

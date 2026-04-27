@@ -1272,6 +1272,33 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("--service-tier", stderr.getvalue())
         self.assertIn("OpenAI", stderr.getvalue())
 
+    def test_service_tier_with_azure_provider_errors(self) -> None:
+        stderr = io.StringIO()
+
+        with (
+            patch("pbi_agent.config.load_dotenv"),
+            patch("sys.stderr", stderr),
+        ):
+            rc = cli.main(
+                [
+                    "--provider",
+                    "azure",
+                    "--responses-url",
+                    "https://example-resource.openai.azure.com/openai/v1/responses",
+                    "--service-tier",
+                    "flex",
+                    "--api-key",
+                    "k",
+                    "run",
+                    "--prompt",
+                    "hello",
+                ]
+            )
+
+        self.assertEqual(rc, 2)
+        self.assertIn("--service-tier", stderr.getvalue())
+        self.assertIn("OpenAI", stderr.getvalue())
+
     def test_main_run_with_session_id_uses_current_runtime_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
@@ -1290,6 +1317,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                         "PBI_AGENT_SESSION_DB_PATH": str(db_path),
                         "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
                         "PBI_AGENT_PROVIDER": "openai",
+                        "PBI_AGENT_MODEL": DEFAULT_MODEL,
                         "OPENAI_API_KEY": "openai-key",
                     },
                     clear=False,
@@ -1332,6 +1360,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                             "PBI_AGENT_SESSION_DB_PATH": str(db_path),
                             "PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path),
                             "PBI_AGENT_PROVIDER": "openai",
+                            "PBI_AGENT_MODEL": DEFAULT_MODEL,
                             "OPENAI_API_KEY": "openai-key",
                         },
                         clear=False,

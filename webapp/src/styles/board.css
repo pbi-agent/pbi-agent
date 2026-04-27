@@ -179,22 +179,21 @@
 }
 
 .board-column__count {
-  min-width: 2rem;
-  min-height: 2rem;
-  padding: var(--sp-1) var(--sp-2);
-  font-family: var(--font-mono);
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
-  flex: 0 0 auto;
+  min-height: 2rem;
+  padding: var(--sp-1) var(--sp-3);
 }
 
 .board-column__label {
   flex: 0 0 auto;
-  min-height: 2rem;
-  padding: var(--sp-1) var(--sp-2);
+  font-family: var(--font-ui);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
-  font-family: var(--font-mono);
+  min-height: 2rem;
+  padding: var(--sp-1) var(--sp-3);
   white-space: nowrap;
 }
 

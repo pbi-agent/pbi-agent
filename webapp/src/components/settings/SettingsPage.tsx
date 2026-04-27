@@ -103,13 +103,12 @@ function ProviderCard({
           </Badge>
           <Badge
             variant="secondary"
-            className={`settings-item__tag ${
-              authStatus.session_status === "connected"
+            className={`settings-item__tag ${authStatus.session_status === "connected"
                 ? "settings-item__tag--success"
                 : authStatus.session_status === "expired"
                   ? "settings-item__tag--warning"
                   : ""
-            }`}
+              }`}
           >
             {authStatusLabel(authStatus)}
           </Badge>
@@ -121,7 +120,7 @@ function ProviderCard({
             </Badge>
           )}
           {authStatus.plan_type && (
-            <Badge variant="secondary" className="settings-item__tag">{authStatus.plan_type}</Badge>
+            <Badge variant="outline" className="settings-item__tag">{authStatus.plan_type}</Badge>
           )}
           {provider.responses_url && (
             <Badge variant="outline" className="settings-item__tag" title={provider.responses_url}>
@@ -147,8 +146,9 @@ function ProviderCard({
           <>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
+              className="task-card__action-button"
               onClick={onConnect}
               disabled={isBusy}
             >
@@ -157,8 +157,9 @@ function ProviderCard({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
+              className="task-card__action-button"
               onClick={onRefresh}
               disabled={isBusy || !authStatus.can_refresh}
             >
@@ -167,8 +168,9 @@ function ProviderCard({
             </Button>
             <Button
               type="button"
-              variant="destructive"
+              variant="ghost"
               size="sm"
+              className="task-card__action-button"
               onClick={onDisconnect}
               disabled={isBusy || !authStatus.has_session}
             >
@@ -177,14 +179,21 @@ function ProviderCard({
             </Button>
           </>
         )}
-        <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="task-card__action-button"
+          onClick={onEdit}
+        >
           <EditIcon data-icon="inline-start" />
           Edit
         </Button>
         <Button
           type="button"
-          variant="destructive"
+          variant="ghost"
           size="sm"
+          className="task-card__action-button"
           onClick={onDelete}
           disabled={isBusy}
         >
@@ -229,7 +238,7 @@ function ProfileCard({
         </div>
         <div className="settings-item__id">{profile.id}</div>
         <div className="settings-item__meta">
-          <Badge variant="secondary" className="settings-item__tag">{profile.provider.name}</Badge>
+          <Badge variant="outline" className="settings-item__tag">{profile.provider.name}</Badge>
           <Badge variant="outline" className="settings-item__tag">
             {providerKindLabel(profile.provider.kind, options)}
           </Badge>
@@ -237,14 +246,21 @@ function ProfileCard({
         <div className="runtime-summary">{runtimeParts.join(" · ")}</div>
       </div>
       <div className="settings-item__actions">
-        <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="task-card__action-button"
+          onClick={onEdit}
+        >
           <EditIcon data-icon="inline-start" />
           Edit
         </Button>
         <Button
           type="button"
-          variant="destructive"
+          variant="ghost"
           size="sm"
+          className="task-card__action-button"
           onClick={onDelete}
         >
           <Trash2Icon data-icon="inline-start" />
@@ -452,7 +468,7 @@ export function SettingsPage() {
           <Alert variant="destructive" className="settings-error-banner">
             <AlertTriangleIcon />
             <AlertDescription>
-            Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
+              Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
             </AlertDescription>
           </Alert>
         </div>
@@ -469,12 +485,12 @@ export function SettingsPage() {
         {model_profiles.length === 0 && (
           <Alert className="settings-inline-note settings-onboarding-guide">
             <AlertDescription>
-            <strong>First-time setup:</strong> To start using the app, complete these
-            steps:
-            <ol>
-              <li>Add a provider and finish any sign-in step</li>
-              <li>Create a model profile that uses that provider</li>
-            </ol>
+              <strong>First-time setup:</strong> To start using the app, complete these
+              steps:
+              <ol>
+                <li>Add a provider and finish any sign-in step</li>
+                <li>Create a model profile that uses that provider</li>
+              </ol>
             </AlertDescription>
           </Alert>
         )}
@@ -496,6 +512,9 @@ export function SettingsPage() {
             </div>
             <Button
               type="button"
+              variant="ghost"
+              size="sm"
+              className="task-card__action-button"
               onClick={() => setModal({ type: "create-provider" })}
             >
               <PlusIcon data-icon="inline-start" />
@@ -540,12 +559,15 @@ export function SettingsPage() {
             </div>
             <Button
               type="button"
+              variant="ghost"
+              size="sm"
+              className="task-card__action-button"
               onClick={() => setModal({ type: "create-profile" })}
               disabled={providers.length === 0}
               title={providers.length === 0 ? "Add a provider first" : undefined}
             >
               <PlusIcon data-icon="inline-start" />
-              + Add Profile
+              Add Profile
             </Button>
           </CardHeader>
           <CardContent className="settings-panel__body">
@@ -599,8 +621,8 @@ export function SettingsPage() {
           <CardContent className="settings-panel__body">
             <Alert className="settings-inline-note">
               <AlertDescription>
-              Add Markdown files under <code>.agents/commands/</code>; a file like
-              <code>.agents/commands/review.md</code> becomes <code>/review</code>.
+                Add Markdown files under <code>.agents/commands/</code>; a file like
+                <code>.agents/commands/review.md</code> becomes <code>/review</code>.
               </AlertDescription>
             </Alert>
 

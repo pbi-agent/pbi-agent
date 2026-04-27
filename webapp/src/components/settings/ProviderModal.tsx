@@ -9,12 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "../ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
@@ -62,10 +57,42 @@ function initForm(provider?: ProviderView, options?: ConfigOptions): FormState {
     auth_mode: defaultMeta?.default_auth_mode ?? "api_key",
     secretMode: "env_var",
     api_key: "",
-    api_key_env: "",
+    api_key_env: defaultApiKeyEnv(defaultKind),
     responses_url: "",
     generic_api_url: "",
   };
+}
+
+function defaultApiKeyEnv(providerKind: string): string {
+  if (providerKind === "azure") return "AZURE_API_KEY";
+  if (providerKind === "openai") return "OPENAI_API_KEY";
+  if (providerKind === "xai") return "XAI_API_KEY";
+  if (providerKind === "google") return "GEMINI_API_KEY";
+  if (providerKind === "anthropic") return "ANTHROPIC_API_KEY";
+  if (providerKind === "generic") return "GENERIC_API_KEY";
+  return "";
+}
+
+function responsesUrlLabel(providerKind: string): string {
+  return providerKind === "azure"
+    ? "Azure endpoint URL"
+    : "Responses URL override";
+}
+
+function responsesUrlDescription(providerKind: string): string {
+  return providerKind === "azure"
+    ? "Required. Routes by URL: /openai/v1/responses, /openai/v1, or /anthropic/v1/messages."
+    : "Leave blank to use the provider default.";
+}
+
+function responsesUrlPlaceholder(
+  providerKind: string,
+  defaultResponsesUrl: string | null | undefined,
+): string {
+  if (providerKind === "azure") {
+    return "https://<resource>.openai.azure.com/openai/v1/responses";
+  }
+  return defaultResponsesUrl ?? "https://api.example.com/v1/responses";
 }
 
 export type ProviderPayload = {
@@ -88,7 +115,9 @@ interface Props {
 
 export function ProviderModal({ provider, options, onSave, onClose }: Props) {
   const isEdit = !!provider;
-  const [form, setForm] = useState<FormState>(() => initForm(provider, options));
+  const [form, setForm] = useState<FormState>(() =>
+    initForm(provider, options),
+  );
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,6 +127,11 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
       if (updates.kind && updates.kind !== prev.kind) {
         const nextMeta = options.provider_metadata[updates.kind];
         next.auth_mode = nextMeta?.default_auth_mode ?? "api_key";
+        if (prev.secretMode === "env_var") {
+          next.api_key_env = defaultApiKeyEnv(updates.kind);
+        }
+        next.responses_url = "";
+        next.generic_api_url = "";
       }
       return next;
     });
@@ -174,14 +208,15 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
   const accountAuthLabel = selectedAuthModeMetadata?.account_label;
 
   return (
-    <Dialog open onOpenChange={(open) => {
-      if (!open && !isPending) onClose();
-    }}>
-      <DialogContent>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isPending) onClose();
+      }}
+    >
+      <DialogContent className="task-form-dialog">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Provider" : "Add Provider"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Provider" : "Add Provider"}</DialogTitle>
         </DialogHeader>
 
         <form
@@ -190,204 +225,204 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
             void handleSubmit(event);
           }}
         >
-          <FieldGroup>
-          <Field>
-            <FieldLabel>Name</FieldLabel>
-            <Input
-              name="provider-name"
-              className="task-form__input"
-              value={form.name}
-              onChange={(e) => set({ name: e.target.value })}
-              required
-              autoFocus
-              placeholder="e.g. My OpenAI"
-            />
-          </Field>
+          <div className="task-form__body">
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Name</FieldLabel>
+                <Input
+                  name="provider-name"
+                  className="task-form__input"
+                  value={form.name}
+                  onChange={(e) => set({ name: e.target.value })}
+                  required
+                  autoFocus
+                  placeholder="e.g. My OpenAI"
+                />
+              </Field>
 
-          {!isEdit && (
-            <Field>
-              <FieldLabel>ID (optional)</FieldLabel>
-              <Input
-                name="provider-id"
-                className="task-form__input"
-                value={form.id}
-                onChange={(e) => set({ id: e.target.value })}
-                placeholder="Auto-generated from name"
-              />
-              <FieldDescription>
-                Leave blank to auto-generate from the name.
-              </FieldDescription>
-            </Field>
-          )}
+              {!isEdit && (
+                <Field>
+                  <FieldLabel>ID (optional)</FieldLabel>
+                  <Input
+                    name="provider-id"
+                    className="task-form__input"
+                    value={form.id}
+                    onChange={(e) => set({ id: e.target.value })}
+                    placeholder="Auto-generated from name"
+                  />
+                  <FieldDescription>
+                    Leave blank to auto-generate from the name.
+                  </FieldDescription>
+                </Field>
+              )}
 
-          <Field>
-            <FieldLabel>Kind</FieldLabel>
-            <NativeSelect
-              name="provider-kind"
-              className="task-form__select"
-              value={form.kind}
-              onChange={(e) => set({ kind: e.target.value })}
-            >
-              {options.provider_kinds.map((k) => (
-                <NativeSelectOption key={k} value={k}>
-                  {options.provider_metadata[k]?.label ?? k}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            {kindMeta?.description && (
-              <FieldDescription>{kindMeta.description}</FieldDescription>
+              <Field>
+                <FieldLabel>Kind</FieldLabel>
+                <NativeSelect
+                  name="provider-kind"
+                  className="task-form__select"
+                  value={form.kind}
+                  onChange={(e) => set({ kind: e.target.value })}
+                >
+                  {options.provider_kinds.map((k) => (
+                    <NativeSelectOption key={k} value={k}>
+                      {options.provider_metadata[k]?.label ?? k}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+                {kindMeta?.description && (
+                  <FieldDescription>{kindMeta.description}</FieldDescription>
+                )}
+              </Field>
+
+              {showAuthModePicker && (
+                <Field>
+                  <FieldLabel>Authentication</FieldLabel>
+                  <ToggleGroup
+                    type="single"
+                    value={form.auth_mode}
+                    onValueChange={(value) => {
+                      if (value) set({ auth_mode: value });
+                    }}
+                    className="secret-mode-tabs provider-auth-mode-tabs"
+                    spacing={1}
+                    variant="outline"
+                  >
+                    {authModes.map((authMode) => (
+                      <ToggleGroupItem key={authMode} value={authMode}>
+                        {authModeMetadata[authMode]?.label ?? authMode}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </Field>
+              )}
+
+              {isApiKeyAuth ? (
+                <Field>
+                  <FieldLabel>Credential source</FieldLabel>
+                  <ToggleGroup
+                    type="single"
+                    value={form.secretMode}
+                    onValueChange={(value) => {
+                      if (value) set({ secretMode: value as SecretMode });
+                    }}
+                    className="secret-mode-tabs"
+                    spacing={1}
+                    variant="outline"
+                  >
+                    {secretModes.map(({ value, label }) => (
+                      <ToggleGroupItem key={value} value={value}>
+                        {label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </Field>
+              ) : (
+                <Alert className="settings-inline-note provider-auth-inline-note">
+                  <AlertDescription>
+                    Save this provider to continue directly into sign-in for
+                    your {accountAuthLabel ?? "account"}.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {isApiKeyAuth && form.secretMode === "env_var" && (
+                <Field>
+                  <FieldLabel>Environment variable name</FieldLabel>
+                  <Input
+                    name="api-key-env"
+                    className="task-form__input"
+                    value={form.api_key_env}
+                    onChange={(e) => set({ api_key_env: e.target.value })}
+                    placeholder="e.g. OPENAI_API_KEY"
+                  />
+                </Field>
+              )}
+
+              {isApiKeyAuth && form.secretMode === "plaintext" && (
+                <Field>
+                  <FieldLabel>
+                    API key
+                    {isEdit ? " (leave blank to keep current)" : ""}
+                  </FieldLabel>
+                  <Input
+                    name="api-key"
+                    className="task-form__input"
+                    type="password"
+                    value={form.api_key}
+                    onChange={(e) => set({ api_key: e.target.value })}
+                    placeholder={isEdit ? "Enter new key to update" : "sk-…"}
+                    autoComplete="new-password"
+                  />
+                </Field>
+              )}
+
+              {kindMeta?.supports_responses_url && (
+                <Field>
+                  <FieldLabel>{responsesUrlLabel(form.kind)}</FieldLabel>
+                  <Input
+                    name="responses-url"
+                    className="task-form__input"
+                    type="text"
+                    value={form.responses_url}
+                    onChange={(e) => set({ responses_url: e.target.value })}
+                    placeholder={responsesUrlPlaceholder(
+                      form.kind,
+                      kindMeta.default_responses_url,
+                    )}
+                    required={form.kind === "azure"}
+                  />
+                  <FieldDescription>
+                    {responsesUrlDescription(form.kind)}
+                  </FieldDescription>
+                </Field>
+              )}
+
+              {kindMeta?.supports_generic_api_url && (
+                <Field>
+                  <FieldLabel>API base URL</FieldLabel>
+                  <Input
+                    name="generic-api-url"
+                    className="task-form__input"
+                    type="text"
+                    value={form.generic_api_url}
+                    onChange={(e) => set({ generic_api_url: e.target.value })}
+                    placeholder={
+                      kindMeta.default_generic_api_url ??
+                      "https://api.example.com/v1"
+                    }
+                  />
+                  <FieldDescription>
+                    Leave blank to use the provider default.
+                  </FieldDescription>
+                </Field>
+              )}
+            </FieldGroup>
+
+            {error && (
+              <Alert variant="destructive" className="task-form__error">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
-          </Field>
-
-          {showAuthModePicker && (
-            <Field>
-              <FieldLabel>Authentication</FieldLabel>
-              <ToggleGroup
-                type="single"
-                value={form.auth_mode}
-                onValueChange={(value) => {
-                  if (value) set({ auth_mode: value });
-                }}
-                className="secret-mode-tabs provider-auth-mode-tabs"
-                spacing={1}
-                variant="outline"
-              >
-                {authModes.map((authMode) => (
-                  <ToggleGroupItem
-                    key={authMode}
-                    value={authMode}
-                  >
-                    {authModeMetadata[authMode]?.label ?? authMode}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </Field>
-          )}
-
-          {isApiKeyAuth ? (
-            <Field>
-              <FieldLabel>Credential source</FieldLabel>
-              <ToggleGroup
-                type="single"
-                value={form.secretMode}
-                onValueChange={(value) => {
-                  if (value) set({ secretMode: value as SecretMode });
-                }}
-                className="secret-mode-tabs"
-                spacing={1}
-                variant="outline"
-              >
-                {secretModes.map(({ value, label }) => (
-                  <ToggleGroupItem
-                    key={value}
-                    value={value}
-                  >
-                    {label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </Field>
-          ) : (
-            <Alert className="settings-inline-note provider-auth-inline-note">
-              <AlertDescription>
-              Save this provider to continue directly into sign-in for your{" "}
-              {accountAuthLabel ?? "account"}.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {isApiKeyAuth && form.secretMode === "env_var" && (
-            <Field>
-              <FieldLabel>
-                Environment variable name
-              </FieldLabel>
-              <Input
-                name="api-key-env"
-                className="task-form__input"
-                value={form.api_key_env}
-                onChange={(e) => set({ api_key_env: e.target.value })}
-                placeholder="e.g. OPENAI_API_KEY"
-              />
-            </Field>
-          )}
-
-          {isApiKeyAuth && form.secretMode === "plaintext" && (
-            <Field>
-              <FieldLabel>
-                API key
-                {isEdit ? " (leave blank to keep current)" : ""}
-              </FieldLabel>
-              <Input
-                name="api-key"
-                className="task-form__input"
-                type="password"
-                value={form.api_key}
-                onChange={(e) => set({ api_key: e.target.value })}
-                placeholder={isEdit ? "Enter new key to update" : "sk-…"}
-                autoComplete="new-password"
-              />
-            </Field>
-          )}
-
-          {kindMeta?.supports_responses_url && (
-            <Field>
-              <FieldLabel>
-                Responses URL override
-              </FieldLabel>
-              <Input
-                name="responses-url"
-                className="task-form__input"
-                type="text"
-                value={form.responses_url}
-                onChange={(e) => set({ responses_url: e.target.value })}
-                placeholder={
-                  kindMeta.default_responses_url ??
-                  "https://api.example.com/v1/responses"
-                }
-              />
-              <FieldDescription>
-                Leave blank to use the provider default.
-              </FieldDescription>
-            </Field>
-          )}
-
-          {kindMeta?.supports_generic_api_url && (
-            <Field>
-              <FieldLabel>API base URL</FieldLabel>
-              <Input
-                name="generic-api-url"
-                className="task-form__input"
-                type="text"
-                value={form.generic_api_url}
-                onChange={(e) => set({ generic_api_url: e.target.value })}
-                placeholder={
-                  kindMeta.default_generic_api_url ??
-                  "https://api.example.com/v1"
-                }
-              />
-              <FieldDescription>
-                Leave blank to use the provider default.
-              </FieldDescription>
-            </Field>
-          )}
-          </FieldGroup>
-
-          {error && (
-            <Alert variant="destructive" className="task-form__error">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          </div>
 
           <DialogFooter className="task-form__footer">
-            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+            <Button
+              type="button"
+              variant="outline"
+              className="task-form__action-button"
+              onClick={onClose}
+              disabled={isPending}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending
-                ? "Saving…"
-                : isEdit
-                  ? "Save Changes"
-                  : "Add Provider"}
+            <Button
+              type="submit"
+              variant="default"
+              className="task-form__action-button"
+              disabled={isPending}
+            >
+              {isPending ? "Saving…" : isEdit ? "Save Changes" : "Add Provider"}
             </Button>
           </DialogFooter>
         </form>

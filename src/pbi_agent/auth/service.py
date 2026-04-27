@@ -234,9 +234,13 @@ def build_runtime_request_auth(
     auth: ApiKeyAuth | OAuthSessionAuth | None,
 ) -> RequestAuthConfig:
     if isinstance(auth, ApiKeyAuth):
+        header_name = "api-key" if provider_kind == "azure" else "Authorization"
+        header_value = (
+            auth.api_key if header_name == "api-key" else f"Bearer {auth.api_key}"
+        )
         return RequestAuthConfig(
             request_url=request_url,
-            headers={"Authorization": f"Bearer {auth.api_key}"},
+            headers={header_name: header_value},
         )
     if isinstance(auth, OAuthSessionAuth):
         backend = _get_backend(auth.backend)

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Trash2Icon } from "lucide-react";
-import { Alert, AlertDescription } from "../ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogMedia,
   AlertDialogTitle,
-} from "../ui/alert-dialog";
+} from "@/components/ui/alert-dialog";
 
 interface Props {
   title: string;
@@ -46,9 +46,9 @@ export function DeleteConfirmModal({
     <AlertDialog open onOpenChange={(open) => {
       if (!open && !isPending) onClose();
     }}>
-      <AlertDialogContent>
+      <AlertDialogContent size="sm">
         <AlertDialogHeader>
-          <AlertDialogMedia>
+          <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
             <Trash2Icon />
           </AlertDialogMedia>
           <AlertDialogTitle>{title}</AlertDialogTitle>

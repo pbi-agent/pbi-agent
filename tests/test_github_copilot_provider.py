@@ -340,13 +340,13 @@ event: response.output_item.done
 data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","id":"rs_1","encrypted_content":"opaque"}}
 
 event: response.output_item.added
-data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"list_files","arguments":""}}
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","arguments":""}}
 
 event: response.function_call_arguments.delta
-data: {"type":"response.function_call_arguments.delta","item_id":"enc_fc_1","output_index":1,"delta":"{\\"path\\":\\".\\"}"}
+data: {"type":"response.function_call_arguments.delta","item_id":"enc_fc_1","output_index":1,"delta":"{\\"path\\":\\"README.md\\"}"}
 
 event: response.output_item.done
-data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_2","call_id":"call_1","name":"list_files","arguments":"{\\"path\\":\\".\\"}","status":"completed"}}
+data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","id":"fc_2","call_id":"call_1","name":"read_file","arguments":"{\\"path\\":\\"README.md\\"}","status":"completed"}}
 
 event: response.completed
 data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":8}}}
@@ -371,5 +371,5 @@ data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","
     assert response.reasoning_summary == "Thinking"
     assert len(response.function_calls) == 1
     assert response.function_calls[0].call_id == "call_1"
-    assert response.function_calls[0].name == "list_files"
-    assert response.function_calls[0].arguments == {"path": "."}
+    assert response.function_calls[0].name == "read_file"
+    assert response.function_calls[0].arguments == {"path": "README.md"}

@@ -1133,7 +1133,7 @@ def _apply_sub_agent_parent_context(
     if not include_context or parent_context is None:
         return
 
-    if provider_name not in {"openai", "google"}:
+    if provider_name not in {"openai", "azure", "google"}:
         return
 
     continuation_id = (parent_context.continuation_id or "").strip()
@@ -1151,7 +1151,7 @@ def _build_sub_agent_initial_message(
     if not include_context or parent_context is None:
         return task_instruction
 
-    if provider_name in {"openai", "google"}:
+    if provider_name in {"openai", "azure", "google"}:
         if (parent_context.continuation_id or "").strip():
             return task_instruction
 

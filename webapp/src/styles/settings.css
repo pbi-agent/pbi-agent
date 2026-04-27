@@ -125,7 +125,7 @@
 }
 
 .settings-item__tag {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
   min-height: 2rem;
@@ -136,12 +136,6 @@
   color: var(--color-accent);
   background: var(--color-accent-muted);
   border-color: var(--color-accent-border);
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  font-weight: var(--weight-medium);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .settings-item__tag--success {
@@ -152,7 +146,11 @@
 
 .settings-item__tag--warning {
   color: var(--color-warning, #f2b84b);
-  background: color-mix(in srgb, var(--color-warning, #f2b84b) 14%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-warning, #f2b84b) 14%,
+    transparent
+  );
   border-color: transparent;
 }
 
@@ -165,49 +163,21 @@
 .settings-item__actions {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  justify-content: flex-end;
+  gap: 0.125rem;
   flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+.settings-item__actions .task-card__action-button {
+  flex: 0 0 auto;
 }
 
 .settings-item__actions--provider {
-  flex-wrap: wrap;
+  display: flex;
+  flex-wrap: nowrap;
   justify-content: flex-end;
-}
-
-/* ── Button overrides for settings context ── */
-/* .btn, .btn--primary, .btn--ghost, .btn--danger are defined globally in
-   session.css and intentionally reused. Only add what settings needs on top. */
-
-/* Give all buttons in the settings page a transparent border slot so that
-   the ghost variant can show a real border without layout shift. */
-.settings-page .btn {
-  border: 1px solid transparent;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.settings-page .btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.settings-page .btn--ghost {
-  border-color: var(--color-border);
-}
-
-.settings-page .btn--ghost:hover:not(:disabled) {
-  border-color: var(--color-border-focus);
-}
-
-/* Ghost-danger: used on item card delete buttons in settings only. */
-.settings-page .btn--ghost-danger {
-  color: var(--color-error);
-  border-color: transparent;
-}
-
-.settings-page .btn--ghost-danger:hover:not(:disabled) {
-  background: var(--color-error-muted);
-  border-color: var(--color-error);
+  gap: 0.125rem;
 }
 
 /* ── Page-level error banner ── */
@@ -239,8 +209,43 @@
 
 .task-form__row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-3);
+}
+
+.task-form__body .task-form__row > [data-slot="field"] {
+  min-width: 0;
+}
+
+.task-form__body [data-slot="field-description"] {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.task-form__body .secret-mode-tabs {
+  width: 100%;
+  min-width: 0;
+}
+
+.task-form__body .secret-mode-tabs [data-slot="toggle-group-item"] {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.task-form__body .settings-inline-note {
+  margin: 0;
+}
+
+.task-form__body .task-form__error,
+.task-form__body .task-form__hint {
+  margin: 0;
+}
+
+@media (max-width: 40rem) {
+  .task-form__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .task-form__error {
@@ -271,7 +276,9 @@
   font-weight: var(--weight-medium);
   color: var(--color-text-secondary);
   border-radius: calc(var(--radius-md) - 2px);
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast);
   text-align: center;
   cursor: pointer;
 }
@@ -429,4 +436,38 @@
 .settings-onboarding-guide ol {
   margin: var(--sp-2) 0 0 var(--sp-4);
   padding: 0;
+}
+
+@media (max-width: 48rem) {
+  .settings-page {
+    padding: var(--sp-4);
+  }
+
+  .settings-page__inner {
+    gap: var(--sp-4);
+  }
+
+  .settings-panel__header,
+  .settings-item,
+  .active-profile-control {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-panel__header {
+    gap: var(--sp-3);
+  }
+
+  .settings-item__actions {
+    justify-content: flex-start;
+  }
+
+  .settings-item__actions--provider {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .active-profile-control__label {
+    white-space: normal;
+  }
 }

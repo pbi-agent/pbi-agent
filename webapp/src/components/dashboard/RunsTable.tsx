@@ -222,7 +222,7 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
             ))}
           </NativeSelect>
         </div>
-        <Badge variant="secondary" className="dashboard-panel__count">{totalCount} total</Badge>
+        <Badge variant="outline" className="dashboard-panel__count">{totalCount} total</Badge>
       </CardHeader>
 
       <CardContent className="dashboard-panel__body">

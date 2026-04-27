@@ -272,16 +272,12 @@
 
 .dashboard-panel__count {
   justify-self: end;
-  min-height: 2rem;
-  margin-right: var(--sp-1);
-  padding: var(--sp-1) var(--sp-3);
-  border-radius: var(--radius-md);
+  font-family: var(--font-ui);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
-  font-weight: var(--weight-medium);
-  color: var(--muted-foreground);
-  font-family: var(--font-mono);
-  background: var(--muted);
+  min-height: 2rem;
+  padding: var(--sp-1) var(--sp-3);
+  margin-right: var(--sp-1);
 }
 
 .dashboard-panel__body {

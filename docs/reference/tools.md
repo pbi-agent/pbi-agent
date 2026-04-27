@@ -14,8 +14,6 @@ Project-local MCP servers are discovered from `.agents/mcp.json` and their tools
 | `shell` | yes | Run a shell command in the workspace and return stdout, stderr, and exit code. |
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `sub_agent` | no | Delegate a scoped task to a child agent, optionally selecting a discovered project sub-agent type and inheriting parent context. |
-| `list_files` | no | List files and directories in the workspace, with optional glob and type filtering. |
-| `search_files` | no | Search text file contents for a string or regex pattern. |
 | `read_file` | no | Read text files with optional line ranges, summarize tabular files, and extract text from PDF and DOCX files. |
 | `read_image` | no | Read a local image file and attach it to the model context in native multimodal format. |
 | `read_web_url` | no | Fetch a public web page through markdown.new and return Markdown. |
@@ -132,33 +130,11 @@ Runtime behavior:
 - Unknown `agent_type` values are rejected before the child session starts.
 - The child session is bounded to `100` provider requests or `1200` elapsed seconds, whichever happens first.
 
-## `list_files`
-
-List directory contents for general workspace discovery, or narrow results by glob and entry type for targeted lookups. Recursive listings skip common generated and dependency directories such as `.git`, `.venv`, `node_modules`, and caches.
-
-| Parameter | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `path` | `string` | no | Directory or file path relative to the workspace root. Defaults to `"."`. |
-| `recursive` | `boolean` | no | Traverse subdirectories when `true`. Defaults to `true`. |
-| `glob` | `string` | no | Optional glob filter. Match against the entry name unless the pattern includes a path separator. |
-| `entry_type` | `string` | no | One of `all`, `file`, or `directory`. Defaults to `all`. |
-| `max_entries` | `integer` | no | Maximum number of entries to return. Defaults to `200`. |
-
-```json
-{
-  "path": ".",
-  "recursive": true,
-  "glob": "docs/**/*.md",
-  "entry_type": "file",
-  "max_entries": 50
-}
-```
-
 ## `read_file`
 
 Read workspace files safely, with line-range support for text files, compact summaries for tabular files, and extraction for formats such as PDF and DOCX.
 
-`read_file` is also the activation path for project-local `SKILL.md` files discovered from `.agents/skills/`. When the prompt catalog lists a skill, the model should load that `SKILL.md` with `read_file` first, then inspect any referenced project-local resources with `read_file`, `list_files`, or `search_files`.
+`read_file` is also the activation path for project-local `SKILL.md` files discovered from `.agents/skills/`. When the prompt catalog lists a skill, the model should load that `SKILL.md` with `read_file` first, then inspect any referenced project-local resources with `read_file` or bounded shell commands such as `rg --files` and `rg -n`.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |

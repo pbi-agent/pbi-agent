@@ -168,29 +168,10 @@
 }
 
 .task-form__action-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-1);
   min-width: 0;
   min-height: 2.25rem;
   margin: 0;
-  padding: var(--sp-1) var(--sp-3);
-  border-radius: var(--radius-md);
-  color: var(--muted-foreground);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  font-weight: var(--weight-semi);
-  transition:
-    color var(--duration-fast) var(--ease),
-    background var(--duration-fast) var(--ease);
   vertical-align: middle;
-}
-
-.task-form__action-button:not(:disabled):hover,
-.task-form__action-button:not(:disabled):focus-visible {
-  color: var(--foreground);
-  background: var(--muted) !important;
 }
 
 @media (max-width: 40rem) {

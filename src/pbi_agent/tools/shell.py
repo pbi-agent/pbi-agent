@@ -22,7 +22,12 @@ MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
 
 SPEC = ToolSpec(
     name="shell",
-    description="Run a shell command in the workspace. Returns stdout, stderr, and exit code.",
+    description=(
+        "Run a shell command in the workspace. Returns stdout, stderr, and "
+        "exit code. Use shell for file discovery with bounded commands such as "
+        "`rg --files | sed -n '1,200p'`, `find . -maxdepth 2 -type f`, "
+        "and content search via `rg -n 'pattern'`."
+    ),
     parameters_schema={
         "type": "object",
         "properties": {

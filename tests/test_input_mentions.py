@@ -34,7 +34,7 @@ def test_expand_file_mentions_warns_for_missing_file(tmp_path: Path) -> None:
     assert warnings == ["Referenced file not found: missing.md"]
 
 
-def test_expand_file_mentions_rejects_outside_workspace(tmp_path: Path) -> None:
+def test_expand_file_mentions_ignores_outside_workspace_paths(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside.txt"
     outside.write_text("outside\n", encoding="utf-8")
     try:
@@ -46,8 +46,17 @@ def test_expand_file_mentions_rejects_outside_workspace(tmp_path: Path) -> None:
         outside.unlink(missing_ok=True)
 
     assert expanded == f"Check @{outside}"
-    assert warnings
-    assert "path outside workspace is not allowed" in warnings[0]
+    assert warnings == []
+
+
+def test_expand_file_mentions_ignores_import_aliases(tmp_path: Path) -> None:
+    expanded, warnings = expand_file_mentions(
+        'import { Button } from "@/components/ui/button"',
+        root=tmp_path,
+    )
+
+    assert expanded == 'import { Button } from "@/components/ui/button"'
+    assert warnings == []
 
 
 def test_expand_file_mentions_skips_email_addresses(tmp_path: Path) -> None:

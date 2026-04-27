@@ -173,8 +173,8 @@ def _collect_mentioned_files(
             if missing_path:
                 try:
                     resolve_safe_path(root, missing_path)
-                except ValueError as exc:
-                    warnings.append(str(exc))
+                except ValueError:
+                    pass
                 else:
                     warnings.append(f"Referenced file not found: {missing_path}")
             index = at_index + 1

@@ -70,7 +70,7 @@ export function StageColumn({
             ) : null}
           </div>
         </div>
-        <Badge variant="secondary" className="board-column__count">{tasks.length}</Badge>
+        <Badge variant="outline" className="board-column__count">{tasks.length}</Badge>
       </CardHeader>
       <CardContent ref={setDropRef} className="board-column__body">
         {tasks.length === 0 ? (

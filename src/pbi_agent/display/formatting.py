@@ -15,8 +15,6 @@ from pbi_agent.models.messages import TokenUsage, context_window_for_model
 TOOL_STYLE_MAP = {
     "shell": "shell",
     "apply_patch": "apply-patch",
-    "list_files": "list-files",
-    "search_files": "search-files",
     "read_file": "read-file",
     "read_image": "read-image",
     "read_web_url": "read-web-url",
@@ -27,8 +25,6 @@ TOOL_STYLE_MAP = {
 TOOL_ICONS: dict[str, str] = {
     "shell": "\u25b6",  # ▶
     "apply-patch": "\u25a0",  # ■
-    "list-files": "\u2630",  # ☰
-    "search-files": "\u2315",  # ⌕
     "read-file": "\u2610",  # ☐
     "read-image": "\U0001f5bc",  # 🖼
     "read-web-url": "\U0001f310",  # 🌐
@@ -41,8 +37,6 @@ TOOL_ICONS: dict[str, str] = {
 TOOL_BORDER_STYLES: dict[str, str] = {
     "shell": "blue",
     "apply-patch": "#F97316",
-    "list-files": "#818CF8",
-    "search-files": "#EC4899",
     "read-file": "#EAB308",
     "read-image": "#FB7185",
     "read-web-url": "#06B6D4",
@@ -413,58 +407,6 @@ def format_generic_function_item(
     return f"{name_safe}()  {status}  [dim]{' '.join(detail_bits)}[/dim]"
 
 
-def format_list_files_item(
-    path: str,
-    *,
-    verbose: bool = False,
-    status: str,
-    call_id: str = "",
-    recursive: bool = True,
-    glob_pattern: str = "",
-    entry_type: str = "all",
-    max_entries: int | str = 200,
-) -> str:
-    flags: list[str] = []
-    if recursive:
-        flags.append("recursive")
-    if glob_pattern:
-        flags.append(f"glob={escape_markup_text(shorten(glob_pattern, 40))}")
-    if entry_type != "all":
-        flags.append(f"type={escape_markup_text(entry_type)}")
-    flags.append(f"max={max_entries}")
-    flag_str = "  ".join(f"[dim]{f}[/dim]" for f in flags)
-    lines = [
-        f"[#818CF8]\u2630[/#818CF8] [bold]{escape_markup_text(shorten(format_informal_path(path), 96))}[/bold]  {status}",
-        flag_str,
-    ]
-    _append_verbose_call_id(lines, call_id, verbose)
-    return "\n".join(lines)
-
-
-def format_search_files_item(
-    pattern: str,
-    *,
-    verbose: bool = False,
-    status: str,
-    call_id: str = "",
-    path: str = ".",
-    glob_pattern: str = "",
-    regex: bool = False,
-    max_matches: int | str = 100,
-) -> str:
-    mode = "[dim]regex[/dim]" if regex else "[dim]literal[/dim]"
-    lines = [
-        f"[#EC4899]\u2315[/#EC4899] [bold]{escape_markup_text(shorten(pattern, 80))}[/bold]  {mode}  {status}",
-        f"[dim]path:[/dim] {escape_markup_text(shorten(format_informal_path(path), 60))}  [dim]max:[/dim] {max_matches}",
-    ]
-    if glob_pattern:
-        lines.append(
-            f"[dim]glob:[/dim] {escape_markup_text(shorten(glob_pattern, 60))}"
-        )
-    _append_verbose_call_id(lines, call_id, verbose)
-    return "\n".join(lines)
-
-
 def format_read_file_item(
     path: str,
     *,
@@ -575,9 +517,8 @@ def route_function_result(
 
     This centralises the if/elif routing so that ``WebDisplay``,
     ``ConsoleDisplay``, and their sub-agent variants share a single code-path.
-    Callers that have extra tool-specific formatters (e.g. ``list_files``,
-    ``search_files``, ``read_file`` on the console) should handle those
-    *before* falling through to this function.
+    Callers that have extra tool-specific formatters (e.g. ``read_file`` on
+    the console) should handle those *before* falling through to this function.
     """
     args = to_dict(arguments)
 
@@ -603,30 +544,6 @@ def route_function_result(
             call_id=call_id,
             diff=raw_diff if isinstance(raw_diff, str) else "",
             shorten_path=True,
-        )
-
-    if name == "list_files":
-        return name, format_list_files_item(
-            str(args.get("path", ".")),
-            verbose=verbose,
-            status=status,
-            call_id=call_id,
-            recursive=bool(args.get("recursive", True)),
-            glob_pattern=str(args.get("glob", "")),
-            entry_type=str(args.get("entry_type", "all")),
-            max_entries=args.get("max_entries", 200),
-        )
-
-    if name == "search_files":
-        return name, format_search_files_item(
-            str(args.get("pattern", "<missing pattern>")),
-            verbose=verbose,
-            status=status,
-            call_id=call_id,
-            path=str(args.get("path", ".")),
-            glob_pattern=str(args.get("glob", "")),
-            regex=bool(args.get("regex", False)),
-            max_matches=args.get("max_matches", 100),
         )
 
     if name == "read_file":
@@ -678,12 +595,10 @@ __all__ = [
     "escape_markup_text",
     "format_context_tooltip",
     "format_generic_function_item",
-    "format_list_files_item",
     "format_patch_tool_item",
     "format_read_file_item",
     "format_read_web_url_item",
     "format_reasoning_title",
-    "format_search_files_item",
     "format_session_subtitle",
     "format_session_subtitle_parts",
     "format_shell_tool_item",

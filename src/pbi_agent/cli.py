@@ -117,11 +117,11 @@ def build_parser() -> argparse.ArgumentParser:
     provider_group = parser.add_argument_group("Provider and API")
     provider_group.add_argument(
         "--provider",
-        choices=["openai", "xai", "google", "anthropic", "generic"],
+        choices=["openai", "azure", "xai", "google", "anthropic", "generic"],
         metavar="PROVIDER",
         default=None,
         help=(
-            "Provider backend: openai, xai, google, anthropic, or generic "
+            "Provider backend: openai, azure, xai, google, anthropic, or generic "
             "(default: openai)."
         ),
     )
@@ -136,6 +136,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     provider_group.add_argument(
         "--openai-api-key",
+        dest="api_key",
+        help=argparse.SUPPRESS,
+    )
+    provider_group.add_argument(
+        "--azure-api-key",
         dest="api_key",
         help=argparse.SUPPRESS,
     )
@@ -820,6 +825,7 @@ def _web_runtime_flags_in_args(raw_argv: list[str]) -> list[str]:
         "--responses-url",
         "--api-key",
         "--openai-api-key",
+        "--azure-api-key",
         "--xai-api-key",
         "--google-api-key",
         "--anthropic-api-key",

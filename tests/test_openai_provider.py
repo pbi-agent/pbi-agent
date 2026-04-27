@@ -187,6 +187,64 @@ def test_resolve_settings_uses_openai_xhigh_default(monkeypatch) -> None:
     settings.validate()
 
 
+def test_resolve_settings_uses_azure_env_and_requires_url(monkeypatch) -> None:
+    for name in (
+        "PBI_AGENT_PROVIDER",
+        "PBI_AGENT_API_KEY",
+        "PBI_AGENT_RESPONSES_URL",
+        "PBI_AGENT_MODEL",
+        "PBI_AGENT_REASONING_EFFORT",
+        "PBI_AGENT_SUB_AGENT_MODEL",
+        "OPENAI_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("AZURE_API_KEY", "azure-test-key")
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--provider",
+            "azure",
+            "--responses-url",
+            "https://example-resource.openai.azure.com/openai/v1/responses",
+            "web",
+        ]
+    )
+    settings = resolve_settings(args)
+
+    assert settings.provider == "azure"
+    assert settings.api_key == "azure-test-key"
+    assert (
+        settings.responses_url
+        == "https://example-resource.openai.azure.com/openai/v1/responses"
+    )
+    assert settings.model == "gpt-4.1"
+    assert settings.sub_agent_model == "gpt-4.1-mini"
+    settings.validate()
+
+
+def test_azure_request_headers_use_api_key_header() -> None:
+    provider = OpenAIProvider(
+        _make_settings(
+            provider="azure",
+            responses_url="https://example-resource.openai.azure.com/openai/v1/responses",
+        )
+    )
+
+    headers = provider._request_headers(
+        request_auth=type(
+            "RequestAuth",
+            (),
+            {"headers": {"api-key": "azure-test-key"}},
+        )(),
+        session_id=None,
+        input_items=[],
+    )
+
+    assert headers["api-key"] == "azure-test-key"
+    assert "Authorization" not in headers
+
+
 def test_openai_build_request_body_uses_http_responses_shape() -> None:
     provider = OpenAIProvider(_make_settings())
 
@@ -659,7 +717,7 @@ def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
 data: {"type":"response.created","response":{"id":"resp_1"}}
 
 event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"function_call","call_id":"call_1","name":"list_files","arguments":"{\\"path\\":\\".\\"}"}]}}
+data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"function_call","call_id":"call_1","name":"read_file","arguments":"{\\"path\\":\\"README.md\\"}"}]}}
 
 """,
                 headers={"x-codex-turn-state": "ts-1"},
@@ -729,8 +787,8 @@ data: {"type":"response.completed","response":{"id":"resp_3","model":"gpt-5","us
             {
                 "type": "function_call",
                 "call_id": "call_1",
-                "name": "list_files",
-                "arguments": '{"path":"."}',
+                "name": "read_file",
+                "arguments": '{"path":"README.md"}',
             },
             {
                 "type": "function_call_output",
@@ -1419,7 +1477,7 @@ def test_openai_chatgpt_http_replays_explicit_transcript_with_reasoning(
 data: {"type":"response.created","response":{"id":"resp_1"}}
 
 event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1}},"output":[{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"Need to inspect files"}],"content":[{"type":"reasoning_text","text":"Checking the workspace before answering."}]},{"type":"function_call","id":"fc_1","call_id":"call_1","name":"list_files","status":"completed","arguments":"{\\"path\\":\\".\\"}"}]}}
+data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1}},"output":[{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"Need to inspect files"}],"content":[{"type":"reasoning_text","text":"Checking the workspace before answering."}]},{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","status":"completed","arguments":"{\\"path\\":\\"README.md\\"}"}]}}
 
 """
             ),
@@ -1506,9 +1564,9 @@ data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5","us
         {
             "type": "function_call",
             "call_id": "call_1",
-            "name": "list_files",
+            "name": "read_file",
             "status": "completed",
-            "arguments": '{"path":"."}',
+            "arguments": '{"path":"README.md"}',
         },
         {
             "type": "function_call_output",

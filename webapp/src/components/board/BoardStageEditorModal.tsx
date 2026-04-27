@@ -272,7 +272,7 @@ export function BoardStageEditorModal({
           <DialogFooter className="board-stage-editor__actions">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               className="task-form__action-button"
               onClick={addStage}
               disabled={isSaving}
@@ -282,7 +282,7 @@ export function BoardStageEditorModal({
             </Button>
             <Button
               type="submit"
-              variant="ghost"
+              variant="default"
               className="task-form__action-button"
               disabled={isSaving}
             >

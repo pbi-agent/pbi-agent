@@ -46,6 +46,7 @@ DEFAULT_MAX_TOKENS = 16384
 OPENAI_SERVICE_TIERS = ("auto", "default", "flex", "priority")
 PROVIDER_API_KEY_ENVS = {
     "openai": "OPENAI_API_KEY",
+    "azure": "AZURE_API_KEY",
     "xai": "XAI_API_KEY",
     "google": "GEMINI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
@@ -53,6 +54,7 @@ PROVIDER_API_KEY_ENVS = {
 }
 PROVIDER_KINDS = (
     "openai",
+    "azure",
     "chatgpt",
     "github_copilot",
     "xai",
@@ -118,9 +120,15 @@ class Settings:
         if self.provider not in PROVIDER_KINDS:
             allowed = ", ".join(PROVIDER_KINDS)
             raise ConfigError(f"--provider must be one of: {allowed}.")
-        if self.provider == "openai":
+        if self.provider in {"openai", "azure"}:
             if not self.api_key:
                 raise ConfigError(missing_api_key_message(self.provider))
+            if self.provider == "azure" and not self.responses_url.strip():
+                raise ConfigError(
+                    "--responses-url is required for provider 'azure'. "
+                    "Use your Azure resource URL, for example "
+                    "https://<resource>.openai.azure.com/openai/v1/responses."
+                )
         elif self.provider == "chatgpt":
             if self.auth is None:
                 raise ConfigError(
@@ -407,6 +415,8 @@ def _command_description_from_markdown(instructions: str, command_id: str) -> st
 
 
 def _default_responses_url(provider: str) -> str:
+    if provider == "azure":
+        return ""
     if provider == "chatgpt":
         return OPENAI_CHATGPT_RESPONSES_URL
     if provider == "github_copilot":
@@ -427,6 +437,8 @@ def _default_responses_url_for_auth(provider_kind: str, auth_mode: str) -> str:
 def _default_model(provider: str) -> str:
     if provider == "generic":
         return ""
+    if provider == "azure":
+        return "gpt-4.1"
     if provider == "github_copilot":
         return "gpt-5.4"
     if provider == "xai":
@@ -441,6 +453,8 @@ def _default_model(provider: str) -> str:
 def _default_sub_agent_model(provider: str) -> str | None:
     if provider == "generic":
         return None
+    if provider == "azure":
+        return "gpt-4.1-mini"
     if provider == "github_copilot":
         return "gpt-5-mini"
     if provider == "xai":
@@ -491,6 +505,7 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
     }
     kind_label = {
         "openai": "OpenAI API",
+        "azure": "Azure",
         "chatgpt": "ChatGPT (Subscription)",
         "github_copilot": "GitHub Copilot (Subscription)",
         "xai": "xAI",
@@ -500,6 +515,10 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
     }.get(provider_kind, provider_kind)
     kind_description = {
         "openai": "Uses an OpenAI API key.",
+        "azure": (
+            "Uses an Azure API key and routes by endpoint: OpenAI Responses, "
+            "OpenAI chat completions, or Anthropic Messages. Model names are deployments."
+        ),
         "chatgpt": "Uses your ChatGPT subscription account.",
         "github_copilot": "Uses your GitHub Copilot subscription account.",
     }.get(provider_kind)
@@ -524,7 +543,14 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "supports_service_tier": provider_kind == "openai",
         "supports_native_web_search": provider_kind != "generic",
         "supports_image_inputs": provider_kind
-        in {"openai", "chatgpt", "google", "anthropic", "github_copilot"},
+        in {
+            "openai",
+            "azure",
+            "chatgpt",
+            "google",
+            "anthropic",
+            "github_copilot",
+        },
     }
 
 
@@ -1151,7 +1177,7 @@ def _resolve_int_setting(
 
 
 def _default_reasoning_effort(provider_kind: str) -> str:
-    return "xhigh" if provider_kind in {"openai", "chatgpt"} else "high"
+    return "xhigh" if provider_kind in {"openai", "azure", "chatgpt"} else "high"
 
 
 def _resolve_web_search(

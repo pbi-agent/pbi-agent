@@ -125,7 +125,7 @@ export function TaskModal({
           <DialogFooter className="task-form__footer">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               className="task-form__action-button"
               onClick={onClose}
               disabled={isSaving}
@@ -134,7 +134,7 @@ export function TaskModal({
             </Button>
             <Button
               type="submit"
-              variant="ghost"
+              variant="default"
               className="task-form__action-button"
               disabled={isSaving}
             >

@@ -24,6 +24,7 @@ from pbi_agent.agent.tool_display import (
 )
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
+from pbi_agent.providers.azure import azure_endpoint_kind, AzureEndpointKind
 from pbi_agent.models.messages import (
     CompletedResponse,
     ImageAttachment,
@@ -319,7 +320,7 @@ class AnthropicProvider(Provider):
             req_start = time.perf_counter()
             try:
                 req = urllib.request.Request(
-                    ANTHROPIC_API_URL,
+                    _request_url(self._settings),
                     data=request_data,
                     headers=headers,
                     method="POST",
@@ -333,7 +334,7 @@ class AnthropicProvider(Provider):
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
-                    url=ANTHROPIC_API_URL,
+                    url=_request_url(self._settings),
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload=response_json,
@@ -396,7 +397,7 @@ class AnthropicProvider(Provider):
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
-                    url=ANTHROPIC_API_URL,
+                    url=_request_url(self._settings),
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload=error_payload or {"body": error_body},
@@ -474,7 +475,7 @@ class AnthropicProvider(Provider):
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
-                    url=ANTHROPIC_API_URL,
+                    url=_request_url(self._settings),
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload={"error": str(exc)},
@@ -664,6 +665,16 @@ def _extract_anthropic_web_search_queries(block: dict[str, Any]) -> list[str]:
 def _supports_adaptive_thinking(model: str) -> bool:
     normalized = model.strip().lower()
     return not normalized.startswith("claude-haiku")
+
+
+def _request_url(settings: Settings) -> str:
+    if (
+        settings.provider == "azure"
+        and azure_endpoint_kind(settings.responses_url)
+        == AzureEndpointKind.ANTHROPIC_MESSAGES
+    ):
+        return settings.responses_url
+    return ANTHROPIC_API_URL
 
 
 def _anthropic_web_search_tool(model: str) -> dict[str, Any]:
