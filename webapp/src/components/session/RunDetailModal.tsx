@@ -47,6 +47,10 @@ export function RunDetailModal({
   const detailQuery = useQuery({
     queryKey: ["run-detail", runSessionId, scope],
     queryFn: () => fetchRunDetail(runSessionId, scope),
+    refetchInterval: (query) => {
+      const run = query.state.data?.run;
+      return run && isRunActive(run.status) ? 2_000 : false;
+    },
   });
 
   return (
@@ -86,6 +90,10 @@ export function RunDetailModal({
       </DialogContent>
     </Dialog>
   );
+}
+
+function isRunActive(status: string): boolean {
+  return status !== "completed" && status !== "failed" && status !== "interrupted";
 }
 
 function RunSummary({ run }: { run: RunSession }) {

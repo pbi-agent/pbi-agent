@@ -20,15 +20,22 @@ export function RunHistory({ sessionId }: { sessionId: string }) {
   const runsQuery = useQuery({
     queryKey: ["session-runs", sessionId],
     queryFn: () => fetchSessionRuns(sessionId),
-    staleTime: 15_000,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const runs = query.state.data ?? [];
+      return runs.some((run) => isRunActive(run.status)) ? 2_000 : false;
+    },
   });
 
-  const runs = runsQuery.data ?? [];
+  const runs = [...(runsQuery.data ?? [])].sort(compareRunsNewestFirst);
   const hasRuns = runs.length > 0;
 
   return (
     <>
-      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenu open={isOpen} onOpenChange={(open) => {
+        setIsOpen(open);
+        if (open) void runsQuery.refetch();
+      }}>
         <div className="run-history">
           <DropdownMenuTrigger asChild>
             <Button
@@ -158,6 +165,14 @@ function RunCard({
       </div>
     </button>
   );
+}
+
+function isRunActive(status: string): boolean {
+  return status !== "completed" && status !== "failed" && status !== "interrupted";
+}
+
+function compareRunsNewestFirst(a: RunSession, b: RunSession): number {
+  return new Date(b.started_at).getTime() - new Date(a.started_at).getTime();
 }
 
 function formatDuration(ms: number): string {

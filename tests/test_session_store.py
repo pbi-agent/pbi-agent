@@ -429,6 +429,8 @@ def test_web_manager_lease_blocks_concurrent_owner(tmp_path) -> None:
 
 def test_web_manager_lease_atomic_across_concurrent_startup(tmp_path) -> None:
     db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db):
+        pass
     barrier = threading.Barrier(2)
     results: list[bool] = []
     errors: list[Exception] = []
