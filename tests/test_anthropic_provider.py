@@ -81,6 +81,47 @@ def test_anthropic_parse_response_extracts_cache_usage_and_tool_calls() -> None:
     assert len(result.provider_data["content_blocks"]) == 5
 
 
+def test_azure_openai_anthropic_endpoint_uses_configured_url(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float):
+        del timeout
+        seen["url"] = request.full_url
+        seen["x_api_key"] = request.headers.get("X-api-key")
+        return make_http_response(
+            {
+                "id": "msg_azure",
+                "content": [{"type": "text", "text": "ok"}],
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = AnthropicProvider(
+        _make_settings(
+            provider="azure_openai",
+            responses_url="https://mca-resource.services.ai.azure.com/anthropic/v1/messages",
+            model="claude-deployment",
+        )
+    )
+    provider.request_turn(
+        user_message="hi",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert seen == {
+        "url": "https://mca-resource.services.ai.azure.com/anthropic/v1/messages",
+        "x_api_key": "test-key",
+    }
+
+
 def test_anthropic_request_turn_preserves_history_and_wraps_tool_results(
     monkeypatch,
     display_spy,

@@ -312,6 +312,10 @@ export function ModelProfileModal({
     (providerModels?.manual_entry_required
       ? "Manual model entry is required for this provider."
       : null);
+  const modelFieldHint =
+    selectedProvider?.kind === "azure_openai"
+      ? "Enter your Azure deployment name. Model discovery is not available for Azure — use a custom value."
+      : null;
 
   function renderModelControl(args: {
     label: string;
@@ -500,6 +504,9 @@ export function ModelProfileModal({
                     options: modelOptions,
                     onChange: (value) => set({ model: value }),
                   })}
+                  {modelFieldHint && (
+                    <FieldDescription>{modelFieldHint}</FieldDescription>
+                  )}
                 </Field>
                 <Field>
                   {renderModelControl({

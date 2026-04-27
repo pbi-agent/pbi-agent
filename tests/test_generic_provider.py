@@ -26,7 +26,48 @@ def _make_settings(**overrides: object) -> Settings:
     return Settings(**defaults)
 
 
-def test_generic_parse_response_normalizes_assistant_message_and_tool_calls() -> None:
+def test_azure_openai_chat_completions_uses_api_key_header_and_endpoint(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float):
+        del timeout
+        seen["url"] = request.full_url
+        seen["api_key"] = request.headers.get("Api-key")
+        seen["authorization"] = request.get_header("Authorization")
+        return make_http_response(
+            {
+                "id": "chatcmpl_azure",
+                "model": "deployment",
+                "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GenericProvider(
+        _make_settings(
+            provider="azure_openai",
+            responses_url="https://mca-resource.openai.azure.com/openai/v1",
+            model="deployment",
+        )
+    )
+    provider.request_turn(
+        user_message="hi",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert seen == {
+        "url": "https://mca-resource.openai.azure.com/openai/v1/chat/completions",
+        "api_key": "test-key",
+        "authorization": None,
+    }
+
     provider = GenericProvider(_make_settings())
 
     result = provider._parse_response(

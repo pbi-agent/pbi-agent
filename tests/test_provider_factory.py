@@ -18,7 +18,6 @@ from pbi_agent.providers.xai_provider import XAIProvider
     ("provider_name", "expected_type"),
     [
         ("openai", OpenAIProvider),
-        ("azure_openai", OpenAIProvider),
         ("chatgpt", OpenAIProvider),
         ("github_copilot", GitHubCopilotProvider),
         ("xai", XAIProvider),
@@ -56,5 +55,31 @@ def test_create_provider_returns_expected_backend(
         settings = Settings(api_key="test-key", provider=provider_name)
 
     provider = create_provider(settings)
+
+    assert isinstance(provider, expected_type)
+
+
+@pytest.mark.parametrize(
+    ("url", "expected_type"),
+    [
+        (
+            "https://mca-resource.openai.azure.com/openai/v1/responses",
+            OpenAIProvider,
+        ),
+        ("https://mca-resource.openai.azure.com/openai/v1", GenericProvider),
+        (
+            "https://mca-resource.services.ai.azure.com/anthropic/v1/messages",
+            AnthropicProvider,
+        ),
+    ],
+)
+def test_azure_openai_routes_by_endpoint_url(url: str, expected_type: type) -> None:
+    provider = create_provider(
+        Settings(
+            api_key="azure-key",
+            provider="azure_openai",
+            responses_url=url,
+        )
+    )
 
     assert isinstance(provider, expected_type)

@@ -1,5 +1,4 @@
-# TODO
-
-[X] Inspect MEMORY.md structure and current-day entries
-[X] Apply daily compaction/compression per MEMORY.md + compress skill
-[X] Validate MEMORY.md sections and update TODO
+[X] Inspect current AlertDialog component and usages
+[X] Replace custom dialog styling with upstream shadcn/radix-nova pattern
+[X] Validate frontend checks/build as feasible
+[X] Update task memory

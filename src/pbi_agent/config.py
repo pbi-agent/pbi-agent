@@ -516,8 +516,8 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
     kind_description = {
         "openai": "Uses an OpenAI API key.",
         "azure_openai": (
-            "Uses an Azure OpenAI API key and resource-specific Responses URL. "
-            "Model names are Azure deployment names."
+            "Uses an Azure API key and routes by endpoint: OpenAI Responses, "
+            "OpenAI chat completions, or Anthropic Messages. Model names are deployments."
         ),
         "chatgpt": "Uses your ChatGPT subscription account.",
         "github_copilot": "Uses your GitHub Copilot subscription account.",

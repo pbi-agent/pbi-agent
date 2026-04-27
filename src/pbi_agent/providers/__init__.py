@@ -36,7 +36,40 @@ def create_provider(
     effective_excluded_tools = set(excluded_tools or set())
     effective_excluded_tools.update(image_excluded_tools(name))
 
-    if name in {"openai", "azure_openai", "chatgpt"}:
+    if name == "azure_openai":
+        from pbi_agent.providers.anthropic_provider import AnthropicProvider
+        from pbi_agent.providers.azure import (
+            AzureEndpointKind,
+            azure_endpoint_kind,
+            settings_for_azure_endpoint,
+        )
+        from pbi_agent.providers.generic_provider import GenericProvider
+        from pbi_agent.providers.openai_provider import OpenAIProvider
+
+        azure_settings = settings_for_azure_endpoint(settings)
+        endpoint_kind = azure_endpoint_kind(settings.responses_url)
+        if endpoint_kind == AzureEndpointKind.ANTHROPIC_MESSAGES:
+            return AnthropicProvider(
+                azure_settings,
+                system_prompt=system_prompt,
+                excluded_tools=effective_excluded_tools,
+                tool_catalog=tool_catalog,
+            )
+        if endpoint_kind == AzureEndpointKind.OPENAI_CHAT_COMPLETIONS:
+            return GenericProvider(
+                azure_settings,
+                system_prompt=system_prompt,
+                excluded_tools=effective_excluded_tools,
+                tool_catalog=tool_catalog,
+            )
+        return OpenAIProvider(
+            azure_settings,
+            system_prompt=system_prompt,
+            excluded_tools=effective_excluded_tools,
+            tool_catalog=tool_catalog,
+        )
+
+    if name in {"openai", "chatgpt"}:
         from pbi_agent.providers.openai_provider import OpenAIProvider
 
         return OpenAIProvider(

@@ -57,10 +57,42 @@ function initForm(provider?: ProviderView, options?: ConfigOptions): FormState {
     auth_mode: defaultMeta?.default_auth_mode ?? "api_key",
     secretMode: "env_var",
     api_key: "",
-    api_key_env: "",
+    api_key_env: defaultApiKeyEnv(defaultKind),
     responses_url: "",
     generic_api_url: "",
   };
+}
+
+function defaultApiKeyEnv(providerKind: string): string {
+  if (providerKind === "azure_openai") return "AZURE_OPENAI_API_KEY";
+  if (providerKind === "openai") return "OPENAI_API_KEY";
+  if (providerKind === "xai") return "XAI_API_KEY";
+  if (providerKind === "google") return "GEMINI_API_KEY";
+  if (providerKind === "anthropic") return "ANTHROPIC_API_KEY";
+  if (providerKind === "generic") return "GENERIC_API_KEY";
+  return "";
+}
+
+function responsesUrlLabel(providerKind: string): string {
+  return providerKind === "azure_openai"
+    ? "Azure endpoint URL"
+    : "Responses URL override";
+}
+
+function responsesUrlDescription(providerKind: string): string {
+  return providerKind === "azure_openai"
+    ? "Required. Routes by URL: /openai/v1/responses, /openai/v1, or /anthropic/v1/messages."
+    : "Leave blank to use the provider default.";
+}
+
+function responsesUrlPlaceholder(
+  providerKind: string,
+  defaultResponsesUrl: string | null | undefined,
+): string {
+  if (providerKind === "azure_openai") {
+    return "https://<resource>.openai.azure.com/openai/v1/responses";
+  }
+  return defaultResponsesUrl ?? "https://api.example.com/v1/responses";
 }
 
 export type ProviderPayload = {
@@ -95,6 +127,11 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
       if (updates.kind && updates.kind !== prev.kind) {
         const nextMeta = options.provider_metadata[updates.kind];
         next.auth_mode = nextMeta?.default_auth_mode ?? "api_key";
+        if (prev.secretMode === "env_var") {
+          next.api_key_env = defaultApiKeyEnv(updates.kind);
+        }
+        next.responses_url = "";
+        next.generic_api_url = "";
       }
       return next;
     });
@@ -322,20 +359,21 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
 
               {kindMeta?.supports_responses_url && (
                 <Field>
-                  <FieldLabel>Responses URL override</FieldLabel>
+                  <FieldLabel>{responsesUrlLabel(form.kind)}</FieldLabel>
                   <Input
                     name="responses-url"
                     className="task-form__input"
                     type="text"
                     value={form.responses_url}
                     onChange={(e) => set({ responses_url: e.target.value })}
-                    placeholder={
-                      kindMeta.default_responses_url ??
-                      "https://api.example.com/v1/responses"
-                    }
+                    placeholder={responsesUrlPlaceholder(
+                      form.kind,
+                      kindMeta.default_responses_url,
+                    )}
+                    required={form.kind === "azure_openai"}
                   />
                   <FieldDescription>
-                    Leave blank to use the provider default.
+                    {responsesUrlDescription(form.kind)}
                   </FieldDescription>
                 </Field>
               )}

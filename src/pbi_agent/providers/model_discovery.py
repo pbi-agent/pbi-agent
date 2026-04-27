@@ -82,8 +82,18 @@ def discover_provider_models(settings: Settings) -> ProviderModelDiscoveryResult
             error=auth_error,
         )
 
+    # Azure requires user-configured deployment names; skip discovery.
+    if provider_kind == "azure_openai":
+        return ProviderModelDiscoveryResult(
+            provider_kind=provider_kind,
+            discovery_supported=False,
+            manual_entry_required=True,
+            models=[],
+            error=None,
+        )
+
     try:
-        if provider_kind in {"openai", "azure_openai", "chatgpt"}:
+        if provider_kind in {"openai", "chatgpt"}:
             models = _discover_openai_models(settings)
         elif provider_kind == "github_copilot":
             models = _discover_github_copilot_models(settings)
@@ -302,7 +312,11 @@ def _discover_generic_models(settings: Settings) -> list[DiscoveredProviderModel
 
 
 def _discover_anthropic_models(settings: Settings) -> list[DiscoveredProviderModel]:
-    url = "https://api.anthropic.com/v1/models"
+    url = (
+        _replace_path_suffix(settings.responses_url, "models")
+        if settings.provider == "azure_openai"
+        else "https://api.anthropic.com/v1/models"
+    )
     models: list[DiscoveredProviderModel] = []
     after_id: str | None = None
     while True:
@@ -426,7 +440,7 @@ def _get_json(
             if (
                 exc.code == 401
                 and not retried_unauthorized_refresh
-                and settings.provider in {"openai", "chatgpt"}
+                and settings.provider in {"openai", "azure_openai", "chatgpt"}
                 and isinstance(settings.auth, OAuthSessionAuth)
             ):
                 settings.auth = refresh_runtime_auth(

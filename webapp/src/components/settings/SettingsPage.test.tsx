@@ -184,6 +184,29 @@ function makeConfigBootstrap(
           supports_native_web_search: true,
           supports_image_inputs: true,
         },
+        azure_openai: {
+          label: "Azure OpenAI",
+          description:
+            "Uses an Azure OpenAI API key and resource-specific Responses URL. Model names are Azure deployment names.",
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+          },
+          default_model: "gpt-4.1",
+          default_sub_agent_model: "gpt-4.1-mini",
+          default_responses_url: "",
+          default_generic_api_url: null,
+          supports_responses_url: true,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
+          supports_native_web_search: true,
+          supports_image_inputs: true,
+        },
         chatgpt: {
           label: "ChatGPT (Subscription)",
           description: "Uses your ChatGPT subscription account.",
@@ -593,6 +616,60 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Uses an OpenAI API key.")).toBeInTheDocument();
   });
 
+  it("configures Azure OpenAI provider fields and saves the Azure URL", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        options: {
+          ...makeConfigBootstrap().options,
+          provider_kinds: ["openai", "azure_openai", "chatgpt"],
+        },
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Add Provider" }));
+    await user.selectOptions(
+      document.querySelector('select[name="provider-kind"]') as HTMLSelectElement,
+      "azure_openai",
+    );
+
+    expect(screen.getByText("Azure OpenAI")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("AZURE_OPENAI_API_KEY")).toBeInTheDocument();
+    expect(screen.getByText("Azure endpoint URL")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Required. Routes by URL: /openai/v1/responses, /openai/v1, or /anthropic/v1/messages.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("e.g. My OpenAI"), "Azure Main");
+    await user.type(
+      screen.getByPlaceholderText(
+        "https://<resource>.openai.azure.com/openai/v1/responses",
+      ),
+      "https://example-resource.openai.azure.com/openai/v1/responses",
+    );
+    await user.click(screen.getByRole("button", { name: "Add Provider" }));
+
+    await waitFor(() =>
+      expect(createProvider).toHaveBeenCalledWith(
+        {
+          name: "Azure Main",
+          kind: "azure_openai",
+          auth_mode: "api_key",
+          api_key: null,
+          api_key_env: "AZURE_OPENAI_API_KEY",
+          responses_url:
+            "https://example-resource.openai.azure.com/openai/v1/responses",
+          generic_api_url: null,
+        },
+        "rev-1",
+      ),
+    );
+  });
+
   it("opens provider auth immediately after creating a subscription-backed provider", async () => {
     const user = userEvent.setup();
 
@@ -765,6 +842,29 @@ describe("SettingsPage", () => {
       providers: [
         ...makeConfigBootstrap().providers,
         {
+          id: "azure-main",
+          name: "Azure Main",
+          kind: "azure_openai",
+          auth_mode: "api_key",
+          responses_url:
+            "https://example-resource.openai.azure.com/openai/v1/responses",
+          generic_api_url: null,
+          secret_source: "env_var",
+          secret_env_var: "AZURE_OPENAI_API_KEY",
+          has_secret: true,
+          auth_status: {
+            auth_mode: "api_key",
+            backend: null,
+            session_status: "missing",
+            has_session: false,
+            can_refresh: false,
+            account_id: null,
+            email: null,
+            plan_type: null,
+            expires_at: null,
+          },
+        },
+        {
           id: "xai-main",
           name: "xAI Main",
           kind: "xai",
@@ -789,7 +889,7 @@ describe("SettingsPage", () => {
       ],
       options: {
         ...makeConfigBootstrap().options,
-        provider_kinds: ["openai", "xai"],
+        provider_kinds: ["openai", "azure_openai", "xai"],
         provider_metadata: {
           ...makeConfigBootstrap().options.provider_metadata,
           xai: {
@@ -834,6 +934,14 @@ describe("SettingsPage", () => {
         manual_entry_required: false,
         models: [],
         error: null,
+      })
+      .mockResolvedValueOnce({
+        provider_id: "azure-main",
+        provider_kind: "azure_openai",
+        discovery_supported: false,
+        manual_entry_required: true,
+        models: [],
+        error: null,
       });
 
     renderWithProviders(<SettingsPage />);
@@ -851,6 +959,17 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("xai-main"),
     );
+
+    await user.selectOptions(providerSelect, "azure-main");
+
+    await waitFor(() =>
+      expect(fetchProviderModels).toHaveBeenCalledWith("azure-main"),
+    );
+    expect(
+      screen.getByText(
+        "Enter your Azure deployment name. Model discovery is not available for Azure — use a custom value.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("uses the standard task form shell for the profile form", async () => {

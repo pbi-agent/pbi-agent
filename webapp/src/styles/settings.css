@@ -169,9 +169,15 @@
   flex-wrap: nowrap;
 }
 
+.settings-item__actions .task-card__action-button {
+  flex: 0 0 auto;
+}
+
 .settings-item__actions--provider {
-  flex-wrap: wrap;
-  row-gap: 0.125rem;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 0.125rem;
 }
 
 /* ── Page-level error banner ── */
@@ -430,4 +436,38 @@
 .settings-onboarding-guide ol {
   margin: var(--sp-2) 0 0 var(--sp-4);
   padding: 0;
+}
+
+@media (max-width: 48rem) {
+  .settings-page {
+    padding: var(--sp-4);
+  }
+
+  .settings-page__inner {
+    gap: var(--sp-4);
+  }
+
+  .settings-panel__header,
+  .settings-item,
+  .active-profile-control {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-panel__header {
+    gap: var(--sp-3);
+  }
+
+  .settings-item__actions {
+    justify-content: flex-start;
+  }
+
+  .settings-item__actions--provider {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .active-profile-control__label {
+    white-space: normal;
+  }
 }
