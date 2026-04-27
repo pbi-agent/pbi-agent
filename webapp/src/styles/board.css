@@ -208,9 +208,13 @@
 
 /* ── Task Card ── */
 .task-card {
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: auto;
   gap: var(--sp-3);
+  min-width: 0;
   padding: var(--sp-4);
-  overflow: visible;
+  overflow: hidden;
   transition: border-color var(--duration-fast),
               box-shadow var(--duration-fast),
               transform var(--duration-fast);
@@ -221,6 +225,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  min-width: 0;
   padding: 0;
   cursor: grab;
 }
@@ -262,6 +267,8 @@
 }
 
 .task-card__title {
+  max-width: 100%;
+  min-width: 0;
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
   font-weight: var(--weight-medium);
