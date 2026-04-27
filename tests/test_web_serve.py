@@ -1723,7 +1723,9 @@ def test_live_session_worker_refreshes_mentions_on_reload_and_end() -> None:
 def test_interrupt_live_session_requires_active_processing() -> None:
     release = threading.Event()
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, display, resume_session_id
         release.wait(timeout=2)
         return 0
@@ -1748,7 +1750,9 @@ def test_interrupt_live_session_requires_active_processing() -> None:
 def test_interrupt_live_session_sets_interrupt_and_removes_latest_user_item() -> None:
     release = threading.Event()
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.bind_session("session-1")
         display.submit_input("queued")
@@ -1862,7 +1866,9 @@ def test_session_input_profile_override_emits_runtime_update(monkeypatch) -> Non
     )
     queued_values: list[object] = []
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         queued_values.append(display.user_prompt())
         queued_values.append(display.user_prompt())
@@ -1919,7 +1925,9 @@ def test_set_live_session_profile_emits_runtime_update(monkeypatch) -> None:
     )
     queued_values: list[object] = []
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         queued_values.append(display.user_prompt())
         queued_values.append(display.user_prompt())
@@ -1974,7 +1982,9 @@ def test_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -> Non
     )
     observed_runtime = None
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         nonlocal observed_runtime
         del display, resume_session_id
         observed_runtime = _settings
@@ -2259,7 +2269,9 @@ def test_create_live_session_reuses_active_live_session_for_saved_chat(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
@@ -2294,7 +2306,9 @@ def test_create_live_session_reuses_active_live_session_for_saved_chat(
 
 
 def test_session_stream_replays_session_identity_event() -> None:
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.bind_session("saved-session-1")
         return 0
@@ -2318,7 +2332,9 @@ def test_session_stream_replays_session_identity_event() -> None:
 
 
 def test_upload_endpoint_returns_uploaded_image_metadata() -> None:
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
@@ -2347,7 +2363,9 @@ def test_upload_endpoint_returns_uploaded_image_metadata() -> None:
 
 
 def test_submit_session_input_accepts_uploaded_image_ids() -> None:
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         queued = display.user_prompt()
         assert isinstance(queued, QueuedInput)
@@ -2398,7 +2416,9 @@ def test_shell_command_endpoint_runs_command_and_publishes_events(
     monkeypatch.chdir(tmp_path)
     (tmp_path / "example.txt").write_text("hello\n", encoding="utf-8")
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
@@ -2443,7 +2463,9 @@ def test_shell_command_endpoint_persists_messages_for_bound_session(
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
     (tmp_path / "example.txt").write_text("hello\n", encoding="utf-8")
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
@@ -2490,7 +2512,9 @@ def test_shell_command_endpoint_persists_messages_for_bound_session(
 
 
 def test_shell_command_endpoint_rejects_empty_command() -> None:
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
@@ -2517,7 +2541,9 @@ def test_submit_session_input_does_not_duplicate_workspace_image_mentions(
     monkeypatch.chdir(tmp_path)
     (tmp_path / "chart.png").write_bytes(b"\x89PNG\r\n\x1a\n")
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         queued = display.user_prompt()
         assert isinstance(queued, QueuedInput)
@@ -3965,7 +3991,9 @@ def test_sessions_endpoint_lists_saved_sessions(tmp_path, monkeypatch) -> None:
 
 
 def test_live_session_list_and_detail_endpoints() -> None:
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
@@ -3992,7 +4020,9 @@ def test_live_session_list_and_detail_endpoints() -> None:
 
 
 def test_live_session_apply_patch_event_includes_diff_metadata() -> None:
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.function_start(1)
         display.patch_result(
@@ -4042,7 +4072,9 @@ def test_live_session_apply_patch_event_includes_diff_metadata() -> None:
 def test_live_session_tool_group_updates_one_item_when_second_tool_finishes_first() -> (
     None
 ):
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.function_start(2)
         display.tool_execution_start(
@@ -4138,7 +4170,9 @@ def test_delete_task_endpoint_removes_task() -> None:
 def test_request_new_session_endpoint_queues_new_session() -> None:
     queued_values: list[object] = []
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         queued_values.append(display.user_prompt())
         queued_values.append(display.user_prompt())
@@ -4164,7 +4198,9 @@ def test_request_new_session_endpoint_queues_new_session() -> None:
 def test_uploaded_session_image_route_returns_image_bytes() -> None:
     image_bytes = b"\x89PNG\r\n\x1a\n"
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.user_prompt()
         return 0
@@ -4367,7 +4403,9 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
 def test_interrupt_live_session_removes_queued_input_item() -> None:
     release = threading.Event()
 
-    def fake_run_session_loop(_settings, display, *, resume_session_id=None):
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
         del _settings, resume_session_id
         display.bind_session("session-1")
         queued = display.user_prompt()

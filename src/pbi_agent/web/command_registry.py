@@ -47,7 +47,7 @@ COMMANDS: tuple[SlashCommand, ...] = (
 )
 
 SlashCommandTuple = tuple[str, str, str, str]
-_MIN_SLASH_FUZZY_SCORE = 25
+_MIN_SLASH_FUZZY_SCORE = 30
 _MIN_DESC_SEARCH_LEN = 2
 _T = TypeVar("_T")
 
@@ -85,7 +85,7 @@ def _score_command(search: str, cmd: str, desc: str, keywords: str = "") -> floa
         return 150.0
     if keywords and len(search) >= _MIN_DESC_SEARCH_LEN:
         for keyword in keywords.lower().split():
-            if keyword.startswith(search) or search in keyword:
+            if keyword.startswith(search):
                 return 120.0
     if len(search) >= _MIN_DESC_SEARCH_LEN and search in lower_desc:
         idx = lower_desc.find(search)
