@@ -17,13 +17,32 @@
 /* ── Header bar ──────────────────────────────────────────────────────── */
 
 .dashboard-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: var(--sp-4);
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background: var(--color-bg-surface);
+}
+
+.dashboard-header__section {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.dashboard-header__section--left {
+  justify-content: flex-start;
+}
+
+.dashboard-header__section--center {
+  justify-content: center;
+}
+
+.dashboard-header__section--right {
+  justify-content: flex-end;
 }
 
 .dashboard-header__title {
@@ -46,58 +65,103 @@
   white-space: nowrap;
 }
 
-.dashboard-header__sep {
-  height: 24px;
-  flex-shrink: 0;
-}
-
-.dashboard-header__filters {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex: 1;
-  justify-content: space-between;
-  flex-wrap: wrap;
-}
-
 .dashboard-header__date-group {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-1);
 }
 
-.dashboard-header__cal-icon {
-  width: 14px;
-  height: 14px;
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
+.dashboard-date-field {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2.5rem;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease);
+}
+
+.dashboard-date-field:hover,
+.dashboard-date-field:focus-within {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.dashboard-date-field__icon {
+  width: 1rem;
+  height: 1rem;
+  color: currentColor;
+  opacity: 0.7;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+
+.dashboard-date-field:hover .dashboard-date-field__icon,
+.dashboard-date-field:focus-within .dashboard-date-field__icon {
+  opacity: 1;
 }
 
 .dashboard-header__date-sep {
-  color: var(--color-text-tertiary);
+  color: var(--muted-foreground);
   font-size: var(--text-xs);
+  line-height: var(--leading-normal);
   user-select: none;
+  padding-inline: var(--sp-1);
+}
+
+.dashboard-header__date-label {
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  font-weight: var(--weight-medium);
+  user-select: none;
+  padding-inline: var(--sp-1);
 }
 
 .dashboard-date-input {
   font-family: var(--font-mono);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--foreground);
+  padding: 0;
+  cursor: pointer;
 }
 
 .dashboard-date-input--compact {
-  height: 32px;
+  height: auto;
   font-size: var(--text-xs);
-  width: 140px;
+  line-height: var(--leading-normal);
+  width: 6.75rem;
 }
 
 /* Webkit date input icon colour fix for dark theme */
 .dashboard-date-input::-webkit-calendar-picker-indicator {
   filter: invert(0.8);
   cursor: pointer;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  inset: 0;
+}
+
+.dashboard-date-input:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
 }
 
 .dashboard-controls__scope {
   align-self: center;
   gap: var(--sp-1);
+  justify-self: end;
 }
 
 .dashboard-controls__scope .dashboard-controls__scope-button {
@@ -126,11 +190,14 @@
 
 @media (max-width: 640px) {
   .dashboard-header {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr;
+    justify-items: center;
   }
 
-  .dashboard-header__sep {
-    display: none;
+  .dashboard-header__section--left,
+  .dashboard-header__section--center,
+  .dashboard-header__section--right {
+    justify-content: center;
   }
 }
 
@@ -188,10 +255,11 @@
 }
 
 .dashboard-panel__header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
   align-items: center;
-  justify-content: space-between;
-  padding: var(--sp-4) var(--sp-5);
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-5);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -203,9 +271,17 @@
 }
 
 .dashboard-panel__count {
+  justify-self: end;
+  min-height: 2rem;
+  margin-right: var(--sp-1);
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-md);
   font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
+  line-height: var(--leading-normal);
+  font-weight: var(--weight-medium);
+  color: var(--muted-foreground);
   font-family: var(--font-mono);
+  background: var(--muted);
 }
 
 .dashboard-panel__body {
@@ -290,17 +366,69 @@
 
 .runs-filters {
   display: flex;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-5);
-  border-bottom: 1px solid var(--color-border);
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  min-width: 0;
 }
 
-.runs-filter-select,
-.runs-filter-input {
+.runs-filter-select {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  min-width: 120px;
+  line-height: var(--leading-normal);
+  font-weight: var(--weight-medium);
+  min-width: 8.5rem;
+  min-height: 2.5rem;
+  padding: var(--sp-2) 2rem var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md);
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
+}
+
+.runs-filters [data-slot="native-select-wrapper"] [data-slot="native-select-icon"] {
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  transition:
+    color var(--duration-fast) var(--ease),
+    opacity var(--duration-fast) var(--ease);
+}
+
+.runs-filter-select:hover,
+.runs-filter-select:focus-visible {
+  color: var(--foreground);
+  background: var(--muted);
+  border-color: transparent;
+}
+
+.runs-filters [data-slot="native-select-wrapper"]:hover [data-slot="native-select-icon"],
+.runs-filters [data-slot="native-select-wrapper"]:focus-within [data-slot="native-select-icon"] {
+  color: var(--foreground);
+  opacity: 1;
+}
+
+.runs-filter-select--model {
+  min-width: 9.5rem;
+}
+
+@media (max-width: 800px) {
+  .dashboard-panel__header {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+
+  .runs-filters {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .dashboard-panel__count {
+    justify-self: start;
+  }
 }
 
 /* ── Runs table row specifics ──────────────────────────────────────── */

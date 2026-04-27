@@ -1,10 +1,15 @@
 import { useState, type JSX, type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ImageAttachment, TimelineItem } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { GitDiffResult, isApplyPatchToolMetadata } from "./GitDiffResult";
+
+function MarkdownContent({ content }: { content: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
+}
 
 function renderUserContent(
   content: string,
@@ -134,7 +139,7 @@ export function TimelineEntry({
         {subAgentBanner}
         <div className="timeline-entry__content">
           {item.markdown && roleClass !== "user" ? (
-            <ReactMarkdown>{item.content}</ReactMarkdown>
+            <MarkdownContent content={item.content} />
           ) : (
             renderUserContent(
               item.content,
@@ -170,7 +175,7 @@ export function TimelineEntry({
         </Button>
         {!collapsed ? (
           <div className="timeline-entry__body">
-            <ReactMarkdown>{item.content}</ReactMarkdown>
+            <MarkdownContent content={item.content} />
           </div>
         ) : null}
       </div>

@@ -115,6 +115,37 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("# Done")).not.toBeInTheDocument();
   });
 
+  it("renders assistant markdown tables as table elements", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: [
+              "| System | Patch format | Fuzzy matching |",
+              "| --- | --- | --- |",
+              "| pbi-agent | V4A diff | No |",
+              "| Codex | apply_patch envelope | Yes |",
+            ].join("\n"),
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "System" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "pbi-agent" })).toBeInTheDocument();
+    expect(screen.queryByText(/\| System \| Patch format/)).not.toBeInTheDocument();
+  });
+
   it("renders apply_patch tool results as a structured git diff", () => {
     render(
       <SessionTimeline

@@ -1,1 +1,0 @@
-import{n as e}from"./markdown-OZOS4VzK.js";import{c as t}from"./dialog-DlQ_rS-c.js";var n=e();function r({status:e}){return(0,n.jsx)(t,{variant:`secondary`,className:`status-pill status-pill--${e===`running`?`running`:e===`completed`?`completed`:e===`failed`?`failed`:`idle`}`,children:e})}export{r as t};

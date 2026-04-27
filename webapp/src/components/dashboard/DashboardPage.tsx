@@ -4,7 +4,6 @@ import { ActivityIcon, AlertTriangleIcon, CalendarIcon } from "lucide-react";
 import { fetchDashboardStats } from "../../api";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Input } from "../ui/input";
-import { Separator } from "../ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { MetricsCards } from "./MetricsCards";
@@ -53,31 +52,41 @@ export function DashboardPage() {
       <div className="dashboard-page__inner">
         {/* ── Header ──────────────────────────── */}
         <div className="dashboard-header">
-          <div className="dashboard-header__title">
-            <ActivityIcon className="dashboard-header__icon" />
-            <h2 className="dashboard-header__heading">Observability</h2>
+          <div className="dashboard-header__section dashboard-header__section--left">
+            <div className="dashboard-header__title">
+              <ActivityIcon className="dashboard-header__icon" />
+              <h2 className="dashboard-header__heading">Observability</h2>
+            </div>
           </div>
 
-          <Separator orientation="vertical" className="dashboard-header__sep" />
-
-          <div className="dashboard-header__filters">
+          <div className="dashboard-header__section dashboard-header__section--center">
             <div className="dashboard-header__date-group">
-              <CalendarIcon className="dashboard-header__cal-icon" />
-              <Input
-                type="date"
-                className="dashboard-date-input dashboard-date-input--compact"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-              <span className="dashboard-header__date-sep">–</span>
-              <Input
-                type="date"
-                className="dashboard-date-input dashboard-date-input--compact"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
+              <span className="dashboard-header__date-label">From</span>
+              <label className="dashboard-date-field">
+                <span className="sr-only">Start date</span>
+                <CalendarIcon className="dashboard-date-field__icon" aria-hidden="true" />
+                <Input
+                  type="date"
+                  className="dashboard-date-input dashboard-date-input--compact"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </label>
+              <span className="dashboard-header__date-label">To</span>
+              <label className="dashboard-date-field">
+                <span className="sr-only">End date</span>
+                <CalendarIcon className="dashboard-date-field__icon" aria-hidden="true" />
+                <Input
+                  type="date"
+                  className="dashboard-date-input dashboard-date-input--compact"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </label>
             </div>
+          </div>
 
+          <div className="dashboard-header__section dashboard-header__section--right">
             <ToggleGroup
               type="single"
               value={scope}

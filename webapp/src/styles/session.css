@@ -543,6 +543,7 @@
   border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
+  overflow-x: auto;
 }
 
 .timeline-entry--assistant .timeline-entry__content p {
@@ -664,7 +665,7 @@
 
 /* Tables */
 .timeline-entry--assistant .timeline-entry__content table {
-  width: 100%;
+  min-width: 100%;
   margin: var(--sp-3) 0;
   border-collapse: collapse;
   font-size: var(--text-xs);
@@ -675,6 +676,8 @@
   padding: var(--sp-2) var(--sp-3);
   text-align: left;
   border: 1px solid var(--color-border-subtle);
+  vertical-align: top;
+  white-space: nowrap;
 }
 
 .timeline-entry--assistant .timeline-entry__content th {

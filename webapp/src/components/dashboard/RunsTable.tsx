@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { fetchAllRuns } from "../../api";
@@ -9,7 +9,6 @@ import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import {
   Table,
@@ -59,6 +58,19 @@ function formatTimestamp(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function uniqueSortedValues(
+  runs: AllRunsRun[],
+  getValue: (run: AllRunsRun) => string | null | undefined
+): string[] {
+  return Array.from(
+    new Set(
+      runs
+        .map((run) => getValue(run)?.trim())
+        .filter((value): value is string => Boolean(value))
+    )
+  ).sort((a, b) => a.localeCompare(b));
 }
 
 type SortKey =
@@ -119,7 +131,19 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
 
   const totalCount = runsQuery.data?.total_count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const runs = runsQuery.data?.runs ?? [];
+  const runs = useMemo(() => runsQuery.data?.runs ?? [], [runsQuery.data?.runs]);
+  const statusOptions = useMemo(
+    () => uniqueSortedValues(runs, (run) => run.status),
+    [runs]
+  );
+  const providerOptions = useMemo(
+    () => uniqueSortedValues(runs, (run) => run.provider),
+    [runs]
+  );
+  const modelOptions = useMemo(
+    () => uniqueSortedValues(runs, (run) => run.model),
+    [runs]
+  );
 
   function toggleSort(key: SortKey) {
     if (sortBy === key) {
@@ -148,45 +172,58 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
     <Card className="dashboard-panel">
       <CardHeader className="dashboard-panel__header">
         <CardTitle className="dashboard-panel__title">All Runs</CardTitle>
+        <div className="runs-filters" aria-label="Run filters">
+          <NativeSelect
+            size="sm"
+            className="runs-filter-select"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              handleFilterChange();
+            }}
+          >
+            <NativeSelectOption value="">All statuses</NativeSelectOption>
+            {statusOptions.map((status) => (
+              <NativeSelectOption key={status} value={status}>
+                {status}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <NativeSelect
+            size="sm"
+            className="runs-filter-select"
+            value={providerFilter}
+            onChange={(e) => {
+              setProviderFilter(e.target.value);
+              handleFilterChange();
+            }}
+          >
+            <NativeSelectOption value="">All providers</NativeSelectOption>
+            {providerOptions.map((provider) => (
+              <NativeSelectOption key={provider} value={provider}>
+                {provider}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <NativeSelect
+            size="sm"
+            className="runs-filter-select runs-filter-select--model"
+            value={modelFilter}
+            onChange={(e) => {
+              setModelFilter(e.target.value);
+              handleFilterChange();
+            }}
+          >
+            <NativeSelectOption value="">All models</NativeSelectOption>
+            {modelOptions.map((model) => (
+              <NativeSelectOption key={model} value={model}>
+                {model}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
         <Badge variant="secondary" className="dashboard-panel__count">{totalCount} total</Badge>
       </CardHeader>
-
-      {/* Filters */}
-      <div className="runs-filters">
-        <NativeSelect
-          className="runs-filter-select"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            handleFilterChange();
-          }}
-        >
-          <NativeSelectOption value="">All statuses</NativeSelectOption>
-          <NativeSelectOption value="completed">Completed</NativeSelectOption>
-          <NativeSelectOption value="failed">Failed</NativeSelectOption>
-          <NativeSelectOption value="started">Running</NativeSelectOption>
-        </NativeSelect>
-        <Input
-          className="runs-filter-input"
-          type="text"
-          placeholder="Filter provider..."
-          value={providerFilter}
-          onChange={(e) => {
-            setProviderFilter(e.target.value);
-            handleFilterChange();
-          }}
-        />
-        <Input
-          className="runs-filter-input"
-          type="text"
-          placeholder="Filter model..."
-          value={modelFilter}
-          onChange={(e) => {
-            setModelFilter(e.target.value);
-            handleFilterChange();
-          }}
-        />
-      </div>
 
       <CardContent className="dashboard-panel__body">
         {runsQuery.isLoading ? (
