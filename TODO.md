@@ -1,4 +1,6 @@
-[X] Inspect current AlertDialog component and usages
-[X] Replace custom dialog styling with upstream shadcn/radix-nova pattern
-[X] Validate frontend checks/build as feasible
-[X] Update task memory
+# TODO
+
+[X] Reproduce shadcn add prompt behavior from repo root and webapp.
+[X] Identify config/package cause and fix command/workspace setup.
+[X] Validate add command dry-run/info.
+[X] Update memory and summarize.
