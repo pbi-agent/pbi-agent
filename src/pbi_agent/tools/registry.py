@@ -10,6 +10,8 @@ _REGISTRY: dict[str, tuple[ToolSpec | Callable[[], ToolSpec], ToolHandler]] = {}
 # --- built-in function tools -----------------------------------------------
 from pbi_agent.tools.shell import SPEC as _sh_spec, handle as _sh_handle  # noqa: E402
 from pbi_agent.tools.apply_patch import SPEC as _ap_spec, handle as _ap_handle  # noqa: E402
+from pbi_agent.tools.replace_in_file import SPEC as _rif_spec, handle as _rif_handle  # noqa: E402
+from pbi_agent.tools.write_file import SPEC as _wf_spec, handle as _wf_handle  # noqa: E402
 from pbi_agent.tools.list_files import SPEC as _lf_spec, handle as _lf_handle  # noqa: E402
 from pbi_agent.tools.search_files import SPEC as _sf_spec, handle as _sf_handle  # noqa: E402
 from pbi_agent.tools.read_file import SPEC as _rf_spec, handle as _rf_handle  # noqa: E402
@@ -19,6 +21,8 @@ from pbi_agent.tools.sub_agent import build_spec as _sa_build_spec, handle as _s
 
 _REGISTRY[_sh_spec.name] = (_sh_spec, _sh_handle)
 _REGISTRY[_ap_spec.name] = (_ap_spec, _ap_handle)
+_REGISTRY[_rif_spec.name] = (_rif_spec, _rif_handle)
+_REGISTRY[_wf_spec.name] = (_wf_spec, _wf_handle)
 _REGISTRY[_lf_spec.name] = (_lf_spec, _lf_handle)
 _REGISTRY[_sf_spec.name] = (_sf_spec, _sf_handle)
 _REGISTRY[_rf_spec.name] = (_rf_spec, _rf_handle)

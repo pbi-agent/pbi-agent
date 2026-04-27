@@ -4,11 +4,30 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Literal
 
 ApplyDiffMode = Literal["default", "create"]
 DiffLineNumber = dict[str, int | None]
+
+TRAILING_WHITESPACE_MATCH_WARNING = (
+    "used fuzzy context match ignoring trailing whitespace"
+)
+TRIMMED_WHITESPACE_MATCH_WARNING = (
+    "used fuzzy context match ignoring leading/trailing whitespace"
+)
+UNICODE_NORMALIZED_MATCH_WARNING = (
+    "used fuzzy context match after normalizing Unicode punctuation/spaces"
+)
+EOF_FALLBACK_MATCH_WARNING = (
+    "used fallback context search for an end-of-file anchored hunk"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ApplyDiffResult:
+    content: str
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass
@@ -22,13 +41,19 @@ class Chunk:
 class ParserState:
     lines: list[str]
     index: int = 0
-    fuzz: int = 0
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
 class ParsedUpdateDiff:
     chunks: list[Chunk]
-    fuzz: int
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MatchStrategy:
+    normalize: Callable[[str], str]
+    warning: str | None = None
 
 
 class InvalidContextError(ValueError):
@@ -58,8 +83,12 @@ SECTION_TERMINATORS = [
 END_SECTION_MARKERS = [*SECTION_TERMINATORS, END_FILE]
 
 
-def apply_diff(input: str, diff: str, mode: ApplyDiffMode = "default") -> str:
-    """Apply a V4A diff to the provided text.
+def apply_diff(
+    input: str,
+    diff: str,
+    mode: ApplyDiffMode = "default",
+) -> ApplyDiffResult:
+    """Apply a V4A diff and return content plus matching diagnostics.
 
     This parser understands both the create-file syntax (only "+" prefixed
     lines) and the default update syntax that includes context hunks.
@@ -67,11 +96,14 @@ def apply_diff(input: str, diff: str, mode: ApplyDiffMode = "default") -> str:
     newline = _detect_newline(input, diff, mode)
     diff_lines = _normalize_diff_lines(diff)
     if mode == "create":
-        return _parse_create_diff(diff_lines, newline=newline)
+        return ApplyDiffResult(content=_parse_create_diff(diff_lines, newline=newline))
 
     normalized_input = _normalize_text_newlines(input)
     parsed = _parse_update_diff(diff_lines, normalized_input)
-    return _apply_chunks(normalized_input, parsed.chunks, newline=newline)
+    return ApplyDiffResult(
+        content=_apply_chunks(normalized_input, parsed.chunks, newline=newline),
+        warnings=parsed.warnings,
+    )
 
 
 def diff_line_numbers(
@@ -268,7 +300,8 @@ def _parse_update_diff(lines: list[str], input: str) -> ParsedUpdateDiff:
             raise InvalidContextError(cursor, section.next_context, eof=section.eof)
 
         cursor = find_result.new_index + len(section.next_context)
-        parser.fuzz += find_result.fuzz
+        if find_result.warning is not None:
+            _append_warning(parser.warnings, find_result.warning)
         parser.index = section.end_index
 
         for ch in section.section_chunks:
@@ -280,7 +313,7 @@ def _parse_update_diff(lines: list[str], input: str) -> ParsedUpdateDiff:
                 )
             )
 
-    return ParsedUpdateDiff(chunks=chunks, fuzz=parser.fuzz)
+    return ParsedUpdateDiff(chunks=chunks, warnings=tuple(parser.warnings))
 
 
 def _advance_cursor_to_anchor(
@@ -289,26 +322,45 @@ def _advance_cursor_to_anchor(
     cursor: int,
     parser: ParserState,
 ) -> int:
-    found = False
+    match = _find_anchor(input_lines, anchor, cursor)
+    if match.new_index == -1:
+        return cursor
+    if match.warning is not None:
+        _append_warning(parser.warnings, match.warning)
+    return match.new_index + 1
 
-    if not any(line == anchor for line in input_lines[:cursor]):
-        for i in range(cursor, len(input_lines)):
-            if input_lines[i] == anchor:
-                cursor = i + 1
-                found = True
-                break
 
-    if not found and not any(
-        line.strip() == anchor.strip() for line in input_lines[:cursor]
-    ):
-        for i in range(cursor, len(input_lines)):
-            if input_lines[i].strip() == anchor.strip():
-                cursor = i + 1
-                parser.fuzz += 1
-                found = True
-                break
+def _find_anchor(input_lines: list[str], anchor: str, cursor: int) -> ContextMatch:
+    if any(line == anchor for line in input_lines[:cursor]):
+        return ContextMatch(new_index=-1)
+    match = _find_context_core(input_lines, [anchor], cursor)
+    if match.new_index == -1:
+        return match
+    if _has_prior_anchor_match(input_lines, anchor, cursor, match.warning):
+        return ContextMatch(new_index=-1)
+    return match
 
-    return cursor
+
+def _has_prior_anchor_match(
+    input_lines: list[str],
+    anchor: str,
+    cursor: int,
+    warning: str | None,
+) -> bool:
+    if warning is None:
+        return False
+    normalizer = _warning_normalizer(warning)
+    return any(normalizer(line) == normalizer(anchor) for line in input_lines[:cursor])
+
+
+def _warning_normalizer(warning: str) -> Callable[[str], str]:
+    if warning == TRAILING_WHITESPACE_MATCH_WARNING:
+        return str.rstrip
+    if warning == TRIMMED_WHITESPACE_MATCH_WARNING:
+        return str.strip
+    if warning == UNICODE_NORMALIZED_MATCH_WARNING:
+        return _normalize_common_unicode
+    return lambda value: value
 
 
 def _read_section(lines: list[str], start_index: int) -> ReadSectionResult:
@@ -392,7 +444,7 @@ def _read_section(lines: list[str], start_index: int) -> ReadSectionResult:
 @dataclass
 class ContextMatch:
     new_index: int
-    fuzz: int
+    warning: str | None = None
 
 
 def _find_context(
@@ -404,7 +456,15 @@ def _find_context(
         if end_match.new_index != -1:
             return end_match
         fallback = _find_context_core(lines, context, start)
-        return ContextMatch(new_index=fallback.new_index, fuzz=fallback.fuzz + 10000)
+        if fallback.new_index == -1:
+            return fallback
+        warnings = [EOF_FALLBACK_MATCH_WARNING]
+        if fallback.warning is not None:
+            warnings.append(fallback.warning)
+        return ContextMatch(
+            new_index=fallback.new_index,
+            warning="; ".join(warnings),
+        )
     return _find_context_core(lines, context, start)
 
 
@@ -412,19 +472,20 @@ def _find_context_core(
     lines: list[str], context: list[str], start: int
 ) -> ContextMatch:
     if not context:
-        return ContextMatch(new_index=start, fuzz=0)
+        return ContextMatch(new_index=start)
 
-    for i in range(start, len(lines)):
-        if _equals_slice(lines, context, i, lambda value: value):
-            return ContextMatch(new_index=i, fuzz=0)
-    for i in range(start, len(lines)):
-        if _equals_slice(lines, context, i, lambda value: value.rstrip()):
-            return ContextMatch(new_index=i, fuzz=1)
-    for i in range(start, len(lines)):
-        if _equals_slice(lines, context, i, lambda value: value.strip()):
-            return ContextMatch(new_index=i, fuzz=100)
+    strategies = [
+        MatchStrategy(lambda value: value),
+        MatchStrategy(str.rstrip, TRAILING_WHITESPACE_MATCH_WARNING),
+        MatchStrategy(str.strip, TRIMMED_WHITESPACE_MATCH_WARNING),
+        MatchStrategy(_normalize_common_unicode, UNICODE_NORMALIZED_MATCH_WARNING),
+    ]
+    for strategy in strategies:
+        for i in range(start, len(lines)):
+            if _equals_slice(lines, context, i, strategy.normalize):
+                return ContextMatch(new_index=i, warning=strategy.warning)
 
-    return ContextMatch(new_index=-1, fuzz=0)
+    return ContextMatch(new_index=-1)
 
 
 def _equals_slice(
@@ -436,6 +497,51 @@ def _equals_slice(
         if map_fn(source[start + offset]) != map_fn(target_value):
             return False
     return True
+
+
+_UNICODE_TRANSLATION = str.maketrans(
+    {
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2015": "-",
+        "\u2212": "-",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201a": "'",
+        "\u201b": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u201e": '"',
+        "\u201f": '"',
+        "\u2026": "...",
+        "\u00a0": " ",
+        "\u2002": " ",
+        "\u2003": " ",
+        "\u2004": " ",
+        "\u2005": " ",
+        "\u2006": " ",
+        "\u2007": " ",
+        "\u2008": " ",
+        "\u2009": " ",
+        "\u200a": " ",
+        "\u202f": " ",
+        "\u205f": " ",
+        "\u3000": " ",
+    }
+)
+
+
+def _normalize_common_unicode(value: str) -> str:
+    return value.strip().translate(_UNICODE_TRANSLATION)
+
+
+def _append_warning(warnings: list[str], warning: str) -> None:
+    for part in warning.split("; "):
+        if part not in warnings:
+            warnings.append(part)
 
 
 def _apply_chunks(input: str, chunks: list[Chunk], newline: str) -> str:
@@ -485,4 +591,4 @@ def _v4a_prefix_escape_hint(context: list[str]) -> str | None:
     )
 
 
-__all__ = ["apply_diff", "diff_line_numbers"]
+__all__ = ["ApplyDiffResult", "apply_diff", "diff_line_numbers"]

@@ -10,7 +10,7 @@ def test_apply_diff_create_mode_builds_new_file_content() -> None:
 
     result = apply_diff("", diff, mode="create")
 
-    assert result == "alpha\nbeta\ngamma"
+    assert result.content == "alpha\nbeta\ngamma"
 
 
 def test_apply_diff_update_mode_preserves_existing_newline_style() -> None:
@@ -19,7 +19,51 @@ def test_apply_diff_update_mode_preserves_existing_newline_style() -> None:
 
     result = apply_diff(original, diff)
 
-    assert result == "alpha\r\ndelta\r\ngamma"
+    assert result.content == "alpha\r\ndelta\r\ngamma"
+
+
+def test_apply_diff_exact_context_match_has_no_warning() -> None:
+    original = "alpha\nbeta\ngamma"
+    diff = " alpha\n-beta\n+BETA\n gamma"
+
+    result = apply_diff(original, diff)
+
+    assert result.content == "alpha\nBETA\ngamma"
+    assert result.warnings == ()
+
+
+def test_apply_diff_trailing_whitespace_fallback_reports_warning() -> None:
+    original = "alpha  \nbeta\n"
+    diff = "-alpha\n+BETA"
+
+    result = apply_diff(original, diff)
+
+    assert result.content == "BETA\nbeta\n"
+    assert result.warnings == ("used fuzzy context match ignoring trailing whitespace",)
+
+
+def test_apply_diff_trimmed_whitespace_fallback_after_rstrip_fails() -> None:
+    original = "  alpha  \nbeta\n"
+    diff = "-alpha\n+BETA"
+
+    result = apply_diff(original, diff)
+
+    assert result.content == "BETA\nbeta\n"
+    assert result.warnings == (
+        "used fuzzy context match ignoring leading/trailing whitespace",
+    )
+
+
+def test_apply_diff_unicode_normalization_fallback_reports_warning() -> None:
+    original = "message = 'smart “quote” – dash'"
+    diff = "-message = 'smart \"quote\" - dash'\n+message = 'plain'"
+
+    result = apply_diff(original, diff)
+
+    assert result.content == "message = 'plain'"
+    assert result.warnings == (
+        "used fuzzy context match after normalizing Unicode punctuation/spaces",
+    )
 
 
 def test_diff_line_numbers_reports_real_update_offsets() -> None:

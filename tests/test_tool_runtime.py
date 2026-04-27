@@ -288,9 +288,12 @@ def test_execute_tool_calls_serializes_truncated_apply_patch_error(
                 call_id="call_1",
                 name="apply_patch",
                 arguments={
-                    "operation_type": "create_file",
-                    "path": "notes/example.txt",
-                    "diff": "+hello",
+                    "patch": (
+                        "*** Begin Patch\n"
+                        "*** Add File: notes/example.txt\n"
+                        "+hello\n"
+                        "*** End Patch"
+                    ),
                 },
             )
         ],
@@ -327,9 +330,15 @@ def test_execute_tool_calls_keeps_apply_patch_display_metadata_out_of_output(
                 call_id="call_1",
                 name="apply_patch",
                 arguments={
-                    "operation_type": "update_file",
-                    "path": "notes.txt",
-                    "diff": " beta\n-gamma\n+GAMMA",
+                    "patch": (
+                        "*** Begin Patch\n"
+                        "*** Update File: notes.txt\n"
+                        "@@\n"
+                        " beta\n"
+                        "-gamma\n"
+                        "+GAMMA\n"
+                        "*** End Patch"
+                    ),
                 },
             )
         ],
@@ -340,8 +349,11 @@ def test_execute_tool_calls_keeps_apply_patch_display_metadata_out_of_output(
 
     assert "diff_line_numbers" not in payload["result"]
     assert batch.results[0].display_metadata == {
-        "diff": " beta\n-gamma\n+GAMMA",
+        "operation_type": "update_file",
+        "path": "notes.txt",
+        "diff": "@@\n beta\n-gamma\n+GAMMA",
         "diff_line_numbers": [
+            {"old": None, "new": None},
             {"old": 2, "new": 2},
             {"old": 3, "new": None},
             {"old": None, "new": 3},
@@ -442,9 +454,14 @@ def test_display_tool_results_routes_apply_patch_with_diff_to_patch_display(
         call_id="call_patch_1",
         name="apply_patch",
         arguments={
-            "operation_type": "update_file",
-            "path": "TODO.md",
-            "diff": "-[ ] Old\n+[X] New",
+            "patch": (
+                "*** Begin Patch\n"
+                "*** Update File: TODO.md\n"
+                "@@\n"
+                "-[ ] Old\n"
+                "+[X] New\n"
+                "*** End Patch"
+            ),
         },
     )
 
@@ -463,10 +480,17 @@ def test_display_tool_results_routes_apply_patch_with_diff_to_patch_display(
             "success": True,
             "call_id": "call_patch_1",
             "arguments": {
-                "path": "TODO.md",
-                "operation_type": "update_file",
+                "path": "<missing path>",
+                "operation_type": "<missing operation_type>",
                 "detail": "",
-                "diff": "-[ ] Old\n+[X] New",
+                "diff": (
+                    "*** Begin Patch\n"
+                    "*** Update File: TODO.md\n"
+                    "@@\n"
+                    "-[ ] Old\n"
+                    "+[X] New\n"
+                    "*** End Patch"
+                ),
             },
         }
     ]
@@ -479,9 +503,14 @@ def test_display_tool_results_forwards_apply_patch_line_numbers(
         call_id="call_patch_1",
         name="apply_patch",
         arguments={
-            "operation_type": "update_file",
-            "path": "TODO.md",
-            "diff": "-[ ] Old\n+[X] New",
+            "patch": (
+                "*** Begin Patch\n"
+                "*** Update File: TODO.md\n"
+                "@@\n"
+                "-[ ] Old\n"
+                "+[X] New\n"
+                "*** End Patch"
+            ),
         },
     )
 
@@ -506,10 +535,17 @@ def test_display_tool_results_forwards_apply_patch_line_numbers(
             "success": True,
             "call_id": "call_patch_1",
             "arguments": {
-                "path": "TODO.md",
-                "operation_type": "update_file",
+                "path": "<missing path>",
+                "operation_type": "<missing operation_type>",
                 "detail": "",
-                "diff": "-[ ] Old\n+[X] New",
+                "diff": (
+                    "*** Begin Patch\n"
+                    "*** Update File: TODO.md\n"
+                    "@@\n"
+                    "-[ ] Old\n"
+                    "+[X] New\n"
+                    "*** End Patch"
+                ),
                 "diff_line_numbers": [
                     {"old": 12, "new": None},
                     {"old": None, "new": 12},
