@@ -81,6 +81,10 @@ type PendingImage = {
   source: "picker" | "clipboard";
 };
 
+type ImageFileInput = HTMLInputElement & {
+  showPicker?: () => void;
+};
+
 const EMAIL_PREFIX_PATTERN = /[a-zA-Z0-9._%+-]$/;
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -193,8 +197,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const pendingImagesRef = useRef<PendingImage[]>([]);
   const refocusAfterSubmitRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const actionMenuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<ImageFileInput>(null);
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
@@ -417,24 +420,29 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     });
   }, []);
 
-  useEffect(() => {
-    if (!isActionMenuOpen) {
-      return undefined;
+  const openImagePicker = useCallback(() => {
+    if (!canSend || isShellMode) {
+      return;
     }
 
-    const handlePointerDown = (event: PointerEvent) => {
-      const menu = actionMenuRef.current;
-      if (!menu || menu.contains(event.target as Node)) {
-        return;
-      }
-      setActionMenuOpen(false);
-    };
+    if (!supportsImageInputs) {
+      setAttachmentMessage("The current provider does not support image inputs.");
+      return;
+    }
 
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [isActionMenuOpen]);
+    setActionMenuOpen(false);
+    const inputElement = fileInputRef.current;
+    if (!inputElement) {
+      return;
+    }
+
+    if (typeof inputElement.showPicker === "function") {
+      inputElement.showPicker();
+      return;
+    }
+
+    inputElement.click();
+  }, [canSend, isShellMode, supportsImageInputs]);
 
   const submitValue = useCallback(
     async (textValue: string) => {
@@ -708,7 +716,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           open={isActionMenuOpen}
           onOpenChange={(open) => setActionMenuOpen(canSend && !isShellMode && open)}
         >
-          <div className="composer__action-menu" ref={actionMenuRef}>
+          <div className="composer__action-menu">
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
@@ -727,9 +735,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <DropdownMenuGroup>
               <DropdownMenuItem
                 className="composer__action-item"
-                onClick={() => {
-                  setActionMenuOpen(false);
-                  fileInputRef.current?.click();
+                onSelect={(event) => {
+                  event.preventDefault();
+                  openImagePicker();
                 }}
                 disabled={!supportsImageInputs}
               >

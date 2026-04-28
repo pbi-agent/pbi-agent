@@ -70,6 +70,12 @@ function renderSubmittingComposer() {
   };
 }
 
+type InputPrototypeWithPicker = typeof HTMLInputElement.prototype & {
+  showPicker: (() => void) | undefined;
+};
+
+const inputPrototype: InputPrototypeWithPicker = HTMLInputElement.prototype;
+
 describe("Composer", () => {
   beforeEach(() => {
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
@@ -77,7 +83,77 @@ describe("Composer", () => {
       return 0;
     });
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    if (!URL.createObjectURL) {
+      URL.createObjectURL = () => "blob:preview";
+    }
+    if (!URL.revokeObjectURL) {
+      URL.revokeObjectURL = () => undefined;
+    }
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     vi.mocked(searchSlashCommands).mockResolvedValue([]);
+  });
+
+  it("opens the native image picker from the actions menu", async () => {
+    const user = userEvent.setup();
+    const showPicker = vi.fn();
+    const originalShowPicker = inputPrototype.showPicker;
+    inputPrototype.showPicker = showPicker;
+
+    try {
+      renderComposer();
+
+      await user.click(screen.getByRole("button", { name: "Actions" }));
+      await user.click(screen.getByRole("menuitem", { name: "Image" }));
+
+      await waitFor(() => expect(showPicker).toHaveBeenCalledTimes(1));
+    } finally {
+      if (originalShowPicker) {
+        inputPrototype.showPicker = originalShowPicker;
+      } else {
+        Reflect.deleteProperty(inputPrototype, "showPicker");
+      }
+    }
+  });
+
+  it("does not open the image picker when image inputs are unsupported", async () => {
+    const user = userEvent.setup();
+    const showPicker = vi.fn();
+    const originalShowPicker = inputPrototype.showPicker;
+    inputPrototype.showPicker = showPicker;
+
+    try {
+      renderComposer({ supportsImageInputs: false });
+
+      await user.click(screen.getByRole("button", { name: "Actions" }));
+
+      expect(screen.getByRole("menuitem", { name: "Image" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      expect(showPicker).not.toHaveBeenCalled();
+    } finally {
+      if (originalShowPicker) {
+        inputPrototype.showPicker = originalShowPicker;
+      } else {
+        Reflect.deleteProperty(inputPrototype, "showPicker");
+      }
+    }
+  });
+
+  it("submits selected image files with the message", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer();
+    const image = new File(["binary"], "diagram.png", { type: "image/png" });
+
+    await user.upload(document.querySelector('input[name="image-upload"]')!, image);
+    expect(screen.getByText("diagram.png")).toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "review this");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith({ text: "review this", images: [image] });
   });
 
   it("shows shell command affordances while typing a bang-prefixed input", async () => {
