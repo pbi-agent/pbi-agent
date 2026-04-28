@@ -153,12 +153,13 @@ export function ProviderAuthFlowModal({
     <Dialog open onOpenChange={(open) => {
       if (!open && !isStarting) onClose();
     }}>
-      <DialogContent>
+      <DialogContent className="task-form-dialog">
         <DialogHeader>
           <DialogTitle>Connect {authModeLabel}</DialogTitle>
         </DialogHeader>
 
         <div className="task-form provider-auth-flow-modal">
+         <div className="task-form__body">
           <p className="sr-only">
             Authorize {provider.name} with your {accountLabel}.
           </p>
@@ -195,21 +196,20 @@ export function ProviderAuthFlowModal({
           )}
 
           {!flow && (
-            <div className="provider-auth-actions-row">
-              <Button
-                type="button"
-                onClick={() => {
+            <Button
+              type="button"
+              className="task-form__submit"
+              onClick={() => {
                   void handleStart(method);
                 }}
-                disabled={isStarting}
-              >
-                {isStarting
-                  ? "Starting…"
-                  : method === "browser"
-                    ? "Start browser sign-in"
-                    : "Generate device code"}
-              </Button>
-            </div>
+              disabled={isStarting}
+            >
+              {isStarting
+                ? "Starting…"
+                : method === "browser"
+                  ? "Start browser sign-in"
+                  : "Generate device code"}
+            </Button>
           )}
 
           {flow && (
@@ -366,6 +366,7 @@ export function ProviderAuthFlowModal({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+         </div>
         </div>
         <DialogFooter className="sr-only" />
       </DialogContent>

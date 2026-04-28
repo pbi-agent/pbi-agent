@@ -173,6 +173,22 @@
   flex: 0 0 auto;
 }
 
+/* Settings-page action buttons (card actions + panel-header CTAs):
+   give them a clearly visible hover consistent with form buttons. */
+.settings-page .task-card__action-button {
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.settings-page .task-card__action-button:not(:disabled):hover,
+.settings-page .task-card__action-button:not(:disabled):focus-visible {
+  background: var(--color-surface-3) !important;
+  border-color: var(--color-border-focus);
+  color: var(--color-text);
+}
+
 .settings-item__actions--provider {
   display: flex;
   flex-wrap: nowrap;
@@ -290,6 +306,25 @@
 
 .provider-auth-mode-tabs {
   width: 100%;
+}
+
+.provider-auth-mode-tabs [data-slot="toggle-group-item"] {
+  flex: 1 1 0;
+  min-width: 0;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    border-color var(--duration-fast);
+}
+
+.provider-auth-mode-tabs [data-slot="toggle-group-item"]:not([data-state="on"]):hover {
+  background: var(--color-surface-3);
+  border-color: var(--color-border-focus);
+  color: var(--color-text);
+}
+
+.provider-auth-flow-modal > .task-form__body > [data-slot="field"]:has(.provider-auth-mode-tabs) {
+  margin-top: var(--sp-2);
 }
 
 .provider-auth-inline-note {
