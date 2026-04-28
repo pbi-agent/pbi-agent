@@ -40,3 +40,4 @@
 ## Detailed Task Events
 ## 2026-04-28
 - Fixed auto-compaction omission from diagnostic `notes/session-4e1ee664-compaction-diagnostic.md`: compaction preserves active trailing user turn, accumulates all current-turn tool exchanges, formats multi-exchange logs chronologically, and prompt clarifies in-flight turns. Validation: focused 3-test pytest for compaction, Ruff check, Ruff format check.
+- Fixed web composer `+` → Image action: removed custom outside-pointer closer that preempted Radix selection, switched image menu item to `onSelect`, and opens native image picker via `showPicker()`/`click()` fallback. Added composer tests for picker trigger, unsupported image inputs, and image submit payload. Validation: focused Composer test, `bun run test:web`, `bun run lint`, `bun run typecheck`, `bun run web:build`.
