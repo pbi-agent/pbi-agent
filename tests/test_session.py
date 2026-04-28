@@ -837,6 +837,76 @@ class _AutoCompactToolProviderStub(_CompactProviderStub):
         )
 
 
+class _TwoIterationAutoCompactToolProviderStub(_AutoCompactToolProviderStub):
+    def __init__(self) -> None:
+        super().__init__()
+        self._responses = [
+            CompletedResponse(
+                response_id="resp_tool_1",
+                text="",
+                usage=TokenUsage(
+                    input_tokens=50, context_tokens=50, model=DEFAULT_MODEL
+                ),
+                function_calls=[
+                    ToolCall(
+                        call_id="call_1", name="shell", arguments={"command": "pwd"}
+                    )
+                ],
+            ),
+            CompletedResponse(
+                response_id="resp_tool_2",
+                text="",
+                usage=TokenUsage(input_tokens=2, output_tokens=1, model=DEFAULT_MODEL),
+                function_calls=[
+                    ToolCall(
+                        call_id="call_2", name="shell", arguments={"command": "ls"}
+                    )
+                ],
+            ),
+            CompletedResponse(
+                response_id="resp_done",
+                text="Done after compacted context.",
+                usage=TokenUsage(input_tokens=2, output_tokens=1, model=DEFAULT_MODEL),
+            ),
+        ]
+
+    def request_turn(self, **kwargs) -> CompletedResponse:
+        if kwargs.get("user_input") is not None:
+            self.request_inputs.append(kwargs["user_input"])
+            self.request_messages.append(kwargs["user_input"].text)
+        else:
+            self.request_messages.append(kwargs.get("user_message"))
+        tool_result_items = kwargs.get("tool_result_items")
+        self.request_tool_result_items.append(tool_result_items)
+        self.request_instructions.append(kwargs.get("instructions"))
+        if (
+            tool_result_items is not None
+            and self._responses[0].response_id != "resp_tool_2"
+        ):
+            raise AssertionError(
+                "tool results should only be sent before auto-compaction triggers"
+            )
+        response = self._responses.pop(0)
+        kwargs["session_usage"].add(response.usage)
+        kwargs["turn_usage"].add(response.usage)
+        return response
+
+    def execute_tool_calls(self, response: CompletedResponse, **kwargs):
+        del kwargs
+        self.execute_calls.append({"response_id": response.response_id})
+        index = len(self.execute_calls)
+        return (
+            [
+                {
+                    "type": "function_call_output",
+                    "call_id": f"call_{index}",
+                    "output": f"ok_{index}",
+                }
+            ],
+            False,
+        )
+
+
 class _CompactionSummaryProviderStub(_ChatProviderStub):
     def request_turn(
         self,
@@ -1475,6 +1545,7 @@ def test_run_session_loop_auto_compaction_summary_includes_pending_tool_exchange
     assert exit_code == 0
     assert compact_provider.request_messages
     compaction_request = compact_provider.request_messages[0]
+    assert "hello" in compaction_request
     assert "<pending_tool_exchange>" in compaction_request
     assert '"name": "shell"' in compaction_request
     assert '"command": "pwd"' in compaction_request
@@ -1482,6 +1553,71 @@ def test_run_session_loop_auto_compaction_summary_includes_pending_tool_exchange
     assert '"output": "ok"' in compaction_request
     assert provider.request_tool_result_items == [None, None]
     assert provider.request_messages[1] == session_module.COMPACTION_CONTINUATION_PROMPT
+
+
+def test_run_session_loop_auto_compaction_summary_includes_all_current_turn_tool_exchanges(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    provider = _TwoIterationAutoCompactToolProviderStub()
+    compact_provider = _CompactionSummaryProviderStub()
+    display = _SessionDisplaySpy(["inspect twice", "quit"])
+    settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        max_tool_workers=2,
+        compact_threshold=10,
+    )
+    monotonic_values = iter([5.0, 6.5])
+    should_compact_calls = 0
+
+    def _should_compact_on_second_tool_exchange(**_kwargs) -> bool:
+        nonlocal should_compact_calls
+        should_compact_calls += 1
+        return should_compact_calls == 2
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_compaction_provider",
+        _stub_runtime_provider(compact_provider),
+    )
+    monkeypatch.setattr(
+        session_module,
+        "_should_auto_compact",
+        _should_compact_on_second_tool_exchange,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert compact_provider.request_messages
+    compaction_request = compact_provider.request_messages[0]
+    assert "inspect twice" in compaction_request
+    assert "<current_turn_tool_exchanges>" in compaction_request
+    assert '<tool_exchange index="1">' in compaction_request
+    assert '<tool_exchange index="2">' in compaction_request
+    assert '"call_id": "call_1"' in compaction_request
+    assert '"command": "pwd"' in compaction_request
+    assert '"output": "ok_1"' in compaction_request
+    assert '"call_id": "call_2"' in compaction_request
+    assert '"command": "ls"' in compaction_request
+    assert '"output": "ok_2"' in compaction_request
+    assert provider.request_tool_result_items == [
+        None,
+        [{"type": "function_call_output", "call_id": "call_1", "output": "ok_1"}],
+        None,
+    ]
+    assert provider.request_messages[2] == session_module.COMPACTION_CONTINUATION_PROMPT
 
 
 def test_run_session_loop_does_not_auto_compact_after_final_response(

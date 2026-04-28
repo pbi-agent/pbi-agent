@@ -16,7 +16,7 @@ Rules:
 Use this structure:
 
 ## Active Task
-The user's most recent unfulfilled request, or "None."
+The user's most recent unfulfilled request, or "None." If the transcript ends with an unanswered user message and current-turn tool logs, that user message is the active task.
 
 ## Goal
 What the user is trying to accomplish overall.
@@ -34,7 +34,7 @@ What is currently in progress, relevant files/directories, known modified/create
 Unresolved errors, failed tests/commands, missing information, or blockers. Use "None." if none.
 
 ## Pending User Asks
-User requests/questions not yet fulfilled. Use "None." if none.
+User requests/questions not yet fulfilled. Use "None." if none. Include an unanswered trailing user message even when tool calls have already run for it.
 
 ## Relevant Files / Directories
 Structured list of files/directories read, modified, created, or important to continue.

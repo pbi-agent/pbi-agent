@@ -1,6 +1,8 @@
 # TODO
 
-[X] Investigate failing session-store lease concurrency test
-[X] Fix test or implementation flake
-[X] Run focused and required validation
-[X] Update memory and handoff
+[X] Inspect compaction/session code and tests
+[X] Implement compaction-specific active-message handling
+[X] Accumulate current-turn tool exchanges for auto-compaction
+[X] Add/update regression tests
+[X] Run focused validation
+[X] Update memory

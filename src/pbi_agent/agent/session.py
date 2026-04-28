@@ -267,6 +267,7 @@ def run_single_turn(
                 current_user_turn_text=user_turn_history_text,
                 instructions=turn_instructions,
                 tracer=tracer,
+                current_turn_tool_exchanges=[],
             )
             _add_message(store, session_id, runtime, "assistant", response.text)
             _update_session_after_turn(
@@ -552,6 +553,7 @@ def run_session_loop(
                         current_user_turn_text=turn_history_text,
                         instructions=turn_instructions,
                         tracer=turn_tracer,
+                        current_turn_tool_exchanges=[],
                     )
                     _raise_if_interrupted(display)
 
@@ -848,8 +850,13 @@ def _run_tool_iterations(
     current_user_turn_text: str | None = None,
     instructions: str | None = None,
     tracer: RunTracer | None = None,
+    current_turn_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
+    | None = None,
 ) -> tuple[CompletedResponse, bool, int]:
     had_errors = False
+    tool_exchanges = current_turn_tool_exchanges
+    if tool_exchanges is None:
+        tool_exchanges = []
 
     while response.has_tool_calls:
         _raise_if_interrupted(display)
@@ -898,6 +905,10 @@ def _run_tool_iterations(
             _log.exception("Tool execution failed inside provider.execute_tool_calls")
             raise
         had_errors = had_errors or loop_errors
+        if response.function_calls or tool_result_items:
+            tool_exchanges.append(
+                (list(response.function_calls), list(tool_result_items))
+            )
 
         compacted_after_tools = False
         if (
@@ -919,9 +930,9 @@ def _run_tool_iterations(
                 display=display,
                 session_usage=session_usage,
                 reason="auto",
-                pending_tool_calls=response.function_calls,
-                pending_tool_result_items=tool_result_items,
+                pending_tool_exchanges=tool_exchanges,
             )
+            tool_exchanges.clear()
             display.session_usage(session_usage)
             compacted_after_tools = True
 
@@ -1223,6 +1234,12 @@ def _messages_for_provider_restore(
     return restored
 
 
+def _messages_for_compaction(
+    messages: list[MessageRecord],
+) -> list[MessageRecord]:
+    return _active_context_messages(messages)
+
+
 def _active_context_messages(
     messages: list[MessageRecord] | tuple[MessageRecord, ...],
 ) -> list[MessageRecord]:
@@ -1287,6 +1304,8 @@ def _compact_live_session(
     reason: str,
     pending_tool_calls: list[ToolCall] | None = None,
     pending_tool_result_items: list[dict[str, Any]] | None = None,
+    pending_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
+    | None = None,
 ) -> int:
     if store is None or session_id is None:
         return session_usage.snapshot().context_tokens
@@ -1295,8 +1314,13 @@ def _compact_live_session(
     except Exception:
         _log.warning("Failed to load session context for compaction", exc_info=True)
         return session_usage.snapshot().context_tokens
-    active_messages = _messages_for_provider_restore(messages)
-    has_pending_tool_exchange = bool(pending_tool_calls or pending_tool_result_items)
+    active_messages = _messages_for_compaction(messages)
+    tool_exchanges = _normalize_tool_exchanges_for_compaction(
+        pending_tool_exchanges=pending_tool_exchanges,
+        pending_tool_calls=pending_tool_calls,
+        pending_tool_result_items=pending_tool_result_items,
+    )
+    has_pending_tool_exchange = bool(tool_exchanges)
     if not active_messages and not has_pending_tool_exchange:
         display.render_markdown("No completed session context to compact yet.")
         return 0
@@ -1333,8 +1357,7 @@ def _compact_live_session(
             session_usage=session_usage,
             turn_usage=compaction_usage,
             tracer=tracer,
-            pending_tool_calls=pending_tool_calls,
-            pending_tool_result_items=pending_tool_result_items,
+            pending_tool_exchanges=tool_exchanges,
         )
         tracer.log_event(
             "agent_step_end",
@@ -1394,11 +1417,14 @@ def _summarize_session_context(
     tracer: RunTracer | None = None,
     pending_tool_calls: list[ToolCall] | None = None,
     pending_tool_result_items: list[dict[str, Any]] | None = None,
+    pending_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
+    | None = None,
 ) -> str:
     transcript = _format_messages_for_compaction(
         messages,
         pending_tool_calls=pending_tool_calls,
         pending_tool_result_items=pending_tool_result_items,
+        pending_tool_exchanges=pending_tool_exchanges,
     )
     if not transcript:
         return ""
@@ -1418,6 +1444,8 @@ def _format_messages_for_compaction(
     *,
     pending_tool_calls: list[ToolCall] | None = None,
     pending_tool_result_items: list[dict[str, Any]] | None = None,
+    pending_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
+    | None = None,
 ) -> str:
     chunks: list[str] = []
     for message in messages:
@@ -1429,12 +1457,59 @@ def _format_messages_for_compaction(
         if not content:
             continue
         chunks.extend([f"<{message.role}>", content, f"</{message.role}>"])
-    pending_tool_exchange = _format_pending_tool_exchange_for_compaction(
-        pending_tool_calls,
-        pending_tool_result_items,
+    tool_exchange = _format_tool_exchanges_for_compaction(
+        _normalize_tool_exchanges_for_compaction(
+            pending_tool_exchanges=pending_tool_exchanges,
+            pending_tool_calls=pending_tool_calls,
+            pending_tool_result_items=pending_tool_result_items,
+        )
     )
-    if pending_tool_exchange:
-        chunks.append(pending_tool_exchange)
+    if tool_exchange:
+        chunks.append(tool_exchange)
+    return "\n".join(chunks)
+
+
+def _normalize_tool_exchanges_for_compaction(
+    *,
+    pending_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
+    | None = None,
+    pending_tool_calls: list[ToolCall] | None = None,
+    pending_tool_result_items: list[dict[str, Any]] | None = None,
+) -> list[tuple[list[ToolCall], list[dict[str, Any]]]]:
+    exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]] = []
+    for calls, results in pending_tool_exchanges or []:
+        normalized_calls = list(calls or [])
+        normalized_results = list(results or [])
+        if normalized_calls or normalized_results:
+            exchanges.append((normalized_calls, normalized_results))
+    if not exchanges and (pending_tool_calls or pending_tool_result_items):
+        exchanges.append(
+            (list(pending_tool_calls or []), list(pending_tool_result_items or []))
+        )
+    return exchanges
+
+
+def _format_tool_exchanges_for_compaction(
+    tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]],
+) -> str:
+    if not tool_exchanges:
+        return ""
+    if len(tool_exchanges) == 1:
+        return _format_one_tool_exchange_for_compaction(
+            "pending_tool_exchange",
+            tool_exchanges[0][0],
+            tool_exchanges[0][1],
+        )
+    chunks = ["<current_turn_tool_exchanges>"]
+    for index, (calls, results) in enumerate(tool_exchanges, start=1):
+        chunks.append(
+            _format_one_tool_exchange_for_compaction(
+                f'tool_exchange index="{index}"',
+                calls,
+                results,
+            )
+        )
+    chunks.append("</current_turn_tool_exchanges>")
     return "\n".join(chunks)
 
 
@@ -1442,11 +1517,22 @@ def _format_pending_tool_exchange_for_compaction(
     pending_tool_calls: list[ToolCall] | None,
     pending_tool_result_items: list[dict[str, Any]] | None,
 ) -> str:
-    calls = pending_tool_calls or []
-    results = pending_tool_result_items or []
+    return _format_tool_exchanges_for_compaction(
+        _normalize_tool_exchanges_for_compaction(
+            pending_tool_calls=pending_tool_calls,
+            pending_tool_result_items=pending_tool_result_items,
+        )
+    )
+
+
+def _format_one_tool_exchange_for_compaction(
+    tag: str,
+    calls: list[ToolCall],
+    results: list[dict[str, Any]],
+) -> str:
     if not calls and not results:
         return ""
-    chunks = ["<pending_tool_exchange>"]
+    chunks = [f"<{tag}>"]
     if calls:
         chunks.append("<tool_calls>")
         for call in calls:
@@ -1465,7 +1551,8 @@ def _format_pending_tool_exchange_for_compaction(
         for item in results:
             chunks.append(_safe_json_dumps(item))
         chunks.append("</tool_results>")
-    chunks.append("</pending_tool_exchange>")
+    tag_name = tag.split(maxsplit=1)[0]
+    chunks.append(f"</{tag_name}>")
     return "\n".join(chunks)
 
 
