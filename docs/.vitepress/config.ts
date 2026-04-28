@@ -91,35 +91,40 @@ export default defineConfig({
   },
   themeConfig: {
     nav: [
-      { text: 'Guide', link: '/guide/', activeMatch: '/guide/' },
-      { text: 'Reference', link: '/reference/cli', activeMatch: '/reference/' },
+      { text: 'Docs', link: '/introduction', activeMatch: '^/(introduction|installation|providers|web-ui|session-commands|cli|kanban-dashboard|model-profiles|customization|tools|environment)' },
       { text: 'GitHub', link: 'https://github.com/pbi-agent/pbi-agent' }
     ],
-    sidebar: {
-      '/guide/': [
-        {
-          text: 'Guide',
-          collapsed: false,
-          items: [
-            { text: 'Introduction', link: '/guide/' },
-            { text: 'Installation', link: '/guide/installation' },
-            { text: 'Providers', link: '/guide/providers' },
-            { text: 'Customization', link: '/guide/customization' }
-          ]
-        }
-      ],
-      '/reference/': [
-        {
-          text: 'Reference',
-          collapsed: false,
-          items: [
-            { text: 'CLI Reference', link: '/reference/cli' },
-            { text: 'Tools', link: '/reference/tools' },
-            { text: 'Environment Variables', link: '/reference/environment' }
-          ]
-        }
-      ]
-    },
+    sidebar: [
+      {
+        text: 'Getting Started',
+        collapsed: false,
+        items: [
+          { text: 'Introduction', link: '/introduction' },
+          { text: 'Installation', link: '/installation' },
+          { text: 'Providers', link: '/providers' }
+        ]
+      },
+      {
+        text: 'Using pbi-agent',
+        collapsed: false,
+        items: [
+          { text: 'Web UI', link: '/web-ui' },
+          { text: 'Session Commands', link: '/session-commands' },
+          { text: 'CLI', link: '/cli' },
+          { text: 'Kanban Dashboard', link: '/kanban-dashboard' },
+          { text: 'Model Profiles', link: '/model-profiles' }
+        ]
+      },
+      {
+        text: 'Customizing',
+        collapsed: false,
+        items: [
+          { text: 'Customization', link: '/customization' },
+          { text: 'Built-in Tools', link: '/tools' },
+          { text: 'Environment Variables', link: '/environment' }
+        ]
+      }
+    ],
     outline: { level: [2, 3], label: 'On this page' },
     search: {
       provider: 'local'

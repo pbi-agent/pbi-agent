@@ -133,7 +133,7 @@ Remote public catalogs are discovered from:
 
 If a source repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
 
-At runtime, project commands are discovered from `.agents/commands/*.md`. The normalized filename becomes the slash alias, and the file contents are injected as active turn instructions when the user starts a message with that alias. Reserved built-in local commands such as `/skills`, `/mcp`, `/agents`, `/reload`, and `/compact` still take precedence.
+At runtime, project commands are discovered from `.agents/commands/*.md`. The normalized filename becomes the slash alias, and the file contents are injected as active turn instructions when the user starts a message with that alias. Reserved built-in local commands such as `/skills`, `/mcp`, `/agents`, `/reload`, and `/compact` still take precedence. See [Session Commands](/session-commands) for how slash commands behave in interactive sessions.
 
 ## Project sub-agent files
 
@@ -212,7 +212,7 @@ Use the local session command:
 - project sub-agent catalogs
 - non-MCP tool definitions
 
-In the web UI, `/reload` also refreshes the `@file` mention cache so newly created, renamed, or removed workspace files show up in autocomplete. The web app also refreshes that file-mention cache when a live session ends, which keeps the next session's file suggestions current without silently changing an active provider mid-task.
+In the web UI, `/reload` also refreshes the `@file` mention cache so newly created, renamed, or removed workspace files show up in autocomplete. The web app also refreshes that file-mention cache when a live session ends, which keeps the next session's file suggestions current without silently changing an active provider mid-task. See [Session Commands](/session-commands) for the full `@file`, `!shell`, and slash-command reference.
 
 `/reload` does not reload MCP server configuration or MCP tool catalogs for the active provider. Restart the session after changing `.agents/mcp.json` or an MCP server's exposed tools.
 

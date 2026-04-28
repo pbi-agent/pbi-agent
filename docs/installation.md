@@ -39,22 +39,19 @@ uv sync
 ## Verify the Install
 
 ```bash
-uv run pbi-agent --help
+pbi-agent --help
 ```
-
-If you installed the package with `uv tool install`, you can also verify it with `pbi-agent --help`.
 
 ## Quick Start
-
-Set an API key, then run the browser UI or a single prompt:
-
+Run the web server and follow the instructions to set up a provider and profile:
 ```bash
-export PBI_AGENT_API_KEY="sk-..."
-uv run pbi-agent
+pbi-agent
 ```
 
+Or, run a prompt directly from the CLI:
+
 ```bash
-uv run pbi-agent run --prompt "Summarize this repository and identify the main moving parts."
+pbi-agent run --prompt "Summarize this repository and identify the main moving parts."
 ```
 
 ::: tip
@@ -67,6 +64,7 @@ For OpenAI, you can save a provider that uses a ChatGPT account session instead 
 
 ```bash
 uv run pbi-agent config providers create \
+  --id openai-chatgpt \
   --name "OpenAI ChatGPT" \
   --kind openai \
   --auth-mode chatgpt_account
@@ -81,4 +79,6 @@ uv run pbi-agent config profiles select chatgpt
 uv run pbi-agent
 ```
 
-`auth-login` opens the browser flow by default. Use `--method device` for the device-code fallback. The full saved-provider workflow, including the equivalent Settings-page flow in the web UI, is documented in [Providers](/guide/providers#openai-via-chatgpt-subscription).
+The `--id openai-chatgpt` value is the saved Provider ID. Later commands reuse that exact ID in `--provider-id` and `auth-login`. If you omit `--id`, `pbi-agent` creates a slug from `--name`; for example, `"OpenAI ChatGPT"` also becomes `openai-chatgpt`.
+
+`auth-login` opens the browser flow by default. Use `--method device` for the device-code fallback. The full saved-provider workflow, including the equivalent Settings-page flow in the web UI, is documented in [Providers](/providers#openai-via-chatgpt-subscription).

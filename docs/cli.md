@@ -228,22 +228,9 @@ pbi-agent web --host 127.0.0.1 --port 8000
 When `--url` is omitted, the browser target is derived from `--host` and `--port`. Wildcard binds such as `0.0.0.0` and `::` are converted to loopback URLs for browser launch.
 :::
 
-The browser session UI exposes local catalog commands without sending a model request:
+The browser session UI also supports interactive input shortcuts such as `@file` mentions, `!` shell command mode, built-in slash commands like `/skills` and `/compact`, and project slash commands from `.agents/commands/`.
 
-- `/skills` renders discovered project skills.
-- `/mcp` renders discovered project MCP servers.
-- `/agents` renders discovered project sub-agents.
-
-Image input in `web` mode is path-based and staged through session commands:
-
-```text
-/image add ./screen.png
-/image add ./before.png ./after.png
-/image list
-/image clear
-```
-
-After `/image add`, send your normal prompt. The staged images are attached to the next turn and then cleared automatically.
+See [Session Commands](/session-commands) for the complete interactive command reference.
 
 ## `pbi-agent run`
 
@@ -266,6 +253,7 @@ Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`.
 | Provider | Explicit image attachments (`--image`, `/image add`) | `read_image` tool |
 | --- | --- | --- |
 | OpenAI | yes | yes |
+| Azure | yes | yes |
 | Google | yes | yes |
 | Anthropic | yes | yes |
 | xAI | no | no |

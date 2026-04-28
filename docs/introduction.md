@@ -40,6 +40,7 @@ CLI
 | Provider | API Shape | Default Endpoint | Default Model | Default Sub-Model |
 | --- | --- | --- | --- | --- |
 | OpenAI | Responses API | `https://api.openai.com/v1/responses` | `gpt-5.4` | `gpt-5.4-mini` |
+| Azure | Responses API, Chat Completions API, or Anthropic Messages API by endpoint | required `--responses-url` | `gpt-4.1` | `gpt-4.1-mini` |
 | xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4.20` | `grok-4-1-fast` |
 | Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` |
 | Anthropic | Messages API | `https://api.anthropic.com/v1/messages` | `claude-opus-4-6` | `claude-sonnet-4-6` |
@@ -51,7 +52,9 @@ OpenAI, xAI, and Google keep conversation state server-side by passing a previou
 
 ## Read Next
 
-- [Installation](/guide/installation)
-- [Providers](/guide/providers)
-- [CLI Reference](/reference/cli)
-- [Environment Variables](/reference/environment)
+- [Installation](/installation)
+- [Providers](/providers)
+- [Web UI](/web-ui)
+- [Session Commands](/session-commands)
+- [Kanban Dashboard](/kanban-dashboard)
+- [Model Profiles](/model-profiles)

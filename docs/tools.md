@@ -170,7 +170,7 @@ Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`.
 `read_image` returns a concise JSON summary to the transcript and keeps the base64 image payload in provider-native multimodal content blocks instead of embedding it into plain text.
 
 ::: warning
-`read_image` is currently only registered for OpenAI, Google, and Anthropic. It is intentionally hidden for xAI and Generic in this build.
+`read_image` is currently only registered for OpenAI, Azure, Google, and Anthropic. It is intentionally hidden for xAI and Generic in this build.
 :::
 
 ## `read_web_url`

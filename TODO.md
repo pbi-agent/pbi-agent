@@ -1,1 +1,5 @@
-[X] Extract benchmark content from provided image
+# TODO
+
+[X] Fix Azure image-support docs inconsistencies from review
+[X] Run docs build
+[X] Update memory

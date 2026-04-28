@@ -79,6 +79,7 @@ uv run pbi-agent web
 | Provider | API Shape | Default Endpoint | Default Model | Default Sub-Model | Env Var for Key | Image Input |
 | --- | --- | --- | --- | --- | --- | --- |
 | OpenAI | Responses API | `https://api.openai.com/v1/responses` | `gpt-5.4` | `gpt-5.4-mini` | `OPENAI_API_KEY` | yes |
+| Azure | Responses API, Chat Completions API, or Anthropic Messages API by endpoint | required `--responses-url` | `gpt-4.1` | `gpt-4.1-mini` | `AZURE_API_KEY` | yes |
 | xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4.20` | `grok-4-1-fast` | `XAI_API_KEY` | no in this build |
 | Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` | `GEMINI_API_KEY` | yes |
 | Anthropic | Messages API | `https://api.anthropic.com/v1/messages` | `claude-opus-4-6` | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` | yes |
@@ -87,11 +88,11 @@ uv run pbi-agent web
 Image input covers both explicit user attachments (`run --image`, `/image add`) and model-initiated local image inspection through the `read_image` tool.
 
 ::: warning
-`--responses-url` is only used by the OpenAI, xAI, and Google backends. Anthropic is hard-wired to `https://api.anthropic.com/v1/messages` in the current implementation, and Generic uses `--generic-api-url` instead.
+`--responses-url` is used by the OpenAI, Azure, xAI, and Google backends. For Azure it is required and selects the wire protocol from the endpoint path. Anthropic is hard-wired to `https://api.anthropic.com/v1/messages` in the current implementation, and Generic uses `--generic-api-url` instead.
 :::
 
 ::: details Hidden compatibility aliases
-The CLI also accepts provider-specific hidden aliases that map to `--api-key`: `--openai-api-key`, `--xai-api-key`, `--google-api-key`, `--anthropic-api-key`, and `--generic-api-key`.
+The CLI also accepts provider-specific hidden aliases that map to `--api-key`: `--openai-api-key`, `--azure-api-key`, `--xai-api-key`, `--google-api-key`, `--anthropic-api-key`, and `--generic-api-key`.
 :::
 
 ## OpenAI
@@ -161,6 +162,62 @@ The browser UI exposes the same flow from **Settings**:
 5. Create or update a model profile that uses that provider, then make it active.
 
 The provider card shows the stored account email, plan label when available, expiry, and `Connect` / `Refresh` / `Disconnect` actions for the saved ChatGPT session.
+
+## Azure
+
+| Setting | Value |
+| --- | --- |
+| Select it | `--provider azure` or `PBI_AGENT_PROVIDER=azure` |
+| API key | `--api-key`, `PBI_AGENT_API_KEY`, or `AZURE_API_KEY` |
+| Endpoint override | required: `--responses-url` or `PBI_AGENT_RESPONSES_URL` |
+| Default model | `gpt-4.1` |
+| Default sub-model | `gpt-4.1-mini` |
+| Model override | `--model` or `PBI_AGENT_MODEL` |
+| History mode | Server-side via `previous_response_id` for Responses endpoints; client-side full message replay for Chat Completions or Anthropic Messages endpoints |
+| Image input | Supported |
+
+Azure model names are deployment names. Set `--model` and `--sub-agent-model` to the deployment names configured on your Azure resource.
+
+The Azure provider routes by the path in `--responses-url`:
+
+| Endpoint path | Backend used |
+| --- | --- |
+| `/openai/v1/responses` | OpenAI Responses-compatible provider |
+| `/openai/v1/chat/completions` or another `/openai/v1` base URL | OpenAI-compatible Chat Completions provider |
+| `/anthropic/v1/messages` | Anthropic Messages-compatible provider |
+
+```bash
+export AZURE_API_KEY="..."
+uv run pbi-agent \
+  --provider azure \
+  --responses-url https://my-resource.openai.azure.com/openai/v1/responses \
+  --model my-gpt-4-1-deployment \
+  --sub-agent-model my-gpt-4-1-mini-deployment \
+  web
+```
+
+Saved config works the same way:
+
+```bash
+uv run pbi-agent config providers create \
+  --name "Azure OpenAI" \
+  --kind azure \
+  --api-key-env AZURE_API_KEY \
+  --responses-url https://my-resource.openai.azure.com/openai/v1/responses
+
+uv run pbi-agent config profiles create \
+  --name azure-main \
+  --provider-id azure-openai \
+  --model my-gpt-4-1-deployment \
+  --sub-agent-model my-gpt-4-1-mini-deployment
+
+uv run pbi-agent config profiles select azure-main
+uv run pbi-agent web
+```
+
+::: tip
+For Azure Chat Completions, you can pass either the full `/openai/v1/chat/completions` URL or the `/openai/v1` base URL; `pbi-agent` appends `/chat/completions` when needed.
+:::
 
 ## xAI
 

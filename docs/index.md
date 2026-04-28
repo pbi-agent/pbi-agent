@@ -9,7 +9,7 @@ hero:
   actions:
     - theme: brand
       text: 'Get Started'
-      link: '/guide/'
+      link: '/introduction'
     - theme: alt
       text: 'GitHub'
       link: 'https://github.com/pbi-agent/pbi-agent'
@@ -81,11 +81,17 @@ pbi-agent --api-key "$OPENAI_API_KEY"
 
 | Section | What you will find |
 | --- | --- |
-| [Guide](/guide/) | Installation, provider setup, and architecture overview |
-| [CLI Reference](/reference/cli) | Commands, flags, and runtime defaults |
-| [Tools](/reference/tools) | The built-in function tools available to the agent |
-| [Environment Variables](/reference/environment) | `PBI_AGENT_*` settings and provider-specific key fallbacks |
-| [Customization](/guide/customization) | `INSTRUCTIONS.md`, `AGENTS.md`, project skills, sub-agents, and MCP discovery |
+| [Introduction](/introduction) | Project overview and architecture |
+| [Installation](/installation) | Prerequisites, install options, and first run |
+| [Providers](/providers) | Provider setup, auth, and endpoint examples |
+| [Web UI](/web-ui) | Browser sessions, Settings, images, and local commands |
+| [Kanban Dashboard](/kanban-dashboard) | Task board automation and observability dashboard |
+| [Model Profiles](/model-profiles) | Saved runtime presets and profile resolution |
+| [Session Commands](/session-commands) | Interactive `@file`, `!shell`, slash commands, and `/compact` behavior |
+| [CLI](/cli) | Terminal commands, flags, and runtime defaults |
+| [Customization](/customization) | `INSTRUCTIONS.md`, `AGENTS.md`, project skills, sub-agents, and MCP discovery |
+| [Built-in Tools](/tools) | The function tools available to the model |
+| [Environment Variables](/environment) | `PBI_AGENT_*` settings and provider-specific key fallbacks |
 
 ::: details Why this project exists
 `pbi-agent` is built for local, file-based coding workflows that need more than a bare chat loop. It keeps the runtime small, talks to providers through synchronous HTTP REST requests implemented with Python's standard library, and lets each workspace define its own skills, commands, agents, and MCP integrations.

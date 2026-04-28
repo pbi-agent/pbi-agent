@@ -39,6 +39,7 @@ These are only consulted when both `--api-key` and `PBI_AGENT_API_KEY` are absen
 | Provider | Fallback env var |
 | --- | --- |
 | OpenAI | `OPENAI_API_KEY` |
+| Azure | `AZURE_API_KEY` |
 | xAI | `XAI_API_KEY` |
 | Google | `GEMINI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
