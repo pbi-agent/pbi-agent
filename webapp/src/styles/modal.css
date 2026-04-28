@@ -162,7 +162,7 @@
 
 .task-form__footer {
   flex: 0 0 auto;
-  gap: 0.125rem;
+  gap: var(--sp-2);
   margin: 0 calc(var(--sp-6) * -1) calc(var(--sp-6) * -1);
   padding-inline: var(--sp-6);
 }
@@ -172,6 +172,39 @@
   min-height: 2.25rem;
   margin: 0;
   vertical-align: middle;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+/* Primary action (Save Changes / Add Provider / Add Profile) */
+.task-form__action-button[data-variant="default"] {
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  border-color: transparent;
+}
+
+.task-form__action-button[data-variant="default"]:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.task-form__action-button[data-variant="default"]:disabled {
+  background: var(--color-surface-3);
+  color: var(--color-text-tertiary);
+}
+
+/* Secondary action (Cancel) */
+.task-form__action-button[data-variant="outline"] {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.task-form__action-button[data-variant="outline"]:hover:not(:disabled) {
+  background: var(--color-surface-3);
+  border-color: var(--color-border-focus);
+  color: var(--color-text);
 }
 
 @media (max-width: 40rem) {
