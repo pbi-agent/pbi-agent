@@ -39,6 +39,7 @@
 
 ## Detailed Task Events
 ## 2026-04-28
+- Added docs for GitHub Copilot subscription provider: provider matrix/section, install quick start, CLI auth notes/defaults/image matrix, env/profile/web UI references; also corrected docs to current chatgpt provider kind and profile-id/PBI_AGENT_PROFILE_ID. Validation: git diff --check; bun run docs:build blocked because bun is not installed/on PATH in this environment.
 - Fixed auto-compaction omission from diagnostic `notes/session-4e1ee664-compaction-diagnostic.md`: compaction preserves active trailing user turn, accumulates all current-turn tool exchanges, formats multi-exchange logs chronologically, and prompt clarifies in-flight turns. Validation: focused 3-test pytest for compaction, Ruff check, Ruff format check.
 - Fixed web composer `+` → Image action: removed custom outside-pointer closer that preempted Radix selection, switched image menu item to `onSelect`, and opens native image picker via `showPicker()`/`click()` fallback. Added composer tests for picker trigger, unsupported image inputs, and image submit payload. Validation: focused Composer test, `bun run test:web`, `bun run lint`, `bun run typecheck`, `bun run web:build`.
 - Clarified `docs/guide/installation.md` ChatGPT subscription example by adding explicit `--id openai-chatgpt` and text explaining the saved Provider ID is reused by `--provider-id` and `auth-login`; omitted IDs are slugified from `--name`. Validation: `bun run docs:build`.

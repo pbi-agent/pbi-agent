@@ -20,7 +20,7 @@ The web UI is the default interactive workspace. It combines live chat sessions,
 | Sessions | Start or resume agent conversations, use `@file` mentions, upload images, run shell commands, and inspect run history. |
 | Kanban | Manage task cards across configurable workflow stages and start automated task runs. |
 | Dashboard | Review run observability, cost/token totals, duration, errors, and provider/model breakdowns. |
-| Settings | Configure providers, model profiles, ChatGPT account auth, and project command discovery. |
+| Settings | Configure providers, model profiles, ChatGPT and GitHub Copilot account auth, and project command discovery. |
 
 If provider setup is incomplete, the app sends you to **Settings** first so you can create a provider and model profile.
 

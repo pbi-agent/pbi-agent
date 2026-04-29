@@ -12,7 +12,7 @@ Saved configuration is split into two entities:
 
 Runtime resolution now happens in two phases:
 
-1. Select a base model profile from `--model-profile`, then `PBI_AGENT_MODEL_PROFILE`, then the saved `active_model_profile`.
+1. Select a base model profile from `--profile-id`, then `PBI_AGENT_PROFILE_ID`, then the saved active default profile.
 2. Compile that profile and its provider into runtime `Settings`, then overlay explicit CLI and environment overrides.
 
 If no saved profile is selected, runtime settings fall back directly to CLI flags, environment variables, and provider defaults. The old provider-scoped saved runtime snapshot is no longer used, and runtime commands do not rewrite saved config.
@@ -78,7 +78,9 @@ uv run pbi-agent web
 
 | Provider | API Shape | Default Endpoint | Default Model | Default Sub-Model | Env Var for Key | Image Input |
 | --- | --- | --- | --- | --- | --- | --- |
-| OpenAI | Responses API | `https://api.openai.com/v1/responses` | `gpt-5.4` | `gpt-5.4-mini` | `OPENAI_API_KEY` | yes |
+| OpenAI API | Responses API | `https://api.openai.com/v1/responses` | `gpt-5.4` | `gpt-5.4-mini` | `OPENAI_API_KEY` | yes |
+| ChatGPT subscription | Responses API | `https://chatgpt.com/backend-api/codex/responses` | `gpt-5.4` | `gpt-5.4-mini` | account session | yes |
+| GitHub Copilot subscription | Responses API for OpenAI-family models; Chat Completions API for other Copilot models | `https://api.githubcopilot.com/responses` or `https://api.githubcopilot.com/chat/completions` | `gpt-5.4` | `gpt-5-mini` | account session | yes |
 | Azure | Responses API, Chat Completions API, or Anthropic Messages API by endpoint | required `--responses-url` | `gpt-4.1` | `gpt-4.1-mini` | `AZURE_API_KEY` | yes |
 | xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4.20` | `grok-4-1-fast` | `XAI_API_KEY` | no in this build |
 | Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` | `GEMINI_API_KEY` | yes |
@@ -88,14 +90,16 @@ uv run pbi-agent web
 Image input covers both explicit user attachments (`run --image`, `/image add`) and model-initiated local image inspection through the `read_image` tool.
 
 ::: warning
-`--responses-url` is used by the OpenAI, Azure, xAI, and Google backends. For Azure it is required and selects the wire protocol from the endpoint path. Anthropic is hard-wired to `https://api.anthropic.com/v1/messages` in the current implementation, and Generic uses `--generic-api-url` instead.
+`--responses-url` is used by the OpenAI API, ChatGPT subscription, GitHub Copilot subscription, Azure, xAI, and Google backends. For Azure it is required and selects the wire protocol from the endpoint path. ChatGPT and GitHub Copilot saved providers normally use their built-in account-session endpoints, Anthropic is hard-wired to `https://api.anthropic.com/v1/messages` in the current implementation, and Generic uses `--generic-api-url` instead.
 :::
 
 ::: details Hidden compatibility aliases
 The CLI also accepts provider-specific hidden aliases that map to `--api-key`: `--openai-api-key`, `--azure-api-key`, `--xai-api-key`, `--google-api-key`, `--anthropic-api-key`, and `--generic-api-key`.
 :::
 
-## OpenAI
+## OpenAI API
+
+Use this provider when you want normal OpenAI Platform API-key billing. For subscription-account auth, use [ChatGPT Subscription](#chatgpt-subscription) instead.
 
 | Setting | Value |
 | --- | --- |
@@ -113,22 +117,23 @@ export OPENAI_API_KEY="sk-..."
 uv run pbi-agent --provider openai web
 ```
 
-### OpenAI via ChatGPT Subscription
+## ChatGPT Subscription
 
-`pbi-agent` can also connect the OpenAI provider through a saved ChatGPT account session instead of an API key. This flow is tied to a saved Provider ID, so use saved provider/profile config rather than an ad hoc `--provider openai` invocation.
+`pbi-agent` can connect through a saved ChatGPT account session instead of an OpenAI API key. In the implementation this is a separate `chatgpt` provider kind with `chatgpt_account` auth and a built-in ChatGPT Codex Responses endpoint. This flow is tied to a saved Provider ID, so use saved provider/profile config rather than an ad hoc `--provider openai` invocation.
 
 ::: tip
-OpenAI documents ChatGPT subscriptions and API billing as separate systems. A ChatGPT plan does not move API billing into `platform.openai.com`, but this app can reuse a ChatGPT subscription session for the OpenAI provider through the built-in account-auth flow. See [Using Codex with your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-in-chatgpt) and [Billing settings in ChatGPT vs Platform](https://help.openai.com/en/articles/9039756).
+OpenAI documents ChatGPT subscriptions and API billing as separate systems. A ChatGPT plan does not move API billing into `platform.openai.com`, but this app can use a ChatGPT subscription session through the built-in account-auth flow. See [Using Codex with your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-in-chatgpt) and [Billing settings in ChatGPT vs Platform](https://help.openai.com/en/articles/9039756).
 :::
 
-#### CLI Workflow
+### CLI Workflow
 
-Create a saved OpenAI provider with ChatGPT-account auth, create a model profile that points at it, complete the sign-in flow, then select that profile for runtime use:
+Create a saved ChatGPT subscription provider, create a model profile that points at it, complete the sign-in flow, then select that profile for runtime use:
 
 ```bash
 uv run pbi-agent config providers create \
+  --id openai-chatgpt \
   --name "OpenAI ChatGPT" \
-  --kind openai \
+  --kind chatgpt \
   --auth-mode chatgpt_account
 
 uv run pbi-agent config profiles create \
@@ -149,19 +154,81 @@ Notes:
 - `auth-login` uses the browser flow by default.
 - Use `uv run pbi-agent config providers auth-login openai-chatgpt --method device` when you need a device-code fallback.
 - Use `auth-refresh` to refresh a stored session and `auth-logout` to delete the local session.
-- Runtime commands use the ChatGPT-backed provider when you select the saved profile or provider. If you only pass `--provider openai` without selecting that saved config, normal API-key resolution still applies.
+- The provider ID in this example is `openai-chatgpt`; if you omit `--id`, the ID is generated from `--name`.
+- Runtime commands use the ChatGPT-backed provider when you select the saved profile or provider. If you only pass `--provider chatgpt` without selecting a saved config, pbi-agent has no Provider ID to load the account session from.
 
-#### Web UI Workflow
+### Web UI Workflow
 
 The browser UI exposes the same flow from **Settings**:
 
-1. Add or edit an OpenAI provider.
-2. Set **Authentication** to **ChatGPT account** and save it.
+1. Add or edit a **ChatGPT (Subscription)** provider.
+2. Leave **Authentication** as **ChatGPT account** and save it.
 3. On the provider card, click **Connect**.
 4. Complete the browser sign-in, or switch to **Device code** in the modal if needed.
 5. Create or update a model profile that uses that provider, then make it active.
 
 The provider card shows the stored account email, plan label when available, expiry, and `Connect` / `Refresh` / `Disconnect` actions for the saved ChatGPT session.
+
+## GitHub Copilot Subscription
+
+`pbi-agent` can also use a saved GitHub Copilot subscription account. This is implemented as the `github_copilot` provider kind with `copilot_account` auth. It does not use an API key; runtime requests are authorized with the locally stored Copilot OAuth session for the saved Provider ID.
+
+| Setting | Value |
+| --- | --- |
+| Select it | saved provider kind `github_copilot`, `--provider github_copilot`, or `PBI_AGENT_PROVIDER=github_copilot` |
+| Auth mode | `copilot_account` |
+| Login method | device-code flow only |
+| Endpoint | built in: `https://api.githubcopilot.com/responses` for OpenAI-family models, `https://api.githubcopilot.com/chat/completions` for other Copilot models |
+| Default model | `gpt-5.4` |
+| Default sub-model | `gpt-5-mini` |
+| Model override | `--model` or `PBI_AGENT_MODEL` |
+| History mode | Client-side full message replay |
+| Image input | Supported |
+
+The provider chooses its wire protocol from the model name: model IDs beginning with `gpt-`, `o1`, `o3`, or `o4` use the Copilot Responses endpoint; other model IDs use the Copilot Chat Completions endpoint.
+
+### CLI Workflow
+
+Create a saved GitHub Copilot provider, create a model profile that points at it, complete the device-code sign-in flow, then select that profile for runtime use:
+
+```bash
+uv run pbi-agent config providers create \
+  --id github-copilot \
+  --name "GitHub Copilot" \
+  --kind github_copilot \
+  --auth-mode copilot_account
+
+uv run pbi-agent config profiles create \
+  --name copilot \
+  --provider-id github-copilot \
+  --model gpt-5.4 \
+  --sub-agent-model gpt-5-mini
+
+uv run pbi-agent config providers auth-login github-copilot --method device
+uv run pbi-agent config providers auth-status github-copilot
+
+uv run pbi-agent config profiles select copilot
+uv run pbi-agent web
+```
+
+Notes:
+
+- GitHub Copilot account auth supports the device-code flow only, so `--method device` is the normal path.
+- The stored Copilot session does not support refresh; use `auth-login ... --method device` again to reconnect, or `auth-logout` to delete the local session.
+- The provider ID in this example is `github-copilot`; if you omit `--id`, the ID is generated from `--name`.
+- Runtime commands use the Copilot-backed provider when you select the saved profile or provider. If you only pass `--provider github_copilot` without selecting a saved config, pbi-agent has no Provider ID to load the account session from.
+
+### Web UI Workflow
+
+The browser UI exposes the same flow from **Settings**:
+
+1. Add or edit a **GitHub Copilot (Subscription)** provider.
+2. Leave **Authentication** as **GitHub Copilot account** and save it.
+3. On the provider card, click **Connect**.
+4. Complete the device-code sign-in shown in the modal.
+5. Create or update a model profile that uses that provider, then make it active.
+
+The provider card shows the stored account label and `Connect` / `Disconnect` actions for the saved Copilot session. Because Copilot sessions do not refresh through pbi-agent, reconnect by running the login flow again.
 
 ## Azure
 

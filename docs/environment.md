@@ -11,8 +11,8 @@ The CLI calls `load_dotenv()` during settings resolution, so a local `.env` file
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `PBI_AGENT_PROVIDER` | `openai` | Selects the provider backend. |
-| `PBI_AGENT_MODEL_PROFILE` | none | Selects a saved model profile by ID before runtime overrides are applied. |
+| `PBI_AGENT_PROVIDER` | `openai` | Selects the provider backend: `openai`, `azure`, `chatgpt`, `github_copilot`, `xai`, `google`, `anthropic`, or `generic`. |
+| `PBI_AGENT_PROFILE_ID` | none | Selects a saved model profile by ID before runtime overrides are applied. |
 | `PBI_AGENT_API_KEY` | none | Shared API key used before provider-specific fallback env vars. |
 | `PBI_AGENT_MODEL` | per-provider | Overrides the provider default model. For Generic, leaving this unset omits `model` from the request body. |
 | `PBI_AGENT_SUB_AGENT_MODEL` | per-provider sub-model | Optional override for the model used by `sub_agent`. When unset, child agents use the provider-specific sub-agent default from `config.py`. |
@@ -21,13 +21,13 @@ The CLI calls `load_dotenv()` during settings resolution, so a local `.env` file
 | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum tool execution workers. |
 | `PBI_AGENT_MAX_RETRIES` | `3` | Retry count for transient provider failures. |
 | `PBI_AGENT_COMPACT_THRESHOLD` | `200000` | Intended context compaction threshold for OpenAI. |
-| `PBI_AGENT_RESPONSES_URL` | provider-specific | Responses or Interactions endpoint override for OpenAI, xAI, or Google. |
+| `PBI_AGENT_RESPONSES_URL` | provider-specific | Responses or Interactions endpoint override for OpenAI API, ChatGPT, GitHub Copilot, Azure, xAI, or Google. |
 | `PBI_AGENT_GENERIC_API_URL` | `https://openrouter.ai/api/v1/chat/completions` | Chat Completions endpoint override for the Generic backend. |
 | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |
 
 Settings resolution happens in two phases:
 
-1. Select a base model profile from `--model-profile`, then `PBI_AGENT_MODEL_PROFILE`, then the saved `active_model_profile`.
+1. Select a base model profile from `--profile-id`, then `PBI_AGENT_PROFILE_ID`, then the saved active default profile.
 2. Compile that profile and its saved provider, then overlay explicit CLI and environment overrides.
 
 If no saved profile is selected, runtime settings fall back directly to CLI flags, environment variables, and provider defaults.
@@ -38,17 +38,19 @@ These are only consulted when both `--api-key` and `PBI_AGENT_API_KEY` are absen
 
 | Provider | Fallback env var |
 | --- | --- |
-| OpenAI | `OPENAI_API_KEY` |
+| OpenAI API | `OPENAI_API_KEY` |
 | Azure | `AZURE_API_KEY` |
 | xAI | `XAI_API_KEY` |
 | Google | `GEMINI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 | Generic | `GENERIC_API_KEY` |
 
+ChatGPT and GitHub Copilot subscription providers use saved account sessions instead of provider-specific API key fallback variables.
+
 ## Example `.env`
 
 ```bash
-PBI_AGENT_MODEL_PROFILE=analysis
+PBI_AGENT_PROFILE_ID=analysis
 PBI_AGENT_PROVIDER=openai
 PBI_AGENT_API_KEY=sk-...
 PBI_AGENT_MODEL=gpt-5.4

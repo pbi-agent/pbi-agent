@@ -11,7 +11,7 @@ A model profile is a saved runtime preset tied to one saved provider. Providers 
 
 | Entity | Stores | Examples |
 | --- | --- | --- |
-| Provider | Connection settings | provider kind, API key, ChatGPT account auth, Azure endpoint, generic API URL |
+| Provider | Connection settings | provider kind, API key, ChatGPT or GitHub Copilot account auth, Azure endpoint, generic API URL |
 | Model Profile | Runtime settings | model, sub-agent model, reasoning effort, max tokens, web search, retries, compaction threshold |
 
 This separation lets you create multiple profiles for the same provider, such as `fast`, `analysis`, `review`, or `azure-prod`.
@@ -52,7 +52,7 @@ pbi-agent config profiles select analysis
 
 When a runtime command starts, pbi-agent resolves settings in two phases:
 
-1. Select a base model profile from `--model-profile`, then `PBI_AGENT_MODEL_PROFILE`, then the saved active default profile.
+1. Select a base model profile from `--profile-id`, then `PBI_AGENT_PROFILE_ID`, then the saved active default profile.
 2. Compile that profile with its provider, then overlay explicit CLI flags and environment variables.
 
 If no profile is selected, pbi-agent falls back to CLI flags, environment variables, and provider defaults.
@@ -85,7 +85,7 @@ Azure uses deployment names as model values, so enter your Azure deployment name
 The active default profile is used by:
 
 - New web sessions when no explicit profile is selected.
-- `pbi-agent run` when no `--model-profile` or environment override is provided.
+- `pbi-agent run` when no `--profile-id` or environment override is provided.
 - Kanban task runs when neither the task nor its stage specifies a profile.
 
 You can clear the active default in Settings by choosing **No default**.
@@ -94,8 +94,8 @@ You can clear the active default in Settings by choosing **No default**.
 
 | Workflow | Override location |
 | --- | --- |
-| One CLI run | `--model-profile PROFILE_ID` |
-| Environment default | `PBI_AGENT_MODEL_PROFILE=PROFILE_ID` |
+| One CLI run | `--profile-id PROFILE_ID` |
+| Environment default | `PBI_AGENT_PROFILE_ID=PROFILE_ID` |
 | Web session | Profile selector in the session header |
 | Kanban stage | Stage profile in the board editor |
 | Kanban task | Task profile override in the task modal |
