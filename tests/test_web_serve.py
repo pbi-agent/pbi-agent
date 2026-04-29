@@ -4072,6 +4072,10 @@ def test_live_session_apply_patch_event_includes_diff_metadata() -> None:
             {"old": None, "new": 12},
         ],
         "call_id": "call_patch_1",
+        "status": "completed",
+        "arguments": None,
+        "result": {},
+        "error": None,
     }
 
 

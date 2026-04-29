@@ -219,7 +219,9 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         call_id: str = "",
         working_directory: str = ".",
         timeout_ms: int | str = "default",
+        result: Any = None,
     ) -> None:
+        del result
         self._tool_group.add_item(
             format_shell_tool_item(
                 command,
@@ -249,10 +251,13 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         detail: str = "",
         diff: str = "",
         diff_line_numbers: list[dict[str, int | None]] | None = None,
+        tool_name: str = "apply_patch",
+        arguments: Any = None,
+        result: Any = None,
     ) -> None:
-        del diff_line_numbers
+        del diff_line_numbers, arguments, result
         if self._tool_group.function_count:
-            self._tool_group.update_for_function("apply_patch")
+            self._tool_group.update_for_function(tool_name)
         self._tool_group.add_item(
             format_patch_tool_item(
                 path,
@@ -263,7 +268,7 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
                 detail=detail,
                 diff=diff,
             ),
-            classes=tool_item_class("apply_patch"),
+            classes=tool_item_class(tool_name),
         )
 
     def function_start(self, count: int) -> None:
@@ -280,7 +285,9 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         *,
         call_id: str = "",
         arguments: Any = None,
+        result: Any = None,
     ) -> None:
+        del result
         self._tool_group.update_for_function(name)
         tool_name, text = route_function_result(
             name,

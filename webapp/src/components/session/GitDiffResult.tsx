@@ -67,9 +67,7 @@ const FAILED_OPERATION_LABELS: Record<string, string> = {
 export function isApplyPatchToolMetadata(
   metadata: ApplyPatchToolMetadata | undefined,
 ): metadata is ApplyPatchToolMetadata {
-  return (
-    metadata?.tool_name === "apply_patch" || Boolean(metadata?.diff && metadata.path)
-  );
+  return Boolean(metadata?.diff && metadata.path);
 }
 
 export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }) {

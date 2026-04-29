@@ -318,6 +318,171 @@ describe("SessionTimeline", () => {
     );
   });
 
+  it("renders shell tool output as a structured terminal card", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-shell",
+            label: "shell",
+            items: [
+              {
+                text: "shell echo hello done",
+                metadata: {
+                  tool_name: "shell",
+                  call_id: "call_shell_1",
+                  status: "completed",
+                  success: true,
+                  arguments: { command: "echo hello", working_directory: "." },
+                  result: { stdout: "hello\n", stderr: "", exit_code: 0 },
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /shell/ }));
+
+    expect(screen.getByText("echo hello")).toBeInTheDocument();
+    expect(screen.getByText("Stdout")).toBeInTheDocument();
+    expect(screen.getByText("hello")).toBeInTheDocument();
+    expect(screen.getByText("call_shell_1")).toBeInTheDocument();
+  });
+
+  it("renders read_file tool output as a file preview card", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-read-file",
+            label: "read_file",
+            items: [
+              {
+                text: "read_file TODO.md done",
+                metadata: {
+                  tool_name: "read_file",
+                  status: "completed",
+                  success: true,
+                  arguments: { path: "TODO.md" },
+                  result: {
+                    path: "TODO.md",
+                    start_line: 1,
+                    end_line: 2,
+                    total_lines: 2,
+                    content: "# TODO\n[X] Done",
+                  },
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /read_file/ }));
+
+    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getByText("lines 1-2 of 2")).toBeInTheDocument();
+    expect(screen.getByText(/\[X\] Done/)).toBeInTheDocument();
+  });
+
+  it("renders read_image, read_web_url, web_search, sub_agent, and generic tool cards", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-mixed",
+            label: "Tool calls",
+            items: [
+              {
+                text: "read_image logo.jpg done",
+                metadata: {
+                  tool_name: "read_image",
+                  status: "completed",
+                  success: true,
+                  result: { path: "logo.jpg", mime_type: "image/jpeg", byte_count: 2048 },
+                },
+              },
+              {
+                text: "read_web_url https://example.com done",
+                metadata: {
+                  tool_name: "read_web_url",
+                  status: "completed",
+                  success: true,
+                  result: { url: "https://example.com", markdown: "# Example" },
+                },
+              },
+              {
+                text: "web_search done",
+                metadata: {
+                  tool_name: "web_search",
+                  status: "completed",
+                  success: true,
+                  result: {
+                    queries: ["pbi-agent"],
+                    sources: [{ title: "Docs", url: "https://example.com/docs", snippet: "Reference" }],
+                  },
+                },
+              },
+              {
+                text: "sub_agent done",
+                metadata: {
+                  tool_name: "sub_agent",
+                  status: "completed",
+                  success: true,
+                  arguments: { task_instruction: "Review tests", agent_type: "default" },
+                  result: { output: "Looks good" },
+                },
+              },
+              {
+                text: "custom_tool done",
+                metadata: {
+                  tool_name: "mcp__custom__lookup",
+                  status: "completed",
+                  success: true,
+                  arguments: { id: 1 },
+                  result: { value: "ok" },
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Tool calls/ }));
+
+    expect(screen.getByText("logo.jpg")).toBeInTheDocument();
+    expect(screen.getByText("2.0 KB")).toBeInTheDocument();
+    expect(screen.getByText("https://example.com")).toBeInTheDocument();
+    expect(screen.getByText("# Example")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://example.com/docs");
+    expect(screen.getByText("Review tests")).toBeInTheDocument();
+    expect(screen.getByText("Looks good")).toBeInTheDocument();
+    expect(screen.getByText("mcp__custom__lookup")).toBeInTheDocument();
+    expect(screen.getByText(/"value": "ok"/)).toBeInTheDocument();
+  });
+
   it("pairs equal-count multi-line replacements for intraline highlights", () => {
     render(
       <SessionTimeline

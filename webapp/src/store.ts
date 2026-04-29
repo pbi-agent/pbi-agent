@@ -1,7 +1,6 @@
 import { create } from "zustand";
 
 import type {
-  ApplyPatchToolMetadata,
   ImageAttachment,
   LiveSession,
   LiveSessionRuntime,
@@ -10,6 +9,7 @@ import type {
   ProcessingState,
   TimelineItem,
   TimelineToolGroupEntry,
+  ToolCallMetadata,
   ToolCallStatus,
   ToolGroupStatus,
   UsagePayload,
@@ -208,12 +208,13 @@ function readDiffLineNumbers(
   });
 }
 
-function readApplyPatchMetadata(value: unknown): ApplyPatchToolMetadata | undefined {
+function readToolCallMetadata(value: unknown): ToolCallMetadata | undefined {
   if (value === null || typeof value !== "object") {
     return undefined;
   }
   const record = value as Record<string, unknown>;
   return {
+    ...record,
     tool_name: readOptionalString(record.tool_name),
     path: readOptionalString(record.path),
     operation: readOptionalString(record.operation),
@@ -223,6 +224,17 @@ function readApplyPatchMetadata(value: unknown): ApplyPatchToolMetadata | undefi
     diff_line_numbers: readDiffLineNumbers(record.diff_line_numbers),
     call_id: readOptionalString(record.call_id),
     status: readToolCallStatus(record.status),
+    command: readOptionalString(record.command),
+    working_directory: readOptionalString(record.working_directory),
+    timeout_ms:
+      typeof record.timeout_ms === "number" || typeof record.timeout_ms === "string"
+        ? record.timeout_ms
+        : undefined,
+    exit_code:
+      typeof record.exit_code === "number" || record.exit_code === null
+        ? record.exit_code
+        : undefined,
+    timed_out: readBoolean(record.timed_out),
   };
 }
 
@@ -254,7 +266,7 @@ function readToolGroupItems(value: unknown): TimelineToolGroupEntry[] {
     return {
       text: readString(record.text),
       classes: readOptionalString(record.classes),
-      metadata: readApplyPatchMetadata(record.metadata),
+      metadata: readToolCallMetadata(record.metadata),
     };
   });
 }

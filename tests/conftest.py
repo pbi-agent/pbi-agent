@@ -113,6 +113,7 @@ class DisplaySpy:
         success: bool,
         call_id: str,
         arguments: object,
+        result: object = None,
     ) -> None:
         self.function_results.append(
             {
@@ -120,6 +121,7 @@ class DisplaySpy:
                 "success": success,
                 "call_id": call_id,
                 "arguments": arguments,
+                "result": result,
             }
         )
 
@@ -133,6 +135,9 @@ class DisplaySpy:
         detail: str = "",
         diff: str = "",
         diff_line_numbers: list[dict[str, int | None]] | None = None,
+        tool_name: str = "apply_patch",
+        result: object = None,
+        **_: object,
     ) -> None:
         arguments = {
             "path": path,
@@ -145,9 +150,11 @@ class DisplaySpy:
         self.function_results.append(
             {
                 "name": "apply_patch",
+                "tool_name": tool_name,
                 "success": success,
                 "call_id": call_id,
                 "arguments": arguments,
+                "result": result,
             }
         )
 

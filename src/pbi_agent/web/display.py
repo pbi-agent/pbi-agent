@@ -67,6 +67,43 @@ def _usage_payload(usage: TokenUsage) -> dict[str, Any]:
     }
 
 
+def _metadata_payload(value: Any) -> Any:
+    if value is None:
+        return None
+    try:
+        import json
+
+        return json.loads(json.dumps(value))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _result_payload(value: Any) -> dict[str, Any]:
+    payload = _metadata_payload(value)
+    if isinstance(payload, dict):
+        return payload
+    if payload is None:
+        return {}
+    return {"result": payload}
+
+
+def _tool_result_body(result: Any) -> Any:
+    payload = _result_payload(result)
+    body = payload.get("result")
+    return body if body is not None else payload
+
+
+def _tool_error_payload(result: Any) -> Any:
+    payload = _result_payload(result)
+    error = payload.get("error")
+    if error is not None:
+        return error
+    body = payload.get("result")
+    if isinstance(body, dict):
+        return body.get("error")
+    return None
+
+
 def history_message_content(message: MessageRecord) -> str:
     content = message.content
     if message.role != "user" or not message.image_attachments:
@@ -393,6 +430,7 @@ class _EventDisplayBase(DisplayProtocol):
         call_id: str = "",
         working_directory: str = ".",
         timeout_ms: int | str = "default",
+        result: Any = None,
     ) -> None:
         tool_name, text = route_function_result(
             "shell",
@@ -405,7 +443,28 @@ class _EventDisplayBase(DisplayProtocol):
                 "timeout_ms": timeout_ms,
             },
         )
-        self._tool_group.add_item(_plain_text(text), classes=tool_item_class(tool_name))
+        result_body = _tool_result_body(result)
+        metadata = {
+            "tool_name": tool_name,
+            "call_id": call_id,
+            "status": "running" if exit_code is None and not timed_out else ("failed" if timed_out or exit_code not in (0, None) else "completed"),
+            "success": not timed_out and exit_code == 0,
+            "arguments": {
+                "command": command,
+                "working_directory": working_directory,
+                "timeout_ms": timeout_ms,
+            },
+            "result": result_body,
+            "error": _tool_error_payload(result),
+            "command": command,
+            "working_directory": working_directory,
+            "timeout_ms": timeout_ms,
+            "exit_code": exit_code,
+            "timed_out": timed_out,
+        }
+        self._tool_group.add_item(
+            _plain_text(text), classes=tool_item_class(tool_name), metadata=metadata
+        )
 
     def patch_start(self, count: int) -> None:
         self._tool_group.start(f"Editing {count} file{'s' if count != 1 else ''}")
@@ -420,11 +479,14 @@ class _EventDisplayBase(DisplayProtocol):
         detail: str = "",
         diff: str = "",
         diff_line_numbers: list[dict[str, int | None]] | None = None,
+        tool_name: str = "apply_patch",
+        arguments: Any = None,
+        result: Any = None,
     ) -> None:
         if self._tool_group.function_count:
-            self._tool_group.update_for_function("apply_patch")
-        tool_name, text = route_function_result(
-            "apply_patch",
+            self._tool_group.update_for_function(tool_name)
+        routed_tool_name, text = route_function_result(
+            tool_name,
             verbose=self.verbose,
             status=status_markup(success=success),
             call_id=call_id,
@@ -435,14 +497,19 @@ class _EventDisplayBase(DisplayProtocol):
                 "diff": diff,
             },
         )
+        result_body = _tool_result_body(result)
         metadata = {
-            "tool_name": tool_name,
+            "tool_name": routed_tool_name,
             "path": path,
             "operation": operation,
             "success": success,
             "detail": detail,
             "diff": diff,
             "call_id": call_id,
+            "status": "completed" if success else "failed",
+            "arguments": _metadata_payload(arguments),
+            "result": result_body,
+            "error": _tool_error_payload(result),
         }
         if diff_line_numbers:
             metadata["diff_line_numbers"] = diff_line_numbers
@@ -450,7 +517,7 @@ class _EventDisplayBase(DisplayProtocol):
         self._tool_group.upsert_item(
             _plain_text(text),
             call_id=call_id,
-            classes=tool_item_class(tool_name),
+            classes=tool_item_class(routed_tool_name),
             metadata=metadata,
         )
         self._publish_tool_group_update()
@@ -468,6 +535,7 @@ class _EventDisplayBase(DisplayProtocol):
         *,
         call_id: str = "",
         arguments: Any = None,
+        result: Any = None,
     ) -> None:
         self._tool_group.update_for_function(name)
         tool_name, text = route_function_result(
@@ -477,6 +545,7 @@ class _EventDisplayBase(DisplayProtocol):
             call_id=call_id,
             arguments=arguments,
         )
+        result_body = _tool_result_body(result)
         self._tool_group.upsert_item(
             _plain_text(text),
             call_id=call_id,
@@ -485,6 +554,10 @@ class _EventDisplayBase(DisplayProtocol):
                 "tool_name": tool_name,
                 "call_id": call_id,
                 "status": "completed" if success else "failed",
+                "success": success,
+                "arguments": _metadata_payload(arguments),
+                "result": result_body,
+                "error": _tool_error_payload(result),
             },
         )
         self._publish_tool_group_update()

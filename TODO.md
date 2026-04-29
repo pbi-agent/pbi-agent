@@ -1,7 +1,5 @@
 # TODO
 
-[X] Inspect config/profile resolution and tests
-[X] Implement default active profile for `run`
-[X] Update help/copy and tests
-[X] Run focused validation
-[X] Update memory and handoff
+[X] Fix review finding: running tool cards must not show completed check icon
+[!] Run focused validation for touched frontend file (blocked: bun unavailable in shell)
+[X] Run git diff --check for touched files

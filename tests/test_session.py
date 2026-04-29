@@ -700,12 +700,14 @@ class _SessionDisplaySpy(_DisplaySpy):
         success: bool,
         call_id: str,
         arguments: object,
+        result: object = None,
     ) -> None:
         self.last_function_result = {
             "name": name,
             "success": success,
             "call_id": call_id,
             "arguments": arguments,
+            "result": result,
         }
 
     def tool_group_end(self) -> None:

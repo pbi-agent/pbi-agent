@@ -77,6 +77,7 @@ def _display_function_result(
         success=not result.is_error,
         call_id=result.call_id,
         arguments=call.arguments if call else None,
+        result=_output_payload(result.output_json),
     )
 
 
@@ -145,6 +146,9 @@ def _display_apply_patch_result(
         diff_line_numbers=diff_line_numbers_metadata(
             result.display_metadata.get("diff_line_numbers")
         ),
+        tool_name=call.name,
+        arguments=call.arguments,
+        result=payload,
     )
 
 

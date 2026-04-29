@@ -882,6 +882,7 @@ def test_anthropic_request_turn_preserves_web_search_order_from_content_blocks(
         success: bool,
         call_id: str,
         arguments: object,
+        result: object = None,
     ) -> None:
         events.append(("tool", name))
         original_function_result(
@@ -889,6 +890,7 @@ def test_anthropic_request_turn_preserves_web_search_order_from_content_blocks(
             success=success,
             call_id=call_id,
             arguments=arguments,
+            result=result,
         )
 
     display_spy.render_markdown = capture_markdown

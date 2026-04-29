@@ -295,7 +295,9 @@ class ConsoleDisplay(DisplayProtocol):
         call_id: str = "",
         working_directory: str = ".",
         timeout_ms: int | str = "default",
+        result: Any = None,
     ) -> None:
+        del result
         self._append_tool_line(
             "shell",
             format_shell_tool_item(
@@ -325,12 +327,15 @@ class ConsoleDisplay(DisplayProtocol):
         detail: str = "",
         diff: str = "",
         diff_line_numbers: list[dict[str, int | None]] | None = None,
+        tool_name: str = "apply_patch",
+        arguments: Any = None,
+        result: Any = None,
     ) -> None:
-        del diff_line_numbers
+        del diff_line_numbers, arguments, result
         if self._tool_group.function_count:
-            self._tool_group.update_for_function("apply_patch")
+            self._tool_group.update_for_function(tool_name)
         self._append_tool_line(
-            "apply_patch",
+            tool_name,
             format_patch_tool_item(
                 path,
                 operation,
@@ -356,7 +361,9 @@ class ConsoleDisplay(DisplayProtocol):
         *,
         call_id: str = "",
         arguments: Any = None,
+        result: Any = None,
     ) -> None:
+        del result
         self._tool_group.update_for_function(name)
         tool_name, text = route_function_result(
             name,

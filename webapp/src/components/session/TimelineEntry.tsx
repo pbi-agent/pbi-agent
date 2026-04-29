@@ -5,7 +5,8 @@ import remarkGfm from "remark-gfm";
 import type { ImageAttachment, TimelineItem } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { GitDiffResult, isApplyPatchToolMetadata } from "./GitDiffResult";
+import { isApplyPatchToolMetadata } from "./GitDiffResult";
+import { hasCustomToolResult, ToolResult } from "./ToolResult";
 
 function MarkdownContent({ content }: { content: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
@@ -206,10 +207,12 @@ export function TimelineEntry({
         <div className="timeline-entry__body">
           {item.items.map((toolItem, index) => {
             const status = toolItemStatus(toolItem);
-            return isApplyPatchToolMetadata(toolItem.metadata) && status !== "running" ? (
-              <GitDiffResult
+            return hasCustomToolResult(toolItem.metadata) ? (
+              <ToolResult
                 key={`${item.itemId}-${index}`}
                 metadata={toolItem.metadata}
+                text={toolItem.text}
+                running={status === "running"}
               />
             ) : (
               <pre

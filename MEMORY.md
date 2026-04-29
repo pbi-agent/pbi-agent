@@ -42,3 +42,5 @@
 ## 2026-04-29
 - Fixed root CLI version output so `pbi-agent -v`/`--version` print only `__version__` (e.g. `0.0.33`) without the program name; updated CLI tests. Validation: focused 2-test pytest, `uv run ruff check .`, `uv run ruff format --check .`, manual `uv run python -m pbi_agent -v`.
 - Fixed CLI `run` runtime resolution to use saved active/default model profile when no CLI/env profile selector is provided; updated profile-select copy and regressions. Validation: `uv run pytest tests/test_internal_config.py tests/test_cli.py -q`, `uv run ruff check .`, `uv run ruff format --check .`.
+- Added structured web tool-result metadata and frontend cards for shell, file edits, read_file, read_image, read_web_url, web_search, sub_agent, and generic/MCP tools; `TODO.md` lists tool output specificity. Validation: Python ruff/py_compile for touched backend files and `git diff --check`; frontend bun/npm unavailable in shell.
+- Fixed review finding so running structured tool cards show a spinner instead of a completed check icon. Validation: `git diff --check`; `bun run typecheck` blocked because bun is unavailable in shell.
