@@ -41,3 +41,4 @@
 ## Detailed Task Events
 ## 2026-04-29
 - Fixed root CLI version output so `pbi-agent -v`/`--version` print only `__version__` (e.g. `0.0.33`) without the program name; updated CLI tests. Validation: focused 2-test pytest, `uv run ruff check .`, `uv run ruff format --check .`, manual `uv run python -m pbi_agent -v`.
+- Fixed CLI `run` runtime resolution to use saved active/default model profile when no CLI/env profile selector is provided; updated profile-select copy and regressions. Validation: `uv run pytest tests/test_internal_config.py tests/test_cli.py -q`, `uv run ruff check .`, `uv run ruff format --check .`.

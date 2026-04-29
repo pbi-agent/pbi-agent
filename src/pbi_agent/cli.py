@@ -751,8 +751,8 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_select = profiles_actions.add_parser(
         "select",
         prog="pbi-agent config profiles select",
-        description="Set the default saved model profile for the web UI.",
-        help="Select the default web model profile.",
+        description="Set the default saved model profile for CLI runs and the web UI.",
+        help="Select the default model profile.",
         formatter_class=CleanHelpFormatter,
     )
     profiles_select.add_argument("profile_id", help="Model profile ID.")
@@ -1194,7 +1194,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
 
     if args.config_action == "select":
         active_id, _ = select_active_model_profile(args.profile_id)
-        print(f"Selected web model profile '{active_id}'.")
+        print(f"Selected default model profile '{active_id}'.")
         return 0
 
     raise ConfigError(f"Unknown profiles action '{args.config_action}'.")
