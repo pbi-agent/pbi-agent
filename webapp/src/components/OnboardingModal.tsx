@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
@@ -20,7 +19,7 @@ export function OnboardingModal({ isOnSettingsPage, onDismissOnSettings }: Props
 
   return (
     <Dialog open>
-      <DialogContent showCloseButton={false}>
+      <DialogContent className="task-form-dialog" showCloseButton={false}>
         <DialogHeader>
           <div className="modal-icon-shell">
             <SparklesIcon />
@@ -32,13 +31,18 @@ export function OnboardingModal({ isOnSettingsPage, onDismissOnSettings }: Props
               : "No model profiles are configured yet. You need to add at least one provider, complete sign-in if prompted, and create a model profile before you can use the app."}
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
+        <div className="task-form__footer">
           {isOnSettingsPage ? (
-            <Button type="button" onClick={onDismissOnSettings}>
+            <Button
+              className="task-form__action-button"
+              type="button"
+              onClick={onDismissOnSettings}
+            >
               Configure below
             </Button>
           ) : (
             <Button
+              className="task-form__action-button"
               type="button"
               onClick={() => {
                 void navigate("/settings");
@@ -47,7 +51,7 @@ export function OnboardingModal({ isOnSettingsPage, onDismissOnSettings }: Props
               Go to Settings
             </Button>
           )}
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );
