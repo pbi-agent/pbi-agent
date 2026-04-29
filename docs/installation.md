@@ -25,7 +25,7 @@ If this is your first `uv tool install`, reload your shell before running `pbi-a
 To update an existing installation later, run:
 
 ```bash
-uv tool upgrade pbi-agent
+uv tool install pbi-agent --upgrade
 ```
 
 ## Install from Source
