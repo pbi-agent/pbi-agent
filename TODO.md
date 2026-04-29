@@ -1,7 +1,6 @@
 # TODO
 
-[X] Inspect config/profile resolution and tests
-[X] Implement default active profile for `run`
-[X] Update help/copy and tests
+[X] Fix duplicate persisted command for kanban continuation review finding
+[X] Add/update regression coverage for persisted history
 [X] Run focused validation
-[X] Update memory and handoff
+[X] Update memory and summarize

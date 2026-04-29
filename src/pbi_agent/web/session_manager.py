@@ -1329,7 +1329,9 @@ class WebSessionManager:
                     with self._lock:
                         self._running_task_ids.discard(task_id)
                     raise RuntimeError("Done tasks cannot run.")
-            if record.stage == KANBAN_STAGE_BACKLOG:
+            is_continuation = False
+            started_from_backlog = record.stage == KANBAN_STAGE_BACKLOG
+            if started_from_backlog:
                 next_stage_id = self._next_runnable_board_stage_id(
                     record.stage,
                     store=store,
@@ -1346,6 +1348,16 @@ class WebSessionManager:
                         self._running_task_ids.discard(task_id)
                     raise KeyError(task_id)
                 record = moved_record
+            existing_session_id = record.session_id
+            if existing_session_id is not None:
+                existing_messages = store.list_messages(existing_session_id)
+                is_continuation = any(
+                    message.content.strip() != record.prompt.strip()
+                    for message in existing_messages
+                    if message.role == "user"
+                )
+            if started_from_backlog:
+                is_continuation = False
             stage_record = store.get_kanban_stage_config(
                 self._directory_key,
                 record.stage,
@@ -1354,6 +1366,12 @@ class WebSessionManager:
                 record,
                 stage_record=stage_record,
                 allow_fallback=False,
+            )
+            initial_prompt = self._task_prompt_for_run(
+                record,
+                stage_record,
+                store=store,
+                is_continuation=is_continuation,
             )
             if record.session_id is None:
                 session_id = store.create_session(
@@ -1373,15 +1391,14 @@ class WebSessionManager:
                         self._running_task_ids.discard(task_id)
                     raise KeyError(task_id)
                 record = updated_record
-            initial_prompt = self._task_prompt_for_run(
-                record, stage_record, store=store
-            )
-            initial_user_message_id = self._persist_task_user_prompt(
-                store,
-                record,
-                runtime,
-                initial_prompt,
-            )
+            initial_user_message_id = None
+            if not is_continuation:
+                initial_user_message_id = self._persist_task_user_prompt(
+                    store,
+                    record,
+                    runtime,
+                    initial_prompt,
+                )
             running_record = store.set_kanban_task_running(task_id)
         if running_record is None:
             with self._lock:
@@ -2078,6 +2095,7 @@ class WebSessionManager:
             self._live_sessions.get(live_session_id) if live_session_id else None
         )
         current_user_message_id = initial_user_message_id
+        is_initial_worker_turn = initial_user_message_id is not None
 
         def publish_summary(summary: str) -> None:
             with SessionStore() as store:
@@ -2119,7 +2137,11 @@ class WebSessionManager:
                     stage_record=stage_record,
                     allow_fallback=False,
                 )
-                prompt = self._task_prompt_for_run(record, stage_record)
+                prompt = self._task_prompt_for_run(
+                    record,
+                    stage_record,
+                    is_continuation=not is_initial_worker_turn,
+                )
                 if current_user_message_id is None:
                     with SessionStore() as store:
                         current_user_message_id = self._persist_task_user_prompt(
@@ -2152,6 +2174,7 @@ class WebSessionManager:
                     replay_history=False,
                 )
                 current_user_message_id = None
+                is_initial_worker_turn = False
                 if live_session is not None:
                     self._bind_live_session(
                         live_session.live_session_id,
@@ -2609,6 +2632,7 @@ class WebSessionManager:
         stage_record: KanbanStageConfigRecord | None,
         *,
         store: SessionStore | None = None,
+        is_continuation: bool = False,
     ) -> str:
         prompt = record.prompt
         stripped_prompt = prompt.strip()
@@ -2622,6 +2646,8 @@ class WebSessionManager:
         command = self._command_map().get(stage_record.command_id)
         if command is None:
             return prompt
+        if is_continuation:
+            return command.slash_alias
         first_runnable_stage_id = self._first_runnable_board_stage_id(store=store)
         if stage_record.stage_id != first_runnable_stage_id:
             return command.slash_alias
