@@ -30,6 +30,7 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.chatgpt_codex_backend import chatgpt_user_agent
 from pbi_agent.providers.openai_provider import (
     OpenAIProvider,
+    _IncompleteStreamError,
     _extract_retry_after,
     _parse_sse_response,
 )
@@ -825,6 +826,65 @@ data: {"type":"response.completed","response":{"id":"resp_3","model":"gpt-5","us
     }
 
 
+def test_openai_request_turn_retries_incomplete_stream_without_terminal_event(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+    incomplete_stream = """event: response.created
+data: {"type":"response.created","response":{"id":"resp_partial","model":"gpt-5"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_123"}}
+
+"""
+    recovered_stream = """event: response.created
+data: {"type":"response.created","response":{"id":"resp_recovered","model":"gpt-5"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_123"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_123","delta":"Recovered."}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_recovered","status":"completed","usage":{"input_tokens":6,"input_tokens_details":{"cached_tokens":0},"output_tokens":4,"output_tokens_details":{"reasoning_tokens":0}}}}
+
+"""
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return _FakeHTTPResponse(
+            incomplete_stream if len(requests) == 1 else recovered_stream
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = OpenAIProvider(
+        _make_settings(
+            provider="chatgpt",
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            max_retries=1,
+        )
+    )
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert all(request["stream"] is True for request in requests)
+    assert display_spy.retry_notices == [(1, 1)]
+
+
 def test_openai_request_turn_retries_incomplete_chunked_response(
     monkeypatch,
     display_spy,
@@ -909,6 +969,21 @@ data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"com
             "content": [{"type": "output_text", "text": "Hello world"}],
         }
     ]
+
+
+def test_parse_sse_response_raises_retryable_error_without_terminal_event() -> None:
+    with pytest.raises(_IncompleteStreamError) as exc_info:
+        _parse_sse_response(
+            """event: response.created
+data: {"type":"response.created","response":{"id":"resp_partial","model":"gpt-5"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_123"}}
+
+"""
+        )
+
+    assert str(exc_info.value) == "Stream ended without a response.completed event"
 
 
 def test_openai_execute_tool_calls_returns_function_call_outputs(

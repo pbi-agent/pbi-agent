@@ -79,6 +79,10 @@ class _ResponseFailedError(RuntimeError):
         return self.code.strip().lower() in _RETRYABLE_RESPONSE_ERROR_CODES
 
 
+class _IncompleteStreamError(RuntimeError):
+    """Raised when a streamed response ends before its terminal event."""
+
+
 class OpenAIProvider(Provider):
     """Provider backed by OpenAI's synchronous Responses HTTP API."""
 
@@ -518,7 +522,12 @@ class OpenAIProvider(Provider):
                 raise RuntimeError(
                     _format_error_message("OpenAI Responses API error", error_payload)
                 ) from exc
-            except (http.client.IncompleteRead, TimeoutError, ConnectionError) as exc:
+            except (
+                http.client.IncompleteRead,
+                TimeoutError,
+                ConnectionError,
+                _IncompleteStreamError,
+            ) as exc:
                 last_error = exc
                 _trace_provider_call(
                     tracer=tracer,
@@ -981,7 +990,7 @@ def _parse_sse_response(raw_body: str) -> dict[str, Any]:
         return merged_response
     if last_error is not None:
         return last_error
-    raise ValueError("Stream ended without a response.completed event")
+    raise _IncompleteStreamError("Stream ended without a response.completed event")
 
 
 def _normalize_sse_output_item(item: dict[str, Any]) -> dict[str, Any]:

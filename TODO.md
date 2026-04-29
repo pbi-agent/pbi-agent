@@ -1,7 +1,7 @@
 # TODO
 
-[X] Inspect config/profile resolution and tests
-[X] Implement default active profile for `run`
-[X] Update help/copy and tests
+[X] Inspect OpenAI provider retry/stream parsing path
+[X] Diagnose why auto-retry did not trigger
+[X] Propose and implement fix with tests
 [X] Run focused validation
 [X] Update memory and handoff
