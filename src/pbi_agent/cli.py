@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-v",
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=__version__,
         help="Show the current version and exit.",
     )
     provider_group = parser.add_argument_group("Provider and API")

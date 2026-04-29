@@ -103,7 +103,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             cli.build_parser().parse_args(["--version"])
 
         self.assertEqual(exc_info.exception.code, 0)
-        self.assertEqual(stdout.getvalue().strip(), f"pbi-agent {__version__}")
+        self.assertEqual(stdout.getvalue().strip(), __version__)
 
     def test_parser_version_short_flag_prints_resolved_version(self) -> None:
         stdout = io.StringIO()
@@ -112,7 +112,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             cli.build_parser().parse_args(["-v"])
 
         self.assertEqual(exc_info.exception.code, 0)
-        self.assertEqual(stdout.getvalue().strip(), f"pbi-agent {__version__}")
+        self.assertEqual(stdout.getvalue().strip(), __version__)
 
     def test_root_help_keeps_long_options_and_descriptions_on_single_rows(self) -> None:
         with patch(

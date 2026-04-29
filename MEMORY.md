@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-04-28
+- Last compacted: 2026-04-29
 - Scope: durable repo memory + append-only active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, `Detailed Task Events`; compact prior-day detail into durable notes before new work.
 
@@ -35,15 +35,9 @@
 - Known validation gaps: repo-wide `uv run ruff format --check .` may report unrelated pre-existing `src/pbi_agent/agents/__init__.py`; some focused provider pytest previously failed only google/xai default reasoning expectation.
 - Active follow-up: source-repo internal `.agents/skills/*` bundles never surface as downloadable/installable candidates.
 - Active follow-up: web overlay primitives need global readable defaults: collision padding, side offsets, min-height/line-height, p-2-ish panel padding; document in `DESIGN.md`.
+- Docs navigation/reference: docs are flattened into grouped sidebar (Getting Started, Using pbi-agent, Customizing); session commands reference `@file`, `!shell`, slash/project commands, and image uploads; Azure provider docs cover `--responses-url`, env/config, and image support matrix.
 - Auto-compaction fix: `_compact_live_session()` must use `_messages_for_compaction()` so unanswered trailing user turns are summarized; `_messages_for_provider_restore()` still strips trailing user turns for resume/restore. `_run_tool_iterations()` accumulates same-turn tool exchanges and clears after successful auto-compaction; compaction transcript uses `<pending_tool_exchange>` for one exchange and `<current_turn_tool_exchanges>` for multiple.
 
 ## Detailed Task Events
-## 2026-04-28
-- Added docs for GitHub Copilot subscription provider: provider matrix/section, install quick start, CLI auth notes/defaults/image matrix, env/profile/web UI references; also corrected docs to current chatgpt provider kind and profile-id/PBI_AGENT_PROFILE_ID. Validation: git diff --check; bun run docs:build blocked because bun is not installed/on PATH in this environment.
-- Fixed auto-compaction omission from diagnostic `notes/session-4e1ee664-compaction-diagnostic.md`: compaction preserves active trailing user turn, accumulates all current-turn tool exchanges, formats multi-exchange logs chronologically, and prompt clarifies in-flight turns. Validation: focused 3-test pytest for compaction, Ruff check, Ruff format check.
-- Fixed web composer `+` → Image action: removed custom outside-pointer closer that preempted Radix selection, switched image menu item to `onSelect`, and opens native image picker via `showPicker()`/`click()` fallback. Added composer tests for picker trigger, unsupported image inputs, and image submit payload. Validation: focused Composer test, `bun run test:web`, `bun run lint`, `bun run typecheck`, `bun run web:build`.
-- Clarified `docs/guide/installation.md` ChatGPT subscription example by adding explicit `--id openai-chatgpt` and text explaining the saved Provider ID is reused by `--provider-id` and `auth-login`; omitted IDs are slugified from `--name`. Validation: `bun run docs:build`.
-- Added Azure to provider docs: provider matrix, warning/hidden alias text, full Azure section with required `--responses-url`, endpoint routing, deployment-model names, CLI/saved-config examples, and `AZURE_API_KEY` env reference. Validation: `bun run docs:build`.
-- Added dedicated `docs/reference/session-commands.md` for interactive `@file`, `!shell`, built-in slash commands (`/skills`, `/mcp`, `/agents`, `/reload`, `/compact`), project commands, and composer image uploads; linked it from reference sidebar, home page, guide read-next, CLI web section, and customization references. Validation: `bun run docs:build`.
-- Flattened docs IA from separate `guide/` and `reference/` trees into one grouped sidebar: Getting Started, Using pbi-agent, Customizing. Moved pages to top-level docs paths, added `web-ui.md`, `kanban-dashboard.md`, and `model-profiles.md`, updated links/navigation. Validation: `bun run docs:build`.
-- Fixed review findings in docs: added Azure to CLI image support matrix and `read_image` registration note. Validation: `bun run docs:build`.
+## 2026-04-29
+- Fixed root CLI version output so `pbi-agent -v`/`--version` print only `__version__` (e.g. `0.0.33`) without the program name; updated CLI tests. Validation: focused 2-test pytest, `uv run ruff check .`, `uv run ruff format --check .`, manual `uv run python -m pbi_agent -v`.
