@@ -185,7 +185,10 @@ def test_web_server_prints_warning_for_expected_startup_failure() -> None:
         server.serve(debug=False)
 
     rendered = output.getvalue()
-    assert "Warning: Another web app instance is already managing this workspace." in rendered
+    assert (
+        "Warning: Another web app instance is already managing this workspace."
+        in rendered
+    )
 
 
 def test_expected_startup_failure_filter_hides_traceback_and_exit_log() -> None:
@@ -207,7 +210,7 @@ def test_expected_startup_failure_filter_hides_traceback_and_exit_log() -> None:
         __file__,
         1,
         "ERROR:    Traceback (most recent call last):\n"
-        "  File \"src/pbi_agent/web/session_manager.py\", line 534, in start\n"
+        '  File "src/pbi_agent/web/session_manager.py", line 534, in start\n'
         "    raise WebManagerAlreadyRunningError(\n"
         "pbi_agent.web.session_manager.WebManagerAlreadyRunningError: "
         "Another web app instance is already managing this workspace.",
@@ -1253,6 +1256,82 @@ def test_run_task_only_prepends_command_for_first_runnable_stage(
 
     assert mock_run.call_args is not None
     assert mock_run.call_args.args[0] == "/review"
+
+
+def test_run_task_continuing_existing_session_sends_command_only(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    _write_default_commands(tmp_path)
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            directory=str(tmp_path),
+            provider="openai",
+            model="gpt-5.4",
+            title="Task A",
+        )
+        store.add_message(
+            session_id, "user", "/plan\n# Task\nTask A\n\n## Goal\nInvestigate"
+        )
+        store.add_message(session_id, "assistant", "Plan ready.")
+
+    with patch(
+        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        return_value=SimpleNamespace(
+            tool_errors=[],
+            text="Replanned.",
+            session_id=session_id,
+        ),
+    ) as mock_run:
+        with TestClient(app) as client:
+            client.put(
+                "/api/board/stages",
+                json={
+                    "board_stages": [
+                        {"id": "backlog", "name": "Backlog"},
+                        {"id": "plan", "name": "Plan", "command_id": "plan"},
+                    ]
+                },
+            )
+            create_response = client.post(
+                "/api/tasks",
+                json={
+                    "title": "Task A",
+                    "prompt": "Investigate",
+                    "stage": "plan",
+                    "session_id": session_id,
+                },
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+
+            deadline = time.monotonic() + 2
+            while True:
+                task_response = client.get("/api/tasks")
+                task_payload = task_response.json()["tasks"][0]
+                if task_payload["run_status"] == "completed":
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("continued task run did not finish in time")
+                time.sleep(0.01)
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        messages = store.list_messages(session_id)
+
+    assert mock_run.call_args is not None
+    assert mock_run.call_args.args[0] == "/plan"
+    assert mock_run.call_args.kwargs["resume_session_id"] == session_id
+    assert [message.content for message in messages] == [
+        "/plan\n# Task\nTask A\n\n## Goal\nInvestigate",
+        "Plan ready.",
+        "/plan",
+    ]
 
 
 def test_task_update_title_preserves_prompt_content() -> None:

@@ -1,4 +1,4 @@
-# Review guidelines:
+# Review guidelines
 
 Act as reviewer for proposed code change by another engineer.
 Run `git status --short --branch` first to identify current workspace change, then review that diff.

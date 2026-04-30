@@ -15,7 +15,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from pbi_agent import __version__
 from pbi_agent import cli
 from pbi_agent.auth.store import build_auth_session
-from pbi_agent.config import DEFAULT_MODEL, load_internal_config
+from pbi_agent.config import (
+    DEFAULT_MODEL,
+    ModelProfileConfig,
+    ProviderConfig,
+    create_model_profile_config,
+    create_provider_config,
+    load_internal_config,
+    select_active_model_profile,
+)
 from pbi_agent.session_store import SessionStore
 
 
@@ -103,7 +111,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             cli.build_parser().parse_args(["--version"])
 
         self.assertEqual(exc_info.exception.code, 0)
-        self.assertEqual(stdout.getvalue().strip(), f"pbi-agent {__version__}")
+        self.assertEqual(stdout.getvalue().strip(), __version__)
 
     def test_parser_version_short_flag_prints_resolved_version(self) -> None:
         stdout = io.StringIO()
@@ -112,7 +120,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             cli.build_parser().parse_args(["-v"])
 
         self.assertEqual(exc_info.exception.code, 0)
-        self.assertEqual(stdout.getvalue().strip(), f"pbi-agent {__version__}")
+        self.assertEqual(stdout.getvalue().strip(), __version__)
 
     def test_root_help_keeps_long_options_and_descriptions_on_single_rows(self) -> None:
         with patch(
@@ -190,6 +198,69 @@ class DefaultWebCommandTests(unittest.TestCase):
         args = parser.parse_args(["--profile-id", "analysis", "web"])
 
         self.assertEqual(args.profile_id, "analysis")
+
+    def test_run_command_uses_active_default_profile(self) -> None:
+        create_provider_config(
+            ProviderConfig(
+                id="openai-main",
+                name="OpenAI Main",
+                kind="openai",
+                api_key="saved-openai-key",
+            )
+        )
+        create_model_profile_config(
+            ModelProfileConfig(
+                id="analysis",
+                name="Analysis",
+                provider_id="openai-main",
+                model="saved-model",
+                reasoning_effort="medium",
+            )
+        )
+        select_active_model_profile("analysis")
+
+        env_overrides = {"PBI_AGENT_API_KEY": "saved-openai-key"}
+        env_clear = [
+            "PBI_AGENT_PROVIDER",
+            "PBI_AGENT_MODEL",
+            "PBI_AGENT_SUB_AGENT_MODEL",
+            "PBI_AGENT_PROFILE_ID",
+            "PBI_AGENT_RESPONSES_URL",
+            "PBI_AGENT_GENERIC_API_URL",
+            "PBI_AGENT_REASONING_EFFORT",
+            "PBI_AGENT_MAX_TOOL_WORKERS",
+            "PBI_AGENT_MAX_RETRIES",
+            "PBI_AGENT_COMPACT_THRESHOLD",
+            "PBI_AGENT_MAX_TOKENS",
+            "PBI_AGENT_SERVICE_TIER",
+            "PBI_AGENT_WEB_SEARCH",
+        ]
+        previous_env = {name: os.environ.get(name) for name in env_clear}
+        try:
+            for name in env_clear:
+                os.environ.pop(name, None)
+            with (
+                patch.dict(os.environ, env_overrides, clear=False),
+                patch(
+                    "pbi_agent.cli._run_single_turn_command", return_value=0
+                ) as run_mock,
+            ):
+                rc = cli.main(["run", "--prompt", "hi"])
+        finally:
+            for name, value in previous_env.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+
+        self.assertEqual(rc, 0)
+        runtime = run_mock.call_args.kwargs["settings"]
+        self.assertEqual(runtime.provider_id, "openai-main")
+        self.assertEqual(runtime.profile_id, "analysis")
+        self.assertEqual(runtime.settings.provider, "openai")
+        self.assertEqual(runtime.settings.api_key, "saved-openai-key")
+        self.assertEqual(runtime.settings.model, "saved-model")
+        self.assertEqual(runtime.settings.reasoning_effort, "medium")
 
     def test_parser_accepts_sub_agent_model_flag(self) -> None:
         parser = cli.build_parser()

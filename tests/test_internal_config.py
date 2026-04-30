@@ -59,6 +59,13 @@ def _clear_runtime_env(monkeypatch) -> None:
         "PBI_AGENT_SERVICE_TIER",
         "PBI_AGENT_WEB_SEARCH",
         "PBI_AGENT_PROFILE_ID",
+        "OPENAI_API_KEY",
+        "XAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "GITHUB_TOKEN",
+        "GITHUB_COPILOT_API_KEY",
     ]:
         monkeypatch.delenv(name, raising=False)
 
@@ -440,6 +447,86 @@ def test_profile_runtime_model_override_keeps_profile_sub_agent_fallback(
     assert runtime.settings.model == "cli-model"
     assert runtime.settings.sub_agent_model == "saved-model"
     assert runtime.profile_id is None
+
+
+def test_resolve_runtime_uses_active_profile_for_run_when_no_profile_selector(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    _clear_runtime_env(monkeypatch)
+
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="saved-openai-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-main",
+            model="saved-model",
+            sub_agent_model="saved-sub-agent-model",
+            reasoning_effort="medium",
+            max_tokens=4096,
+            max_tool_workers=6,
+            max_retries=5,
+            compact_threshold=123456,
+            web_search=False,
+        )
+    )
+    select_active_model_profile("analysis")
+
+    runtime = resolve_runtime(_args("run", "--prompt", "hi"))
+
+    assert runtime.provider_id == "openai-main"
+    assert runtime.profile_id == "analysis"
+    assert runtime.settings.provider == "openai"
+    assert runtime.settings.api_key == "saved-openai-key"
+    assert runtime.settings.model == "saved-model"
+    assert runtime.settings.sub_agent_model == "saved-sub-agent-model"
+    assert runtime.settings.reasoning_effort == "medium"
+    assert runtime.settings.max_tokens == 4096
+    assert runtime.settings.max_tool_workers == 6
+    assert runtime.settings.max_retries == 5
+    assert runtime.settings.compact_threshold == 123456
+    assert runtime.settings.web_search is False
+
+
+def test_resolve_settings_prefers_env_profile_selector_over_active_profile(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    _clear_runtime_env(monkeypatch)
+    monkeypatch.setenv("PBI_AGENT_PROFILE_ID", "env-profile")
+
+    create_provider_config(
+        ProviderConfig(id="openai-main", name="OpenAI Main", kind="openai", api_key="k")
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="active-profile",
+            name="Active Profile",
+            provider_id="openai-main",
+            model="gpt-5.4-active",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="env-profile",
+            name="Env Profile",
+            provider_id="openai-main",
+            model="gpt-5.4-env",
+        )
+    )
+    select_active_model_profile("active-profile")
+
+    settings = resolve_settings(_args("run", "--prompt", "hi"))
+
+    assert settings.model == "gpt-5.4-env"
 
 
 def test_resolve_settings_prefers_cli_profile_selector_over_env_and_active_profile(
@@ -890,7 +977,7 @@ def test_resolve_settings_falls_back_to_unsaved_runtime_defaults(monkeypatch) ->
     monkeypatch.setenv("PBI_AGENT_PROVIDER", "google")
     monkeypatch.setenv("GEMINI_API_KEY", "google-key")
 
-    settings = resolve_settings(_args("web"))
+    settings = resolve_settings(_args("run", "--prompt", "hi"))
 
     assert settings.provider == "google"
     assert settings.model == "gemini-3.1-pro-preview"

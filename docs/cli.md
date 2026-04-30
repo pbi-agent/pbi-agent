@@ -15,8 +15,8 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 
 | Flag | Env Var | Default | Description |
 | --- | --- | --- | --- |
-| `--provider` | `PBI_AGENT_PROVIDER` | `openai` | LLM provider backend: `openai`, `xai`, `google`, `anthropic`, or `generic`. |
-| `--model-profile` | `PBI_AGENT_MODEL_PROFILE` | none | Select a saved model profile by ID before explicit CLI and env overrides are applied. |
+| `--provider` | `PBI_AGENT_PROVIDER` | `openai` | LLM provider backend: `openai`, `azure`, `chatgpt`, `github_copilot`, `xai`, `google`, `anthropic`, or `generic`. |
+| `--profile-id` | `PBI_AGENT_PROFILE_ID` | none | Select a saved model profile by ID before explicit CLI and env overrides are applied. |
 | `--api-key` | `PBI_AGENT_API_KEY` | none | Shared API key override. If unset, provider-specific fallback env vars are checked. |
 | `--model` | `PBI_AGENT_MODEL` | per-provider | Model override for the selected provider. Generic omits `model` when this is unset. |
 | `--sub-agent-model` | `PBI_AGENT_SUB_AGENT_MODEL` | per-provider sub-model | Optional model override for `sub_agent`. When unset, child agents use the provider-specific sub-agent default from `config.py`. |
@@ -25,7 +25,7 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--max-tool-workers` | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum parallel workers for tool execution. |
 | `--max-retries` | `PBI_AGENT_MAX_RETRIES` | `3` | Maximum retries for transient provider failures and rate limits. |
 | `--compact-threshold` | `PBI_AGENT_COMPACT_THRESHOLD` | `200000` | Context compaction threshold sent to OpenAI. |
-| `--responses-url` | `PBI_AGENT_RESPONSES_URL` | provider-specific | Override the Responses or Interactions endpoint for OpenAI, xAI, or Google. Ignored by Anthropic and Generic. |
+| `--responses-url` | `PBI_AGENT_RESPONSES_URL` | provider-specific | Override the Responses or Interactions endpoint for OpenAI API, ChatGPT, GitHub Copilot, Azure, xAI, or Google. Ignored by Anthropic and Generic. |
 | `--generic-api-url` | `PBI_AGENT_GENERIC_API_URL` | `https://openrouter.ai/api/v1/chat/completions` | Override the OpenAI-compatible Chat Completions endpoint used by the Generic backend. |
 | `--service-tier` | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier for request processing: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |
 | `--no-web-search` | none | `false` | Disable the provider's native web search tool when that backend supports it. |
@@ -39,7 +39,10 @@ Per-provider model defaults:
 
 | Provider | Default model | Default sub-model |
 | --- | --- | --- |
-| OpenAI | `gpt-5.4` | `gpt-5.4-mini` |
+| OpenAI API | `gpt-5.4` | `gpt-5.4-mini` |
+| Azure | `gpt-4.1` | `gpt-4.1-mini` |
+| ChatGPT subscription | `gpt-5.4` | `gpt-5.4-mini` |
+| GitHub Copilot subscription | `gpt-5.4` | `gpt-5-mini` |
 | xAI | `grok-4.20` | `grok-4-1-fast` |
 | Google | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` |
 | Anthropic | `claude-opus-4-6` | `claude-sonnet-4-6` |
@@ -177,8 +180,8 @@ Stored providers hold connection-only settings: provider kind, API key, and endp
 | Command | Purpose |
 | --- | --- |
 | `pbi-agent config providers list` | List saved providers. |
-| `pbi-agent config providers create --name NAME [--id ID] --kind PROVIDER [--auth-mode api_key|chatgpt_account] [--api-key KEY] [--responses-url URL] [--generic-api-url URL]` | Create a provider. |
-| `pbi-agent config providers update ID [--name NAME] [--kind PROVIDER] [--auth-mode api_key|chatgpt_account] [--api-key KEY] [--responses-url URL] [--generic-api-url URL]` | Update a provider by ID. |
+| `pbi-agent config providers create --name NAME [--id ID] --kind PROVIDER [--auth-mode api_key|chatgpt_account|copilot_account] [--api-key KEY] [--responses-url URL] [--generic-api-url URL]` | Create a provider. |
+| `pbi-agent config providers update ID [--name NAME] [--kind PROVIDER] [--auth-mode api_key|chatgpt_account|copilot_account] [--api-key KEY] [--responses-url URL] [--generic-api-url URL]` | Update a provider by ID. |
 | `pbi-agent config providers delete ID` | Delete a provider by ID. Deletion fails while any saved model profile still references it. |
 | `pbi-agent config providers auth-status ID` | Show stored account-auth status for a provider. |
 | `pbi-agent config providers auth-login ID [--method browser|device]` | Run the built-in browser or device login flow for a provider. |
@@ -188,9 +191,11 @@ Stored providers hold connection-only settings: provider kind, API key, and endp
 
 ::: details Provider auth notes
 
-- `chatgpt_account` is currently the only non-API-key auth mode, and it is only supported for the OpenAI provider.
-- The built-in `auth-login` flow stores a local account session under the saved provider ID, so it is intended for saved provider/profile workflows rather than one-off `--provider openai` runs.
-- `auth-login` defaults to the browser flow. Use `--method device` if you need a device-code fallback.
+- `chatgpt_account` is supported by the `chatgpt` subscription provider.
+- `copilot_account` is supported by the `github_copilot` subscription provider.
+- The built-in `auth-login` flow stores a local account session under the saved provider ID, so it is intended for saved provider/profile workflows rather than one-off `--provider ...` runs.
+- ChatGPT `auth-login` defaults to the browser flow and also supports `--method device`; GitHub Copilot supports the device-code flow only.
+- GitHub Copilot sessions do not support `auth-refresh`; reconnect by running `auth-login PROVIDER_ID --method device` again.
 
 :::
 
@@ -204,7 +209,7 @@ Stored model profiles hold runnable model and runtime settings tied to one saved
 | `pbi-agent config profiles create --name NAME [--id ID] --provider-id PROVIDER_ID [profile options]` | Create a model profile. |
 | `pbi-agent config profiles update ID [--name NAME] [--provider-id PROVIDER_ID] [profile options]` | Update a model profile by ID. |
 | `pbi-agent config profiles delete ID` | Delete a model profile by ID. |
-| `pbi-agent config profiles select ID` | Set the active model profile used when `--model-profile` and `PBI_AGENT_MODEL_PROFILE` are absent. |
+| `pbi-agent config profiles select ID` | Set the active model profile used when `--profile-id` and `PBI_AGENT_PROFILE_ID` are absent. |
 
 Profile options: `--model`, `--sub-agent-model`, `--reasoning-effort`, `--max-tokens`, `--service-tier`, `--web-search`, `--no-web-search`, `--max-tool-workers`, `--max-retries`, and `--compact-threshold`.
 
@@ -252,8 +257,10 @@ Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`.
 
 | Provider | Explicit image attachments (`--image`, `/image add`) | `read_image` tool |
 | --- | --- | --- |
-| OpenAI | yes | yes |
+| OpenAI API | yes | yes |
 | Azure | yes | yes |
+| ChatGPT subscription | yes | yes |
+| GitHub Copilot subscription | yes | yes |
 | Google | yes | yes |
 | Anthropic | yes | yes |
 | xAI | no | no |

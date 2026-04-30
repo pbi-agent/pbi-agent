@@ -1,4 +1,6 @@
-[X] Fix Uvicorn startup traceback suppression for traceback-text log records
-[X] Update tests to match Uvicorn lifespan logging shape
-[X] Run targeted validation
-[X] Update memory
+# TODO
+
+[X] Inspect PR 218 branch state and reproduce merge conflict
+[X] Resolve merge conflicts for PR 218
+[X] Run focused validation
+[X] Update MEMORY.md with task summary

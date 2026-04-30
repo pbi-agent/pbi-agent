@@ -25,7 +25,7 @@ If this is your first `uv tool install`, reload your shell before running `pbi-a
 To update an existing installation later, run:
 
 ```bash
-uv tool upgrade pbi-agent
+uv tool install pbi-agent --upgrade
 ```
 
 ## Install from Source
@@ -58,15 +58,17 @@ pbi-agent run --prompt "Summarize this repository and identify the main moving p
 Startup loads environment variables from a local `.env` file automatically through `python-dotenv`, so you can keep `PBI_AGENT_API_KEY`, `PBI_AGENT_PROVIDER`, and related settings there.
 :::
 
-## Alternative: Connect a ChatGPT Subscription
+## Alternative: Connect a Subscription Account
 
-For OpenAI, you can save a provider that uses a ChatGPT account session instead of an API key.
+You can save a provider that uses a subscription account session instead of an API key.
+
+### ChatGPT
 
 ```bash
 uv run pbi-agent config providers create \
   --id openai-chatgpt \
   --name "OpenAI ChatGPT" \
-  --kind openai \
+  --kind chatgpt \
   --auth-mode chatgpt_account
 
 uv run pbi-agent config profiles create \
@@ -81,4 +83,27 @@ uv run pbi-agent
 
 The `--id openai-chatgpt` value is the saved Provider ID. Later commands reuse that exact ID in `--provider-id` and `auth-login`. If you omit `--id`, `pbi-agent` creates a slug from `--name`; for example, `"OpenAI ChatGPT"` also becomes `openai-chatgpt`.
 
-`auth-login` opens the browser flow by default. Use `--method device` for the device-code fallback. The full saved-provider workflow, including the equivalent Settings-page flow in the web UI, is documented in [Providers](/providers#openai-via-chatgpt-subscription).
+`auth-login` opens the browser flow by default. Use `--method device` for the device-code fallback.
+
+### GitHub Copilot
+
+```bash
+uv run pbi-agent config providers create \
+  --id github-copilot \
+  --name "GitHub Copilot" \
+  --kind github_copilot \
+  --auth-mode copilot_account
+
+uv run pbi-agent config profiles create \
+  --name copilot \
+  --provider-id github-copilot \
+  --model gpt-5.4
+
+uv run pbi-agent config providers auth-login github-copilot --method device
+uv run pbi-agent config profiles select copilot
+uv run pbi-agent
+```
+
+GitHub Copilot auth uses the device-code flow. The stored Copilot session does not support refresh; run `auth-login github-copilot --method device` again when you need to reconnect.
+
+The full saved-provider workflows, including the equivalent Settings-page flows in the web UI, are documented in [Providers](/providers#chatgpt-subscription) and [GitHub Copilot Subscription](/providers#github-copilot-subscription).

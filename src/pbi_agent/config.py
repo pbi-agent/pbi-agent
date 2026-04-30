@@ -1006,8 +1006,10 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
     config = load_internal_config()
     providers = _provider_map(config)
     profiles = _profile_map(config)
-    selected_profile_ref = getattr(args, "profile_id", None) or os.getenv(
-        PROFILE_ID_ENV
+    selected_profile_ref = (
+        getattr(args, "profile_id", None)
+        or os.getenv(PROFILE_ID_ENV)
+        or config.web.active_profile_id
     )
 
     selected_profile: ModelProfileConfig | None = None
@@ -1415,9 +1417,13 @@ def _resolved_profile_id(
 ) -> str | None:
     if selected_profile is None or resolved_provider_id != selected_profile.provider_id:
         return None
-    concrete_profile = _concrete_profile_for_settings(
-        settings,
-        provider_id=resolved_provider_id,
+    concrete_profile = replace(
+        _concrete_profile_for_settings(
+            settings,
+            provider_id=resolved_provider_id,
+        ),
+        id=selected_profile.id,
+        name=selected_profile.name,
     )
     if (
         _concrete_profile_for_saved_profile(
