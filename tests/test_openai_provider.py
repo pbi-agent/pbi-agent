@@ -27,7 +27,18 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
-from pbi_agent.providers.chatgpt_codex_backend import chatgpt_user_agent
+from pbi_agent.providers.chatgpt_codex_backend import (
+    CHATGPT_CODEX_VERSION,
+    CHATGPT_ORIGINATOR,
+    CHATGPT_TURN_STATE_HEADER,
+    CHATGPT_WEBSOCKET_BETA_HEADER,
+    _WS_OPCODE_TEXT,
+    ChatGPTCodexBackend,
+    ChatGPTCodexWebSocketError,
+    ResponsesWebSocket,
+    chatgpt_user_agent,
+    websocket_url_for_responses_url,
+)
 from pbi_agent.providers.openai_provider import (
     OpenAIProvider,
     _extract_retry_after,
@@ -314,7 +325,9 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
     }
     assert "max_output_tokens" not in body
     assert "prompt_cache_retention" not in body
-    assert "context_management" not in body
+    assert body["context_management"] == [
+        {"type": "compaction", "compact_threshold": 200000}
+    ]
     assert "previous_response_id" not in body
 
 
@@ -643,29 +656,230 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     assert requests[1]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
 
 
+def test_chatgpt_user_agent_uses_static_real_codex_version() -> None:
+    user_agent = chatgpt_user_agent()
+
+    assert user_agent.startswith(f"{CHATGPT_ORIGINATOR}/{CHATGPT_CODEX_VERSION} (")
+    assert "0.0.33" not in user_agent
+
+
+def test_chatgpt_codex_backend_websocket_url_matches_codex_provider_path() -> None:
+    assert (
+        websocket_url_for_responses_url(OPENAI_CHATGPT_RESPONSES_URL)
+        == "wss://chatgpt.com/backend-api/codex/responses"
+    )
+    assert (
+        websocket_url_for_responses_url("https://chatgpt.com/backend-api/codex")
+        == "wss://chatgpt.com/backend-api/codex/responses"
+    )
+    assert (
+        websocket_url_for_responses_url("https://example.test/base?foo=bar")
+        == "wss://example.test/base/responses?foo=bar"
+    )
+
+
+def test_chatgpt_codex_backend_headers_match_codex_signature() -> None:
+    backend = ChatGPTCodexBackend(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    backend._turn_state = "turn-state-1"
+    headers: dict[str, str] = {}
+
+    backend.apply_headers(headers, session_id="session-123")
+
+    assert headers == {
+        "Accept": "application/json",
+        "OpenAI-Beta": CHATGPT_WEBSOCKET_BETA_HEADER,
+        "originator": CHATGPT_ORIGINATOR,
+        "User-Agent": chatgpt_user_agent(),
+        "session_id": "session-123",
+        CHATGPT_TURN_STATE_HEADER: "turn-state-1",
+    }
+
+
+def test_chatgpt_codex_backend_headers_skip_optional_session_and_turn_state() -> None:
+    backend = ChatGPTCodexBackend(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    headers: dict[str, str] = {}
+
+    backend.apply_headers(headers, session_id=None)
+
+    assert headers == {
+        "Accept": "application/json",
+        "OpenAI-Beta": CHATGPT_WEBSOCKET_BETA_HEADER,
+        "originator": CHATGPT_ORIGINATOR,
+        "User-Agent": chatgpt_user_agent(),
+    }
+
+
+def test_chatgpt_codex_backend_headers_noop_when_disabled() -> None:
+    backend = ChatGPTCodexBackend(responses_url=DEFAULT_RESPONSES_URL)
+    headers = {"Accept": "text/event-stream"}
+
+    backend.apply_headers(headers, session_id="session-123")
+
+    assert headers == {"Accept": "text/event-stream"}
+
+
+def test_chatgpt_codex_websocket_protocol_headers_override_conflicts(
+    monkeypatch,
+) -> None:
+    sent_requests: list[str] = []
+
+    class FakeSocket:
+        def settimeout(self, timeout: float) -> None:
+            del timeout
+
+        def sendall(self, payload: bytes) -> None:
+            sent_requests.append(payload.decode("utf-8"))
+
+        def recv(self, size: int) -> bytes:
+            del size
+            return b"HTTP/1.1 101 Switching Protocols\r\n\r\n"
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.socket.create_connection",
+        lambda *args, **kwargs: FakeSocket(),
+    )
+
+    ResponsesWebSocket.connect(
+        "ws://example.test/responses",
+        headers={
+            "Authorization": "Bearer token",
+            "Connection": "close",
+            "Upgrade": "h2c",
+            "Sec-WebSocket-Key": "bad-key",
+            "Sec-WebSocket-Version": "12",
+        },
+        timeout=30,
+    )
+
+    assert len(sent_requests) == 1
+    header_lines = sent_requests[0].split("\r\n")
+    assert "Authorization: Bearer token" in header_lines
+    assert "Connection: Upgrade" in header_lines
+    assert "Upgrade: websocket" in header_lines
+    assert "Sec-WebSocket-Version: 13" in header_lines
+    assert "Connection: close" not in header_lines
+    assert "Upgrade: h2c" not in header_lines
+    assert "Sec-WebSocket-Key: bad-key" not in header_lines
+    assert "Sec-WebSocket-Version: 12" not in header_lines
+
+
+def test_chatgpt_codex_websocket_sends_response_create_body_at_top_level() -> None:
+    sent_payloads: list[str] = []
+    websocket = object.__new__(ResponsesWebSocket)
+    websocket.closed = False
+    websocket._buffer = b""
+    websocket._sock = Mock()
+    websocket._sock.settimeout = Mock()
+    websocket._send_text = sent_payloads.append
+    websocket._recv_frame = Mock(
+        side_effect=[
+            (
+                _WS_OPCODE_TEXT,
+                json.dumps(
+                    {
+                        "type": "response.completed",
+                        "response": {"id": "resp_1", "output": []},
+                    }
+                ).encode("utf-8"),
+            )
+        ]
+    )
+
+    events = websocket.send_response_create(
+        {
+            "model": "gpt-5",
+            "input": [{"role": "user", "content": "Hello"}],
+            "stream": True,
+        },
+        timeout=30,
+    )
+
+    assert events == [
+        {"type": "response.completed", "response": {"id": "resp_1", "output": []}}
+    ]
+    assert len(sent_payloads) == 1
+    payload = json.loads(sent_payloads[0])
+    assert payload == {
+        "type": "response.create",
+        "model": "gpt-5",
+        "input": [{"role": "user", "content": "Hello"}],
+        "stream": True,
+    }
+    assert "response" not in payload
+
+
+def _unmasked_websocket_text_frame(payload: dict[str, object]) -> bytes:
+    body = json.dumps(payload).encode("utf-8")
+    if len(body) < 126:
+        return bytes([0x80 | _WS_OPCODE_TEXT, len(body)]) + body
+    if len(body) < 65536:
+        return (
+            bytes([0x80 | _WS_OPCODE_TEXT, 126]) + len(body).to_bytes(2, "big") + body
+        )
+    return bytes([0x80 | _WS_OPCODE_TEXT, 127]) + len(body).to_bytes(8, "big") + body
+
+
+def test_chatgpt_codex_websocket_reads_buffered_upgrade_frame() -> None:
+    buffered_event = {
+        "type": "response.completed",
+        "response": {"id": "resp_buffered", "output": []},
+    }
+    websocket = ResponsesWebSocket(
+        Mock(),
+        response_headers={},
+        buffered=_unmasked_websocket_text_frame(buffered_event),
+    )
+    sent_payloads: list[str] = []
+    websocket._send_text = sent_payloads.append
+
+    events = websocket.send_response_create(
+        {"model": "gpt-5", "input": [], "stream": True},
+        timeout=30,
+    )
+
+    assert events == [buffered_event]
+    assert sent_payloads
+    websocket._sock.recv.assert_not_called()
+
+
 def test_openai_request_turn_uses_chatgpt_account_auth_headers(monkeypatch) -> None:
     request_details: dict[str, object] = {}
 
-    def fake_urlopen(
-        request: urllib.request.Request,
-        timeout: float,
-    ) -> _FakeHTTPResponse:
-        del timeout
-        request_details["url"] = request.full_url
-        request_details["authorization"] = request.get_header("Authorization")
-        request_details["headers"] = dict(request.header_items())
-        request_details["body"] = json.loads(request.data.decode("utf-8"))
-        return _FakeHTTPResponse(
-            """event: response.created
-data: {"type":"response.created","response":{"id":"resp_chatgpt"}}
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
+        del self, timeout
+        request_details["headers"] = headers
+        request_details["body"] = request_body
+        return [
+            {"type": "response.created", "response": {"id": "resp_chatgpt"}},
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_chatgpt",
+                    "model": "gpt-5",
+                    "usage": {
+                        "input_tokens": 5,
+                        "input_tokens_details": {"cached_tokens": 0},
+                        "output_tokens": 3,
+                        "output_tokens_details": {"reasoning_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "Done."}],
+                        }
+                    ],
+                },
+            },
+        ]
 
-event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_chatgpt","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}]}}
-
-"""
-        )
-
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
 
     provider = OpenAIProvider(
         _make_settings(
@@ -696,14 +910,13 @@ data: {"type":"response.completed","response":{"id":"resp_chatgpt","model":"gpt-
     )
 
     assert response.text == "Done."
-    assert request_details["url"] == OPENAI_CHATGPT_RESPONSES_URL
-    assert request_details["authorization"] == "Bearer access-token"
+    assert request_details["headers"]["Authorization"] == "Bearer access-token"
     assert request_details["body"]["stream"] is True
-    assert request_details["headers"]["Chatgpt-account-id"] == "acct_123"
-    assert request_details["headers"]["Accept"] == "text/event-stream"
-    assert request_details["headers"]["Originator"] == "opencode"
-    assert request_details["headers"]["Session_id"] == "session-123"
-    assert request_details["headers"]["User-agent"] == chatgpt_user_agent()
+    assert request_details["headers"]["ChatGPT-Account-Id"] == "acct_123"
+    assert request_details["headers"]["Accept"] == "application/json"
+    assert request_details["headers"]["originator"] == CHATGPT_ORIGINATOR
+    assert request_details["headers"]["session_id"] == "session-123"
+    assert request_details["headers"]["User-Agent"] == chatgpt_user_agent()
 
 
 def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
@@ -712,48 +925,90 @@ def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
     requests: list[dict[str, object]] = []
     responses = iter(
         [
-            _FakeHTTPResponse(
-                """event: response.created
-data: {"type":"response.created","response":{"id":"resp_1"}}
-
-event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"function_call","call_id":"call_1","name":"read_file","arguments":"{\\"path\\":\\"README.md\\"}"}]}}
-
-""",
-                headers={"x-codex-turn-state": "ts-1"},
-            ),
-            _FakeHTTPResponse(
-                """event: response.created
-data: {"type":"response.created","response":{"id":"resp_2"}}
-
-event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5","usage":{"input_tokens":4,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}]}}
-
-""",
-            ),
-            _FakeHTTPResponse(
-                """event: response.created
-data: {"type":"response.created","response":{"id":"resp_3"}}
-
-event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_3","model":"gpt-5","usage":{"input_tokens":4,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Next."}]}]}}
-
-""",
-            ),
+            [
+                {"type": "response.created", "response": {"id": "resp_1"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_1",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 5,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 3,
+                            "output_tokens_details": {"reasoning_tokens": 0},
+                        },
+                        "output": [
+                            {
+                                "type": "function_call",
+                                "call_id": "call_1",
+                                "name": "read_file",
+                                "arguments": '{"path":"README.md"}',
+                            }
+                        ],
+                    },
+                },
+            ],
+            [
+                {"type": "response.created", "response": {"id": "resp_2"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_2",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 4,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 2,
+                            "output_tokens_details": {"reasoning_tokens": 0},
+                        },
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [{"type": "output_text", "text": "Done."}],
+                            }
+                        ],
+                    },
+                },
+            ],
+            [
+                {"type": "response.created", "response": {"id": "resp_3"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_3",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 4,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 2,
+                            "output_tokens_details": {"reasoning_tokens": 0},
+                        },
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [{"type": "output_text", "text": "Next."}],
+                            }
+                        ],
+                    },
+                },
+            ],
         ]
     )
 
-    def fake_urlopen(request: urllib.request.Request, timeout: float = 0.0):
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
         del timeout
-        requests.append(
-            {
-                "headers": dict(request.header_items()),
-                "body": json.loads(request.data.decode("utf-8")),
-            }
-        )
+        requests.append({"headers": dict(headers), "body": request_body})
+        if len(requests) == 1:
+            self._turn_state = "ts-1"
         return next(responses)
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
     provider = OpenAIProvider(
         _make_settings(
             responses_url=OPENAI_CHATGPT_RESPONSES_URL,
@@ -810,15 +1065,21 @@ data: {"type":"response.completed","response":{"id":"resp_3","model":"gpt-5","us
         turn_usage=turn_usage,
     )
 
-    assert requests[0]["headers"].get("X-codex-turn-state") is None
-    assert requests[1]["headers"]["X-codex-turn-state"] == "ts-1"
-    assert requests[1]["body"]["input"][0] == {"role": "user", "content": "Hello"}
+    assert requests[0]["headers"].get("x-codex-turn-state") is None
+    assert requests[1]["headers"]["x-codex-turn-state"] == "ts-1"
+    assert requests[1]["body"]["previous_response_id"] == "resp_1"
+    assert requests[1]["body"]["input"][0] == {
+        "type": "function_call",
+        "call_id": "call_1",
+        "name": "read_file",
+        "arguments": '{"path":"README.md"}',
+    }
     assert requests[1]["body"]["input"][-1] == {
         "type": "function_call_output",
         "call_id": "call_1",
         "output": '{"ok": true, "result": []}',
     }
-    assert requests[2]["headers"].get("X-codex-turn-state") is None
+    assert requests[2]["headers"].get("x-codex-turn-state") is None
     assert requests[2]["body"]["input"][-1] == {
         "role": "user",
         "content": "Next turn",
@@ -875,6 +1136,94 @@ def test_openai_request_turn_retries_incomplete_chunked_response(
     assert display_spy.retry_notices == [(1, 1)]
 
 
+def test_openai_request_turn_retries_incomplete_response_event(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+    incomplete_events = [
+        {
+            "type": "response.created",
+            "response": {"id": "resp_partial", "model": "gpt-5"},
+        },
+        {
+            "type": "response.incomplete",
+            "response": {
+                "id": "resp_partial",
+                "model": "gpt-5",
+                "status": "incomplete",
+                "incomplete_details": {"reason": "content_filter"},
+                "usage": {"input_tokens": 3, "output_tokens": 1},
+            },
+        },
+    ]
+    completed_events = [
+        {"type": "response.created", "response": {"id": "resp_recovered"}},
+        {
+            "type": "response.completed",
+            "response": {
+                "id": "resp_recovered",
+                "model": DEFAULT_MODEL,
+                "usage": {
+                    "input_tokens": 6,
+                    "input_tokens_details": {"cached_tokens": 0},
+                    "output_tokens": 4,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                },
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "Recovered."}],
+                    }
+                ],
+            },
+        },
+    ]
+    responses = iter([incomplete_events, completed_events])
+
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
+        del self, headers, timeout
+        requests.append(request_body)
+        return next(responses)
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(max_retries=1, responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    )
+    session_usage = TokenUsage(model=DEFAULT_MODEL)
+    turn_usage = TokenUsage(model=DEFAULT_MODEL)
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=session_usage,
+        turn_usage=turn_usage,
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert display_spy.retry_notices == [(1, 1)]
+    assert session_usage.input_tokens == 6
+    assert turn_usage.input_tokens == 6
+
+
+def test_parse_sse_response_raises_for_incomplete_event() -> None:
+    with pytest.raises(RuntimeError, match="content_filter"):
+        _parse_sse_response(
+            """event: response.created
+data: {"type":"response.created","response":{"id":"resp_partial","model":"gpt-5"}}
+
+event: response.incomplete
+data: {"type":"response.incomplete","response":{"id":"resp_partial","model":"gpt-5","status":"incomplete","incomplete_details":{"reason":"content_filter"}}}
+
+"""
+        )
+
+
 def test_parse_sse_response_reconstructs_output_from_stream_events() -> None:
     response = _parse_sse_response(
         """event: response.created
@@ -909,6 +1258,67 @@ data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"com
             "content": [{"type": "output_text", "text": "Hello world"}],
         }
     ]
+
+
+def test_parse_sse_response_merges_function_call_delta_with_done_by_item_id() -> None:
+    response = _parse_sse_response(
+        """event: response.created
+data: {"type":"response.created","response":{"id":"resp_chatgpt","model":"gpt-5"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","item_id":"fc_123","delta":"{\\\"path\\\":\\\"README.md\\\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":3,"item":{"type":"function_call","id":"fc_123","call_id":"call_1","name":"read_file","status":"completed"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"completed","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}}}}
+
+"""
+    )
+
+    assert response["output"] == [
+        {
+            "type": "function_call",
+            "id": "fc_123",
+            "arguments": '{"path":"README.md"}',
+            "call_id": "call_1",
+            "name": "read_file",
+            "status": "completed",
+        }
+    ]
+
+
+def test_parse_sse_response_reconstructs_reasoning_text_delta() -> None:
+    response = _parse_sse_response(
+        """event: response.created
+data: {"type":"response.created","response":{"id":"resp_chatgpt","model":"gpt-5"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","id":"rs_123"}}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","item_id":"rs_123","content_index":0,"delta":"Think"}
+
+event: response.reasoning_text.delta
+data: {"type":"response.reasoning_text.delta","item_id":"rs_123","content_index":0,"delta":"ing."}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"completed","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":2}}}}
+
+"""
+    )
+
+    assert response["output"] == [
+        {
+            "type": "reasoning",
+            "id": "rs_123",
+            "summary": [],
+            "content": [{"type": "reasoning_text", "text": "Thinking."}],
+        }
+    ]
+    parsed = OpenAIProvider(_make_settings())._parse_response(response)
+    assert parsed.reasoning_content == "Thinking."
 
 
 def test_openai_execute_tool_calls_returns_function_call_outputs(
@@ -1452,47 +1862,90 @@ def test_openai_request_turn_replays_restored_transcript_without_previous_id(
     ]
 
 
-def test_openai_chatgpt_http_replays_explicit_transcript_with_reasoning(
+def test_openai_chatgpt_websocket_uses_previous_id_for_live_followup(
     monkeypatch,
     display_spy,
 ) -> None:
     requests: list[dict[str, object]] = []
     responses = iter(
         [
-            _FakeHTTPResponse(
-                """event: response.created
-data: {"type":"response.created","response":{"id":"resp_1"}}
-
-event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1}},"output":[{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"Need to inspect files"}],"content":[{"type":"reasoning_text","text":"Checking the workspace before answering."}]},{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","status":"completed","arguments":"{\\"path\\":\\"README.md\\"}"}]}}
-
-"""
-            ),
-            _FakeHTTPResponse(
-                """event: response.created
-data: {"type":"response.created","response":{"id":"resp_2"}}
-
-event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5","usage":{"input_tokens":4,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done."}]}]}}
-
-"""
-            ),
+            [
+                {"type": "response.created", "response": {"id": "resp_1"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_1",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 5,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 3,
+                            "output_tokens_details": {"reasoning_tokens": 1},
+                        },
+                        "output": [
+                            {
+                                "type": "reasoning",
+                                "id": "rs_1",
+                                "summary": [
+                                    {
+                                        "type": "summary_text",
+                                        "text": "Need to inspect files",
+                                    }
+                                ],
+                                "content": [
+                                    {
+                                        "type": "reasoning_text",
+                                        "text": "Checking the workspace before answering.",
+                                    }
+                                ],
+                            },
+                            {
+                                "type": "function_call",
+                                "id": "fc_1",
+                                "call_id": "call_1",
+                                "name": "read_file",
+                                "status": "completed",
+                                "arguments": '{"path":"README.md"}',
+                            },
+                        ],
+                    },
+                },
+            ],
+            [
+                {"type": "response.created", "response": {"id": "resp_2"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_2",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 4,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 2,
+                            "output_tokens_details": {"reasoning_tokens": 0},
+                        },
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [{"type": "output_text", "text": "Done."}],
+                            }
+                        ],
+                    },
+                },
+            ],
         ]
     )
 
-    def fake_urlopen(
-        request: urllib.request.Request,
-        timeout: float,
-    ):
-        del timeout
-        payload = request.data.decode("utf-8") if request.data else "{}"
-        requests.append(json.loads(payload))
-        response = next(responses)
-        if isinstance(response, Exception):
-            raise response
-        return response
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
+        del self, headers, timeout
+        requests.append(request_body)
+        return next(responses)
 
-    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
 
     provider = OpenAIProvider(
         _make_settings(
@@ -1535,24 +1988,274 @@ data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5","us
 
     assert second.text == "Done."
     assert "previous_response_id" not in requests[0]
-    assert "previous_response_id" not in requests[1]
+    assert requests[1]["previous_response_id"] == "resp_1"
     assert requests[1]["input"] == [
-        {"role": "user", "content": "Find instructions"},
         {
-            "type": "reasoning",
-            "summary": [{"type": "summary_text", "text": "Need to inspect files"}],
-            "content": [
-                {
-                    "type": "reasoning_text",
-                    "text": "Checking the workspace before answering.",
-                }
-            ],
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"ok": true, "result": []}',
         },
+    ]
+
+
+def test_openai_chatgpt_websocket_connection_limit_reconnects_and_resends(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
+        del self, headers, timeout
+        requests.append(request_body)
+        if len(requests) == 1:
+            raise ChatGPTCodexWebSocketError(
+                "connection limit",
+                status=429,
+                payload={
+                    "error": {
+                        "code": "websocket_connection_limit_reached",
+                        "message": "connection limit",
+                    }
+                },
+                retryable=True,
+                connection_limit=True,
+            )
+        return [
+            {"type": "response.created", "response": {"id": "resp_1"}},
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_1",
+                    "model": "gpt-5",
+                    "usage": {
+                        "input_tokens": 1,
+                        "input_tokens_details": {"cached_tokens": 0},
+                        "output_tokens": 1,
+                        "output_tokens_details": {"reasoning_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "Recovered."}],
+                        }
+                    ],
+                },
+            },
+        ]
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            max_retries=1,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+            ),
+        )
+    )
+    response = provider.request_turn(
+        user_input=UserTurnInput(text="Hello"),
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert requests[0] == requests[1]
+    assert display_spy.retry_notices == [(1, 1)]
+
+
+def test_openai_chatgpt_websocket_usage_limit_429_does_not_retry(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
+        del self, headers, timeout
+        requests.append(request_body)
+        raise ChatGPTCodexWebSocketError(
+            "usage limit",
+            status=429,
+            payload={
+                "error": {
+                    "code": "usage_limit_reached",
+                    "message": "usage limit",
+                }
+            },
+            retryable=False,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            max_retries=1,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+            ),
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="usage_limit_reached"):
+        provider.request_turn(
+            user_input=UserTurnInput(text="Hello"),
+            session_id="session-123",
+            display=display_spy,
+            session_usage=TokenUsage(model=DEFAULT_MODEL),
+            turn_usage=TokenUsage(model=DEFAULT_MODEL),
+        )
+
+    assert len(requests) == 1
+    assert display_spy.retry_notices == []
+    assert display_spy.rate_limit_notices == []
+
+
+def test_openai_chatgpt_previous_response_not_found_replays_active_turn(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+    responses = iter(
+        [
+            [
+                {"type": "response.created", "response": {"id": "resp_1"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_1",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 1,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 1,
+                            "output_tokens_details": {"reasoning_tokens": 0},
+                        },
+                        "output": [
+                            {
+                                "type": "function_call",
+                                "call_id": "call_1",
+                                "name": "read_file",
+                                "arguments": '{"path":"README.md"}',
+                            }
+                        ],
+                    },
+                },
+            ],
+            ChatGPTCodexWebSocketError(
+                "missing previous response",
+                status=400,
+                payload={
+                    "error": {
+                        "code": "previous_response_not_found",
+                        "message": "Previous response not found",
+                    }
+                },
+                retryable=True,
+                previous_response_not_found=True,
+            ),
+            [
+                {"type": "response.created", "response": {"id": "resp_2"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_2",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 2,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 1,
+                            "output_tokens_details": {"reasoning_tokens": 0},
+                        },
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "output_text", "text": "Recovered."}
+                                ],
+                            }
+                        ],
+                    },
+                },
+            ],
+        ]
+    )
+
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
+        del self, headers, timeout
+        requests.append(request_body)
+        response = next(responses)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            max_retries=1,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+            ),
+        )
+    )
+    first = provider.request_turn(
+        user_input=UserTurnInput(text="Find instructions"),
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+    assert first.has_tool_calls is True
+
+    second = provider.request_turn(
+        tool_result_items=[
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": '{"ok": true, "result": []}',
+            },
+        ],
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert second.text == "Recovered."
+    assert requests[1]["previous_response_id"] == "resp_1"
+    assert "previous_response_id" not in requests[2]
+    assert requests[2]["input"] == [
+        {"role": "user", "content": "Find instructions"},
         {
             "type": "function_call",
             "call_id": "call_1",
             "name": "read_file",
-            "status": "completed",
             "arguments": '{"path":"README.md"}',
         },
         {

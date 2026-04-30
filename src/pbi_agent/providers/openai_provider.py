@@ -35,6 +35,7 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.chatgpt_codex_backend import (
     ChatGPTCodexBackend,
+    ChatGPTCodexWebSocketError,
     ResponsesRequestOptions,
 )
 from pbi_agent.session_store import MessageRecord
@@ -77,6 +78,13 @@ class _ResponseFailedError(RuntimeError):
     @property
     def retryable(self) -> bool:
         return self.code.strip().lower() in _RETRYABLE_RESPONSE_ERROR_CODES
+
+
+class _ResponseIncompleteError(RuntimeError):
+    def __init__(self, *, reason: str, payload: dict[str, Any]) -> None:
+        self.reason = reason
+        self.payload = payload
+        super().__init__(f"Incomplete response returned, reason: {reason}")
 
 
 class OpenAIProvider(Provider):
@@ -122,7 +130,7 @@ class OpenAIProvider(Provider):
             )
 
     def close(self) -> None:
-        pass
+        self._chatgpt_backend.close_websocket()
 
     def reset_conversation(self) -> None:
         self._previous_response_id = None
@@ -304,6 +312,16 @@ class OpenAIProvider(Provider):
             session_id=session_id,
             include_previous_response_id=include_previous_response_id,
         )
+        if self._chatgpt_backend.enabled:
+            return self._websocket_request(
+                input_items=input_items,
+                instructions=instructions,
+                session_id=session_id,
+                display=display,
+                tracer=tracer,
+                is_user_turn=is_user_turn,
+                request_body=request_body,
+            )
         request_data = json.dumps(request_body).encode("utf-8")
 
         max_retries = self._settings.max_retries
@@ -346,6 +364,34 @@ class OpenAIProvider(Provider):
 
                 try:
                     _raise_if_response_failed(response_json)
+                except _ResponseIncompleteError as exc:
+                    last_error = exc
+                    last_error_message = str(exc)
+                    _trace_provider_call(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=_sanitize_request_payload_for_observability(
+                            request_body
+                        ),
+                        response_payload=response_json,
+                        duration_ms=_duration_ms(req_start),
+                        status_code=200,
+                        success=False,
+                        error_message=str(exc),
+                        metadata={
+                            "attempt": attempt + 1,
+                            "semantic_error": True,
+                            "incomplete": True,
+                        },
+                    )
+                    if attempt < max_retries:
+                        retry_notice_max_retries = max_retries
+                        continue
+                    display.wait_stop()
+                    raise RuntimeError(str(exc)) from exc
                 except _ResponseFailedError as exc:
                     last_error = exc
                     last_error_message = str(exc)
@@ -369,6 +415,15 @@ class OpenAIProvider(Provider):
                         },
                     )
                     if exc.retryable and attempt < max_retries:
+                        retry_notice_max_retries = max_retries
+                        continue
+                    if attempt < max_retries:
+                        if self._previous_response_id and not is_user_turn:
+                            request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
+                                input_items=input_items,
+                                instructions=instructions,
+                                session_id=session_id,
+                            )
                         retry_notice_max_retries = max_retries
                         continue
                     display.wait_stop()
@@ -569,6 +624,316 @@ class OpenAIProvider(Provider):
             ) from last_error
         raise RuntimeError("OpenAI request failed after retries.")
 
+    def _rebuild_chatgpt_websocket_request_without_previous_response(
+        self,
+        *,
+        input_items: list[dict[str, Any]],
+        instructions: str,
+        session_id: str | None,
+    ) -> dict[str, Any]:
+        self._previous_response_id = None
+        self._branch_response_id = None
+        self._chatgpt_backend.clear_live_loop_state()
+        return self._build_request_body(
+            input_items=input_items,
+            instructions=instructions,
+            session_id=session_id,
+            include_previous_response_id=False,
+        )
+
+    def _websocket_request(
+        self,
+        *,
+        input_items: list[dict[str, Any]],
+        instructions: str,
+        session_id: str | None,
+        display: DisplayProtocol,
+        tracer: "RunTracer | None" = None,
+        is_user_turn: bool = False,
+        request_body: dict[str, Any] | None = None,
+    ) -> CompletedResponse:
+        include_previous_response_id = not is_user_turn
+        request_body = request_body or self._build_request_body(
+            input_items=input_items,
+            instructions=instructions,
+            session_id=session_id,
+            include_previous_response_id=include_previous_response_id,
+        )
+        max_retries = self._settings.max_retries
+        rate_limit_max_retries = max(max_retries, _RATE_LIMIT_MAX_RETRIES)
+        retry_notice_max_retries = max_retries
+        retried_unauthorized_refresh = False
+        retried_missing_previous_response = False
+        last_error: Exception | None = None
+        last_error_message: str | None = None
+
+        for attempt in range(rate_limit_max_retries + 1):
+            if attempt > 0:
+                display.retry_notice(attempt, retry_notice_max_retries)
+            req_start = time.perf_counter()
+            request_auth = build_runtime_request_auth(
+                provider_kind=self._settings.provider,
+                request_url=self._chatgpt_backend.websocket_url,
+                auth=self._settings.auth,
+            )
+            headers = self._request_headers(
+                request_auth=request_auth,
+                session_id=session_id,
+                input_items=input_items,
+            )
+            try:
+                events = self._chatgpt_backend.send_websocket_request(
+                    request_body=request_body,
+                    headers=headers,
+                    timeout=_REQUEST_TIMEOUT_SECS,
+                )
+                try:
+                    response_json = _parse_stream_events(events)
+                except _ResponseIncompleteError as exc:
+                    last_error = exc
+                    last_error_message = str(exc)
+                    error_payload = exc.payload
+                    _trace_provider_call(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=_sanitize_request_payload_for_observability(
+                            request_body
+                        ),
+                        response_payload=error_payload,
+                        duration_ms=_duration_ms(req_start),
+                        status_code=200,
+                        success=False,
+                        error_message=str(exc),
+                        metadata={
+                            "attempt": attempt + 1,
+                            "semantic_error": True,
+                            "transport": "websocket",
+                            "incomplete": True,
+                        },
+                    )
+                    if attempt < max_retries:
+                        if self._previous_response_id and not is_user_turn:
+                            request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
+                                input_items=input_items,
+                                instructions=instructions,
+                                session_id=session_id,
+                            )
+                        retry_notice_max_retries = max_retries
+                        continue
+                    display.wait_stop()
+                    raise RuntimeError(str(exc)) from exc
+                try:
+                    _raise_if_response_failed(response_json)
+                except _ResponseIncompleteError as exc:
+                    last_error = exc
+                    last_error_message = str(exc)
+                    _trace_provider_call(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=_sanitize_request_payload_for_observability(
+                            request_body
+                        ),
+                        response_payload=response_json,
+                        duration_ms=_duration_ms(req_start),
+                        status_code=200,
+                        success=False,
+                        error_message=str(exc),
+                        metadata={
+                            "attempt": attempt + 1,
+                            "semantic_error": True,
+                            "transport": "websocket",
+                            "incomplete": True,
+                        },
+                    )
+                    if attempt < max_retries:
+                        if self._previous_response_id and not is_user_turn:
+                            request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
+                                input_items=input_items,
+                                instructions=instructions,
+                                session_id=session_id,
+                            )
+                        retry_notice_max_retries = max_retries
+                        continue
+                    display.wait_stop()
+                    raise RuntimeError(str(exc)) from exc
+                except _ResponseFailedError as exc:
+                    last_error = exc
+                    last_error_message = str(exc)
+                    _trace_provider_call(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=_sanitize_request_payload_for_observability(
+                            request_body
+                        ),
+                        response_payload=response_json,
+                        duration_ms=_duration_ms(req_start),
+                        status_code=200,
+                        success=False,
+                        error_message=str(exc),
+                        metadata={
+                            "attempt": attempt + 1,
+                            "semantic_error": True,
+                            "transport": "websocket",
+                        },
+                    )
+                    if exc.retryable and attempt < max_retries:
+                        if self._previous_response_id and not is_user_turn:
+                            request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
+                                input_items=input_items,
+                                instructions=instructions,
+                                session_id=session_id,
+                            )
+                        retry_notice_max_retries = max_retries
+                        continue
+                    if attempt < max_retries:
+                        if self._previous_response_id and not is_user_turn:
+                            request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
+                                input_items=input_items,
+                                instructions=instructions,
+                                session_id=session_id,
+                            )
+                        retry_notice_max_retries = max_retries
+                        continue
+                    display.wait_stop()
+                    raise RuntimeError(str(exc)) from exc
+
+                result = self._parse_response(response_json)
+                _trace_provider_call(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=_sanitize_request_payload_for_observability(
+                        request_body
+                    ),
+                    response_payload=response_json,
+                    duration_ms=_duration_ms(req_start),
+                    prompt_tokens=result.usage.input_tokens,
+                    completion_tokens=result.usage.output_tokens,
+                    total_tokens=result.usage.total_tokens,
+                    status_code=200,
+                    success=True,
+                    metadata={"attempt": attempt + 1, "transport": "websocket"},
+                )
+                display.wait_stop()
+                return result
+            except ChatGPTCodexWebSocketError as exc:
+                last_error = exc
+                error_payload = exc.payload or {"error": {"message": str(exc)}}
+                last_error_message = _format_error_message(
+                    "OpenAI Responses WebSocket error",
+                    error_payload,
+                )
+                _trace_provider_call(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=_sanitize_request_payload_for_observability(
+                        request_body
+                    ),
+                    response_payload=error_payload,
+                    duration_ms=_duration_ms(req_start),
+                    status_code=exc.status,
+                    success=False,
+                    error_message=str(exc),
+                    metadata={"attempt": attempt + 1, "transport": "websocket"},
+                )
+
+                if (
+                    exc.status == 401
+                    and not retried_unauthorized_refresh
+                    and isinstance(self._settings.auth, OAuthSessionAuth)
+                    and self._settings.auth.refresh_token
+                ):
+                    self._settings.auth = refresh_runtime_auth(
+                        provider_kind=self._settings.provider,
+                        auth=self._settings.auth,
+                    )
+                    retried_unauthorized_refresh = True
+                    continue
+
+                if (
+                    exc.previous_response_not_found
+                    and not retried_missing_previous_response
+                ):
+                    request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
+                        input_items=input_items,
+                        instructions=instructions,
+                        session_id=session_id,
+                    )
+                    retried_missing_previous_response = True
+                    retry_notice_max_retries = max_retries
+                    continue
+
+                if exc.status == 429:
+                    if not exc.connection_limit:
+                        display.wait_stop()
+                        raise RuntimeError(last_error_message) from exc
+                    if attempt >= max_retries:
+                        break
+                    if self._previous_response_id and not is_user_turn:
+                        request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
+                            input_items=input_items,
+                            instructions=instructions,
+                            session_id=session_id,
+                        )
+                    retry_notice_max_retries = max_retries
+                    continue
+
+                if exc.status == 503:
+                    if attempt >= max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            _format_error_message(
+                                f"OpenAI API overloaded after {max_retries + 1} attempts",
+                                error_payload,
+                            )
+                        ) from exc
+                    wait = _extract_retry_after(exc, attempt)
+                    retry_notice_max_retries = max_retries
+                    display.overload_notice(
+                        wait_seconds=wait,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    time.sleep(wait)
+                    continue
+
+                if exc.retryable:
+                    if attempt >= max_retries:
+                        break
+                    if self._previous_response_id and not is_user_turn:
+                        request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
+                            input_items=input_items,
+                            instructions=instructions,
+                            session_id=session_id,
+                        )
+                    retry_notice_max_retries = max_retries
+                    continue
+
+                display.wait_stop()
+                raise RuntimeError(last_error_message) from exc
+
+        display.wait_stop()
+        if last_error is not None:
+            raise RuntimeError(
+                last_error_message
+                or f"OpenAI request failed after {max_retries + 1} attempts: {last_error}"
+            ) from last_error
+        raise RuntimeError("OpenAI request failed after retries.")
+
     def _build_request_body(
         self,
         *,
@@ -610,11 +975,7 @@ class OpenAIProvider(Provider):
             ]
         if instructions:
             body["instructions"] = instructions
-        if (
-            include_previous_response_id
-            and self._previous_response_id
-            and self._supports_previous_response_id()
-        ):
+        if include_previous_response_id and self._previous_response_id:
             body["previous_response_id"] = self._previous_response_id
         if self._settings.service_tier:
             body["service_tier"] = self._settings.service_tier
@@ -626,6 +987,7 @@ class OpenAIProvider(Provider):
     ) -> list[dict[str, Any]]:
         input_payload = self._chatgpt_backend.build_input_payload(
             input_items=input_items,
+            live_followup=bool(self._previous_response_id),
         )
         if (
             self._restored_input_items
@@ -636,7 +998,7 @@ class OpenAIProvider(Provider):
         return input_payload
 
     def _supports_previous_response_id(self) -> bool:
-        return not self._chatgpt_backend.enabled
+        return True
 
     def _record_exchange(
         self,
@@ -867,15 +1229,10 @@ def _decode_responses_body(raw_body: str, *, streamed: bool) -> dict[str, Any]:
 def _parse_sse_response(raw_body: str) -> dict[str, Any]:
     event_name: str | None = None
     data_lines: list[str] = []
-    last_response: dict[str, Any] | None = None
-    last_error: dict[str, Any] | None = None
-    response_meta: dict[str, Any] = {}
-    output_items: dict[int, dict[str, Any]] = {}
-    item_indexes: dict[str, int] = {}
-    current_text_item_id: str | None = None
+    events: list[dict[str, Any]] = []
 
     def flush_event() -> None:
-        nonlocal event_name, data_lines, last_response, last_error, current_text_item_id
+        nonlocal event_name, data_lines
         if not data_lines:
             event_name = None
             return
@@ -885,7 +1242,39 @@ def _parse_sse_response(raw_body: str) -> dict[str, Any]:
             event_name = None
             return
         payload = json.loads(payload_text)
-        event_type = event_name or payload.get("type")
+        if isinstance(payload, dict):
+            if event_name and "type" not in payload:
+                payload["type"] = event_name
+            events.append(payload)
+        event_name = None
+
+    for raw_line in raw_body.splitlines():
+        line = raw_line.rstrip("\r")
+        if not line:
+            flush_event()
+            continue
+        if line.startswith(":"):
+            continue
+        if line.startswith("event:"):
+            event_name = line[6:].strip()
+            continue
+        if line.startswith("data:"):
+            data_lines.append(line[5:].lstrip())
+
+    flush_event()
+    return _parse_stream_events(events)
+
+
+def _parse_stream_events(events: list[dict[str, Any]]) -> dict[str, Any]:
+    last_response: dict[str, Any] | None = None
+    last_error: dict[str, Any] | None = None
+    response_meta: dict[str, Any] = {}
+    output_items: dict[int, dict[str, Any]] = {}
+    item_indexes: dict[str, int] = {}
+    current_text_item_id: str | None = None
+
+    for payload in events:
+        event_type = payload.get("type")
         if event_type == "response.created":
             response = payload.get("response")
             if isinstance(response, dict):
@@ -906,18 +1295,26 @@ def _parse_sse_response(raw_body: str) -> dict[str, Any]:
             item = payload.get("item")
             if isinstance(output_index, int) and isinstance(item, dict):
                 normalized_item = _normalize_sse_output_item(item)
-                existing_item = output_items.get(output_index)
+                item_id = normalized_item.get("id")
+                existing_index = (
+                    item_indexes.get(item_id) if isinstance(item_id, str) else None
+                )
+                merge_index = (
+                    existing_index if existing_index is not None else output_index
+                )
+                existing_item = output_items.get(merge_index)
                 if existing_item is not None:
-                    output_items[output_index] = _merge_sse_output_item(
-                        existing_item, normalized_item
-                    )
+                    merged_item = _merge_sse_output_item(existing_item, normalized_item)
                 else:
-                    output_items[output_index] = normalized_item
+                    merged_item = normalized_item
+                if merge_index != output_index:
+                    output_items.pop(merge_index, None)
+                output_items[output_index] = merged_item
                 item_id = output_items[output_index].get("id")
                 if isinstance(item_id, str):
                     item_indexes[item_id] = output_index
         elif event_type == "response.output_text.delta":
-            item_id = payload.get("item_id")
+            item_id = payload.get("item_id") or current_text_item_id
             delta = payload.get("delta")
             if isinstance(item_id, str) and isinstance(delta, str):
                 current_text_item_id = item_id
@@ -945,28 +1342,35 @@ def _parse_sse_response(raw_body: str) -> dict[str, Any]:
                     summary_index,
                     delta,
                 )
-        if event_type in {"response.completed", "response.incomplete"}:
+        elif event_type == "response.reasoning_text.delta":
+            item_id = payload.get("item_id")
+            delta = payload.get("delta")
+            content_index = payload.get("content_index", 0)
+            if (
+                isinstance(item_id, str)
+                and isinstance(delta, str)
+                and isinstance(content_index, int)
+            ):
+                _append_sse_reasoning_text_delta(
+                    output_items,
+                    item_indexes,
+                    item_id,
+                    content_index,
+                    delta,
+                )
+        if event_type == "response.completed":
             response = payload.get("response")
             if isinstance(response, dict):
                 last_response = response
+        elif event_type == "response.incomplete":
+            response = payload.get("response")
+            payload_for_error = response if isinstance(response, dict) else payload
+            raise _ResponseIncompleteError(
+                reason=_response_incomplete_reason(payload_for_error),
+                payload=payload,
+            )
         elif event_type == "response.failed":
             last_error = payload
-        event_name = None
-
-    for raw_line in raw_body.splitlines():
-        line = raw_line.rstrip("\r")
-        if not line:
-            flush_event()
-            continue
-        if line.startswith(":"):
-            continue
-        if line.startswith("event:"):
-            event_name = line[6:].strip()
-            continue
-        if line.startswith("data:"):
-            data_lines.append(line[5:].lstrip())
-
-    flush_event()
 
     if last_response is not None:
         merged_response = dict(response_meta)
@@ -1004,11 +1408,32 @@ def _merge_sse_output_item(
 ) -> dict[str, Any]:
     merged = dict(existing)
     for key, value in new_item.items():
-        if key == "content" and isinstance(value, list) and not value:
-            continue
-        if key == "summary" and isinstance(value, list) and not value:
-            continue
+        if key == "content" and isinstance(value, list):
+            if not value:
+                continue
+            existing_content = merged.get("content")
+            if isinstance(existing_content, list):
+                merged["content"] = _merge_sse_indexed_list(existing_content, value)
+                continue
+        if key == "summary" and isinstance(value, list):
+            if not value:
+                continue
+            existing_summary = merged.get("summary")
+            if isinstance(existing_summary, list):
+                merged["summary"] = _merge_sse_indexed_list(existing_summary, value)
+                continue
         merged[key] = value
+    return merged
+
+
+def _merge_sse_indexed_list(existing: list[Any], new_values: list[Any]) -> list[Any]:
+    merged = list(existing)
+    for index, value in enumerate(new_values):
+        if index >= len(merged):
+            merged.append(value)
+        elif not merged[index]:
+            merged[index] = value
+    return merged
     return merged
 
 
@@ -1065,6 +1490,28 @@ def _append_sse_reasoning_summary_delta(
     if isinstance(summary_item, dict):
         summary_item["type"] = "summary_text"
         summary_item["text"] = f"{summary_item.get('text', '')}{delta}"
+
+
+def _append_sse_reasoning_text_delta(
+    output_items: dict[int, dict[str, Any]],
+    item_indexes: dict[str, int],
+    item_id: str,
+    content_index: int,
+    delta: str,
+) -> None:
+    item = _get_or_create_sse_item(
+        output_items,
+        item_indexes,
+        item_id,
+        item_type="reasoning",
+    )
+    content = item.setdefault("content", [])
+    while len(content) <= content_index:
+        content.append({"type": "reasoning_text", "text": ""})
+    content_item = content[content_index]
+    if isinstance(content_item, dict):
+        content_item["type"] = "reasoning_text"
+        content_item["text"] = f"{content_item.get('text', '')}{delta}"
 
 
 def _get_or_create_sse_item(
@@ -1202,10 +1649,24 @@ def _raise_if_response_failed(response_json: dict[str, Any]) -> None:
         message = str(error_obj.get("message", "No error message"))
         raise _ResponseFailedError(code=code, message=message, payload=response_json)
 
-    if (
-        response_json.get("status") == "failed"
-        or _nested_response_status(response_json) == "failed"
-    ):
+    if response_json.get("status") == "incomplete":
+        raise _ResponseIncompleteError(
+            reason=_response_incomplete_reason(response_json),
+            payload=response_json,
+        )
+
+    nested_status = _nested_response_status(response_json)
+    if nested_status == "incomplete":
+        nested_response = response_json.get("response")
+        payload = (
+            nested_response if isinstance(nested_response, dict) else response_json
+        )
+        raise _ResponseIncompleteError(
+            reason=_response_incomplete_reason(payload),
+            payload=response_json,
+        )
+
+    if response_json.get("status") == "failed" or nested_status == "failed":
         raise _ResponseFailedError(
             code="unknown_error",
             message="No error details.",
@@ -1229,6 +1690,15 @@ def _nested_response_status(response_json: dict[str, Any]) -> str | None:
         return None
     status = nested_response.get("status")
     return status if isinstance(status, str) else None
+
+
+def _response_incomplete_reason(response_json: dict[str, Any]) -> str:
+    details = response_json.get("incomplete_details")
+    if isinstance(details, dict):
+        reason = details.get("reason")
+        if isinstance(reason, str) and reason:
+            return reason
+    return "unknown"
 
 
 def _clone_input_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -1347,9 +1817,10 @@ def _should_retry_missing_previous_response(error_payload: dict[str, Any]) -> bo
     return "previous response with id" in normalized and "not found" in normalized
 
 
-def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
+def _extract_retry_after(exc: Any, attempt: int) -> float:
     try:
-        retry_after = exc.headers.get("Retry-After") if exc.headers else None
+        headers = getattr(exc, "headers", None)
+        retry_after = headers.get("Retry-After") if headers else None
         if retry_after:
             return max(0.1, min(float(retry_after), 60.0))
     except (TypeError, ValueError):

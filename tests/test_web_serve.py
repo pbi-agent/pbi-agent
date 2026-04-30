@@ -31,6 +31,7 @@ from pbi_agent.auth.store import build_auth_session, save_auth_session
 from pbi_agent import __version__
 from pbi_agent.branding import PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
+from pbi_agent.providers.chatgpt_codex_backend import CHATGPT_ORIGINATOR
 from pbi_agent.config import (
     ModelProfileConfig,
     ProviderConfig,
@@ -3652,8 +3653,8 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
     headers = {key.lower(): value for key, value in requests_seen[0].header_items()}
     assert headers["authorization"].startswith("Bearer ")
     assert headers["chatgpt-account-id"] == "acct_chatgpt"
-    assert headers["originator"] == "opencode"
-    assert headers["user-agent"].startswith("opencode/")
+    assert headers["originator"] == CHATGPT_ORIGINATOR
+    assert headers["user-agent"].startswith(f"{CHATGPT_ORIGINATOR}/")
 
 
 def test_provider_model_discovery_endpoint_returns_auth_required_error(
