@@ -1,6 +1,7 @@
 # TODO
 
-[X] Inspect PR 218 branch state and reproduce merge conflict
-[X] Resolve merge conflicts for PR 218
+[X] Inspect current OpenAI reasoning parsing/rendering and tests
+[X] Implement split reasoning display items
+[X] Add focused provider tests
 [X] Run focused validation
-[X] Update MEMORY.md with task summary
+[X] Update task memory and handoff

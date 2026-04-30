@@ -13,7 +13,10 @@ from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
 from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_auth
 from pbi_agent.config import ConfigError, Settings, missing_api_key_message
 from pbi_agent.providers.anthropic_provider import ANTHROPIC_VERSION
-from pbi_agent.providers.chatgpt_codex_backend import chatgpt_user_agent
+from pbi_agent.providers.chatgpt_codex_backend import (
+    CHATGPT_ORIGINATOR,
+    chatgpt_user_agent,
+)
 from pbi_agent.providers.github_copilot_backend import GITHUB_COPILOT_MODELS_URL
 
 _DISCOVERY_TIMEOUT_SECS = 30.0
@@ -470,7 +473,7 @@ def _request_headers(
         "User-Agent": f"pbi-agent/{__version__}",
     }
     if settings.responses_url == OPENAI_CHATGPT_RESPONSES_URL:
-        headers["originator"] = "opencode"
+        headers["originator"] = CHATGPT_ORIGINATOR
         headers["User-Agent"] = chatgpt_user_agent()
 
     if auth_header == "Authorization":
