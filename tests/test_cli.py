@@ -123,13 +123,13 @@ class DefaultWebCommandTests(unittest.TestCase):
             help_text = parser.format_help()
 
         self.assertIn(
-            "--provider PROVIDER                    Provider backend:", help_text
+            "--provider PROVIDER                     Provider backend:", help_text
         )
         self.assertNotIn("--provider PROVIDER\n", help_text)
         self.assertIn("--generic-api-url GENERIC_API_URL", help_text)
         self.assertNotIn("--generic-api-url GENERIC_API_URL\n", help_text)
         self.assertIn(
-            "--compact-threshold COMPACT_THRESHOLD  Context compaction token threshold",
+            "--compact-threshold COMPACT_THRESHOLD   Context compaction token threshold",
             help_text,
         )
         self.assertNotIn("--compact-threshold COMPACT_THRESHOLD\n", help_text)

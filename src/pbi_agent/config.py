@@ -105,6 +105,9 @@ class Settings:
     max_retries: int = 3
     reasoning_effort: str = "xhigh"
     compact_threshold: int = 200000
+    compact_tail_turns: int = 2
+    compact_preserve_recent_tokens: int = 8000
+    compact_tool_output_max_chars: int = 2000
     provider: str = "openai"
     generic_api_url: str = DEFAULT_GENERIC_API_URL
     service_tier: str | None = None
@@ -153,6 +156,12 @@ class Settings:
             )
         if self.compact_threshold < 0:
             raise ConfigError("--compact-threshold must be >= 0.")
+        if self.compact_tail_turns < 0:
+            raise ConfigError("--compact-tail-turns must be >= 0.")
+        if self.compact_preserve_recent_tokens < 0:
+            raise ConfigError("--compact-preserve-recent-tokens must be >= 0.")
+        if self.compact_tool_output_max_chars < 0:
+            raise ConfigError("--compact-tool-output-max-chars must be >= 0.")
         if self.max_tokens < 1:
             raise ConfigError("--max-tokens must be >= 1.")
         if self.service_tier is not None and self.provider != "openai":
@@ -180,6 +189,9 @@ class Settings:
             "max_retries": self.max_retries,
             "reasoning_effort": self.reasoning_effort,
             "compact_threshold": self.compact_threshold,
+            "compact_tail_turns": self.compact_tail_turns,
+            "compact_preserve_recent_tokens": self.compact_preserve_recent_tokens,
+            "compact_tool_output_max_chars": self.compact_tool_output_max_chars,
             "generic_api_url": self.generic_api_url,
             "service_tier": self.service_tier,
             "web_search": self.web_search,
@@ -231,6 +243,9 @@ class ModelProfileConfig:
     max_tool_workers: int | None = None
     max_retries: int | None = None
     compact_threshold: int | None = None
+    compact_tail_turns: int | None = None
+    compact_preserve_recent_tokens: int | None = None
+    compact_tool_output_max_chars: int | None = None
 
     def validate(self, *, provider_kind: str | None = None) -> None:
         self.id = slugify(self.id)
@@ -255,6 +270,18 @@ class ModelProfileConfig:
             raise ConfigError("--max-retries must be >= 0.")
         if self.compact_threshold is not None and self.compact_threshold < 0:
             raise ConfigError("--compact-threshold must be >= 0.")
+        if self.compact_tail_turns is not None and self.compact_tail_turns < 0:
+            raise ConfigError("--compact-tail-turns must be >= 0.")
+        if (
+            self.compact_preserve_recent_tokens is not None
+            and self.compact_preserve_recent_tokens < 0
+        ):
+            raise ConfigError("--compact-preserve-recent-tokens must be >= 0.")
+        if (
+            self.compact_tool_output_max_chars is not None
+            and self.compact_tool_output_max_chars < 0
+        ):
+            raise ConfigError("--compact-tool-output-max-chars must be >= 0.")
         if self.service_tier is not None and provider_kind not in {None, "openai"}:
             raise ConfigError(
                 "--service-tier is only supported with the OpenAI provider."
@@ -873,6 +900,9 @@ def update_model_profile_config(
     max_tool_workers: int | None = None,
     max_retries: int | None = None,
     compact_threshold: int | None = None,
+    compact_tail_turns: int | None = None,
+    compact_preserve_recent_tokens: int | None = None,
+    compact_tool_output_max_chars: int | None = None,
     expected_revision: str | None = None,
 ) -> tuple[ModelProfileConfig, str]:
     config = load_internal_config()
@@ -909,6 +939,21 @@ def update_model_profile_config(
             compact_threshold
             if compact_threshold is not None
             else profile.compact_threshold
+        ),
+        compact_tail_turns=(
+            compact_tail_turns
+            if compact_tail_turns is not None
+            else profile.compact_tail_turns
+        ),
+        compact_preserve_recent_tokens=(
+            compact_preserve_recent_tokens
+            if compact_preserve_recent_tokens is not None
+            else profile.compact_preserve_recent_tokens
+        ),
+        compact_tool_output_max_chars=(
+            compact_tool_output_max_chars
+            if compact_tool_output_max_chars is not None
+            else profile.compact_tool_output_max_chars
         ),
     )
     return replace_model_profile_config(
@@ -1075,6 +1120,30 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         profile_value=selected_profile.compact_threshold if selected_profile else None,
         default=200000,
     )
+    compact_tail_turns = _resolve_int_setting(
+        cli_value=getattr(args, "compact_tail_turns", None),
+        env_name="PBI_AGENT_COMPACT_TAIL_TURNS",
+        profile_value=selected_profile.compact_tail_turns if selected_profile else None,
+        default=2,
+    )
+    compact_preserve_recent_tokens = _resolve_int_setting(
+        cli_value=getattr(args, "compact_preserve_recent_tokens", None),
+        env_name="PBI_AGENT_COMPACT_PRESERVE_RECENT_TOKENS",
+        profile_value=(
+            selected_profile.compact_preserve_recent_tokens
+            if selected_profile
+            else None
+        ),
+        default=8000,
+    )
+    compact_tool_output_max_chars = _resolve_int_setting(
+        cli_value=getattr(args, "compact_tool_output_max_chars", None),
+        env_name="PBI_AGENT_COMPACT_TOOL_OUTPUT_MAX_CHARS",
+        profile_value=(
+            selected_profile.compact_tool_output_max_chars if selected_profile else None
+        ),
+        default=2000,
+    )
     max_tokens = _resolve_int_setting(
         cli_value=getattr(args, "max_tokens", None),
         env_name="PBI_AGENT_MAX_TOKENS",
@@ -1108,6 +1177,9 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         max_retries=max_retries,
         reasoning_effort=reasoning_effort,
         compact_threshold=compact_threshold,
+        compact_tail_turns=compact_tail_turns,
+        compact_preserve_recent_tokens=compact_preserve_recent_tokens,
+        compact_tool_output_max_chars=compact_tool_output_max_chars,
         provider=provider_kind,
         service_tier=service_tier,
         web_search=web_search,
@@ -1290,6 +1362,17 @@ def _settings_from_runtime_parts(
             profile.compact_threshold if profile else None,
             200000,
         ),
+        compact_tail_turns=_coalesce(
+            profile.compact_tail_turns if profile else None, 2
+        ),
+        compact_preserve_recent_tokens=_coalesce(
+            profile.compact_preserve_recent_tokens if profile else None,
+            8000,
+        ),
+        compact_tool_output_max_chars=_coalesce(
+            profile.compact_tool_output_max_chars if profile else None,
+            2000,
+        ),
         provider=provider.kind,
         service_tier=profile.service_tier if profile else None,
         web_search=True
@@ -1373,6 +1456,15 @@ def _concrete_profile_for_saved_profile(
         max_tool_workers=_coalesce(profile.max_tool_workers, 4),
         max_retries=_coalesce(profile.max_retries, 3),
         compact_threshold=_coalesce(profile.compact_threshold, 200000),
+        compact_tail_turns=_coalesce(profile.compact_tail_turns, 2),
+        compact_preserve_recent_tokens=_coalesce(
+            profile.compact_preserve_recent_tokens,
+            8000,
+        ),
+        compact_tool_output_max_chars=_coalesce(
+            profile.compact_tool_output_max_chars,
+            2000,
+        ),
     )
 
 
@@ -1394,6 +1486,9 @@ def _concrete_profile_for_settings(
         max_tool_workers=settings.max_tool_workers,
         max_retries=settings.max_retries,
         compact_threshold=settings.compact_threshold,
+        compact_tail_turns=settings.compact_tail_turns,
+        compact_preserve_recent_tokens=settings.compact_preserve_recent_tokens,
+        compact_tool_output_max_chars=settings.compact_tool_output_max_chars,
     )
 
 
@@ -1471,6 +1566,13 @@ def _profile_from_payload(payload: object) -> ModelProfileConfig | None:
         max_tool_workers=_optional_int(payload.get("max_tool_workers")),
         max_retries=_optional_int(payload.get("max_retries")),
         compact_threshold=_optional_int(payload.get("compact_threshold")),
+        compact_tail_turns=_optional_int(payload.get("compact_tail_turns")),
+        compact_preserve_recent_tokens=_optional_int(
+            payload.get("compact_preserve_recent_tokens")
+        ),
+        compact_tool_output_max_chars=_optional_int(
+            payload.get("compact_tool_output_max_chars")
+        ),
     )
     try:
         profile.validate()

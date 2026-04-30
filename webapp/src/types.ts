@@ -325,6 +325,9 @@ export type ResolvedRuntimeView = {
   max_tool_workers: number;
   max_retries: number;
   compact_threshold: number;
+  compact_tail_turns: number;
+  compact_preserve_recent_tokens: number;
+  compact_tool_output_max_chars: number;
   responses_url: string;
   generic_api_url: string;
   supports_image_inputs: boolean;
@@ -344,6 +347,9 @@ export type ModelProfileView = {
   max_tool_workers: number | null;
   max_retries: number | null;
   compact_threshold: number | null;
+  compact_tail_turns: number | null;
+  compact_preserve_recent_tokens: number | null;
+  compact_tool_output_max_chars: number | null;
   is_active_default: boolean;
   resolved_runtime: ResolvedRuntimeView;
 };

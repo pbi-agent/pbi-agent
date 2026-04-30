@@ -236,6 +236,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Context compaction token threshold (default: 200000).",
     )
+    runtime_group.add_argument(
+        "--compact-tail-turns",
+        type=int,
+        default=None,
+        help="Recent user turns to preserve verbatim after compaction (default: 2).",
+    )
+    runtime_group.add_argument(
+        "--compact-preserve-recent-tokens",
+        type=int,
+        default=None,
+        help="Approximate token budget for preserved recent compaction tail (default: 8000).",
+    )
+    runtime_group.add_argument(
+        "--compact-tool-output-max-chars",
+        type=int,
+        default=None,
+        help="Maximum characters per tool-result string in compaction prompts (default: 2000).",
+    )
 
     diagnostics_group = parser.add_argument_group("Diagnostics")
     diagnostics_group.add_argument(
@@ -712,6 +730,9 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--max-tool-workers", type=int, default=None)
         target.add_argument("--max-retries", type=int, default=None)
         target.add_argument("--compact-threshold", type=int, default=None)
+        target.add_argument("--compact-tail-turns", type=int, default=None)
+        target.add_argument("--compact-preserve-recent-tokens", type=int, default=None)
+        target.add_argument("--compact-tool-output-max-chars", type=int, default=None)
 
     profiles_create = profiles_actions.add_parser(
         "create",
@@ -841,6 +862,9 @@ def _web_runtime_flags_in_args(raw_argv: list[str]) -> list[str]:
         "--max-tool-workers",
         "--max-retries",
         "--compact-threshold",
+        "--compact-tail-turns",
+        "--compact-preserve-recent-tokens",
+        "--compact-tool-output-max-chars",
     }
     seen: list[str] = []
     for token in raw_argv:
@@ -1164,6 +1188,9 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
                 max_tool_workers=args.max_tool_workers,
                 max_retries=args.max_retries,
                 compact_threshold=args.compact_threshold,
+                compact_tail_turns=args.compact_tail_turns,
+                compact_preserve_recent_tokens=args.compact_preserve_recent_tokens,
+                compact_tool_output_max_chars=args.compact_tool_output_max_chars,
             )
         )
         print(f"Created model profile '{profile.id}'.")
@@ -1183,6 +1210,9 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
             max_tool_workers=args.max_tool_workers,
             max_retries=args.max_retries,
             compact_threshold=args.compact_threshold,
+            compact_tail_turns=args.compact_tail_turns,
+            compact_preserve_recent_tokens=args.compact_preserve_recent_tokens,
+            compact_tool_output_max_chars=args.compact_tool_output_max_chars,
         )
         print(f"Updated model profile '{profile.id}'.")
         return 0
@@ -1566,6 +1596,13 @@ def _settings_env(settings: Settings) -> dict[str, str]:
         "PBI_AGENT_MAX_TOOL_WORKERS": str(settings.max_tool_workers),
         "PBI_AGENT_MAX_RETRIES": str(settings.max_retries),
         "PBI_AGENT_COMPACT_THRESHOLD": str(settings.compact_threshold),
+        "PBI_AGENT_COMPACT_TAIL_TURNS": str(settings.compact_tail_turns),
+        "PBI_AGENT_COMPACT_PRESERVE_RECENT_TOKENS": str(
+            settings.compact_preserve_recent_tokens
+        ),
+        "PBI_AGENT_COMPACT_TOOL_OUTPUT_MAX_CHARS": str(
+            settings.compact_tool_output_max_chars
+        ),
         "PBI_AGENT_MAX_TOKENS": str(settings.max_tokens),
     }
     if settings.service_tier:
