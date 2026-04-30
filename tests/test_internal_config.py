@@ -59,6 +59,13 @@ def _clear_runtime_env(monkeypatch) -> None:
         "PBI_AGENT_SERVICE_TIER",
         "PBI_AGENT_WEB_SEARCH",
         "PBI_AGENT_PROFILE_ID",
+        "OPENAI_API_KEY",
+        "XAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "GITHUB_TOKEN",
+        "GITHUB_COPILOT_API_KEY",
     ]:
         monkeypatch.delenv(name, raising=False)
 

@@ -7,6 +7,7 @@ import type {
   ProviderModelView,
   ProviderView,
 } from "../../types";
+import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import {
@@ -35,6 +36,9 @@ interface FormState {
   max_tool_workers: string;
   max_retries: string;
   compact_threshold: string;
+  compact_tail_turns: string;
+  compact_preserve_recent_tokens: string;
+  compact_tool_output_max_chars: string;
 }
 
 function initForm(
@@ -60,6 +64,11 @@ function initForm(
       max_tool_workers: profile.max_tool_workers?.toString() ?? "",
       max_retries: profile.max_retries?.toString() ?? "",
       compact_threshold: profile.compact_threshold?.toString() ?? "",
+      compact_tail_turns: profile.compact_tail_turns?.toString() ?? "",
+      compact_preserve_recent_tokens:
+        profile.compact_preserve_recent_tokens?.toString() ?? "",
+      compact_tool_output_max_chars:
+        profile.compact_tool_output_max_chars?.toString() ?? "",
     };
   }
   return {
@@ -75,6 +84,9 @@ function initForm(
     max_tool_workers: "",
     max_retries: "",
     compact_threshold: "",
+    compact_tail_turns: "",
+    compact_preserve_recent_tokens: "",
+    compact_tool_output_max_chars: "",
   };
 }
 
@@ -91,6 +103,9 @@ export type ProfilePayload = {
   max_tool_workers?: number | null;
   max_retries?: number | null;
   compact_threshold?: number | null;
+  compact_tail_turns?: number | null;
+  compact_preserve_recent_tokens?: number | null;
+  compact_tool_output_max_chars?: number | null;
 };
 
 interface Props {
@@ -407,6 +422,9 @@ export function ModelProfileModal({
       max_tool_workers: toInt(form.max_tool_workers),
       max_retries: toInt(form.max_retries),
       compact_threshold: toInt(form.compact_threshold),
+      compact_tail_turns: toInt(form.compact_tail_turns),
+      compact_preserve_recent_tokens: toInt(form.compact_preserve_recent_tokens),
+      compact_tool_output_max_chars: toInt(form.compact_tool_output_max_chars),
     };
 
     if (!isEdit && form.id.trim()) {
@@ -663,6 +681,57 @@ export function ModelProfileModal({
                   Token count at which context is compacted.
                 </FieldDescription>
               </Field>
+              <div className={cn("grid gap-4 md:grid-cols-3")}>
+                <Field>
+                  <FieldLabel>Compact tail turns</FieldLabel>
+                  <Input
+                    name="compact-tail-turns"
+                    className="task-form__input"
+                    type="number"
+                    min="0"
+                    value={form.compact_tail_turns}
+                    onChange={(e) => set({ compact_tail_turns: e.target.value })}
+                    placeholder="Default"
+                  />
+                  <FieldDescription>
+                    Recent user turns kept verbatim after compaction.
+                  </FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel>Tail token budget</FieldLabel>
+                  <Input
+                    name="compact-preserve-recent-tokens"
+                    className="task-form__input"
+                    type="number"
+                    min="0"
+                    value={form.compact_preserve_recent_tokens}
+                    onChange={(e) =>
+                      set({ compact_preserve_recent_tokens: e.target.value })
+                    }
+                    placeholder="Default"
+                  />
+                  <FieldDescription>
+                    Approximate token budget for preserved recent context.
+                  </FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel>Tool output cap</FieldLabel>
+                  <Input
+                    name="compact-tool-output-max-chars"
+                    className="task-form__input"
+                    type="number"
+                    min="0"
+                    value={form.compact_tool_output_max_chars}
+                    onChange={(e) =>
+                      set({ compact_tool_output_max_chars: e.target.value })
+                    }
+                    placeholder="Default"
+                  />
+                  <FieldDescription>
+                    Max characters per tool-output string in compaction prompts.
+                  </FieldDescription>
+                </Field>
+              </div>
             </FieldGroup>
 
             {error && (

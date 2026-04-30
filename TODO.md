@@ -1,7 +1,6 @@
 # TODO
 
-[X] Inspect config/profile resolution and tests
-[X] Implement default active profile for `run`
-[X] Update help/copy and tests
+[X] Inspect PR 218 branch state and reproduce merge conflict
+[X] Resolve merge conflicts for PR 218
 [X] Run focused validation
-[X] Update memory and handoff
+[X] Update MEMORY.md with task summary

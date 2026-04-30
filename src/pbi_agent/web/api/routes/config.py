@@ -177,6 +177,9 @@ def create_model_profile(
             max_tool_workers=request.max_tool_workers,
             max_retries=request.max_retries,
             compact_threshold=request.compact_threshold,
+            compact_tail_turns=request.compact_tail_turns,
+            compact_preserve_recent_tokens=request.compact_preserve_recent_tokens,
+            compact_tool_output_max_chars=request.compact_tool_output_max_chars,
             expected_revision=expected_revision,
         )
     except Exception as exc:
@@ -210,6 +213,9 @@ def update_model_profile(
             max_tool_workers=request.max_tool_workers,
             max_retries=request.max_retries,
             compact_threshold=request.compact_threshold,
+            compact_tail_turns=request.compact_tail_turns,
+            compact_preserve_recent_tokens=request.compact_preserve_recent_tokens,
+            compact_tool_output_max_chars=request.compact_tool_output_max_chars,
             fields_set=set(request.model_fields_set),
             expected_revision=expected_revision,
         )

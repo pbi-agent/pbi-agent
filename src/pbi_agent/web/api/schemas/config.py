@@ -196,6 +196,9 @@ class ResolvedRuntimeViewModel(BaseModel):
     max_tool_workers: int
     max_retries: int
     compact_threshold: int
+    compact_tail_turns: int
+    compact_preserve_recent_tokens: int
+    compact_tool_output_max_chars: int
     responses_url: str
     generic_api_url: str
     supports_image_inputs: bool
@@ -215,6 +218,9 @@ class ModelProfileViewModel(BaseModel):
     max_tool_workers: int | None
     max_retries: int | None
     compact_threshold: int | None
+    compact_tail_turns: int | None
+    compact_preserve_recent_tokens: int | None
+    compact_tool_output_max_chars: int | None
     is_active_default: bool
     resolved_runtime: ResolvedRuntimeViewModel
 
@@ -232,6 +238,9 @@ class ModelProfileMutationRequest(BaseModel):
     max_tool_workers: int | None = Field(default=None, ge=1)
     max_retries: int | None = Field(default=None, ge=0)
     compact_threshold: int | None = Field(default=None, ge=1)
+    compact_tail_turns: int | None = Field(default=None, ge=0)
+    compact_preserve_recent_tokens: int | None = Field(default=None, ge=0)
+    compact_tool_output_max_chars: int | None = Field(default=None, ge=0)
 
 
 class ModelProfileUpdateRequest(BaseModel):
@@ -246,6 +255,9 @@ class ModelProfileUpdateRequest(BaseModel):
     max_tool_workers: int | None = Field(default=None, ge=1)
     max_retries: int | None = Field(default=None, ge=0)
     compact_threshold: int | None = Field(default=None, ge=1)
+    compact_tail_turns: int | None = Field(default=None, ge=0)
+    compact_preserve_recent_tokens: int | None = Field(default=None, ge=0)
+    compact_tool_output_max_chars: int | None = Field(default=None, ge=0)
 
 
 class ModelProfileListResponse(BaseModel):
