@@ -22,7 +22,7 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    expect(screen.getByText("Live session")).toBeInTheDocument();
+    expect(screen.getByText(/work smart/i)).toBeInTheDocument();
     expect(screen.getByText("Send any prompt to begin")).toBeInTheDocument();
   });
 

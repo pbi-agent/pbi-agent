@@ -3,15 +3,10 @@ import { describe, expect, it } from "vitest";
 import { SessionWelcome } from "./SessionWelcome";
 
 describe("SessionWelcome", () => {
-  it("renders the live indicator, heading, and description", () => {
+  it("renders the welcome heading", () => {
     render(<SessionWelcome />);
 
-    const live = screen.getByLabelText("Session is live");
-    expect(live).toHaveClass("status-pill", "status-pill--running");
-
-    expect(
-      screen.getByText(/agent's reasoning, tool calls, and replies/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/work smart/i)).toBeInTheDocument();
   });
 
   it("lists the composer hints with their keyboard hints", () => {
