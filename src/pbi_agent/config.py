@@ -103,7 +103,7 @@ class Settings:
     verbose: bool = False
     max_tool_workers: int = 4
     max_retries: int = 3
-    reasoning_effort: str = "xhigh"
+    reasoning_effort: str = "medium"
     compact_threshold: int = 200000
     compact_tail_turns: int = 2
     compact_preserve_recent_tokens: int = 8000
@@ -1251,7 +1251,8 @@ def _resolve_int_setting(
 
 
 def _default_reasoning_effort(provider_kind: str) -> str:
-    return "xhigh" if provider_kind in {"openai", "azure", "chatgpt"} else "high"
+    del provider_kind
+    return "medium"
 
 
 def _resolve_web_search(
