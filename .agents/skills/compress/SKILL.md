@@ -12,10 +12,6 @@ description: >
 
 Compress natural-language files such as `md` files, notes, or preferences into shorter caveman-style prose to reduce input tokens.
 
-## Trigger
-
-Use this skill when the user asks to compress a memory file, notes file, or other prose-heavy markdown/text document.
-
 ## Process
 
 1. Read the target file.
