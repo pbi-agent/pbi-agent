@@ -11,6 +11,13 @@ from pbi_agent.tools import read_file as read_file_tool
 from pbi_agent.tools.types import ToolContext
 
 
+def test_read_file_schema_does_not_expose_encoding_parameter() -> None:
+    properties = read_file_tool.SPEC.parameters_schema["properties"]
+
+    assert set(properties) == {"path", "start_line", "max_lines"}
+    assert "encoding" not in properties
+
+
 def test_read_file_returns_requested_line_window(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "notes.txt").write_text("one\ntwo\nthree\nfour\n", encoding="utf-8")

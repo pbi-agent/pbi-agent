@@ -485,7 +485,7 @@ def test_run_single_turn_does_not_activate_command_when_command_file_is_missing(
     assert provider.request_calls[0]["instructions"] is None
 
 
-def test_run_single_turn_persists_provider_checkpoint_for_resume(
+def test_run_single_turn_clears_provider_checkpoint_after_completion(
     monkeypatch,
     tmp_path,
 ) -> None:
@@ -513,7 +513,8 @@ def test_run_single_turn_persists_provider_checkpoint_for_resume(
         session = store.get_session(outcome.session_id)
 
     assert session is not None
-    assert session.previous_id == "resp_resume"
+    assert session.previous_id is None
+    assert provider.previous_response_ids == []
 
 
 def test_run_single_turn_persists_observability_run_and_events(
@@ -700,12 +701,14 @@ class _SessionDisplaySpy(_DisplaySpy):
         success: bool,
         call_id: str,
         arguments: object,
+        result: object = None,
     ) -> None:
         self.last_function_result = {
             "name": name,
             "success": success,
             "call_id": call_id,
             "arguments": arguments,
+            "result": result,
         }
 
     def tool_group_end(self) -> None:
@@ -786,9 +789,11 @@ class _CompactProviderStub(_ChatProviderStub):
     def __init__(self) -> None:
         super().__init__()
         self.restored_messages = []
+        self.restored_message_batches = []
 
     def restore_messages(self, messages) -> None:
         self.restored_messages = list(messages)
+        self.restored_message_batches.append(list(messages))
 
 
 class _AutoCompactToolProviderStub(_CompactProviderStub):
@@ -1290,7 +1295,7 @@ def test_run_session_loop_handles_compact_command_locally(
     assert session.input_tokens == 2 + 11
     assert session.output_tokens == 1 + 5
     assert provider.request_messages == ["hello"]
-    assert provider.reset_calls == 1
+    assert provider.reset_calls == 2
     assert compact_provider.request_messages
     assert compact_provider.request_messages[0].startswith("<session_transcript>")
     assert COMPACTION_PROMPT not in compact_provider.request_messages[0]
@@ -1792,8 +1797,12 @@ def test_run_session_loop_auto_compacts_between_tool_iterations(
 
     assert exit_code == 0
     assert compact_provider.request_messages
-    assert [message.content for message in provider.restored_messages] == [
+    assert [message.content for message in provider.restored_message_batches[0]] == [
         "Compacted session context:\n\nGoal: continue implementing context compaction."
+    ]
+    assert [message.content for message in provider.restored_messages] == [
+        "hello",
+        "Done after compacted context.",
     ]
     assert provider.request_tool_result_items == [None, None]
     assert provider.request_messages[
@@ -2343,7 +2352,7 @@ def test_run_session_loop_interrupt_deletes_user_turn_and_accepts_next_input(
             ("user", "second"),
             ("assistant", "Ack second"),
         ]
-        assert sessions[0].previous_id == "checkpoint-ok"
+        assert sessions[0].previous_id is None
     assert display.clear_interrupt_calls == 1
     assert display.assistant_stop_calls == 2
 
@@ -2563,7 +2572,7 @@ def test_resume_session_does_not_restore_trailing_user_only_turn(
     ]
 
 
-def test_resume_session_restores_previous_response_id_when_history_missing(
+def test_resume_session_ignores_previous_response_id_when_history_missing(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -2591,7 +2600,7 @@ def test_resume_session_restores_previous_response_id_when_history_missing(
             display=display,
         )
 
-    assert provider.previous_response_ids == ["resp_parent"]
+    assert provider.previous_response_ids == []
 
 
 def test_run_single_turn_resumed_openai_session_increments_total_usage(

@@ -197,6 +197,10 @@ def test_anthropic_request_turn_preserves_history_and_wraps_tool_results(
 
     assert first.response_id == "msg_1"
     assert second.response_id == "msg_2"
+    assert display_spy.wait_messages == [
+        "analyzing your request...",
+        "waiting for model to process tool results...",
+    ]
     assert requests[0]["model"] == DEFAULT_ANTHROPIC_MODEL
     assert requests[0]["max_tokens"] == DEFAULT_MAX_TOKENS
     assert requests[0]["thinking"] == {"type": "adaptive"}
@@ -882,6 +886,7 @@ def test_anthropic_request_turn_preserves_web_search_order_from_content_blocks(
         success: bool,
         call_id: str,
         arguments: object,
+        result: object = None,
     ) -> None:
         events.append(("tool", name))
         original_function_result(
@@ -889,6 +894,7 @@ def test_anthropic_request_turn_preserves_web_search_order_from_content_blocks(
             success=success,
             call_id=call_id,
             arguments=arguments,
+            result=result,
         )
 
     display_spy.render_markdown = capture_markdown

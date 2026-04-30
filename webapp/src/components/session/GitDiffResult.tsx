@@ -64,11 +64,27 @@ const FAILED_OPERATION_LABELS: Record<string, string> = {
   delete_file: "Delete failed",
 };
 
+/**
+ * Tools whose completed metadata is rendered with the git-diff layout. The
+ * Python side (`agent/tool_display.py::_display_apply_patch_result`) routes
+ * `apply_patch`, `replace_in_file`, and `write_file` through
+ * `display.patch_result(...)`, which populates `path` + `diff` on the metadata
+ * for all three. Callers should keep this set aligned with the Python
+ * `_PATCH_DISPLAY_TOOL_NAMES` constant.
+ */
+export const FILE_EDIT_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "apply_patch",
+  "replace_in_file",
+  "write_file",
+]);
+
 export function isApplyPatchToolMetadata(
   metadata: ApplyPatchToolMetadata | undefined,
 ): metadata is ApplyPatchToolMetadata {
-  return (
-    metadata?.tool_name === "apply_patch" || Boolean(metadata?.diff && metadata.path)
+  return Boolean(
+    metadata?.tool_name &&
+      FILE_EDIT_TOOL_NAMES.has(metadata.tool_name) &&
+      metadata.path,
   );
 }
 

@@ -30,6 +30,7 @@ from pbi_agent.models.messages import (
     WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
+from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
@@ -278,7 +279,7 @@ class GoogleProvider(Provider):
         display: DisplayProtocol,
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
-        display.wait_start(_waiting_message_for_input(input_value))
+        display.wait_start(waiting_message_for_input(input_value))
 
         request_body = self._build_request_body(
             input_value=input_value,
@@ -1030,20 +1031,6 @@ def _trace_provider_call(
         error_message=error_message,
         metadata=metadata,
     )
-
-
-def _waiting_message_for_input(input_value: str | list[dict[str, Any]]) -> str:
-    if isinstance(input_value, str):
-        return "analyzing your request..."
-
-    has_tool_output = any(
-        isinstance(item, dict) and item.get("type") == "function_result"
-        for item in input_value
-    )
-    if has_tool_output:
-        return "integrating tool results..."
-
-    return "processing..."
 
 
 def _reasoning_body_text(reasoning_text: str, summary_text: str) -> str | None:

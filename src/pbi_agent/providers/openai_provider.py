@@ -38,6 +38,7 @@ from pbi_agent.providers.chatgpt_codex_backend import (
     ChatGPTCodexWebSocketError,
     ResponsesRequestOptions,
 )
+from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext, ToolResult
@@ -314,7 +315,7 @@ class OpenAIProvider(Provider):
         tracer: "RunTracer | None" = None,
         is_user_turn: bool = False,
     ) -> CompletedResponse:
-        display.wait_start(_waiting_message_for_input_items(input_items))
+        display.wait_start(waiting_message_for_input(input_items))
         include_previous_response_id = not is_user_turn
 
         request_body = self._build_request_body(
@@ -1913,23 +1914,6 @@ def _trace_provider_call(
         error_message=error_message,
         metadata=metadata,
     )
-
-
-def _waiting_message_for_input_items(input_items: list[dict[str, Any]]) -> str:
-    has_user_message = any(
-        isinstance(item, dict) and item.get("role") == "user" for item in input_items
-    )
-    if has_user_message:
-        return "analyzing your request..."
-
-    has_tool_output = any(
-        isinstance(item, dict) and item.get("type") == "function_call_output"
-        for item in input_items
-    )
-    if has_tool_output:
-        return "integrating tool results..."
-
-    return "processing..."
 
 
 def _build_reasoning_display_items(

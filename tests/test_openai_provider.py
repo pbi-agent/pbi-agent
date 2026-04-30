@@ -2135,6 +2135,161 @@ def test_openai_chatgpt_websocket_uses_previous_id_for_live_followup(
     ]
 
 
+def test_openai_chatgpt_replay_collapses_completed_tool_turns(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+    responses = iter(
+        [
+            [
+                {"type": "response.created", "response": {"id": "resp_1"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_1",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 5,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 3,
+                            "output_tokens_details": {"reasoning_tokens": 1},
+                        },
+                        "output": [
+                            {
+                                "type": "reasoning",
+                                "summary": [
+                                    {
+                                        "type": "summary_text",
+                                        "text": "Need to inspect files",
+                                    }
+                                ],
+                            },
+                            {
+                                "type": "function_call",
+                                "id": "fc_1",
+                                "call_id": "call_1",
+                                "name": "read_file",
+                                "status": "completed",
+                                "arguments": '{"path":"README.md"}',
+                            },
+                        ],
+                    },
+                },
+            ],
+            [
+                {"type": "response.created", "response": {"id": "resp_2"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_2",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 4,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 2,
+                            "output_tokens_details": {"reasoning_tokens": 0},
+                        },
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [{"type": "output_text", "text": "Done."}],
+                            }
+                        ],
+                    },
+                },
+            ],
+            [
+                {"type": "response.created", "response": {"id": "resp_3"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_3",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 3,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 1,
+                            "output_tokens_details": {"reasoning_tokens": 0},
+                        },
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [{"type": "output_text", "text": "Next."}],
+                            }
+                        ],
+                    },
+                },
+            ],
+        ]
+    )
+
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
+        del self, headers, timeout
+        requests.append(request_body)
+        return next(responses)
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+            ),
+        )
+    )
+
+    first = provider.request_turn(
+        user_input=UserTurnInput(text="Find instructions"),
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+    assert first.has_tool_calls is True
+
+    second = provider.request_turn(
+        tool_result_items=[
+            {
+                "type": "function_call_output",
+                "call_id": "call_1",
+                "output": '{"ok": true, "result": {"content": "large log"}}',
+            },
+        ],
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+    assert second.text == "Done."
+
+    third = provider.request_turn(
+        user_input=UserTurnInput(text="Next question"),
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert third.text == "Next."
+    assert requests[2]["input"] == [
+        {"role": "user", "content": "Find instructions"},
+        {"role": "assistant", "content": "Done."},
+        {"role": "user", "content": "Next question"},
+    ]
+    assert "function_call" not in json.dumps(requests[2]["input"])
+    assert "large log" not in json.dumps(requests[2]["input"])
+
+
 def test_openai_chatgpt_websocket_connection_limit_reconnects_and_resends(
     monkeypatch,
     display_spy,
@@ -2934,6 +3089,7 @@ def test_openai_request_turn_preserves_web_search_order_from_output(
         success: bool,
         call_id: str,
         arguments: object,
+        result: object = None,
     ) -> None:
         events.append(("tool", name))
         original_function_result(
@@ -2941,6 +3097,7 @@ def test_openai_request_turn_preserves_web_search_order_from_output(
             success=success,
             call_id=call_id,
             arguments=arguments,
+            result=result,
         )
 
     display_spy.render_markdown = capture_markdown

@@ -4246,6 +4246,10 @@ def test_live_session_apply_patch_event_includes_diff_metadata() -> None:
             {"old": None, "new": 12},
         ],
         "call_id": "call_patch_1",
+        "status": "completed",
+        "arguments": None,
+        "result": {},
+        "error": None,
     }
 
 
@@ -4312,6 +4316,8 @@ def test_live_session_tool_group_updates_one_item_when_second_tool_finishes_firs
         "running",
         "running",
     ]
+    assert initial_items[0]["metadata"]["arguments"] == {"command": "slow"}
+    assert initial_items[1]["metadata"]["arguments"] == {"path": "README.md"}
 
     second_completed_items = tool_events[1]["payload"]["items"]
     assert [item["metadata"]["status"] for item in second_completed_items] == [

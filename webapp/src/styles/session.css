@@ -399,24 +399,6 @@
   min-height: 100%;
 }
 
-/* Processing indicator */
-.processing-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-  animation: fade-in var(--duration-normal) var(--ease-out);
-}
-
-.processing-indicator--tool_execution {
-  color: var(--color-info);
-}
-
-.processing-indicator--finalizing {
-  color: var(--color-text-tertiary);
-}
-
 /* New messages indicator */
 .timeline__new-messages {
   position: sticky;
@@ -818,32 +800,19 @@
   transition: transform var(--duration-normal) var(--ease-out);
 }
 
-.timeline-entry--tool .timeline-entry__chevron--open {
+.timeline-entry--tool .timeline-entry__chevron--open,
+.timeline-entry--tool [data-slot="collapsible-trigger"][data-state="open"] .timeline-entry__chevron {
   transform: rotate(90deg);
 }
 
-.timeline-entry--tool .timeline-entry__count {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-}
-
-.timeline-entry__running,
-.timeline-entry__inline-spinner {
+.timeline-entry__running {
   width: 0.75rem;
   height: 0.75rem;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: var(--radius-pill);
   animation: spin 0.8s linear infinite;
-}
-
-.timeline-entry__running {
   margin-left: auto;
-}
-
-.timeline-entry__running + .timeline-entry__count {
-  margin-left: 0;
 }
 
 .timeline-entry--tool .timeline-entry__body {
@@ -853,27 +822,81 @@
   margin-top: var(--sp-1);
 }
 
-.timeline-entry--tool .timeline-entry__tool-item {
-  padding: var(--sp-2) var(--sp-3);
-  background: var(--color-surface-2);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-  white-space: pre-wrap;
-  overflow-x: auto;
-  line-height: var(--leading-relaxed);
+/* Work runs — single collapsible coalescing consecutive thinking + tool_group items */
+.timeline-entry--work-run {
+  margin: var(--sp-1) 0;
 }
 
-.timeline-entry--tool .timeline-entry__tool-item--running {
+.timeline-entry__header--work-run {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: transparent;
+  border-left: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--duration-fast);
+}
+
+.timeline-entry__header--work-run:hover {
+  background: var(--color-muted);
+}
+
+.timeline-entry__header--work-run[data-phase="starting"],
+.timeline-entry__header--work-run[data-phase="model_wait"],
+.timeline-entry__header--work-run[data-phase="active"] {
+  border-left-color: var(--color-accent-border);
+  color: var(--color-accent);
+}
+
+.timeline-entry__header--work-run[data-phase="tool_execution"] {
+  border-left-color: var(--color-info);
   color: var(--color-info);
 }
 
-.timeline-entry__inline-spinner {
-  flex: 0 0 auto;
+.timeline-entry__header--work-run[data-phase="finalizing"] {
+  border-left-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.timeline-entry__header--work-run[data-phase="interrupting"],
+.timeline-entry__header--work-run[data-phase="retry_wait"] {
+  border-left-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+[data-slot="collapsible-trigger"][data-state="open"] .timeline-entry__chevron {
+  transform: rotate(90deg);
+}
+
+.timeline-entry__work-run-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0 var(--sp-2) var(--sp-3);
+  margin-left: var(--sp-2);
+  border-left: 1px dashed var(--color-border);
+}
+
+/* Bare items (rendered inside a work-run collapsible — no own header chrome) */
+.timeline-entry--bare {
+  margin: 0;
+}
+
+.timeline-entry--bare .timeline-entry__bare-title {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-muted-foreground);
+  margin-bottom: var(--sp-1);
+}
+
+.timeline-entry--bare .timeline-entry__body {
+  margin-top: 0;
 }
 
 /* Git diff result — structured apply_patch output */
@@ -1170,6 +1193,270 @@
   max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Tool result cards — structured output for non-diff tools */
+.tool-result-card {
+  gap: 0;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-card) 92%, transparent), var(--color-card)),
+    var(--color-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.tool-result-card[data-status="failed"] {
+  border-color: color-mix(in srgb, var(--color-error) 34%, var(--color-border));
+}
+
+.tool-result-card[data-status="running"] {
+  border-color: color-mix(in srgb, var(--color-info) 34%, var(--color-border));
+}
+
+.tool-result-card__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.tool-result-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.tool-result-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+  color: var(--color-info);
+}
+
+.tool-result-card__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tool-result-card__title-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-result-card__title {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-result-card__description {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-result-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+.tool-result-card__status,
+.tool-result-card__tool-name,
+.tool-result-card__call-id {
+  font-family: var(--font-mono);
+}
+
+.tool-result-card__status,
+.tool-result-card__tool-name {
+  min-height: 1.625rem;
+  padding-block: var(--sp-1);
+  padding-inline: var(--sp-2);
+  gap: var(--sp-1);
+  line-height: var(--leading-normal);
+}
+
+.tool-result-card__status-spinner {
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: spin 0.8s linear infinite;
+}
+
+.tool-result-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+
+.tool-result-card__call-id {
+  align-self: flex-end;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-result__section {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg) 82%, var(--color-card));
+}
+
+.tool-result__section[data-tone="stderr"] {
+  border-color: color-mix(in srgb, var(--color-error) 18%, var(--color-border));
+}
+
+.tool-result__section-label {
+  display: block;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.tool-result__pre {
+  max-height: min(36vh, 360px);
+  overflow: auto;
+  margin: 0;
+  padding: var(--sp-3);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/*
+ * Syntax-highlighted code blocks (Shiki). The wrapper applies the same
+ * size/scroll constraints as `.tool-result__pre` so highlighted and plain
+ * blocks share visual chrome. Shiki's nested `<pre>` carries the per-token
+ * spans; we strip its inline background and let the inline `--shiki-light` /
+ * `--shiki-dark` per-span variables drive token color, switched by the app's
+ * `[data-theme]` selector. Only the explicit `light` theme uses the light
+ * Shiki tokens; both `prism` (dark indigo background) and `dark` use the
+ * dark tokens so highlighted text stays readable on dark surfaces.
+ */
+.tool-result__code {
+  max-height: min(36vh, 360px);
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tool-result__code .shiki {
+  margin: 0;
+  padding: var(--sp-3);
+  background: transparent !important;
+  color: var(--shiki-dark, var(--color-text-secondary));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-result__code .shiki span {
+  color: var(--shiki-dark, inherit);
+}
+
+:root[data-theme="light"] .tool-result__code .shiki {
+  color: var(--shiki-light, var(--color-text-secondary));
+}
+
+:root[data-theme="light"] .tool-result__code .shiki span {
+  color: var(--shiki-light, inherit);
+}
+
+.tool-result__notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3);
+  border: 1px solid color-mix(in srgb, var(--color-info) 24%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-info) 8%, transparent);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.tool-result__notice[data-tone="error"] {
+  border-color: color-mix(in srgb, var(--color-error) 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  color: var(--color-error);
+}
+
+.tool-result__kv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+}
+
+.tool-result__kv strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.tool-result__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.tool-result__list-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg) 72%, var(--color-card));
+  color: var(--color-text-tertiary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.tool-result__list-item strong,
+.tool-result__list-item a {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-result__list-item a:hover {
+  color: var(--color-info);
 }
 
 /* ── Usage Pills (compact inline) ── */

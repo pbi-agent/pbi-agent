@@ -405,12 +405,25 @@ export type ApplyPatchToolMetadata = {
   diff_line_numbers?: Array<{ old: number | null; new: number | null }>;
   call_id?: string;
   status?: ToolCallStatus;
+  arguments?: Record<string, unknown> | string | null;
+  result?: Record<string, unknown> | string | null;
+  error?: unknown;
+  command?: string;
+  working_directory?: string;
+  timeout_ms?: number | string;
+  exit_code?: number | null;
+  timed_out?: boolean;
 };
+
+export type ToolCallMetadata = Omit<
+  Record<string, unknown>,
+  keyof ApplyPatchToolMetadata
+> & ApplyPatchToolMetadata;
 
 export type TimelineToolGroupEntry = {
   text: string;
   classes?: string;
-  metadata?: ApplyPatchToolMetadata;
+  metadata?: ToolCallMetadata;
 };
 
 export type TimelineToolGroupItem = {

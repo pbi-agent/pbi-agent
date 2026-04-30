@@ -415,14 +415,12 @@ def format_read_file_item(
     call_id: str = "",
     start_line: int | str = 1,
     max_lines: int | str = 200,
-    encoding: str = "auto",
 ) -> str:
     normalized_start = _safe_positive_int(start_line, default=1)
     normalized_max = _safe_positive_int(max_lines, default=200)
     lines = [
         f"[#EAB308]\u2610[/#EAB308] [bold]{escape_markup_text(shorten(format_informal_path(path), 96))}[/bold]  {status}",
-        f"[dim]lines:[/dim] {normalized_start}\u2013{normalized_start + normalized_max - 1}"
-        f"  [dim]encoding:[/dim] {escape_markup_text(encoding)}",
+        f"[dim]lines:[/dim] {normalized_start}\u2013{normalized_start + normalized_max - 1}",
     ]
     _append_verbose_call_id(lines, call_id, verbose)
     return "\n".join(lines)
@@ -554,7 +552,6 @@ def route_function_result(
             call_id=call_id,
             start_line=args.get("start_line", 1),
             max_lines=args.get("max_lines", 200),
-            encoding=str(args.get("encoding", "auto")),
         )
 
     if name == "read_web_url":

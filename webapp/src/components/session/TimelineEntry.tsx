@@ -3,9 +3,14 @@ import { ChevronRightIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ImageAttachment, TimelineItem } from "../../types";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { GitDiffResult, isApplyPatchToolMetadata } from "./GitDiffResult";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "../ui/collapsible";
+import { isApplyPatchToolMetadata } from "./GitDiffResult";
+import { ToolResult } from "./ToolResult";
 
 function MarkdownContent({ content }: { content: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
@@ -105,15 +110,41 @@ export function TimelineEntry({
   item,
   subAgentTitle,
   subAgentStatus,
+  bare = false,
+  closeSignal = null,
 }: {
   item: TimelineItem;
   subAgentTitle?: string;
   subAgentStatus?: string;
+  /**
+   * When true, the entry renders without its own collapsible/header chrome.
+   * Used by SessionTimeline when several tool/thinking items are coalesced
+   * into a single outer Collapsible.
+   */
+  bare?: boolean;
+  /** Session timeline signal that closes open details when the final answer arrives. */
+  closeSignal?: string | null;
 }) {
-  const startsCollapsed =
-    item.kind !== "tool_group"
-    || !item.items.some((toolItem) => isApplyPatchToolMetadata(toolItem.metadata));
-  const [collapsed, setCollapsed] = useState(startsCollapsed);
+  const toolGroupDefaultOpen =
+    item.kind === "tool_group"
+    && item.status !== "running"
+    && item.items.some((toolItem) => isApplyPatchToolMetadata(toolItem.metadata));
+  const [thinkingCollapsedState, setThinkingCollapsedState] = useState({
+    collapsed: true,
+    closeSignal,
+  });
+  const thinkingCollapsed =
+    thinkingCollapsedState.closeSignal === closeSignal
+      ? thinkingCollapsedState.collapsed
+      : true;
+  const [toolGroupOpenState, setToolGroupOpenState] = useState({
+    open: toolGroupDefaultOpen,
+    closeSignal,
+  });
+  const toolGroupOpen =
+    toolGroupOpenState.closeSignal === closeSignal
+      ? toolGroupOpenState.open
+      : false;
 
   const subAgentBanner =
     subAgentTitle || subAgentStatus ? (
@@ -157,6 +188,21 @@ export function TimelineEntry({
   }
 
   if (item.kind === "thinking") {
+    if (bare) {
+      return (
+        <div
+          className="timeline-entry timeline-entry--thinking timeline-entry--bare"
+          data-timeline-item-id={item.itemId}
+        >
+          {subAgentBanner}
+          <div className="timeline-entry__bare-title">{item.title}</div>
+          <div className="timeline-entry__body">
+            <MarkdownContent content={item.content} />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className="timeline-entry timeline-entry--thinking"
@@ -168,16 +214,44 @@ export function TimelineEntry({
           variant="ghost"
           size="sm"
           className="timeline-entry__header"
-          onClick={() => setCollapsed((prev) => !prev)}
+          onClick={() => setThinkingCollapsedState({
+            collapsed: !thinkingCollapsed,
+            closeSignal,
+          })}
         >
-          <ChevronRightIcon className={`timeline-entry__chevron ${collapsed ? "" : "timeline-entry__chevron--open"}`} />
+          <ChevronRightIcon className={`timeline-entry__chevron ${thinkingCollapsed ? "" : "timeline-entry__chevron--open"}`} />
           <span>{item.title}</span>
         </Button>
-        {!collapsed ? (
+        {!thinkingCollapsed ? (
           <div className="timeline-entry__body">
             <MarkdownContent content={item.content} />
           </div>
         ) : null}
+      </div>
+    );
+  }
+
+  // tool_group
+  if (bare) {
+    return (
+      <div
+        className="timeline-entry timeline-entry--tool timeline-entry--bare"
+        data-timeline-item-id={item.itemId}
+      >
+        {subAgentBanner}
+        <div className="timeline-entry__body">
+          {item.items.map((toolItem, index) => {
+            const status = toolItemStatus(toolItem);
+            return (
+              <ToolResult
+                key={`${item.itemId}-${index}`}
+                metadata={toolItem.metadata}
+                text={toolItem.text}
+                running={status === "running"}
+              />
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -188,41 +262,40 @@ export function TimelineEntry({
       data-timeline-item-id={item.itemId}
     >
       {subAgentBanner}
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="timeline-entry__header"
-        onClick={() => setCollapsed((prev) => !prev)}
+      <Collapsible
+        open={toolGroupOpen}
+        onOpenChange={(nextOpen) => setToolGroupOpenState({ open: nextOpen, closeSignal })}
       >
-        <ChevronRightIcon className={`timeline-entry__chevron ${collapsed ? "" : "timeline-entry__chevron--open"}`} />
-        <span>{item.label}</span>
-        {item.status === "running" ? (
-          <span className="timeline-entry__running" aria-label="running" />
-        ) : null}
-        <Badge variant="secondary" className="timeline-entry__count">{item.items.length}</Badge>
-      </Button>
-      {!collapsed ? (
-        <div className="timeline-entry__body">
-          {item.items.map((toolItem, index) => {
-            const status = toolItemStatus(toolItem);
-            return isApplyPatchToolMetadata(toolItem.metadata) && status !== "running" ? (
-              <GitDiffResult
-                key={`${item.itemId}-${index}`}
-                metadata={toolItem.metadata}
-              />
-            ) : (
-              <pre
-                key={`${item.itemId}-${index}`}
-                className={`timeline-entry__tool-item${status === "running" ? " timeline-entry__tool-item--running" : ""}`}
-              >
-                {status === "running" ? <span className="timeline-entry__inline-spinner" /> : null}
-                {toolItem.text}
-              </pre>
-            );
-          })}
-        </div>
-      ) : null}
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="timeline-entry__header"
+          >
+            <ChevronRightIcon className="timeline-entry__chevron" />
+            <span>{item.label}</span>
+            {item.status === "running" ? (
+              <span className="timeline-entry__running" aria-label="running" />
+            ) : null}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="timeline-entry__body">
+            {item.items.map((toolItem, index) => {
+              const status = toolItemStatus(toolItem);
+              return (
+                <ToolResult
+                  key={`${item.itemId}-${index}`}
+                  metadata={toolItem.metadata}
+                  text={toolItem.text}
+                  running={status === "running"}
+                />
+              );
+            })}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

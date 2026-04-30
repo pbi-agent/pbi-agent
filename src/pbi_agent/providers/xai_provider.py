@@ -34,6 +34,7 @@ from pbi_agent.models.messages import (
     WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
+from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
@@ -261,7 +262,7 @@ class XAIProvider(Provider):
         display: DisplayProtocol,
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
-        display.wait_start(_waiting_message_for_input_items(input_items))
+        display.wait_start(waiting_message_for_input(input_items))
 
         request_body = self._build_request_body(
             input_items=input_items,
@@ -969,23 +970,6 @@ def _trace_provider_call(
         error_message=error_message,
         metadata=metadata,
     )
-
-
-def _waiting_message_for_input_items(input_items: list[dict[str, Any]]) -> str:
-    has_user_message = any(
-        isinstance(item, dict) and item.get("role") == "user" for item in input_items
-    )
-    if has_user_message:
-        return "analyzing your request..."
-
-    has_tool_output = any(
-        isinstance(item, dict) and item.get("type") == "function_call_output"
-        for item in input_items
-    )
-    if has_tool_output:
-        return "integrating tool results..."
-
-    return "processing..."
 
 
 def _reasoning_body_text(reasoning_text: str, summary_text: str) -> str | None:

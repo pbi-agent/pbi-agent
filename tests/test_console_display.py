@@ -110,7 +110,6 @@ def test_read_file_tool_summary_tolerates_invalid_line_arguments() -> None:
             "path": "notes.txt",
             "start_line": "oops",
             "max_lines": None,
-            "encoding": "utf-8",
         },
     )
     display.tool_group_end()
@@ -118,6 +117,7 @@ def test_read_file_tool_summary_tolerates_invalid_line_arguments() -> None:
     output = stdout.getvalue()
     assert "notes.txt" in output
     assert "1–200" in output
+    assert "encoding:" not in output
     assert "FAILED" in output
 
 

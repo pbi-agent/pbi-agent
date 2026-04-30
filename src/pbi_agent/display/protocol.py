@@ -211,6 +211,7 @@ class DisplayProtocol(Protocol):
         call_id: str = "",
         working_directory: str = ".",
         timeout_ms: int | str = "default",
+        result: Any = None,
     ) -> None: ...
 
     def patch_start(self, count: int) -> None: ...
@@ -225,6 +226,9 @@ class DisplayProtocol(Protocol):
         detail: str = "",
         diff: str = "",
         diff_line_numbers: list[dict[str, int | None]] | None = None,
+        tool_name: str = "apply_patch",
+        arguments: Any = None,
+        result: Any = None,
     ) -> None: ...
 
     def function_start(self, count: int) -> None: ...
@@ -236,6 +240,7 @@ class DisplayProtocol(Protocol):
         *,
         call_id: str = "",
         arguments: Any = None,
+        result: Any = None,
     ) -> None: ...
 
     def tool_group_end(self) -> None: ...
