@@ -1,3 +1,4 @@
-[X] Inspect command conventions and release-writing skill
-[X] Add release workflow command
-[X] Validate command and update memory
+[X] Read release skill/command files
+[X] Compress prose while preserving structure/code/commands/paths
+[X] Validate command tests or inspect diffs
+[X] Update MEMORY.md
