@@ -75,7 +75,7 @@ def test_resolve_settings_uses_google_defaults(monkeypatch) -> None:
     assert settings.api_key == "gemini-test-key"
     assert settings.responses_url == DEFAULT_GOOGLE_INTERACTIONS_URL
     assert settings.model == DEFAULT_GOOGLE_MODEL
-    assert settings.reasoning_effort == "high"
+    assert settings.reasoning_effort == "medium"
     settings.validate()
 
 

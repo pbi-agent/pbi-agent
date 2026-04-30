@@ -151,7 +151,7 @@ def test_resolve_settings_uses_xai_defaults(monkeypatch) -> None:
     assert settings.api_key == "xai-test-key"
     assert settings.responses_url == DEFAULT_XAI_RESPONSES_URL
     assert settings.model == DEFAULT_XAI_MODEL
-    assert settings.reasoning_effort == "high"
+    assert settings.reasoning_effort == "medium"
     settings.validate()
 
 

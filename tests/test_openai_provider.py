@@ -175,7 +175,7 @@ def _make_settings(**overrides: object) -> Settings:
     return Settings(**defaults)
 
 
-def test_resolve_settings_uses_openai_xhigh_default(monkeypatch) -> None:
+def test_resolve_settings_uses_openai_medium_default(monkeypatch) -> None:
     for name in (
         "PBI_AGENT_PROVIDER",
         "PBI_AGENT_API_KEY",
@@ -194,7 +194,7 @@ def test_resolve_settings_uses_openai_xhigh_default(monkeypatch) -> None:
     assert settings.api_key == "openai-test-key"
     assert settings.responses_url == DEFAULT_RESPONSES_URL
     assert settings.model == DEFAULT_MODEL
-    assert settings.reasoning_effort == "xhigh"
+    assert settings.reasoning_effort == "medium"
     settings.validate()
 
 

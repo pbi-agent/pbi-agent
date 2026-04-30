@@ -302,7 +302,7 @@ def test_run_single_turn_executes_tool_loop_and_aggregates_usage(monkeypatch) ->
         {
             "interactive": False,
             "model": DEFAULT_MODEL,
-            "reasoning_effort": "xhigh",
+            "reasoning_effort": "medium",
             "single_turn_hint": "Single-turn test",
         }
     ]
