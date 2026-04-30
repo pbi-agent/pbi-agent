@@ -126,6 +126,14 @@ _WEB_MANAGER_LEASE_BUSY_RETRY_SECS = 2.0
 _WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS = 0.1
 
 
+class WebManagerStartupError(RuntimeError):
+    """User-facing startup failure for the web manager."""
+
+
+class WebManagerAlreadyRunningError(WebManagerStartupError):
+    """Raised when another web server already owns the workspace lease."""
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -270,6 +278,9 @@ def _resolved_runtime_view(runtime: ResolvedRuntime) -> dict[str, Any]:
         "max_tool_workers": runtime.settings.max_tool_workers,
         "max_retries": runtime.settings.max_retries,
         "compact_threshold": runtime.settings.compact_threshold,
+        "compact_tail_turns": runtime.settings.compact_tail_turns,
+        "compact_preserve_recent_tokens": runtime.settings.compact_preserve_recent_tokens,
+        "compact_tool_output_max_chars": runtime.settings.compact_tool_output_max_chars,
         "responses_url": runtime.settings.responses_url,
         "generic_api_url": runtime.settings.generic_api_url,
         "supports_image_inputs": provider_supports_images(runtime.settings.provider),
@@ -520,14 +531,14 @@ class WebSessionManager:
                         stale_after_seconds=_WEB_MANAGER_LEASE_STALE_SECS,
                     )
                     if not acquired:
-                        raise RuntimeError(
+                        raise WebManagerAlreadyRunningError(
                             "Another web app instance is already managing this workspace."
                         )
                     store.normalize_kanban_running_tasks(directory=self._directory_key)
                 break
             except WebManagerLeaseBusyError as exc:
                 if time.monotonic() >= deadline:
-                    raise RuntimeError(
+                    raise WebManagerStartupError(
                         "Session database is busy. Try starting the web app again."
                     ) from exc
                 time.sleep(_WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS)
@@ -1330,7 +1341,9 @@ class WebSessionManager:
                     with self._lock:
                         self._running_task_ids.discard(task_id)
                     raise RuntimeError("Done tasks cannot run.")
-            if record.stage == KANBAN_STAGE_BACKLOG:
+            is_continuation = False
+            started_from_backlog = record.stage == KANBAN_STAGE_BACKLOG
+            if started_from_backlog:
                 next_stage_id = self._next_runnable_board_stage_id(
                     record.stage,
                     store=store,
@@ -1347,6 +1360,16 @@ class WebSessionManager:
                         self._running_task_ids.discard(task_id)
                     raise KeyError(task_id)
                 record = moved_record
+            existing_session_id = record.session_id
+            if existing_session_id is not None:
+                existing_messages = store.list_messages(existing_session_id)
+                is_continuation = any(
+                    message.content.strip() != record.prompt.strip()
+                    for message in existing_messages
+                    if message.role == "user"
+                )
+            if started_from_backlog:
+                is_continuation = False
             stage_record = store.get_kanban_stage_config(
                 self._directory_key,
                 record.stage,
@@ -1355,6 +1378,12 @@ class WebSessionManager:
                 record,
                 stage_record=stage_record,
                 allow_fallback=False,
+            )
+            initial_prompt = self._task_prompt_for_run(
+                record,
+                stage_record,
+                store=store,
+                is_continuation=is_continuation,
             )
             if record.session_id is None:
                 session_id = store.create_session(
@@ -1374,15 +1403,14 @@ class WebSessionManager:
                         self._running_task_ids.discard(task_id)
                     raise KeyError(task_id)
                 record = updated_record
-            initial_prompt = self._task_prompt_for_run(
-                record, stage_record, store=store
-            )
-            initial_user_message_id = self._persist_task_user_prompt(
-                store,
-                record,
-                runtime,
-                initial_prompt,
-            )
+            initial_user_message_id = None
+            if not is_continuation:
+                initial_user_message_id = self._persist_task_user_prompt(
+                    store,
+                    record,
+                    runtime,
+                    initial_prompt,
+                )
             running_record = store.set_kanban_task_running(task_id)
         if running_record is None:
             with self._lock:
@@ -1861,6 +1889,9 @@ class WebSessionManager:
         max_tool_workers: int | None,
         max_retries: int | None,
         compact_threshold: int | None,
+        compact_tail_turns: int | None,
+        compact_preserve_recent_tokens: int | None,
+        compact_tool_output_max_chars: int | None,
         expected_revision: str,
     ) -> dict[str, Any]:
         config = load_internal_config()
@@ -1879,6 +1910,9 @@ class WebSessionManager:
                 max_tool_workers=max_tool_workers,
                 max_retries=max_retries,
                 compact_threshold=compact_threshold,
+                compact_tail_turns=compact_tail_turns,
+                compact_preserve_recent_tokens=compact_preserve_recent_tokens,
+                compact_tool_output_max_chars=compact_tool_output_max_chars,
             ),
             expected_revision=expected_revision,
         )
@@ -1909,6 +1943,9 @@ class WebSessionManager:
         max_tool_workers: int | None,
         max_retries: int | None,
         compact_threshold: int | None,
+        compact_tail_turns: int | None,
+        compact_preserve_recent_tokens: int | None,
+        compact_tool_output_max_chars: int | None,
         fields_set: set[str],
         expected_revision: str,
     ) -> dict[str, Any]:
@@ -1958,6 +1995,21 @@ class WebSessionManager:
                 compact_threshold
                 if "compact_threshold" in fields_set
                 else profile.compact_threshold
+            ),
+            compact_tail_turns=(
+                compact_tail_turns
+                if "compact_tail_turns" in fields_set
+                else profile.compact_tail_turns
+            ),
+            compact_preserve_recent_tokens=(
+                compact_preserve_recent_tokens
+                if "compact_preserve_recent_tokens" in fields_set
+                else profile.compact_preserve_recent_tokens
+            ),
+            compact_tool_output_max_chars=(
+                compact_tool_output_max_chars
+                if "compact_tool_output_max_chars" in fields_set
+                else profile.compact_tool_output_max_chars
             ),
         )
         updated, revision = replace_model_profile_config(
@@ -2079,6 +2131,7 @@ class WebSessionManager:
             self._live_sessions.get(live_session_id) if live_session_id else None
         )
         current_user_message_id = initial_user_message_id
+        is_initial_worker_turn = initial_user_message_id is not None
 
         def publish_summary(summary: str) -> None:
             with SessionStore() as store:
@@ -2120,7 +2173,11 @@ class WebSessionManager:
                     stage_record=stage_record,
                     allow_fallback=False,
                 )
-                prompt = self._task_prompt_for_run(record, stage_record)
+                prompt = self._task_prompt_for_run(
+                    record,
+                    stage_record,
+                    is_continuation=not is_initial_worker_turn,
+                )
                 if current_user_message_id is None:
                     with SessionStore() as store:
                         current_user_message_id = self._persist_task_user_prompt(
@@ -2153,6 +2210,7 @@ class WebSessionManager:
                     replay_history=False,
                 )
                 current_user_message_id = None
+                is_initial_worker_turn = False
                 if live_session is not None:
                     self._bind_live_session(
                         live_session.live_session_id,
@@ -2610,6 +2668,7 @@ class WebSessionManager:
         stage_record: KanbanStageConfigRecord | None,
         *,
         store: SessionStore | None = None,
+        is_continuation: bool = False,
     ) -> str:
         prompt = record.prompt
         stripped_prompt = prompt.strip()
@@ -2623,6 +2682,8 @@ class WebSessionManager:
         command = self._command_map().get(stage_record.command_id)
         if command is None:
             return prompt
+        if is_continuation:
+            return command.slash_alias
         first_runnable_stage_id = self._first_runnable_board_stage_id(store=store)
         if stage_record.stage_id != first_runnable_stage_id:
             return command.slash_alias
@@ -3116,6 +3177,9 @@ class WebSessionManager:
             "max_tool_workers": profile.max_tool_workers,
             "max_retries": profile.max_retries,
             "compact_threshold": profile.compact_threshold,
+            "compact_tail_turns": profile.compact_tail_turns,
+            "compact_preserve_recent_tokens": profile.compact_preserve_recent_tokens,
+            "compact_tool_output_max_chars": profile.compact_tool_output_max_chars,
             "is_active_default": profile.id == active_profile_id,
             "resolved_runtime": _resolved_runtime_view(runtime),
         }

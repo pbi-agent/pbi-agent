@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 from io import BytesIO, StringIO
 from pathlib import Path
 import threading
@@ -30,6 +31,7 @@ from pbi_agent.auth.store import build_auth_session, save_auth_session
 from pbi_agent import __version__
 from pbi_agent.branding import PBI_AGENT_TAGLINE
 from pbi_agent.cli import build_parser
+from pbi_agent.providers.chatgpt_codex_backend import CHATGPT_ORIGINATOR
 from pbi_agent.config import (
     ModelProfileConfig,
     ProviderConfig,
@@ -45,7 +47,14 @@ from pbi_agent.session_store import (
 )
 from pbi_agent.display.protocol import PendingToolCall, QueuedInput, QueuedRuntimeChange
 from pbi_agent.web.display import WebDisplay
-from pbi_agent.web.session_manager import WebSessionManager
+from pbi_agent.web.server_runtime import (
+    _ExpectedStartupFailureFilter,
+    _startup_error_message_from_traceback,
+)
+from pbi_agent.web.session_manager import (
+    WebManagerStartupError,
+    WebSessionManager,
+)
 from pbi_agent.web.serve import PBIWebServer, create_app
 
 
@@ -160,6 +169,95 @@ def test_web_server_prints_banner_and_starts_uvicorn() -> None:
     assert f"v{__version__}" in rendered
     assert "http://127.0.0.1:9001" in rendered
     mock_run.assert_called_once()
+
+
+def test_web_server_prints_warning_for_expected_startup_failure() -> None:
+    server = PBIWebServer(settings=_settings(), port=9001)
+    output = StringIO()
+    server.console = Console(file=output, width=80, highlight=False)
+
+    def fake_run(_uvicorn_server, sockets=None) -> None:
+        del sockets
+        _uvicorn_server._record_startup_failure(
+            "Another web app instance is already managing this workspace."
+        )
+
+    with patch("pbi_agent.web.server_runtime.uvicorn.Server.run", fake_run):
+        server.serve(debug=False)
+
+    rendered = output.getvalue()
+    assert (
+        "Warning: Another web app instance is already managing this workspace."
+        in rendered
+    )
+
+
+def test_expected_startup_failure_filter_hides_traceback_and_exit_log() -> None:
+    messages: list[str] = []
+    log_filter = _ExpectedStartupFailureFilter(messages.append)
+    exc = WebManagerStartupError("friendly")
+    traceback_record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Exception in 'lifespan' protocol\n",
+        (),
+        (type(exc), exc, exc.__traceback__),
+    )
+    text_traceback_record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "ERROR:    Traceback (most recent call last):\n"
+        '  File "src/pbi_agent/web/session_manager.py", line 534, in start\n'
+        "    raise WebManagerAlreadyRunningError(\n"
+        "pbi_agent.web.session_manager.WebManagerAlreadyRunningError: "
+        "Another web app instance is already managing this workspace.",
+        (),
+        None,
+    )
+    exit_record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Application startup failed. Exiting.",
+        (),
+        None,
+    )
+    unexpected_record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Different startup error",
+        (),
+        None,
+    )
+
+    assert not log_filter.filter(traceback_record)
+    assert messages == ["friendly"]
+    assert not log_filter.filter(text_traceback_record)
+    assert messages == [
+        "friendly",
+        "Another web app instance is already managing this workspace.",
+    ]
+    assert not log_filter.filter(exit_record)
+    assert log_filter.filter(unexpected_record)
+
+
+def test_startup_error_message_from_traceback_extracts_base_error() -> None:
+    message = (
+        "Traceback (most recent call last):\n"
+        "pbi_agent.web.session_manager.WebManagerStartupError: "
+        "Session database is busy. Try starting the web app again."
+    )
+
+    assert _startup_error_message_from_traceback(message) == (
+        "Session database is busy. Try starting the web app again."
+    )
 
 
 def test_bootstrap_endpoint_returns_workspace_metadata() -> None:
@@ -1159,6 +1257,82 @@ def test_run_task_only_prepends_command_for_first_runnable_stage(
 
     assert mock_run.call_args is not None
     assert mock_run.call_args.args[0] == "/review"
+
+
+def test_run_task_continuing_existing_session_sends_command_only(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    _write_default_commands(tmp_path)
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            directory=str(tmp_path),
+            provider="openai",
+            model="gpt-5.4",
+            title="Task A",
+        )
+        store.add_message(
+            session_id, "user", "/plan\n# Task\nTask A\n\n## Goal\nInvestigate"
+        )
+        store.add_message(session_id, "assistant", "Plan ready.")
+
+    with patch(
+        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        return_value=SimpleNamespace(
+            tool_errors=[],
+            text="Replanned.",
+            session_id=session_id,
+        ),
+    ) as mock_run:
+        with TestClient(app) as client:
+            client.put(
+                "/api/board/stages",
+                json={
+                    "board_stages": [
+                        {"id": "backlog", "name": "Backlog"},
+                        {"id": "plan", "name": "Plan", "command_id": "plan"},
+                    ]
+                },
+            )
+            create_response = client.post(
+                "/api/tasks",
+                json={
+                    "title": "Task A",
+                    "prompt": "Investigate",
+                    "stage": "plan",
+                    "session_id": session_id,
+                },
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+
+            deadline = time.monotonic() + 2
+            while True:
+                task_response = client.get("/api/tasks")
+                task_payload = task_response.json()["tasks"][0]
+                if task_payload["run_status"] == "completed":
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("continued task run did not finish in time")
+                time.sleep(0.01)
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        messages = store.list_messages(session_id)
+
+    assert mock_run.call_args is not None
+    assert mock_run.call_args.args[0] == "/plan"
+    assert mock_run.call_args.kwargs["resume_session_id"] == session_id
+    assert [message.content for message in messages] == [
+        "/plan\n# Task\nTask A\n\n## Goal\nInvestigate",
+        "Plan ready.",
+        "/plan",
+    ]
 
 
 def test_task_update_title_preserves_prompt_content() -> None:
@@ -3479,8 +3653,8 @@ def test_provider_model_discovery_endpoint_lists_chatgpt_openai_models(
     headers = {key.lower(): value for key, value in requests_seen[0].header_items()}
     assert headers["authorization"].startswith("Bearer ")
     assert headers["chatgpt-account-id"] == "acct_chatgpt"
-    assert headers["originator"] == "opencode"
-    assert headers["user-agent"].startswith("opencode/")
+    assert headers["originator"] == CHATGPT_ORIGINATOR
+    assert headers["user-agent"].startswith(f"{CHATGPT_ORIGINATOR}/")
 
 
 def test_provider_model_discovery_endpoint_returns_auth_required_error(

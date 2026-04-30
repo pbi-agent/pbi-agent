@@ -1,5 +1,7 @@
 # TODO
 
-[X] Fix review finding: running tool cards must not show completed check icon
-[!] Run focused validation for touched frontend file (blocked: bun unavailable in shell)
-[X] Run git diff --check for touched files
+[X] Inspect current OpenAI reasoning parsing/rendering and tests
+[X] Implement split reasoning display items
+[X] Add focused provider tests
+[X] Run focused validation
+[X] Update task memory and handoff
