@@ -818,32 +818,19 @@
   transition: transform var(--duration-normal) var(--ease-out);
 }
 
-.timeline-entry--tool .timeline-entry__chevron--open {
+.timeline-entry--tool .timeline-entry__chevron--open,
+.timeline-entry--tool [data-slot="collapsible-trigger"][data-state="open"] .timeline-entry__chevron {
   transform: rotate(90deg);
 }
 
-.timeline-entry--tool .timeline-entry__count {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-}
-
-.timeline-entry__running,
-.timeline-entry__inline-spinner {
+.timeline-entry__running {
   width: 0.75rem;
   height: 0.75rem;
   border: 2px solid currentColor;
   border-top-color: transparent;
   border-radius: var(--radius-pill);
   animation: spin 0.8s linear infinite;
-}
-
-.timeline-entry__running {
   margin-left: auto;
-}
-
-.timeline-entry__running + .timeline-entry__count {
-  margin-left: 0;
 }
 
 .timeline-entry--tool .timeline-entry__body {
@@ -851,29 +838,6 @@
   flex-direction: column;
   gap: var(--sp-2);
   margin-top: var(--sp-1);
-}
-
-.timeline-entry--tool .timeline-entry__tool-item {
-  padding: var(--sp-2) var(--sp-3);
-  background: var(--color-surface-2);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-  white-space: pre-wrap;
-  overflow-x: auto;
-  line-height: var(--leading-relaxed);
-}
-
-.timeline-entry--tool .timeline-entry__tool-item--running {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  color: var(--color-info);
-}
-
-.timeline-entry__inline-spinner {
-  flex: 0 0 auto;
 }
 
 /* Git diff result — structured apply_patch output */

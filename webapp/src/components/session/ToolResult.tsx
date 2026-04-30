@@ -58,11 +58,6 @@ export function ToolResult({ metadata, text, running = false }: ToolResultProps)
   return <GenericToolResult metadata={metadata} text={text} running={running} />;
 }
 
-export function hasCustomToolResult(metadata: ToolCallMetadata | undefined): boolean {
-  const toolName = toolNameFor(metadata);
-  return Boolean(toolName || metadata?.result || metadata?.arguments || metadata?.error);
-}
-
 function ShellToolResult({ metadata, text, running }: ToolResultProps) {
   const args = objectValue(metadata?.arguments);
   const result = objectValue(metadata?.result);
