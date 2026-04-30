@@ -1,6 +1,6 @@
 # TODO
 
-[X] Fix duplicate persisted command for kanban continuation review finding
-[X] Add/update regression coverage for persisted history
+[X] Inspect PR 218 branch state and reproduce merge conflict
+[X] Resolve merge conflicts for PR 218
 [X] Run focused validation
-[X] Update memory and summarize
+[X] Update MEMORY.md with task summary

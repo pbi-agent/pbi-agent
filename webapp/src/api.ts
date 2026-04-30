@@ -421,6 +421,9 @@ export async function createModelProfile(
     max_tool_workers?: number | null;
     max_retries?: number | null;
     compact_threshold?: number | null;
+    compact_tail_turns?: number | null;
+    compact_preserve_recent_tokens?: number | null;
+    compact_tool_output_max_chars?: number | null;
   },
   configRevision: string,
 ): Promise<{ model_profile: ModelProfileView; config_revision: string }> {
@@ -445,6 +448,9 @@ export async function updateModelProfile(
     max_tool_workers: number | null;
     max_retries: number | null;
     compact_threshold: number | null;
+    compact_tail_turns: number | null;
+    compact_preserve_recent_tokens: number | null;
+    compact_tool_output_max_chars: number | null;
   }>,
   configRevision: string,
 ): Promise<{ model_profile: ModelProfileView; config_revision: string }> {

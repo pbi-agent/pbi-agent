@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 from io import BytesIO, StringIO
 from pathlib import Path
 import threading
@@ -45,7 +46,14 @@ from pbi_agent.session_store import (
 )
 from pbi_agent.display.protocol import PendingToolCall, QueuedInput, QueuedRuntimeChange
 from pbi_agent.web.display import WebDisplay
-from pbi_agent.web.session_manager import WebSessionManager
+from pbi_agent.web.server_runtime import (
+    _ExpectedStartupFailureFilter,
+    _startup_error_message_from_traceback,
+)
+from pbi_agent.web.session_manager import (
+    WebManagerStartupError,
+    WebSessionManager,
+)
 from pbi_agent.web.serve import PBIWebServer, create_app
 
 
@@ -160,6 +168,95 @@ def test_web_server_prints_banner_and_starts_uvicorn() -> None:
     assert f"v{__version__}" in rendered
     assert "http://127.0.0.1:9001" in rendered
     mock_run.assert_called_once()
+
+
+def test_web_server_prints_warning_for_expected_startup_failure() -> None:
+    server = PBIWebServer(settings=_settings(), port=9001)
+    output = StringIO()
+    server.console = Console(file=output, width=80, highlight=False)
+
+    def fake_run(_uvicorn_server, sockets=None) -> None:
+        del sockets
+        _uvicorn_server._record_startup_failure(
+            "Another web app instance is already managing this workspace."
+        )
+
+    with patch("pbi_agent.web.server_runtime.uvicorn.Server.run", fake_run):
+        server.serve(debug=False)
+
+    rendered = output.getvalue()
+    assert (
+        "Warning: Another web app instance is already managing this workspace."
+        in rendered
+    )
+
+
+def test_expected_startup_failure_filter_hides_traceback_and_exit_log() -> None:
+    messages: list[str] = []
+    log_filter = _ExpectedStartupFailureFilter(messages.append)
+    exc = WebManagerStartupError("friendly")
+    traceback_record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Exception in 'lifespan' protocol\n",
+        (),
+        (type(exc), exc, exc.__traceback__),
+    )
+    text_traceback_record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "ERROR:    Traceback (most recent call last):\n"
+        '  File "src/pbi_agent/web/session_manager.py", line 534, in start\n'
+        "    raise WebManagerAlreadyRunningError(\n"
+        "pbi_agent.web.session_manager.WebManagerAlreadyRunningError: "
+        "Another web app instance is already managing this workspace.",
+        (),
+        None,
+    )
+    exit_record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Application startup failed. Exiting.",
+        (),
+        None,
+    )
+    unexpected_record = logging.LogRecord(
+        "uvicorn.error",
+        logging.ERROR,
+        __file__,
+        1,
+        "Different startup error",
+        (),
+        None,
+    )
+
+    assert not log_filter.filter(traceback_record)
+    assert messages == ["friendly"]
+    assert not log_filter.filter(text_traceback_record)
+    assert messages == [
+        "friendly",
+        "Another web app instance is already managing this workspace.",
+    ]
+    assert not log_filter.filter(exit_record)
+    assert log_filter.filter(unexpected_record)
+
+
+def test_startup_error_message_from_traceback_extracts_base_error() -> None:
+    message = (
+        "Traceback (most recent call last):\n"
+        "pbi_agent.web.session_manager.WebManagerStartupError: "
+        "Session database is busy. Try starting the web app again."
+    )
+
+    assert _startup_error_message_from_traceback(message) == (
+        "Session database is busy. Try starting the web app again."
+    )
 
 
 def test_bootstrap_endpoint_returns_workspace_metadata() -> None:
