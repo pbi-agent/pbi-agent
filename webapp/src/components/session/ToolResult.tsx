@@ -20,7 +20,12 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
-import { GitDiffResult, isApplyPatchToolMetadata } from "./GitDiffResult";
+import { CodeBlock } from "../ui/code-block";
+import {
+  FILE_EDIT_TOOL_NAMES,
+  GitDiffResult,
+  isApplyPatchToolMetadata,
+} from "./GitDiffResult";
 
 type ToolResultProps = {
   metadata?: ToolCallMetadata;
@@ -28,7 +33,7 @@ type ToolResultProps = {
   running?: boolean;
 };
 
-const FILE_EDIT_TOOLS = new Set(["apply_patch", "write_file", "replace_in_file"]);
+
 
 export function ToolResult({ metadata, text, running = false }: ToolResultProps) {
   const toolName = toolNameFor(metadata);
@@ -104,9 +109,30 @@ function ReadFileToolResult({ metadata, text, running }: ToolResultProps) {
   return (
     <ToolCard metadata={metadata} running={running} icon={<FileTextIcon />} title={path} description={description || "Read file"}>
       {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata?.error ?? result?.error)} /> : null}
-      {content ? <OutputBlock label="Content" value={content} truncated={Boolean(result?.content_truncated)} /> : null}
-      {schema ? <OutputBlock label="Schema" value={schema} truncated={Boolean(result?.schema_truncated)} /> : null}
-      {preview ? <OutputBlock label="Preview" value={preview} truncated={Boolean(result?.preview_truncated)} /> : null}
+      {content ? (
+        <CodeOutputBlock
+          label="Content"
+          value={content}
+          truncated={Boolean(result?.content_truncated)}
+          path={path}
+        />
+      ) : null}
+      {schema ? (
+        <CodeOutputBlock
+          label="Schema"
+          value={schema}
+          truncated={Boolean(result?.schema_truncated)}
+          language="markdown"
+        />
+      ) : null}
+      {preview ? (
+        <CodeOutputBlock
+          label="Preview"
+          value={preview}
+          truncated={Boolean(result?.preview_truncated)}
+          language={previewLanguage(preview)}
+        />
+      ) : null}
       {sheets.length > 0 ? (
         <div className="tool-result__section">
           <span className="tool-result__section-label">Sheets</span>
@@ -245,7 +271,7 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, ch
             )}
             {label}
           </Badge>
-          {metadata?.tool_name && !FILE_EDIT_TOOLS.has(metadata.tool_name) ? (
+          {metadata?.tool_name && !FILE_EDIT_TOOL_NAMES.has(metadata.tool_name) ? (
             <Badge variant="outline" className="tool-result-card__tool-name">{metadata.tool_name}</Badge>
           ) : null}
         </CardAction>
@@ -267,6 +293,45 @@ function OutputBlock({ label, value, empty, truncated, tone }: { label: string; 
       <pre className="tool-result__pre">{displayValue}</pre>
     </div>
   );
+}
+
+function CodeOutputBlock({
+  label,
+  value,
+  truncated,
+  language,
+  path,
+  tone,
+}: {
+  label: string;
+  value: string;
+  truncated?: boolean;
+  language?: string;
+  path?: string;
+  tone?: "stderr";
+}) {
+  if (!value) return null;
+  return (
+    <div className="tool-result__section" data-tone={tone}>
+      <span className="tool-result__section-label">{label}{truncated ? " · truncated" : ""}</span>
+      <CodeBlock value={value} language={language} path={path} />
+    </div>
+  );
+}
+
+/**
+ * Heuristically pick a language for the tabular preview block. The Python
+ * `read_file` tool emits markdown bullet lists for some shapes and CSV-style
+ * snippets for others; we highlight markdown when we see clear markdown
+ * structure and otherwise fall back to plain text.
+ */
+function previewLanguage(preview: string): string | undefined {
+  const trimmed = preview.trimStart();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("|") || trimmed.startsWith("- ") || trimmed.startsWith("# ")) {
+    return "markdown";
+  }
+  return undefined;
 }
 
 function ToolNotice({ label, value, tone }: { label: string; value: string; tone?: "error" }) {

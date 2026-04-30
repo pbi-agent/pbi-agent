@@ -1346,6 +1346,43 @@
   word-break: break-word;
 }
 
+/*
+ * Syntax-highlighted code blocks (Shiki). The wrapper applies the same
+ * size/scroll constraints as `.tool-result__pre` so highlighted and plain
+ * blocks share visual chrome. Shiki's nested `<pre>` carries the per-token
+ * spans; we strip its inline background and let the inline `--shiki-light` /
+ * `--shiki-dark` per-span variables drive token color, switched by the app's
+ * `[data-theme]` selector.
+ */
+.tool-result__code {
+  max-height: min(36vh, 360px);
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+}
+
+.tool-result__code .shiki {
+  margin: 0;
+  padding: var(--sp-3);
+  background: transparent !important;
+  color: var(--shiki-light, var(--color-text-secondary));
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-result__code .shiki span {
+  color: var(--shiki-light, inherit);
+}
+
+:root[data-theme="dark"] .tool-result__code .shiki {
+  color: var(--shiki-dark, var(--color-text-secondary));
+}
+
+:root[data-theme="dark"] .tool-result__code .shiki span {
+  color: var(--shiki-dark, inherit);
+}
+
 .tool-result__notice {
   display: flex;
   flex-direction: column;
