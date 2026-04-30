@@ -60,11 +60,6 @@ SPEC = ToolSpec(
                 "type": "integer",
                 "description": "Maximum number of lines to return. Defaults to 200.",
             },
-            "encoding": {
-                "type": "string",
-                "description": "Text encoding to use. Defaults to 'auto'.",
-                "default": "auto",
-            },
         },
         "required": ["path"],
         "additionalProperties": False,
@@ -86,8 +81,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     max_lines = normalize_positive_int(
         arguments.get("max_lines"), default=DEFAULT_MAX_LINES
     )
-    encoding = arguments.get("encoding", "auto")
-
     try:
         target_path = resolve_safe_path(root, path_value)
         if not target_path.exists():
@@ -114,7 +107,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
 
         selected_lines: list[str] = []
         line_count = 0
-        with open_text_file(target_path, encoding=str(encoding)) as text_handle:
+        with open_text_file(target_path, encoding="auto") as text_handle:
             for line_count, line in enumerate(text_handle, start=1):
                 if line_count < start_line:
                     continue

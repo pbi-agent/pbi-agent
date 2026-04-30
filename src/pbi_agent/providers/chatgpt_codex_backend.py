@@ -133,11 +133,13 @@ class ChatGPTCodexBackend:
             return
         del input_items
         self.clear_live_loop_state()
+        self._conversation.start_turn()
 
     def finish_turn(self) -> None:
         if not self._enabled:
             return
         self.clear_live_loop_state()
+        self._conversation.finish_turn()
 
     def record_exchange(
         self,
@@ -244,12 +246,27 @@ class ChatGPTCodexBackend:
 class ResponsesConversationReplay:
     def __init__(self) -> None:
         self._conversation_items: list[dict[str, Any]] = []
+        self._active_turn_start: int | None = None
 
     def reset(self) -> None:
         self._conversation_items.clear()
+        self._active_turn_start = None
 
     def restore(self, items: list[dict[str, Any]]) -> None:
         self._conversation_items = [_clone_item(item) for item in items]
+        self._active_turn_start = None
+
+    def start_turn(self) -> None:
+        self._active_turn_start = len(self._conversation_items)
+
+    def finish_turn(self) -> None:
+        if self._active_turn_start is None:
+            return
+        before_turn = self._conversation_items[: self._active_turn_start]
+        active_items = self._conversation_items[self._active_turn_start :]
+        collapsed_items = _completed_turn_history_items(active_items)
+        self._conversation_items = [*before_turn, *collapsed_items]
+        self._active_turn_start = None
 
     def build_input_payload(
         self,
@@ -621,6 +638,43 @@ def _clone_item(item: dict[str, Any]) -> dict[str, Any]:
 def _sanitize_output_item(item: dict[str, Any]) -> dict[str, Any]:
     cloned = _clone_item(item)
     return _strip_backend_ids(cloned)
+
+
+def _completed_turn_history_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    history_items: list[dict[str, Any]] = []
+    for item in items:
+        if item.get("role") == "user":
+            history_items.append(_clone_item(item))
+            continue
+        assistant_item = _assistant_history_item(item)
+        if assistant_item is not None:
+            history_items.append(assistant_item)
+    return history_items
+
+
+def _assistant_history_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    if item.get("role") == "assistant" and isinstance(item.get("content"), str):
+        content = item["content"]
+        return {"role": "assistant", "content": content} if content else None
+    if item.get("type") != "message" or item.get("role") != "assistant":
+        return None
+
+    text_parts: list[str] = []
+    raw_content = item.get("content")
+    if isinstance(raw_content, list):
+        for part in raw_content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") not in {"output_text", "input_text"}:
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text:
+                text_parts.append(text)
+    elif isinstance(raw_content, str) and raw_content:
+        text_parts.append(raw_content)
+
+    content = "".join(text_parts)
+    return {"role": "assistant", "content": content} if content else None
 
 
 def _strip_backend_ids(value: Any) -> Any:
