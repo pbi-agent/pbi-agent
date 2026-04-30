@@ -1,0 +1,14 @@
+---
+title: Changelog
+description: Release history for pbi-agent.
+---
+
+# Changelog
+
+Track notable user-facing changes for each pbi-agent release.
+
+Each release has its own changelog page named with the release version. Release entries are prepared in dedicated release PRs and should include the release date, version, and links to the PRs that introduced notable changes.
+
+## Releases
+
+- [v0.0.33 - 2026-04-30](./v0.0.33.md)

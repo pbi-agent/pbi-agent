@@ -1,5 +1,3 @@
-# TODO
-
-[X] Review current diff
-[X] Inspect relevant tests and source
-[X] Produce findings
+[X] Inspect command conventions and release-writing skill
+[X] Add release workflow command
+[X] Validate command and update memory
