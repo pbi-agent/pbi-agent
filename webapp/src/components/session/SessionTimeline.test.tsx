@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionTimeline } from "./SessionTimeline";
 
@@ -694,6 +694,76 @@ describe("SessionTimeline", () => {
     );
 
     expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
+  });
+
+  it("closes open work details when the final assistant response arrives", async () => {
+    const itemsBeforeFinal = [
+      {
+        kind: "message" as const,
+        itemId: "user-1",
+        role: "user" as const,
+        content: "Do the task",
+        markdown: false,
+      },
+      {
+        kind: "tool_group" as const,
+        itemId: "tool-1",
+        label: "apply_patch",
+        status: "completed" as const,
+        items: [
+          {
+            text: "update_file TODO.md done",
+            metadata: {
+              tool_name: "apply_patch" as const,
+              path: "TODO.md",
+              operation: "update_file",
+              success: true,
+              diff: "-[ ] Old\n+[X] New",
+            },
+          },
+        ],
+      },
+    ];
+
+    const { rerender } = render(
+      <SessionTimeline
+        items={itemsBeforeFinal}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+
+    rerender(
+      <SessionTimeline
+        items={[
+          ...itemsBeforeFinal,
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Done.",
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={2}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(workingButton).toHaveAttribute("aria-expanded", "false");
+    });
+    expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
   });
 
   it("keeps following updates after programmatically scrolling to the first apply_patch diff", async () => {

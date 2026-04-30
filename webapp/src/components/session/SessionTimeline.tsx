@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type {
@@ -115,22 +115,32 @@ function WorkRun({
   subAgents,
   active,
   phase,
+  closeSignal,
 }: {
   unit: Extract<RenderUnit, { kind: "work_run" }>;
   subAgents: Record<string, { title: string; status: string }>;
   active: boolean;
   phase: WorkRunPhase | null;
+  closeSignal: string | null;
 }) {
   const subAgent = unit.subAgentId ? subAgents[unit.subAgentId] : undefined;
   const hasItems = unit.items.length > 0;
   const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
+  const [openState, setOpenState] = useState({
+    open: unit.defaultOpen,
+    closeSignal,
+  });
+  const open = openState.closeSignal === closeSignal ? openState.open : false;
 
   return (
     <div
       className="timeline-entry timeline-entry--work-run"
       data-timeline-item-id={lastItemId}
     >
-      <Collapsible defaultOpen={unit.defaultOpen}>
+      <Collapsible
+        open={open}
+        onOpenChange={(nextOpen) => setOpenState({ open: nextOpen, closeSignal })}
+      >
         <CollapsibleTrigger asChild>
           <Button
             type="button"
@@ -155,6 +165,7 @@ function WorkRun({
                   item={item}
                   subAgentTitle={subAgent?.title}
                   subAgentStatus={subAgent?.status}
+                  closeSignal={closeSignal}
                   bare
                 />
               ))}
@@ -220,6 +231,11 @@ export function SessionTimeline({
     markProgrammaticScroll,
   } =
     useAutoScroll(itemsVersion, { followOnChange: false });
+
+  const closeCollapsiblesSignal =
+    latestItem?.kind === "message" && latestItem.role === "assistant"
+      ? latestItem.itemId
+      : null;
 
   const scrollToTarget = useCallback(
     (container: HTMLElement, target: HTMLElement, offset: number) => {
@@ -306,6 +322,7 @@ export function SessionTimeline({
                     ? subAgents[unit.item.subAgentId]?.status
                     : undefined
                 }
+                closeSignal={closeCollapsiblesSignal}
               />
             );
           }
@@ -317,6 +334,7 @@ export function SessionTimeline({
               subAgents={subAgents}
               active={isActiveUnit}
               phase={isActiveUnit ? activePhase : null}
+              closeSignal={closeCollapsiblesSignal}
             />
           );
         })}

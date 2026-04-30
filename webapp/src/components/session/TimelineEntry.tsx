@@ -111,6 +111,7 @@ export function TimelineEntry({
   subAgentTitle,
   subAgentStatus,
   bare = false,
+  closeSignal = null,
 }: {
   item: TimelineItem;
   subAgentTitle?: string;
@@ -121,11 +122,28 @@ export function TimelineEntry({
    * into a single outer Collapsible.
    */
   bare?: boolean;
+  /** Session timeline signal that closes open details when the final answer arrives. */
+  closeSignal?: string | null;
 }) {
   const toolGroupDefaultOpen =
     item.kind === "tool_group"
     && item.items.some((toolItem) => isApplyPatchToolMetadata(toolItem.metadata));
-  const [thinkingCollapsed, setThinkingCollapsed] = useState(true);
+  const [thinkingCollapsedState, setThinkingCollapsedState] = useState({
+    collapsed: true,
+    closeSignal,
+  });
+  const thinkingCollapsed =
+    thinkingCollapsedState.closeSignal === closeSignal
+      ? thinkingCollapsedState.collapsed
+      : true;
+  const [toolGroupOpenState, setToolGroupOpenState] = useState({
+    open: toolGroupDefaultOpen,
+    closeSignal,
+  });
+  const toolGroupOpen =
+    toolGroupOpenState.closeSignal === closeSignal
+      ? toolGroupOpenState.open
+      : false;
 
   const subAgentBanner =
     subAgentTitle || subAgentStatus ? (
@@ -195,7 +213,10 @@ export function TimelineEntry({
           variant="ghost"
           size="sm"
           className="timeline-entry__header"
-          onClick={() => setThinkingCollapsed((prev) => !prev)}
+          onClick={() => setThinkingCollapsedState({
+            collapsed: !thinkingCollapsed,
+            closeSignal,
+          })}
         >
           <ChevronRightIcon className={`timeline-entry__chevron ${thinkingCollapsed ? "" : "timeline-entry__chevron--open"}`} />
           <span>{item.title}</span>
@@ -240,7 +261,10 @@ export function TimelineEntry({
       data-timeline-item-id={item.itemId}
     >
       {subAgentBanner}
-      <Collapsible defaultOpen={toolGroupDefaultOpen}>
+      <Collapsible
+        open={toolGroupOpen}
+        onOpenChange={(nextOpen) => setToolGroupOpenState({ open: nextOpen, closeSignal })}
+      >
         <CollapsibleTrigger asChild>
           <Button
             type="button"

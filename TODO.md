@@ -1,8 +1,7 @@
 # TODO
 
-- [X] Update web tests for removed welcome sections
-  - [X] Inspect current SessionWelcome implementation and tests
-  - [X] Revert prior component restoration if present
-  - [X] Update tests to match deleted sections
-  - [X] Run focused and full web validations
-  - [X] Update memory
+[X] Inspect current session collapsible UI state handling
+[X] Implement auto-close of collapsible elements when final assistant response arrives
+[X] Add/update frontend tests
+[X] Run focused validation
+[X] Update MEMORY.md
