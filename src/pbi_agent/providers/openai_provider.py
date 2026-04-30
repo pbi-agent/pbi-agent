@@ -205,7 +205,18 @@ class OpenAIProvider(Provider):
         turn_usage.add(result.usage)
         display.session_usage(session_usage)
 
-        if result.reasoning_summary or result.reasoning_content:
+        reasoning_display_items = result.provider_data.get("reasoning_display_items")
+        if isinstance(reasoning_display_items, list) and reasoning_display_items:
+            for item in reasoning_display_items:
+                if not isinstance(item, dict):
+                    continue
+                text = item.get("text")
+                title = item.get("title")
+                display.render_thinking(
+                    text if isinstance(text, str) else None,
+                    title=title if isinstance(title, str) else None,
+                )
+        elif result.reasoning_summary or result.reasoning_content:
             display.render_thinking(
                 _reasoning_body_text(
                     result.reasoning_content,
@@ -1169,6 +1180,10 @@ class OpenAIProvider(Provider):
         reasoning_content = "\n\n".join(
             part for part in reasoning_content_parts if part.strip()
         ).strip()
+        reasoning_display_items = _build_reasoning_display_items(
+            reasoning_summary_parts,
+            reasoning_content,
+        )
         text = "".join(text_parts).strip()
         if not text:
             output_text = response_json.get("output_text")
@@ -1192,6 +1207,7 @@ class OpenAIProvider(Provider):
             reasoning_content=reasoning_content,
             provider_data={
                 "reasoning": response_json.get("reasoning"),
+                "reasoning_display_items": reasoning_display_items,
                 "display_items": display_items,
                 "function_call_items": function_call_items,
                 "output_items": output_items,
@@ -1914,6 +1930,32 @@ def _waiting_message_for_input_items(input_items: list[dict[str, Any]]) -> str:
         return "integrating tool results..."
 
     return "processing..."
+
+
+def _build_reasoning_display_items(
+    reasoning_summary_parts: list[str],
+    reasoning_content: str,
+) -> list[dict[str, str | None]]:
+    clean_summary_parts = [
+        part.strip() for part in reasoning_summary_parts if part.strip()
+    ]
+    clean_reasoning_content = reasoning_content.strip()
+    if clean_reasoning_content:
+        summary = "\n\n".join(clean_summary_parts)
+        return [
+            {
+                "text": clean_reasoning_content,
+                "title": summary or None,
+            }
+        ]
+
+    return [
+        {
+            "text": _reasoning_body_text("", summary),
+            "title": summary,
+        }
+        for summary in clean_summary_parts
+    ]
 
 
 def _reasoning_body_text(reasoning_text: str, summary_text: str) -> str | None:

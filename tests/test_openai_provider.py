@@ -501,6 +501,12 @@ def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> 
         result.reasoning_content
         == "Examined the request before deciding to call a tool."
     )
+    assert result.provider_data["reasoning_display_items"] == [
+        {
+            "text": "Examined the request before deciding to call a tool.",
+            "title": "Planned a tool call",
+        }
+    ]
     assert result.provider_data["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert result.function_calls[0].call_id == "call_88263992"
     assert result.function_calls[0].name == "get_temperature"
@@ -510,6 +516,61 @@ def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> 
     assert result.usage.output_tokens == 233
     assert result.usage.reasoning_tokens == 207
     assert result.usage.model == DEFAULT_MODEL
+
+
+def test_openai_parse_response_preserves_reasoning_summary_display_blocks() -> None:
+    provider = OpenAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_reasoning_blocks",
+            "model": DEFAULT_MODEL,
+            "output": [
+                {
+                    "id": "rs_123",
+                    "type": "reasoning",
+                    "summary": [
+                        {
+                            "type": "summary_text",
+                            "text": "Read repository state\nChecked git status and memory.",
+                        },
+                        {
+                            "type": "summary_text",
+                            "text": "Inspect implementation\nFound the joined reasoning display path.",
+                        },
+                    ],
+                },
+                {
+                    "arguments": '{"command":"pwd"}',
+                    "call_id": "call_1",
+                    "name": "shell",
+                    "type": "function_call",
+                },
+                {
+                    "arguments": '{"path":"LICENSE"}',
+                    "call_id": "call_2",
+                    "name": "read_file",
+                    "type": "function_call",
+                },
+            ],
+        }
+    )
+
+    assert result.reasoning_summary == (
+        "Read repository state\nChecked git status and memory.\n\n"
+        "Inspect implementation\nFound the joined reasoning display path."
+    )
+    assert result.provider_data["reasoning_display_items"] == [
+        {
+            "text": "Checked git status and memory.",
+            "title": "Read repository state\nChecked git status and memory.",
+        },
+        {
+            "text": "Found the joined reasoning display path.",
+            "title": "Inspect implementation\nFound the joined reasoning display path.",
+        },
+    ]
+    assert [call.call_id for call in result.function_calls] == ["call_1", "call_2"]
 
 
 def test_openai_parse_response_preserves_distinct_assistant_messages() -> None:
@@ -1655,6 +1716,82 @@ def test_openai_request_turn_retries_after_rate_limit_and_renders_reasoning(
     assert display_spy.session_usage_snapshots[-1].input_tokens == 6
     assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 1
     assert display_spy.session_usage_snapshots[-1].output_tokens == 4
+
+
+def test_openai_request_turn_renders_each_reasoning_summary_block(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    response_payload = {
+        "id": "resp_reasoning_blocks",
+        "model": DEFAULT_MODEL,
+        "usage": {
+            "input_tokens": 5,
+            "output_tokens": 7,
+            "total_tokens": 12,
+        },
+        "output": [
+            {
+                "type": "reasoning",
+                "summary": [
+                    {
+                        "type": "summary_text",
+                        "text": "Read repository state\nChecked git status and memory.",
+                    },
+                    {
+                        "type": "summary_text",
+                        "text": "Inspect implementation\nFound the joined reasoning display path.",
+                    },
+                ],
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "shell",
+                "arguments": '{"command":"git status --short"}',
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_2",
+                "name": "read_file",
+                "arguments": '{"path":"LICENSE"}',
+            },
+        ],
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del request, timeout
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = OpenAIProvider(_make_settings())
+    response = provider.request_turn(
+        user_message="diagnose reasoning blocks",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert [call.call_id for call in response.function_calls] == ["call_1", "call_2"]
+    assert display_spy.thinking_calls == [
+        {
+            "text": "Checked git status and memory.",
+            "title": "Read repository state\nChecked git status and memory.",
+            "replace_existing": False,
+            "widget_id": None,
+        },
+        {
+            "text": "Found the joined reasoning display path.",
+            "title": "Inspect implementation\nFound the joined reasoning display path.",
+            "replace_existing": False,
+            "widget_id": None,
+        },
+    ]
 
 
 def test_openai_request_turn_retries_rate_limits_up_to_ten_times(
