@@ -58,12 +58,12 @@ export function ToolResult({ metadata, text, running = false }: ToolResultProps)
   return <GenericToolResult metadata={metadata} text={text} running={running} />;
 }
 
-function ShellToolResult({ metadata, text, running }: ToolResultProps) {
+function ShellToolResult({ metadata, running }: ToolResultProps) {
   const args = objectValue(metadata?.arguments);
   const result = objectValue(metadata?.result);
   const command = stringValue(metadata?.command) ?? stringValue(args?.command) ?? "<missing command>";
   const cwd = stringValue(metadata?.working_directory) ?? stringValue(args?.working_directory) ?? ".";
-  const timeout = metadata?.timeout_ms ?? args?.timeout_ms;
+  const timeout = timeoutValue(metadata?.timeout_ms) ?? timeoutValue(args?.timeout_ms);
   const exitCode = typeof metadata?.exit_code === "number" || metadata?.exit_code === null
     ? metadata.exit_code
     : numberOrNull(result?.exit_code);
@@ -84,7 +84,6 @@ function ShellToolResult({ metadata, text, running }: ToolResultProps) {
       {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
       <OutputBlock label="Stdout" value={stdout} empty="(empty)" truncated={Boolean(result?.stdout_truncated)} />
       <OutputBlock label="Stderr" value={stderr} empty="(empty)" truncated={Boolean(result?.stderr_truncated)} tone="stderr" />
-      {!stdout && !stderr && !error && text ? <OutputBlock label="Summary" value={text} /> : null}
     </ToolCard>
   );
 }
@@ -104,7 +103,7 @@ function ReadFileToolResult({ metadata, text, running }: ToolResultProps) {
 
   return (
     <ToolCard metadata={metadata} running={running} icon={<FileTextIcon />} title={path} description={description || "Read file"}>
-      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata.error ?? result?.error)} /> : null}
+      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata?.error ?? result?.error)} /> : null}
       {content ? <OutputBlock label="Content" value={content} truncated={Boolean(result?.content_truncated)} /> : null}
       {schema ? <OutputBlock label="Schema" value={schema} truncated={Boolean(result?.schema_truncated)} /> : null}
       {preview ? <OutputBlock label="Preview" value={preview} truncated={Boolean(result?.preview_truncated)} /> : null}
@@ -139,7 +138,7 @@ function ReadImageToolResult({ metadata, text, running }: ToolResultProps) {
 
   return (
     <ToolCard metadata={metadata} running={running} icon={<FileImageIcon />} title={path} description={description || "Attached image to model context"}>
-      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata.error ?? result?.error)} /> : null}
+      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata?.error ?? result?.error)} /> : null}
       <div className="tool-result__kv">
         <span>Attachment</span>
         <strong>{metadata?.success === false ? "Failed" : "Ready for model context"}</strong>
@@ -156,7 +155,7 @@ function ReadWebUrlToolResult({ metadata, text, running }: ToolResultProps) {
   const markdown = stringValue(result?.markdown);
   return (
     <ToolCard metadata={metadata} running={running} icon={<GlobeIcon />} title={url} description="Fetched as Markdown">
-      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata.error ?? result?.error)} /> : null}
+      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata?.error ?? result?.error)} /> : null}
       {markdown ? <OutputBlock label="Markdown" value={markdown} truncated={Boolean(result?.markdown_truncated)} /> : null}
       {!markdown && text ? <OutputBlock label="Summary" value={text} /> : null}
     </ToolCard>
@@ -197,7 +196,7 @@ function SubAgentToolResult({ metadata, text, running }: ToolResultProps) {
   const output = stringValue(result?.output) ?? stringValue(result?.message) ?? stringValue(result?.summary);
   return (
     <ToolCard metadata={metadata} running={running} icon={<BotIcon />} title={task} description={`Agent · ${agentType}`}>
-      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata.error ?? result?.error)} /> : null}
+      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata?.error ?? result?.error)} /> : null}
       {output ? <OutputBlock label="Result" value={output} /> : text ? <OutputBlock label="Summary" value={text} /> : null}
     </ToolCard>
   );
@@ -300,6 +299,10 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
+}
+
+function timeoutValue(value: unknown): number | string | undefined {
+  return typeof value === "number" || typeof value === "string" ? value : undefined;
 }
 
 function numberOrNull(value: unknown): number | null | undefined {

@@ -840,6 +840,60 @@
   margin-top: var(--sp-1);
 }
 
+/* Work runs — single collapsible coalescing consecutive thinking + tool_group items */
+.timeline-entry--work-run {
+  margin: var(--sp-1) 0;
+}
+
+.timeline-entry__header--work-run {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: transparent;
+  border-left: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--duration-fast);
+}
+
+.timeline-entry__header--work-run:hover {
+  background: var(--color-muted);
+}
+
+[data-slot="collapsible-trigger"][data-state="open"] .timeline-entry__chevron {
+  transform: rotate(90deg);
+}
+
+.timeline-entry__work-run-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0 var(--sp-2) var(--sp-3);
+  margin-left: var(--sp-2);
+  border-left: 1px dashed var(--color-border);
+}
+
+/* Bare items (rendered inside a work-run collapsible — no own header chrome) */
+.timeline-entry--bare {
+  margin: 0;
+}
+
+.timeline-entry--bare .timeline-entry__bare-title {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-muted-foreground);
+  margin-bottom: var(--sp-1);
+}
+
+.timeline-entry--bare .timeline-entry__body {
+  margin-top: 0;
+}
+
 /* Git diff result — structured apply_patch output */
 .git-diff-result {
   gap: 0;

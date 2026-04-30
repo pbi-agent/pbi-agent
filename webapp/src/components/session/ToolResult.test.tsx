@@ -22,6 +22,8 @@ describe("ToolResult", () => {
       );
 
       expect(screen.getByText("bun run web:build")).toBeInTheDocument();
+      expect(screen.queryByText("Summary")).not.toBeInTheDocument();
+      expect(screen.queryByText("$ bun run web:build")).not.toBeInTheDocument();
       expect(screen.queryByText("<missing command>")).not.toBeInTheDocument();
     });
 

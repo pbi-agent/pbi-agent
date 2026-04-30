@@ -265,6 +265,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+
     const title = screen.getByText("TODO.md");
     const card = title.closest(".git-diff-result");
 
@@ -349,7 +351,7 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /shell/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
 
     expect(screen.getByText("echo hello")).toBeInTheDocument();
     expect(screen.getByText("Stdout")).toBeInTheDocument();
@@ -393,7 +395,7 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /read_file/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
 
     expect(screen.getByText("TODO.md")).toBeInTheDocument();
     expect(screen.getByText("lines 1-2 of 2")).toBeInTheDocument();
@@ -470,16 +472,16 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Tool calls/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
 
     expect(screen.getByText("logo.jpg")).toBeInTheDocument();
-    expect(screen.getByText("2.0 KB")).toBeInTheDocument();
+    expect(screen.getByText(/2.0 KB/)).toBeInTheDocument();
     expect(screen.getByText("https://example.com")).toBeInTheDocument();
     expect(screen.getByText("# Example")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://example.com/docs");
     expect(screen.getByText("Review tests")).toBeInTheDocument();
     expect(screen.getByText("Looks good")).toBeInTheDocument();
-    expect(screen.getByText("mcp__custom__lookup")).toBeInTheDocument();
+    expect(screen.getAllByText("mcp__custom__lookup").length).toBeGreaterThan(0);
     expect(screen.getByText(/"value": "ok"/)).toBeInTheDocument();
   });
 
@@ -641,6 +643,63 @@ describe("SessionTimeline", () => {
     expect(screen.getByText("Update failed")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.queryByText("Updated")).not.toBeInTheDocument();
+  });
+
+  it("keeps the Working badge spinner visible while the session is active", () => {
+    const { rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Thinking",
+            content: "Planning the work",
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Analyzing..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Working/ })).toBeInTheDocument();
+    expect(screen.getByLabelText("running")).toBeInTheDocument();
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Thinking",
+            content: "Planning the work",
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={2}
+      />,
+    );
+
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
   });
 
   it("keeps following updates after programmatically scrolling to the first apply_patch diff", async () => {

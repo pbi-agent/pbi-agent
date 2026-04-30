@@ -289,6 +289,10 @@ def test_generic_request_turn_preserves_history_and_tool_results(
 
     assert first.response_id == "chatcmpl_1"
     assert second.response_id == "chatcmpl_2"
+    assert display_spy.wait_messages == [
+        "analyzing your request...",
+        "waiting for model to process tool results...",
+    ]
     assert requests[0] == {
         "messages": [
             {"role": "system", "content": get_system_prompt()},

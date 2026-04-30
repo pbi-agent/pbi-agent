@@ -110,10 +110,17 @@ export function TimelineEntry({
   item,
   subAgentTitle,
   subAgentStatus,
+  bare = false,
 }: {
   item: TimelineItem;
   subAgentTitle?: string;
   subAgentStatus?: string;
+  /**
+   * When true, the entry renders without its own collapsible/header chrome.
+   * Used by SessionTimeline when several tool/thinking items are coalesced
+   * into a single outer Collapsible.
+   */
+  bare?: boolean;
 }) {
   const toolGroupDefaultOpen =
     item.kind === "tool_group"
@@ -162,6 +169,21 @@ export function TimelineEntry({
   }
 
   if (item.kind === "thinking") {
+    if (bare) {
+      return (
+        <div
+          className="timeline-entry timeline-entry--thinking timeline-entry--bare"
+          data-timeline-item-id={item.itemId}
+        >
+          {subAgentBanner}
+          <div className="timeline-entry__bare-title">{item.title}</div>
+          <div className="timeline-entry__body">
+            <MarkdownContent content={item.content} />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className="timeline-entry timeline-entry--thinking"
@@ -183,6 +205,31 @@ export function TimelineEntry({
             <MarkdownContent content={item.content} />
           </div>
         ) : null}
+      </div>
+    );
+  }
+
+  // tool_group
+  if (bare) {
+    return (
+      <div
+        className="timeline-entry timeline-entry--tool timeline-entry--bare"
+        data-timeline-item-id={item.itemId}
+      >
+        {subAgentBanner}
+        <div className="timeline-entry__body">
+          {item.items.map((toolItem, index) => {
+            const status = toolItemStatus(toolItem);
+            return (
+              <ToolResult
+                key={`${item.itemId}-${index}`}
+                metadata={toolItem.metadata}
+                text={toolItem.text}
+                running={status === "running"}
+              />
+            );
+          })}
+        </div>
       </div>
     );
   }

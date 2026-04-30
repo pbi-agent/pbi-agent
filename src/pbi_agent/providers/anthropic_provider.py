@@ -34,6 +34,7 @@ from pbi_agent.models.messages import (
     WebSearchSource,
 )
 from pbi_agent.providers.base import Provider
+from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
@@ -160,6 +161,7 @@ class AnthropicProvider(Provider):
             user_input = UserTurnInput(text=user_message)
 
         if user_input is not None:
+            input_value: str | list[dict[str, Any]] = user_input.text
             self._messages.append(
                 {
                     "role": "user",
@@ -167,6 +169,7 @@ class AnthropicProvider(Provider):
                 }
             )
         elif tool_result_items is not None:
+            input_value = tool_result_items
             # Tool results are sent as a user message containing tool_result
             # content blocks.
             self._messages.append(
@@ -181,6 +184,7 @@ class AnthropicProvider(Provider):
         system_prompt = instructions or self._system_prompt
 
         response = self._http_request(
+            input_value=input_value,
             system_prompt=system_prompt,
             display=display,
             tracer=tracer,
@@ -277,13 +281,14 @@ class AnthropicProvider(Provider):
     def _http_request(
         self,
         *,
+        input_value: str | list[dict[str, Any]],
         system_prompt: str | None,
         display: DisplayProtocol,
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
         """Send the current messages to the Anthropic Messages API and return
         a parsed ``CompletedResponse``."""
-        display.wait_start("waiting for Anthropic response...")
+        display.wait_start(waiting_message_for_input(input_value))
 
         body: dict[str, Any] = {
             "model": self._settings.model,

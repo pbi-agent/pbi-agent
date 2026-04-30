@@ -115,13 +115,13 @@ class DisplaySpy:
         arguments: object,
         result: object = None,
     ) -> None:
+        _ = result
         self.function_results.append(
             {
                 "name": name,
                 "success": success,
                 "call_id": call_id,
                 "arguments": arguments,
-                "result": result,
             }
         )
 
@@ -147,16 +147,16 @@ class DisplaySpy:
         }
         if diff_line_numbers:
             arguments["diff_line_numbers"] = diff_line_numbers
-        self.function_results.append(
-            {
-                "name": "apply_patch",
-                "tool_name": tool_name,
-                "success": success,
-                "call_id": call_id,
-                "arguments": arguments,
-                "result": result,
-            }
-        )
+        _ = result
+        entry = {
+            "name": "apply_patch",
+            "success": success,
+            "call_id": call_id,
+            "arguments": arguments,
+        }
+        if tool_name != "apply_patch":
+            entry["tool_name"] = tool_name
+        self.function_results.append(entry)
 
     def tool_group_end(self) -> None:
         self.tool_group_end_count += 1
