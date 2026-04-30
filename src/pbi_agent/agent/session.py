@@ -277,8 +277,13 @@ def run_single_turn(
                 store,
                 session_id,
                 runtime,
-                _conversation_checkpoint_for_resume(provider, response.response_id),
                 session_usage,
+            )
+            _refresh_provider_history_from_store(
+                provider,
+                store,
+                session_id,
+                reason="turn",
             )
             display.assistant_stop()
             elapsed = time.monotonic() - session_start
@@ -571,11 +576,13 @@ def run_session_loop(
                         store,
                         session_id,
                         current_runtime,
-                        _conversation_checkpoint_for_resume(
-                            provider,
-                            response.response_id,
-                        ),
                         session_usage,
+                    )
+                    _refresh_provider_history_from_store(
+                        provider,
+                        store,
+                        session_id,
+                        reason="turn",
                     )
                     had_tool_errors = had_tool_errors or loop_had_errors
                     display.assistant_stop()
@@ -1090,48 +1097,59 @@ def _update_session_after_turn(
     store: SessionStore | None,
     session_id: str | None,
     runtime: ResolvedRuntime,
-    response_id: str | None,
     session_usage: TokenUsage,
-    *,
-    clear_previous_id: bool = False,
 ) -> None:
     if store is None or session_id is None:
         return
     try:
         snap = session_usage.snapshot()
-        update_kwargs = {
-            "provider": runtime.settings.provider,
-            "provider_id": runtime.provider_id or None,
-            "model": runtime.settings.model,
-            "profile_id": runtime.profile_id or None,
-            "clear_previous_id": clear_previous_id,
-            "total_tokens": snap.total_tokens,
-            "input_tokens": snap.input_tokens,
-            "output_tokens": snap.output_tokens,
-            "cost_usd": snap.estimated_cost_usd,
-        }
-        if not clear_previous_id:
-            update_kwargs["previous_id"] = response_id or None
         store.update_session(
             session_id,
-            **update_kwargs,
+            provider=runtime.settings.provider,
+            provider_id=runtime.provider_id or None,
+            model=runtime.settings.model,
+            profile_id=runtime.profile_id or None,
+            clear_previous_id=True,
+            total_tokens=snap.total_tokens,
+            input_tokens=snap.input_tokens,
+            output_tokens=snap.output_tokens,
+            cost_usd=snap.estimated_cost_usd,
         )
     except Exception:
         _log.warning("Failed to update session after turn", exc_info=True)
 
 
-def _conversation_checkpoint_for_resume(
+def _refresh_provider_history_from_store(
     provider: Provider,
-    response_id: str | None,
-) -> str | None:
+    store: SessionStore | None,
+    session_id: str | None,
+    *,
+    reason: str,
+) -> None:
+    reset_conversation = getattr(provider, "reset_conversation", None)
+    restore_messages = getattr(provider, "restore_messages", None)
+    if not callable(reset_conversation) or not callable(restore_messages):
+        return
     try:
-        checkpoint = provider.get_conversation_checkpoint()
-    except AttributeError:
-        checkpoint = None
+        messages = []
+        if store is not None and session_id is not None:
+            messages = _messages_for_provider_restore(store.list_messages(session_id))
     except Exception:
-        _log.debug("Failed to capture provider conversation checkpoint", exc_info=True)
-        checkpoint = None
-    return checkpoint or response_id
+        _log.warning(
+            "Failed to load provider history after %s",
+            reason,
+            exc_info=True,
+        )
+        return
+    try:
+        reset_conversation()
+        restore_messages(messages)
+    except Exception:
+        _log.warning(
+            "Failed to refresh provider history after %s",
+            reason,
+            exc_info=True,
+        )
 
 
 def _update_session_title(
@@ -1221,26 +1239,15 @@ def _resume_session(
             display.session_usage(session_usage)
     except Exception:
         _log.warning("Failed to restore session state", exc_info=True)
-    history_restored = False
     if messages:
         provider_messages = _messages_for_provider_restore(messages)
         try:
             if provider_messages:
                 provider.restore_messages(provider_messages)
-                history_restored = True
             if replay_history:
                 display.replay_history(messages)
         except Exception:
             _log.warning("Failed to apply restored session history", exc_info=True)
-    if history_restored or rec is None or not rec.previous_id:
-        return
-    try:
-        provider.set_previous_response_id(rec.previous_id)
-    except Exception:
-        _log.warning(
-            "Failed to restore provider conversation checkpoint",
-            exc_info=True,
-        )
 
 
 def _messages_for_provider_restore(
@@ -1561,23 +1568,17 @@ def _compact_live_session(
         compaction_context=compaction_context,
         summary_content=summary_content,
     )
-    provider.reset_conversation()
-    try:
-        provider.set_previous_response_id(None)
-    except Exception:
-        _log.debug(
-            "Failed to clear provider checkpoint after compaction", exc_info=True
-        )
-    provider.restore_messages(
-        _messages_for_provider_restore(store.list_messages(session_id))
+    _refresh_provider_history_from_store(
+        provider,
+        store,
+        session_id,
+        reason="compaction",
     )
     _update_session_after_turn(
         store,
         session_id,
         runtime,
-        None,
         session_usage,
-        clear_previous_id=True,
     )
     estimated_context_tokens = max(1, len(summary_content) // 4)
     display.render_markdown(
