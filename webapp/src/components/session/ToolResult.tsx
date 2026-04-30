@@ -79,7 +79,7 @@ function ShellToolResult({ metadata, text, running }: ToolResultProps) {
       icon={<TerminalIcon />}
       title={command}
       description={[cwd, timeout ? `timeout ${timeout}ms` : null].filter(Boolean).join(" · ")}
-      statusLabel={timedOut ? "Timed out" : exitCode === 0 ? "Done" : exitCode === null ? "Running" : `Exit ${exitCode}`}
+      statusLabel={timedOut ? "Timed out" : running || exitCode === null || exitCode === undefined ? "Running" : exitCode === 0 ? "Done" : `Exit ${exitCode}`}
     >
       {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
       <OutputBlock label="Stdout" value={stdout} empty="(empty)" truncated={Boolean(result?.stdout_truncated)} />

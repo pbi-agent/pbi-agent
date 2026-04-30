@@ -307,6 +307,7 @@ class _EventDisplayBase(DisplayProtocol):
                     "tool_name": tool_name,
                     "call_id": call.call_id,
                     "status": "running",
+                    "arguments": _metadata_payload(call.arguments),
                 },
             )
         self._publish_tool_group_update()
@@ -447,7 +448,9 @@ class _EventDisplayBase(DisplayProtocol):
         metadata = {
             "tool_name": tool_name,
             "call_id": call_id,
-            "status": "running" if exit_code is None and not timed_out else ("failed" if timed_out or exit_code not in (0, None) else "completed"),
+            "status": "running"
+            if exit_code is None and not timed_out
+            else ("failed" if timed_out or exit_code not in (0, None) else "completed"),
             "success": not timed_out and exit_code == 0,
             "arguments": {
                 "command": command,
