@@ -100,3 +100,23 @@ Compressed:
 - If file has mixed content (prose + code), compress ONLY the prose sections
 - If unsure whether something is code or prose, leave it unchanged
 - Do not create or rely on helper scripts for this skill
+
+## MEMORY.md Mode
+
+When target is `MEMORY.md`, compression means memory curation, not only prose shortening.
+
+For `Long-Term Memory`:
+- Keep only durable decisions, stable repo conventions, reusable validation patterns, and active follow-ups.
+- Drop completed task logs, detailed histories, branch names, commit hashes, PR/run IDs, workflow IDs, validation transcripts, and implementation step lists unless still actionable.
+- Prefer outcome-only bullets. Example: a detailed shipped-release log can become `v0.1.0 shipped.`
+- If a bullet is only proof that past work happened, delete or collapse it.
+- If a bullet tells future agents how to act, keep it compact.
+
+`MEMORY.md` exception to normal preserve rules:
+- Do not preserve every URL, path, command, date, version, or ID just because it is technical.
+- Preserve technical strings only when they are needed for future decisions or workflows.
+
+Acceptance check for `MEMORY.md`:
+- `Long-Term Memory` should read like decisions/follow-ups, not changelog/docs.
+- No completed-task bullet should contain a full chain of PR + branch + commit + workflow + validation details.
+- Report compression by durable-memory impact, not by all removed details.
