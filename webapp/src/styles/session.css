@@ -1352,7 +1352,9 @@
  * blocks share visual chrome. Shiki's nested `<pre>` carries the per-token
  * spans; we strip its inline background and let the inline `--shiki-light` /
  * `--shiki-dark` per-span variables drive token color, switched by the app's
- * `[data-theme]` selector.
+ * `[data-theme]` selector. Only the explicit `light` theme uses the light
+ * Shiki tokens; both `prism` (dark indigo background) and `dark` use the
+ * dark tokens so highlighted text stays readable on dark surfaces.
  */
 .tool-result__code {
   max-height: min(36vh, 360px);
@@ -1366,21 +1368,21 @@
   margin: 0;
   padding: var(--sp-3);
   background: transparent !important;
-  color: var(--shiki-light, var(--color-text-secondary));
+  color: var(--shiki-dark, var(--color-text-secondary));
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .tool-result__code .shiki span {
-  color: var(--shiki-light, inherit);
-}
-
-:root[data-theme="dark"] .tool-result__code .shiki {
-  color: var(--shiki-dark, var(--color-text-secondary));
-}
-
-:root[data-theme="dark"] .tool-result__code .shiki span {
   color: var(--shiki-dark, inherit);
+}
+
+:root[data-theme="light"] .tool-result__code .shiki {
+  color: var(--shiki-light, var(--color-text-secondary));
+}
+
+:root[data-theme="light"] .tool-result__code .shiki span {
+  color: var(--shiki-light, inherit);
 }
 
 .tool-result__notice {

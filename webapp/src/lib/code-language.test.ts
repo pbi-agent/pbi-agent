@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { languageForPath } from "./code-language";
+import { inferShellOutputLanguage, languageForPath } from "./code-language";
 
 describe("languageForPath", () => {
   it("maps common extensions to Shiki language ids", () => {
@@ -39,5 +39,35 @@ describe("languageForPath", () => {
     expect(languageForPath("noext")).toBeUndefined();
     expect(languageForPath(".gitignore")).toBeUndefined();
     expect(languageForPath("trailingdot.")).toBeUndefined();
+  });
+});
+
+describe("inferShellOutputLanguage", () => {
+  it("derives language from the first file argument of file-print commands", () => {
+    expect(inferShellOutputLanguage("cat src/main.py")).toBe("python");
+    expect(inferShellOutputLanguage("head -n 20 README.md")).toBe("markdown");
+    expect(inferShellOutputLanguage("tail -f logs/server.json")).toBe("json");
+    expect(inferShellOutputLanguage("bat webapp/src/types.ts")).toBe("typescript");
+    expect(inferShellOutputLanguage("/usr/bin/cat Cargo.toml")).toBe("toml");
+  });
+
+  it("recognizes diff-producing commands", () => {
+    expect(inferShellOutputLanguage("git diff")).toBe("diff");
+    expect(inferShellOutputLanguage("git diff --stat HEAD~1")).toBe("diff");
+    expect(inferShellOutputLanguage("git show HEAD")).toBe("diff");
+    expect(inferShellOutputLanguage("git log -p")).toBe("diff");
+    expect(inferShellOutputLanguage("diff a.txt b.txt")).toBe("diff");
+  });
+
+  it("returns undefined when nothing matches", () => {
+    expect(inferShellOutputLanguage(undefined)).toBeUndefined();
+    expect(inferShellOutputLanguage("")).toBeUndefined();
+    expect(inferShellOutputLanguage("ls")).toBeUndefined();
+    expect(inferShellOutputLanguage("ls -la")).toBeUndefined();
+    expect(inferShellOutputLanguage("cat")).toBeUndefined();
+    expect(inferShellOutputLanguage("cat -n")).toBeUndefined();
+    expect(inferShellOutputLanguage("cat notes.unknownext")).toBeUndefined();
+    expect(inferShellOutputLanguage("echo hello")).toBeUndefined();
+    expect(inferShellOutputLanguage("gitsomething diff")).toBeUndefined();
   });
 });

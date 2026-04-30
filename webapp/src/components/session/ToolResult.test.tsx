@@ -95,6 +95,121 @@ describe("ToolResult", () => {
 
       expect(screen.getByText("<missing command>")).toBeInTheDocument();
     });
+
+    describe("stdout highlighting", () => {
+      beforeEach(() => {
+        highlightCodeMock.mockReset();
+        highlightCodeMock.mockResolvedValue(null);
+      });
+
+      it("highlights stdout as the language inferred from a `cat <file>` command", async () => {
+        const { container } = render(
+          <ToolResult
+            text=""
+            metadata={{
+              tool_name: "shell",
+              call_id: "call_cat_py",
+              status: "completed",
+              success: true,
+              command: "cat src/main.py",
+              working_directory: ".",
+              exit_code: 0,
+              arguments: { command: "cat src/main.py" },
+              result: { stdout: "print('hi')\n", stderr: "", exit_code: 0 },
+            }}
+          />,
+        );
+
+        await waitFor(() => {
+          expect(highlightCodeMock).toHaveBeenCalledWith(
+            "print('hi')\n",
+            "python",
+          );
+        });
+
+        expect(
+          container.querySelector('[data-language="python"]'),
+        ).not.toBeNull();
+      });
+
+      it("highlights `git diff` stdout as a unified diff", async () => {
+        render(
+          <ToolResult
+            text=""
+            metadata={{
+              tool_name: "shell",
+              call_id: "call_git_diff",
+              status: "completed",
+              success: true,
+              command: "git diff",
+              working_directory: ".",
+              exit_code: 0,
+              arguments: { command: "git diff" },
+              result: {
+                stdout: "diff --git a/x b/x\n--- a/x\n+++ b/x\n",
+                stderr: "",
+                exit_code: 0,
+              },
+            }}
+          />,
+        );
+
+        await waitFor(() => {
+          expect(highlightCodeMock).toHaveBeenCalledWith(
+            "diff --git a/x b/x\n--- a/x\n+++ b/x\n",
+            "diff",
+          );
+        });
+      });
+
+      it("leaves stdout plain when the command is unrecognized", () => {
+        const { container } = render(
+          <ToolResult
+            text=""
+            metadata={{
+              tool_name: "shell",
+              call_id: "call_ls",
+              status: "completed",
+              success: true,
+              command: "ls -la",
+              working_directory: ".",
+              exit_code: 0,
+              arguments: { command: "ls -la" },
+              result: { stdout: "README.md\nsrc\n", stderr: "", exit_code: 0 },
+            }}
+          />,
+        );
+
+        expect(highlightCodeMock).not.toHaveBeenCalled();
+        const stdoutPre = container.querySelector(
+          ".tool-result__section pre.tool-result__pre",
+        );
+        expect(stdoutPre?.textContent).toBe("README.md\nsrc\n");
+        expect(stdoutPre?.getAttribute("data-highlighted")).toBe("false");
+      });
+
+      it("does not request highlighting for the (empty) placeholder", () => {
+        render(
+          <ToolResult
+            text=""
+            metadata={{
+              tool_name: "shell",
+              call_id: "call_cat_empty",
+              status: "completed",
+              success: true,
+              command: "cat src/main.py",
+              working_directory: ".",
+              exit_code: 0,
+              arguments: { command: "cat src/main.py" },
+              result: { stdout: "", stderr: "", exit_code: 0 },
+            }}
+          />,
+        );
+
+        expect(highlightCodeMock).not.toHaveBeenCalled();
+        expect(screen.getAllByText("(empty)").length).toBeGreaterThan(0);
+      });
+    });
   });
 
   describe("File-edit tools", () => {

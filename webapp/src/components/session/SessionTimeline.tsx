@@ -8,7 +8,6 @@ import type {
   TimelineThinkingItem,
   TimelineToolGroupItem,
 } from "../../types";
-import { EmptyState } from "../shared/EmptyState";
 import { Button } from "../ui/button";
 import {
   Collapsible,
@@ -16,6 +15,7 @@ import {
   CollapsibleTrigger,
 } from "../ui/collapsible";
 import { TimelineEntry } from "./TimelineEntry";
+import { SessionWelcome } from "./SessionWelcome";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
 
 const USER_MESSAGE_TOP_OFFSET = 8;
@@ -253,10 +253,7 @@ export function SessionTimeline({
     return (
       <div className="session-scroll-area" ref={containerRef}>
         <div className="timeline">
-          <EmptyState
-            title="Session started. Waiting for updates…"
-            description="Live events will appear here as soon as the session produces output."
-          />
+          <SessionWelcome />
         </div>
       </div>
     );

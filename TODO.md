@@ -1,8 +1,6 @@
 # TODO
 
-- [X] Diagnose git-diff regression: `1b446c4` narrowed predicate to apply_patch only.
-- [X] Restore coverage for `replace_in_file` and `write_file` via shared `FILE_EDIT_TOOL_NAMES` set.
-- [X] Dedupe `FILE_EDIT_TOOLS` in `ToolResult.tsx` to import the shared constant.
-- [X] Add regression tests (parametrized completion + running fallback).
-- [X] Validate: `bun run test:web` 106/106, lint clean, typecheck clean, web:build clean.
-- [X] Update MEMORY.md.
+- [X] Fix Shiki code highlighting in Prism theme (use dark token colors for `prism` and `dark`, light only for `light`).
+- [X] Update CSS comment in `webapp/src/styles/session.css` to reflect new selector logic.
+- [X] Validate: typecheck clean, focused vitest 26/26 (code-block, ToolResult, code-language), `bun run web:build` clean. Lint/full test suite have a pre-existing unrelated failure in untracked `SessionWelcome.tsx`/`SessionWelcome.test.tsx`.
+- [X] Update `MEMORY.md` task event.

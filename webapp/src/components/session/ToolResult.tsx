@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
+import { inferShellOutputLanguage } from "@/lib/code-language";
 import { CodeBlock } from "../ui/code-block";
 import {
   FILE_EDIT_TOOL_NAMES,
@@ -76,6 +77,7 @@ function ShellToolResult({ metadata, running }: ToolResultProps) {
   const stdout = stringValue(result?.stdout) ?? "";
   const stderr = stringValue(result?.stderr) ?? "";
   const error = errorText(metadata?.error ?? result?.error);
+  const stdoutLanguage = inferShellOutputLanguage(command);
 
   return (
     <ToolCard
@@ -87,8 +89,20 @@ function ShellToolResult({ metadata, running }: ToolResultProps) {
       statusLabel={timedOut ? "Timed out" : running || exitCode === null || exitCode === undefined ? "Running" : exitCode === 0 ? "Done" : `Exit ${exitCode}`}
     >
       {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
-      <OutputBlock label="Stdout" value={stdout} empty="(empty)" truncated={Boolean(result?.stdout_truncated)} />
-      <OutputBlock label="Stderr" value={stderr} empty="(empty)" truncated={Boolean(result?.stderr_truncated)} tone="stderr" />
+      <CodeOutputBlock
+        label="Stdout"
+        value={stdout}
+        empty="(empty)"
+        truncated={Boolean(result?.stdout_truncated)}
+        language={stdoutLanguage}
+      />
+      <CodeOutputBlock
+        label="Stderr"
+        value={stderr}
+        empty="(empty)"
+        truncated={Boolean(result?.stderr_truncated)}
+        tone="stderr"
+      />
     </ToolCard>
   );
 }
@@ -298,6 +312,7 @@ function OutputBlock({ label, value, empty, truncated, tone }: { label: string; 
 function CodeOutputBlock({
   label,
   value,
+  empty,
   truncated,
   language,
   path,
@@ -305,16 +320,22 @@ function CodeOutputBlock({
 }: {
   label: string;
   value: string;
+  empty?: string;
   truncated?: boolean;
   language?: string;
   path?: string;
   tone?: "stderr";
 }) {
-  if (!value) return null;
+  const displayValue = value && value.length > 0 ? value : empty;
+  if (!displayValue) return null;
+  // Skip syntax highlighting on the placeholder string so we don't request a
+  // grammar load just to render `(empty)`.
+  const effectiveLanguage = value && value.length > 0 ? language : undefined;
+  const effectivePath = value && value.length > 0 ? path : undefined;
   return (
     <div className="tool-result__section" data-tone={tone}>
       <span className="tool-result__section-label">{label}{truncated ? " · truncated" : ""}</span>
-      <CodeBlock value={value} language={language} path={path} />
+      <CodeBlock value={displayValue} language={effectiveLanguage} path={effectivePath} />
     </div>
   );
 }

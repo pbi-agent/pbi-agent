@@ -115,3 +115,53 @@ export function languageForPath(path: string | undefined | null): string | undef
   const ext = lowered.slice(dot + 1);
   return EXTENSION_LANGUAGES[ext];
 }
+
+/**
+ * Commands that print a file's contents verbatim to stdout. The first
+ * non-flag argument is treated as the source path for language detection.
+ */
+const FILE_PRINT_COMMANDS: ReadonlySet<string> = new Set([
+  "cat",
+  "bat",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "type",
+]);
+
+/**
+ * Heuristically infer a Shiki language id for a shell command's stdout.
+ *
+ * Conservative on purpose: only recognizes a handful of patterns where the
+ * output format is unambiguous. Returns `undefined` when nothing matches so
+ * the caller falls back to plain text.
+ *
+ * Recognized patterns:
+ * - `git diff` / `git show` / `git log -p` / bare `diff` → `diff`
+ * - `cat`/`bat`/`head`/`tail`/`less`/`more`/`type <file>` → language of the
+ *   first non-flag argument resolved via {@link languageForPath}.
+ */
+export function inferShellOutputLanguage(
+  command: string | undefined | null,
+): string | undefined {
+  if (!command) return undefined;
+  const trimmed = command.trim();
+  if (!trimmed) return undefined;
+
+  if (/^(git\s+(diff|show)|git\s+log\s+.*-p|diff)\b/.test(trimmed)) {
+    return "diff";
+  }
+
+  const tokens = trimmed.split(/\s+/);
+  if (tokens.length < 2) return undefined;
+  const head = tokens[0]?.split(/[\\/]/).pop()?.toLowerCase() ?? "";
+  if (!FILE_PRINT_COMMANDS.has(head)) return undefined;
+
+  for (const token of tokens.slice(1)) {
+    if (!token || token.startsWith("-")) continue;
+    const language = languageForPath(token);
+    if (language) return language;
+  }
+  return undefined;
+}

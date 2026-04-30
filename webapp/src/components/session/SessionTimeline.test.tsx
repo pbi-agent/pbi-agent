@@ -10,7 +10,7 @@ describe("SessionTimeline", () => {
     HTMLElement.prototype.scrollTo = vi.fn();
   });
 
-  it("shows a waiting state for connected live sessions with no events yet", () => {
+  it("shows the welcome screen for connected live sessions with no events yet", () => {
     render(
       <SessionTimeline
         items={[]}
@@ -22,14 +22,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Session started. Waiting for updates…"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Live events will appear here as soon as the session produces output.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Live session")).toBeInTheDocument();
+    expect(screen.getByText("Send any prompt to begin")).toBeInTheDocument();
   });
 
   it("preserves user-authored line breaks in message text", () => {
