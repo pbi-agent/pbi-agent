@@ -789,4 +789,129 @@ describe("SessionTimeline", () => {
     });
     expect(screen.queryByText("New messages below")).not.toBeInTheDocument();
   });
+
+  it("color-codes the active Working header for tool_execution phase", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "running",
+            items: [{ text: "ls" }],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Working/ });
+    expect(trigger).toHaveAttribute("data-phase", "tool_execution");
+    expect(screen.getByLabelText("running")).toBeInTheDocument();
+  });
+
+  it("color-codes the active Working header for model_wait phase", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Thinking",
+            content: "Planning",
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Analyzing..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Working/ });
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+    expect(screen.getByLabelText("running")).toBeInTheDocument();
+  });
+
+  it("renders a synthetic Working header when the latest item is a user message and the session is active", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Working/ });
+    expect(trigger).toHaveAttribute("data-phase", "starting");
+    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    // Clicking the synthetic header must not crash even with no body content.
+    fireEvent.click(trigger);
+    expect(screen.getByRole("button", { name: /Working/ })).toBeInTheDocument();
+  });
+
+  it("falls back to data-phase=active when waitMessage is set without processing", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage="Waiting for tool..."
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Working/ });
+    expect(trigger).toHaveAttribute("data-phase", "active");
+    expect(screen.getByLabelText("running")).toBeInTheDocument();
+  });
+
+  it("does not render the legacy bottom processing indicator", () => {
+    const { container } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Thinking",
+            content: "Planning",
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Analyzing..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(container.querySelector(".processing-indicator")).toBeNull();
+    expect(screen.queryByText("Analyzing...")).not.toBeInTheDocument();
+  });
 });

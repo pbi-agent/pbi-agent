@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type {
+  ProcessingPhase,
   ProcessingState,
   TimelineItem,
   TimelineMessageItem,
@@ -107,17 +108,22 @@ function waitForImages(container: HTMLElement): Promise<void> {
   ).then(() => {});
 }
 
+type WorkRunPhase = ProcessingPhase | "active";
+
 function WorkRun({
   unit,
   subAgents,
   active,
+  phase,
 }: {
   unit: Extract<RenderUnit, { kind: "work_run" }>;
   subAgents: Record<string, { title: string; status: string }>;
   active: boolean;
+  phase: WorkRunPhase | null;
 }) {
   const subAgent = unit.subAgentId ? subAgents[unit.subAgentId] : undefined;
-  const lastItemId = unit.items[unit.items.length - 1].itemId;
+  const hasItems = unit.items.length > 0;
+  const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
 
   return (
     <div
@@ -131,6 +137,7 @@ function WorkRun({
             variant="ghost"
             size="sm"
             className="timeline-entry__header timeline-entry__header--work-run"
+            data-phase={phase ?? undefined}
           >
             <ChevronRightIcon className="timeline-entry__chevron" />
             <span>Working</span>
@@ -139,19 +146,21 @@ function WorkRun({
             ) : null}
           </Button>
         </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="timeline-entry__work-run-body">
-            {unit.items.map((item) => (
-              <TimelineEntry
-                key={item.itemId}
-                item={item}
-                subAgentTitle={subAgent?.title}
-                subAgentStatus={subAgent?.status}
-                bare
-              />
-            ))}
-          </div>
-        </CollapsibleContent>
+        {hasItems ? (
+          <CollapsibleContent>
+            <div className="timeline-entry__work-run-body">
+              {unit.items.map((item) => (
+                <TimelineEntry
+                  key={item.itemId}
+                  item={item}
+                  subAgentTitle={subAgent?.title}
+                  subAgentStatus={subAgent?.status}
+                  bare
+                />
+              ))}
+            </div>
+          </CollapsibleContent>
+        ) : null}
       </Collapsible>
     </div>
   );
@@ -176,8 +185,27 @@ export function SessionTimeline({
   const latestItem = items.at(-1);
   const latestItemIsUserMessage =
     latestItem?.kind === "message" && latestItem.role === "user";
-  const renderUnits = useMemo(() => buildRenderUnits(items), [items]);
+  const baseRenderUnits = useMemo(() => buildRenderUnits(items), [items]);
   const sessionIsActive = Boolean(processing?.active || waitMessage);
+  const activePhase: WorkRunPhase | null = sessionIsActive
+    ? processing?.phase ?? "active"
+    : null;
+  const renderUnits = useMemo(() => {
+    if (!sessionIsActive) return baseRenderUnits;
+    const last = baseRenderUnits[baseRenderUnits.length - 1];
+    if (last?.kind === "work_run") return baseRenderUnits;
+    return [
+      ...baseRenderUnits,
+      {
+        kind: "work_run" as const,
+        key: "work-active-placeholder",
+        items: [],
+        subAgentId: undefined,
+        running: true,
+        defaultOpen: false,
+      },
+    ];
+  }, [baseRenderUnits, sessionIsActive]);
   const latestRenderUnit = renderUnits[renderUnits.length - 1];
   const activeWorkRunKey =
     sessionIsActive && latestRenderUnit?.kind === "work_run"
@@ -281,26 +309,17 @@ export function SessionTimeline({
               />
             );
           }
+          const isActiveUnit = unit.key === activeWorkRunKey;
           return (
             <WorkRun
               key={unit.key}
               unit={unit}
               subAgents={subAgents}
-              active={unit.key === activeWorkRunKey}
+              active={isActiveUnit}
+              phase={isActiveUnit ? activePhase : null}
             />
           );
         })}
-        {processing?.active ? (
-          <div className={`processing-indicator processing-indicator--${processing.phase ?? "active"}`}>
-            <div className="spinner spinner--sm" />
-            <span>{processing.message ?? "Working..."}</span>
-          </div>
-        ) : waitMessage ? (
-          <div className="processing-indicator">
-            <div className="spinner spinner--sm" />
-            <span>{waitMessage}</span>
-          </div>
-        ) : null}
         {showNewMessages ? (
           <Button
             type="button"

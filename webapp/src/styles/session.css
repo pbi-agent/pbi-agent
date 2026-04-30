@@ -399,24 +399,6 @@
   min-height: 100%;
 }
 
-/* Processing indicator */
-.processing-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-  animation: fade-in var(--duration-normal) var(--ease-out);
-}
-
-.processing-indicator--tool_execution {
-  color: var(--color-info);
-}
-
-.processing-indicator--finalizing {
-  color: var(--color-text-tertiary);
-}
-
 /* New messages indicator */
 .timeline__new-messages {
   position: sticky;
@@ -863,6 +845,29 @@
 
 .timeline-entry__header--work-run:hover {
   background: var(--color-muted);
+}
+
+.timeline-entry__header--work-run[data-phase="starting"],
+.timeline-entry__header--work-run[data-phase="model_wait"],
+.timeline-entry__header--work-run[data-phase="active"] {
+  border-left-color: var(--color-accent-border);
+  color: var(--color-accent);
+}
+
+.timeline-entry__header--work-run[data-phase="tool_execution"] {
+  border-left-color: var(--color-info);
+  color: var(--color-info);
+}
+
+.timeline-entry__header--work-run[data-phase="finalizing"] {
+  border-left-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.timeline-entry__header--work-run[data-phase="interrupting"],
+.timeline-entry__header--work-run[data-phase="retry_wait"] {
+  border-left-color: var(--color-warning);
+  color: var(--color-warning);
 }
 
 [data-slot="collapsible-trigger"][data-state="open"] .timeline-entry__chevron {
