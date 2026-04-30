@@ -1,7 +1,5 @@
 # TODO
 
-[X] Inspect current session collapsible UI state handling
-[X] Implement auto-close of collapsible elements when final assistant response arrives
-[X] Add/update frontend tests
-[X] Run focused validation
-[X] Update MEMORY.md
+[X] Review current diff
+[X] Inspect relevant tests and source
+[X] Produce findings

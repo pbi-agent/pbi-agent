@@ -64,7 +64,10 @@ function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
       items: buffer,
       subAgentId: bufferSubAgent,
       running,
-      defaultOpen: running || hasApplyPatch,
+      // Keep running tools collapsed by default — opening them mid-stream
+      // confuses the autoscroll. Completed apply_patch results stay open
+      // so the diff is immediately visible.
+      defaultOpen: !running && hasApplyPatch,
     });
     buffer = [];
     bufferSubAgent = undefined;
@@ -116,12 +119,14 @@ function WorkRun({
   active,
   phase,
   closeSignal,
+  onUserOpen,
 }: {
   unit: Extract<RenderUnit, { kind: "work_run" }>;
   subAgents: Record<string, { title: string; status: string }>;
   active: boolean;
   phase: WorkRunPhase | null;
   closeSignal: string | null;
+  onUserOpen?: (contentEl: HTMLElement | null) => void;
 }) {
   const subAgent = unit.subAgentId ? subAgents[unit.subAgentId] : undefined;
   const hasItems = unit.items.length > 0;
@@ -131,6 +136,39 @@ function WorkRun({
     closeSignal,
   });
   const open = openState.closeSignal === closeSignal ? openState.open : false;
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // When `unit.defaultOpen` flips from false -> true (e.g. an apply_patch
+  // run finishes streaming and its diff should now be visible), reveal the
+  // panel automatically. This restores the prior "diff is immediately
+  // visible" behavior that was lost once running tools started rendering
+  // collapsed: useState's initializer only runs once with the initial
+  // (running) value, so a later defaultOpen flip would otherwise be a no-op.
+  // We only force-open; we never force-close, so an explicit user toggle
+  // continues to win on subsequent renders.
+  //
+  // Critical race: tool completion and the final assistant message can
+  // arrive in the same render. In that case `closeSignal` also transitions
+  // (null -> assistant itemId) and the close-signal logic intends to keep
+  // the block collapsed. Skip the auto-open whenever `closeSignal` changed
+  // in this same cycle so the final-answer close behavior wins.
+  const previousDefaultOpenRef = useRef(unit.defaultOpen);
+  const previousCloseSignalRef = useRef(closeSignal);
+  useEffect(() => {
+    const defaultOpenJustEnabled =
+      !previousDefaultOpenRef.current && unit.defaultOpen;
+    const closeSignalChanged = previousCloseSignalRef.current !== closeSignal;
+    if (defaultOpenJustEnabled && !closeSignalChanged) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing with `unit.defaultOpen` derived from streaming tool status; we need to react to its transition false->true after the initial useState initializer captured the running (false) value.
+      setOpenState((prev) =>
+        prev.closeSignal === closeSignal && prev.open
+          ? prev
+          : { open: true, closeSignal },
+      );
+    }
+    previousDefaultOpenRef.current = unit.defaultOpen;
+    previousCloseSignalRef.current = closeSignal;
+  }, [unit.defaultOpen, closeSignal]);
 
   return (
     <div
@@ -139,7 +177,12 @@ function WorkRun({
     >
       <Collapsible
         open={open}
-        onOpenChange={(nextOpen) => setOpenState({ open: nextOpen, closeSignal })}
+        onOpenChange={(nextOpen) => {
+          setOpenState({ open: nextOpen, closeSignal });
+          if (nextOpen) {
+            onUserOpen?.(contentRef.current);
+          }
+        }}
       >
         <CollapsibleTrigger asChild>
           <Button
@@ -158,7 +201,7 @@ function WorkRun({
         </CollapsibleTrigger>
         {hasItems ? (
           <CollapsibleContent>
-            <div className="timeline-entry__work-run-body">
+            <div className="timeline-entry__work-run-body" ref={contentRef}>
               {unit.items.map((item) => (
                 <TimelineEntry
                   key={item.itemId}
@@ -248,6 +291,50 @@ export function SessionTimeline({
     [markProgrammaticScroll],
   );
 
+  const handleUserOpenCollapsible = useCallback(
+    (contentEl: HTMLElement | null) => {
+      const container = containerRef.current;
+      if (!container) return;
+      // Treat a user-initiated open like fresh "follow the latest output"
+      // intent: keep autoscroll glued to the bottom and dismiss any pending
+      // "new messages" badge once we've scrolled.
+      userScrolledRef.current = false;
+      setShowNewMessages(false);
+      const align = () => {
+        if (!container.isConnected) return;
+        markProgrammaticScroll();
+        if (contentEl && contentEl.isConnected) {
+          // Bring the bottom of the freshly expanded panel into view so the
+          // latest tool output is visible without ever jumping the viewport
+          // upward.
+          const containerRect = container.getBoundingClientRect();
+          const contentRect = contentEl.getBoundingClientRect();
+          const delta = contentRect.bottom - containerRect.bottom;
+          if (delta > 0) {
+            const maxScrollTop = Math.max(
+              0,
+              container.scrollHeight - container.clientHeight,
+            );
+            container.scrollTo({
+              top: Math.min(container.scrollTop + delta, maxScrollTop),
+              behavior: "instant",
+            });
+            return;
+          }
+        }
+        // Fallback: stick to the very bottom of the timeline.
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: "instant",
+        });
+      };
+      // Wait one frame so the Collapsible has finished laying out its
+      // content; otherwise the rect math runs against the pre-open layout.
+      requestAnimationFrame(align);
+    },
+    [containerRef, markProgrammaticScroll, setShowNewMessages, userScrolledRef],
+  );
+
   useEffect(() => {
     const previousLength = previousLengthRef.current;
     previousLengthRef.current = items.length;
@@ -260,9 +347,15 @@ export function SessionTimeline({
 
     if (isNewItem && latestItem) {
       // New item added — scroll to the top of that item
-      const target = container.querySelector<HTMLElement>(
+      // querySelectorAll + last picks the innermost match: when the new item
+      // is rendered inside an expanded WorkRun the inner TimelineEntry shares
+      // a data-timeline-item-id with the WorkRun wrapper, and a depth-first
+      // querySelector would otherwise return the wrapper and scroll the user
+      // away from the new content.
+      const matches = container.querySelectorAll<HTMLElement>(
         `[data-timeline-item-id="${CSS.escape(latestItem.itemId)}"]`,
       );
+      const target = matches.length > 0 ? matches.item(matches.length - 1) : null;
 
       if (latestItemIsUserMessage) {
         // Always scroll to user messages
@@ -327,6 +420,11 @@ export function SessionTimeline({
             );
           }
           const isActiveUnit = unit.key === activeWorkRunKey;
+          // Only the active/running WorkRun should treat user-opens as a
+          // "follow the latest output" intent. Expanding a completed
+          // historical block must not reset auto-follow or hide the
+          // new-messages badge.
+          const isActiveRunningUnit = isActiveUnit && unit.running;
           return (
             <WorkRun
               key={unit.key}
@@ -335,6 +433,9 @@ export function SessionTimeline({
               active={isActiveUnit}
               phase={isActiveUnit ? activePhase : null}
               closeSignal={closeCollapsiblesSignal}
+              onUserOpen={
+                isActiveRunningUnit ? handleUserOpenCollapsible : undefined
+              }
             />
           );
         })}

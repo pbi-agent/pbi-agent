@@ -127,6 +127,7 @@ export function TimelineEntry({
 }) {
   const toolGroupDefaultOpen =
     item.kind === "tool_group"
+    && item.status !== "running"
     && item.items.some((toolItem) => isApplyPatchToolMetadata(toolItem.metadata));
   const [thinkingCollapsedState, setThinkingCollapsedState] = useState({
     collapsed: true,

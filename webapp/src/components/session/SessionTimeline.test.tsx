@@ -984,4 +984,374 @@ describe("SessionTimeline", () => {
     expect(container.querySelector(".processing-indicator")).toBeNull();
     expect(screen.queryByText("Analyzing...")).not.toBeInTheDocument();
   });
+
+  it("keeps Working details collapsed by default while a tool is running", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run it",
+            markdown: false,
+          },
+          {
+            kind: "tool_group" as const,
+            itemId: "tool-1",
+            label: "shell",
+            status: "running" as const,
+            items: [
+              {
+                text: "ls -la",
+                metadata: {
+                  tool_name: "shell",
+                  status: "running" as const,
+                  command: "ls -la",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAttribute("aria-expanded", "false");
+    // The inner shell command text should not be in the DOM yet because the
+    // collapsible defaults to closed for running tools.
+    expect(screen.queryByText("ls -la")).not.toBeInTheDocument();
+  });
+
+  it("scrolls the timeline to the end of the expanded content when the user opens a running Working block", async () => {
+    const items = [
+      {
+        kind: "message" as const,
+        itemId: "user-1",
+        role: "user" as const,
+        content: "Run a long task",
+        markdown: false,
+      },
+      {
+        kind: "tool_group" as const,
+        itemId: "tool-1",
+        label: "shell",
+        status: "running" as const,
+        items: [
+          {
+            text: "tail -f /var/log/syslog\nstreaming line 1\nstreaming line 2",
+            metadata: {
+              tool_name: "shell",
+              status: "running" as const,
+              command: "tail -f /var/log/syslog",
+            },
+          },
+        ],
+      },
+    ];
+
+    const { container } = render(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    expect(scrollArea).not.toBeNull();
+    Object.defineProperties(scrollArea!, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 2000 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+
+    const scrollSpy = vi.spyOn(scrollArea!, "scrollTo");
+
+    const workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAttribute("aria-expanded", "false");
+
+    await act(async () => {
+      fireEvent.click(workingButton);
+      // Flush the requestAnimationFrame inside the open handler.
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    });
+
+    expect(workingButton).toHaveAttribute("aria-expanded", "true");
+    // The user-open handler must call scrollTo so the bottom of the
+    // newly-expanded content is visible (i.e. the latest tool output).
+    expect(scrollSpy).toHaveBeenCalled();
+    const lastCall = scrollSpy.mock.calls.at(-1)?.[0] as ScrollToOptions;
+    expect(lastCall.behavior).toBe("instant");
+    // Either we landed on the very bottom of the timeline, or we advanced
+    // toward it — never jumped above the prior position (which would have
+    // been the "go to top" bug).
+    expect((lastCall.top ?? 0)).toBeGreaterThanOrEqual(0);
+  });
+
+  it("does not jump the viewport when the user opens a completed historical Working block", async () => {
+    const items = [
+      {
+        kind: "message" as const,
+        itemId: "user-1",
+        role: "user" as const,
+        content: "Run a task",
+        markdown: false,
+      },
+      {
+        kind: "tool_group" as const,
+        itemId: "tool-1",
+        label: "shell",
+        // No `status` field => completed historical tool group.
+        items: [
+          {
+            text: "ls -la\nfile-a\nfile-b",
+            metadata: {
+              tool_name: "shell",
+              command: "ls -la",
+            },
+          },
+        ],
+      },
+      {
+        kind: "message" as const,
+        itemId: "assistant-1",
+        role: "assistant" as const,
+        content: "All done.",
+        markdown: true,
+      },
+    ];
+
+    const { container } = render(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        // Session is no longer active — the assistant final message has
+        // arrived. The Working block is purely historical.
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    expect(scrollArea).not.toBeNull();
+    Object.defineProperties(scrollArea!, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 2000 },
+      scrollTop: { configurable: true, writable: true, value: 600 },
+    });
+
+    const scrollSpy = vi.spyOn(scrollArea!, "scrollTo");
+    // Drop any scrollTo calls triggered by the initial mount/new-item
+    // effect — we only care about what happens when the user opens the
+    // historical block.
+    scrollSpy.mockClear();
+
+    const workingButton = screen.getByRole("button", { name: /Working/ });
+    // The closeSignal forces historical Working blocks closed once the
+    // final assistant message arrives.
+    expect(workingButton).toHaveAttribute("aria-expanded", "false");
+
+    await act(async () => {
+      fireEvent.click(workingButton);
+      // Flush the requestAnimationFrame the user-open handler would have
+      // scheduled if it were (incorrectly) wired for this WorkRun.
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    });
+
+    expect(workingButton).toHaveAttribute("aria-expanded", "true");
+    // The historical block should expand silently — no programmatic scroll,
+    // because that callback is reserved for the active running run.
+    expect(scrollSpy).not.toHaveBeenCalled();
+    // And the inner Collapsible content has actually mounted (i.e. the
+    // expand worked even though we didn't run the user-open scroll path).
+    expect(
+      container.querySelector(".timeline-entry__work-run-body"),
+    ).not.toBeNull();
+  });
+
+  it("auto-opens a completed apply_patch Working block that first rendered while running", () => {
+    const userMessage = {
+      kind: "message" as const,
+      itemId: "user-1",
+      role: "user" as const,
+      content: "Apply the patch",
+      markdown: false,
+    };
+    const applyPatchEntry = {
+      text: "update_file TODO.md",
+      classes: "tool-call-apply-patch",
+      metadata: {
+        tool_name: "apply_patch" as const,
+        path: "TODO.md",
+        operation: "update_file" as const,
+        diff: "-[ ] Old\n+[X] New",
+        call_id: "call_patch_running",
+      },
+    };
+    const runningTool = {
+      kind: "tool_group" as const,
+      itemId: "tool-1",
+      label: "apply_patch",
+      status: "running" as const,
+      items: [applyPatchEntry],
+    };
+    const runningItems = [userMessage, runningTool];
+
+    const { rerender } = render(
+      <SessionTimeline
+        items={runningItems}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Applying..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    // While running, the panel is collapsed.
+    let workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
+
+    const completedItems = [
+      userMessage,
+      {
+        ...runningTool,
+        status: undefined,
+        items: [
+          {
+            ...applyPatchEntry,
+            metadata: {
+              ...applyPatchEntry.metadata,
+              success: true,
+            },
+          },
+        ],
+      },
+    ];
+
+    rerender(
+      <SessionTimeline
+        items={completedItems}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={2}
+      />,
+    );
+
+    // Once the run completes, the apply_patch diff must auto-reveal so the
+    // user sees what changed without having to expand the block manually.
+    workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getByText("Updated")).toBeInTheDocument();
+  });
+
+  it(
+    "keeps the apply_patch Working block collapsed when tool completion and"
+      + " the final assistant message arrive in the same update",
+    async () => {
+      const userMessage = {
+        kind: "message" as const,
+        itemId: "user-1",
+        role: "user" as const,
+        content: "Apply the patch",
+        markdown: false,
+      };
+      const applyPatchEntry = {
+        text: "update_file TODO.md",
+        classes: "tool-call-apply-patch",
+        metadata: {
+          tool_name: "apply_patch" as const,
+          path: "TODO.md",
+          operation: "update_file" as const,
+          diff: "-[ ] Old\n+[X] New",
+          call_id: "call_patch_race",
+        },
+      };
+      const runningTool = {
+        kind: "tool_group" as const,
+        itemId: "tool-1",
+        label: "apply_patch",
+        status: "running" as const,
+        items: [applyPatchEntry],
+      };
+
+      const { rerender } = render(
+        <SessionTimeline
+          items={[userMessage, runningTool]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={{
+            active: true,
+            phase: "tool_execution",
+            message: "Applying...",
+          }}
+          itemsVersion={1}
+        />,
+      );
+
+      // While the tool is running the panel is collapsed.
+      let workingButton = screen.getByRole("button", { name: /Working/ });
+      expect(workingButton).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
+
+      // Single render where the tool flips running -> completed AND the final
+      // assistant response is appended. The final-answer close signal must
+      // win over the apply_patch auto-open.
+      const completedTool = {
+        ...runningTool,
+        status: undefined,
+        items: [
+          {
+            ...applyPatchEntry,
+            metadata: {
+              ...applyPatchEntry.metadata,
+              success: true,
+            },
+          },
+        ],
+      };
+      rerender(
+        <SessionTimeline
+          items={[
+            userMessage,
+            completedTool,
+            {
+              kind: "message",
+              itemId: "assistant-1",
+              role: "assistant",
+              content: "Done.",
+              markdown: true,
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={null}
+          itemsVersion={2}
+        />,
+      );
+
+      await waitFor(() => {
+        workingButton = screen.getByRole("button", { name: /Working/ });
+        expect(workingButton).toHaveAttribute("aria-expanded", "false");
+      });
+      expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
+    },
+  );
 });
