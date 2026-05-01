@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { ExternalLinkIcon, GripVerticalIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { ExternalLinkIcon, GripVerticalIcon, PencilIcon, PlayIcon, SquareIcon, Trash2Icon } from "lucide-react";
 import type { TaskRecord } from "../../types";
 import { Button } from "../ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "../ui/card";
@@ -23,25 +23,33 @@ export function TaskCard({
   onEdit,
   onDelete,
   onRun,
+  onInterrupt,
+  activeLiveSessionId = null,
+  isInterrupting = false,
   canRun,
 }: {
   task: TaskRecord;
   onEdit: () => void;
   onDelete: () => void;
   onRun: () => void;
+  onInterrupt?: () => void;
+  activeLiveSessionId?: string | null;
+  isInterrupting?: boolean;
   canRun: boolean;
 }) {
+  const hasActiveSession = activeLiveSessionId !== null;
   const isRunning = task.run_status === "running";
+  const isReadonly = isRunning || hasActiveSession;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: task.task_id,
-    disabled: isRunning,
+    disabled: isReadonly,
     data: { taskId: task.task_id, stage: task.stage },
   });
 
   return (
     <Card
       ref={setNodeRef}
-      className={`task-card${isDragging ? " task-card--dragging" : ""}${isRunning ? " task-card--readonly" : ""}`}
+      className={`task-card${isDragging ? " task-card--dragging" : ""}${isReadonly ? " task-card--readonly" : ""}`}
     >
       {/* Drag handle — only this region initiates drag */}
       <CardHeader className="task-card__drag-handle" {...listeners} {...attributes}>
@@ -59,12 +67,25 @@ export function TaskCard({
           size="sm"
           className="task-card__action-button"
           onClick={onEdit}
-          disabled={isRunning}
+          disabled={isReadonly}
         >
           <PencilIcon data-icon="inline-start" />
           Edit
         </Button>
-        {canRun ? (
+        {hasActiveSession ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="task-card__action-button task-card__action-button--danger"
+            onClick={onInterrupt}
+            disabled={isInterrupting || !onInterrupt}
+            aria-label={`Stop ${task.title}`}
+          >
+            <SquareIcon data-icon="inline-start" />
+            Stop
+          </Button>
+        ) : canRun ? (
           <Button
             type="button"
             variant="ghost"
@@ -91,7 +112,7 @@ export function TaskCard({
           size="sm"
           className="task-card__action-button"
           onClick={onDelete}
-          disabled={isRunning}
+          disabled={isReadonly}
         >
           <Trash2Icon data-icon="inline-start" />
           Delete
