@@ -487,6 +487,16 @@ describe("SessionPage", () => {
     expect(screen.queryByRole("button", { name: "Interrupt assistant turn" })).toBeNull();
   });
 
+  it("renders the saved-session delete icon as a neutral toolbar action with destructive hover styling", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    const deleteButton = await screen.findByRole("button", { name: "Delete session" });
+
+    expect(deleteButton).toHaveAttribute("data-variant", "ghost");
+    expect(deleteButton).toHaveAttribute("data-size", "icon-sm");
+    expect(deleteButton).toHaveClass("session-topbar__delete-button");
+  });
+
   it("passes live session usage to the context gauge before turn end", async () => {
     const liveUsage = makeUsage({ context_tokens: 120000 });
     const finalTurnUsage = makeUsage({ context_tokens: 85000 });

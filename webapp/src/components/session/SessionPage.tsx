@@ -552,8 +552,9 @@ export function SessionPage({
             {canDeleteActiveSession ? (
               <Button
                 type="button"
-                variant="destructive"
+                variant="ghost"
                 size="icon-sm"
+                className="session-topbar__delete-button"
                 title="Delete session"
                 aria-label="Delete session"
                 onClick={() => {
