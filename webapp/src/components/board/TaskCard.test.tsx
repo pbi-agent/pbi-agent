@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { screen } from "@testing-library/react";
 import { TaskCard } from "./TaskCard";
 import { renderWithProviders } from "../../test/render";
@@ -42,6 +43,62 @@ function makeTask(overrides: Partial<TaskRecord> = {}): TaskRecord {
 }
 
 describe("TaskCard", () => {
+  it("renders the start shortcut for idle runnable tasks", () => {
+    renderWithProviders(
+      <TaskCard
+        task={makeTask()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+        canRun
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Stop/ })).not.toBeInTheDocument();
+  });
+
+  it("replaces start with stop when the task has an active live session", async () => {
+    const user = userEvent.setup();
+    const onInterrupt = vi.fn();
+
+    renderWithProviders(
+      <TaskCard
+        task={makeTask({ run_status: "running" })}
+        activeLiveSessionId="live-1"
+        onInterrupt={onInterrupt}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+        canRun
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+
+    const stopButton = screen.getByRole("button", { name: "Stop Draft spec" });
+    await user.click(stopButton);
+
+    expect(onInterrupt).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables stop while interrupting the active live session", () => {
+    renderWithProviders(
+      <TaskCard
+        task={makeTask({ run_status: "running" })}
+        activeLiveSessionId="live-1"
+        isInterrupting
+        onInterrupt={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+        canRun
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Stop Draft spec" })).toBeDisabled();
+  });
+
   it("links to the task session in the same tab", () => {
     renderWithProviders(
       <TaskCard

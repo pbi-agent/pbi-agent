@@ -13,15 +13,21 @@ const TERMINAL_STAGE_ID = "done";
 export function StageColumn({
   stage,
   tasks,
+  activeTaskLiveSessionIds = {},
+  interruptingLiveSessionId = null,
   onEdit,
   onDelete,
   onRun,
+  onInterrupt,
 }: {
   stage: BoardStage;
   tasks: TaskRecord[];
+  activeTaskLiveSessionIds?: Record<string, string>;
+  interruptingLiveSessionId?: string | null;
   onEdit: (task: TaskRecord) => void;
   onDelete: (taskId: string) => void;
   onRun: (taskId: string) => void;
+  onInterrupt?: (liveSessionId: string) => void;
 }) {
   const {
     attributes,
@@ -76,16 +82,22 @@ export function StageColumn({
         {tasks.length === 0 ? (
           <EmptyState title="No tasks" />
         ) : (
-          tasks.map((task) => (
-            <TaskCard
-              key={task.task_id}
-              task={task}
-              onEdit={() => onEdit(task)}
-              onDelete={() => onDelete(task.task_id)}
-              onRun={() => onRun(task.task_id)}
-              canRun={stage.id !== TERMINAL_STAGE_ID}
-            />
-          ))
+          tasks.map((task) => {
+            const activeLiveSessionId = activeTaskLiveSessionIds[task.task_id] ?? null;
+            return (
+              <TaskCard
+                key={task.task_id}
+                task={task}
+                activeLiveSessionId={activeLiveSessionId}
+                isInterrupting={interruptingLiveSessionId === activeLiveSessionId}
+                onEdit={() => onEdit(task)}
+                onDelete={() => onDelete(task.task_id)}
+                onRun={() => onRun(task.task_id)}
+                onInterrupt={activeLiveSessionId ? () => onInterrupt?.(activeLiveSessionId) : undefined}
+                canRun={stage.id !== TERMINAL_STAGE_ID}
+              />
+            );
+          })
         )}
       </CardContent>
     </Card>

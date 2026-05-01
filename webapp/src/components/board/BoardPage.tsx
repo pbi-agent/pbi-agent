@@ -19,7 +19,9 @@ import {
   deleteTask,
   fetchBoardStages,
   fetchConfigBootstrap,
+  fetchLiveSessions,
   fetchTasks,
+  interruptLiveSession,
   runTask,
   updateBoardStages,
   updateTask,
@@ -87,6 +89,10 @@ export function BoardPage() {
   const client = useQueryClient();
   const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
   const stagesQuery = useQuery({ queryKey: ["board-stages"], queryFn: fetchBoardStages });
+  const liveSessionsQuery = useQuery({
+    queryKey: ["live-sessions"],
+    queryFn: fetchLiveSessions,
+  });
   const configQuery = useQuery({
     queryKey: ["config-bootstrap"],
     queryFn: fetchConfigBootstrap,
@@ -111,7 +117,26 @@ export function BoardPage() {
   });
   const runTaskMutation = useMutation({
     mutationFn: runTask,
-    onSuccess: () => client.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["tasks"] }),
+        client.invalidateQueries({ queryKey: ["live-sessions"] }),
+      ]);
+    },
+  });
+  const interruptTaskMutation = useMutation({
+    mutationFn: interruptLiveSession,
+    onSuccess: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["tasks"] }),
+        client.invalidateQueries({ queryKey: ["live-sessions"] }),
+        client.invalidateQueries({ queryKey: ["sessions"] }),
+        client.invalidateQueries({ queryKey: ["bootstrap"] }),
+      ]);
+    },
+    onError: (error) => {
+      setRunError(error instanceof Error ? error.message : "Failed to interrupt task session.");
+    },
   });
   const updateBoardStagesMutation = useMutation({
     mutationFn: updateBoardStages,
@@ -145,6 +170,16 @@ export function BoardPage() {
         return acc;
       }, {}),
     [boardStages, tasks],
+  );
+  const activeTaskLiveSessionIds = useMemo(
+    () =>
+      (liveSessionsQuery.data ?? []).reduce<Record<string, string>>((acc, session) => {
+        if (session.kind === "task" && session.task_id && session.status !== "ended") {
+          acc[session.task_id] = session.live_session_id;
+        }
+        return acc;
+      }, {}),
+    [liveSessionsQuery.data],
   );
 
   const activeTask = activeDragId ? tasks.find((task) => task.task_id === activeDragId) : undefined;
@@ -315,7 +350,12 @@ export function BoardPage() {
     });
   };
 
-  if (tasksQuery.isLoading || stagesQuery.isLoading || configQuery.isLoading) {
+  const handleInterruptTask = (liveSessionId: string) => {
+    setRunError(null);
+    interruptTaskMutation.mutate(liveSessionId);
+  };
+
+  if (tasksQuery.isLoading || stagesQuery.isLoading || liveSessionsQuery.isLoading || configQuery.isLoading) {
     return (
       <section className="board-layout">
         <div className="board-layout__header">
@@ -330,7 +370,7 @@ export function BoardPage() {
     );
   }
 
-  if (tasksQuery.isError || stagesQuery.isError || configQuery.isError) {
+  if (tasksQuery.isError || stagesQuery.isError || liveSessionsQuery.isError || configQuery.isError) {
     return (
       <section className="board-layout">
         <div className="board-layout__header">
@@ -419,7 +459,12 @@ export function BoardPage() {
                     const task = tasks.find((t) => t.task_id === taskId);
                     if (task) setTaskToDelete(task);
                   }}
+                  activeTaskLiveSessionIds={activeTaskLiveSessionIds}
+                  interruptingLiveSessionId={
+                    interruptTaskMutation.isPending ? interruptTaskMutation.variables : null
+                  }
                   onRun={handleRunTask}
+                  onInterrupt={handleInterruptTask}
                 />
               ))}
             </div>

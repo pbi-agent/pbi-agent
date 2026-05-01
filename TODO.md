@@ -1,5 +1,3 @@
-[X] Inspect session API/store/sidebar implementation
-[X] Add backend update-title endpoint and tests
-[X] Add frontend API/types/sidebar edit UI and tests
+[X] Fix interrupt pending-state review finding
 [X] Run focused validation
-[X] Update memory and handoff
+[X] Update memory and summarize

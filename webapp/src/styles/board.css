@@ -358,6 +358,16 @@
   opacity: 1;
 }
 
+.task-card__action-button--danger {
+  color: var(--destructive);
+}
+
+.task-card__action-button--danger:not(:disabled):hover,
+.task-card__action-button--danger:not(:disabled):focus-visible {
+  color: var(--destructive);
+  background: color-mix(in oklab, var(--destructive) 10%, transparent);
+}
+
 .modal-card--board-editor {
   width: min(920px, calc(100vw - 32px));
   max-width: none;
