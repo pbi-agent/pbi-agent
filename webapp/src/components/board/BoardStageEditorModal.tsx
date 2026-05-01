@@ -269,7 +269,7 @@ export function BoardStageEditorModal({
             </Alert>
           ) : null}
 
-          <DialogFooter className="board-stage-editor__actions">
+          <DialogFooter className="app-action-row app-action-row--between board-stage-editor__actions">
             <Button
               type="button"
               variant="outline"

@@ -164,7 +164,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.125rem;
+  gap: var(--sp-2);
   flex-shrink: 0;
   flex-wrap: nowrap;
 }
@@ -184,7 +184,7 @@
 
 .settings-page .task-card__action-button:not(:disabled):hover,
 .settings-page .task-card__action-button:not(:disabled):focus-visible {
-  background: var(--color-surface-3) !important;
+  background: var(--color-surface-3);
   border-color: var(--color-border-focus);
   color: var(--color-text);
 }
@@ -193,7 +193,7 @@
   display: flex;
   flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 0.125rem;
+  gap: var(--sp-2);
 }
 
 /* ── Page-level error banner ── */

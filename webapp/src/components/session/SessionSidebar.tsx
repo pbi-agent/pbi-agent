@@ -178,7 +178,7 @@ export function SessionSidebar({
                         }}
                       >
                         <Trash2Icon />
-                        Delete session
+                        Delete
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
                   </DropdownMenuContent>

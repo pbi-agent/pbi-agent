@@ -141,7 +141,7 @@ function ProviderCard({
           </div>
         )}
       </div>
-      <div className="settings-item__actions settings-item__actions--provider">
+      <div className="app-action-row app-action-row--compact app-action-row--nowrap app-action-row--end settings-item__actions settings-item__actions--provider">
         {showAuthActions && (
           <>
             <Button
@@ -245,7 +245,7 @@ function ProfileCard({
         </div>
         <div className="runtime-summary">{runtimeParts.join(" · ")}</div>
       </div>
-      <div className="settings-item__actions">
+      <div className="app-action-row app-action-row--compact app-action-row--nowrap app-action-row--end settings-item__actions">
         <Button
           type="button"
           variant="ghost"

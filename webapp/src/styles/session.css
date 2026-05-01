@@ -210,7 +210,7 @@
 }
 
 .session-card__menu-trigger:hover {
-  background: var(--color-surface-3) !important;
+  background: var(--color-surface-3);
   color: var(--color-text);
 }
 

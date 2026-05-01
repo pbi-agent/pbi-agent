@@ -232,7 +232,7 @@ export function TaskModal({
 
               <Field>
                 <FieldLabel>Image attachments</FieldLabel>
-                <div className="task-form__attachment-actions">
+                <div className="app-action-row app-action-row--compact task-form__attachment-actions">
                   <Button
                     type="button"
                     variant="outline"
@@ -354,7 +354,7 @@ export function TaskModal({
             </FieldGroup>
           </div>
 
-          <DialogFooter className="task-form__footer">
+          <DialogFooter className="app-action-row app-action-row--end task-form__footer">
             <Button
               type="button"
               variant="outline"
