@@ -1,5 +1,6 @@
 import {
   type ChangeEvent,
+  type ClipboardEvent,
   type FormEvent,
   useCallback,
   useEffect,
@@ -142,6 +143,18 @@ export function TaskModal({
     event.target.value = "";
   };
 
+  const handlePromptPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+
+    if (files.length === 0) return;
+
+    event.preventDefault();
+    appendFiles(files);
+  };
+
   const openImagePicker = () => {
     const input = imageInputRef.current;
     if (!input || isSaving) return;
@@ -212,6 +225,7 @@ export function TaskModal({
                   className="task-form__textarea"
                   value={task.prompt}
                   onChange={(e) => onChange({ prompt: e.target.value })}
+                  onPaste={handlePromptPaste}
                   required
                 />
               </Field>
@@ -230,7 +244,8 @@ export function TaskModal({
                     Add images
                   </Button>
                   <span className="task-form__attachment-note">
-                    PNG, JPEG, or WEBP. Sent with the task prompt on the first run.
+                    PNG, JPEG, or WEBP. Paste screenshots into the prompt or add files here.
+                    Sent with the task prompt on the first run.
                   </span>
                 </div>
                 {hasImages ? (
