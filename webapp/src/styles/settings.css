@@ -595,6 +595,13 @@
   padding: 0.875rem 1.125rem;
 }
 
+.provider-usage-bucket__status-badge {
+  min-height: 1.75rem;
+  padding: var(--sp-1) var(--sp-3);
+  gap: var(--sp-1);
+  margin-block: 0.25rem;
+}
+
 .provider-usage-bucket__body {
   padding: 1rem 1.125rem 1.125rem;
 }
