@@ -325,7 +325,7 @@ function BucketCard({ bucket }: { bucket: UsageLimitBucket }) {
         <Badge
           variant="outline"
           className={cn(
-            "uppercase tracking-wide",
+            "provider-usage-bucket__status-badge uppercase tracking-wide",
             STATUS_BADGE_CLASSES[bucket.status],
           )}
         >
