@@ -17,7 +17,6 @@ import {
 } from "../ui/collapsible";
 import { TimelineEntry } from "./TimelineEntry";
 import { SessionWelcome } from "./SessionWelcome";
-import { isApplyPatchToolMetadata } from "./GitDiffResult";
 
 const USER_MESSAGE_TOP_OFFSET = 8;
 const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
@@ -32,7 +31,6 @@ type RenderUnit =
       items: WorkItem[];
       subAgentId: string | undefined;
       running: boolean;
-      defaultOpen: boolean;
     };
 
 function isWorkItem(item: TimelineItem): item is WorkItem {
@@ -49,25 +47,12 @@ function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
     const running = buffer.some(
       (it) => it.kind === "tool_group" && it.status === "running",
     );
-    const hasApplyPatch = buffer.some(
-      (it) =>
-        it.kind === "tool_group"
-        && it.items.some(
-          (entry) =>
-            isApplyPatchToolMetadata(entry.metadata)
-            && Boolean(entry.metadata.diff),
-        ),
-    );
     units.push({
       kind: "work_run",
       key: `work-${buffer[0].itemId}`,
       items: buffer,
       subAgentId: bufferSubAgent,
       running,
-      // Keep running tools collapsed by default — opening them mid-stream
-      // confuses the autoscroll. Completed apply_patch results stay open
-      // so the diff is immediately visible.
-      defaultOpen: !running && hasApplyPatch,
     });
     buffer = [];
     bufferSubAgent = undefined;
@@ -132,43 +117,11 @@ function WorkRun({
   const hasItems = unit.items.length > 0;
   const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
   const [openState, setOpenState] = useState({
-    open: unit.defaultOpen,
+    open: false,
     closeSignal,
   });
   const open = openState.closeSignal === closeSignal ? openState.open : false;
   const contentRef = useRef<HTMLDivElement>(null);
-
-  // When `unit.defaultOpen` flips from false -> true (e.g. an apply_patch
-  // run finishes streaming and its diff should now be visible), reveal the
-  // panel automatically. This restores the prior "diff is immediately
-  // visible" behavior that was lost once running tools started rendering
-  // collapsed: useState's initializer only runs once with the initial
-  // (running) value, so a later defaultOpen flip would otherwise be a no-op.
-  // We only force-open; we never force-close, so an explicit user toggle
-  // continues to win on subsequent renders.
-  //
-  // Critical race: tool completion and the final assistant message can
-  // arrive in the same render. In that case `closeSignal` also transitions
-  // (null -> assistant itemId) and the close-signal logic intends to keep
-  // the block collapsed. Skip the auto-open whenever `closeSignal` changed
-  // in this same cycle so the final-answer close behavior wins.
-  const previousDefaultOpenRef = useRef(unit.defaultOpen);
-  const previousCloseSignalRef = useRef(closeSignal);
-  useEffect(() => {
-    const defaultOpenJustEnabled =
-      !previousDefaultOpenRef.current && unit.defaultOpen;
-    const closeSignalChanged = previousCloseSignalRef.current !== closeSignal;
-    if (defaultOpenJustEnabled && !closeSignalChanged) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing with `unit.defaultOpen` derived from streaming tool status; we need to react to its transition false->true after the initial useState initializer captured the running (false) value.
-      setOpenState((prev) =>
-        prev.closeSignal === closeSignal && prev.open
-          ? prev
-          : { open: true, closeSignal },
-      );
-    }
-    previousDefaultOpenRef.current = unit.defaultOpen;
-    previousCloseSignalRef.current = closeSignal;
-  }, [unit.defaultOpen, closeSignal]);
 
   return (
     <div
@@ -256,7 +209,6 @@ export function SessionTimeline({
         items: [],
         subAgentId: undefined,
         running: true,
-        defaultOpen: false,
       },
     ];
   }, [baseRenderUnits, sessionIsActive]);

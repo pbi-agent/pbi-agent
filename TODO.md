@@ -1,7 +1,5 @@
-# TODO
-
-- [X] Inspect TaskModal image attachment implementation and tests
-- [X] Add prompt paste handling for image clipboard files
-- [X] Add/adjust TaskModal tests
-- [X] Run targeted frontend validation
-- [X] Update MEMORY.md and report handoff
+[X] Inspect SessionTimeline work-run collapse logic and tests
+[X] Patch WorkRun open-state behavior
+[X] Add/update regression tests
+[X] Run focused/frontend validation
+[X] Update memory and summarize handoff

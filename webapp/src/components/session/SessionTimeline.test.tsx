@@ -4,6 +4,12 @@ import { SessionTimeline } from "./SessionTimeline";
 
 const EMPTY_DIFF_TEXT = "No diff content was provided for this operation.";
 
+function openWorking(index = 0) {
+  const workingButton = screen.getAllByRole("button", { name: /Working/ })[index];
+  fireEvent.click(workingButton);
+  return workingButton;
+}
+
 describe("SessionTimeline", () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -172,6 +178,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    openWorking();
+
     expect(screen.getByText("TODO.md")).toBeInTheDocument();
     expect(screen.getByText("Updated")).toBeInTheDocument();
     expect(screen.getByText(/Old/).closest("code")?.textContent).toBe("[ ] Old");
@@ -218,6 +226,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    openWorking();
+
     const rows = Array.from(document.querySelectorAll(".git-diff-result__line"));
     expect(rows.map((row) => row.textContent)).toEqual([
       "4141before",
@@ -259,7 +269,7 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+    openWorking();
 
     const title = screen.getByText("TODO.md");
     const card = title.closest(".git-diff-result");
@@ -305,6 +315,8 @@ describe("SessionTimeline", () => {
         itemsVersion={1}
       />,
     );
+
+    openWorking();
 
     expect(screen.getByText("1 focused change")).toBeInTheDocument();
     expect(screen.getByText("old")).toHaveClass("git-diff-result__token--removed");
@@ -511,6 +523,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    openWorking();
+
     expect(screen.getByText("1 focused change")).toBeInTheDocument();
     expect(screen.getByText("48")).toHaveClass("git-diff-result__token--removed");
     expect(screen.getByText("32")).toHaveClass("git-diff-result__token--added");
@@ -556,6 +570,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    openWorking();
+
     expect(screen.getByText(/const first/).closest("tr")).not.toHaveAttribute(
       "data-focused",
     );
@@ -598,6 +614,8 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    openWorking();
+
     expect(screen.getByText("2 unchanged lines")).toBeInTheDocument();
   });
 
@@ -633,6 +651,8 @@ describe("SessionTimeline", () => {
         itemsVersion={1}
       />,
     );
+
+    openWorking();
 
     expect(screen.getByText("Update failed")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
@@ -737,6 +757,10 @@ describe("SessionTimeline", () => {
     );
 
     const workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(workingButton);
+
     expect(workingButton).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("TODO.md")).toBeInTheDocument();
 
@@ -832,6 +856,8 @@ describe("SessionTimeline", () => {
         itemsVersion={2}
       />,
     );
+
+    openWorking();
 
     expect(screen.getByText("TODO.md")).toBeInTheDocument();
 
@@ -1180,7 +1206,7 @@ describe("SessionTimeline", () => {
     ).not.toBeNull();
   });
 
-  it("auto-opens a completed apply_patch Working block that first rendered while running", () => {
+  it("keeps a completed apply_patch Working block collapsed unless the user opened it", () => {
     const userMessage = {
       kind: "message" as const,
       itemId: "user-1",
@@ -1252,9 +1278,14 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    // Once the run completes, the apply_patch diff must auto-reveal so the
-    // user sees what changed without having to expand the block manually.
+    // Once the run completes, the apply_patch diff stays collapsed until the
+    // user opens this specific block.
     workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
+
+    fireEvent.click(workingButton);
+
     expect(workingButton).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("TODO.md")).toBeInTheDocument();
     expect(screen.getByText("Updated")).toBeInTheDocument();
@@ -1311,8 +1342,8 @@ describe("SessionTimeline", () => {
       expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
 
       // Single render where the tool flips running -> completed AND the final
-      // assistant response is appended. The final-answer close signal must
-      // win over the apply_patch auto-open.
+      // assistant response is appended. Completed apply_patch blocks must not
+      // auto-open.
       const completedTool = {
         ...runningTool,
         status: undefined,
@@ -1354,4 +1385,92 @@ describe("SessionTimeline", () => {
       expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
     },
   );
+
+  it("keeps the next Working block collapsed after an intermediate assistant message", () => {
+    const firstTool = {
+      kind: "tool_group" as const,
+      itemId: "tool-1",
+      label: "shell",
+      status: undefined,
+      items: [{ text: "first output" }],
+    };
+    const secondTool = {
+      kind: "tool_group" as const,
+      itemId: "tool-2",
+      label: "apply_patch",
+      status: "running" as const,
+      items: [
+        {
+          text: "update_file NEXT.md",
+          classes: "tool-call-apply-patch",
+          metadata: {
+            tool_name: "apply_patch" as const,
+            path: "NEXT.md",
+            operation: "update_file" as const,
+            diff: "-[ ] Old\n+[X] New",
+            call_id: "call_patch_next",
+          },
+        },
+      ],
+    };
+
+    const { rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the work",
+            markdown: false,
+          },
+          firstTool,
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const firstWorkingButton = screen.getByRole("button", { name: /Working/ });
+    fireEvent.click(firstWorkingButton);
+    expect(firstWorkingButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("first output")).toBeInTheDocument();
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the work",
+            markdown: false,
+          },
+          firstTool,
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "I found something; continuing.",
+            markdown: true,
+          },
+          secondTool,
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running..." }}
+        itemsVersion={2}
+      />,
+    );
+
+    const workingButtons = screen.getAllByRole("button", { name: /Working/ });
+    expect(workingButtons).toHaveLength(2);
+    expect(workingButtons[0]).toHaveAttribute("aria-expanded", "true");
+    expect(workingButtons[1]).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("NEXT.md")).not.toBeInTheDocument();
+  });
 });
