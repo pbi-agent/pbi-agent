@@ -101,6 +101,7 @@ function runtimeFromSession(session: LiveSession): LiveSessionRuntime {
     provider: session.provider,
     model: session.model,
     reasoning_effort: session.reasoning_effort,
+    compact_threshold: session.compact_threshold,
   };
 }
 
@@ -599,6 +600,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
           }
           break;
         case "usage_updated":
+          if (typeof payload.sub_agent_id === "string") {
+            break;
+          }
           if (payload.scope === "session") {
             patch.sessionUsage = payload.usage as UsagePayload;
           } else {
@@ -705,6 +709,10 @@ export const useSessionStore = create<SessionStore>((set) => ({
               provider: payload.provider,
               model: payload.model,
               reasoning_effort: payload.reasoning_effort,
+              compact_threshold:
+                typeof payload.compact_threshold === "number"
+                  ? payload.compact_threshold
+                  : current.runtime?.compact_threshold ?? 0,
             };
           }
           break;

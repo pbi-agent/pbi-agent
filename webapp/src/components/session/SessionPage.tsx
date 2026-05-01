@@ -543,8 +543,8 @@ export function SessionPage({
           </div>
           <div className="session-topbar__actions">
             <UsageBar
-              sessionUsage={sessionState?.sessionUsage ?? null}
-              turnUsage={sessionState?.turnUsage ?? null}
+              compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
+              usage={sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null}
             />
             {routeSessionId ? (
               <RunHistory sessionId={routeSessionId} />

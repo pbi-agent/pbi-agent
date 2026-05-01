@@ -17,3 +17,4 @@ class RuntimeSummaryModel(BaseModel):
     profile_id: str | None
     model: str | None
     reasoning_effort: str | None
+    compact_threshold: int | None = None

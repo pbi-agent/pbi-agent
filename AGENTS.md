@@ -96,6 +96,7 @@ uv tool install --reinstall .
 - Styling should use semantic Tailwind/shadcn tokens (`bg-background`, `text-muted-foreground`, `border-border`, etc.) and `cn()` for conditionals; avoid raw color utilities, manual dark-mode color overrides, custom overlay z-indexes, and `space-x-*`/`space-y-*` utilities.
 - For icons, use `lucide-react`; icons inside `Button` should use `data-icon="inline-start"` or `data-icon="inline-end"` and avoid manual sizing classes when the component styles them.
 - Dialog, Sheet, and Drawer content must include an accessible title; use a visually hidden title only when the visible design already provides equivalent context.
+- For floating UI near viewport edges (tooltips, popovers, badges in topbars), do not assume Radix/shadcn `sideOffset` or `collisionPadding` creates visible page-edge margin. Radix Popper may not shift on the cross axis, so content can still touch/crop against the viewport. Verify edge placement manually; when a tooltip must keep a guaranteed gutter from every viewport edge, use positioning that clamps both axes (for example a fixed-position portal tooltip) or a primitive/configuration that explicitly supports cross-axis shifting.
 
 ## Key Constraints
 

@@ -23,6 +23,7 @@ function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
     provider: "OpenAI",
     model: "gpt-5.4",
     reasoning_effort: "high",
+    compact_threshold: 200000,
     ...overrides,
   };
 }
@@ -193,5 +194,88 @@ describe("session store", () => {
       usage: { total_tokens: 42 },
       elapsedSeconds: 3.2,
     });
+  });
+
+  it("captures top-level session usage updates for live context progress", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 5,
+      type: "usage_updated",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: {
+        scope: "session",
+        usage: {
+          context_tokens: 120000,
+          total_tokens: 42,
+        },
+      },
+    });
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.sessionUsage).toEqual({
+      context_tokens: 120000,
+      total_tokens: 42,
+    });
+  });
+
+  it("ignores sub-agent usage updates for the top-level context gauge", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 5,
+      type: "usage_updated",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: {
+        scope: "session",
+        usage: { context_tokens: 120000 },
+      },
+    });
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 6,
+      type: "usage_updated",
+      created_at: "2026-04-16T12:00:04Z",
+      payload: {
+        scope: "session",
+        sub_agent_id: "subagent-1",
+        usage: { context_tokens: 5000 },
+      },
+    });
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.sessionUsage).toEqual({ context_tokens: 120000 });
+  });
+
+  it("stores compact threshold from live sessions and runtime updates", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ compact_threshold: 150000 }),
+    );
+
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.runtime)
+      .toEqual(expect.objectContaining({ compact_threshold: 150000 }));
+
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 5,
+      type: "session_runtime_updated",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: {
+        provider_id: "openai-main",
+        profile_id: "review",
+        provider: "OpenAI",
+        model: "gpt-5.4",
+        reasoning_effort: "medium",
+        compact_threshold: 90000,
+      },
+    });
+
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.runtime)
+      .toEqual(expect.objectContaining({
+        profile_id: "review",
+        compact_threshold: 90000,
+      }));
   });
 });
