@@ -2069,6 +2069,7 @@ def test_session_creation_with_model_profile_exposes_runtime_binding(
             provider_id="openai-main",
             model="gpt-5.4-2026-03-05",
             reasoning_effort="xhigh",
+            compact_threshold=123456,
         )
     )
     with patch("pbi_agent.web.session_manager.run_session_loop", return_value=0):
@@ -2083,6 +2084,7 @@ def test_session_creation_with_model_profile_exposes_runtime_binding(
             payload = response.json()["session"]
             assert payload["profile_id"] == "analysis"
             assert payload["model"] == "gpt-5.4-2026-03-05"
+            assert payload["compact_threshold"] == 123456
 
             live_session_id = payload["live_session_id"]
             events = app.state.manager.get_event_stream(live_session_id).snapshot()
@@ -2093,6 +2095,7 @@ def test_session_creation_with_model_profile_exposes_runtime_binding(
     assert runtime_events
     assert runtime_events[0]["payload"]["profile_id"] == "analysis"
     assert runtime_events[0]["payload"]["model"] == "gpt-5.4-2026-03-05"
+    assert runtime_events[0]["payload"]["compact_threshold"] == 123456
 
 
 def test_session_input_profile_override_emits_runtime_update(monkeypatch) -> None:

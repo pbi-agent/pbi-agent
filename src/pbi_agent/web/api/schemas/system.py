@@ -58,6 +58,7 @@ class LiveSessionModel(BaseModel):
     provider: str
     model: str
     reasoning_effort: str
+    compact_threshold: int
     created_at: str
     status: SessionStatus
     exit_code: int | None

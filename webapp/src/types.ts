@@ -41,6 +41,7 @@ export type RuntimeSummary = {
   profile_id: string | null;
   model: string | null;
   reasoning_effort: string | null;
+  compact_threshold?: number | null;
 };
 
 export type BoardStage = {
@@ -82,6 +83,7 @@ export type LiveSessionRuntime = {
   provider: string;
   model: string;
   reasoning_effort: string;
+  compact_threshold: number;
 };
 
 export type LiveSession = LiveSessionRuntime & {

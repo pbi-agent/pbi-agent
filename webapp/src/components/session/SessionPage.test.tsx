@@ -23,7 +23,10 @@ import type {
   LiveSessionSnapshot,
   SessionDetailPayload,
   SessionRecord,
+  UsagePayload,
 } from "../../types";
+
+const usageBarMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../hooks/useLiveSessionEvents", () => ({
   useLiveSessionEvents: vi.fn(),
@@ -57,7 +60,10 @@ vi.mock("./SessionTimeline", () => ({
 }));
 
 vi.mock("./UsageBar", () => ({
-  UsageBar: () => <div>Usage Bar</div>,
+  UsageBar: (props: unknown) => {
+    usageBarMock(props);
+    return <div>Usage Bar</div>;
+  },
 }));
 
 vi.mock("./DeleteSessionModal", () => ({
@@ -288,6 +294,7 @@ function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
     provider: "openai",
     model: "gpt-5.4",
     reasoning_effort: "high",
+    compact_threshold: 200000,
     ...overrides,
   };
 }
@@ -317,6 +324,33 @@ function makeSnapshot(
     ],
     sub_agents: {},
     last_event_seq: 1,
+    ...overrides,
+  };
+}
+
+function makeUsage(overrides: Partial<UsagePayload> = {}): UsagePayload {
+  return {
+    input_tokens: 0,
+    cached_input_tokens: 0,
+    cache_write_tokens: 0,
+    cache_write_1h_tokens: 0,
+    output_tokens: 0,
+    reasoning_tokens: 0,
+    tool_use_tokens: 0,
+    provider_total_tokens: 0,
+    sub_agent_input_tokens: 0,
+    sub_agent_output_tokens: 0,
+    sub_agent_reasoning_tokens: 0,
+    sub_agent_tool_use_tokens: 0,
+    sub_agent_provider_total_tokens: 0,
+    sub_agent_cost_usd: 0,
+    context_tokens: 0,
+    total_tokens: 0,
+    estimated_cost_usd: 0,
+    main_agent_total_tokens: 0,
+    sub_agent_total_tokens: 0,
+    model: "gpt-5.4",
+    service_tier: "",
     ...overrides,
   };
 }
@@ -451,6 +485,26 @@ describe("SessionPage", () => {
 
     expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Interrupt assistant turn" })).toBeNull();
+  });
+
+  it("passes live session usage to the context gauge before turn end", async () => {
+    const liveUsage = makeUsage({ context_tokens: 120000 });
+    const finalTurnUsage = makeUsage({ context_tokens: 85000 });
+    vi.mocked(fetchLiveSessionDetail).mockResolvedValue({
+      live_session: makeLiveSession({ compact_threshold: 200000 }),
+      snapshot: makeSnapshot({
+        session_usage: liveUsage,
+        turn_usage: { usage: finalTurnUsage, elapsed_seconds: 3.2 },
+      }),
+    });
+
+    renderSessionRoute("/sessions/live/live-1");
+
+    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
+    expect(usageBarMock).toHaveBeenLastCalledWith({
+      compactThreshold: 200000,
+      usage: liveUsage,
+    });
   });
 
   it("sends slash commands directly with image uploads and without expansion", async () => {

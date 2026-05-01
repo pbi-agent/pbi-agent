@@ -246,7 +246,7 @@ def _serialize_observability_event(record: ObservabilityEventRecord) -> dict[str
     }
 
 
-def _runtime_summary(runtime: ResolvedRuntime | None) -> dict[str, str | None]:
+def _runtime_summary(runtime: ResolvedRuntime | None) -> dict[str, Any]:
     if runtime is None:
         return {
             "provider": None,
@@ -254,6 +254,7 @@ def _runtime_summary(runtime: ResolvedRuntime | None) -> dict[str, str | None]:
             "profile_id": None,
             "model": None,
             "reasoning_effort": None,
+            "compact_threshold": None,
         }
     return {
         "provider": runtime.settings.provider,
@@ -261,6 +262,7 @@ def _runtime_summary(runtime: ResolvedRuntime | None) -> dict[str, str | None]:
         "profile_id": runtime.profile_id,
         "model": runtime.settings.model,
         "reasoning_effort": runtime.settings.reasoning_effort,
+        "compact_threshold": runtime.settings.compact_threshold,
     }
 
 
@@ -441,7 +443,7 @@ class LiveSessionState:
 @dataclass(slots=True)
 class LiveSessionSnapshot:
     session_id: str | None = None
-    runtime: dict[str, str | None] | None = None
+    runtime: dict[str, Any] | None = None
     input_enabled: bool = False
     wait_message: str | None = None
     processing: dict[str, Any] | None = None
@@ -2620,6 +2622,7 @@ class WebSessionManager:
             "provider": live_session.runtime.settings.provider,
             "model": live_session.runtime.settings.model,
             "reasoning_effort": live_session.runtime.settings.reasoning_effort,
+            "compact_threshold": live_session.runtime.settings.compact_threshold,
             "created_at": live_session.created_at,
             "status": live_session.status,
             "exit_code": live_session.exit_code,
@@ -2891,6 +2894,7 @@ class WebSessionManager:
                 "provider": live_session.runtime.settings.provider,
                 "model": live_session.runtime.settings.model,
                 "reasoning_effort": live_session.runtime.settings.reasoning_effort,
+                "compact_threshold": live_session.runtime.settings.compact_threshold,
             },
         )
 
@@ -2945,6 +2949,8 @@ class WebSessionManager:
             snapshot.processing = dict(payload) if payload.get("active") else None
             return
         if event_type == "usage_updated":
+            if isinstance(payload.get("sub_agent_id"), str):
+                return
             if payload.get("scope") == "session":
                 snapshot.session_usage = payload.get("usage")
             else:
@@ -3009,6 +3015,7 @@ class WebSessionManager:
                 "profile_id": payload.get("profile_id"),
                 "model": payload.get("model"),
                 "reasoning_effort": payload.get("reasoning_effort"),
+                "compact_threshold": payload.get("compact_threshold"),
             }
 
     def _upsert_snapshot_item(
