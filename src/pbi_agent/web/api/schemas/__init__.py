@@ -6,6 +6,7 @@ from .live_sessions import (
     ExpandInputResponse,
     ImageUploadResponse,
     NewSessionRequest,
+    SubmitQuestionResponseRequest,
 )
 from .common import ImageAttachmentModel, RuntimeSummaryModel
 from .config import (
@@ -93,6 +94,7 @@ __all__ = [
     "ModelProfileUpdateRequest",
     "ModelProfileViewModel",
     "NewSessionRequest",
+    "SubmitQuestionResponseRequest",
     "ObservabilityEventModel",
     "ProviderKindMetadataModel",
     "ProviderListResponse",

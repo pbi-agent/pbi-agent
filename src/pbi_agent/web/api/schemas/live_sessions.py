@@ -13,12 +13,25 @@ class CreateLiveSessionRequest(BaseModel):
     profile_id: str | None = None
 
 
+class QuestionAnswerRequest(BaseModel):
+    question_id: str
+    answer: str
+    selected_suggestion_index: int | None = None
+    custom: bool = False
+
+
+class SubmitQuestionResponseRequest(BaseModel):
+    prompt_id: str
+    answers: list[QuestionAnswerRequest] = Field(default_factory=list)
+
+
 class LiveSessionInputRequest(BaseModel):
     text: str = ""
     file_paths: list[str] = Field(default_factory=list)
     image_paths: list[str] = Field(default_factory=list)
     image_upload_ids: list[str] = Field(default_factory=list)
     profile_id: str | None = None
+    interactive_mode: bool = False
 
 
 class LiveSessionShellCommandRequest(BaseModel):

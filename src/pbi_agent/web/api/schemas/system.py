@@ -92,6 +92,7 @@ class LiveSessionSnapshotModel(BaseModel):
     turn_usage: dict[str, Any] | None
     session_ended: bool
     fatal_error: str | None
+    pending_user_questions: dict[str, Any] | None = None
     items: list[dict[str, Any]]
     sub_agents: dict[str, dict[str, str]]
     last_event_seq: int

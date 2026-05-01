@@ -410,6 +410,7 @@ function renderSessionRoute(route: string) {
 
 describe("SessionPage", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(fetchSessions).mockResolvedValue([makeSessionRecord()]);
     vi.mocked(fetchLiveSessionDetail).mockResolvedValue({
@@ -467,7 +468,33 @@ describe("SessionPage", () => {
       image_paths: ["images/diagram.png"],
       image_upload_ids: ["upload-1"],
       profile_id: "analysis",
+      interactive_mode: false,
     });
+  });
+
+  it("sends interactive mode as a per-message input flag from the topbar toggle", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/live/live-1");
+
+    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
+    const toggle = screen.getByRole("button", {
+      name: "Toggle interactive mode for assistant questions",
+    });
+
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Submit Expanded" }));
+
+    await waitFor(() => expect(submitSessionInput).toHaveBeenCalledTimes(1));
+    expect(submitSessionInput).toHaveBeenCalledWith(
+      "live-1",
+      expect.objectContaining({ interactive_mode: true }),
+    );
+    expect(createLiveSession).not.toHaveBeenCalledWith(
+      expect.objectContaining({ interactive_mode: true }),
+    );
   });
 
   it("shows interrupt only while processing and calls interrupt endpoint", async () => {
@@ -564,6 +591,7 @@ describe("SessionPage", () => {
       image_paths: [],
       image_upload_ids: ["upload-1"],
       profile_id: "analysis",
+      interactive_mode: false,
     });
   });
 

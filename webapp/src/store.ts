@@ -5,6 +5,7 @@ import type {
   LiveSession,
   LiveSessionRuntime,
   LiveSessionSnapshot,
+  PendingUserQuestions,
   ProcessingPhase,
   ProcessingState,
   TimelineItem,
@@ -36,6 +37,7 @@ export type SessionRuntimeState = {
   turnUsage: { usage: UsagePayload | null; elapsedSeconds?: number } | null;
   sessionEnded: boolean;
   fatalError: string | null;
+  pendingUserQuestions: PendingUserQuestions | null;
   items: TimelineItem[];
   itemsVersion: number;
   subAgents: Record<string, SubAgentState>;
@@ -79,6 +81,7 @@ function createEmptySessionState(sessionId: string | null = null): SessionRuntim
     turnUsage: null,
     sessionEnded: false,
     fatalError: null,
+    pendingUserQuestions: null,
     items: [],
     itemsVersion: 0,
     subAgents: {},
@@ -117,6 +120,31 @@ function upsertItem(items: TimelineItem[], nextItem: TimelineItem): TimelineItem
 
 function readString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
+}
+
+function readPendingUserQuestions(value: unknown): PendingUserQuestions | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const promptId = readString(record.prompt_id);
+  if (!promptId || !Array.isArray(record.questions)) return null;
+  const questions = record.questions.flatMap((rawQuestion) => {
+    if (!rawQuestion || typeof rawQuestion !== "object") return [];
+    const questionRecord = rawQuestion as Record<string, unknown>;
+    const suggestions = Array.isArray(questionRecord.suggestions)
+      ? questionRecord.suggestions.filter((suggestion): suggestion is string => typeof suggestion === "string")
+      : [];
+    if (suggestions.length !== 3) return [];
+    const questionId = readString(questionRecord.question_id);
+    const question = readString(questionRecord.question);
+    if (!questionId || !question) return [];
+    return [{
+      question_id: questionId,
+      question,
+      suggestions: [suggestions[0], suggestions[1], suggestions[2]] as [string, string, string],
+      recommended_suggestion_index: 0 as const,
+    }];
+  });
+  return questions.length > 0 ? { prompt_id: promptId, questions } : null;
 }
 
 function readOptionalString(value: unknown): string | undefined {
@@ -481,6 +509,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
               : null,
             sessionEnded: snapshot.session_ended,
             fatalError: snapshot.fatal_error,
+            pendingUserQuestions: snapshot.pending_user_questions ?? null,
             items,
             itemsVersion: items.length,
             subAgents: snapshot.sub_agents,
@@ -581,6 +610,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
           patch.turnUsage = null;
           patch.sessionEnded = false;
           patch.fatalError = null;
+          patch.pendingUserQuestions = null;
           break;
         case "session_identity":
           patch.sessionId = nextSessionId;
@@ -597,6 +627,15 @@ export const useSessionStore = create<SessionStore>((set) => ({
           patch.processing = readProcessingState(payload);
           if (patch.processing === null && current.restoredInput) {
             patch.inputEnabled = true;
+          }
+          break;
+        case "user_questions_requested":
+          patch.pendingUserQuestions = readPendingUserQuestions(payload);
+          patch.inputEnabled = false;
+          break;
+        case "user_questions_resolved":
+          if (current.pendingUserQuestions?.prompt_id === readString(payload.prompt_id)) {
+            patch.pendingUserQuestions = null;
           }
           break;
         case "usage_updated":
@@ -690,6 +729,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             patch.processing = null;
             patch.fatalError =
               typeof payload.fatal_error === "string" ? payload.fatal_error : null;
+            patch.pendingUserQuestions = null;
           } else {
             patch.sessionEnded = false;
             patch.fatalError = null;

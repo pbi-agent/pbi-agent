@@ -13,8 +13,10 @@ from pbi_agent.display.protocol import (
     DisplayProtocol,
     PendingToolCall,
     PendingToolGroup,
+    PendingUserQuestion,
     QueuedInput,
     QueuedRuntimeChange,
+    UserQuestionAnswer,
 )
 from pbi_agent.display.formatting import (
     REDACTED_THINKING_NOTICE,
@@ -123,6 +125,26 @@ class _SubAgentContext:
     title: str
 
 
+@dataclass(slots=True)
+class PendingUserQuestionsPrompt:
+    prompt_id: str
+    questions: list[PendingUserQuestion]
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "prompt_id": self.prompt_id,
+            "questions": [
+                {
+                    "question_id": question.question_id,
+                    "question": question.question,
+                    "suggestions": list(question.suggestions),
+                    "recommended_suggestion_index": 0,
+                }
+                for question in self.questions
+            ],
+        }
+
+
 class _EventDisplayBase(DisplayProtocol):
     def __init__(
         self,
@@ -183,14 +205,21 @@ class _EventDisplayBase(DisplayProtocol):
         image_paths: list[str] | None = None,
         images=None,
         image_attachments=None,
+        interactive_mode: bool = False,
     ) -> None:
-        del value, file_paths, image_paths, images, image_attachments
+        del value, file_paths, image_paths, images, image_attachments, interactive_mode
         return None
 
     def request_new_session(self) -> None:
         raise RuntimeError(
             "This display does not support interactive new-session calls."
         )
+
+    def ask_user_questions(
+        self, questions: list[PendingUserQuestion]
+    ) -> list[UserQuestionAnswer]:
+        del questions
+        raise RuntimeError("This display does not support interactive questions.")
 
     def reset_session(self) -> None:
         self._waiting_message = None
@@ -741,6 +770,12 @@ class WebDisplay(_EventDisplayBase):
             queue.Queue()
         )
         self._input_event = threading.Event()
+        self._question_response_queue: queue.Queue[list[UserQuestionAnswer]] = (
+            queue.Queue()
+        )
+        self._question_response_event = threading.Event()
+        self._pending_question_prompt: PendingUserQuestionsPrompt | None = None
+        self._prompt_counter = 0
         self._shutdown = threading.Event()
         self._interrupt = threading.Event()
         self._model = model
@@ -750,11 +785,13 @@ class WebDisplay(_EventDisplayBase):
     def request_shutdown(self) -> None:
         self._shutdown.set()
         self._input_event.set()
+        self._question_response_event.set()
 
     def request_interrupt(
         self, *, item_id: str | None = None, input_text: str | None = None
     ) -> None:
         self._interrupt.set()
+        self._question_response_event.set()
         self._publish(
             "processing_state",
             {
@@ -794,6 +831,7 @@ class WebDisplay(_EventDisplayBase):
         image_paths: list[str] | None = None,
         images=None,
         image_attachments=None,
+        interactive_mode: bool = False,
     ) -> None:
         self.clear_interrupt()
         queued = QueuedInput(
@@ -802,6 +840,7 @@ class WebDisplay(_EventDisplayBase):
             image_paths=list(image_paths or []),
             images=list(images or []),
             image_attachments=list(image_attachments or []),
+            interactive_mode=interactive_mode,
         )
         self._input_queue.put(queued)
         self._input_event.set()
@@ -813,6 +852,62 @@ class WebDisplay(_EventDisplayBase):
         self._input_queue.put(NEW_SESSION_SENTINEL)
         self._input_event.set()
         self._publish("input_state", {"enabled": False})
+
+    def ask_user_questions(
+        self, questions: list[PendingUserQuestion]
+    ) -> list[UserQuestionAnswer]:
+        if not questions:
+            raise ValueError("ask_user requires at least one question.")
+        self._prompt_counter += 1
+        prompt = PendingUserQuestionsPrompt(
+            prompt_id=f"ask-{self._prompt_counter}",
+            questions=list(questions),
+        )
+        self._pending_question_prompt = prompt
+        self._publish("user_questions_requested", prompt.to_payload())
+        try:
+            while True:
+                try:
+                    answers = self._question_response_queue.get_nowait()
+                except queue.Empty:
+                    if self._shutdown.is_set():
+                        raise RuntimeError(
+                            "Session shut down while waiting for user answers."
+                        )
+                    if self._interrupt.is_set():
+                        raise RuntimeError(
+                            "Assistant turn interrupted while waiting for user answers."
+                        )
+                    self._question_response_event.wait(timeout=0.5)
+                    self._question_response_event.clear()
+                    continue
+                if self._question_response_queue.empty():
+                    self._question_response_event.clear()
+                return answers
+        finally:
+            if self._pending_question_prompt is prompt:
+                self._pending_question_prompt = None
+            self._publish("user_questions_resolved", {"prompt_id": prompt.prompt_id})
+
+    def submit_question_response(
+        self,
+        *,
+        prompt_id: str,
+        answers: list[UserQuestionAnswer],
+    ) -> None:
+        prompt = self._pending_question_prompt
+        if prompt is None or prompt.prompt_id != prompt_id:
+            raise RuntimeError("No matching pending user question prompt.")
+        expected_ids = {question.question_id for question in prompt.questions}
+        answer_ids = {answer.question_id for answer in answers}
+        if answer_ids != expected_ids:
+            raise ValueError("All pending questions must be answered exactly once.")
+        self._question_response_queue.put(list(answers))
+        self._question_response_event.set()
+
+    def pending_question_prompt_payload(self) -> dict[str, Any] | None:
+        prompt = self._pending_question_prompt
+        return prompt.to_payload() if prompt is not None else None
 
     def request_runtime_change(
         self,

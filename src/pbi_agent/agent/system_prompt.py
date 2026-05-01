@@ -174,8 +174,3 @@ def get_sub_agent_system_prompt(agent_prompt_override: str | None = None) -> str
     base = agent_prompt_override or _resolve_base_prompt()
     prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}")
     return _append_available_skills(prompt)
-
-
-def get_custom_excluded_tools() -> set[str]:
-    """Return tool names to exclude when custom instructions are active."""
-    return set()

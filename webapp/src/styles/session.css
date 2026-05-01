@@ -2070,6 +2070,16 @@
   padding: 0;
 }
 
+/* ── Interactive questions ── */
+.user-questions-panel {
+  margin: var(--sp-3) var(--sp-5);
+  flex-shrink: 0;
+}
+
+.interactive-mode-toggle {
+  white-space: nowrap;
+}
+
 /* ── Wait/Error banners ── */
 .banner {
   margin: 0 var(--sp-5);

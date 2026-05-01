@@ -10,7 +10,6 @@ import pytest
 from pbi_agent.agent.system_prompt import (
     _DEFAULT_SYSTEM_PROMPT,
     _MAX_FILE_BYTES,
-    get_custom_excluded_tools,
     get_sub_agent_system_prompt,
     get_system_prompt,
     load_instructions,
@@ -301,20 +300,3 @@ def test_get_system_prompt_appends_active_command_instructions(tmp_path, monkeyp
     prompt = get_system_prompt(active_command_instructions="Plan before coding.")
 
     assert "<active_command>\nPlan before coding.\n</active_command>" in prompt
-
-
-# ---------------------------------------------------------------------------
-# get_custom_excluded_tools
-# ---------------------------------------------------------------------------
-
-
-def test_no_excluded_tools_without_instructions(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    assert get_custom_excluded_tools() == set()
-
-
-def test_no_excluded_tools_with_instructions(tmp_path, monkeypatch):
-    (tmp_path / "INSTRUCTIONS.md").write_text("Custom agent.", encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
-    excluded = get_custom_excluded_tools()
-    assert excluded == set()

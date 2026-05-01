@@ -11,7 +11,6 @@ from typing import Any, Callable
 
 from pbi_agent.agent.compaction_prompt import COMPACTION_PROMPT
 from pbi_agent.agent.system_prompt import (
-    get_custom_excluded_tools,
     get_sub_agent_system_prompt,
     get_system_prompt,
 )
@@ -39,7 +38,10 @@ from pbi_agent.observability import RunTracer
 from pbi_agent.providers import create_provider
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.providers.capabilities import provider_supports_images
+from pbi_agent.providers.capabilities import (
+    image_excluded_tools,
+    provider_supports_images,
+)
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.display.protocol import (
@@ -54,7 +56,8 @@ NEW_SESSION_SENTINEL = "__new_session__"
 RESUME_SESSION_PREFIX = "__resume_session__:"
 SUB_AGENT_MAX_REQUESTS = 100
 SUB_AGENT_MAX_ELAPSED_SECONDS = 1200.0
-SUB_AGENT_DISABLED_TOOLS = {"sub_agent"}
+INTERACTIVE_ONLY_TOOLS = {"ask_user"}
+SUB_AGENT_DISABLED_TOOLS = {"sub_agent"} | INTERACTIVE_ONLY_TOOLS
 SKILLS_COMMAND = "/skills"
 MCP_COMMAND = "/mcp"
 AGENTS_COMMAND = "/agents"
@@ -221,7 +224,7 @@ def run_single_turn(
     try:
         with _open_runtime_provider(
             settings,
-            excluded_tools=get_custom_excluded_tools(),
+            excluded_tools=INTERACTIVE_ONLY_TOOLS,
         ) as provider:
             display.assistant_start()
             _resume_session(
@@ -320,6 +323,7 @@ def run_session_loop(
     *,
     resume_session_id: str | None = None,
     on_reload: Callable[[], None] | None = None,
+    excluded_tools: set[str] | None = None,
 ) -> int:
     current_runtime = _coerce_runtime(settings)
     store = _open_store(current_runtime.settings)
@@ -328,6 +332,18 @@ def run_session_loop(
     resume_session_to_restore = resume_session_id
     replay_history_on_restore = resume_session_id is not None
     should_exit = False
+    base_excluded_tools = set(excluded_tools) if excluded_tools is not None else set()
+
+    def _turn_excluded_tools(*, interactive_mode: bool = False) -> set[str]:
+        return (
+            base_excluded_tools
+            | image_excluded_tools(current_runtime.settings.provider)
+            | (
+                set()
+                if interactive_mode and excluded_tools is None
+                else INTERACTIVE_ONLY_TOOLS
+            )
+        )
 
     def _reset_session(
         active_runtime: ResolvedRuntime, *, clear_display: bool = False
@@ -352,7 +368,7 @@ def run_session_loop(
     while not should_exit:
         with _open_runtime_provider(
             current_runtime.settings,
-            excluded_tools=get_custom_excluded_tools(),
+            excluded_tools=_turn_excluded_tools(interactive_mode=False),
         ) as provider:
             if resume_session_to_restore is not None:
                 _resume_session(
@@ -392,8 +408,10 @@ def run_session_loop(
                     image_paths = queued_input.image_paths
                     queued_images = queued_input.images
                     message_image_attachments = queued_input.image_attachments
+                    turn_interactive_mode = queued_input.interactive_mode
                 else:
                     user_input = queued_input.strip()
+                    turn_interactive_mode = False
                 if user_input == NEW_SESSION_SENTINEL:
                     provider.reset_conversation()
                     session_usage = _reset_session(
@@ -522,6 +540,9 @@ def run_session_loop(
                 user_message_id: int | None = None
                 try:
                     _raise_if_interrupted(display)
+                    provider.set_excluded_tools(
+                        _turn_excluded_tools(interactive_mode=turn_interactive_mode)
+                    )
                     user_message_id = _add_message(
                         store,
                         session_id,
@@ -713,7 +734,7 @@ def run_sub_agent_task(
                     else None
                 )
             ),
-            excluded_tools=SUB_AGENT_DISABLED_TOOLS | get_custom_excluded_tools(),
+            excluded_tools=SUB_AGENT_DISABLED_TOOLS,
             tool_catalog=tool_catalog,
         ) as provider:
             _apply_sub_agent_parent_context(
@@ -899,9 +920,14 @@ def _run_tool_iterations(
                         "tool_count": len(response.function_calls),
                     },
                 )
+            effective_max_workers = (
+                1
+                if any(call.name == "ask_user" for call in response.function_calls)
+                else max_workers
+            )
             tool_result_items, loop_errors = provider.execute_tool_calls(
                 response,
-                max_workers=max_workers,
+                max_workers=effective_max_workers,
                 display=display,
                 session_usage=session_usage,
                 turn_usage=turn_usage,

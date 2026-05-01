@@ -70,7 +70,7 @@ from pbi_agent.config import (
     slugify,
 )
 from pbi_agent.display.formatting import shorten
-from pbi_agent.display.protocol import QueuedInput
+from pbi_agent.display.protocol import QueuedInput, UserQuestionAnswer
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
 from pbi_agent.providers.capabilities import provider_supports_images
@@ -452,6 +452,7 @@ class LiveSessionSnapshot:
     turn_usage: dict[str, Any] | None = None
     session_ended: bool = False
     fatal_error: str | None = None
+    pending_user_questions: dict[str, Any] | None = None
     items: list[dict[str, Any]] = None  # type: ignore[assignment]
     sub_agents: dict[str, dict[str, str]] = None  # type: ignore[assignment]
     last_event_seq: int = 0
@@ -1084,6 +1085,7 @@ class WebSessionManager:
         image_paths: list[str] | None = None,
         image_upload_ids: list[str] | None = None,
         profile_id: str | None = None,
+        interactive_mode: bool = False,
     ) -> dict[str, Any]:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
@@ -1131,8 +1133,79 @@ class WebSessionManager:
             file_paths=file_paths,
             images=resolved_images or None,
             image_attachments=message_image_attachments or None,
+            interactive_mode=interactive_mode,
         )
         self._set_latest_queued_input_item_id(live_session, optimistic_item_id)
+        return self._serialize_live_session(live_session)
+
+    def submit_question_response(
+        self,
+        live_session_id: str,
+        *,
+        prompt_id: str,
+        answers: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        live_session = self._require_live_session(live_session_id)
+        if live_session.status == "ended":
+            raise RuntimeError("Live session has already ended.")
+        pending = live_session.snapshot.pending_user_questions
+        if not isinstance(pending, dict) or pending.get("prompt_id") != prompt_id:
+            raise RuntimeError("No matching pending user question prompt.")
+        questions = pending.get("questions")
+        if not isinstance(questions, list):
+            raise RuntimeError("Pending user question prompt is invalid.")
+        question_by_id = {
+            str(question.get("question_id") or ""): question
+            for question in questions
+            if isinstance(question, dict)
+        }
+        parsed_answers: list[UserQuestionAnswer] = []
+        seen_ids: set[str] = set()
+        for raw_answer in answers:
+            question_id = str(raw_answer.get("question_id") or "").strip()
+            if not question_id or question_id not in question_by_id:
+                raise ValueError("Question response contains an unknown question id.")
+            if question_id in seen_ids:
+                raise ValueError("Question response contains duplicate answers.")
+            seen_ids.add(question_id)
+            answer_text = str(raw_answer.get("answer") or "").strip()
+            if not answer_text:
+                raise ValueError("Question answers must be non-empty.")
+            selected_index = raw_answer.get("selected_suggestion_index")
+            custom = bool(raw_answer.get("custom"))
+            question = question_by_id[question_id]
+            suggestions = question.get("suggestions")
+            if not isinstance(suggestions, list) or len(suggestions) != 3:
+                raise RuntimeError("Pending user question suggestions are invalid.")
+            if custom:
+                if selected_index is not None:
+                    raise ValueError(
+                        "Custom answers cannot include a selected suggestion index."
+                    )
+            else:
+                if not isinstance(selected_index, int) or selected_index not in {
+                    0,
+                    1,
+                    2,
+                }:
+                    raise ValueError(
+                        "Suggestion answers must include a valid suggestion index."
+                    )
+                answer_text = str(suggestions[selected_index])
+            parsed_answers.append(
+                UserQuestionAnswer(
+                    question_id=question_id,
+                    question=str(question.get("question") or ""),
+                    answer=answer_text,
+                    custom=custom,
+                )
+            )
+        if seen_ids != set(question_by_id):
+            raise ValueError("All pending questions must be answered.")
+        live_session.display.submit_question_response(
+            prompt_id=prompt_id,
+            answers=parsed_answers,
+        )
         return self._serialize_live_session(live_session)
 
     def interrupt_live_session(self, live_session_id: str) -> dict[str, Any]:
@@ -2665,6 +2738,7 @@ class WebSessionManager:
             "turn_usage": live_session.snapshot.turn_usage,
             "session_ended": live_session.snapshot.session_ended,
             "fatal_error": live_session.snapshot.fatal_error,
+            "pending_user_questions": live_session.snapshot.pending_user_questions,
             "items": list(live_session.snapshot.items),
             "sub_agents": dict(live_session.snapshot.sub_agents),
             "last_event_seq": live_session.snapshot.last_event_seq,
@@ -2947,6 +3021,7 @@ class WebSessionManager:
             snapshot.turn_usage = None
             snapshot.session_ended = False
             snapshot.fatal_error = None
+            snapshot.pending_user_questions = None
             return
         if event_type == "session_identity":
             snapshot.session_id = (
@@ -2967,6 +3042,16 @@ class WebSessionManager:
             return
         if event_type == "processing_state":
             snapshot.processing = dict(payload) if payload.get("active") else None
+            return
+        if event_type == "user_questions_requested":
+            snapshot.pending_user_questions = dict(payload)
+            snapshot.input_enabled = False
+            return
+        if event_type == "user_questions_resolved":
+            if snapshot.pending_user_questions and snapshot.pending_user_questions.get(
+                "prompt_id"
+            ) == payload.get("prompt_id"):
+                snapshot.pending_user_questions = None
             return
         if event_type == "usage_updated":
             if isinstance(payload.get("sub_agent_id"), str):
@@ -3024,6 +3109,7 @@ class WebSessionManager:
                     if isinstance(payload.get("fatal_error"), str)
                     else None
                 )
+                snapshot.pending_user_questions = None
             else:
                 snapshot.session_ended = False
                 snapshot.fatal_error = None

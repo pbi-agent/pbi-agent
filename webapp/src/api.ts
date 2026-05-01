@@ -10,6 +10,7 @@ import type {
   ImageAttachment,
   LiveSession,
   LiveSessionSnapshot,
+  UserQuestionAnswer,
   ModelProfileView,
   ObservabilityEvent,
   ProviderAuthFlowResponse,
@@ -158,6 +159,23 @@ export async function createLiveSession(
   return result.session;
 }
 
+export async function submitQuestionResponse(
+  liveSessionId: string,
+  payload: {
+    prompt_id: string;
+    answers: UserQuestionAnswer[];
+  },
+): Promise<LiveSession> {
+  const result = await requestJson<{ session: LiveSession }>(
+    `/api/live-sessions/${liveSessionId}/question-response`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+  return result.session;
+}
+
 export async function submitSessionInput(
   liveSessionId: string,
   payload: {
@@ -166,6 +184,7 @@ export async function submitSessionInput(
     image_paths: string[];
     image_upload_ids: string[];
     profile_id?: string | null;
+    interactive_mode?: boolean;
   },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
