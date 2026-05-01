@@ -46,6 +46,32 @@ const stages: BoardStage[] = [
   },
 ];
 
+function clipboardFileItem(file: File): DataTransferItem {
+  return {
+    kind: "file",
+    type: file.type,
+    getAsFile: () => file,
+  } as DataTransferItem;
+}
+
+function clipboardTextItem(text: string): DataTransferItem {
+  return {
+    kind: "string",
+    type: "text/plain",
+    getAsFile: () => null,
+    getAsString: (callback: (data: string) => void) => callback(text),
+  } as DataTransferItem;
+}
+
+function pasteInto(element: HTMLElement, items: DataTransferItem[]): Event {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: { items },
+  });
+  element.dispatchEvent(event);
+  return event;
+}
+
 const profiles: ModelProfileView[] = [
   {
     id: "analysis",
@@ -138,5 +164,77 @@ describe("TaskModal", () => {
     expect(update.imageFiles).toHaveLength(1);
     expect(update.imageFiles?.[0]?.file).toBe(file);
     expect(update.imageFiles?.[0]?.previewUrl).toBe("blob:task-image");
+  });
+
+  it("attaches pasted prompt image files through onChange", () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <TaskModal
+        task={task}
+        boardStages={stages}
+        profiles={profiles}
+        isSaving={false}
+        onChange={onChange}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const prompt = screen.getByLabelText("Prompt");
+    const file = new File(["binary"], "screenshot.png", { type: "image/png" });
+    const pasteEvent = pasteInto(prompt, [clipboardFileItem(file)]);
+
+    expect(pasteEvent.defaultPrevented).toBe(true);
+    expect(onChange).toHaveBeenCalledOnce();
+    const update = onChange.mock.calls[0]?.[0] as Partial<EditableTask>;
+    expect(update.imageError).toBeNull();
+    expect(update.imageFiles).toHaveLength(1);
+    expect(update.imageFiles?.[0]?.file).toBe(file);
+    expect(update.imageFiles?.[0]?.previewUrl).toBe("blob:task-image");
+  });
+
+  it("leaves normal prompt text paste unchanged", () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <TaskModal
+        task={task}
+        boardStages={stages}
+        profiles={profiles}
+        isSaving={false}
+        onChange={onChange}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const prompt = screen.getByLabelText("Prompt");
+    const pasteEvent = pasteInto(prompt, [clipboardTextItem("plain prompt text")]);
+
+    expect(pasteEvent.defaultPrevented).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("reports unsupported pasted image types", () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <TaskModal
+        task={task}
+        boardStages={stages}
+        profiles={profiles}
+        isSaving={false}
+        onChange={onChange}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const prompt = screen.getByLabelText("Prompt");
+    const file = new File(["binary"], "animation.gif", { type: "image/gif" });
+    const pasteEvent = pasteInto(prompt, [clipboardFileItem(file)]);
+
+    expect(pasteEvent.defaultPrevented).toBe(true);
+    expect(onChange).toHaveBeenCalledWith({
+      imageError: "Only PNG, JPEG, and WEBP images are supported.",
+    });
   });
 });
