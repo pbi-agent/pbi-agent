@@ -30,6 +30,7 @@
 
 ## Detailed Task Events
 ## 2026-05-01
+- Added multi-workspace web server startup: CLI now rejects an active same-workspace web lease before binding, auto-selects a free port only for implicit default `8000`, and keeps explicit `--port` strict; SessionStore exposes fresh/stale lease inspection. Validation: targeted Ruff check/format and `uv run pytest tests/test_cli.py tests/test_session_store.py tests/test_web_serve.py -q` passed.
 - Added Kanban task image attachments: backend task upload endpoint + persisted attachments, task create/update image IDs, initial task run image plumbing, frontend TaskModal upload/preview/remove, card image count, docs update. Validation: Ruff check/format targeted, pytest `tests/test_session_store.py` + `tests/test_web_serve.py`, `bun run typecheck`, targeted web tests, `bun run lint`, `bun run web:build`, `bun run docs:build` passed.
 - Ensured existing SQLite DBs add missing `image_attachments_json` on `kanban_tasks` (messages already covered) and added regression coverage for old message/task tables. Validation: `uv run pytest tests/test_session_store.py`, targeted Ruff check/format passed.
 - Fixed review findings for Kanban task images: continuation/stage handoff user messages now persist/publish no task images, and deleting a linked session preserves upload files still owned by tasks. Validation: targeted Ruff check/format and `uv run pytest tests/test_web_serve.py::test_auto_started_stage_prompt_is_visible_while_running tests/test_web_serve.py::test_delete_session_endpoint_preserves_task_owned_uploads -q` passed.

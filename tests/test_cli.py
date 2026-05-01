@@ -451,6 +451,10 @@ class DefaultWebCommandTests(unittest.TestCase):
         server = Mock()
 
         with (
+            patch(
+                "pbi_agent.cli._current_workspace_has_active_web_manager",
+                return_value=False,
+            ),
             patch("pbi_agent.cli._start_browser_open_thread") as mock_browser_thread,
             patch(
                 "pbi_agent.cli._create_web_server", return_value=server
@@ -470,6 +474,124 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(runtime.provider_id, "")
         self.assertEqual(runtime.profile_id, "")
         server.serve.assert_called_once_with(debug=False)
+
+    def test_handle_web_command_uses_default_port_when_available(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["web"])
+        settings = self._settings()
+        server = Mock()
+
+        with (
+            patch(
+                "pbi_agent.cli._current_workspace_has_active_web_manager",
+                return_value=False,
+            ),
+            patch(
+                "pbi_agent.cli._is_web_port_available", return_value=True
+            ) as mock_available,
+            patch("pbi_agent.cli._find_free_web_port") as mock_find_port,
+            patch("pbi_agent.cli._start_browser_open_thread") as mock_browser_thread,
+            patch(
+                "pbi_agent.cli._create_web_server", return_value=server
+            ) as mock_server,
+        ):
+            rc = cli._handle_web_command(args, settings)
+
+        self.assertEqual(rc, 0)
+        mock_available.assert_called_once_with("127.0.0.1", 8000)
+        mock_find_port.assert_not_called()
+        mock_browser_thread.assert_called_once_with(
+            "127.0.0.1",
+            8000,
+            "http://127.0.0.1:8000",
+        )
+        self.assertEqual(mock_server.call_args.args[0].port, 8000)
+
+    def test_handle_web_command_auto_selects_free_default_port(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["web"])
+        settings = self._settings()
+        server = Mock()
+        stderr = io.StringIO()
+
+        with (
+            patch("sys.stderr", stderr),
+            patch(
+                "pbi_agent.cli._current_workspace_has_active_web_manager",
+                return_value=False,
+            ),
+            patch("pbi_agent.cli._is_web_port_available", return_value=False),
+            patch("pbi_agent.cli._find_free_web_port", return_value=8123),
+            patch("pbi_agent.cli._start_browser_open_thread") as mock_browser_thread,
+            patch(
+                "pbi_agent.cli._create_web_server", return_value=server
+            ) as mock_server,
+        ):
+            rc = cli._handle_web_command(args, settings)
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(args.port, 8123)
+        self.assertIn("Port 8000 is unavailable; using port 8123", stderr.getvalue())
+        mock_browser_thread.assert_called_once_with(
+            "127.0.0.1",
+            8123,
+            "http://127.0.0.1:8123",
+        )
+        self.assertEqual(mock_server.call_args.args[0].port, 8123)
+
+    def test_handle_web_command_explicit_port_does_not_auto_select(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["web", "--port", "8000"])
+        settings = self._settings()
+        server = Mock()
+
+        with (
+            patch(
+                "pbi_agent.cli._current_workspace_has_active_web_manager",
+                return_value=False,
+            ),
+            patch("pbi_agent.cli._is_web_port_available") as mock_available,
+            patch("pbi_agent.cli._find_free_web_port") as mock_find_port,
+            patch("pbi_agent.cli._start_browser_open_thread") as mock_browser_thread,
+            patch(
+                "pbi_agent.cli._create_web_server", return_value=server
+            ) as mock_server,
+        ):
+            rc = cli._handle_web_command(args, settings)
+
+        self.assertEqual(rc, 0)
+        mock_available.assert_not_called()
+        mock_find_port.assert_not_called()
+        mock_browser_thread.assert_called_once_with(
+            "127.0.0.1",
+            8000,
+            "http://127.0.0.1:8000",
+        )
+        self.assertEqual(mock_server.call_args.args[0].port, 8000)
+
+    def test_handle_web_command_rejects_active_same_workspace_lease(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["web"])
+        settings = self._settings()
+        stderr = io.StringIO()
+
+        with (
+            patch("sys.stderr", stderr),
+            patch(
+                "pbi_agent.cli._current_workspace_has_active_web_manager",
+                return_value=True,
+            ),
+            patch("pbi_agent.cli._is_web_port_available") as mock_available,
+            patch("pbi_agent.cli._start_browser_open_thread") as mock_browser_thread,
+            patch("pbi_agent.cli._create_web_server") as mock_server,
+        ):
+            rc = cli._handle_web_command(args, settings)
+
+        self.assertEqual(rc, 1)
+        self.assertIn("already managing this workspace", stderr.getvalue())
+        mock_available.assert_not_called()
+        mock_browser_thread.assert_not_called()
+        mock_server.assert_not_called()
 
     def test_handle_web_command_sets_and_restores_settings_env(self) -> None:
         parser = cli.build_parser()
@@ -492,6 +614,10 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         try:
             with (
+                patch(
+                    "pbi_agent.cli._current_workspace_has_active_web_manager",
+                    return_value=False,
+                ),
                 patch("pbi_agent.cli._start_browser_open_thread"),
                 patch("pbi_agent.cli._create_web_server", return_value=server),
             ):
@@ -766,6 +892,10 @@ class DefaultWebCommandTests(unittest.TestCase):
         server.serve.side_effect = KeyboardInterrupt()
 
         with (
+            patch(
+                "pbi_agent.cli._current_workspace_has_active_web_manager",
+                return_value=False,
+            ),
             patch("pbi_agent.cli._start_browser_open_thread"),
             patch("pbi_agent.cli._create_web_server", return_value=server),
         ):
