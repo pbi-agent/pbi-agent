@@ -38,6 +38,7 @@ from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
+from pbi_agent.web.uploads import load_uploaded_image
 from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
@@ -132,12 +133,9 @@ class AnthropicProvider(Provider):
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         self._messages = [
-            {
-                "role": message.role,
-                "content": [{"type": "text", "text": message.content}],
-            }
+            _anthropic_message_record_to_message(message)
             for message in messages
-            if message.role in {"user", "assistant"} and message.content
+            if _anthropic_message_record_can_restore(message)
         ]
 
     # -- request_turn --------------------------------------------------------
@@ -635,6 +633,34 @@ def _anthropic_user_content_blocks(user_input: UserTurnInput) -> list[dict[str, 
     if user_input.text:
         blocks.append({"type": "text", "text": user_input.text})
     return blocks or [{"type": "text", "text": ""}]
+
+
+def _anthropic_message_record_can_restore(message: MessageRecord) -> bool:
+    if message.role not in {"user", "assistant"}:
+        return False
+    return bool(message.content or message.image_attachments)
+
+
+def _anthropic_message_record_to_message(
+    message: MessageRecord,
+) -> dict[str, Any]:
+    if message.role == "user" and message.image_attachments:
+        return {
+            "role": message.role,
+            "content": _anthropic_user_content_blocks(
+                UserTurnInput(
+                    text=message.content,
+                    images=[
+                        load_uploaded_image(attachment.upload_id)
+                        for attachment in message.image_attachments
+                    ],
+                )
+            ),
+        }
+    return {
+        "role": message.role,
+        "content": [{"type": "text", "text": message.content}],
+    }
 
 
 def _anthropic_tool_result_content(result) -> str | list[dict[str, Any]]:

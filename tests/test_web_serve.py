@@ -42,6 +42,7 @@ from pbi_agent.config import (
 )
 from pbi_agent.session_store import (
     SESSION_DB_PATH_ENV,
+    MessageImageAttachment,
     SessionStore,
     WebManagerLeaseBusyError,
 )
@@ -1470,11 +1471,13 @@ def test_auto_started_stage_prompt_is_visible_while_running(
     release_second_run = threading.Event()
     call_count = 0
     replay_history_flags: list[bool | None] = []
+    turn_image_counts: list[int] = []
 
     def fake_run_single_turn_in_directory(prompt, _runtime, _display, **kwargs):
         nonlocal call_count
         call_count += 1
         replay_history_flags.append(kwargs.get("replay_history"))
+        turn_image_counts.append(len(kwargs.get("images") or []))
         assert isinstance(kwargs["persisted_user_message_id"], int)
         if call_count == 2:
             assert prompt == "/implement"
@@ -1506,9 +1509,21 @@ def test_auto_started_stage_prompt_is_visible_while_running(
                     ]
                 },
             )
+            upload_response = client.post(
+                "/api/tasks/images",
+                files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+            )
+            assert upload_response.status_code == 200
+            upload_id = upload_response.json()["uploads"][0]["upload_id"]
+
             create_response = client.post(
                 "/api/tasks",
-                json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+                json={
+                    "title": "Task A",
+                    "prompt": "Investigate",
+                    "stage": "plan",
+                    "image_upload_ids": [upload_id],
+                },
             )
             assert create_response.status_code == 200
             task_id = create_response.json()["task"]["task_id"]
@@ -1534,8 +1549,11 @@ def test_auto_started_stage_prompt_is_visible_while_running(
     history = detail_response.json()["history_items"]
     assert [item["role"] for item in history] == ["user", "user"]
     assert history[0]["content"] == "/plan\n# Task\nTask A\n\n## Goal\nInvestigate"
+    assert history[0]["image_attachments"][0]["upload_id"] == upload_id
     assert history[1]["content"] == "/implement"
+    assert history[1]["image_attachments"] == []
     assert replay_history_flags == [False, False]
+    assert turn_image_counts == [1, 0]
 
 
 def test_second_manager_start_does_not_mark_running_task_failed(
@@ -2542,6 +2560,52 @@ def test_upload_endpoint_returns_uploaded_image_metadata() -> None:
     )
 
 
+def test_task_image_upload_endpoint_returns_metadata(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        upload_response = client.post(
+            "/api/tasks/images",
+            files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+        )
+
+    assert upload_response.status_code == 200
+    payload = upload_response.json()
+    assert len(payload["uploads"]) == 1
+    upload = payload["uploads"][0]
+    assert upload["name"] == "chart.png"
+    assert upload["mime_type"] == "image/png"
+    assert upload["preview_url"].startswith("/api/live-sessions/uploads/")
+
+
+def test_create_task_accepts_uploaded_image_ids(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        upload_response = client.post(
+            "/api/tasks/images",
+            files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+        )
+        assert upload_response.status_code == 200
+        upload_id = upload_response.json()["uploads"][0]["upload_id"]
+
+        create_response = client.post(
+            "/api/tasks",
+            json={
+                "title": "Review chart",
+                "prompt": "Describe the chart",
+                "image_upload_ids": [upload_id],
+            },
+        )
+
+    assert create_response.status_code == 200
+    task = create_response.json()["task"]
+    assert task["image_attachments"][0]["upload_id"] == upload_id
+    assert task["image_attachments"][0]["name"] == "chart.png"
+
+
 def test_submit_session_input_accepts_uploaded_image_ids() -> None:
     def fake_run_session_loop(
         _settings, display, *, resume_session_id=None, on_reload=None
@@ -2788,6 +2852,54 @@ def test_delete_session_endpoint_removes_session_and_clears_task_links(
 
     assert sessions_response.json()["sessions"] == []
     assert tasks_response.json()["tasks"][0]["session_id"] is None
+
+
+def test_delete_session_endpoint_preserves_task_owned_uploads(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+    attachment = MessageImageAttachment(
+        upload_id="task-upload",
+        name="chart.png",
+        mime_type="image/png",
+        byte_count=8,
+        preview_url="/api/live-sessions/uploads/task-upload",
+    )
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+        store.add_message(
+            session_id,
+            "user",
+            "Investigate",
+            image_attachments=[attachment],
+        )
+        store.create_kanban_task(
+            directory=str(tmp_path),
+            title="Task with image",
+            prompt="Investigate",
+            stage="backlog",
+            session_id=session_id,
+            image_attachments=[attachment],
+        )
+
+    with patch("pbi_agent.web.session_manager.delete_uploaded_images") as mock_delete:
+        with TestClient(app) as client:
+            response = client.delete(f"/api/sessions/{session_id}")
+
+    assert response.status_code == 204
+    mock_delete.assert_called_once_with([])
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        tasks = store.list_kanban_tasks(str(tmp_path))
+    assert tasks[0].session_id is None
+    assert tasks[0].image_attachments == [attachment]
 
 
 def test_delete_session_endpoint_accepts_saved_sessions_from_any_provider(

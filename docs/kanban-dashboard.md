@@ -20,6 +20,7 @@ Each task contains:
 | --- | --- |
 | Title | Short task label shown on the card. |
 | Prompt | The user prompt sent when the task runs. |
+| Image attachments | Optional PNG, JPEG, or WEBP images sent with the initial task prompt. |
 | Stage | Current board stage. |
 | Profile override | Optional model profile for this task. If empty, the stage/default runtime is used. |
 
@@ -57,6 +58,8 @@ Profile selection follows this order:
 4. CLI/env/provider defaults if no saved profile applies.
 
 Command selection follows the stage configuration. The first runnable stage sends the slash command plus task details; later stages can run command-only handoffs when configured. Project commands come from `.agents/commands/*.md` and are documented in [Session Commands](/session-commands#project-slash-commands).
+
+Task image attachments are included only with the initial full task prompt. Later continuation or command-only stage handoffs do not resend the original images. The selected task/stage/default runtime must support image inputs for attached-image tasks to run.
 
 If the board only has Backlog and Done, pbi-agent prompts you to create a runnable stage before starting backlog tasks.
 

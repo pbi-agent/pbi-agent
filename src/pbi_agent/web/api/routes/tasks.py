@@ -1,19 +1,42 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from typing import Annotated
+
+from fastapi import APIRouter, File, Response, UploadFile
 
 from pbi_agent.config import ConfigError
 from pbi_agent.web.api.deps import SessionManagerDep, TaskIdPath, model_from_payload
 from pbi_agent.web.api.errors import bad_request, config_http_error, not_found
 from pbi_agent.web.api.schemas.tasks import (
     CreateTaskRequest,
+    TaskImageUploadResponse,
     TaskRecordModel,
     TaskResponse,
     TasksResponse,
     UpdateTaskRequest,
 )
+from pbi_agent.web.api.schemas.common import ImageAttachmentModel
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+
+@router.post("/images", response_model=TaskImageUploadResponse)
+async def upload_task_images(
+    manager: SessionManagerDep,
+    files: Annotated[list[UploadFile], File(description="One or more image files")],
+) -> TaskImageUploadResponse:
+    try:
+        uploads = manager.upload_task_images(
+            files=[
+                (upload.filename or "task-image.png", await upload.read())
+                for upload in files
+            ],
+        )
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return TaskImageUploadResponse(
+        uploads=[model_from_payload(ImageAttachmentModel, upload) for upload in uploads]
+    )
 
 
 @router.get("", response_model=TasksResponse)
@@ -38,6 +61,7 @@ def create_task(
             project_dir=request.project_dir,
             session_id=request.session_id,
             profile_id=request.profile_id,
+            image_upload_ids=request.image_upload_ids,
         )
     except ConfigError as exc:
         raise config_http_error(exc) from exc
@@ -64,6 +88,8 @@ def update_task(
             session_id_present="session_id" in request.model_fields_set,
             profile_id=request.profile_id,
             profile_id_present="profile_id" in request.model_fields_set,
+            image_upload_ids=request.image_upload_ids,
+            image_upload_ids_present="image_upload_ids" in request.model_fields_set,
         )
     except KeyError as exc:
         raise not_found("Task not found.") from exc

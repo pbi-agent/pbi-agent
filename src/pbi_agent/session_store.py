@@ -161,7 +161,8 @@ CREATE TABLE IF NOT EXISTS kanban_tasks (
     created_at            TEXT NOT NULL,
     updated_at            TEXT NOT NULL,
     last_run_started_at   TEXT,
-    last_run_finished_at  TEXT
+    last_run_finished_at  TEXT,
+    image_attachments_json TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_kanban_tasks_directory
     ON kanban_tasks(directory, stage, position, updated_at DESC);
@@ -308,6 +309,7 @@ class KanbanTaskRecord:
     updated_at: str
     last_run_started_at: str | None
     last_run_finished_at: str | None
+    image_attachments: list[MessageImageAttachment] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -514,6 +516,31 @@ def _deserialize_image_attachments(raw_value: object) -> list[MessageImageAttach
     return attachments
 
 
+def _kanban_task_record(row: sqlite3.Row) -> KanbanTaskRecord:
+    data = dict(row)
+    image_attachments = _deserialize_image_attachments(
+        data.pop("image_attachments_json", None)
+    )
+    return KanbanTaskRecord(
+        task_id=str(data["task_id"]),
+        directory=str(data["directory"]),
+        title=str(data["title"]),
+        prompt=str(data["prompt"]),
+        stage=str(data["stage"]),
+        position=int(data["position"]),
+        project_dir=str(data["project_dir"]),
+        session_id=data.get("session_id"),
+        model_profile_id=data.get("model_profile_id"),
+        run_status=str(data["run_status"]),
+        last_result_summary=str(data["last_result_summary"]),
+        created_at=str(data["created_at"]),
+        updated_at=str(data["updated_at"]),
+        last_run_started_at=data.get("last_run_started_at"),
+        last_run_finished_at=data.get("last_run_finished_at"),
+        image_attachments=image_attachments,
+    )
+
+
 def _kanban_stage_config_record(row: sqlite3.Row) -> KanbanStageConfigRecord:
     data = dict(row)
     return KanbanStageConfigRecord(
@@ -582,6 +609,16 @@ class SessionStore:
         if "image_attachments_json" not in message_columns:
             self._conn.execute(
                 "ALTER TABLE messages "
+                "ADD COLUMN image_attachments_json TEXT NOT NULL DEFAULT '[]'"
+            )
+
+        kanban_task_columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(kanban_tasks)").fetchall()
+        }
+        if "image_attachments_json" not in kanban_task_columns:
+            self._conn.execute(
+                "ALTER TABLE kanban_tasks "
                 "ADD COLUMN image_attachments_json TEXT NOT NULL DEFAULT '[]'"
             )
         self._conn.commit()
@@ -1452,6 +1489,7 @@ class SessionStore:
         project_dir: str = ".",
         session_id: str | None = None,
         model_profile_id: str | None = None,
+        image_attachments: list[MessageImageAttachment] | None = None,
     ) -> KanbanTaskRecord:
         task_id = uuid.uuid4().hex
         now = _now_iso()
@@ -1464,8 +1502,8 @@ class SessionStore:
                 "INSERT INTO kanban_tasks "
                 "(task_id, directory, title, prompt, stage, position, project_dir, "
                 "session_id, model_profile_id, run_status, last_result_summary, created_at, updated_at, "
-                "last_run_started_at, last_run_finished_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)",
+                "last_run_started_at, last_run_finished_at, image_attachments_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)",
                 (
                     task_id,
                     normalized_directory,
@@ -1480,6 +1518,7 @@ class SessionStore:
                     "",
                     now,
                     now,
+                    _serialize_image_attachments(image_attachments),
                 ),
             )
             self._conn.commit()
@@ -1488,7 +1527,7 @@ class SessionStore:
                 (task_id,),
             ).fetchone()
         assert row is not None
-        return KanbanTaskRecord(**dict(row))
+        return _kanban_task_record(row)
 
     def get_kanban_task(self, task_id: str) -> KanbanTaskRecord | None:
         with self._lock:
@@ -1498,7 +1537,7 @@ class SessionStore:
             ).fetchone()
         if row is None:
             return None
-        return KanbanTaskRecord(**dict(row))
+        return _kanban_task_record(row)
 
     def list_kanban_tasks(self, directory: str) -> list[KanbanTaskRecord]:
         normalized_directory = _normalize_directory_key(directory)
@@ -1522,7 +1561,7 @@ class SessionStore:
                     KANBAN_STAGE_DONE,
                 ),
             ).fetchall()
-        return [KanbanTaskRecord(**dict(row)) for row in rows]
+        return [_kanban_task_record(row) for row in rows]
 
     def update_kanban_task(
         self,
@@ -1536,6 +1575,8 @@ class SessionStore:
         clear_session_id: bool = False,
         model_profile_id: str | None = None,
         clear_model_profile_id: bool = False,
+        image_attachments: list[MessageImageAttachment] | None = None,
+        image_attachments_present: bool = False,
         run_status: str | None = None,
         last_result_summary: str | None = None,
         last_run_started_at: str | None = None,
@@ -1576,6 +1617,9 @@ class SessionStore:
         elif model_profile_id is not None:
             clauses.append("model_profile_id = ?")
             params.append(model_profile_id)
+        if image_attachments_present:
+            clauses.append("image_attachments_json = ?")
+            params.append(_serialize_image_attachments(image_attachments))
         if run_status is not None:
             clauses.append("run_status = ?")
             params.append(run_status)
@@ -1609,7 +1653,7 @@ class SessionStore:
             ).fetchone()
         if row is None:
             return None
-        return KanbanTaskRecord(**dict(row))
+        return _kanban_task_record(row)
 
     def move_kanban_task(
         self,
@@ -1625,7 +1669,7 @@ class SessionStore:
             ).fetchone()
             if current is None:
                 return None
-            record = KanbanTaskRecord(**dict(current))
+            record = _kanban_task_record(current)
             self._require_kanban_stage_locked(record.directory, stage)
             old_stage = record.stage
             old_position = record.position
@@ -1697,7 +1741,7 @@ class SessionStore:
                 (task_id,),
             ).fetchone()
         assert row is not None
-        return KanbanTaskRecord(**dict(row))
+        return _kanban_task_record(row)
 
     def delete_kanban_task(self, task_id: str) -> bool:
         with self._lock:

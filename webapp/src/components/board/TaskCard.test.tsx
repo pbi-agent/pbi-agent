@@ -29,6 +29,7 @@ function makeTask(overrides: Partial<TaskRecord> = {}): TaskRecord {
     updated_at: "2026-04-16T10:00:00Z",
     last_run_started_at: null,
     last_run_finished_at: null,
+    image_attachments: [],
     runtime_summary: {
       provider: null,
       provider_id: null,

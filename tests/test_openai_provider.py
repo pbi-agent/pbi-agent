@@ -44,10 +44,11 @@ from pbi_agent.providers.openai_provider import (
     _extract_retry_after,
     _parse_sse_response,
 )
-from pbi_agent.session_store import MessageRecord
+from pbi_agent.session_store import MessageImageAttachment, MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog, ToolCatalogEntry
 from pbi_agent.tools.types import ToolSpec
 from pbi_agent.tools.types import ToolResult
+from pbi_agent.web import uploads
 
 
 class _DisplayStub:
@@ -395,6 +396,68 @@ def test_openai_build_request_body_replays_restored_history_without_previous_res
     assert body["input"] == [
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "hi"},
+        {"role": "user", "content": "continue"},
+    ]
+    assert "previous_response_id" not in body
+
+
+def test_openai_build_request_body_replays_restored_user_images_without_previous_response_id(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path)
+    stored = uploads.store_uploaded_image_bytes(
+        raw_bytes=b"\x89PNG\r\n\x1a\nimage-bytes",
+        name="chart.png",
+        upload_id="upload-1",
+    )
+    provider = OpenAIProvider(_make_settings())
+    provider.restore_messages(
+        [
+            MessageRecord(
+                id=1,
+                session_id="session-1",
+                role="user",
+                content="describe this",
+                created_at="2026-03-31T00:00:00+00:00",
+                image_attachments=[
+                    MessageImageAttachment(
+                        upload_id=stored.upload_id,
+                        name=stored.name,
+                        mime_type=stored.mime_type,
+                        byte_count=stored.byte_count,
+                        preview_url=f"/api/live-sessions/uploads/{stored.upload_id}",
+                    )
+                ],
+            ),
+            MessageRecord(
+                id=2,
+                session_id="session-1",
+                role="assistant",
+                content="it is a chart",
+                created_at="2026-03-31T00:00:01+00:00",
+            ),
+        ]
+    )
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "continue"}],
+        instructions="be concise",
+    )
+
+    assert body["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "describe this"},
+                {
+                    "type": "input_image",
+                    "image_url": "data:image/png;base64,iVBORw0KGgppbWFnZS1ieXRlcw==",
+                    "detail": "original",
+                },
+            ],
+        },
+        {"role": "assistant", "content": "it is a chart"},
         {"role": "user", "content": "continue"},
     ]
     assert "previous_response_id" not in body

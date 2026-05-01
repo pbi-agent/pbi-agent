@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 from pbi_agent.web.api.deps import NonEmptyString
-from pbi_agent.web.api.schemas.common import RuntimeSummaryModel
+from pbi_agent.web.api.schemas.common import ImageAttachmentModel, RuntimeSummaryModel
 
 RunStatus = Literal["idle", "running", "completed", "failed"]
 
@@ -17,6 +17,7 @@ class CreateTaskRequest(BaseModel):
     project_dir: str = "."
     session_id: str | None = None
     profile_id: str | None = None
+    image_upload_ids: list[str] = Field(default_factory=list)
 
 
 class UpdateTaskRequest(BaseModel):
@@ -27,6 +28,7 @@ class UpdateTaskRequest(BaseModel):
     project_dir: str | None = None
     session_id: str | None = None
     profile_id: str | None = None
+    image_upload_ids: list[str] | None = None
 
 
 class BoardStageModel(BaseModel):
@@ -70,7 +72,12 @@ class TaskRecordModel(BaseModel):
     updated_at: str
     last_run_started_at: str | None
     last_run_finished_at: str | None
+    image_attachments: list[ImageAttachmentModel] = Field(default_factory=list)
     runtime_summary: RuntimeSummaryModel
+
+
+class TaskImageUploadResponse(BaseModel):
+    uploads: list[ImageAttachmentModel]
 
 
 class TasksResponse(BaseModel):

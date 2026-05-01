@@ -23,6 +23,7 @@ import {
   runTask,
   updateBoardStages,
   updateTask,
+  uploadTaskImages,
 } from "../../api";
 import type { BoardStage, TaskRecord } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
@@ -194,6 +195,9 @@ export function BoardPage() {
       projectDir: ".",
       sessionId: "",
       profileId: "",
+      imageAttachments: [],
+      imageFiles: [],
+      imageError: null,
     });
   };
 
@@ -216,34 +220,52 @@ export function BoardPage() {
       projectDir: task.project_dir,
       sessionId: task.session_id ?? "",
       profileId: task.profile_id ?? "",
+      imageAttachments: task.image_attachments,
+      imageFiles: [],
+      imageError: null,
     });
 
   const saveTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingTask) return;
-    if (editingTask.taskId) {
-      await updateTaskMutation.mutateAsync({
-        taskId: editingTask.taskId,
-        payload: {
+    try {
+      const uploadedImages = editingTask.imageFiles.length > 0
+        ? await uploadTaskImages(editingTask.imageFiles.map((image) => image.file))
+        : [];
+      const imageUploadIds = [
+        ...editingTask.imageAttachments.map((attachment) => attachment.upload_id),
+        ...uploadedImages.map((attachment) => attachment.upload_id),
+      ];
+      if (editingTask.taskId) {
+        await updateTaskMutation.mutateAsync({
+          taskId: editingTask.taskId,
+          payload: {
+            title: editingTask.title,
+            prompt: editingTask.prompt,
+            stage: editingTask.stage,
+            project_dir: editingTask.projectDir,
+            session_id: editingTask.sessionId.trim() === "" ? null : editingTask.sessionId,
+            profile_id: editingTask.profileId.trim() === "" ? null : editingTask.profileId,
+            image_upload_ids: imageUploadIds,
+          },
+        });
+      } else {
+        await createTaskMutation.mutateAsync({
           title: editingTask.title,
           prompt: editingTask.prompt,
           stage: editingTask.stage,
           project_dir: editingTask.projectDir,
-          session_id: editingTask.sessionId.trim() === "" ? null : editingTask.sessionId,
-          profile_id: editingTask.profileId.trim() === "" ? null : editingTask.profileId,
-        },
-      });
-    } else {
-      await createTaskMutation.mutateAsync({
-        title: editingTask.title,
-        prompt: editingTask.prompt,
-        stage: editingTask.stage,
-        project_dir: editingTask.projectDir,
-        session_id: editingTask.sessionId || undefined,
-        profile_id: editingTask.profileId || undefined,
-      });
+          session_id: editingTask.sessionId || undefined,
+          profile_id: editingTask.profileId || undefined,
+          image_upload_ids: imageUploadIds,
+        });
+      }
+      setEditingTask(null);
+    } catch (error) {
+      setEditingTask((current) => current
+        ? { ...current, imageError: error instanceof Error ? error.message : "Failed to save task images." }
+        : current);
     }
-    setEditingTask(null);
   };
 
   const saveBoardStages = async (

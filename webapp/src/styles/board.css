@@ -584,3 +584,14 @@
     padding-inline: var(--sp-4);
   }
 }
+
+.task-card__attachment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.task-card__attachment-count svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}

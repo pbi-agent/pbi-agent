@@ -1,4 +1,7 @@
-[X] Read release skill/command files
-[X] Compress prose while preserving structure/code/commands/paths
-[X] Validate command tests or inspect diffs
-[X] Update MEMORY.md
+# TODO
+
+[X] Inspect session/image handling for reported multi-turn behavior
+[X] Determine whether image should be resent on later turns or preserved via provider history
+[X] Apply fix if needed
+[X] Run focused validation
+[X] Update memory
