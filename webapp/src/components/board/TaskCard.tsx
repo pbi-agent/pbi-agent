@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { ExternalLinkIcon, GripVerticalIcon, ImageIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { ExternalLinkIcon, GripVerticalIcon, PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import type { TaskRecord } from "../../types";
 import { Button } from "../ui/button";
 import { Card, CardFooter, CardHeader, CardTitle } from "../ui/card";
@@ -11,14 +11,6 @@ export function TaskCardContent({ task }: { task: TaskRecord }) {
     <>
       <CardTitle className="task-card__title">{task.title}</CardTitle>
       <p className="task-card__prompt">{task.prompt}</p>
-      {task.image_attachments.length > 0 ? (
-        <div className="task-card__meta">
-          <span className="task-card__attachment-count">
-            <ImageIcon aria-hidden="true" />
-            {task.image_attachments.length}
-          </span>
-        </div>
-      ) : null}
       {task.last_result_summary ? (
         <pre className="task-card__summary">{task.last_result_summary}</pre>
       ) : null}

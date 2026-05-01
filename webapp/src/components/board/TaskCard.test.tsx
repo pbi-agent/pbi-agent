@@ -92,35 +92,4 @@ describe("TaskCard", () => {
     expect(screen.queryByText("no session")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Session" })).not.toBeInTheDocument();
   });
-
-  it("keeps the image attachment count visible", () => {
-    renderWithProviders(
-      <TaskCard
-        task={makeTask({
-          image_attachments: [
-            {
-              upload_id: "image-1",
-              name: "first.png",
-              mime_type: "image/png",
-              byte_count: 12,
-              preview_url: "/api/live-sessions/uploads/image-1",
-            },
-            {
-              upload_id: "image-2",
-              name: "second.png",
-              mime_type: "image/png",
-              byte_count: 34,
-              preview_url: "/api/live-sessions/uploads/image-2",
-            },
-          ],
-        })}
-        onEdit={vi.fn()}
-        onDelete={vi.fn()}
-        onRun={vi.fn()}
-        canRun
-      />,
-    );
-
-    expect(screen.getByText("2")).toBeInTheDocument();
-  });
 });
