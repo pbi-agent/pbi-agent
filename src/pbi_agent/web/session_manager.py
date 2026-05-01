@@ -40,6 +40,7 @@ from pbi_agent.auth.service import (
     start_provider_browser_auth,
     start_provider_device_auth,
 )
+from pbi_agent.auth.usage_limits import get_provider_usage_limits
 from pbi_agent.config import (
     ConfigError,
     InternalConfig,
@@ -1687,6 +1688,12 @@ class WebSessionManager:
             "auth_status": self._auth_status_view(status),
             "removed": removed,
         }
+
+    def get_provider_usage_limits(self, provider_id: str) -> dict[str, Any]:
+        config = load_internal_config()
+        provider = self._require_provider(config, provider_id)
+        usage = get_provider_usage_limits(provider)
+        return usage.to_dict()
 
     def start_provider_auth_flow(
         self,

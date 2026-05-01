@@ -506,3 +506,119 @@
     white-space: normal;
   }
 }
+
+/* ── Provider usage dialog ───────────────────────────────────────────────── */
+
+.provider-usage-dialog {
+  --provider-usage-gutter: 1.5rem;
+}
+
+.provider-usage-dialog > [data-slot="dialog-close"] {
+  top: 1rem;
+  right: 1rem;
+}
+
+.provider-usage-dialog__header {
+  padding: 1.5rem var(--provider-usage-gutter) 1rem;
+}
+
+.provider-usage-dialog__header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  /* Reserve room for the absolutely-positioned dialog close button. */
+  padding-right: 3rem;
+}
+
+.provider-usage-dialog__header-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.provider-usage-dialog__header-content {
+  padding-top: 0.125rem;
+  min-width: 0;
+}
+
+.provider-usage-dialog__meta {
+  margin-top: 0.875rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  min-height: 1.875rem;
+}
+
+.provider-usage-dialog__plan-badge {
+  flex-shrink: 0;
+  min-height: 1.75rem;
+  padding: var(--sp-1) var(--sp-3);
+  gap: var(--sp-1);
+  /* Nudge the badge down so it visually centers against the title row
+     while staying clear of the close button at the top-right corner. */
+  margin-top: 0.25rem;
+}
+
+.provider-usage-dialog__scroll {
+  padding: 1.25rem var(--provider-usage-gutter) 1.5rem;
+  scrollbar-gutter: stable both-edges;
+}
+
+.provider-usage-dialog__buckets {
+  display: grid;
+  gap: 1rem;
+}
+
+.provider-usage-dialog__refresh {
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+
+.provider-usage-dialog__refresh:not(:disabled):hover,
+.provider-usage-dialog__refresh:not(:disabled):focus-visible {
+  background: var(--color-surface-3);
+  border-color: var(--color-border-focus);
+  color: var(--color-text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.provider-usage-bucket {
+  overflow: hidden;
+}
+
+.provider-usage-bucket__header {
+  padding: 0.875rem 1.125rem;
+}
+
+.provider-usage-bucket__body {
+  padding: 1rem 1.125rem 1.125rem;
+}
+
+.provider-usage-window-list {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.provider-usage-window {
+  padding: 0.95rem 1rem;
+}
+
+.provider-usage-bucket__notes {
+  margin-top: 1rem;
+  padding-top: 0.875rem;
+}
+
+@media (max-width: 40rem) {
+  .provider-usage-dialog {
+    --provider-usage-gutter: 1rem;
+  }
+
+  .provider-usage-dialog__header-top {
+    padding-right: 2.5rem;
+  }
+}

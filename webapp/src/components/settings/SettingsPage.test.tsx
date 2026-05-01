@@ -9,6 +9,7 @@ import {
   fetchConfigBootstrap,
   fetchProviderModels,
   fetchProviderAuthFlow,
+  fetchProviderUsageLimits,
   logoutProviderAuth,
   refreshProviderAuth,
   setActiveModelProfile,
@@ -31,6 +32,7 @@ vi.mock("../../api", async (importOriginal) => {
     setActiveModelProfile: vi.fn(),
     startProviderAuthFlow: vi.fn(),
     fetchProviderAuthFlow: vi.fn(),
+    fetchProviderUsageLimits: vi.fn(),
     refreshProviderAuth: vi.fn(),
     logoutProviderAuth: vi.fn(),
   };
@@ -387,6 +389,14 @@ describe("SettingsPage", () => {
       auth_status: makeConfigBootstrap().providers[1].auth_status,
       removed: true,
     });
+    vi.mocked(fetchProviderUsageLimits).mockResolvedValue({
+      provider_id: "chatgpt-main",
+      provider_kind: "chatgpt",
+      account_label: "user@example.com",
+      plan_type: "Plus",
+      fetched_at: "2026-05-01T00:00:00Z",
+      buckets: [],
+    });
     vi.mocked(fetchProviderModels).mockResolvedValue({
       provider_id: "openai-main",
       provider_kind: "openai",
@@ -450,6 +460,97 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(setActiveModelProfile).toHaveBeenCalledWith("qa", "rev-1"),
     );
+  });
+
+  it("opens the usage-limits dialog only for connected subscription providers", async () => {
+    const user = userEvent.setup();
+    const base = makeConfigBootstrap();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [
+          base.providers[0],
+          {
+            ...base.providers[1],
+            auth_status: {
+              ...base.providers[1].auth_status,
+              session_status: "connected",
+              has_session: true,
+              email: "user@example.com",
+              plan_type: "Plus",
+            },
+          },
+        ],
+      }),
+    );
+    vi.mocked(fetchProviderUsageLimits).mockResolvedValue({
+      provider_id: "chatgpt-main",
+      provider_kind: "chatgpt",
+      account_label: "user@example.com",
+      plan_type: "Plus",
+      fetched_at: "2026-05-01T00:00:00Z",
+      buckets: [
+        {
+          id: "codex",
+          label: "Codex",
+          unlimited: false,
+          overage_allowed: false,
+          overage_count: 0,
+          status: "warning",
+          credits: { has_credits: true, unlimited: false, balance: "9.99" },
+          windows: [
+            {
+              name: "5h",
+              used_percent: 80,
+              remaining_percent: 20,
+              window_minutes: 300,
+              resets_at: 1_800_000_000,
+              reset_at_iso: null,
+              used_requests: null,
+              total_requests: null,
+              remaining_requests: null,
+            },
+            {
+              name: "weekly",
+              used_percent: 35,
+              remaining_percent: 65,
+              window_minutes: 10_080,
+              resets_at: 1_800_500_000,
+              reset_at_iso: null,
+              used_requests: null,
+              total_requests: null,
+              remaining_requests: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
+
+    // Usage data must NOT be fetched eagerly on render.
+    expect(fetchProviderUsageLimits).not.toHaveBeenCalled();
+
+    // API-key providers should not expose a Usage button.
+    const usageButtons = screen.getAllByRole("button", { name: "Usage" });
+    expect(usageButtons).toHaveLength(1);
+
+    await user.click(usageButtons[0]);
+
+    expect(
+      await screen.findByRole("dialog", { name: /Usage & limits/i }),
+    ).toBeInTheDocument();
+
+    expect(fetchProviderUsageLimits).toHaveBeenCalledWith("chatgpt-main");
+    expect(fetchProviderUsageLimits).not.toHaveBeenCalledWith("openai-main");
+
+    expect(await screen.findByText("Codex")).toBeInTheDocument();
+    expect(screen.getByText("5h limit")).toBeInTheDocument();
+    expect(screen.getByText("weekly limit")).toBeInTheDocument();
+    expect(screen.getByText(/Used 80%/)).toBeInTheDocument();
+    expect(screen.getByText(/Used 35%/)).toBeInTheDocument();
+    expect(screen.getByText("Credits: 9.99")).toBeInTheDocument();
   });
 
   it("shows provider auth controls and starts the browser auth flow", async () => {

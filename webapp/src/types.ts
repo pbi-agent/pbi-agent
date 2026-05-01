@@ -308,6 +308,44 @@ export type ProviderAuthFlowResponse = {
   session: ProviderAuthSession | null;
 };
 
+export type UsageLimitCredits = {
+  has_credits: boolean | null;
+  unlimited: boolean | null;
+  balance: string | null;
+};
+
+export type UsageLimitWindow = {
+  name: string;
+  used_percent: number | null;
+  remaining_percent: number | null;
+  window_minutes: number | null;
+  resets_at: number | null;
+  reset_at_iso: string | null;
+  used_requests: number | null;
+  total_requests: number | null;
+  remaining_requests: number | null;
+};
+
+export type UsageLimitBucket = {
+  id: string;
+  label: string;
+  unlimited: boolean;
+  overage_allowed: boolean;
+  overage_count: number;
+  status: "ok" | "warning" | "exhausted" | "unknown";
+  credits: UsageLimitCredits | null;
+  windows: UsageLimitWindow[];
+};
+
+export type ProviderUsageLimitsResponse = {
+  provider_id: string;
+  provider_kind: string;
+  account_label: string | null;
+  plan_type: string | null;
+  fetched_at: string;
+  buckets: UsageLimitBucket[];
+};
+
 export type ConfigOptions = {
   provider_kinds: string[];
   reasoning_efforts: string[];

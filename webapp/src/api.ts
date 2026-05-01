@@ -16,6 +16,7 @@ import type {
   ProviderAuthLogoutResponse,
   ProviderAuthResponse,
   ProviderModelListPayload,
+  ProviderUsageLimitsResponse,
   ProviderView,
   RunSession,
   SessionDetailPayload,
@@ -423,6 +424,12 @@ export async function logoutProviderAuth(
   return requestJson(`/api/provider-auth/${providerId}`, {
     method: "DELETE",
   });
+}
+
+export async function fetchProviderUsageLimits(
+  providerId: string,
+): Promise<ProviderUsageLimitsResponse> {
+  return requestJson(`/api/provider-auth/${providerId}/usage-limits`);
 }
 
 export async function createModelProfile(

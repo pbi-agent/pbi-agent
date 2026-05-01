@@ -52,6 +52,37 @@
   color: var(--color-text);
 }
 
+.app-close-icon-button {
+  color: var(--color-text-tertiary);
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.app-close-icon-button svg {
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.app-close-icon-button:hover:not(:disabled),
+.app-close-icon-button:focus-visible:not(:disabled) {
+  background: var(--color-error-muted);
+  border-color: color-mix(in srgb, var(--color-error) 32%, transparent);
+  color: var(--color-error);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-error) 16%, transparent);
+}
+
+.app-close-icon-button:hover:not(:disabled) svg,
+.app-close-icon-button:focus-visible:not(:disabled) svg {
+  transform: rotate(90deg) scale(1.08);
+}
+
+.app-close-icon-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.96);
+}
+
 /* ── Task Form ── */
 .task-form-dialog {
   width: min(35rem, calc(100dvw - 2rem));

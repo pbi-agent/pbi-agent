@@ -65,7 +65,7 @@ export function RunDetailModal({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="modal-card__close"
+            className="app-close-icon-button modal-card__close"
             onClick={onClose}
             aria-label="Close"
           >
