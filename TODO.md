@@ -1,7 +1,6 @@
 # TODO
 
-[X] Add hover styling hook for delete confirm Cancel action
-[X] Update CSS to match existing outline validation action hover effect
-[X] Update frontend test coverage
-[X] Run targeted validation
-[X] Update memory and handoff
+[X] Update ship-task workflow verification
+[X] Validate gh CLI command syntax for waiting on PR checks
+[X] Edit `.agents/commands/ship-task.md` with clear pre-merge verification step
+[X] Review diff and update memory
