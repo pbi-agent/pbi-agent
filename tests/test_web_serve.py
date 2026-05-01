@@ -668,6 +668,58 @@ def test_expand_input_endpoint_expands_mentions_and_extracts_images(
     assert payload["warnings"] == []
 
 
+def test_expand_input_endpoint_handles_path_mention_followed_by_long_prompt(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    commands_dir = tmp_path / ".agents" / "commands"
+    commands_dir.mkdir(parents=True)
+    (commands_dir / "ship-task.md").write_text("ship it\n", encoding="utf-8")
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/live-sessions/expand-input",
+            json={
+                "text": "Update @.agents/commands/ship-task.md "
+                "we need to add instruction to wait for github workflow before merging PR"
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["text"] == (
+        "Update .agents/commands/ship-task.md "
+        "we need to add instruction to wait for github workflow before merging PR"
+    )
+    assert payload["file_paths"] == [".agents/commands/ship-task.md"]
+    assert payload["image_paths"] == []
+    assert payload["warnings"] == []
+
+
+def test_expand_input_endpoint_warns_for_overlong_path_mention(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    app = create_app(_settings())
+    overlong_name = "a" * 300 + ".md"
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/live-sessions/expand-input",
+            json={"text": f"Review @{overlong_name}"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["text"] == f"Review @{overlong_name}"
+    assert payload["file_paths"] == []
+    assert payload["image_paths"] == []
+    assert payload["warnings"] == ["Referenced file path is too long and was ignored."]
+
+
 def test_expand_input_endpoint_warns_when_image_mentions_are_unsupported(
     tmp_path, monkeypatch
 ) -> None:

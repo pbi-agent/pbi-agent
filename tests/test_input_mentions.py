@@ -110,6 +110,43 @@ def test_expand_file_mentions_supports_literal_spaces(tmp_path: Path) -> None:
     assert expanded == "Summarize my notes.txt please"
 
 
+def test_expand_file_mentions_resolves_valid_path_before_long_prose(
+    tmp_path: Path,
+) -> None:
+    commands_dir = tmp_path / ".agents" / "commands"
+    commands_dir.mkdir(parents=True)
+    target = commands_dir / "ship-task.md"
+    target.write_text("ship it\n", encoding="utf-8")
+
+    expanded, file_paths, image_paths, warnings = expand_input_mentions(
+        "Update @.agents/commands/ship-task.md "
+        "we need to add instruction to wait for github workflow before merging PR",
+        root=tmp_path,
+    )
+
+    assert expanded == (
+        "Update .agents/commands/ship-task.md "
+        "we need to add instruction to wait for github workflow before merging PR"
+    )
+    assert file_paths == [".agents/commands/ship-task.md"]
+    assert image_paths == []
+    assert warnings == []
+
+
+def test_expand_file_mentions_warns_for_overlong_unresolved_path(
+    tmp_path: Path,
+) -> None:
+    overlong_name = "a" * 300 + ".md"
+
+    expanded, warnings = expand_file_mentions(
+        f"Summarize @{overlong_name}",
+        root=tmp_path,
+    )
+
+    assert expanded == f"Summarize @{overlong_name}"
+    assert warnings == ["Referenced file path is too long and was ignored."]
+
+
 def test_search_input_mentions_returns_ranked_matches(tmp_path: Path) -> None:
     (tmp_path / "docs").mkdir()
     (tmp_path / "main.py").write_text("print('hi')\n", encoding="utf-8")

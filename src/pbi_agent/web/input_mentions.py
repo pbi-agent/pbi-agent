@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 import threading
@@ -28,6 +29,14 @@ class _MentionMatch:
     path: Path
     start: int
     end: int
+
+
+@dataclass(frozen=True, slots=True)
+class _MentionResolveResult:
+    path: Path | None
+    clean_path: str
+    consumed: int
+    path_too_long: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,21 +176,26 @@ def _collect_mentioned_files(
             line_end = len(text)
         raw_segment = text[at_index + 1 : line_end]
 
-        resolved, clean_path, consumed = _resolve_mentioned_file(raw_segment, root=root)
-        if resolved is None:
-            missing_path = _missing_mention_path(raw_segment)
-            if missing_path:
-                try:
-                    resolve_safe_path(root, missing_path)
-                except ValueError:
-                    pass
-                else:
-                    warnings.append(f"Referenced file not found: {missing_path}")
+        result = _resolve_mentioned_file(raw_segment, root=root)
+        if result.path is None:
+            if result.path_too_long:
+                warnings.append("Referenced file path is too long and was ignored.")
+            else:
+                missing_path = _missing_mention_path(raw_segment)
+                if missing_path:
+                    try:
+                        resolve_safe_path(root, missing_path)
+                    except (OSError, ValueError):
+                        pass
+                    else:
+                        warnings.append(f"Referenced file not found: {missing_path}")
             index = at_index + 1
             continue
 
-        files.append(_MentionMatch(resolved, at_index, at_index + 1 + consumed))
-        index = at_index + 1 + consumed
+        files.append(
+            _MentionMatch(result.path, at_index, at_index + 1 + result.consumed)
+        )
+        index = at_index + 1 + result.consumed
 
     return files
 
@@ -274,12 +288,11 @@ def _fuzzy_search(
     return [candidate for _, candidate in scored[:limit]]
 
 
-def _resolve_mentioned_file(
-    raw_segment: str, *, root: Path
-) -> tuple[Path | None, str, int]:
+def _resolve_mentioned_file(raw_segment: str, *, root: Path) -> _MentionResolveResult:
     if not raw_segment or raw_segment[0].isspace():
-        return None, "", 0
+        return _MentionResolveResult(None, "", 0)
 
+    path_too_long = False
     for end in range(len(raw_segment), 0, -1):
         candidate = raw_segment[:end].rstrip()
         if not candidate or candidate[0].isspace():
@@ -287,12 +300,21 @@ def _resolve_mentioned_file(
         clean_path = candidate.replace("\\ ", " ")
         try:
             resolved = resolve_safe_path(root, clean_path)
+        except OSError as exc:
+            if exc.errno == errno.ENAMETOOLONG:
+                path_too_long = True
+            continue
         except ValueError:
             continue
-        if resolved.exists() and resolved.is_file():
-            return resolved, clean_path, len(candidate)
+        try:
+            if resolved.is_file():
+                return _MentionResolveResult(resolved, clean_path, len(candidate))
+        except OSError as exc:
+            if exc.errno == errno.ENAMETOOLONG:
+                path_too_long = True
+            continue
 
-    return None, "", 0
+    return _MentionResolveResult(None, "", 0, path_too_long=path_too_long)
 
 
 def _missing_mention_path(raw_segment: str) -> str:
