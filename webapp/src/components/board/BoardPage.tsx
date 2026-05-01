@@ -357,7 +357,7 @@ export function BoardPage() {
             Tasks move by configured stage order and can auto-start per stage
           </p>
         </div>
-        <div className="board-layout__actions">
+        <div className="app-action-row app-action-row--compact app-action-row--end board-layout__actions">
           <Button
             type="button"
             variant="ghost"
@@ -505,7 +505,7 @@ export function BoardPage() {
                 Add a stage between them before starting backlog tasks.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
+            <DialogFooter className="app-action-row app-action-row--end">
               <Button
                 type="button"
                 variant="outline"

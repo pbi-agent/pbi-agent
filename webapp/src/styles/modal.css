@@ -161,15 +161,19 @@
 }
 
 .task-form__footer {
+  display: flex;
+  flex-wrap: wrap;
   flex: 0 0 auto;
-  gap: var(--sp-2);
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-3);
   margin: 0 calc(var(--sp-6) * -1) calc(var(--sp-6) * -1);
-  padding-inline: var(--sp-6);
+  padding: var(--sp-4) var(--sp-6);
 }
 
 .task-form__action-button {
-  min-width: 0;
-  min-height: 2.25rem;
+  min-width: 4.5rem;
+  padding-inline: var(--sp-4);
   margin: 0;
   vertical-align: middle;
   transition:
@@ -215,7 +219,7 @@
 
   .task-form__footer {
     margin: 0 calc(var(--sp-4) * -1) calc(var(--sp-4) * -1);
-    padding-inline: var(--sp-4);
+    padding: var(--sp-4);
   }
 }
 
@@ -309,7 +313,8 @@
 .confirm-modal__actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--sp-2);
+  align-items: center;
+  gap: var(--sp-3);
 }
 
 .modal-icon-shell {
@@ -331,7 +336,7 @@
 .task-form__attachment-actions {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   flex-wrap: wrap;
 }
 
@@ -371,7 +376,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: var(--sp-1);
 }
 
 .task-form__attachment-name {

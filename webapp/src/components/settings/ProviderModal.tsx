@@ -406,7 +406,7 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
             )}
           </div>
 
-          <DialogFooter className="task-form__footer">
+          <DialogFooter className="app-action-row app-action-row--end task-form__footer">
             <Button
               type="button"
               variant="outline"

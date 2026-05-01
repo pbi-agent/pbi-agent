@@ -31,7 +31,7 @@ export function OnboardingModal({ isOnSettingsPage, onDismissOnSettings }: Props
               : "No model profiles are configured yet. You need to add at least one provider, complete sign-in if prompted, and create a model profile before you can use the app."}
           </DialogDescription>
         </DialogHeader>
-        <div className="task-form__footer">
+        <div className="app-action-row app-action-row--end task-form__footer">
           {isOnSettingsPage ? (
             <Button
               className="task-form__action-button"

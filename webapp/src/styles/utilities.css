@@ -90,6 +90,48 @@
   margin-top: var(--sp-2);
 }
 
+/* Shared action rows
+   Buttons remain marginless primitives; parent rows own all spacing so actions
+   keep the same visible gutter in dialogs, cards, settings rows, and headers. */
+.app-action-row,
+:where([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"]) {
+  align-items: center;
+  column-gap: var(--sp-3);
+  row-gap: var(--sp-2);
+}
+
+.app-action-row:not([data-slot="alert-dialog-footer"]) {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.app-action-row--compact {
+  column-gap: var(--sp-2);
+  row-gap: var(--sp-1);
+}
+
+.app-action-row--end {
+  justify-content: flex-end;
+}
+
+.app-action-row--between {
+  justify-content: space-between;
+}
+
+.app-action-row--nowrap {
+  flex-wrap: nowrap;
+}
+
+.app-action-row:not(.app-action-row--compact) > [data-slot="button"][data-size="default"] {
+  min-inline-size: 4.5rem;
+  padding-inline: var(--sp-4);
+}
+
+.app-action-row:not(.app-action-row--compact) > [data-slot="button"][data-size="lg"] {
+  min-inline-size: 5rem;
+  padding-inline: var(--sp-5);
+}
+
 /* Loading spinner */
 .spinner {
   width: 20px;

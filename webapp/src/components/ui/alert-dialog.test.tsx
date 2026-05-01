@@ -26,8 +26,15 @@ function DestructiveAlertDialog() {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel variant="outline">Cancel</AlertDialogCancel>
-          <AlertDialogAction variant="destructive">Delete</AlertDialogAction>
+          <AlertDialogCancel className="delete-confirm-modal__cancel" variant="outline">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            className="delete-confirm-modal__confirm"
+            variant="destructive"
+          >
+            Delete
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -52,9 +59,21 @@ describe("AlertDialog", () => {
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect(cancel).toHaveAttribute("data-variant", "outline");
 
+    const footer = dialog.querySelector('[data-slot="alert-dialog-footer"]');
+    expect(footer).toHaveClass(
+      "gap-2",
+      "group-data-[size=sm]/alert-dialog-content:grid",
+      "group-data-[size=sm]/alert-dialog-content:grid-cols-2",
+    );
+    expect(footer).not.toHaveClass("app-action-row");
+
     const action = screen.getByRole("button", { name: "Delete" });
     expect(action).toHaveAttribute("data-slot", "alert-dialog-action");
     expect(action).toHaveAttribute("data-variant", "destructive");
-    expect(action).toHaveClass("bg-destructive/10", "text-destructive");
+    expect(action).toHaveClass(
+      "bg-destructive/10",
+      "text-destructive",
+      "delete-confirm-modal__confirm",
+    );
   });
 });

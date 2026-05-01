@@ -21,18 +21,13 @@
 .board-layout__actions {
   display: flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .board-layout__action-button {
-  gap: 0.375rem;
-  min-height: 2.5rem;
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-md);
   color: var(--muted-foreground);
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  font-weight: var(--weight-medium);
   transition:
     color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease);
@@ -325,7 +320,7 @@
 
 .task-card__actions {
   display: none;
-  gap: 0.125rem;
+  gap: var(--sp-2);
   flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
@@ -339,19 +334,9 @@
 }
 
 .task-card__action-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
   min-width: 0;
-  min-height: 2rem;
   margin: 0;
-  padding: var(--sp-1) var(--sp-2);
-  border-radius: var(--radius-md);
   color: var(--muted-foreground);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  font-weight: var(--weight-medium);
   transition:
     color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease);
@@ -359,16 +344,13 @@
 }
 
 .task-card__action-button svg {
-  width: 0.875rem;
-  height: 0.875rem;
-  flex-shrink: 0;
   opacity: 0.7;
 }
 
 .task-card__action-button:not(:disabled):hover,
 .task-card__action-button:not(:disabled):focus-visible {
   color: var(--foreground);
-  background: var(--muted) !important;
+  background: var(--muted);
 }
 
 .task-card__action-button:not(:disabled):hover svg,
@@ -441,7 +423,7 @@
 .board-stage-editor__icon-button:not(:disabled):hover,
 .board-stage-editor__icon-button:not(:disabled):focus-visible {
   color: var(--foreground);
-  background: var(--muted) !important;
+  background: var(--muted);
 }
 
 .board-stage-editor__fields {
@@ -532,10 +514,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.125rem;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
   flex: 0 0 auto;
   margin: 0 calc(var(--sp-6) * -1) calc(var(--sp-6) * -1);
-  padding-inline: var(--sp-6);
+  padding: var(--sp-4) var(--sp-6);
 }
 
 /* ── Responsive ── */
@@ -570,6 +553,7 @@
   .board-stage-editor__actions {
     flex-direction: column;
     align-items: stretch;
+    gap: var(--sp-2);
   }
 }
 
@@ -581,7 +565,7 @@
 
   .board-stage-editor__actions {
     margin: 0 calc(var(--sp-4) * -1) calc(var(--sp-4) * -1);
-    padding-inline: var(--sp-4);
+    padding: var(--sp-4);
   }
 }
 

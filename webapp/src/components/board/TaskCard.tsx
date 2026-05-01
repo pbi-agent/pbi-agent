@@ -62,7 +62,7 @@ export function TaskCard({
         <TaskCardContent task={task} />
       </CardHeader>
 
-      <CardFooter className="task-card__actions">
+      <CardFooter className="app-action-row app-action-row--compact app-action-row--nowrap task-card__actions">
         <Button
           type="button"
           variant="ghost"

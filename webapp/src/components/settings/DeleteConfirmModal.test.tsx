@@ -22,6 +22,16 @@ describe("DeleteConfirmModal", () => {
   it("applies hover styling hooks to dialog actions", () => {
     renderDeleteConfirmModal();
 
+    const footer = screen
+      .getByRole("alertdialog", { name: "Delete Task" })
+      .querySelector('[data-slot="alert-dialog-footer"]');
+    expect(footer).toHaveClass(
+      "gap-2",
+      "group-data-[size=sm]/alert-dialog-content:grid",
+      "group-data-[size=sm]/alert-dialog-content:grid-cols-2",
+    );
+    expect(footer).not.toHaveClass("app-action-row");
+
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect(cancel).toHaveAttribute("data-variant", "outline");
     expect(cancel).toHaveClass("delete-confirm-modal__cancel");

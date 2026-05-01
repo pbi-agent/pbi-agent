@@ -51,11 +51,16 @@ export function DeleteSessionModal({
         ) : null}
 
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose} disabled={isDeleting}>
+          <AlertDialogCancel
+            className="delete-confirm-modal__cancel"
+            onClick={onClose}
+            disabled={isDeleting}
+          >
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
+            className="delete-confirm-modal__confirm"
             onClick={onConfirm}
             disabled={isDeleting}
           >
