@@ -58,4 +58,69 @@ describe("TaskCard", () => {
     expect(link).not.toHaveAttribute("target");
     expect(link).not.toHaveAttribute("rel");
   });
+
+  it("does not render technical project or session metadata in the card content", () => {
+    renderWithProviders(
+      <TaskCard
+        task={makeTask({ project_dir: "technical/project", session_id: "technical-session-id" })}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+        canRun
+      />,
+    );
+
+    expect(screen.queryByText("technical/project")).not.toBeInTheDocument();
+    expect(screen.queryByText("technical-session-id")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Session" })).toHaveAttribute(
+      "href",
+      "/sessions/technical-session-id",
+    );
+  });
+
+  it("does not render a no session fallback for tasks without sessions", () => {
+    renderWithProviders(
+      <TaskCard
+        task={makeTask({ session_id: null })}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+        canRun
+      />,
+    );
+
+    expect(screen.queryByText("no session")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Session" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the image attachment count visible", () => {
+    renderWithProviders(
+      <TaskCard
+        task={makeTask({
+          image_attachments: [
+            {
+              upload_id: "image-1",
+              name: "first.png",
+              mime_type: "image/png",
+              byte_count: 12,
+              preview_url: "/api/live-sessions/uploads/image-1",
+            },
+            {
+              upload_id: "image-2",
+              name: "second.png",
+              mime_type: "image/png",
+              byte_count: 34,
+              preview_url: "/api/live-sessions/uploads/image-2",
+            },
+          ],
+        })}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onRun={vi.fn()}
+        canRun
+      />,
+    );
+
+    expect(screen.getByText("2")).toBeInTheDocument();
+  });
 });
