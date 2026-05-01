@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from pbi_agent.web.api.deps import NonEmptyString
 from pbi_agent.web.api.schemas.common import ImageAttachmentModel, RuntimeSummaryModel
 from pbi_agent.web.api.schemas.tasks import BoardStageModel, TaskRecordModel
 
@@ -107,6 +108,14 @@ class LiveSessionDetailResponse(BaseModel):
 
 class SessionsResponse(BaseModel):
     sessions: list[SessionRecordModel]
+
+
+class UpdateSessionRequest(BaseModel):
+    title: NonEmptyString
+
+
+class SessionResponse(BaseModel):
+    session: SessionRecordModel
 
 
 class HistoryItemModel(BaseModel):

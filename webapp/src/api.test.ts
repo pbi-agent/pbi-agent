@@ -10,6 +10,7 @@ import {
   refreshProviderAuth,
   setActiveModelProfile,
   startProviderAuthFlow,
+  updateSession,
   uploadSessionImages,
   uploadTaskImages,
   websocketUrl,
@@ -80,6 +81,28 @@ describe("api helpers", () => {
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);
     expect(new Headers(init.headers).has("Content-Type")).toBe(false);
+  });
+
+  it("updates saved sessions with a PATCH payload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ session: { session_id: "session-1", title: "New title" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(updateSession("session-1", { title: "New title" })).resolves.toEqual({
+      session_id: "session-1",
+      title: "New title",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/session-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ title: "New title" }),
+      }),
+    );
   });
 
   it("returns undefined for 204 responses", async () => {

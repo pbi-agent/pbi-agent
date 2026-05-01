@@ -1,3 +1,7 @@
+export type UpdateSessionPayload = {
+  title: string;
+};
+
 export type SessionRecord = {
   session_id: string;
   directory: string;

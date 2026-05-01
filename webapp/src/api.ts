@@ -23,6 +23,7 @@ import type {
   SessionRecord,
   SlashCommandItem,
   TaskRecord,
+  UpdateSessionPayload,
 } from "./types";
 
 export class ApiError extends Error {
@@ -75,6 +76,20 @@ export async function fetchConfigBootstrap(): Promise<ConfigBootstrapPayload> {
 export async function fetchSessions(): Promise<SessionRecord[]> {
   const result = await requestJson<{ sessions: SessionRecord[] }>("/api/sessions");
   return result.sessions;
+}
+
+export async function updateSession(
+  sessionId: string,
+  payload: UpdateSessionPayload,
+): Promise<SessionRecord> {
+  const result = await requestJson<{ session: SessionRecord }>(
+    `/api/sessions/${sessionId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+  return result.session;
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {

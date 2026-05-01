@@ -38,6 +38,15 @@ export function useTaskEvents(): void {
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
           return;
         }
+        if (event.type === "session_updated") {
+          void client.invalidateQueries({ queryKey: ["sessions"] });
+          void client.invalidateQueries({ queryKey: ["bootstrap"] });
+          const session = event.payload.session as { session_id?: unknown } | undefined;
+          if (typeof session?.session_id === "string") {
+            void client.invalidateQueries({ queryKey: ["session", session.session_id] });
+          }
+          return;
+        }
         if (
           event.type === "live_session_started"
           || event.type === "live_session_updated"

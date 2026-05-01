@@ -14,6 +14,7 @@ import {
   interruptLiveSession,
   runShellCommand,
   submitSessionInput,
+  updateSession,
   uploadSessionImages,
 } from "../../api";
 import type {
@@ -44,13 +45,24 @@ vi.mock("./SessionSidebar", () => ({
   SessionSidebar: ({
     sessions,
     onNewSession,
+    onUpdateSession,
   }: {
     sessions: SessionRecord[];
     onNewSession: () => void;
+    onUpdateSession: (session: SessionRecord, title: string) => Promise<void>;
   }) => (
     <div>
       <div>Sidebar {sessions.length}</div>
       <button type="button" onClick={onNewSession}>New Session</button>
+      <button
+        type="button"
+        onClick={() => {
+          const session = sessions[0];
+          if (session) void onUpdateSession(session, "Renamed session");
+        }}
+      >
+        Mock rename session
+      </button>
     </div>
   ),
 }));
@@ -167,6 +179,7 @@ vi.mock("../../api", async (importOriginal) => {
     setActiveModelProfile: vi.fn(),
     setLiveSessionProfile: vi.fn(),
     submitSessionInput: vi.fn(),
+    updateSession: vi.fn(),
     uploadSessionImages: vi.fn(),
   };
 });
@@ -425,6 +438,7 @@ describe("SessionPage", () => {
     ]);
     vi.mocked(runShellCommand).mockResolvedValue(makeLiveSession());
     vi.mocked(submitSessionInput).mockResolvedValue(makeLiveSession());
+    vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
     vi.mocked(interruptLiveSession).mockResolvedValue(makeLiveSession());
   });
 
@@ -495,6 +509,18 @@ describe("SessionPage", () => {
     expect(deleteButton).toHaveAttribute("data-variant", "ghost");
     expect(deleteButton).toHaveAttribute("data-size", "icon-sm");
     expect(deleteButton).toHaveClass("session-topbar__delete-button");
+  });
+
+  it("updates saved session titles from the sidebar", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/session-1");
+
+    await user.click(await screen.findByRole("button", { name: "Mock rename session" }));
+
+    await waitFor(() => {
+      expect(updateSession).toHaveBeenCalledWith("session-1", { title: "Renamed session" });
+    });
   });
 
   it("passes live session usage to the context gauge before turn end", async () => {

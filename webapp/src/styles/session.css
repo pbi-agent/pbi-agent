@@ -240,9 +240,41 @@
   background: var(--color-error-muted);
 }
 
+.session-card__edit-form {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.session-card__edit-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.session-card__edit-input {
+  min-height: 34px;
+}
+
+.session-card__edit-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.session-card__edit-error {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--color-error);
+}
+
 .session-card__main:focus-visible,
 .session-card__menu-trigger:focus-visible,
-.session-card__menu-item:focus-visible {
+.session-card__menu-item:focus-visible,
+.session-card__edit-input:focus-visible {
   outline: 1px solid var(--color-accent-border);
   outline-offset: 2px;
 }
