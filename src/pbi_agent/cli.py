@@ -65,6 +65,21 @@ WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS = 20.0
 WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS = 10.0
 WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS = 0.1
 WEB_SERVER_BROWSER_CONNECT_TIMEOUT_SECONDS = 0.2
+WEB_MANAGER_LEASE_STALE_SECONDS = 30.0
+DEFAULT_WEB_PORT = 8000
+
+
+class ExplicitPortAction(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | int | None,
+        option_string: str | None = None,
+    ) -> None:
+        del parser, option_string
+        setattr(namespace, self.dest, values)
+        setattr(namespace, "_explicit_web_port", True)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -317,9 +332,11 @@ def build_parser() -> argparse.ArgumentParser:
     web_parser.add_argument(
         "--port",
         type=int,
-        default=8000,
+        default=DEFAULT_WEB_PORT,
+        action=ExplicitPortAction,
         help="Port to bind the web server (default: 8000).",
     )
+    web_parser.set_defaults(_explicit_web_port=False)
     web_parser.add_argument(
         "--dev",
         action="store_true",
@@ -1633,6 +1650,20 @@ def _handle_web_command(
         print("Error: --port must be between 1 and 65535.", file=sys.stderr)
         return 2
 
+    try:
+        if _current_workspace_has_active_web_manager():
+            print(
+                "Error: another web app instance is already managing this workspace.",
+                file=sys.stderr,
+            )
+            return 1
+    except Exception as exc:
+        print(f"Error: unable to inspect web server lease: {exc}", file=sys.stderr)
+        return 1
+
+    if not _resolve_web_command_port(args):
+        return 1
+
     browser_url = _browser_target_url(args)
     print(f"Serving web UI on {browser_url}")
     _start_browser_open_thread(args.host, args.port, browser_url)
@@ -1650,6 +1681,66 @@ def _handle_web_command(
     except OSError as exc:
         print(f"Error: failed to launch web server: {exc}", file=sys.stderr)
         return 1
+
+
+def _current_workspace_has_active_web_manager() -> bool:
+    from pbi_agent.session_store import SessionStore
+
+    directory = str(Path.cwd().resolve())
+    with SessionStore() as store:
+        return store.has_active_web_manager_lease(
+            directory,
+            stale_after_seconds=WEB_MANAGER_LEASE_STALE_SECONDS,
+        )
+
+
+def _resolve_web_command_port(args: argparse.Namespace) -> bool:
+    if getattr(args, "_explicit_web_port", False):
+        return True
+    if args.port != DEFAULT_WEB_PORT:
+        return True
+    if _is_web_port_available(args.host, args.port):
+        return True
+
+    free_port = _find_free_web_port(args.host)
+    if free_port is None:
+        print("Error: unable to find a free port for the web server.", file=sys.stderr)
+        return False
+
+    print(
+        f"Port {DEFAULT_WEB_PORT} is unavailable; using port {free_port}.",
+        file=sys.stderr,
+    )
+    args.port = free_port
+    return True
+
+
+def _is_web_port_available(host: str, port: int) -> bool:
+    try:
+        with _bind_web_port_probe(host, port):
+            return True
+    except OSError:
+        return False
+
+
+def _find_free_web_port(host: str) -> int | None:
+    try:
+        with _bind_web_port_probe(host, 0) as probe:
+            return int(probe.getsockname()[1])
+    except OSError:
+        return None
+
+
+@contextlib.contextmanager
+def _bind_web_port_probe(host: str, port: int):
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+        yield sock
+    finally:
+        sock.close()
 
 
 def _browser_target_url(args: argparse.Namespace) -> str:

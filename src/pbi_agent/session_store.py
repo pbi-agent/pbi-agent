@@ -709,6 +709,25 @@ class SessionStore:
                     self._conn.rollback()
                 raise
 
+    def has_active_web_manager_lease(
+        self,
+        directory: str,
+        *,
+        stale_after_seconds: float,
+    ) -> bool:
+        normalized_directory = _normalize_directory_key(directory)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT heartbeat_at FROM web_manager_leases WHERE directory = ?",
+                (normalized_directory,),
+            ).fetchone()
+        if row is None:
+            return False
+        return not _is_stale_timestamp(
+            str(row["heartbeat_at"]),
+            stale_after_seconds=stale_after_seconds,
+        )
+
     def renew_web_manager_lease(self, directory: str, *, owner_id: str) -> bool:
         normalized_directory = _normalize_directory_key(directory)
         now = _now_iso()

@@ -548,6 +548,64 @@ def test_web_manager_lease_blocks_concurrent_owner(tmp_path) -> None:
         )
 
 
+def test_has_active_web_manager_lease_detects_fresh_lease(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        assert not store.has_active_web_manager_lease(
+            "/w",
+            stale_after_seconds=30,
+        )
+        assert store.acquire_web_manager_lease(
+            "/w",
+            owner_id="owner-a",
+            stale_after_seconds=30,
+        )
+        assert store.has_active_web_manager_lease(
+            "/W",
+            stale_after_seconds=30,
+        )
+
+
+def test_has_active_web_manager_lease_ignores_released_lease(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        assert store.acquire_web_manager_lease(
+            "/w",
+            owner_id="owner-a",
+            stale_after_seconds=30,
+        )
+        assert store.release_web_manager_lease("/w", owner_id="owner-a")
+        assert not store.has_active_web_manager_lease(
+            "/w",
+            stale_after_seconds=30,
+        )
+
+
+def test_has_active_web_manager_lease_ignores_stale_lease(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        assert store.acquire_web_manager_lease(
+            "/w",
+            owner_id="owner-a",
+            stale_after_seconds=30,
+        )
+        with store._lock:
+            store._conn.execute(
+                "UPDATE web_manager_leases SET heartbeat_at = ?, updated_at = ? "
+                "WHERE directory = ?",
+                (
+                    "2000-01-01T00:00:00+00:00",
+                    "2000-01-01T00:00:00+00:00",
+                    "/w",
+                ),
+            )
+            store._conn.commit()
+        assert not store.has_active_web_manager_lease(
+            "/w",
+            stale_after_seconds=30,
+        )
+
+
 def test_web_manager_lease_atomic_across_concurrent_startup(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db):
