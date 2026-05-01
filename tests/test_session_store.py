@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import time
 import threading
 
@@ -209,6 +210,41 @@ def test_add_and_list_messages_preserve_image_attachments(tmp_path) -> None:
     assert msgs[0].image_attachments == [attachment]
 
 
+def test_existing_message_table_adds_image_attachments_column(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE messages (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id      TEXT NOT NULL,
+            role            TEXT NOT NULL,
+            content         TEXT NOT NULL DEFAULT '',
+            provider_id     TEXT,
+            profile_id      TEXT,
+            file_paths_json TEXT NOT NULL DEFAULT '[]',
+            created_at      TEXT NOT NULL
+        );
+        INSERT INTO messages
+            (session_id, role, content, provider_id, profile_id, file_paths_json, created_at)
+        VALUES
+            ('session-1', 'user', 'hello', NULL, NULL, '[]', '2026-05-01T00:00:00+00:00');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    with SessionStore(db_path=db) as store:
+        msgs = store.list_messages("session-1")
+        store.add_message("session-1", "assistant", "hi")
+        updated_msgs = store.list_messages("session-1")
+
+    assert len(msgs) == 1
+    assert msgs[0].image_attachments == []
+    assert len(updated_msgs) == 2
+    assert updated_msgs[1].image_attachments == []
+
+
 def test_add_and_list_messages_preserve_file_paths(tmp_path) -> None:
     db = tmp_path / "sessions.db"
 
@@ -389,6 +425,91 @@ def test_create_and_list_kanban_tasks(tmp_path) -> None:
     assert len(tasks) == 1
     assert tasks[0].task_id == task.task_id
     assert tasks[0].stage == KANBAN_STAGE_BACKLOG
+
+
+def test_create_and_update_kanban_task_image_attachments(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    attachment = MessageImageAttachment(
+        upload_id="upload-1",
+        name="chart.png",
+        mime_type="image/png",
+        byte_count=8,
+        preview_url="/api/live-sessions/uploads/upload-1",
+    )
+    with SessionStore(db_path=db) as store:
+        task = store.create_kanban_task(
+            directory="/w",
+            title="Review chart",
+            prompt="Describe the chart",
+            image_attachments=[attachment],
+        )
+        assert task.image_attachments == [attachment]
+        assert store.list_kanban_tasks("/w")[0].image_attachments == [attachment]
+
+        updated = store.update_kanban_task(
+            task.task_id,
+            image_attachments=[],
+            image_attachments_present=True,
+        )
+        assert updated is not None
+        assert updated.image_attachments == []
+        assert store.get_kanban_task(task.task_id).image_attachments == []
+
+
+def test_existing_kanban_task_table_adds_image_attachments_column(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE kanban_tasks (
+            task_id              TEXT PRIMARY KEY,
+            directory            TEXT NOT NULL,
+            title                TEXT NOT NULL,
+            prompt               TEXT NOT NULL DEFAULT '',
+            stage                TEXT NOT NULL,
+            position             INTEGER NOT NULL DEFAULT 0,
+            project_dir          TEXT NOT NULL DEFAULT '.',
+            session_id           TEXT,
+            model_profile_id     TEXT,
+            run_status           TEXT NOT NULL DEFAULT 'idle',
+            last_result_summary  TEXT NOT NULL DEFAULT '',
+            created_at           TEXT NOT NULL,
+            updated_at           TEXT NOT NULL,
+            last_run_started_at  TEXT,
+            last_run_finished_at TEXT
+        );
+        INSERT INTO kanban_tasks
+            (task_id, directory, title, prompt, stage, position, project_dir,
+             session_id, model_profile_id, run_status, last_result_summary,
+             created_at, updated_at, last_run_started_at, last_run_finished_at)
+        VALUES
+            ('task-1', '/w', 'Existing task', 'prompt', 'backlog', 0, '.',
+             NULL, NULL, 'idle', '', '2026-05-01T00:00:00+00:00',
+             '2026-05-01T00:00:00+00:00', NULL, NULL);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    attachment = MessageImageAttachment(
+        upload_id="upload-1",
+        name="chart.png",
+        mime_type="image/png",
+        byte_count=8,
+        preview_url="/api/live-sessions/uploads/upload-1",
+    )
+    with SessionStore(db_path=db) as store:
+        tasks = store.list_kanban_tasks("/w")
+        updated = store.update_kanban_task(
+            "task-1",
+            image_attachments=[attachment],
+            image_attachments_present=True,
+        )
+
+    assert len(tasks) == 1
+    assert tasks[0].image_attachments == []
+    assert updated is not None
+    assert updated.image_attachments == [attachment]
 
 
 def test_default_kanban_stage_configs_are_neutral(tmp_path) -> None:

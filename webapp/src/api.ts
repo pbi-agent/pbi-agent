@@ -186,6 +186,18 @@ export async function interruptLiveSession(
   return result.session;
 }
 
+export async function uploadTaskImages(files: File[]): Promise<ImageAttachment[]> {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+  const result = await requestJson<{ uploads: ImageAttachment[] }>("/api/tasks/images", {
+    method: "POST",
+    body: formData,
+  });
+  return result.uploads;
+}
+
 export async function uploadSessionImages(
   liveSessionId: string,
   files: File[],
@@ -267,11 +279,17 @@ export async function updateBoardStages(
   return result.board_stages;
 }
 
+type TaskWritePayload = Partial<TaskRecord> & {
+  title?: string;
+  prompt?: string;
+  profile_id?: string | null;
+  image_upload_ids?: string[];
+};
+
 export async function createTask(
-  payload: Partial<TaskRecord> & {
+  payload: TaskWritePayload & {
     title: string;
     prompt: string;
-    profile_id?: string | null;
   },
 ): Promise<TaskRecord> {
   const result = await requestJson<{ task: TaskRecord }>("/api/tasks", {
@@ -283,7 +301,7 @@ export async function createTask(
 
 export async function updateTask(
   taskId: string,
-  payload: Partial<TaskRecord>,
+  payload: TaskWritePayload,
 ): Promise<TaskRecord> {
   const result = await requestJson<{ task: TaskRecord }>(`/api/tasks/${taskId}`, {
     method: "PATCH",

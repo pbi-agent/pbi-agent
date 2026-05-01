@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.display.protocol import DisplayProtocol
+from pbi_agent.models.messages import ImageAttachment
 
 
 def run_single_turn_in_directory(
@@ -16,6 +17,7 @@ def run_single_turn_in_directory(
     single_turn_hint: str | None = None,
     resume_session_id: str | None = None,
     image_paths: list[str] | None = None,
+    images: list[ImageAttachment] | None = None,
     persisted_user_message_id: int | None = None,
     replay_history: bool = True,
 ):
@@ -50,6 +52,7 @@ def run_single_turn_in_directory(
         single_turn_hint=resolved_hint,
         resume_session_id=resume_session_id,
         image_paths=image_paths,
+        images=images,
         persisted_user_message_id=persisted_user_message_id,
         replay_history=replay_history,
     )

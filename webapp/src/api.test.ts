@@ -10,6 +10,7 @@ import {
   setActiveModelProfile,
   startProviderAuthFlow,
   uploadSessionImages,
+  uploadTaskImages,
   websocketUrl,
 } from "./api";
 
@@ -52,6 +53,30 @@ describe("api helpers", () => {
       throw new Error("Expected upload call");
     }
     const init = uploadCall[1] as RequestInit;
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(new Headers(init.headers).has("Content-Type")).toBe(false);
+  });
+
+  it("uploads task images as form data", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ uploads: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await uploadTaskImages([
+      new File(["binary"], "task.png", { type: "image/png" }),
+    ]);
+
+    const uploadCall = fetchMock.mock.calls[0];
+    if (!uploadCall) {
+      throw new Error("Expected task image upload call");
+    }
+    expect(uploadCall[0]).toBe("/api/tasks/images");
+    const init = uploadCall[1] as RequestInit;
+    expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);
     expect(new Headers(init.headers).has("Content-Type")).toBe(false);
   });

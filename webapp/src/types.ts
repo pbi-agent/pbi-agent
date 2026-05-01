@@ -31,6 +31,7 @@ export type TaskRecord = {
   updated_at: string;
   last_run_started_at: string | null;
   last_run_finished_at: string | null;
+  image_attachments: ImageAttachment[];
   runtime_summary: RuntimeSummary;
 };
 

@@ -1,7 +1,19 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { TaskModal, type EditableTask } from "./TaskModal";
 import { renderWithProviders } from "../../test/render";
 import type { BoardStage, ModelProfileView } from "../../types";
+
+beforeEach(() => {
+  vi.stubGlobal("URL", {
+    ...URL,
+    createObjectURL: vi.fn(() => "blob:task-image"),
+    revokeObjectURL: vi.fn(),
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const task: EditableTask = {
   title: "Draft implementation plan",
@@ -10,6 +22,9 @@ const task: EditableTask = {
   projectDir: "/workspace/project",
   sessionId: "",
   profileId: "",
+  imageAttachments: [],
+  imageFiles: [],
+  imageError: null,
 };
 
 const stages: BoardStage[] = [
@@ -96,5 +111,32 @@ describe("TaskModal", () => {
     expect(screen.getByRole("combobox", { name: "Profile Override" })).toHaveClass("task-form__select");
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
+  it("reports selected image files through onChange", () => {
+    const onChange = vi.fn();
+    renderWithProviders(
+      <TaskModal
+        task={task}
+        boardStages={stages}
+        profiles={profiles}
+        isSaving={false}
+        onChange={onChange}
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const input = document.querySelector<HTMLInputElement>('input[name="task-image-upload"]');
+    expect(input).not.toBeNull();
+    const file = new File(["binary"], "mockup.png", { type: "image/png" });
+    fireEvent.change(input!, { target: { files: [file] } });
+
+    expect(onChange).toHaveBeenCalledOnce();
+    const update = onChange.mock.calls[0]?.[0] as Partial<EditableTask>;
+    expect(update.imageError).toBeNull();
+    expect(update.imageFiles).toHaveLength(1);
+    expect(update.imageFiles?.[0]?.file).toBe(file);
+    expect(update.imageFiles?.[0]?.previewUrl).toBe("blob:task-image");
   });
 });

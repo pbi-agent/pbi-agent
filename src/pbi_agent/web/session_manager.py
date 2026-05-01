@@ -312,6 +312,10 @@ def _serialize_task(
         "updated_at": record.updated_at,
         "last_run_started_at": record.last_run_started_at,
         "last_run_finished_at": record.last_run_finished_at,
+        "image_attachments": [
+            _message_image_payload(attachment)
+            for attachment in record.image_attachments
+        ],
         "runtime_summary": _runtime_summary(runtime),
     }
 
@@ -987,10 +991,16 @@ class WebSessionManager:
                 if updated is not None:
                     updated_tasks.append(updated)
 
+            task_upload_ids = {
+                attachment.upload_id
+                for task in store.list_kanban_tasks(self._directory_key)
+                for attachment in task.image_attachments
+            }
             upload_ids = [
                 attachment.upload_id
                 for message in store.list_messages(session_id)
                 for attachment in message.image_attachments
+                if attachment.upload_id not in task_upload_ids
             ]
 
             deleted = store.delete_session(session_id)
@@ -1002,6 +1012,29 @@ class WebSessionManager:
 
         for task in updated_tasks:
             self._publish_task_updated(task)
+
+    def _message_attachments_for_upload_ids(
+        self,
+        upload_ids: list[str],
+    ) -> list[MessageImageAttachment]:
+        return [
+            _message_image_attachment(load_uploaded_image_record(upload_id))
+            for upload_id in upload_ids
+        ]
+
+    def upload_task_images(
+        self,
+        *,
+        files: list[tuple[str, bytes]],
+    ) -> list[dict[str, Any]]:
+        attachments: list[dict[str, Any]] = []
+        for original_name, raw_bytes in files:
+            safe_name = (original_name or "task-image.png").strip() or "task-image.png"
+            record = store_uploaded_image_bytes(raw_bytes=raw_bytes, name=safe_name)
+            attachments.append(
+                _message_image_payload(_message_image_attachment(record))
+            )
+        return attachments
 
     def upload_session_images(
         self,
@@ -1231,6 +1264,7 @@ class WebSessionManager:
         project_dir: str = ".",
         session_id: str | None = None,
         profile_id: str | None = None,
+        image_upload_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         self._validate_project_dir(project_dir)
         if profile_id is not None:
@@ -1239,6 +1273,9 @@ class WebSessionManager:
         normalized_title, normalized_prompt = self._normalize_task_content(
             title=title,
             prompt=prompt,
+        )
+        image_attachments = self._message_attachments_for_upload_ids(
+            image_upload_ids or []
         )
         with SessionStore() as store:
             record = store.create_kanban_task(
@@ -1249,6 +1286,7 @@ class WebSessionManager:
                 project_dir=project_dir,
                 session_id=session_id,
                 model_profile_id=profile_id,
+                image_attachments=image_attachments,
             )
         payload = self._publish_task_updated(record)
         return self._maybe_auto_start_task(record) or payload
@@ -1266,11 +1304,18 @@ class WebSessionManager:
         session_id_present: bool = False,
         profile_id: str | None = None,
         profile_id_present: bool = False,
+        image_upload_ids: list[str] | None = None,
+        image_upload_ids_present: bool = False,
     ) -> dict[str, Any]:
         if project_dir is not None:
             self._validate_project_dir(project_dir)
         if profile_id_present and profile_id is not None:
             self._resolve_runtime(profile_id)
+        image_attachments = (
+            self._message_attachments_for_upload_ids(image_upload_ids or [])
+            if image_upload_ids_present
+            else None
+        )
         with SessionStore() as store:
             current = store.get_kanban_task(task_id)
             if current is None or current.directory != self._directory_key:
@@ -1302,6 +1347,8 @@ class WebSessionManager:
                 clear_session_id=session_id_present and session_id is None,
                 model_profile_id=profile_id,
                 clear_model_profile_id=(profile_id_present and profile_id is None),
+                image_attachments=image_attachments,
+                image_attachments_present=image_upload_ids_present,
             )
         if updated is None:
             raise KeyError(task_id)
@@ -1385,6 +1432,14 @@ class WebSessionManager:
                 store=store,
                 is_continuation=is_continuation,
             )
+            if (
+                not is_continuation
+                and record.image_attachments
+                and not provider_supports_images(runtime.settings.provider)
+            ):
+                with self._lock:
+                    self._running_task_ids.discard(task_id)
+                raise ValueError("Image inputs are not supported by the task runtime.")
             if record.session_id is None:
                 session_id = store.create_session(
                     directory=self._task_session_directory(record.project_dir),
@@ -1410,6 +1465,7 @@ class WebSessionManager:
                     record,
                     runtime,
                     initial_prompt,
+                    list(record.image_attachments),
                 )
             running_record = store.set_kanban_task_running(task_id)
         if running_record is None:
@@ -1424,6 +1480,7 @@ class WebSessionManager:
                 runtime,
                 initial_prompt,
                 initial_user_message_id,
+                list(running_record.image_attachments),
             )
         self._publish_task_updated(running_record)
         worker = threading.Thread(
@@ -2178,6 +2235,19 @@ class WebSessionManager:
                     stage_record,
                     is_continuation=not is_initial_worker_turn,
                 )
+                turn_image_attachments = (
+                    list(record.image_attachments) if is_initial_worker_turn else []
+                )
+                turn_images = [
+                    load_uploaded_image(attachment.upload_id)
+                    for attachment in turn_image_attachments
+                ]
+                if turn_images and not provider_supports_images(
+                    runtime.settings.provider
+                ):
+                    raise ValueError(
+                        "Image inputs are not supported by the task runtime."
+                    )
                 if current_user_message_id is None:
                     with SessionStore() as store:
                         current_user_message_id = self._persist_task_user_prompt(
@@ -2185,6 +2255,7 @@ class WebSessionManager:
                             record,
                             runtime,
                             prompt,
+                            turn_image_attachments,
                         )
                     if live_session is not None and current_user_message_id is not None:
                         self._publish_persisted_user_message(
@@ -2193,6 +2264,7 @@ class WebSessionManager:
                             runtime,
                             prompt,
                             current_user_message_id,
+                            turn_image_attachments,
                         )
                 outcome = run_single_turn_in_directory(
                     prompt,
@@ -2206,6 +2278,7 @@ class WebSessionManager:
                     project_dir=record.project_dir,
                     workspace_root=self._workspace_root,
                     resume_session_id=record.session_id,
+                    images=turn_images or None,
                     persisted_user_message_id=current_user_message_id,
                     replay_history=False,
                 )
@@ -2373,6 +2446,7 @@ class WebSessionManager:
         record: KanbanTaskRecord,
         runtime: ResolvedRuntime,
         prompt: str,
+        image_attachments: list[MessageImageAttachment],
     ) -> int | None:
         if record.session_id is None:
             return None
@@ -2382,6 +2456,7 @@ class WebSessionManager:
             prompt.strip(),
             provider_id=runtime.provider_id or None,
             profile_id=runtime.profile_id or None,
+            image_attachments=image_attachments,
         )
 
     def _publish_persisted_user_message(
@@ -2391,6 +2466,7 @@ class WebSessionManager:
         runtime: ResolvedRuntime,
         prompt: str,
         message_id: int,
+        image_attachments: list[MessageImageAttachment],
     ) -> None:
         if record.session_id is None:
             return
@@ -2401,6 +2477,7 @@ class WebSessionManager:
             content=prompt.strip(),
             provider_id=runtime.provider_id or None,
             profile_id=runtime.profile_id or None,
+            image_attachments=list(image_attachments),
             created_at=_now_iso(),
         )
         self._publish_task_live_event(

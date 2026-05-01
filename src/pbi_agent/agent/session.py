@@ -168,6 +168,7 @@ def run_single_turn(
     single_turn_hint: str | None = None,
     resume_session_id: str | None = None,
     image_paths: list[str] | None = None,
+    images: list[ImageAttachment] | None = None,
     persisted_user_message_id: int | None = None,
     replay_history: bool = True,
 ) -> AgentOutcome:
@@ -193,7 +194,7 @@ def run_single_turn(
     user_input = _build_user_turn_input(
         text=prompt_text,
         image_paths=image_paths or [],
-        images=None,
+        images=images,
         settings=settings,
     )
     user_turn_history_text = _user_turn_history_text(user_input)

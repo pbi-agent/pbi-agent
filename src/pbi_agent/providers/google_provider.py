@@ -34,6 +34,7 @@ from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
+from pbi_agent.web.uploads import load_uploaded_image
 from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
@@ -126,12 +127,12 @@ class GoogleProvider(Provider):
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         restored_input: list[dict[str, Any]] = []
         for message in messages:
-            if message.role not in {"user", "assistant"} or not message.content:
+            if not _google_message_record_can_restore(message):
                 continue
             restored_input.append(
                 {
                     "role": "model" if message.role == "assistant" else "user",
-                    "content": message.content,
+                    "content": _google_message_record_content(message),
                 }
             )
         self._restored_input = restored_input
@@ -793,6 +794,28 @@ def _google_user_input_value(
     for image in user_input.images:
         content.append(_google_image_part(image))
     return content
+
+
+def _google_message_record_can_restore(message: MessageRecord) -> bool:
+    if message.role not in {"user", "assistant"}:
+        return False
+    return bool(message.content or message.image_attachments)
+
+
+def _google_message_record_content(
+    message: MessageRecord,
+) -> str | list[dict[str, Any]]:
+    if message.role == "user" and message.image_attachments:
+        return _google_user_input_value(
+            UserTurnInput(
+                text=message.content,
+                images=[
+                    load_uploaded_image(attachment.upload_id)
+                    for attachment in message.image_attachments
+                ],
+            )
+        )
+    return message.content
 
 
 def _google_function_result_value(result) -> str | list[dict[str, Any]]:
