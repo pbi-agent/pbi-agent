@@ -1,1 +1,0 @@
-import{u as e}from"./markdown-TMFdla2q.js";import{c as t}from"./dialog-CrJMT9sx.js";var n=e();function r({status:e}){return(0,n.jsx)(t,{variant:`secondary`,className:`status-pill status-pill--${e===`running`?`running`:e===`completed`?`completed`:e===`failed`?`failed`:`idle`}`,children:e})}export{r as t};

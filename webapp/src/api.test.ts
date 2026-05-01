@@ -3,6 +3,7 @@ import {
   deleteModelProfile,
   fetchProviderAuthFlow,
   fetchProviderAuthStatus,
+  fetchProviderUsageLimits,
   fetchSessions,
   logoutProviderAuth,
   pollProviderAuthFlow,
@@ -171,6 +172,19 @@ describe("api helpers", () => {
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            provider_id: "openai-chatgpt",
+            provider_kind: "chatgpt",
+            account_label: "user@example.com",
+            plan_type: "pro",
+            fetched_at: "2026-05-01T00:00:00Z",
+            buckets: [],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
       );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -180,6 +194,7 @@ describe("api helpers", () => {
     await pollProviderAuthFlow("openai-chatgpt", "flow-1");
     await refreshProviderAuth("openai-chatgpt");
     await logoutProviderAuth("openai-chatgpt");
+    await fetchProviderUsageLimits("openai-chatgpt");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -210,6 +225,11 @@ describe("api helpers", () => {
       6,
       "/api/provider-auth/openai-chatgpt",
       expect.objectContaining({ method: "DELETE" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      7,
+      "/api/provider-auth/openai-chatgpt/usage-limits",
+      expect.anything(),
     );
 
     const startCall = fetchMock.mock.calls[1];

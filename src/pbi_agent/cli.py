@@ -36,6 +36,12 @@ from pbi_agent.auth.service import (
     provider_auth_modes,
     refresh_provider_auth_session,
 )
+from pbi_agent.auth.usage_limits import (
+    ProviderUsageLimits,
+    UsageLimitBucket,
+    UsageLimitWindow,
+    get_provider_usage_limits,
+)
 from pbi_agent.config import (
     ConfigError,
     ModelProfileConfig,
@@ -681,6 +687,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     providers_auth_logout.add_argument("provider_id", help="Provider ID.")
 
+    providers_usage_limits = providers_actions.add_parser(
+        "usage-limits",
+        prog="pbi-agent config providers usage-limits",
+        description="Show subscription usage limits for a provider.",
+        help="Show provider usage limits.",
+        formatter_class=CleanHelpFormatter,
+    )
+    providers_usage_limits.add_argument("provider_id", help="Provider ID.")
+
     profiles_parser = config_subparsers.add_parser(
         "profiles",
         prog="pbi-agent config profiles",
@@ -1155,6 +1170,11 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
         _print_provider_auth_status(provider)
         return 0
 
+    if args.config_action == "usage-limits":
+        provider = _require_provider_config(args.provider_id)
+        _print_provider_usage_limits(get_provider_usage_limits(provider))
+        return 0
+
     raise ConfigError(f"Unknown providers action '{args.config_action}'.")
 
 
@@ -1298,6 +1318,95 @@ def _print_provider_auth_status(provider: ProviderConfig) -> None:
         print(f"Plan: {status.plan_type}")
     if status.expires_at is not None:
         print(f"Expires at: {status.expires_at}")
+
+
+def _print_provider_usage_limits(usage: ProviderUsageLimits) -> None:
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    console.print(f"Provider: [bold]{usage.provider_id}[/bold]")
+    if usage.account_label:
+        console.print(f"Account: {usage.account_label}")
+    if usage.plan_type:
+        console.print(f"Plan: {usage.plan_type}")
+    console.print(f"Fetched: {usage.fetched_at}")
+    if not usage.buckets:
+        console.print("[dim]No usage limits returned.[/dim]")
+        return
+    table = Table(title="Subscription Usage Limits", title_style="bold cyan")
+    table.add_column("Limit")
+    table.add_column("Window")
+    table.add_column("Used")
+    table.add_column("Remaining")
+    table.add_column("Reset")
+    table.add_column("Status")
+    table.add_column("Notes")
+    for bucket in usage.buckets:
+        windows: list[UsageLimitWindow | None] = list(bucket.windows) or [None]
+        for index, window in enumerate(windows):
+            table.add_row(
+                bucket.label if index == 0 else "",
+                window.name if window else "-",
+                _format_usage_window_used(window),
+                _format_usage_window_remaining(window),
+                _format_usage_window_reset(window),
+                bucket.status if index == 0 else "",
+                _format_usage_bucket_notes(bucket) if index == 0 else "",
+            )
+    console.print(table)
+
+
+def _format_usage_window_used(window: UsageLimitWindow | None) -> str:
+    if window is None:
+        return "-"
+    parts: list[str] = []
+    if window.used_percent is not None:
+        parts.append(f"{window.used_percent:g}%")
+    if window.used_requests is not None and window.total_requests is not None:
+        parts.append(f"{window.used_requests}/{window.total_requests}")
+    return " · ".join(parts) or "-"
+
+
+def _format_usage_window_remaining(window: UsageLimitWindow | None) -> str:
+    if window is None:
+        return "-"
+    parts: list[str] = []
+    if window.remaining_percent is not None:
+        parts.append(f"{window.remaining_percent:g}%")
+    if window.remaining_requests is not None:
+        parts.append(f"{window.remaining_requests} requests")
+    return " · ".join(parts) or "-"
+
+
+def _format_usage_window_reset(window: UsageLimitWindow | None) -> str:
+    if window is None:
+        return "-"
+    if window.reset_at_iso:
+        return window.reset_at_iso
+    if window.resets_at is not None:
+        return str(window.resets_at)
+    if window.window_minutes is not None:
+        return f"{window.window_minutes}m window"
+    return "-"
+
+
+def _format_usage_bucket_notes(bucket: UsageLimitBucket) -> str:
+    notes: list[str] = []
+    if bucket.unlimited:
+        notes.append("unlimited")
+    if bucket.overage_allowed:
+        notes.append("overage allowed")
+    if bucket.overage_count:
+        notes.append(f"overage used: {bucket.overage_count}")
+    if bucket.credits:
+        if bucket.credits.unlimited:
+            notes.append("credits: unlimited")
+        elif bucket.credits.balance is not None:
+            notes.append(f"credits: {bucket.credits.balance}")
+        elif bucket.credits.has_credits is not None:
+            notes.append("has credits" if bucket.credits.has_credits else "no credits")
+    return ", ".join(notes) or "-"
 
 
 def _print_browser_auth_instructions(browser_auth) -> None:

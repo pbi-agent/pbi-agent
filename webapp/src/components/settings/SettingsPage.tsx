@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangleIcon, CheckCircle2Icon, EditIcon, PlugZapIcon, PlusIcon, Trash2Icon, UnplugIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  CheckCircle2Icon,
+  EditIcon,
+  GaugeIcon,
+  PlugZapIcon,
+  PlusIcon,
+  Trash2Icon,
+  UnplugIcon,
+} from "lucide-react";
 import {
   createModelProfile,
   createProvider,
@@ -27,6 +36,7 @@ import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import type { ProfilePayload } from "./ModelProfileModal";
 import { ModelProfileModal } from "./ModelProfileModal";
 import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
+import { ProviderUsageLimitsDialog } from "./ProviderUsageLimitsDialog";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
 import { Alert, AlertDescription } from "../ui/alert";
@@ -68,6 +78,13 @@ function formatAuthExpiry(expiresAt: number | null): string | null {
   return new Date(expiresAt * 1000).toLocaleString();
 }
 
+function supportsUsageLimits(provider: ProviderView): boolean {
+  return (
+    provider.auth_mode !== "api_key" &&
+    provider.auth_status.session_status === "connected"
+  );
+}
+
 function ProviderCard({
   provider,
   options,
@@ -77,6 +94,7 @@ function ProviderCard({
   onConnect,
   onRefresh,
   onDisconnect,
+  onShowUsage,
 }: {
   provider: ProviderView;
   options: ConfigOptions;
@@ -86,10 +104,12 @@ function ProviderCard({
   onConnect: () => void;
   onRefresh: () => void;
   onDisconnect: () => void;
+  onShowUsage: () => void;
 }) {
   const authStatus = provider.auth_status;
   const authExpires = formatAuthExpiry(authStatus.expires_at);
   const showAuthActions = provider.auth_mode !== "api_key";
+  const showUsageAction = supportsUsageLimits(provider);
 
   return (
     <Card className="settings-item settings-item--provider">
@@ -166,6 +186,18 @@ function ProviderCard({
               <CheckCircle2Icon data-icon="inline-start" />
               Refresh
             </Button>
+            {showUsageAction && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="task-card__action-button"
+                onClick={onShowUsage}
+              >
+                <GaugeIcon data-icon="inline-start" />
+                Usage
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
@@ -298,6 +330,7 @@ type ModalState =
   | { type: "edit-provider"; provider: ProviderView }
   | { type: "delete-provider"; provider: ProviderView }
   | { type: "provider-auth"; provider: ProviderView }
+  | { type: "provider-usage"; provider: ProviderView }
   | { type: "create-profile" }
   | { type: "edit-profile"; profile: ModelProfileView }
   | { type: "delete-profile"; profile: ModelProfileView };
@@ -543,6 +576,9 @@ export function SettingsPage() {
                   onDisconnect={() => {
                     void handleDisconnectProviderAuth(provider.id);
                   }}
+                  onShowUsage={() =>
+                    setModal({ type: "provider-usage", provider })
+                  }
                 />
               ))
             )}
@@ -672,6 +708,12 @@ export function SettingsPage() {
           options={options}
           onClose={() => setModal({ type: "none" })}
           onCompleted={invalidateBoth}
+        />
+      )}
+      {modal.type === "provider-usage" && (
+        <ProviderUsageLimitsDialog
+          provider={modal.provider}
+          onClose={() => setModal({ type: "none" })}
         />
       )}
       {modal.type === "create-profile" && (

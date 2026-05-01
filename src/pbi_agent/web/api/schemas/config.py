@@ -177,6 +177,44 @@ class ProviderAuthFlowResponse(BaseModel):
     session: ProviderAuthSessionModel | None = None
 
 
+class UsageLimitCreditsModel(BaseModel):
+    has_credits: bool | None = None
+    unlimited: bool | None = None
+    balance: str | None = None
+
+
+class UsageLimitWindowModel(BaseModel):
+    name: str
+    used_percent: float | None = None
+    remaining_percent: float | None = None
+    window_minutes: int | None = None
+    resets_at: int | None = None
+    reset_at_iso: str | None = None
+    used_requests: int | None = None
+    total_requests: int | None = None
+    remaining_requests: int | None = None
+
+
+class UsageLimitBucketModel(BaseModel):
+    id: str
+    label: str
+    unlimited: bool
+    overage_allowed: bool
+    overage_count: int
+    status: Literal["ok", "warning", "exhausted", "unknown"]
+    credits: UsageLimitCreditsModel | None = None
+    windows: list[UsageLimitWindowModel]
+
+
+class ProviderUsageLimitsResponse(BaseModel):
+    provider_id: str
+    provider_kind: str
+    account_label: str | None
+    plan_type: str | None
+    fetched_at: str
+    buckets: list[UsageLimitBucketModel]
+
+
 class ModelProfileProviderModel(BaseModel):
     id: str
     name: str

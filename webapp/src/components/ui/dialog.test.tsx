@@ -41,4 +41,18 @@ describe("Dialog", () => {
       "default",
     );
   });
+
+  it("applies the shared close icon hover class", () => {
+    render(
+      <Dialog open>
+        <DialogContent>
+          <DialogTitle>Preferences</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    const closeButton = screen.getByRole("button", { name: "Close" });
+
+    expect(closeButton).toHaveClass("app-close-icon-button");
+  });
 });

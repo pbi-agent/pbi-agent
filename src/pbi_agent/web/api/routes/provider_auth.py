@@ -12,6 +12,7 @@ from pbi_agent.web.api.schemas.config import (
     ProviderAuthImportRequest,
     ProviderAuthLogoutResponse,
     ProviderAuthResponse,
+    ProviderUsageLimitsResponse,
 )
 
 router = APIRouter(prefix="/api/provider-auth", tags=["provider-auth"])
@@ -73,6 +74,18 @@ def logout_provider_auth(
     except Exception as exc:
         raise config_http_error(exc) from exc
     return model_from_payload(ProviderAuthLogoutResponse, payload)
+
+
+@router.get("/{provider_id}/usage-limits", response_model=ProviderUsageLimitsResponse)
+def get_provider_usage_limits(
+    provider_id: str,
+    manager: SessionManagerDep,
+) -> ProviderUsageLimitsResponse:
+    try:
+        payload = manager.get_provider_usage_limits(provider_id)
+    except Exception as exc:
+        raise config_http_error(exc) from exc
+    return model_from_payload(ProviderUsageLimitsResponse, payload)
 
 
 @router.post("/{provider_id}/flows", response_model=ProviderAuthFlowResponse)
