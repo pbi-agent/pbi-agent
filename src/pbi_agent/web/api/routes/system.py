@@ -34,10 +34,12 @@ from pbi_agent.web.api.schemas.system import (
     RunSessionModel,
     SessionDetailResponse,
     SessionRecordModel,
+    SessionResponse,
     SessionRunsResponse,
     SessionsResponse,
     SlashCommandItemModel,
     SlashCommandSearchResponse,
+    UpdateSessionRequest,
 )
 
 router = APIRouter(prefix="/api", tags=["system"])
@@ -87,6 +89,19 @@ def get_session_detail(
             else None
         ),
     )
+
+
+@router.patch("/sessions/{session_id}", response_model=SessionResponse)
+def update_session(
+    session_id: SessionIdPath,
+    payload: UpdateSessionRequest,
+    manager: SessionManagerDep,
+) -> SessionResponse:
+    try:
+        session = manager.update_session_title(session_id, payload.title)
+    except KeyError as exc:
+        raise not_found("Session not found.") from exc
+    return SessionResponse(session=model_from_payload(SessionRecordModel, session))
 
 
 @router.get("/sessions/{session_id}/runs", response_model=SessionRunsResponse)

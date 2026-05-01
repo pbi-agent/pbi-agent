@@ -714,6 +714,19 @@ class WebSessionManager:
             ),
         }
 
+    def update_session_title(self, session_id: str, title: str) -> dict[str, Any]:
+        with SessionStore() as store:
+            record = store.get_session(session_id)
+            if record is None or record.directory != self._directory_key:
+                raise KeyError(session_id)
+            store.update_session(session_id, title=title)
+            updated = store.get_session(session_id)
+        if updated is None:
+            raise KeyError(session_id)
+        serialized = _serialize_session(updated)
+        self._app_stream.publish("session_updated", {"session": serialized})
+        return serialized
+
     def list_session_runs(self, session_id: str) -> list[dict[str, Any]]:
         with SessionStore() as store:
             session = store.get_session(session_id)

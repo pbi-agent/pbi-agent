@@ -22,9 +22,16 @@ import {
   setActiveModelProfile,
   setLiveSessionProfile,
   submitSessionInput,
+  updateSession,
   uploadSessionImages,
 } from "../../api";
-import type { HistoryItem, ModelProfileView, SessionRecord, TimelineItem } from "../../types";
+import type {
+  HistoryItem,
+  ModelProfileView,
+  SessionDetailPayload,
+  SessionRecord,
+  TimelineItem,
+} from "../../types";
 import {
   getLiveSessionKey,
   getSavedSessionKey,
@@ -193,6 +200,25 @@ export function SessionPage({
 
   const deleteSessionMutation = useMutation({
     mutationFn: deleteSession,
+  });
+
+  const updateSessionMutation = useMutation({
+    mutationFn: ({ sessionId, title }: { sessionId: string; title: string }) =>
+      updateSession(sessionId, { title }),
+    onSuccess: (updatedSession) => {
+      client.setQueryData<SessionRecord[] | undefined>(["sessions"], (sessions) =>
+        (sessions ?? []).map((session) =>
+          session.session_id === updatedSession.session_id ? updatedSession : session,
+        ),
+      );
+      client.setQueryData<SessionDetailPayload | undefined>(
+        ["session", updatedSession.session_id],
+        (detail) => detail ? { ...detail, session: updatedSession } : detail,
+      );
+      void client.invalidateQueries({ queryKey: ["sessions"] });
+      void client.invalidateQueries({ queryKey: ["bootstrap"] });
+      void client.invalidateQueries({ queryKey: ["session", updatedSession.session_id] });
+    },
   });
 
   const setSessionProfileMutation = useMutation({
@@ -476,6 +502,13 @@ export function SessionPage({
     void navigate("/sessions");
   };
 
+  const handleUpdateSessionTitle = async (session: SessionRecord, title: string) => {
+    await updateSessionMutation.mutateAsync({
+      sessionId: session.session_id,
+      title,
+    });
+  };
+
   const handleDeleteSession = async () => {
     if (!pendingDeleteSession) return;
     const deletingActive = pendingDeleteSession.session_id === routeSessionId;
@@ -518,6 +551,7 @@ export function SessionPage({
             void navigate(`/sessions/${encodeURIComponent(sessionId)}`);
             setSidebarOpen(false);
           }}
+          onUpdateSession={handleUpdateSessionTitle}
           onDeleteSession={(session) => {
             deleteSessionMutation.reset();
             setPendingDeleteSession(session);

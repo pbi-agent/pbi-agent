@@ -1,7 +1,5 @@
-# TODO
-
-[X] Identify current task-scoped changes
-[X] Remove Kanban task card image attachment count test after UI removal
-[X] Remove unused image icon import
-[X] Run ship-mode validation
-[>] Commit, push, PR, checks, merge, cleanup
+[X] Inspect session API/store/sidebar implementation
+[X] Add backend update-title endpoint and tests
+[X] Add frontend API/types/sidebar edit UI and tests
+[X] Run focused validation
+[X] Update memory and handoff

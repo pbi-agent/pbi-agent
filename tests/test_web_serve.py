@@ -752,6 +752,86 @@ def test_sessions_endpoint_rejects_invalid_limit() -> None:
     assert response.status_code == 422
 
 
+def test_update_session_title_endpoint_updates_workspace_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Original title",
+        )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.patch(
+            f"/api/sessions/{session_id}",
+            json={"title": "  Updated title  "},
+        )
+        with client.websocket_connect("/api/events/app") as websocket:
+            event = websocket.receive_json()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["session"]["title"] == "Updated title"
+    assert event["type"] == "session_updated"
+    assert event["payload"]["session"]["session_id"] == session_id
+    assert event["payload"]["session"]["title"] == "Updated title"
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        stored = store.get_session(session_id)
+    assert stored is not None
+    assert stored.title == "Updated title"
+
+
+def test_update_session_title_endpoint_rejects_blank_title(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Original title",
+        )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.patch(
+            f"/api/sessions/{session_id}",
+            json={"title": "   "},
+        )
+
+    assert response.status_code == 422
+
+
+def test_update_session_title_endpoint_returns_not_found_for_other_workspace(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path / "other"),
+            "openai",
+            "gpt-5.4",
+            "Other title",
+        )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.patch(
+            f"/api/sessions/{session_id}",
+            json={"title": "Updated title"},
+        )
+
+    assert response.status_code == 404
+
+
 def test_task_creation_is_visible_on_app_event_stream() -> None:
     app = create_app(_settings())
 

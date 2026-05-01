@@ -68,12 +68,22 @@ describe("useTaskEvents", () => {
         data: JSON.stringify({ type: "live_session_ended", payload: {}, seq: 3 }),
       }),
     );
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "session_updated",
+          payload: { session: { session_id: "session-1" } },
+          seq: 4,
+        }),
+      }),
+    );
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["tasks"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["board-stages"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["live-sessions"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
   });
 
   it("closes on websocket errors and reconnects with reset backoff after open", () => {
