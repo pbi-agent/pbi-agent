@@ -11,16 +11,14 @@ export function TaskCardContent({ task }: { task: TaskRecord }) {
     <>
       <CardTitle className="task-card__title">{task.title}</CardTitle>
       <p className="task-card__prompt">{task.prompt}</p>
-      <div className="task-card__meta">
-        <span>{task.project_dir}</span>
-        <span>{task.session_id ?? "no session"}</span>
-        {task.image_attachments.length > 0 ? (
+      {task.image_attachments.length > 0 ? (
+        <div className="task-card__meta">
           <span className="task-card__attachment-count">
             <ImageIcon aria-hidden="true" />
             {task.image_attachments.length}
           </span>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {task.last_result_summary ? (
         <pre className="task-card__summary">{task.last_result_summary}</pre>
       ) : null}
