@@ -240,6 +240,42 @@
   color: var(--color-text-tertiary);
 }
 
+.delete-confirm-modal__cancel,
+.delete-confirm-modal__confirm {
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.delete-confirm-modal__cancel {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.delete-confirm-modal__cancel:hover:not(:disabled) {
+  background: var(--color-surface-3);
+  border-color: var(--color-border-focus);
+  color: var(--color-text);
+}
+
+.delete-confirm-modal__confirm {
+  background: var(--color-error-muted);
+  color: var(--color-error);
+  border-color: transparent;
+}
+
+.delete-confirm-modal__confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error) 24%, transparent);
+  color: var(--color-error);
+}
+
+.delete-confirm-modal__confirm:disabled {
+  background: var(--color-surface-3);
+  color: var(--color-text-tertiary);
+}
+
 .modal-card--confirm {
   width: min(460px, calc(100vw - 32px));
 }

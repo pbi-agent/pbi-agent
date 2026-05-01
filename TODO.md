@@ -1,7 +1,7 @@
 # TODO
 
-[X] Inspect session/image handling for reported multi-turn behavior
-[X] Determine whether image should be resent on later turns or preserved via provider history
-[X] Apply fix if needed
-[X] Run focused validation
-[X] Update memory
+[X] Add hover styling hook for delete confirm Cancel action
+[X] Update CSS to match existing outline validation action hover effect
+[X] Update frontend test coverage
+[X] Run targeted validation
+[X] Update memory and handoff
