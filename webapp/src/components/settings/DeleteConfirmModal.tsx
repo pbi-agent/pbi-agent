@@ -64,11 +64,16 @@ export function DeleteConfirmModal({
         ) : null}
 
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose} disabled={isPending}>
+          <AlertDialogCancel
+            className="delete-confirm-modal__cancel"
+            onClick={onClose}
+            disabled={isPending}
+          >
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
+            className="delete-confirm-modal__confirm"
             onClick={() => {
               void handleConfirm();
             }}
