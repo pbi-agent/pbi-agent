@@ -380,12 +380,14 @@ def test_apply_patch_handle_update_file_reports_leading_blank_line_hint(
     assert "remove the leading blank line" in result["error"]
 
 
-def test_apply_patch_handle_rejects_paths_outside_workspace(
+def test_apply_patch_handle_allows_absolute_paths_outside_workspace(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-    outside_path = tmp_path.parent / "escape.txt"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    outside_path = tmp_path / "outside.txt"
 
     result = apply_patch_tool.handle(
         {
@@ -396,8 +398,8 @@ def test_apply_patch_handle_rejects_paths_outside_workspace(
         ToolContext(),
     )
 
-    assert result["status"] == "failed"
-    assert "patch paths must be relative" in result["error"]
+    assert result["status"] == "completed"
+    assert outside_path.read_text(encoding="utf-8") == "secret"
 
 
 def test_apply_patch_handle_rejects_missing_envelope() -> None:

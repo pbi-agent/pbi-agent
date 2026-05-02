@@ -3,8 +3,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pytest
-
 from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.types import ToolContext
 
@@ -192,8 +190,15 @@ def test_shell_handle_bounds_large_stdout_and_stderr(
     assert "chars omitted" in result["stderr"]
 
 
-def test_resolve_working_directory_rejects_workspace_escape(tmp_path: Path) -> None:
-    outside = tmp_path.parent
+def test_resolve_working_directory_allows_absolute_paths_outside_workspace(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
 
-    with pytest.raises(ValueError, match="outside workspace"):
-        shell_tool._resolve_working_directory(tmp_path.resolve(), str(outside))
+    assert (
+        shell_tool._resolve_working_directory(workspace.resolve(), str(outside))
+        == outside.resolve()
+    )

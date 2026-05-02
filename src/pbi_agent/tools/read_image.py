@@ -8,15 +8,14 @@ from pbi_agent.tools.types import ToolContext, ToolOutput, ToolSpec
 
 SPEC = ToolSpec(
     name="read_image",
-    description="Read a workspace image file and attach it to the model context.",
+    description="Read an image file and attach it to the model context.",
     parameters_schema={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
                 "description": (
-                    "Image path relative to the workspace root "
-                    "(or absolute within workspace)."
+                    "Image path relative to the workspace root (or absolute)."
                 ),
             }
         },

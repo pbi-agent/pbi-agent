@@ -317,8 +317,8 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
             {
                 "type": "string",
                 "description": (
-                    "Working directory for the command, relative to the "
-                    "workspace root. Defaults to the workspace root."
+                    "Working directory for the command. Relative paths resolve "
+                    "from the workspace root. Defaults to the workspace root."
                 ),
             },
             {"type": "null"},

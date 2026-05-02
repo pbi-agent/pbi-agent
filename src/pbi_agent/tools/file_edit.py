@@ -1,4 +1,4 @@
-"""Shared helpers for workspace file edit tools."""
+"""Shared helpers for file edit tools."""
 
 from __future__ import annotations
 
@@ -26,16 +26,8 @@ class AppliedFileEditResult:
 def resolve_safe_path(root: Path, raw_path: str) -> Path:
     candidate = Path(raw_path)
     if candidate.is_absolute():
-        resolved = candidate.resolve()
-    else:
-        resolved = (root / candidate).resolve()
-
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise ValueError(f"path outside workspace is not allowed: {raw_path}") from exc
-
-    return resolved
+        return candidate.resolve(strict=False)
+    return (root / candidate).resolve(strict=False)
 
 
 def store_display_metadata(

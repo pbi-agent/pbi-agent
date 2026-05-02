@@ -1,4 +1,4 @@
-"""Custom ``apply_patch`` tool – applies V4A patches to workspace files.
+"""Custom ``apply_patch`` tool – applies V4A patches to files.
 
 This replaces the provider-specific native patch/editor tools (OpenAI
 ``apply_patch``, Anthropic ``str_replace_based_edit_tool``) with a single,
@@ -28,7 +28,7 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 SPEC = ToolSpec(
     name="apply_patch",
     description=(
-        "Apply a V4A patch to workspace files. The patch must include "
+        "Apply a V4A patch to files. The patch must include "
         "*** Begin Patch, one or more file sections, and *** End Patch."
     ),
     parameters_schema={
@@ -45,8 +45,8 @@ SPEC = ToolSpec(
                     "'*** Update File: <path>' followed by hunks. Hunk := "
                     "'@@' [anchor] followed by lines prefixed with space for "
                     "context, '-' for removals, or '+' for insertions. Paths "
-                    "must be relative and stay inside the workspace. Unified "
-                    "diffs are not accepted."
+                    "may be relative to the workspace root or absolute. "
+                    "Unified diffs are not accepted."
                 ),
             },
         },
@@ -247,8 +247,6 @@ def _parse_path_header(line: str, prefix: str) -> str:
     path = line[len(prefix) :].strip()
     if not path:
         raise ValueError(f"Missing path in patch header: {line}")
-    if Path(path).is_absolute():
-        raise ValueError(f"patch paths must be relative: {path}")
     return path
 
 

@@ -238,23 +238,24 @@ def test_replace_in_file_no_match_is_explicit(
     assert "old_string was not found" in result["error"]
 
 
-def test_file_edit_tools_reject_paths_outside_workspace(
+def test_file_edit_tools_allow_absolute_paths_outside_workspace(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-    outside = tmp_path.parent / "escape.txt"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    outside = tmp_path / "outside.txt"
 
     write_result = write_file.handle(
-        {"path": str(outside), "content": "secret"},
+        {"path": str(outside), "content": "alpha"},
         ToolContext(),
     )
     replace_result = replace_in_file.handle(
-        {"path": str(outside), "old_string": "a", "new_string": "b"},
+        {"path": str(outside), "old_string": "alpha", "new_string": "beta"},
         ToolContext(),
     )
 
-    assert write_result["status"] == "failed"
-    assert "outside workspace" in write_result["error"]
-    assert replace_result["status"] == "failed"
-    assert "outside workspace" in replace_result["error"]
+    assert write_result["status"] == "completed"
+    assert replace_result["status"] == "completed"
+    assert outside.read_text(encoding="utf-8") == "beta"

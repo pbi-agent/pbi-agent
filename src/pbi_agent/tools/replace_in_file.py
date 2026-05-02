@@ -17,7 +17,7 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 SPEC = ToolSpec(
     name="replace_in_file",
     description=(
-        "Replace a unique text block in one workspace file. Use after read_file for targeted edits; "
+        "Replace a unique text block in one file. Use after read_file for targeted edits; "
         "include enough old_string context to make the match unique."
     ),
     parameters_schema={
@@ -26,8 +26,7 @@ SPEC = ToolSpec(
             "path": {
                 "type": "string",
                 "description": (
-                    "File path relative to the workspace root "
-                    "(or absolute within workspace)."
+                    "File path relative to the workspace root (or absolute)."
                 ),
             },
             "old_string": {

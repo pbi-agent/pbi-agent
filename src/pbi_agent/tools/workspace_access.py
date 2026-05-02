@@ -26,20 +26,11 @@ _TEXT_CONTROL_BYTES = {7, 8, 9, 10, 12, 13, 27}
 def resolve_safe_path(root: Path, raw_path: Any, *, default: str = ".") -> Path:
     path_value = raw_path if isinstance(raw_path, str) and raw_path.strip() else default
     candidate = Path(path_value)
-    resolved = (
+    return (
         candidate.resolve(strict=False)
         if candidate.is_absolute()
         else (root / candidate).resolve(strict=False)
     )
-
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise ValueError(
-            f"path outside workspace is not allowed: {path_value}"
-        ) from exc
-
-    return resolved
 
 
 def normalize_positive_int(
@@ -54,7 +45,11 @@ def normalize_positive_int(
 
 
 def relative_workspace_path(root: Path, path: Path) -> str:
-    return path.resolve(strict=False).relative_to(root).as_posix()
+    resolved = path.resolve(strict=False)
+    try:
+        return resolved.relative_to(root.resolve(strict=False)).as_posix()
+    except ValueError:
+        return str(resolved)
 
 
 def iter_directory_entries(path: Path, *, recursive: bool) -> Iterator[Path]:

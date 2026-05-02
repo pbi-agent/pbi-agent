@@ -90,6 +90,21 @@ def test_read_file_auto_detects_utf16_bom(tmp_path: Path, monkeypatch) -> None:
     assert "windowed" not in result
 
 
+def test_read_file_allows_absolute_path_outside_workspace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("external", encoding="utf-8")
+
+    result = read_file_tool.handle({"path": str(outside)}, ToolContext())
+
+    assert result["path"] == str(outside.resolve())
+    assert result["content"] == "external"
+
+
 def test_read_file_summarizes_csv_with_schema_and_stats(
     tmp_path: Path, monkeypatch
 ) -> None:
