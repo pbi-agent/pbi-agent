@@ -163,7 +163,7 @@ type WindowWithAudioContext = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
 };
 
-export async function playUserQuestionNotificationSound(): Promise<void> {
+export async function playNotificationSound(): Promise<void> {
   if (!isBrowser()) return;
 
   const AudioContextConstructor =

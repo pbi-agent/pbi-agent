@@ -1,4 +1,4 @@
-[X] Fix notification settings checkbox visibility
-[X] Validate frontend settings change
-[X] Update Python tests for ask_user tool exclusion
-[X] Re-run full shipping validation
+[X] Inspect app websocket snapshot event shape and current session-ended notification handling
+[X] Fix replayed live_session_ended notifications
+[X] Add/update focused tests
+[X] Run focused frontend validation

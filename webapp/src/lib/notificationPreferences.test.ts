@@ -1,6 +1,6 @@
 import {
   NOTIFICATION_PREFERENCES_STORAGE_KEY,
-  playUserQuestionNotificationSound,
+  playNotificationSound,
   readNotificationPreferences,
   requestDesktopNotificationPermission,
   resetNotificationPreferencesForTests,
@@ -140,7 +140,7 @@ describe("notification preferences", () => {
       value: AudioContextMock,
     });
 
-    await playUserQuestionNotificationSound();
+    await playNotificationSound();
 
     expect(start).toHaveBeenCalledTimes(1);
     expect(stop).toHaveBeenCalledTimes(1);
@@ -154,6 +154,6 @@ describe("notification preferences", () => {
       value: undefined,
     });
 
-    await expect(playUserQuestionNotificationSound()).resolves.toBeUndefined();
+    await expect(playNotificationSound()).resolves.toBeUndefined();
   });
 });
