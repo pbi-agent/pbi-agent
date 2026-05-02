@@ -95,13 +95,13 @@ def handle(
         if suffix in _IMAGE_EXTENSIONS or _has_supported_image_signature(target_path):
             return _handle_image_file(root, target_path)
         if suffix in {".xlsx", ".xls"}:
-            return _handle_excel_workbook(root, target_path)
+            return _handle_excel_workbook(target_path)
         if suffix in _TABULAR_EXTENSIONS:
-            return _handle_tabular_file(root, target_path, suffix)
+            return _handle_tabular_file(target_path, suffix)
         if suffix == ".docx":
-            return _handle_docx_file(root, target_path)
+            return _handle_docx_file(target_path)
         if suffix == ".pdf":
-            return _handle_pdf_file(root, target_path)
+            return _handle_pdf_file(target_path)
 
         selected_lines: list[str] = []
         line_count = 0
@@ -123,7 +123,6 @@ def handle(
         has_more_lines = returned_end_line < line_count if returned_end_line else False
 
         result: dict[str, Any] = {
-            "path": relative_workspace_path(root, target_path),
             "start_line": returned_start_line,
             "end_line": returned_end_line,
             "total_lines": line_count,
@@ -152,14 +151,13 @@ def _handle_image_file(root: Path, target_path: Path) -> ToolOutput:
         target_path.read_bytes(),
     )
     summary = {
-        "path": image.path,
         "mime_type": image.mime_type,
         "byte_count": image.byte_count,
     }
     return ToolOutput(result=summary, attachments=[image])
 
 
-def _handle_tabular_file(root: Path, target_path: Path, suffix: str) -> dict[str, Any]:
+def _handle_tabular_file(target_path: Path, suffix: str) -> dict[str, Any]:
     separator: str | None = None
     if suffix in {".csv", ".tsv"}:
         separator = _detect_delimited_separator(target_path, suffix=suffix)
@@ -176,7 +174,6 @@ def _handle_tabular_file(root: Path, target_path: Path, suffix: str) -> dict[str
                 actual_rows=row_count,
                 sampled_rows=len(dataframe),
             )
-            result["path"] = relative_workspace_path(root, target_path)
             return result
 
     dataframe = _read_tabular_dataframe(
@@ -185,11 +182,10 @@ def _handle_tabular_file(root: Path, target_path: Path, suffix: str) -> dict[str
         separator=separator,
     )
     result = _summarize_dataframe(dataframe)
-    result["path"] = relative_workspace_path(root, target_path)
     return result
 
 
-def _handle_excel_workbook(root: Path, target_path: Path) -> dict[str, Any]:
+def _handle_excel_workbook(target_path: Path) -> dict[str, Any]:
     sheet_metadata = _read_excel_sheet_metadata(target_path)
     if sheet_metadata and any(
         meta["rows"] > TABULAR_SAMPLE_ROWS for meta in sheet_metadata
@@ -214,7 +210,6 @@ def _handle_excel_workbook(root: Path, target_path: Path) -> dict[str, Any]:
             sheets.append(sheet_result)
 
         return {
-            "path": relative_workspace_path(root, target_path),
             "sheet_count": len(sheets),
             "sheets": sheets,
         }
@@ -228,17 +223,15 @@ def _handle_excel_workbook(root: Path, target_path: Path) -> dict[str, Any]:
         sheets.append(sheet_result)
 
     return {
-        "path": relative_workspace_path(root, target_path),
         "sheet_count": len(sheets),
         "sheets": sheets,
     }
 
 
-def _handle_docx_file(root: Path, target_path: Path) -> dict[str, Any]:
+def _handle_docx_file(target_path: Path) -> dict[str, Any]:
     full_text = _extract_docx_text(target_path)
 
     result: dict[str, Any] = {
-        "path": relative_workspace_path(root, target_path),
         "content": full_text,
     }
     return result
@@ -896,7 +889,7 @@ def _format_number(value: float | numbers.Real) -> str:
     return f"{value:.4f}".rstrip("0").rstrip(".")
 
 
-def _handle_pdf_file(root: Path, target_path: Path) -> dict[str, Any]:
+def _handle_pdf_file(target_path: Path) -> dict[str, Any]:
     from pypdf import PdfReader
 
     reader = PdfReader(str(target_path))
@@ -911,7 +904,6 @@ def _handle_pdf_file(root: Path, target_path: Path) -> dict[str, Any]:
             metadata["author"] = reader.metadata.author
 
     result: dict[str, Any] = {
-        "path": relative_workspace_path(root, target_path),
         "content": full_text,
         "metadata": metadata,
     }
