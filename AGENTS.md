@@ -11,16 +11,17 @@ This file provides guidance to Coding Agent when working with code in this repos
 - Do not commit, push, merge, or open PRs unless explicitly asked.
 - Stop after local changes; leave Git steps to the user.
 - Shell commands run from the workspace root by default; use relative paths and avoid `cd /full/workspace/path && ...` prefixes unless a task explicitly requires changing directories.
+- When invoking Python directly in shell commands, use `python3` instead of `python`.
 - Use the `gh` CLI for GitHub work; do not call the GitHub API with `curl`.
 - Prefer `gh ... --json ...` for `pr view` / `issue view`; plain `gh pr view` and `gh issue view` can fail here because of the deprecated `projectCards` query.
 
 ## Common Commands
 
 ```bash
-uv run pytest
-uv run pytest tests/test_cli.py
-uv run pytest tests/test_cli.py::DefaultWebCommandTests::test_main_defaults_to_web_for_global_options_only
-uv run pytest -m slow
+uv run pytest -q --tb=short -x
+uv run pytest -q --tb=short -x tests/test_cli.py
+uv run pytest -q --tb=short -x tests/test_cli.py::DefaultWebCommandTests::test_main_defaults_to_web_for_global_options_only
+uv run pytest -q --tb=short -x -m slow
 bun run test:web
 bun run test:web:watch
 uv run ruff check .
@@ -105,8 +106,8 @@ uv tool install --reinstall .
 - Workspace confinement: `shell` tool rejects path traversal; all file tools validate paths against workspace boundaries.
 - Keep the web implementation aligned with the current FastAPI backend plus Vite/React frontend; do not introduce a parallel web framework or client stack.
 - Validation by touched surface:
-  - Python changes: `uv run ruff check .`, `uv run ruff format --check .`, and the relevant `uv run pytest ...` scope.
+  - Python changes: `uv run ruff check .`, `uv run ruff format --check .`, and the relevant `uv run pytest -q --tb=short -x ...` scope.
   - Frontend changes: `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build`.
   - Docs changes: `bun run docs:build`.
-- Before handoff on broad changes, the repo-level checks are `uv run ruff check .`, `uv run ruff format --check .`, `bun run lint`, `bun run typecheck`, and `uv run pytest`.
+- Before handoff on broad changes, the repo-level checks are `uv run ruff check .`, `uv run ruff format --check .`, `bun run lint`, `bun run typecheck`, and `uv run pytest -q --tb=short -x`.
 - **No migration or backward-compatibility logic.** The project is in early development — do not add schema migrations, version checks, deprecation shims, or any other backward-compatibility code. When something changes, just change it directly.

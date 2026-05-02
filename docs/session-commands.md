@@ -63,7 +63,7 @@ File mentions are expanded only for normal prompts. Inputs that start with `/` a
 Start a web composer input with `!` to run a shell command locally:
 
 ```text
-!uv run pytest tests/test_session.py
+!uv run pytest -q --tb=short -x tests/test_session.py
 ```
 
 Shell command mode:

@@ -48,11 +48,11 @@ Stop without shipping if:
 1. Start with `git status --short --branch` and inspect the diff before making Git changes.
 2. Identify current task scope from diff and available session context. Prefer explicit file paths when staging.
 3. Run focused validation for the touched surfaces before committing, then verify the full Python and web test suites pass before shipping:
-   - Python: `uv run ruff check .`, `uv run ruff format .`, `uv run python scripts/dead_code.py`, and full `uv run pytest`.
+   - Python: `uv run ruff check .`, `uv run ruff format .`, `uv run python scripts/dead_code.py`, and full `uv run pytest -q --tb=short -x`.
    - Frontend: `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build`.
    - Docs: `bun run docs:build`.
    - Broad changes: run repo-level checks from project instructions.
-   - Do not rely only on scoped/focused tests; confirm both the complete Python test suite (`uv run pytest`) and the complete web test suite (`bun run test:web`) pass before PR creation/merge.
+   - Do not rely only on scoped/focused tests; confirm both the complete Python test suite (`uv run pytest -q --tb=short -x`) and the complete web test suite (`bun run test:web`) pass before PR creation/merge.
 4. Create branch from current task summary. Branch name must always start with common standard change prefix, such as `fix/`, `feat/`, `docs/`, `test/`, `refactor/`, `chore/`, `ci/`, `build/`, `perf/`, or `style/`, followed by short kebab-case slug; for example, `fix/session-resume-error` or `feat/settings-import`.
 5. Stage only scoped files, then re-check `git diff --cached` before committing.
 6. Commit scoped changes with concise imperative commit message.

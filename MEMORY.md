@@ -7,7 +7,7 @@
 
 ## Long-Term Memory
 - Memory: token-efficient; keep durable decisions/follow-ups only, not logs.
-- Workflow: no commit/push/merge/PR unless asked. Use session-only `TODO.md`; markers `[ ]`, `[>]`, `[X]`, `[!]`, `[-]`. Shell from workspace root.
+- Workflow: no commit/push/merge/PR unless asked. Use session-only `TODO.md`; markers `[ ]`, `[>]`, `[X]`, `[!]`, `[-]`. Shell from workspace root; use `python3` for direct Python shell commands.
 - Validate touched surface: Python Ruff+pytest; frontend Bun tests/lint/typecheck/build; docs build. Note skipped/hung checks.
 - Architecture: CLI `src/pbi_agent/__main__.py` -> `src/pbi_agent/cli.py`; default command `web`; backend FastAPI `src/pbi_agent/web/`; frontend Vite React `webapp/`.
 - API changes: align routes/schemas/session manager with `webapp/src/api.ts` + `webapp/src/types.ts`.
@@ -68,3 +68,9 @@
 - OCRed `Artificial Analysis Intelligence Index (2 May '26).png` and reported chart title/subtitle plus model scores from visual inspection. Validation: `read_file` image preview. Next: none.
 - Fixed review findings for merged image reading: `read_file` now detects PNG/JPEG/WEBP by file signature before text fallback, including extensionless images, and generic Chat Completions tool results now serialize image attachments as multimodal content parts. Validation: `uv run pytest tests/test_read_file_tool.py tests/test_generic_provider.py`, Ruff check, and Ruff format-check on touched Python files passed.
 - Removed the provider image capability helper module entirely: deleted `src/pbi_agent/providers/capabilities.py`, removed web/API gates that rejected image inputs by provider, made runtime/provider metadata always report image support, and updated expand-input coverage for image mentions on any provider. Validation: targeted `tests/test_web_serve.py` cases plus `tests/test_session.py`, Ruff check, and Ruff format-check on touched Python files passed.
+- Added a brief `python3` preference to the default agent system prompt and repo `AGENTS.md` workflow instructions. Validation: `uv run pytest tests/test_system_prompt.py`, `uv run ruff check src/pbi_agent/agent/system_prompt.py tests/test_system_prompt.py`, and `uv run ruff format --check src/pbi_agent/agent/system_prompt.py tests/test_system_prompt.py` passed.
+- Added `scripts/dead_code.py`, a Vulture wrapper with advisory-by-default summary output, and added dev dependency `vulture==2.16`; first baseline at min confidence 100 reports 9 findings: 2 duplicate-return unreachable lines and 7 unused test fake `check` args. Validation: `uv run ruff check scripts/dead_code.py`, `uv run ruff format --check scripts/dead_code.py`, and `uv run python scripts/dead_code.py` passed.
+- Removed duplicate unreachable provider returns in `google_provider.py` and `openai_provider.py`; Vulture 100% baseline now has only 7 test fake `check`-arg findings. Validation: provider Ruff check/format-check and `uv run python scripts/dead_code.py` passed.
+- Cleared remaining Vulture 100% test findings by asserting monkeypatched `subprocess.run` fakes receive `check=False` in project agents/commands/skills tests; dead-code script now reports no findings. Validation: `uv run python scripts/dead_code.py`, targeted project source tests, and Ruff check/format-check on touched test files passed.
+- Added `uv run python scripts/dead_code.py` to ship-task and release command validation steps after Ruff. Validation: inspected `git diff` and `rg` matches for command docs.
+- Made pytest concise/fail-fast by default via `pyproject.toml` addopts `-q --tb=short -x` and updated pytest command references in AGENTS, ship-task/release command docs, and session command docs. Validation: `uv run pytest -q --tb=short -x tests/test_command_registry.py` passed.

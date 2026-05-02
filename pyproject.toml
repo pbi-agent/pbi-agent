@@ -46,7 +46,7 @@ markers = [
     "slow: slow tests",
     "integration: integration tests",
 ]
-addopts = "-v --tb=short"
+addopts = "-q --tb=short -x"
 
 [dependency-groups]
 dev = [
