@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { AskUserNotificationEffects } from "./notifications/AskUserNotificationEffects";
+import { SessionEndedNotificationEffects } from "./notifications/SessionEndedNotificationEffects";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
 import { themeOptions, useTheme, type AppTheme } from "./ThemeProvider";
@@ -54,7 +55,7 @@ const themeIcons: Record<AppTheme, typeof SunIcon> = {
 };
 
 export function AppShell() {
-  useTaskEvents();
+  const liveSessionEvents = useTaskEvents();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
 
@@ -93,6 +94,10 @@ export function AppShell() {
   return (
     <div className="app-shell bg-background text-foreground">
       <AskUserNotificationEffects />
+      <SessionEndedNotificationEffects
+        liveSessionEvents={liveSessionEvents}
+        liveSessions={bootstrap?.live_sessions ?? []}
+      />
       <header className="header">
         <div className="header__left">
           {folderLabel && (

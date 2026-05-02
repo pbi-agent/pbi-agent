@@ -1,94 +1,75 @@
-import { useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { websocketUrl } from "../api";
-import {
-  shouldNotifyForWindowState,
-  triggerDesktopAndSoundNotification,
-} from "../lib/notificationEffects";
-import { useNotificationPreferences, type NotificationPreferences } from "../lib/notificationPreferences";
-import type { LiveSession, WebEvent } from "../types";
+import type {
+  LiveSession,
+  LiveSessionLifecycleEvent,
+  LiveSessionLifecycleEventType,
+  WebEvent,
+} from "../types";
 
 const INITIAL_DELAY = 1000;
 const MAX_DELAY = 30000;
+const MAX_LIVE_SESSION_EVENT_HISTORY = 100;
+const LIVE_SESSION_LIFECYCLE_TYPES = new Set<string>([
+  "live_session_started",
+  "live_session_updated",
+  "live_session_bound",
+  "live_session_ended",
+]);
 
-function liveSessionDestination(liveSession: Pick<LiveSession, "live_session_id" | "session_id">): string {
-  if (liveSession.session_id) {
-    return `/sessions/${encodeURIComponent(liveSession.session_id)}`;
-  }
-  return `/sessions/live/${encodeURIComponent(liveSession.live_session_id)}`;
+function isLiveSessionLifecycleType(type: string): type is LiveSessionLifecycleEventType {
+  return LIVE_SESSION_LIFECYCLE_TYPES.has(type);
 }
 
-function readEndedLiveSession(event: WebEvent): LiveSession | null {
-  if (event.type !== "live_session_ended") return null;
-  const rawLiveSession = event.payload.live_session;
-  if (!rawLiveSession || typeof rawLiveSession !== "object") return null;
-  const liveSession = rawLiveSession as Partial<LiveSession>;
-  if (typeof liveSession.live_session_id !== "string") return null;
-  return liveSession as LiveSession;
-}
-
-function eventCreatedAtOrAfter(event: WebEvent, timestampMs: number): boolean {
-  const createdAtMs = Date.parse(event.created_at);
-  return Number.isNaN(createdAtMs) || createdAtMs >= timestampMs;
-}
-
-function notifyForEndedLiveSession(
-  event: WebEvent,
-  preferences: NotificationPreferences,
-  notifiedLiveSessionIds: Set<string>,
-  connectedAtMs: number,
-  navigate: (destination: string) => void | Promise<void>,
-): void {
-  const liveSession = readEndedLiveSession(event);
-  if (!liveSession) return;
-  if (notifiedLiveSessionIds.has(liveSession.live_session_id)) return;
-  notifiedLiveSessionIds.add(liveSession.live_session_id);
-
-  if (!eventCreatedAtOrAfter(event, connectedAtMs)) return;
-  if (!preferences.desktopEnabled && !preferences.soundEnabled) return;
-  if (!shouldNotifyForWindowState()) return;
-
-  const endedWithError = Boolean(liveSession.fatal_error);
-  triggerDesktopAndSoundNotification(
-    {
-      title: endedWithError ? "pbi-agent session failed" : "pbi-agent session finished",
-      body: endedWithError
-        ? "A session ended with an error."
-        : "A session finished while this tab was hidden or unfocused.",
-      destination: liveSessionDestination(liveSession),
-      tag: `session-ended:${liveSession.live_session_id}`,
-    },
-    preferences,
-    navigate,
+function isLiveSession(value: unknown): value is LiveSession {
+  return (
+    typeof value === "object"
+    && value !== null
+    && typeof (value as { live_session_id?: unknown }).live_session_id === "string"
+    && typeof (value as { status?: unknown }).status === "string"
   );
 }
 
-export function useTaskEvents(): void {
+function lifecycleEventFromWebEvent(event: WebEvent): LiveSessionLifecycleEvent | null {
+  if (!isLiveSessionLifecycleType(event.type)) {
+    return null;
+  }
+  const liveSession = event.payload.live_session;
+  if (!isLiveSession(liveSession)) {
+    return null;
+  }
+  return {
+    seq: event.seq,
+    type: event.type,
+    created_at: event.created_at,
+    live_session: liveSession,
+  };
+}
+
+function eventCreatedAtOrAfter(event: WebEvent, timestampMs: number): boolean {
+  const eventCreatedAtMs = Date.parse(event.created_at);
+  return Number.isFinite(eventCreatedAtMs) && eventCreatedAtMs >= timestampMs;
+}
+
+export function useTaskEvents(): LiveSessionLifecycleEvent[] {
   const client = useQueryClient();
-  const navigate = useNavigate();
-  const preferences = useNotificationPreferences();
-  const preferencesRef = useRef(preferences);
-  const navigateRef = useRef(navigate);
   const retryDelay = useRef(INITIAL_DELAY);
-  const notifiedLiveSessionIds = useRef<Set<string>>(new Set());
+  const startedAtMs = useRef<number | null>(null);
+  const latestHandledSeq = useRef(0);
+  const [liveSessionEvents, setLiveSessionEvents] = useState<LiveSessionLifecycleEvent[]>([]);
 
   useEffect(() => {
-    preferencesRef.current = preferences;
-  }, [preferences]);
-
-  useEffect(() => {
-    navigateRef.current = navigate;
-  }, [navigate]);
-
-  useEffect(() => {
+    if (startedAtMs.current === null) {
+      startedAtMs.current = Date.now();
+    }
+    const hookStartedAtMs = startedAtMs.current;
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
     function connect() {
       if (disposed) return;
-      const connectedAtMs = Date.now();
       socket = new WebSocket(websocketUrl("/api/events/app"));
 
       socket.onopen = () => {
@@ -125,18 +106,24 @@ export function useTaskEvents(): void {
           || event.type === "live_session_bound"
           || event.type === "live_session_ended"
         ) {
-          if (event.type === "live_session_ended") {
-            notifyForEndedLiveSession(
-              event,
-              preferencesRef.current,
-              notifiedLiveSessionIds.current,
-              connectedAtMs,
-              (destination) => navigateRef.current(destination),
-            );
-          }
           void client.invalidateQueries({ queryKey: ["sessions"] });
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
           void client.invalidateQueries({ queryKey: ["live-sessions"] });
+          const latestSeq = latestHandledSeq.current;
+          latestHandledSeq.current = Math.max(latestSeq, event.seq);
+          if (
+            event.seq <= latestSeq
+            || !eventCreatedAtOrAfter(event, hookStartedAtMs)
+          ) {
+            return;
+          }
+          const lifecycleEvent = lifecycleEventFromWebEvent(event);
+          if (lifecycleEvent) {
+            setLiveSessionEvents((previous) => [
+              ...previous,
+              lifecycleEvent,
+            ].slice(-MAX_LIVE_SESSION_EVENT_HISTORY));
+          }
         }
       };
 
@@ -161,4 +148,6 @@ export function useTaskEvents(): void {
       socket?.close();
     };
   }, [client]);
+
+  return liveSessionEvents;
 }

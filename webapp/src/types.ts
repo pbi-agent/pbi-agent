@@ -512,6 +512,19 @@ export type WebEvent = {
   payload: Record<string, unknown>;
 };
 
+export type LiveSessionLifecycleEventType =
+  | "live_session_started"
+  | "live_session_updated"
+  | "live_session_bound"
+  | "live_session_ended";
+
+export type LiveSessionLifecycleEvent = {
+  seq: number;
+  type: LiveSessionLifecycleEventType;
+  created_at: string;
+  live_session: LiveSession;
+};
+
 export type RunSession = {
   run_session_id: string;
   session_id: string | null;
