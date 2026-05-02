@@ -1,4 +1,4 @@
-[X] Inspect play icon settings styles
-[X] Add hover effect to play icon button
-[X] Run targeted validation
+[X] Fix stale queued Working phase when actual phase returns to visible color
+[X] Add regression test for A→B→A rapid phase updates
+[X] Run focused frontend validation
 [X] Update memory
