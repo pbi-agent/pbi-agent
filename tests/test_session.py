@@ -2370,6 +2370,137 @@ def test_run_session_loop_interrupt_deletes_user_turn_and_accepts_next_input(
     assert display.assistant_stop_calls == 2
 
 
+def test_run_session_loop_interruption_resets_provider_to_persisted_history(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(
+            directory=os.getcwd(),
+            provider="chatgpt",
+            model=DEFAULT_MODEL,
+            title="existing",
+        )
+        store.add_message(session_id, "user", "hello")
+        store.add_message(session_id, "assistant", "hi")
+
+    class _StatefulProvider:
+        def __init__(self) -> None:
+            self.settings = Settings(api_key="test-key", provider="chatgpt")
+            self.calls = 0
+            self.transcript: list[str] = []
+            self.restore_calls: list[list[str]] = []
+            self.reset_calls = 0
+
+        def reset_conversation(self) -> None:
+            self.reset_calls += 1
+            self.transcript.clear()
+
+        def restore_messages(self, messages) -> None:
+            restored = [message.content for message in messages]
+            self.restore_calls.append(restored)
+            self.transcript = list(restored)
+
+        def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+            del excluded_tools
+
+        def request_turn(
+            self,
+            *,
+            user_message: str | None = None,
+            user_input: UserTurnInput | None = None,
+            tool_result_items: list[dict[str, object]] | None = None,
+            instructions: str | None = None,
+            session_id: str | None = None,
+            display,
+            session_usage: TokenUsage,
+            turn_usage: TokenUsage,
+            tracer=None,
+        ) -> CompletedResponse:
+            del user_message, tool_result_items, instructions, session_id, tracer
+            assert user_input is not None
+            self.calls += 1
+            if self.calls == 1:
+                self.transcript.append(user_input.text)
+                self.transcript.append("call_without_output")
+                display.request_interrupt()
+                response = CompletedResponse(
+                    response_id="resp_tool",
+                    text="",
+                    usage=TokenUsage(
+                        input_tokens=1, output_tokens=1, model=DEFAULT_MODEL
+                    ),
+                    function_calls=[
+                        ToolCall(
+                            call_id="call_missing",
+                            name="read_file",
+                            arguments={"path": "README.md"},
+                        )
+                    ],
+                )
+            else:
+                assert self.transcript == ["hello", "hi"]
+                self.transcript.append(user_input.text)
+                response = CompletedResponse(
+                    response_id="resp_ok",
+                    text="ok",
+                    usage=TokenUsage(
+                        input_tokens=1, output_tokens=1, model=DEFAULT_MODEL
+                    ),
+                )
+            session_usage.add(response.usage)
+            turn_usage.add(response.usage)
+            return response
+
+    class _InterruptDisplay(_SessionDisplaySpy):
+        def __init__(self) -> None:
+            super().__init__(["first", "second", "quit"])
+            self.interrupt = False
+
+        def request_interrupt(
+            self, *, item_id: str | None = None, input_text: str | None = None
+        ) -> None:
+            del item_id, input_text
+            self.interrupt = True
+
+        def clear_interrupt(self) -> None:
+            self.interrupt = False
+
+        def interrupt_requested(self) -> bool:
+            return self.interrupt
+
+    provider = _StatefulProvider()
+    display = _InterruptDisplay()
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    assert (
+        run_session_loop(
+            Settings(api_key="test-key", provider="chatgpt"),
+            display,
+            resume_session_id=session_id,
+        )
+        == 0
+    )
+
+    assert provider.reset_calls == 2
+    assert provider.restore_calls[-2] == ["hello", "hi"]
+    assert provider.restore_calls[-1] == ["hello", "hi", "second", "ok"]
+    with SessionStore(db_path=db_path) as store:
+        messages = store.list_messages(session_id)
+    assert [(message.role, message.content) for message in messages] == [
+        ("user", "hello"),
+        ("assistant", "hi"),
+        ("user", "second"),
+        ("assistant", "ok"),
+    ]
+
+
 def test_run_single_turn_passes_parent_context_snapshot_to_tool_execution(
     monkeypatch, tmp_path
 ) -> None:

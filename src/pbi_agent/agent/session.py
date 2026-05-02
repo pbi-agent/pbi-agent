@@ -626,8 +626,12 @@ def run_session_loop(
                         status="interrupted",
                         usage=turn_usage,
                     )
-                    if user_message_id is not None:
-                        _delete_message(store, user_message_id)
+                    _discard_interrupted_turn(
+                        provider=provider,
+                        store=store,
+                        session_id=session_id,
+                        user_message_id=user_message_id,
+                    )
                     clear_interrupt = getattr(display, "clear_interrupt", None)
                     if callable(clear_interrupt):
                         clear_interrupt()
@@ -1226,6 +1230,22 @@ def _delete_message(store: SessionStore | None, message_id: int | None) -> None:
         store.delete_message(message_id)
     except Exception:
         _log.warning("Failed to delete message from session store", exc_info=True)
+
+
+def _discard_interrupted_turn(
+    *,
+    provider: Provider,
+    store: SessionStore | None,
+    session_id: str | None,
+    user_message_id: int | None,
+) -> None:
+    _delete_message(store, user_message_id)
+    _refresh_provider_history_from_store(
+        provider,
+        store,
+        session_id,
+        reason="interrupt",
+    )
 
 
 def _resume_session(

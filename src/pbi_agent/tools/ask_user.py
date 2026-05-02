@@ -10,12 +10,7 @@ if TYPE_CHECKING:
 
 SPEC = ToolSpec(
     name="ask_user",
-    description=(
-        "Ask the user one or more clarifying questions and wait for their answers. "
-        "Use this only when the user's answer materially changes the next step. "
-        "Call ask_user by itself, not in parallel with other tools. Each question "
-        "must include exactly three suggestions; suggestion 1 is the recommended default."
-    ),
+    description=("Request user input for one to three short questions."),
     parameters_schema={
         "type": "object",
         "additionalProperties": False,
@@ -37,7 +32,7 @@ SPEC = ToolSpec(
                             "maxItems": 3,
                             "items": {"type": "string"},
                             "description": (
-                                "Exactly three suggested answers. The first suggestion "
+                                "Exactly three mutually exclusive choices. The first suggestion "
                                 "is treated as the recommended answer."
                             ),
                         },
