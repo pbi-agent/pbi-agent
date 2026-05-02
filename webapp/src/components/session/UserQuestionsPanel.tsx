@@ -242,53 +242,53 @@ export function UserQuestionsPanel({
     !currentDraft.customText.trim();
 
   return (
-    <Card className="user-questions-panel border border-primary/20 ring-0">
-      <CardHeader>
-        <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
-          >
-            <HelpCircleIcon className="size-4" />
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <CardTitle>Assistant needs your input</CardTitle>
-            <CardDescription>
-              {totalQuestions > 1
-                ? `Answer all ${totalQuestions} questions so the assistant can continue this turn.`
-                : "Answer the question so the assistant can continue this turn."}
-            </CardDescription>
+    <div className="user-questions-panel">
+      <Card className="user-questions-panel__card">
+        <CardHeader className="user-questions-panel__header">
+          <div className="user-questions-panel__heading">
+            <span aria-hidden="true" className="user-questions-panel__icon">
+              <HelpCircleIcon />
+            </span>
+            <div className="user-questions-panel__heading-copy">
+              <CardTitle className="user-questions-panel__title">
+                Assistant needs your input
+              </CardTitle>
+              <CardDescription className="user-questions-panel__description">
+                {totalQuestions > 1
+                  ? `Answer all ${totalQuestions} questions so the assistant can continue this turn.`
+                  : "Answer the question so the assistant can continue this turn."}
+              </CardDescription>
+            </div>
+            {totalQuestions > 1 ? (
+              <Badge
+                variant="outline"
+                aria-live="polite"
+                className="user-questions-panel__badge"
+              >
+                {currentIndex + 1} / {totalQuestions}
+              </Badge>
+            ) : null}
           </div>
-          {totalQuestions > 1 ? (
-            <Badge
-              variant="outline"
-              aria-live="polite"
-              className="shrink-0 self-start"
-            >
-              {currentIndex + 1} / {totalQuestions}
-            </Badge>
-          ) : null}
-        </div>
-      </CardHeader>
-      <CardContent>
+        </CardHeader>
+        <CardContent className="user-questions-panel__content">
         <div
           ref={interactiveAreaRef}
           role="group"
           aria-label={`Question ${currentIndex + 1} of ${totalQuestions}`}
           tabIndex={-1}
           onKeyDown={handleKeyDown}
-          className="outline-none"
+          className="user-questions-panel__interactive-area"
         >
           <fieldset
             key={currentQuestion.question_id}
-            className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0"
+            className="user-question-card"
           >
-            <legend className="mb-1 text-sm font-semibold leading-snug text-foreground">
+            <legend className="user-question-card__legend">
               {totalQuestions > 1
                 ? `${currentIndex + 1}. ${currentQuestion.question}`
                 : currentQuestion.question}
             </legend>
-            <div className="flex flex-col gap-2">
+            <div className="user-question-card__options">
               {currentQuestion.suggestions.map((suggestion, index) => {
                 const isSelected = currentDraft.selectedIndex === index;
                 const isRecommended =
@@ -303,21 +303,22 @@ export function UserQuestionsPanel({
                     variant={isSelected ? "default" : "outline"}
                     aria-pressed={isSelected}
                     data-question-option=""
+                    data-selected={isSelected ? "true" : "false"}
                     className={cn(
-                      "h-auto min-h-10 justify-between gap-3 whitespace-normal px-3 py-2 text-left",
-                      isSelected
-                        ? "shadow-sm"
-                        : "hover:border-primary/40 hover:bg-primary/5",
+                      "user-question-option",
+                      isSelected && "user-question-option--selected",
                     )}
                     onClick={() => {
                       setSelection(index as SelectedIndex);
                     }}
                   >
-                    <span className="flex-1 text-left">{suggestion}</span>
+                    <span className="user-question-option__label">
+                      {suggestion}
+                    </span>
                     {isRecommended ? (
                       <Badge
                         variant={isSelected ? "secondary" : "outline"}
-                        className="shrink-0"
+                        className="user-question-option__badge"
                       >
                         Recommended
                       </Badge>
@@ -328,10 +329,10 @@ export function UserQuestionsPanel({
             </div>
             <div
               className={cn(
-                "rounded-lg border bg-background p-3 transition-colors",
+                "user-question-custom",
                 currentDraft.selectedIndex === CUSTOM_OPTION
-                  ? "border-primary/60 bg-primary/5"
-                  : "border-border hover:border-primary/40",
+                  ? "user-question-custom--selected"
+                  : "user-question-custom--idle",
               )}
               data-state={
                 currentDraft.selectedIndex === CUSTOM_OPTION ? "selected" : "idle"
@@ -339,11 +340,11 @@ export function UserQuestionsPanel({
             >
               <label
                 htmlFor={customId}
-                className="flex items-center justify-between gap-2 text-sm font-medium"
+                className="user-question-custom__label"
               >
                 <span>Another response</span>
                 {currentDraft.selectedIndex === CUSTOM_OPTION ? (
-                  <Badge variant="secondary" className="shrink-0">
+                  <Badge variant="secondary" className="user-question-custom__badge">
                     Selected
                   </Badge>
                 ) : null}
@@ -356,7 +357,7 @@ export function UserQuestionsPanel({
                 aria-invalid={customInvalid}
                 aria-describedby={customDescriptionId}
                 rows={2}
-                className="mt-2 min-h-[3.25rem]"
+                className="user-question-custom__textarea"
                 onFocus={() => {
                   updateDraft(currentQuestion.question_id, {
                     selectedIndex: CUSTOM_OPTION,
@@ -371,10 +372,10 @@ export function UserQuestionsPanel({
               />
               <p
                 id={customDescriptionId}
-                className="mt-1.5 text-xs text-muted-foreground"
+                className="user-question-custom__description"
               >
                 Use this if none of the suggestions fit. Press{" "}
-                <kbd className="rounded border border-border bg-muted px-1 text-[10px] font-medium">
+                <kbd className="user-questions-panel__kbd">
                   Esc
                 </kbd>{" "}
                 to return to the options.
@@ -382,15 +383,16 @@ export function UserQuestionsPanel({
             </div>
           </fieldset>
         </div>
-      </CardContent>
-      <CardFooter className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
+        </CardContent>
+        <CardFooter className="user-questions-panel__footer">
+        <div className="user-questions-panel__navigation">
           {totalQuestions > 1 ? (
             <>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="user-questions-panel__nav-button"
                 disabled={currentIndex === 0}
                 onClick={() => goToQuestion(currentIndex - 1)}
                 aria-label="Previous question"
@@ -399,7 +401,7 @@ export function UserQuestionsPanel({
                 Prev
               </Button>
               <div
-                className="flex items-center gap-1.5"
+                className="user-questions-panel__steps"
                 role="presentation"
                 aria-hidden="true"
               >
@@ -414,12 +416,12 @@ export function UserQuestionsPanel({
                       aria-label={`Go to question ${i + 1}`}
                       onClick={() => goToQuestion(i)}
                       className={cn(
-                        "h-1.5 w-4 rounded-full transition-colors",
+                        "user-questions-panel__step",
                         isActive
-                          ? "bg-primary"
+                          ? "user-questions-panel__step--active"
                           : answered
-                            ? "bg-primary/40 hover:bg-primary/60"
-                            : "bg-muted-foreground/30 hover:bg-muted-foreground/50",
+                            ? "user-questions-panel__step--answered"
+                            : "user-questions-panel__step--empty",
                       )}
                     />
                   );
@@ -429,6 +431,7 @@ export function UserQuestionsPanel({
                 type="button"
                 variant="outline"
                 size="sm"
+                className="user-questions-panel__nav-button"
                 disabled={currentIndex === totalQuestions - 1}
                 onClick={() => goToQuestion(currentIndex + 1)}
                 aria-label="Next question"
@@ -438,30 +441,31 @@ export function UserQuestionsPanel({
               </Button>
             </>
           ) : (
-            <span className="text-xs text-muted-foreground">
-              <kbd className="rounded border border-border bg-muted px-1 text-[10px] font-medium">
+            <span className="user-questions-panel__hint">
+              <kbd className="user-questions-panel__kbd">
                 ↑
               </kbd>
-              <kbd className="ml-1 rounded border border-border bg-muted px-1 text-[10px] font-medium">
+              <kbd className="user-questions-panel__kbd">
                 ↓
               </kbd>{" "}
               navigate ·{" "}
-              <kbd className="rounded border border-border bg-muted px-1 text-[10px] font-medium">
+              <kbd className="user-questions-panel__kbd">
                 Enter
               </kbd>{" "}
               confirm
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="user-questions-panel__actions">
           {errorMessage ? (
-            <p className="m-0 text-sm text-destructive" role="alert">
+            <p className="user-questions-panel__error" role="alert">
               {errorMessage}
             </p>
           ) : null}
           <Button
             type="button"
             disabled={!canSubmit || isSubmitting}
+            className="user-questions-panel__submit"
             onClick={() => {
               void submitAnswers();
             }}
@@ -470,7 +474,8 @@ export function UserQuestionsPanel({
             {isSubmitting ? "Sending…" : "Send answers"}
           </Button>
         </div>
-      </CardFooter>
-    </Card>
+        </CardFooter>
+      </Card>
+    </div>
   );
 }

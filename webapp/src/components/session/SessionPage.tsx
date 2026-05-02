@@ -621,15 +621,15 @@ export function SessionPage({
               title="Allow the assistant to pause and ask questions for each message while this is on."
               onPressedChange={setInteractiveMode}
             >
-              Interactive {interactiveMode ? "on" : "off"}
+              Interactive
             </Toggle>
+            {routeSessionId ? (
+              <RunHistory sessionId={routeSessionId} />
+            ) : null}
             <UsageBar
               compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
               usage={sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null}
             />
-            {routeSessionId ? (
-              <RunHistory sessionId={routeSessionId} />
-            ) : null}
             {canDeleteActiveSession ? (
               <Button
                 type="button"
