@@ -20,6 +20,10 @@ import { SessionWelcome } from "./SessionWelcome";
 
 const USER_MESSAGE_TOP_OFFSET = 8;
 const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
+const WORK_RUN_PHASE_MIN_VISIBLE_MS = 600;
+const WORK_RUN_PHASE_TRANSITION_MS = 300;
+const WORK_RUN_PHASE_HOLD_MS =
+  WORK_RUN_PHASE_MIN_VISIBLE_MS + WORK_RUN_PHASE_TRANSITION_MS;
 
 type WorkItem = TimelineThinkingItem | TimelineToolGroupItem;
 
@@ -41,6 +45,8 @@ function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
   const units: RenderUnit[] = [];
   let buffer: WorkItem[] = [];
   let bufferSubAgent: string | undefined;
+  let previousMessageItemId: string | undefined;
+  let workRunSinceMessage = false;
 
   const flush = () => {
     if (buffer.length === 0) return;
@@ -49,19 +55,25 @@ function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
     );
     units.push({
       kind: "work_run",
-      key: `work-${buffer[0].itemId}`,
+      key:
+        previousMessageItemId && !workRunSinceMessage
+          ? `work-after-${previousMessageItemId}`
+          : `work-${buffer[0].itemId}`,
       items: buffer,
       subAgentId: bufferSubAgent,
       running,
     });
     buffer = [];
     bufferSubAgent = undefined;
+    workRunSinceMessage = true;
   };
 
   for (const item of items) {
     if (!isWorkItem(item)) {
       flush();
       units.push({ kind: "message", item });
+      previousMessageItemId = item.itemId;
+      workRunSinceMessage = false;
       continue;
     }
     if (buffer.length > 0 && bufferSubAgent !== item.subAgentId) {
@@ -97,6 +109,108 @@ function waitForImages(container: HTMLElement): Promise<void> {
 }
 
 type WorkRunPhase = ProcessingPhase | "active";
+
+function useVisibleWorkRunPhase(phase: WorkRunPhase | null) {
+  const [visiblePhase, setVisiblePhase] = useState(phase);
+  const visiblePhaseRef = useRef(phase);
+  const visibleSinceRef = useRef(0);
+  const queuedPhasesRef = useRef<WorkRunPhase[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current === null) return;
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }, []);
+
+  const markVisiblePhase = useCallback((nextPhase: WorkRunPhase | null) => {
+    visiblePhaseRef.current = nextPhase;
+    visibleSinceRef.current = Date.now();
+  }, []);
+
+  const setVisiblePhaseNow = useCallback(
+    (nextPhase: WorkRunPhase | null) => {
+      markVisiblePhase(nextPhase);
+      setVisiblePhase(nextPhase);
+    },
+    [markVisiblePhase],
+  );
+
+  const scheduleNextPhase = useCallback(
+    function scheduleQueuedPhase() {
+      if (timerRef.current !== null || queuedPhasesRef.current.length === 0) {
+        return;
+      }
+
+      const elapsed = Date.now() - visibleSinceRef.current;
+      const delay = Math.max(WORK_RUN_PHASE_HOLD_MS - elapsed, 0);
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        const nextPhase = queuedPhasesRef.current.shift();
+        if (!nextPhase) return;
+        setVisiblePhaseNow(nextPhase);
+        scheduleQueuedPhase();
+      }, delay);
+    },
+    [setVisiblePhaseNow],
+  );
+
+  useEffect(() => {
+    if (visiblePhaseRef.current !== null && visibleSinceRef.current === 0) {
+      visibleSinceRef.current = Date.now();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (phase === null) {
+      queuedPhasesRef.current = [];
+      clearTimer();
+      if (visiblePhaseRef.current !== null) {
+        markVisiblePhase(null);
+        setTimeout(() => {
+          setVisiblePhase(null);
+        }, 0);
+      }
+      return;
+    }
+
+    if (visiblePhaseRef.current === null) {
+      markVisiblePhase(phase);
+      setTimeout(() => {
+        setVisiblePhase(phase);
+      }, 0);
+      return;
+    }
+
+    if (phase === visiblePhaseRef.current) {
+      queuedPhasesRef.current = [];
+      clearTimer();
+      return;
+    }
+
+    const queuedPhaseIndex = queuedPhasesRef.current.indexOf(phase);
+    if (queuedPhaseIndex !== -1) {
+      queuedPhasesRef.current = queuedPhasesRef.current.slice(
+        0,
+        queuedPhaseIndex + 1,
+      );
+      scheduleNextPhase();
+      return;
+    }
+
+    queuedPhasesRef.current.push(phase);
+    scheduleNextPhase();
+  }, [clearTimer, markVisiblePhase, phase, scheduleNextPhase]);
+
+  useEffect(
+    () => () => {
+      clearTimer();
+    },
+    [clearTimer],
+  );
+
+  return visiblePhase;
+}
 
 function WorkRun({
   unit,
@@ -197,6 +311,7 @@ export function SessionTimeline({
   const activePhase: WorkRunPhase | null = sessionIsActive
     ? processing?.phase ?? "active"
     : null;
+  const visibleActivePhase = useVisibleWorkRunPhase(activePhase);
   const renderUnits = useMemo(() => {
     if (!sessionIsActive) return baseRenderUnits;
     const last = baseRenderUnits[baseRenderUnits.length - 1];
@@ -205,13 +320,15 @@ export function SessionTimeline({
       ...baseRenderUnits,
       {
         kind: "work_run" as const,
-        key: "work-active-placeholder",
+        key: latestItem?.kind === "message"
+          ? `work-after-${latestItem.itemId}`
+          : "work-active-placeholder",
         items: [],
         subAgentId: undefined,
         running: true,
       },
     ];
-  }, [baseRenderUnits, sessionIsActive]);
+  }, [baseRenderUnits, latestItem, sessionIsActive]);
   const latestRenderUnit = renderUnits[renderUnits.length - 1];
   const activeWorkRunKey =
     sessionIsActive && latestRenderUnit?.kind === "work_run"
@@ -383,7 +500,7 @@ export function SessionTimeline({
               unit={unit}
               subAgents={subAgents}
               active={isActiveUnit}
-              phase={isActiveUnit ? activePhase : null}
+              phase={isActiveUnit ? visibleActivePhase : null}
               closeSignal={closeCollapsiblesSignal}
               onUserOpen={
                 isActiveRunningUnit ? handleUserOpenCollapsible : undefined

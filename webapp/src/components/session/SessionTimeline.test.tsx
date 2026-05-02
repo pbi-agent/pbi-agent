@@ -935,6 +935,239 @@ describe("SessionTimeline", () => {
     expect(screen.getByLabelText("running")).toBeInTheDocument();
   });
 
+  it("delays active Working phase color changes without replacing the spinner", () => {
+    vi.useFakeTimers();
+    const items = [
+      {
+        kind: "thinking" as const,
+        itemId: "thinking-1",
+        title: "Thinking",
+        content: "Planning",
+      },
+    ];
+    const { rerender } = render(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Analyzing..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Working/ });
+    const spinner = screen.getByLabelText("running");
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+
+    rerender(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={2}
+      />,
+    );
+
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+    expect(screen.getByLabelText("running")).toBe(spinner);
+
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(trigger).toHaveAttribute("data-phase", "tool_execution");
+    expect(screen.getByLabelText("running")).toBe(spinner);
+  });
+
+  it("keeps the active Working spinner stable and delays color changes when the first tool run replaces the placeholder", () => {
+    vi.useFakeTimers();
+    const initialItems = [
+      {
+        kind: "message" as const,
+        itemId: "user-1",
+        role: "user" as const,
+        content: "Do the task",
+        markdown: false,
+      },
+    ];
+    const toolItems = [
+      ...initialItems,
+      {
+        kind: "tool_group" as const,
+        itemId: "tool-1",
+        label: "shell",
+        status: "running" as const,
+        items: [
+          {
+            text: "Running command",
+            metadata: {
+              tool_name: "shell" as const,
+              command: "echo ok",
+            },
+          },
+        ],
+      },
+    ];
+    const { rerender } = render(
+      <SessionTimeline
+        items={initialItems}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Analyzing..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Working/ });
+    const spinner = screen.getByLabelText("running");
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+
+    rerender(
+      <SessionTimeline
+        items={toolItems}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={2}
+      />,
+    );
+
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+    expect(screen.getByLabelText("running")).toBe(spinner);
+
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(trigger).toHaveAttribute("data-phase", "tool_execution");
+    expect(screen.getByLabelText("running")).toBe(spinner);
+  });
+
+  it("clears stale queued active Working phases when the current phase returns to the visible color", () => {
+    vi.useFakeTimers();
+    const items = [
+      {
+        kind: "thinking" as const,
+        itemId: "thinking-1",
+        title: "Thinking",
+        content: "Planning",
+      },
+    ];
+    const { rerender } = render(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Analyzing..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Working/ });
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+
+    rerender(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={2}
+      />,
+    );
+    rerender(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Analyzing..." }}
+        itemsVersion={3}
+      />,
+    );
+
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+  });
+
+  it("shows each queued active Working phase for a visible interval", () => {
+    vi.useFakeTimers();
+    const items = [
+      {
+        kind: "thinking" as const,
+        itemId: "thinking-1",
+        title: "Thinking",
+        content: "Planning",
+      },
+    ];
+    const { rerender } = render(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Analyzing..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Working/ });
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+
+    rerender(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={2}
+      />,
+    );
+    rerender(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "finalizing", message: "Finalizing..." }}
+        itemsVersion={3}
+      />,
+    );
+
+    expect(trigger).toHaveAttribute("data-phase", "model_wait");
+
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(trigger).toHaveAttribute("data-phase", "tool_execution");
+
+    act(() => {
+      vi.advanceTimersByTime(899);
+    });
+
+    expect(trigger).toHaveAttribute("data-phase", "tool_execution");
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(trigger).toHaveAttribute("data-phase", "finalizing");
+  });
+
   it("renders a synthetic Working header when the latest item is a user message and the session is active", () => {
     render(
       <SessionTimeline
