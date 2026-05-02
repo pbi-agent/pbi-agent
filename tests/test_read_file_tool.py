@@ -28,7 +28,6 @@ def test_read_file_returns_requested_line_window(tmp_path: Path, monkeypatch) ->
     )
 
     assert result == {
-        "path": "notes.txt",
         "start_line": 2,
         "end_line": 3,
         "total_lines": 4,
@@ -84,7 +83,7 @@ def test_read_file_auto_detects_utf16_bom(tmp_path: Path, monkeypatch) -> None:
 
     result = read_file_tool.handle({"path": "utf16.txt"}, ToolContext())
 
-    assert result["path"] == "utf16.txt"
+    assert "path" not in result
     assert result["content"] == "hello\nworld\n"
     assert result["has_more_lines"] is False
     assert "windowed" not in result
@@ -101,7 +100,7 @@ def test_read_file_allows_absolute_path_outside_workspace(
 
     result = read_file_tool.handle({"path": str(outside)}, ToolContext())
 
-    assert result["path"] == str(outside.resolve())
+    assert "path" not in result
     assert result["content"] == "external"
 
 
@@ -216,7 +215,7 @@ def test_read_file_returns_all_excel_sheets(tmp_path: Path, monkeypatch) -> None
 
     result = read_file_tool.handle({"path": "workbook.xlsx"}, ToolContext())
 
-    assert result["path"] == "workbook.xlsx"
+    assert "path" not in result
     assert result["sheet_count"] == 2
     assert [sheet["name"] for sheet in result["sheets"]] == ["Orders", "Returns"]
     assert result["sheets"][0]["shape"] == {"rows": 2, "columns": 2}
@@ -432,7 +431,6 @@ def test_read_file_extracts_docx_text(tmp_path: Path, monkeypatch) -> None:
     result = read_file_tool.handle({"path": "report.docx"}, ToolContext())
 
     assert result == {
-        "path": "report.docx",
         "content": "Quarterly report\nRevenue grew 12%",
     }
 
@@ -495,7 +493,6 @@ def test_read_file_does_not_truncate_docx_content(tmp_path: Path, monkeypatch) -
     result = read_file_tool.handle({"path": "report.docx"}, ToolContext())
 
     assert result == {
-        "path": "report.docx",
         "content": full_text,
     }
 
@@ -522,7 +519,6 @@ def test_read_file_does_not_truncate_pdf_content(tmp_path: Path, monkeypatch) ->
     result = read_file_tool.handle({"path": "report.pdf"}, ToolContext())
 
     assert result == {
-        "path": "report.pdf",
         "content": full_text,
         "metadata": {
             "pages": 1,
@@ -593,7 +589,6 @@ def test_read_file_reports_empty_files_with_zero_range(
     result = read_file_tool.handle({"path": "empty.txt"}, ToolContext())
 
     assert result == {
-        "path": "empty.txt",
         "start_line": 0,
         "end_line": 0,
         "total_lines": 0,
@@ -614,7 +609,6 @@ def test_read_file_detects_supported_image_without_extension(
 
     assert isinstance(result, ToolOutput)
     assert result.result == {
-        "path": "chart",
         "mime_type": "image/png",
         "byte_count": len(png_bytes),
     }
@@ -633,7 +627,6 @@ def test_read_file_returns_image_summary_and_attachment(
 
     assert isinstance(result, ToolOutput)
     assert result.result == {
-        "path": "chart.png",
         "mime_type": "image/png",
         "byte_count": len(png_bytes),
     }
@@ -656,7 +649,7 @@ def test_read_file_allows_absolute_image_path_outside_workspace(
     result = read_file_tool.handle({"path": str(outside)}, ToolContext())
 
     assert isinstance(result, ToolOutput)
-    assert result.result["path"] == str(outside.resolve())
+    assert "path" not in result.result
     assert result.attachments[0].path == str(outside.resolve())
 
 

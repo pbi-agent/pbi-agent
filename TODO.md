@@ -1,4 +1,7 @@
-[X] Find pytest command references
-[X] Update defaults/instructions to use `uv run pytest -q --tb=short -x`
-[X] Validate docs/config changes
-[X] Update task memory
+# TODO
+
+[X] Inspect read_file outputs and tests
+[X] Remove redundant successful result `path` fields
+[X] Update tests for new output shape
+[X] Run targeted validation
+[X] Update MEMORY.md
