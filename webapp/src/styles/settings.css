@@ -48,6 +48,56 @@
   gap: var(--sp-3);
 }
 
+.settings-notifications [data-slot="field-group"] {
+  gap: var(--sp-4);
+}
+
+.settings-notifications__field {
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+
+.settings-notifications__checkbox[data-slot="checkbox"] {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 2px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-1);
+  color: var(--on-primary);
+  opacity: 1;
+}
+
+.settings-notifications__checkbox[data-slot="checkbox"][data-state="checked"] {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.settings-notifications__checkbox[data-slot="checkbox"]:not(:disabled):hover,
+.settings-notifications__checkbox[data-slot="checkbox"]:not(:disabled):focus-visible {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, var(--color-surface-1));
+}
+
+.settings-notifications__checkbox[data-slot="checkbox"][data-state="checked"]:not(:disabled):hover,
+.settings-notifications__checkbox[data-slot="checkbox"][data-state="checked"]:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--primary) 88%, white);
+}
+
+.settings-notifications__checkbox[data-slot="checkbox"]:disabled {
+  border-color: var(--color-border-subtle);
+  background: var(--color-surface-2);
+  color: var(--color-text-tertiary);
+  opacity: 0.75;
+}
+
+.settings-notifications__field [data-slot="field-label"] {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--color-text);
+}
+
 /* ── Item cards ── */
 
 .settings-item {

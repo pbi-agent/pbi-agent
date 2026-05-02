@@ -102,6 +102,8 @@ class Provider(ABC):
 
     def set_excluded_tools(self, excluded_tools: set[str]) -> None:
         """Replace the active excluded tool names and rebuild definitions."""
+        if getattr(self, "_excluded_tools", set()) == excluded_tools:
+            return
         self._excluded_tools = set(excluded_tools)
         self.refresh_tools()
 

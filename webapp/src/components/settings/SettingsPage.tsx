@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangleIcon,
+  BellIcon,
   CheckCircle2Icon,
   EditIcon,
   GaugeIcon,
@@ -9,6 +10,7 @@ import {
   PlusIcon,
   Trash2Icon,
   UnplugIcon,
+  Volume2Icon,
 } from "lucide-react";
 import {
   createModelProfile,
@@ -23,6 +25,14 @@ import {
   updateProvider,
 } from "../../api";
 import { ApiError } from "../../api";
+import {
+  getBrowserNotificationPermission,
+  requestDesktopNotificationPermission,
+  setDesktopNotificationsEnabled,
+  setSoundNotificationsEnabled,
+  useNotificationPreferences,
+  type BrowserNotificationPermission,
+} from "../../lib/notificationPreferences";
 import type {
   CommandView,
   ConfigBootstrapPayload,
@@ -42,7 +52,15 @@ import { ProviderModal } from "./ProviderModal";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Checkbox } from "../ui/checkbox";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "../ui/field";
 import { EmptyState } from "../shared/EmptyState";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 
@@ -324,6 +342,98 @@ function CommandCard({ command }: { command: CommandView }) {
   );
 }
 
+function notificationPermissionLabel(
+  permission: BrowserNotificationPermission,
+  desktopEnabled: boolean,
+): string {
+  switch (permission) {
+    case "unsupported":
+      return "Browser notifications are not supported here.";
+    case "denied":
+      return "Notifications are blocked in this browser.";
+    case "granted":
+      return desktopEnabled
+        ? "Desktop notifications are enabled."
+        : "Desktop permission is granted, but notifications are disabled.";
+    default:
+      return "Desktop notifications have not been enabled.";
+  }
+}
+
+function NotificationSettingsCard() {
+  const preferences = useNotificationPreferences();
+  const permission = getBrowserNotificationPermission();
+  const desktopChecked = preferences.desktopEnabled && permission === "granted";
+  const desktopUnavailable =
+    permission === "unsupported" || (permission === "denied" && !preferences.desktopEnabled);
+
+  async function handleDesktopCheckedChange(checked: boolean | "indeterminate") {
+    if (checked === true) {
+      await requestDesktopNotificationPermission();
+      return;
+    }
+    setDesktopNotificationsEnabled(false);
+  }
+
+  return (
+    <Card className="settings-panel">
+      <CardHeader className="settings-panel__header">
+        <div>
+          <CardTitle className="settings-panel__title">Notifications</CardTitle>
+          <CardDescription className="settings-panel__subtitle">
+            Alerts for interactive questions that pause the assistant
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="settings-panel__body settings-notifications">
+        <FieldGroup>
+          <Field orientation="horizontal" className="settings-notifications__field">
+            <Checkbox
+              id="desktop-notifications"
+              className="settings-notifications__checkbox"
+              checked={desktopChecked}
+              disabled={desktopUnavailable}
+              onCheckedChange={(checked) => {
+                void handleDesktopCheckedChange(checked);
+              }}
+            />
+            <FieldContent>
+              <FieldLabel htmlFor="desktop-notifications">
+                <BellIcon data-icon="inline-start" />
+                Desktop notifications
+              </FieldLabel>
+              <FieldDescription>
+                Show a browser notification when an ask_user question arrives while this
+                tab is hidden or unfocused. {notificationPermissionLabel(permission, desktopChecked)}
+              </FieldDescription>
+            </FieldContent>
+          </Field>
+
+          <Field orientation="horizontal" className="settings-notifications__field">
+            <Checkbox
+              id="sound-notifications"
+              className="settings-notifications__checkbox"
+              checked={preferences.soundEnabled}
+              onCheckedChange={(checked) => {
+                setSoundNotificationsEnabled(checked === true);
+              }}
+            />
+            <FieldContent>
+              <FieldLabel htmlFor="sound-notifications">
+                <Volume2Icon data-icon="inline-start" />
+                Sound notifications
+              </FieldLabel>
+              <FieldDescription>
+                Play a short chime for the same hidden or unfocused ask_user alerts.
+              </FieldDescription>
+            </FieldContent>
+          </Field>
+        </FieldGroup>
+      </CardContent>
+    </Card>
+  );
+}
+
 type ModalState =
   | { type: "none" }
   | { type: "create-provider" }
@@ -534,6 +644,8 @@ export function SettingsPage() {
             <AlertDescription>{pageError}</AlertDescription>
           </Alert>
         )}
+
+        <NotificationSettingsCard />
 
         <Card className="settings-panel">
           <CardHeader className="settings-panel__header">
