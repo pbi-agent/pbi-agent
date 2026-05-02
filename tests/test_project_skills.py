@@ -330,6 +330,7 @@ def test_private_repo_404_falls_back_to_git_and_succeeds(
         timeout: int,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        assert check is False
         git_calls.append(
             (tuple(args), None if env is None else env.get("GIT_TERMINAL_PROMPT"))
         )
@@ -411,6 +412,7 @@ def test_tree_url_with_slashful_ref_works_via_git_fallback(
         timeout: int,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        assert check is False
         git_calls.append(tuple(args))
         if args[:3] == ["gh", "auth", "token"]:
             return subprocess.CompletedProcess(args, 1, "", "no auth")
@@ -467,6 +469,7 @@ def test_https_auth_failure_retries_ssh_before_surfacing_final_error(
         timeout: int,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        assert check is False
         if args[:3] == ["gh", "auth", "token"]:
             return subprocess.CompletedProcess(args, 1, "", "no auth")
         if args[:3] == ["git", "clone", "--depth"]:
@@ -556,6 +559,7 @@ def test_temp_materialization_is_removed_after_archive_parse_failure(
         timeout: int,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        assert check is False
         if args[:3] == ["gh", "auth", "token"]:
             return subprocess.CompletedProcess(args, 1, "", "no auth")
         if args[:3] == ["git", "clone", "--depth"]:
@@ -592,6 +596,7 @@ def test_temp_materialization_is_removed_after_clone_failure(
         timeout: int,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        assert check is False
         if args[:3] == ["gh", "auth", "token"]:
             return subprocess.CompletedProcess(args, 1, "", "no auth")
         if args[:3] == ["git", "clone", "--depth"]:
