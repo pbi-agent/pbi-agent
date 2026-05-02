@@ -687,7 +687,6 @@ def _extract_google_text_annotation_sources(
                 )
             )
     return sources
-    return sources
 
 
 def _extract_google_grounding_metadata(

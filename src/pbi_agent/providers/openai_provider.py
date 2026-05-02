@@ -1472,7 +1472,6 @@ def _merge_sse_indexed_list(existing: list[Any], new_values: list[Any]) -> list[
         elif not merged[index]:
             merged[index] = value
     return merged
-    return merged
 
 
 def _append_sse_message_delta(

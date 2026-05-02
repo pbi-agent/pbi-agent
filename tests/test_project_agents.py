@@ -354,6 +354,7 @@ def test_private_repo_404_falls_back_to_git_and_succeeds(
         timeout: int,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        assert check is False
         git_calls.append(
             (tuple(args), None if env is None else env.get("GIT_TERMINAL_PROMPT"))
         )
