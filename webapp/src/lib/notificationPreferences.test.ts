@@ -63,21 +63,61 @@ describe("notification preferences", () => {
     expect(readNotificationPreferences()).toEqual({
       desktopEnabled: false,
       soundEnabled: false,
+      soundId: "chime",
     });
   });
 
   it("persists notification preferences in localStorage", () => {
-    setNotificationPreferences({ desktopEnabled: true, soundEnabled: true });
+    setNotificationPreferences({
+      desktopEnabled: true,
+      soundEnabled: true,
+      soundId: "bell",
+    });
 
     expect(readNotificationPreferences()).toEqual({
       desktopEnabled: true,
       soundEnabled: true,
+      soundId: "bell",
     });
     expect(
       JSON.parse(
         window.localStorage.getItem(NOTIFICATION_PREFERENCES_STORAGE_KEY) ?? "{}",
       ),
-    ).toEqual({ desktopEnabled: true, soundEnabled: true });
+    ).toEqual({ desktopEnabled: true, soundEnabled: true, soundId: "bell" });
+  });
+
+  it("falls back to the default sound for missing or invalid stored sound ids", () => {
+    window.localStorage.setItem(
+      NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({ desktopEnabled: true, soundEnabled: true }),
+    );
+    resetNotificationPreferencesForTests();
+    window.localStorage.setItem(
+      NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({ desktopEnabled: true, soundEnabled: true }),
+    );
+
+    expect(readNotificationPreferences()).toEqual({
+      desktopEnabled: true,
+      soundEnabled: true,
+      soundId: "chime",
+    });
+
+    resetNotificationPreferencesForTests();
+    window.localStorage.setItem(
+      NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        desktopEnabled: true,
+        soundEnabled: true,
+        soundId: "siren",
+      }),
+    );
+
+    expect(readNotificationPreferences()).toEqual({
+      desktopEnabled: true,
+      soundEnabled: true,
+      soundId: "chime",
+    });
   });
 
   it("requests desktop notification permission before enabling desktop notifications", async () => {
@@ -99,7 +139,9 @@ describe("notification preferences", () => {
     expect(readNotificationPreferences().desktopEnabled).toBe(false);
   });
 
-  it("plays a short sound when Web Audio is available", async () => {
+  it.each(["chime", "bell", "pop", "pulse"] as const)(
+    "plays the %s sound when Web Audio is available",
+    async (soundId) => {
     const start = vi.fn();
     const stop = vi.fn();
     const close = vi.fn();
@@ -140,12 +182,13 @@ describe("notification preferences", () => {
       value: AudioContextMock,
     });
 
-    await playNotificationSound();
+    await playNotificationSound(soundId);
 
-    expect(start).toHaveBeenCalledTimes(1);
-    expect(stop).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledTimes(start.mock.calls.length);
     expect(close).toHaveBeenCalledTimes(1);
-  });
+  },
+  );
 
   it("does not throw when Web Audio is unavailable", async () => {
     Object.defineProperty(window, "AudioContext", {

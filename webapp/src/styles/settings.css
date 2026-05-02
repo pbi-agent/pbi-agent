@@ -98,6 +98,52 @@
   color: var(--color-text);
 }
 
+.settings-notifications__sound-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.settings-notifications__sound-label[data-slot="field-label"] {
+  width: 100%;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.settings-notifications__sound-select[data-slot="native-select"] {
+  min-width: 9rem;
+}
+
+.settings-notifications__sound-preview {
+  color: var(--color-text-secondary);
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.settings-notifications__sound-preview svg {
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+.settings-notifications__sound-preview:not(:disabled):hover,
+.settings-notifications__sound-preview:not(:disabled):focus-visible {
+  background: color-mix(in srgb, var(--primary) 12%, var(--color-surface-1));
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.settings-notifications__sound-preview:not(:disabled):hover svg,
+.settings-notifications__sound-preview:not(:disabled):focus-visible svg {
+  transform: scale(1.08);
+}
+
 /* ── Item cards ── */
 
 .settings-item {

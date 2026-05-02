@@ -1,4 +1,4 @@
-[X] Locate Interactive toggle styling
-[X] Update hover/active colors to be distinct
+[X] Inspect play icon settings styles
+[X] Add hover effect to play icon button
 [X] Run targeted validation
 [X] Update memory
