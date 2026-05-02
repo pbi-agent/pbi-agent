@@ -104,6 +104,25 @@ export type LiveSession = LiveSessionRuntime & {
   last_event_seq: number;
 };
 
+export type PendingUserQuestion = {
+  question_id: string;
+  question: string;
+  suggestions: [string, string, string];
+  recommended_suggestion_index: 0;
+};
+
+export type PendingUserQuestions = {
+  prompt_id: string;
+  questions: PendingUserQuestion[];
+};
+
+export type UserQuestionAnswer = {
+  question_id: string;
+  answer: string;
+  selected_suggestion_index: 0 | 1 | 2 | null;
+  custom: boolean;
+};
+
 export type HistoryItem = {
   item_id: string;
   role: "user" | "assistant" | "notice" | "error" | "debug";
@@ -134,6 +153,7 @@ export type LiveSessionSnapshot = {
     | null;
   session_ended: boolean;
   fatal_error: string | null;
+  pending_user_questions?: PendingUserQuestions | null;
   items: Record<string, unknown>[];
   sub_agents: Record<string, { title: string; status: string }>;
   last_event_seq: number;

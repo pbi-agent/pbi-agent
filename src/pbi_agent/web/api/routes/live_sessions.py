@@ -20,6 +20,7 @@ from pbi_agent.web.api.schemas.live_sessions import (
     LiveSessionShellCommandRequest,
     CreateLiveSessionRequest,
     ExpandInputRequest,
+    SubmitQuestionResponseRequest,
     ExpandInputResponse,
     ImageUploadResponse,
     NewSessionRequest,
@@ -69,11 +70,33 @@ def submit_session_input(
             image_paths=request.image_paths,
             image_upload_ids=request.image_upload_ids,
             profile_id=request.profile_id,
+            interactive_mode=request.interactive_mode,
         )
     except KeyError as exc:
         raise not_found("Live session not found.") from exc
     except ConfigError as exc:
         raise config_http_error(exc) from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(
+        session=model_from_payload(LiveSessionModel, session),
+    )
+
+
+@router.post("/{live_session_id}/question-response", response_model=LiveSessionResponse)
+def submit_question_response(
+    live_session_id: LiveSessionIdPath,
+    request: SubmitQuestionResponseRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.submit_question_response(
+            live_session_id,
+            prompt_id=request.prompt_id,
+            answers=[answer.model_dump() for answer in request.answers],
+        )
+    except KeyError as exc:
+        raise not_found("Live session not found.") from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
     return LiveSessionResponse(

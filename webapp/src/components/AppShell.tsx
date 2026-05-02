@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { AskUserNotificationEffects } from "./notifications/AskUserNotificationEffects";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
 import { themeOptions, useTheme, type AppTheme } from "./ThemeProvider";
@@ -91,6 +92,7 @@ export function AppShell() {
 
   return (
     <div className="app-shell bg-background text-foreground">
+      <AskUserNotificationEffects />
       <header className="header">
         <div className="header__left">
           {folderLabel && (

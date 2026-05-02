@@ -100,6 +100,13 @@ class Provider(ABC):
     def refresh_tools(self) -> None:
         """Rebuild provider tool definitions when dynamic schemas change."""
 
+    def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+        """Replace the active excluded tool names and rebuild definitions."""
+        if getattr(self, "_excluded_tools", set()) == excluded_tools:
+            return
+        self._excluded_tools = set(excluded_tools)
+        self.refresh_tools()
+
     # -- context manager convenience ----------------------------------------
 
     def __enter__(self) -> Provider:

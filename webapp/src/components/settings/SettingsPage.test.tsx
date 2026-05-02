@@ -16,6 +16,38 @@ import {
   startProviderAuthFlow,
 } from "../../api";
 import type { ConfigBootstrapPayload } from "../../types";
+import {
+  readNotificationPreferences,
+  resetNotificationPreferencesForTests,
+} from "../../lib/notificationPreferences";
+
+const originalNotification = globalThis.Notification;
+
+function installNotificationMock(permission: NotificationPermission) {
+  class NotificationMock {
+    static permission: NotificationPermission = "default";
+    static requestPermission = vi.fn().mockResolvedValue(permission);
+  }
+
+  Object.defineProperty(globalThis, "Notification", {
+    configurable: true,
+    writable: true,
+    value: NotificationMock,
+  });
+  return NotificationMock;
+}
+
+function restoreNotificationMock() {
+  if (originalNotification) {
+    Object.defineProperty(globalThis, "Notification", {
+      configurable: true,
+      writable: true,
+      value: originalNotification,
+    });
+    return;
+  }
+  Reflect.deleteProperty(globalThis, "Notification");
+}
 
 vi.mock("../../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api")>();
@@ -273,6 +305,7 @@ function makeConfigBootstrap(
 
 describe("SettingsPage", () => {
   beforeEach(() => {
+    resetNotificationPreferencesForTests();
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(createProvider).mockResolvedValue({
       provider: {
@@ -430,8 +463,67 @@ describe("SettingsPage", () => {
   });
 
   afterEach(() => {
+    restoreNotificationMock();
     vi.clearAllMocks();
     vi.restoreAllMocks();
+  });
+
+  it("renders notification controls with desktop and sound disabled by default", async () => {
+    renderWithProviders(<SettingsPage />);
+
+    const desktopCheckbox = await screen.findByRole("checkbox", {
+      name: /desktop notifications/i,
+    });
+    const soundCheckbox = screen.getByRole("checkbox", {
+      name: /sound notifications/i,
+    });
+
+    expect(desktopCheckbox).not.toBeChecked();
+    expect(soundCheckbox).not.toBeChecked();
+    expect(screen.getByText(/ask_user question arrives/i)).toBeInTheDocument();
+  });
+
+  it("requests browser permission from the desktop notification control", async () => {
+    const user = userEvent.setup();
+    const notificationMock = installNotificationMock("granted");
+
+    renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("checkbox", {
+      name: /desktop notifications/i,
+    }));
+
+    await waitFor(() =>
+      expect(notificationMock.requestPermission).toHaveBeenCalledTimes(1),
+    );
+    expect(readNotificationPreferences().desktopEnabled).toBe(true);
+  });
+
+  it("keeps desktop notifications disabled when browser permission is denied", async () => {
+    const user = userEvent.setup();
+    installNotificationMock("denied");
+
+    renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("checkbox", {
+      name: /desktop notifications/i,
+    }));
+
+    await waitFor(() =>
+      expect(readNotificationPreferences().desktopEnabled).toBe(false),
+    );
+  });
+
+  it("persists the sound notification setting", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await user.click(await screen.findByRole("checkbox", {
+      name: /sound notifications/i,
+    }));
+
+    expect(readNotificationPreferences().soundEnabled).toBe(true);
   });
 
   it("renders the onboarding and empty-provider states when config is blank", async () => {

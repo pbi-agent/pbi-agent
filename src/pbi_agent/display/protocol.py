@@ -12,6 +12,21 @@ from pbi_agent.display.formatting import tool_group_class
 
 
 @dataclass(slots=True)
+class PendingUserQuestion:
+    question_id: str
+    question: str
+    suggestions: list[str]
+
+
+@dataclass(slots=True)
+class UserQuestionAnswer:
+    question_id: str
+    question: str
+    answer: str
+    custom: bool = False
+
+
+@dataclass(slots=True)
 class PendingToolGroupItem:
     text: str
     classes: str = ""
@@ -32,6 +47,7 @@ class QueuedInput:
     image_paths: list[str] = field(default_factory=list)
     images: list[ImageAttachment] = field(default_factory=list)
     image_attachments: list[MessageImageAttachment] = field(default_factory=list)
+    interactive_mode: bool = False
     item_id: str | None = None
 
 
@@ -142,9 +158,14 @@ class DisplayProtocol(Protocol):
         image_paths: list[str] | None = None,
         images: list[ImageAttachment] | None = None,
         image_attachments: list[MessageImageAttachment] | None = None,
+        interactive_mode: bool = False,
     ) -> None: ...
 
     def request_new_session(self) -> None: ...
+
+    def ask_user_questions(
+        self, questions: list[PendingUserQuestion]
+    ) -> list[UserQuestionAnswer]: ...
 
     def reset_session(self) -> None: ...
 
@@ -275,8 +296,10 @@ class DisplayProtocol(Protocol):
 __all__ = [
     "DisplayProtocol",
     "PendingToolCall",
+    "PendingUserQuestion",
     "PendingToolGroup",
     "PendingToolGroupItem",
     "QueuedInput",
+    "UserQuestionAnswer",
     "QueuedRuntimeChange",
 ]

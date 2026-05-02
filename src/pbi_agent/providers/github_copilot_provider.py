@@ -141,6 +141,9 @@ class GitHubCopilotProvider(Provider):
     def refresh_tools(self) -> None:
         self._delegate.refresh_tools()
 
+    def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+        self._delegate.set_excluded_tools(excluded_tools)
+
 
 class _GitHubCopilotResponsesProvider(OpenAIProvider):
     def __init__(

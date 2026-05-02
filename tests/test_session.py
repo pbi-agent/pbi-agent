@@ -731,6 +731,7 @@ class _ChatProviderStub:
         self.previous_response_id: str | None = None
         self.system_prompts: list[str] = []
         self.refresh_tools_calls = 0
+        self.excluded_tools = {"ask_user"}
 
     def __enter__(self) -> _ChatProviderStub:
         return self
@@ -753,6 +754,12 @@ class _ChatProviderStub:
 
     def refresh_tools(self) -> None:
         self.refresh_tools_calls += 1
+
+    def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+        if self.excluded_tools == excluded_tools:
+            return
+        self.excluded_tools = set(excluded_tools)
+        self.refresh_tools()
 
     def request_turn(
         self,
@@ -2216,6 +2223,9 @@ def test_run_session_loop_does_not_persist_unanswered_user_turn(monkeypatch) -> 
         def reset_conversation(self) -> None:
             return None
 
+        def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+            del excluded_tools
+
         def request_turn(
             self,
             *,
@@ -2274,6 +2284,9 @@ def test_run_session_loop_interrupt_deletes_user_turn_and_accepts_next_input(
 
         def reset_conversation(self) -> None:
             return None
+
+        def set_excluded_tools(self, excluded_tools: set[str]) -> None:
+            del excluded_tools
 
         def get_conversation_checkpoint(self) -> str | None:
             return "checkpoint-ok"

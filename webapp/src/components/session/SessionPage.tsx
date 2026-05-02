@@ -21,6 +21,7 @@ import {
   runShellCommand,
   setActiveModelProfile,
   setLiveSessionProfile,
+  submitQuestionResponse,
   submitSessionInput,
   updateSession,
   uploadSessionImages,
@@ -31,6 +32,7 @@ import type {
   SessionDetailPayload,
   SessionRecord,
   TimelineItem,
+  UserQuestionAnswer,
 } from "../../types";
 import {
   getLiveSessionKey,
@@ -44,6 +46,7 @@ import { RunHistory } from "./RunHistory";
 import { SessionSidebar } from "./SessionSidebar";
 import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
+import { UserQuestionsPanel } from "./UserQuestionsPanel";
 import { Composer, type ComposerHandle } from "./Composer";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -55,6 +58,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { EmptyState } from "../shared/EmptyState";
+import { Toggle } from "../ui/toggle";
 
 export function SessionPage({
   workspaceRoot,
@@ -73,6 +77,9 @@ export function SessionPage({
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
   const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
+  const [interactiveMode, setInteractiveMode] = useState(() =>
+    window.localStorage.getItem("pbi-agent.interactive-mode") === "true",
+  );
   const composerRef = useRef<ComposerHandle>(null);
   const createRequestKeyRef = useRef<string | null>(null);
 
@@ -163,9 +170,27 @@ export function SessionPage({
       image_paths: string[];
       image_upload_ids: string[];
       profile_id?: string | null;
+      interactive_mode?: boolean;
     }) => {
       if (!sessionState?.liveSessionId) throw new Error("No live session available.");
       return submitSessionInput(sessionState.liveSessionId, payload);
+    },
+    onSuccess: (session) => {
+      if (selectedRouteSessionKey) {
+        updateRuntimeFromSession(selectedRouteSessionKey, session);
+      }
+    },
+  });
+
+  const questionResponseMutation = useMutation({
+    mutationFn: (answers: UserQuestionAnswer[]) => {
+      if (!sessionState?.liveSessionId || !sessionState.pendingUserQuestions) {
+        throw new Error("No pending assistant questions.");
+      }
+      return submitQuestionResponse(sessionState.liveSessionId, {
+        prompt_id: sessionState.pendingUserQuestions.prompt_id,
+        answers,
+      });
     },
     onSuccess: (session) => {
       if (selectedRouteSessionKey) {
@@ -259,6 +284,10 @@ export function SessionPage({
     },
   });
 
+  useEffect(() => {
+    window.localStorage.setItem("pbi-agent.interactive-mode", String(interactiveMode));
+  }, [interactiveMode]);
+
   // Hydrate saved session items when session detail data arrives.
   // Skip hydration when a live session is already attached and has
   // items — even if the WebSocket is reconnecting.  Re-hydrating
@@ -303,7 +332,9 @@ export function SessionPage({
     if (sessionState?.liveSessionId && !sessionState.sessionEnded) return;
     if (createSessionMutation.isPending) return;
     createRequestKeyRef.current = getSavedSessionKey(routeSessionId);
-    createSessionMutation.mutate({ resume_session_id: routeSessionId });
+    createSessionMutation.mutate({
+      resume_session_id: routeSessionId,
+    });
   }, [
     sessionState?.liveSessionId,
     sessionState?.sessionEnded,
@@ -346,7 +377,9 @@ export function SessionPage({
       profiles,
     );
     createRequestKeyRef.current = null;
-    createSessionMutation.mutate(profileId ? { profile_id: profileId } : {});
+    createSessionMutation.mutate({
+      ...(profileId ? { profile_id: profileId } : {}),
+    });
   }, [
     configQuery.data,
     createSessionMutation,
@@ -453,6 +486,7 @@ export function SessionPage({
         image_paths: [],
         image_upload_ids: uploadedImageIds,
         profile_id: selectedSavedProfileId,
+        interactive_mode: interactiveMode,
       });
       return;
     }
@@ -471,6 +505,7 @@ export function SessionPage({
       image_paths: Array.from(new Set(expanded.image_paths)),
       image_upload_ids: uploadedImageIds,
       profile_id: selectedSavedProfileId,
+      interactive_mode: interactiveMode,
     });
   };
 
@@ -576,13 +611,25 @@ export function SessionPage({
             />
           </div>
           <div className="session-topbar__actions">
+            <Toggle
+              type="button"
+              variant="outline"
+              size="sm"
+              className="interactive-mode-toggle"
+              pressed={interactiveMode}
+              aria-label="Toggle interactive mode for assistant questions"
+              title="Allow the assistant to pause and ask questions for each message while this is on."
+              onPressedChange={setInteractiveMode}
+            >
+              Interactive
+            </Toggle>
+            {routeSessionId ? (
+              <RunHistory sessionId={routeSessionId} />
+            ) : null}
             <UsageBar
               compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
               usage={sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null}
             />
-            {routeSessionId ? (
-              <RunHistory sessionId={routeSessionId} />
-            ) : null}
             {canDeleteActiveSession ? (
               <Button
                 type="button"
@@ -671,9 +718,19 @@ export function SessionPage({
               waitMessage={sessionState?.waitMessage ?? null}
               processing={sessionState?.processing ?? null}
             />
+            {sessionState?.pendingUserQuestions ? (
+              <UserQuestionsPanel
+                prompt={sessionState.pendingUserQuestions}
+                isSubmitting={questionResponseMutation.isPending}
+                errorMessage={questionResponseMutation.error?.message ?? null}
+                onSubmit={async (answers) => {
+                  await questionResponseMutation.mutateAsync(answers);
+                }}
+              />
+            ) : null}
             <Composer
               ref={composerRef}
-              inputEnabled={sessionState?.inputEnabled ?? false}
+              inputEnabled={Boolean(sessionState?.inputEnabled && !sessionState.pendingUserQuestions)}
               sessionEnded={sessionState?.sessionEnded ?? false}
               liveSessionId={sessionState?.liveSessionId ?? null}
               supportsImageInputs={providerSupportsImages}
