@@ -2,10 +2,10 @@ import { useEffect, useMemo, useReducer, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
-  getBrowserNotificationPermission,
-  playUserQuestionNotificationSound,
-  useNotificationPreferences,
-} from "../../lib/notificationPreferences";
+  shouldNotifyForWindowState,
+  triggerDesktopAndSoundNotification,
+} from "../../lib/notificationEffects";
+import { useNotificationPreferences } from "../../lib/notificationPreferences";
 import { useSessionStore, type SessionRuntimeState } from "../../store";
 
 type PendingUserQuestionNotification = {
@@ -13,10 +13,6 @@ type PendingUserQuestionNotification = {
   destination: string;
   questionCount: number;
 };
-
-function shouldNotifyForWindowState(): boolean {
-  return document.visibilityState === "hidden" || !document.hasFocus();
-}
 
 function sessionDestination(session: SessionRuntimeState): string {
   if (session.sessionId) {
@@ -42,23 +38,13 @@ function collectPendingUserQuestionNotifications(
   });
 }
 
-function createDesktopNotification(
-  pending: PendingUserQuestionNotification,
-  navigate: ReturnType<typeof useNavigate>,
-): void {
+function createAskUserNotificationRequest(pending: PendingUserQuestionNotification) {
   const questionLabel = pending.questionCount === 1 ? "question" : "questions";
-  const options: NotificationOptions & { renotify?: boolean } = {
+  return {
+    title: "pbi-agent needs input",
     body: `Assistant is waiting for ${pending.questionCount} ${questionLabel}.`,
-    icon: "/logo.jpg",
-    renotify: true,
+    destination: pending.destination,
     tag: `ask-user:${pending.dedupeKey}`,
-  };
-  const notification = new Notification("pbi-agent needs input", options);
-
-  notification.onclick = () => {
-    window.focus();
-    void navigate(pending.destination);
-    notification.close();
   };
 }
 
@@ -83,23 +69,11 @@ export function AskUserNotificationEffects() {
         continue;
       }
 
-      let attemptedNotification = false;
-      if (
-        preferences.desktopEnabled
-        && getBrowserNotificationPermission() === "granted"
-      ) {
-        attemptedNotification = true;
-        try {
-          createDesktopNotification(pending, navigate);
-        } catch {
-          // Browser notification construction can fail in restricted contexts.
-        }
-      }
-
-      if (preferences.soundEnabled) {
-        attemptedNotification = true;
-        void playUserQuestionNotificationSound();
-      }
+      const attemptedNotification = triggerDesktopAndSoundNotification(
+        createAskUserNotificationRequest(pending),
+        preferences,
+        navigate,
+      );
 
       if (attemptedNotification) {
         notifiedPromptKeysRef.current.add(pending.dedupeKey);

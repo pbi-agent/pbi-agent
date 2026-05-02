@@ -480,7 +480,7 @@ describe("SettingsPage", () => {
 
     expect(desktopCheckbox).not.toBeChecked();
     expect(soundCheckbox).not.toBeChecked();
-    expect(screen.getByText(/ask_user question arrives/i)).toBeInTheDocument();
+    expect(screen.getByText(/session\s+finishes/i)).toBeInTheDocument();
   });
 
   it("requests browser permission from the desktop notification control", async () => {

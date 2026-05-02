@@ -381,7 +381,7 @@ function NotificationSettingsCard() {
         <div>
           <CardTitle className="settings-panel__title">Notifications</CardTitle>
           <CardDescription className="settings-panel__subtitle">
-            Alerts for interactive questions that pause the assistant
+            Alerts for interactive questions and finished sessions
           </CardDescription>
         </div>
       </CardHeader>
@@ -403,8 +403,8 @@ function NotificationSettingsCard() {
                 Desktop notifications
               </FieldLabel>
               <FieldDescription>
-                Show a browser notification when an ask_user question arrives while this
-                tab is hidden or unfocused. {notificationPermissionLabel(permission, desktopChecked)}
+                Show a browser notification when an ask_user question arrives or a session
+                finishes while this tab is hidden or unfocused. {notificationPermissionLabel(permission, desktopChecked)}
               </FieldDescription>
             </FieldContent>
           </Field>
@@ -424,7 +424,7 @@ function NotificationSettingsCard() {
                 Sound notifications
               </FieldLabel>
               <FieldDescription>
-                Play a short chime for the same hidden or unfocused ask_user alerts.
+                Play a short chime for the same hidden or unfocused alerts.
               </FieldDescription>
             </FieldContent>
           </Field>
