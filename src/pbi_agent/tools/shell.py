@@ -23,7 +23,7 @@ MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
 SPEC = ToolSpec(
     name="shell",
     description=(
-        "Run a shell command in the workspace. Returns stdout, stderr, and "
+        "Run a shell command. Returns stdout, stderr, and "
         "exit code. Use shell for file discovery."
     ),
     parameters_schema={
@@ -36,8 +36,8 @@ SPEC = ToolSpec(
             "working_directory": {
                 "type": "string",
                 "description": (
-                    "Working directory for the command, relative to the "
-                    "workspace root. Defaults to the workspace root."
+                    "Working directory for the command. Relative paths resolve "
+                    "from the workspace root. Defaults to the workspace root."
                 ),
             },
             "timeout_ms": {
@@ -120,13 +120,6 @@ def _resolve_working_directory(root: Path, raw: Any) -> Path:
         resolved = candidate.resolve()
     else:
         resolved = (root / candidate).resolve()
-
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise ValueError(
-            f"working_directory outside workspace is not allowed: {raw}"
-        ) from exc
 
     if not resolved.exists() or not resolved.is_dir():
         raise FileNotFoundError(f"working_directory does not exist: {resolved}")

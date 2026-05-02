@@ -16,7 +16,7 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 SPEC = ToolSpec(
     name="write_file",
     description=(
-        "Write complete text content to one workspace file, creating parent directories as needed. "
+        "Write complete text content to one file, creating parent directories as needed. "
         "Best for new files, generated files, or small full-file rewrites."
     ),
     parameters_schema={
@@ -25,8 +25,7 @@ SPEC = ToolSpec(
             "path": {
                 "type": "string",
                 "description": (
-                    "File path relative to the workspace root "
-                    "(or absolute within workspace)."
+                    "File path relative to the workspace root (or absolute)."
                 ),
             },
             "content": {

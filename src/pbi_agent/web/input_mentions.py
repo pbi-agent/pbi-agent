@@ -11,7 +11,6 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Literal
 
-from pbi_agent.tools.workspace_access import resolve_safe_path
 from pbi_agent.tools.workspace_filters import should_skip_directory_name
 
 PATH_CHAR_CLASS = r"A-Za-z0-9._~/\\:-"
@@ -184,7 +183,7 @@ def _collect_mentioned_files(
                 missing_path = _missing_mention_path(raw_segment)
                 if missing_path:
                     try:
-                        resolve_safe_path(root, missing_path)
+                        _resolve_workspace_path(root, missing_path)
                     except (OSError, ValueError):
                         pass
                     else:
@@ -288,6 +287,17 @@ def _fuzzy_search(
     return [candidate for _, candidate in scored[:limit]]
 
 
+def _resolve_workspace_path(root: Path, raw_path: str) -> Path:
+    candidate = Path(raw_path)
+    resolved = (
+        candidate.resolve(strict=False)
+        if candidate.is_absolute()
+        else (root / candidate).resolve(strict=False)
+    )
+    resolved.relative_to(root)
+    return resolved
+
+
 def _resolve_mentioned_file(raw_segment: str, *, root: Path) -> _MentionResolveResult:
     if not raw_segment or raw_segment[0].isspace():
         return _MentionResolveResult(None, "", 0)
@@ -299,7 +309,7 @@ def _resolve_mentioned_file(raw_segment: str, *, root: Path) -> _MentionResolveR
             continue
         clean_path = candidate.replace("\\ ", " ")
         try:
-            resolved = resolve_safe_path(root, clean_path)
+            resolved = _resolve_workspace_path(root, clean_path)
         except OSError as exc:
             if exc.errno == errno.ENAMETOOLONG:
                 path_too_long = True

@@ -1,7 +1,3 @@
-# TODO
-
-[X] Inspect session 3d61f25b55984bbabf0e815e98dfa9cd and persisted transcript
-[X] Reproduce/identify interrupted tool-call payload bug
-[X] Implement fix and tests
-[X] Run targeted validation
-[X] Update memory
+[X] Fix review finding: keep web input mention expansion from crashing on outside paths
+[X] Run focused input mention validation
+[X] Record memory and summarize
