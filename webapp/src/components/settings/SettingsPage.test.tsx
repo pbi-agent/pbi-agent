@@ -19,9 +19,11 @@ import type { ConfigBootstrapPayload } from "../../types";
 import {
   readNotificationPreferences,
   resetNotificationPreferencesForTests,
+  setNotificationPreferences,
 } from "../../lib/notificationPreferences";
 
 const originalNotification = globalThis.Notification;
+const originalAudioContext = window.AudioContext;
 
 function installNotificationMock(permission: NotificationPermission) {
   class NotificationMock {
@@ -44,9 +46,15 @@ function restoreNotificationMock() {
       writable: true,
       value: originalNotification,
     });
-    return;
+  } else {
+    Reflect.deleteProperty(globalThis, "Notification");
   }
-  Reflect.deleteProperty(globalThis, "Notification");
+
+  Object.defineProperty(window, "AudioContext", {
+    configurable: true,
+    writable: true,
+    value: originalAudioContext,
+  });
 }
 
 vi.mock("../../api", async (importOriginal) => {
@@ -514,16 +522,102 @@ describe("SettingsPage", () => {
     );
   });
 
-  it("persists the sound notification setting", async () => {
+  it("persists the sound notification setting and reveals the sound picker", async () => {
     const user = userEvent.setup();
 
     renderWithProviders(<SettingsPage />);
+
+    expect(
+      screen.queryByRole("combobox", { name: /notification sound/i }),
+    ).not.toBeInTheDocument();
 
     await user.click(await screen.findByRole("checkbox", {
       name: /sound notifications/i,
     }));
 
     expect(readNotificationPreferences().soundEnabled).toBe(true);
+    expect(
+      screen.getByRole("combobox", { name: /notification sound/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("persists the selected notification sound", async () => {
+    const user = userEvent.setup();
+    setNotificationPreferences({ soundEnabled: true });
+
+    renderWithProviders(<SettingsPage />);
+
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: /notification sound/i }),
+      "pulse",
+    );
+
+    expect(readNotificationPreferences().soundId).toBe("pulse");
+    expect(screen.getByText(/two quick alert pulses/i)).toBeInTheDocument();
+  });
+
+  it("hides notification sound selection and preview when sounds are disabled", async () => {
+    renderWithProviders(<SettingsPage />);
+
+    await screen.findByRole("checkbox", { name: /sound notifications/i });
+
+    expect(
+      screen.queryByRole("combobox", { name: /notification sound/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /preview notification sound/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("previews the selected notification sound when sounds are enabled", async () => {
+    const user = userEvent.setup();
+    const start = vi.fn();
+    const stop = vi.fn();
+    const connect = vi.fn();
+    const setValueAtTime = vi.fn();
+    const exponentialRampToValueAtTime = vi.fn();
+    setNotificationPreferences({ soundEnabled: true, soundId: "pop" });
+
+    class AudioContextMock {
+      state = "running" as AudioContextState;
+      currentTime = 1;
+      destination = {} as AudioDestinationNode;
+      close = vi.fn();
+      resume = vi.fn();
+
+      createOscillator() {
+        return {
+          type: "sine" as OscillatorType,
+          frequency: { setValueAtTime, exponentialRampToValueAtTime },
+          connect,
+          start,
+          stop,
+          addEventListener: vi.fn((_event: string, callback: () => void) => callback()),
+        };
+      }
+
+      createGain() {
+        return {
+          gain: { setValueAtTime, exponentialRampToValueAtTime },
+          connect,
+        };
+      }
+    }
+
+    Object.defineProperty(window, "AudioContext", {
+      configurable: true,
+      writable: true,
+      value: AudioContextMock,
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /preview notification sound/i }),
+    );
+
+    expect(start).toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledTimes(start.mock.calls.length);
   });
 
   it("renders the onboarding and empty-provider states when config is blank", async () => {
@@ -547,7 +641,11 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
-    await user.selectOptions(await screen.findByRole("combobox"), "qa");
+    await screen.findByRole("button", { name: "Add Profile" });
+    await user.selectOptions(
+      document.querySelector<HTMLSelectElement>('select[name="active-profile"]')!,
+      "qa",
+    );
 
     await waitFor(() =>
       expect(setActiveModelProfile).toHaveBeenCalledWith("qa", "rev-1"),
@@ -1334,7 +1432,11 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
-    await user.selectOptions(await screen.findByRole("combobox"), "qa");
+    await screen.findByRole("button", { name: "Add Profile" });
+    await user.selectOptions(
+      document.querySelector<HTMLSelectElement>('select[name="active-profile"]')!,
+      "qa",
+    );
 
     expect(
       await screen.findByText(

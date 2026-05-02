@@ -233,13 +233,13 @@ describe("AskUserNotificationEffects", () => {
       writable: true,
       value: AudioContextMock,
     });
-    setNotificationPreferences({ desktopEnabled: false, soundEnabled: true });
+    setNotificationPreferences({ desktopEnabled: false, soundEnabled: true, soundId: "pulse" });
     seedPendingQuestion();
 
     const { rerender } = renderEffects();
 
-    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-    expect(stop).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    expect(stop).toHaveBeenCalledTimes(2);
 
     rerender(
       <>
@@ -248,6 +248,6 @@ describe("AskUserNotificationEffects", () => {
       </>,
     );
 
-    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(2);
   });
 });

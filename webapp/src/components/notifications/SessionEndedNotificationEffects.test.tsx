@@ -301,7 +301,7 @@ describe("SessionEndedNotificationEffects", () => {
       writable: true,
       value: AudioContextMock,
     });
-    setNotificationPreferences({ desktopEnabled: false, soundEnabled: true });
+    setNotificationPreferences({ desktopEnabled: false, soundEnabled: true, soundId: "bell" });
     const { rerender } = renderEffects([makeLiveSession({ status: "running" })]);
 
     rerender(effectsUi([
@@ -312,7 +312,7 @@ describe("SessionEndedNotificationEffects", () => {
       }),
     ]));
 
-    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-    expect(stop).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    expect(stop).toHaveBeenCalledTimes(2);
   });
 });

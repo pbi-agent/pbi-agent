@@ -49,7 +49,7 @@ export function triggerDesktopAndSoundNotification(
 
   if (preferences.soundEnabled) {
     attemptedNotification = true;
-    void playNotificationSound();
+    void playNotificationSound(preferences.soundId);
   }
 
   return attemptedNotification;

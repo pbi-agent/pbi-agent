@@ -6,6 +6,7 @@ import {
   CheckCircle2Icon,
   EditIcon,
   GaugeIcon,
+  PlayIcon,
   PlugZapIcon,
   PlusIcon,
   Trash2Icon,
@@ -26,9 +27,13 @@ import {
 } from "../../api";
 import { ApiError } from "../../api";
 import {
+  NOTIFICATION_SOUND_OPTIONS,
   getBrowserNotificationPermission,
+  isNotificationSoundId,
+  playNotificationSound,
   requestDesktopNotificationPermission,
   setDesktopNotificationsEnabled,
+  setNotificationSoundId,
   setSoundNotificationsEnabled,
   useNotificationPreferences,
   type BrowserNotificationPermission,
@@ -424,8 +429,59 @@ function NotificationSettingsCard() {
                 Sound notifications
               </FieldLabel>
               <FieldDescription>
-                Play a short chime for the same hidden or unfocused alerts.
+                Play the selected sound for the same hidden or unfocused alerts.
               </FieldDescription>
+              {preferences.soundEnabled && (
+                <>
+                  <div className="settings-notifications__sound-row">
+                    <FieldLabel
+                      htmlFor="notification-sound"
+                      className="settings-notifications__sound-label"
+                    >
+                      Notification sound
+                    </FieldLabel>
+                    <NativeSelect
+                      id="notification-sound"
+                      size="sm"
+                      className="settings-notifications__sound-select"
+                      value={preferences.soundId}
+                      onChange={(event) => {
+                        const nextSoundId = event.target.value;
+                        if (isNotificationSoundId(nextSoundId)) {
+                          setNotificationSoundId(nextSoundId);
+                        }
+                      }}
+                      aria-describedby="notification-sound-description"
+                    >
+                      {NOTIFICATION_SOUND_OPTIONS.map((option) => (
+                        <NativeSelectOption key={option.id} value={option.id}>
+                          {option.label}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      className="settings-notifications__sound-preview"
+                      aria-label="Preview notification sound"
+                      title="Preview notification sound"
+                      onClick={() => {
+                        void playNotificationSound(preferences.soundId);
+                      }}
+                    >
+                      <PlayIcon aria-hidden="true" />
+                    </Button>
+                  </div>
+                  <FieldDescription id="notification-sound-description">
+                    {
+                      NOTIFICATION_SOUND_OPTIONS.find(
+                        (option) => option.id === preferences.soundId,
+                      )?.description
+                    }
+                  </FieldDescription>
+                </>
+              )}
             </FieldContent>
           </Field>
         </FieldGroup>
