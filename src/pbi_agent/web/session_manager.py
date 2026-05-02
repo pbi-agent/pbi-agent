@@ -73,7 +73,6 @@ from pbi_agent.display.formatting import shorten
 from pbi_agent.display.protocol import QueuedInput, UserQuestionAnswer
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
-from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.providers.model_discovery import (
     discover_provider_models,
     manual_entry_reason,
@@ -286,7 +285,7 @@ def _resolved_runtime_view(runtime: ResolvedRuntime) -> dict[str, Any]:
         "compact_tool_output_max_chars": runtime.settings.compact_tool_output_max_chars,
         "responses_url": runtime.settings.responses_url,
         "generic_api_url": runtime.settings.generic_api_url,
-        "supports_image_inputs": provider_supports_images(runtime.settings.provider),
+        "supports_image_inputs": True,
     }
 
 
@@ -595,11 +594,7 @@ class WebSessionManager:
                 if default_runtime is not None
                 else None
             ),
-            "supports_image_inputs": (
-                provider_supports_images(default_runtime.settings.provider)
-                if default_runtime is not None
-                else False
-            ),
+            "supports_image_inputs": default_runtime is not None,
             "sessions": self.list_sessions(),
             "tasks": self.list_tasks(),
             "live_sessions": [
@@ -1062,9 +1057,6 @@ class WebSessionManager:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
             raise RuntimeError("Live session has already ended.")
-        if not provider_supports_images(live_session.runtime.settings.provider):
-            raise ValueError("Image inputs are not supported by the current provider.")
-
         attachments: list[dict[str, Any]] = []
         for original_name, raw_bytes in files:
             safe_name = (
@@ -1094,10 +1086,6 @@ class WebSessionManager:
         if requested_runtime.profile_id != live_session.runtime.profile_id:
             self._queue_runtime_change(live_session, profile_id)
         message_text = text.strip()
-        if (image_paths or image_upload_ids) and not provider_supports_images(
-            live_session.runtime.settings.provider
-        ):
-            raise ValueError("Image inputs are not supported by the current provider.")
         resolved_images: list[ImageAttachment] = []
         message_image_attachments: list[MessageImageAttachment] = []
         for image_path in image_paths or []:
@@ -1521,14 +1509,6 @@ class WebSessionManager:
                 store=store,
                 is_continuation=is_continuation,
             )
-            if (
-                not is_continuation
-                and record.image_attachments
-                and not provider_supports_images(runtime.settings.provider)
-            ):
-                with self._lock:
-                    self._running_task_ids.discard(task_id)
-                raise ValueError("Image inputs are not supported by the task runtime.")
             if record.session_id is None:
                 session_id = store.create_session(
                     directory=self._task_session_directory(record.project_dir),
@@ -2337,12 +2317,6 @@ class WebSessionManager:
                     load_uploaded_image(attachment.upload_id)
                     for attachment in turn_image_attachments
                 ]
-                if turn_images and not provider_supports_images(
-                    runtime.settings.provider
-                ):
-                    raise ValueError(
-                        "Image inputs are not supported by the task runtime."
-                    )
                 if current_user_message_id is None:
                     with SessionStore() as store:
                         current_user_message_id = self._persist_task_user_prompt(

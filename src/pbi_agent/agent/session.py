@@ -38,10 +38,6 @@ from pbi_agent.observability import RunTracer
 from pbi_agent.providers import create_provider
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.providers.capabilities import (
-    image_excluded_tools,
-    provider_supports_images,
-)
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.display.protocol import (
@@ -335,14 +331,10 @@ def run_session_loop(
     base_excluded_tools = set(excluded_tools) if excluded_tools is not None else set()
 
     def _turn_excluded_tools(*, interactive_mode: bool = False) -> set[str]:
-        return (
-            base_excluded_tools
-            | image_excluded_tools(current_runtime.settings.provider)
-            | (
-                set()
-                if interactive_mode and excluded_tools is None
-                else INTERACTIVE_ONLY_TOOLS
-            )
+        return base_excluded_tools | (
+            set()
+            if interactive_mode and excluded_tools is None
+            else INTERACTIVE_ONLY_TOOLS
         )
 
     def _reset_session(
@@ -2032,16 +2024,8 @@ def _build_user_turn_input(
 ) -> UserTurnInput:
     resolved_images = list(images or [])
     if image_paths:
-        if not provider_supports_images(settings.provider):
-            raise ValueError(
-                f"Provider '{settings.provider}' does not support image inputs in this build."
-            )
         root = Path.cwd().resolve()
         resolved_images.extend(load_workspace_image(root, path) for path in image_paths)
-    elif resolved_images and not provider_supports_images(settings.provider):
-        raise ValueError(
-            f"Provider '{settings.provider}' does not support image inputs in this build."
-        )
     return UserTurnInput(text=text, images=resolved_images)
 
 

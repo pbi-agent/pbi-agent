@@ -641,7 +641,7 @@ def test_anthropic_execute_tool_calls_serializes_image_attachments(
                 {
                     "type": "tool_use",
                     "id": "toolu_1",
-                    "name": "read_image",
+                    "name": "read_file",
                     "input": {"path": "chart.png"},
                 }
             ]

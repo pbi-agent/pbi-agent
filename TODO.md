@@ -1,3 +1,7 @@
-[X] Fix review finding: keep web input mention expansion from crashing on outside paths
-[X] Run focused input mention validation
-[X] Record memory and summarize
+# TODO
+
+- [X] Find all provider_supports_images/capabilities references
+- [X] Remove capabilities module and imports/usages
+- [X] Update tests for removal
+- [X] Run focused validation
+- [X] Append MEMORY entry
