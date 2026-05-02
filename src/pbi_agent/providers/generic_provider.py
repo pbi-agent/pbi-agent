@@ -22,6 +22,7 @@ from pbi_agent.agent.tool_display import (
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
 from pbi_agent.providers.azure import azure_chat_completions_url
+from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import (
     CompletedResponse,
     TokenUsage,
@@ -32,7 +33,7 @@ from pbi_agent.providers.base import Provider
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
+from pbi_agent.tools.types import ParentContextSnapshot, ToolContext, ToolResult
 from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
@@ -183,13 +184,7 @@ class GenericProvider(Provider):
                 display.tool_execution_stop()
             raise
         for result in batch.results:
-            tool_result_items.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": result.call_id,
-                    "content": result.output_json,
-                }
-            )
+            tool_result_items.append(_generic_tool_result_item(result))
         if displayable_calls:
             display.tool_group_end()
         return tool_result_items, batch.had_errors
@@ -381,6 +376,24 @@ class GenericProvider(Provider):
 def _response_model_name(response_json: dict[str, Any]) -> str:
     model = response_json.get("model")
     return model if isinstance(model, str) else ""
+
+
+def _generic_tool_result_item(result: ToolResult) -> dict[str, Any]:
+    content: str | list[dict[str, Any]] = result.output_json
+    if result.attachments:
+        content = [{"type": "text", "text": result.output_json}]
+        for attachment in result.attachments:
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url_for_image(attachment)},
+                }
+            )
+    return {
+        "role": "tool",
+        "tool_call_id": result.call_id,
+        "content": content,
+    }
 
 
 def _extract_choice_messages(choices: Any) -> list[dict[str, Any]]:

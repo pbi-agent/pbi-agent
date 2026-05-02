@@ -8,7 +8,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from pbi_agent.tools import read_file as read_file_tool
-from pbi_agent.tools.types import ToolContext
+from pbi_agent.tools.types import ToolContext, ToolOutput
 
 
 def test_read_file_schema_does_not_expose_encoding_parameter() -> None:
@@ -603,14 +603,71 @@ def test_read_file_reports_empty_files_with_zero_range(
     }
 
 
-def test_read_file_redirects_supported_images_to_read_image(
+def test_read_file_detects_supported_image_without_extension(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "chart.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    png_bytes = b"\x89PNG\r\n\x1a\nPNGDATA"
+    (tmp_path / "chart").write_bytes(png_bytes)
+
+    result = read_file_tool.handle({"path": "chart"}, ToolContext())
+
+    assert isinstance(result, ToolOutput)
+    assert result.result == {
+        "path": "chart",
+        "mime_type": "image/png",
+        "byte_count": len(png_bytes),
+    }
+    assert result.attachments[0].path == "chart"
+    assert result.attachments[0].mime_type == "image/png"
+
+
+def test_read_file_returns_image_summary_and_attachment(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    png_bytes = b"\x89PNG\r\n\x1a\nPNGDATA"
+    (tmp_path / "chart.png").write_bytes(png_bytes)
+
+    result = read_file_tool.handle({"path": "chart.png"}, ToolContext())
+
+    assert isinstance(result, ToolOutput)
+    assert result.result == {
+        "path": "chart.png",
+        "mime_type": "image/png",
+        "byte_count": len(png_bytes),
+    }
+    assert len(result.attachments) == 1
+    assert result.attachments[0].path == "chart.png"
+    assert result.attachments[0].mime_type == "image/png"
+    assert result.attachments[0].byte_count == len(png_bytes)
+
+
+def test_read_file_allows_absolute_image_path_outside_workspace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    png_bytes = b"\x89PNG\r\n\x1a\nPNGDATA"
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(png_bytes)
+
+    result = read_file_tool.handle({"path": str(outside)}, ToolContext())
+
+    assert isinstance(result, ToolOutput)
+    assert result.result["path"] == str(outside.resolve())
+    assert result.attachments[0].path == str(outside.resolve())
+
+
+def test_read_file_rejects_unsupported_image_signature_for_image_extension(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "chart.png").write_bytes(b"not really a png")
 
     result = read_file_tool.handle({"path": "chart.png"}, ToolContext())
 
     assert result == {
-        "error": "image file is not supported by read_file: chart.png; use read_image instead"
+        "error": "unsupported image format: chart.png (allowed: JPEG, PNG, WEBP)"
     }

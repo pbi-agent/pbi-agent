@@ -16,7 +16,6 @@ TOOL_STYLE_MAP = {
     "shell": "shell",
     "apply_patch": "apply-patch",
     "read_file": "read-file",
-    "read_image": "read-image",
     "read_web_url": "read-web-url",
     "sub_agent": "sub-agent",
     "mcp": "mcp",
@@ -26,7 +25,6 @@ TOOL_ICONS: dict[str, str] = {
     "shell": "\u25b6",  # ▶
     "apply-patch": "\u25a0",  # ■
     "read-file": "\u2610",  # ☐
-    "read-image": "\U0001f5bc",  # 🖼
     "read-web-url": "\U0001f310",  # 🌐
     "sub-agent": "\u25c9",  # ◉
     "mcp": "\u25a7",  # ▧
@@ -38,7 +36,6 @@ TOOL_BORDER_STYLES: dict[str, str] = {
     "shell": "blue",
     "apply-patch": "#F97316",
     "read-file": "#EAB308",
-    "read-image": "#FB7185",
     "read-web-url": "#06B6D4",
     "sub-agent": "#F59E0B",
     "mcp": "#14B8A6",

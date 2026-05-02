@@ -720,7 +720,7 @@ def test_expand_input_endpoint_warns_for_overlong_path_mention(
     assert payload["warnings"] == ["Referenced file path is too long and was ignored."]
 
 
-def test_expand_input_endpoint_warns_when_image_mentions_are_unsupported(
+def test_expand_input_endpoint_keeps_image_mentions_for_any_provider(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -737,10 +737,8 @@ def test_expand_input_endpoint_warns_when_image_mentions_are_unsupported(
     payload = response.json()
     assert payload["text"] == "Review mockup.png carefully"
     assert payload["file_paths"] == ["mockup.png"]
-    assert payload["image_paths"] == []
-    assert payload["warnings"] == [
-        "Image mentions are not supported by the current provider."
-    ]
+    assert payload["image_paths"] == ["mockup.png"]
+    assert payload["warnings"] == []
 
 
 def test_sessions_endpoint_rejects_invalid_limit() -> None:

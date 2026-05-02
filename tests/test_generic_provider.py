@@ -7,7 +7,12 @@ from unittest.mock import Mock
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import DEFAULT_GENERIC_API_URL, DEFAULT_MAX_TOKENS, Settings
-from pbi_agent.models.messages import CompletedResponse, TokenUsage, ToolCall
+from pbi_agent.models.messages import (
+    CompletedResponse,
+    ImageAttachment,
+    TokenUsage,
+    ToolCall,
+)
 from pbi_agent.providers.generic_provider import GenericProvider
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.types import ToolResult
@@ -498,6 +503,73 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
         },
     ]
     assert display_spy.tool_group_end_count == 1
+
+
+def test_generic_execute_tool_calls_serializes_image_attachments(
+    monkeypatch,
+    display_spy,
+) -> None:
+    provider = GenericProvider(_make_settings())
+    response = CompletedResponse(
+        response_id="resp_1",
+        text="",
+        usage=TokenUsage(),
+        function_calls=[
+            ToolCall(
+                call_id="call_image",
+                name="read_file",
+                arguments={"path": "chart"},
+            )
+        ],
+    )
+    batch = ToolExecutionBatch(
+        results=[
+            ToolResult(
+                call_id="call_image",
+                output_json='{"ok": true, "result": {"path": "chart"}}',
+                attachments=[
+                    ImageAttachment(
+                        path="chart",
+                        mime_type="image/png",
+                        data_base64="QUJDRA==",
+                        byte_count=4,
+                    )
+                ],
+            )
+        ],
+        had_errors=False,
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.generic_provider._execute_tool_calls",
+        lambda calls, max_workers, context=None, on_result=None: (
+            (on_result(calls[0], batch.results[0]) if on_result is not None else None)
+            or batch
+        ),
+    )
+
+    tool_result_items, had_errors = provider.execute_tool_calls(
+        response,
+        max_workers=1,
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert had_errors is False
+    assert tool_result_items == [
+        {
+            "role": "tool",
+            "tool_call_id": "call_image",
+            "content": [
+                {"type": "text", "text": '{"ok": true, "result": {"path": "chart"}}'},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,QUJDRA=="},
+                },
+            ],
+        }
+    ]
 
 
 def test_generic_request_turn_retries_after_rate_limit(

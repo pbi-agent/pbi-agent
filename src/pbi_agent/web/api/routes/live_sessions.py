@@ -6,7 +6,6 @@ from fastapi import APIRouter, File, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from pbi_agent.config import ConfigError
-from pbi_agent.providers.capabilities import provider_supports_images
 from pbi_agent.web.api.deps import (
     LiveSessionIdPath,
     SessionManagerDep,
@@ -175,12 +174,6 @@ def expand_session_input(
         request.text,
         root=manager.workspace_root,
     )
-    if image_paths and not provider_supports_images(manager.settings.provider):
-        warnings = [
-            *warnings,
-            "Image mentions are not supported by the current provider.",
-        ]
-        image_paths = []
     return ExpandInputResponse(
         text=expanded_text,
         file_paths=file_paths,

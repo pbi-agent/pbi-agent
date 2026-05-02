@@ -3280,7 +3280,7 @@ def test_openai_execute_tool_calls_serializes_image_attachments(
         text="",
         function_calls=[
             ToolCall(
-                call_id="call_1", name="read_image", arguments={"path": "chart.png"}
+                call_id="call_1", name="read_file", arguments={"path": "chart.png"}
             )
         ],
     )

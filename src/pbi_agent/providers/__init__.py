@@ -7,7 +7,6 @@ the current :class:`~pbi_agent.config.Settings`.
 from __future__ import annotations
 
 from pbi_agent.config import Settings
-from pbi_agent.providers.capabilities import image_excluded_tools
 from pbi_agent.providers.base import Provider
 from pbi_agent.tools.catalog import ToolCatalog
 
@@ -34,7 +33,6 @@ def create_provider(
     """
     name = settings.provider.lower()
     effective_excluded_tools = set(excluded_tools or set())
-    effective_excluded_tools.update(image_excluded_tools(name))
 
     if name == "azure":
         from pbi_agent.providers.anthropic_provider import AnthropicProvider

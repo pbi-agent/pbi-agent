@@ -9,8 +9,10 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
+from pbi_agent.media import detect_image_mime_type
+from pbi_agent.media import load_image_bytes
 from pbi_agent.tools.output import bound_output
-from pbi_agent.tools.types import ToolContext, ToolSpec
+from pbi_agent.tools.types import ToolContext, ToolOutput, ToolSpec
 from pbi_agent.tools.workspace_access import DEFAULT_MAX_LINES
 from pbi_agent.tools.workspace_access import normalize_positive_int
 from pbi_agent.tools.workspace_access import open_text_file
@@ -40,7 +42,7 @@ SPEC = ToolSpec(
     name="read_file",
     description=(
         "Read a file. Supports text (with line ranges), "
-        "tabular data (CSV/Excel/Parquet), PDF, and DOCX."
+        "tabular data (CSV/Excel/Parquet), PDF, DOCX, and images."
     ),
     parameters_schema={
         "type": "object",
@@ -66,7 +68,9 @@ SPEC = ToolSpec(
 )
 
 
-def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+def handle(
+    arguments: dict[str, Any], context: ToolContext
+) -> dict[str, Any] | ToolOutput:
     del context
     path_value = arguments.get("path", "")
     if not isinstance(path_value, str) or not path_value.strip():
@@ -88,13 +92,8 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             return {"error": f"path is not a file: {target_path}"}
 
         suffix = target_path.suffix.lower()
-        if suffix in _IMAGE_EXTENSIONS:
-            return {
-                "error": (
-                    f"image file is not supported by read_file: {target_path.name}; "
-                    "use read_image instead"
-                )
-            }
+        if suffix in _IMAGE_EXTENSIONS or _has_supported_image_signature(target_path):
+            return _handle_image_file(root, target_path)
         if suffix in {".xlsx", ".xls"}:
             return _handle_excel_workbook(root, target_path)
         if suffix in _TABULAR_EXTENSIONS:
@@ -140,6 +139,24 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         return result
     except Exception as exc:
         return {"error": bound_output(str(exc))[0]}
+
+
+def _has_supported_image_signature(target_path: Path) -> bool:
+    with target_path.open("rb") as handle:
+        return detect_image_mime_type(handle.read(12)) is not None
+
+
+def _handle_image_file(root: Path, target_path: Path) -> ToolOutput:
+    image = load_image_bytes(
+        relative_workspace_path(root, target_path),
+        target_path.read_bytes(),
+    )
+    summary = {
+        "path": image.path,
+        "mime_type": image.mime_type,
+        "byte_count": image.byte_count,
+    }
+    return ToolOutput(result=summary, attachments=[image])
 
 
 def _handle_tabular_file(root: Path, target_path: Path, suffix: str) -> dict[str, Any]:

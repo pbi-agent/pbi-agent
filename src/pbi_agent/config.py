@@ -569,15 +569,7 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "supports_generic_api_url": provider_kind == "generic",
         "supports_service_tier": provider_kind == "openai",
         "supports_native_web_search": provider_kind != "generic",
-        "supports_image_inputs": provider_kind
-        in {
-            "openai",
-            "azure",
-            "chatgpt",
-            "google",
-            "anthropic",
-            "github_copilot",
-        },
+        "supports_image_inputs": True,
     }
 
 
