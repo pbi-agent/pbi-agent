@@ -233,13 +233,14 @@ def run_single_turn(
                 replay_history=replay_history,
             )
             if persisted_user_message_id is None:
-                _add_message(
+                user_message_id = _add_message(
                     store,
                     session_id,
                     runtime,
                     "user",
                     user_turn_history_text,
                 )
+                _publish_persisted_message(display, store, user_message_id)
             tracer.log_event(
                 "agent_step_start",
                 metadata={"step": "initial_model_request"},
@@ -272,7 +273,14 @@ def run_single_turn(
                 tracer=tracer,
                 current_turn_tool_exchanges=[],
             )
-            _add_message(store, session_id, runtime, "assistant", response.text)
+            assistant_message_id = _add_message(
+                store,
+                session_id,
+                runtime,
+                "assistant",
+                response.text,
+            )
+            _publish_persisted_message(display, store, assistant_message_id)
             _update_session_after_turn(
                 store,
                 session_id,
@@ -402,9 +410,11 @@ def run_session_loop(
                     queued_images = queued_input.images
                     message_image_attachments = queued_input.image_attachments
                     turn_interactive_mode = queued_input.interactive_mode
+                    queued_item_id = queued_input.item_id
                 else:
                     user_input = queued_input.strip()
                     turn_interactive_mode = False
+                    queued_item_id = None
                 if user_input == NEW_SESSION_SENTINEL:
                     provider.reset_conversation()
                     session_usage = _reset_session(
@@ -546,6 +556,12 @@ def run_session_loop(
                         file_paths=file_paths,
                         image_attachments=message_image_attachments,
                     )
+                    _publish_persisted_message(
+                        display,
+                        store,
+                        user_message_id,
+                        previous_item_id=queued_item_id,
+                    )
                     turn_tracer.log_event(
                         "agent_step_start",
                         metadata={"step": "initial_model_request"},
@@ -581,12 +597,17 @@ def run_session_loop(
                     )
                     _raise_if_interrupted(display)
 
-                    _add_message(
+                    assistant_message_id = _add_message(
                         store,
                         session_id,
                         current_runtime,
                         "assistant",
                         response.text,
+                    )
+                    _publish_persisted_message(
+                        display,
+                        store,
+                        assistant_message_id,
                     )
                     _update_session_after_turn(
                         store,
@@ -1215,6 +1236,29 @@ def _add_message(
     except Exception:
         _log.warning("Failed to add message to session store", exc_info=True)
         return None
+
+
+def _publish_persisted_message(
+    display: DisplayProtocol,
+    store: SessionStore | None,
+    message_id: int | None,
+    *,
+    previous_item_id: str | None = None,
+) -> None:
+    handler = getattr(display, "persisted_message", None)
+    if store is None or message_id is None or not callable(handler):
+        return
+    try:
+        message = store.get_message(message_id)
+    except Exception:
+        _log.warning("Failed to load persisted message for display", exc_info=True)
+        return
+    if message is None:
+        return
+    try:
+        handler(message, previous_item_id=previous_item_id)
+    except Exception:
+        _log.warning("Failed to publish persisted message to display", exc_info=True)
 
 
 def _delete_message(store: SessionStore | None, message_id: int | None) -> None:

@@ -103,7 +103,7 @@ from pbi_agent.web.command_registry import (
 from pbi_agent.web.display import (
     WebDisplay,
     _plain_text,
-    history_message_content,
+    persisted_message_payload,
 )
 from pbi_agent.web.input_mentions import MentionSearchResult, WorkspaceFileIndex
 from pbi_agent.web.uploads import (
@@ -445,19 +445,7 @@ def _serialize_board_stage(record: KanbanStageConfigRecord) -> dict[str, Any]:
 
 
 def _serialize_history_message(message: MessageRecord) -> dict[str, Any]:
-    return {
-        "item_id": f"history-{message.id}",
-        "role": message.role,
-        "content": history_message_content(message),
-        "file_paths": list(message.file_paths),
-        "image_attachments": [
-            _message_image_payload(attachment)
-            for attachment in message.image_attachments
-        ],
-        "markdown": message.role == "assistant",
-        "historical": True,
-        "created_at": message.created_at,
-    }
+    return persisted_message_payload(message)
 
 
 def _preview_url(upload_id: str) -> str:
@@ -1343,6 +1331,7 @@ class WebSessionManager:
             images=resolved_images or None,
             image_attachments=message_image_attachments or None,
             interactive_mode=interactive_mode,
+            item_id=optimistic_item_id,
         )
         self._set_latest_queued_input_item_id(live_session, optimistic_item_id)
         return self._serialize_live_session(live_session)
@@ -1516,11 +1505,18 @@ class WebSessionManager:
         if not normalized_command:
             raise ValueError("Shell command must be a non-empty string.")
         user_content = f"!{normalized_command}"
+        user_message = self._persist_live_session_message(
+            live_session,
+            role="user",
+            content=user_content,
+        )
 
         self._publish_live_event(
             live_session_id,
             "message_added",
-            {
+            persisted_message_payload(user_message)
+            if user_message is not None
+            else {
                 "item_id": f"user-{uuid.uuid4().hex}",
                 "role": "user",
                 "content": user_content,
@@ -1546,22 +1542,23 @@ class WebSessionManager:
         )
         live_session.display.tool_group_end()
         assistant_content = _format_shell_command_output(result)
+        assistant_message = self._persist_live_session_message(
+            live_session,
+            role="assistant",
+            content=assistant_content,
+        )
         self._publish_live_event(
             live_session_id,
             "message_added",
-            {
+            persisted_message_payload(assistant_message)
+            if assistant_message is not None
+            else {
                 "item_id": f"shell-output-{uuid.uuid4().hex}",
                 "role": "assistant",
                 "content": assistant_content,
                 "markdown": True,
             },
         )
-        if live_session.bound_session_id is not None:
-            self._persist_shell_command_messages(
-                live_session,
-                user_content=user_content,
-                assistant_content=assistant_content,
-            )
         return self._serialize_live_session(live_session)
 
     def run_saved_session_shell_command(
@@ -1578,28 +1575,25 @@ class WebSessionManager:
             live_session_id = live_session.live_session_id
         return self.run_shell_command(live_session_id, command=command)
 
-    def _persist_shell_command_messages(
+    def _persist_live_session_message(
         self,
         live_session: LiveSessionState,
         *,
-        user_content: str,
-        assistant_content: str,
-    ) -> None:
+        role: str,
+        content: str,
+    ) -> MessageRecord | None:
         with SessionStore() as store:
             session = store.get_session(live_session.bound_session_id or "")
             if session is None or session.directory != self._directory_key:
-                return
-            for role, content in (
-                ("user", user_content),
-                ("assistant", assistant_content),
-            ):
-                store.add_message(
-                    session.session_id,
-                    role,
-                    content,
-                    provider_id=live_session.runtime.provider_id or None,
-                    profile_id=live_session.runtime.profile_id or None,
-                )
+                return None
+            message_id = store.add_message(
+                session.session_id,
+                role,
+                content,
+                provider_id=live_session.runtime.provider_id or None,
+                profile_id=live_session.runtime.profile_id or None,
+            )
+            return store.get_message(message_id)
 
     def request_new_session(
         self,
@@ -3511,6 +3505,22 @@ class WebSessionManager:
                 else "tool_group"
             )
             item["itemId"] = str(payload.get("item_id") or "")
+            snapshot.items = self._upsert_snapshot_item(snapshot.items, item)
+            return
+        if event_type == "message_rekeyed":
+            raw_item = payload.get("item")
+            if not isinstance(raw_item, dict):
+                return
+            old_item_id = str(payload.get("old_item_id") or "")
+            item = dict(raw_item)
+            item["kind"] = "message"
+            item["itemId"] = str(item.get("item_id") or item.get("itemId") or "")
+            if old_item_id and old_item_id != item["itemId"]:
+                snapshot.items = [
+                    existing
+                    for existing in snapshot.items
+                    if _snapshot_item_id(existing) != old_item_id
+                ]
             snapshot.items = self._upsert_snapshot_item(snapshot.items, item)
             return
         if event_type == "message_removed":

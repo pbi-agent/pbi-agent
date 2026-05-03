@@ -165,8 +165,16 @@ class SessionResponse(BaseModel):
     session: SessionRecordModel
 
 
+class MessagePartIdsModel(BaseModel):
+    content: str
+    file_paths: list[str] = Field(default_factory=list)
+    image_attachments: list[str] = Field(default_factory=list)
+
+
 class HistoryItemModel(BaseModel):
     item_id: str
+    message_id: str
+    part_ids: MessagePartIdsModel
     role: str
     content: str
     file_paths: list[str] = Field(default_factory=list)

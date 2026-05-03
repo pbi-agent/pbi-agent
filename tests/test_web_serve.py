@@ -40,6 +40,7 @@ from pbi_agent.config import (
     delete_model_profile_config,
 )
 from pbi_agent.session_store import (
+    MessageRecord,
     SESSION_DB_PATH_ENV,
     SessionStore,
     WebManagerLeaseBusyError,
@@ -1158,6 +1159,8 @@ def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) 
             assert detail_payload["history_items"] == [
                 {
                     "item_id": detail_payload["history_items"][0]["item_id"],
+                    "message_id": detail_payload["history_items"][0]["message_id"],
+                    "part_ids": detail_payload["history_items"][0]["part_ids"],
                     "role": "user",
                     "content": "Investigate",
                     "file_paths": [],
@@ -2048,6 +2051,49 @@ def test_web_display_wait_stop_clears_model_wait_processing() -> None:
     ]
 
 
+def test_web_display_rekeys_persisted_assistant_message() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+
+    display.render_markdown("final answer")
+    display.persisted_message(
+        MessageRecord(
+            id=42,
+            session_id="session-1",
+            role="assistant",
+            content="final answer",
+            created_at="2026-05-03T00:00:00Z",
+        )
+    )
+
+    assert published[-1] == (
+        "message_rekeyed",
+        {
+            "old_item_id": "message-1",
+            "item": {
+                "item_id": "msg-42",
+                "message_id": "msg-42",
+                "part_ids": {
+                    "content": "msg-42:content",
+                    "file_paths": [],
+                    "image_attachments": [],
+                },
+                "role": "assistant",
+                "content": "final answer",
+                "file_paths": [],
+                "image_attachments": [],
+                "markdown": True,
+                "historical": True,
+                "created_at": "2026-05-03T00:00:00Z",
+            },
+        },
+    )
+
+
 def test_live_session_worker_refreshes_mentions_on_reload_and_end() -> None:
     observed: dict[str, object] = {}
 
@@ -2256,7 +2302,13 @@ def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None
     assert payload["session"]["session_id"] == session_id
     assert payload["history_items"] == [
         {
-            "item_id": "history-1",
+            "item_id": "msg-1",
+            "message_id": "msg-1",
+            "part_ids": {
+                "content": "msg-1:content",
+                "file_paths": ["msg-1:file-path:0"],
+                "image_attachments": [],
+            },
             "role": "user",
             "content": "Hello",
             "file_paths": ["notes.md"],
@@ -2266,7 +2318,13 @@ def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None
             "created_at": payload["history_items"][0]["created_at"],
         },
         {
-            "item_id": "history-2",
+            "item_id": "msg-2",
+            "message_id": "msg-2",
+            "part_ids": {
+                "content": "msg-2:content",
+                "file_paths": [],
+                "image_attachments": [],
+            },
             "role": "assistant",
             "content": "Hi there",
             "file_paths": [],

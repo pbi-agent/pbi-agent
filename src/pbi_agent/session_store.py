@@ -538,6 +538,23 @@ def _deserialize_image_attachments(raw_value: object) -> list[MessageImageAttach
     return attachments
 
 
+def _message_record_from_row(row: sqlite3.Row) -> MessageRecord:
+    data = dict(row)
+    return MessageRecord(
+        id=data["id"],
+        session_id=data["session_id"],
+        role=data["role"],
+        content=data["content"],
+        provider_id=data.get("provider_id"),
+        profile_id=data.get("profile_id"),
+        file_paths=_deserialize_file_paths(data.get("file_paths_json")),
+        image_attachments=_deserialize_image_attachments(
+            data.get("image_attachments_json")
+        ),
+        created_at=data["created_at"],
+    )
+
+
 def _kanban_task_record(row: sqlite3.Row) -> KanbanTaskRecord:
     data = dict(row)
     image_attachments = _deserialize_image_attachments(
@@ -988,31 +1005,21 @@ class SessionStore:
             self._conn.commit()
         return cursor.rowcount > 0
 
+    def get_message(self, message_id: int) -> MessageRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM messages WHERE id = ?",
+                (message_id,),
+            ).fetchone()
+        return _message_record_from_row(row) if row is not None else None
+
     def list_messages(self, session_id: str) -> list[MessageRecord]:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM messages WHERE session_id = ? ORDER BY id ASC",
                 (session_id,),
             ).fetchall()
-        messages: list[MessageRecord] = []
-        for row in rows:
-            data = dict(row)
-            messages.append(
-                MessageRecord(
-                    id=data["id"],
-                    session_id=data["session_id"],
-                    role=data["role"],
-                    content=data["content"],
-                    provider_id=data.get("provider_id"),
-                    profile_id=data.get("profile_id"),
-                    file_paths=_deserialize_file_paths(data.get("file_paths_json")),
-                    image_attachments=_deserialize_image_attachments(
-                        data.get("image_attachments_json")
-                    ),
-                    created_at=data["created_at"],
-                )
-            )
-        return messages
+        return [_message_record_from_row(row) for row in rows]
 
     def create_run_session(
         self,

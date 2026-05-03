@@ -134,6 +134,57 @@ describe("session store", () => {
     expect(state.restoredInput).toBe("remove me");
   });
 
+  it("rekeys optimistic messages to persisted message ids", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 5,
+      type: "message_added",
+      created_at: "2026-04-16T12:00:02Z",
+      payload: {
+        item_id: "user-optimistic",
+        role: "user",
+        content: "hello",
+      },
+    });
+
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 6,
+      type: "message_rekeyed",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: {
+        old_item_id: "user-optimistic",
+        item: {
+          item_id: "msg-10",
+          message_id: "msg-10",
+          part_ids: {
+            content: "msg-10:content",
+            file_paths: [],
+            image_attachments: [],
+          },
+          role: "user",
+          content: "hello",
+          markdown: false,
+        },
+      },
+    });
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0]).toEqual(
+      expect.objectContaining({
+        itemId: "msg-10",
+        messageId: "msg-10",
+        partIds: {
+          content: "msg-10:content",
+          file_paths: [],
+          image_attachments: [],
+        },
+      }),
+    );
+    expect(state.itemsVersion).toBe(2);
+  });
+
   it("ignores events from a stale live session after saved hydration", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());

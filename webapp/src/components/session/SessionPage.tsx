@@ -277,11 +277,9 @@ export function SessionPage({
 
   // Hydrate saved session items when session detail data arrives.
   // Skip hydration when a live session is already attached and has
-  // items — even if the WebSocket is reconnecting.  Re-hydrating
-  // during reconnection replaces WS-sourced items (item IDs like
-  // "message-N") with API history items ("history-N"), then the WS
-  // snapshot replay adds them again with their original IDs,
-  // producing duplicates and flickering.
+  // items — even if the event stream is reconnecting. Re-hydrating
+  // during reconnection can briefly replace live items before replay
+  // catches up, producing duplicates and flickering.
   useEffect(() => {
     if (!routeSessionId || !sessionDetailQuery.isSuccess) return;
     const sessionKey = getSavedSessionKey(routeSessionId);
@@ -771,6 +769,8 @@ function mapHistoryItem(item: HistoryItem): TimelineItem {
   return {
     kind: "message",
     itemId: item.item_id,
+    messageId: item.message_id,
+    partIds: item.part_ids,
     role: item.role,
     content: item.content,
     filePaths: item.file_paths,
@@ -783,6 +783,8 @@ function historyItemToSnapshotItem(item: HistoryItem): Record<string, unknown> {
   return {
     kind: "message",
     itemId: item.item_id,
+    message_id: item.message_id,
+    part_ids: item.part_ids,
     role: item.role,
     content: item.content,
     file_paths: item.file_paths,
@@ -798,6 +800,15 @@ function messageSignature(item: Record<string, unknown>): string | null {
   const filePaths = Array.isArray(item.file_paths) ? item.file_paths : [];
   const imageAttachments = Array.isArray(item.image_attachments) ? item.image_attachments : [];
   return JSON.stringify([role, content, filePaths, imageAttachments]);
+}
+
+function persistedMessageId(item: Record<string, unknown>): string | null {
+  if (item.kind !== "message") return null;
+  return typeof item.message_id === "string"
+    ? item.message_id
+    : typeof item.messageId === "string"
+      ? item.messageId
+      : null;
 }
 
 function snapshotItemId(item: Record<string, unknown>): string {
@@ -834,6 +845,12 @@ function timelineForDisplay(
   }
 
   const historyItems = detail.history_items.map(historyItemToSnapshotItem);
+  const persistedMessageIds = new Set(
+    historyItems.flatMap((item) => {
+      const messageId = persistedMessageId(item);
+      return messageId ? [messageId] : [];
+    }),
+  );
   const persistedMessageCounts = new Map<string, number>();
   for (const item of historyItems) {
     const signature = messageSignature(item);
@@ -857,6 +874,8 @@ function timelineForDisplay(
   };
   const liveItems = timeline.items.filter((item) => {
     if (isHistoricalSnapshotMessage(item)) return false;
+    const messageId = persistedMessageId(item);
+    if (messageId && persistedMessageIds.has(messageId)) return false;
     const signature = messageSignature(item);
     if (!signature) return true;
     if (dormantTimeline || activeIdleTimeline) {

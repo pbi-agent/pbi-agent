@@ -437,6 +437,8 @@ describe("SessionPage", () => {
       history_items: [
         {
           item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
           role: "assistant",
           content: "done",
           file_paths: [],
@@ -465,6 +467,8 @@ describe("SessionPage", () => {
       history_items: [
         {
           item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
           role: "user",
           content: "/plan",
           file_paths: [],
@@ -475,6 +479,8 @@ describe("SessionPage", () => {
         },
         {
           item_id: "history-2",
+          message_id: "msg-2",
+          part_ids: { content: "msg-2:content", file_paths: [], image_attachments: [] },
           role: "assistant",
           content: "Previous plan",
           file_paths: [],
@@ -485,6 +491,8 @@ describe("SessionPage", () => {
         },
         {
           item_id: "history-3",
+          message_id: "msg-3",
+          part_ids: { content: "msg-3:content", file_paths: [], image_attachments: [] },
           role: "user",
           content: "/review",
           file_paths: [],
@@ -548,6 +556,8 @@ describe("SessionPage", () => {
       history_items: [
         {
           item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
           role: "user",
           content: "hi",
           file_paths: [],
@@ -558,6 +568,8 @@ describe("SessionPage", () => {
         },
         {
           item_id: "history-2",
+          message_id: "msg-2",
+          part_ids: { content: "msg-2:content", file_paths: [], image_attachments: [] },
           role: "assistant",
           content: "Hi! What would you like to work on in this repo?",
           file_paths: [],
@@ -633,6 +645,8 @@ describe("SessionPage", () => {
       history_items: [
         {
           item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
           role: "user",
           content: "/plan\n# Task\ntest task",
           file_paths: [],
@@ -643,6 +657,8 @@ describe("SessionPage", () => {
         },
         {
           item_id: "history-2",
+          message_id: "msg-2",
+          part_ids: { content: "msg-2:content", file_paths: [], image_attachments: [] },
           role: "assistant",
           content: "this is a test",
           file_paths: [],
@@ -653,6 +669,8 @@ describe("SessionPage", () => {
         },
         {
           item_id: "history-3",
+          message_id: "msg-3",
+          part_ids: { content: "msg-3:content", file_paths: [], image_attachments: [] },
           role: "user",
           content: "/execute",
           file_paths: [],
@@ -663,6 +681,8 @@ describe("SessionPage", () => {
         },
         {
           item_id: "history-4",
+          message_id: "msg-4",
+          part_ids: { content: "msg-4:content", file_paths: [], image_attachments: [] },
           role: "assistant",
           content: "this is a test",
           file_paths: [],
@@ -673,6 +693,8 @@ describe("SessionPage", () => {
         },
         {
           item_id: "history-5",
+          message_id: "msg-5",
+          part_ids: { content: "msg-5:content", file_paths: [], image_attachments: [] },
           role: "user",
           content: "say this is a test again",
           file_paths: [],
@@ -778,6 +800,8 @@ describe("SessionPage", () => {
       history_items: [
         {
           item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
           role: "user",
           content: "hi",
           file_paths: [],
@@ -788,6 +812,8 @@ describe("SessionPage", () => {
         },
         {
           item_id: "history-2",
+          message_id: "msg-2",
+          part_ids: { content: "msg-2:content", file_paths: [], image_attachments: [] },
           role: "assistant",
           content: "Hi! What would you like to work on in the workspace?",
           file_paths: [],
@@ -866,6 +892,8 @@ describe("SessionPage", () => {
       history_items: [
         {
           item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
           role: "assistant",
           content: "done",
           file_paths: [],

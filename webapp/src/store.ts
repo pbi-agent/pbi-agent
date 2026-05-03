@@ -5,6 +5,7 @@ import type {
   LiveSession,
   LiveSessionRuntime,
   LiveSessionSnapshot,
+  MessagePartIds,
   PendingUserQuestions,
   ProcessingPhase,
   ProcessingState,
@@ -118,6 +119,17 @@ function upsertItem(items: TimelineItem[], nextItem: TimelineItem): TimelineItem
   return updated;
 }
 
+function rekeyItem(
+  items: TimelineItem[],
+  oldItemId: string,
+  nextItem: TimelineItem,
+): TimelineItem[] {
+  const withoutOld = oldItemId && oldItemId !== nextItem.itemId
+    ? items.filter((item) => item.itemId !== oldItemId)
+    : items;
+  return upsertItem(withoutOld, nextItem);
+}
+
 function readString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
@@ -149,6 +161,24 @@ function readPendingUserQuestions(value: unknown): PendingUserQuestions | null {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function readStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function readMessagePartIds(value: unknown): MessagePartIds | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const content = readString(record.content);
+  if (!content) return undefined;
+  return {
+    content,
+    file_paths: readStringList(record.file_paths),
+    image_attachments: readStringList(record.image_attachments),
+  };
 }
 
 function readTimelineRole(
@@ -302,12 +332,18 @@ function readToolGroupItems(value: unknown): TimelineToolGroupEntry[] {
 
 function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
   const kind = raw.kind;
-  const itemId = typeof raw.itemId === "string" ? raw.itemId : null;
+  const itemId = typeof raw.itemId === "string"
+    ? raw.itemId
+    : typeof raw.item_id === "string"
+      ? raw.item_id
+      : null;
   if (!itemId || typeof kind !== "string") return null;
   if (kind === "message") {
     return {
       kind: "message",
       itemId,
+      messageId: readOptionalString(raw.message_id),
+      partIds: readMessagePartIds(raw.part_ids),
       role: readTimelineRole(raw.role),
       content: readString(raw.content),
       filePaths: Array.isArray(raw.file_paths)
@@ -665,6 +701,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
           const item: TimelineItem = {
             kind: "message",
             itemId: String(payload.item_id),
+            messageId: readOptionalString(payload.message_id),
+            partIds: readMessagePartIds(payload.part_ids),
             role: readTimelineRole(payload.role),
             content: readString(payload.content),
             filePaths: Array.isArray(payload.file_paths)
@@ -677,6 +715,23 @@ export const useSessionStore = create<SessionStore>((set) => ({
             subAgentId: readOptionalString(payload.sub_agent_id),
           };
           patch.items = upsertItem(current.items, item);
+          patch.itemsVersion = current.itemsVersion + 1;
+          break;
+        }
+        case "message_rekeyed": {
+          const rawItem = payload.item;
+          if (!rawItem || typeof rawItem !== "object") {
+            break;
+          }
+          const item = mapSnapshotItem({
+            ...(rawItem as Record<string, unknown>),
+            kind: "message",
+          });
+          if (!item) {
+            break;
+          }
+          patch.restoredInput = null;
+          patch.items = rekeyItem(current.items, readString(payload.old_item_id), item);
           patch.itemsVersion = current.itemsVersion + 1;
           break;
         }

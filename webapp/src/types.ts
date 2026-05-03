@@ -136,8 +136,16 @@ export type UserQuestionAnswer = {
   custom: boolean;
 };
 
+export type MessagePartIds = {
+  content: string;
+  file_paths: string[];
+  image_attachments: string[];
+};
+
 export type HistoryItem = {
   item_id: string;
+  message_id: string;
+  part_ids: MessagePartIds;
   role: "user" | "assistant" | "notice" | "error" | "debug";
   content: string;
   file_paths: string[];
@@ -456,6 +464,8 @@ export type ConfigBootstrapPayload = {
 export type TimelineMessageItem = {
   kind: "message";
   itemId: string;
+  messageId?: string;
+  partIds?: MessagePartIds;
   role: "user" | "assistant" | "notice" | "error" | "debug";
   content: string;
   filePaths?: string[];

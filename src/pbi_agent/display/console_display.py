@@ -96,8 +96,17 @@ class ConsoleDisplay(DisplayProtocol):
         images=None,
         image_attachments=None,
         interactive_mode: bool = False,
+        item_id: str | None = None,
     ) -> None:
-        del value, file_paths, image_paths, images, image_attachments, interactive_mode
+        del (
+            value,
+            file_paths,
+            image_paths,
+            images,
+            image_attachments,
+            interactive_mode,
+            item_id,
+        )
         return None
 
     def request_new_session(self) -> None:
