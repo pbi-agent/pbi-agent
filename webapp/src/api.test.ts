@@ -13,7 +13,6 @@ import {
   startProviderAuthFlow,
   updateSession,
   uploadTaskImages,
-  websocketUrl,
 } from "./api";
 
 describe("api helpers", () => {
@@ -241,7 +240,7 @@ describe("api helpers", () => {
     expect(startInit.body).toBe(JSON.stringify({ method: "browser" }));
   });
 
-  it("derives websocket URLs from the current browser location", () => {
+  it("derives event stream URLs from the current browser location", () => {
     vi.stubGlobal("window", {
       location: {
         protocol: "https:",
@@ -250,9 +249,6 @@ describe("api helpers", () => {
       },
     });
 
-    expect(websocketUrl("/api/events/live-1")).toBe(
-      "wss://agent.test:9443/api/events/live-1",
-    );
     expect(eventStreamUrl("/api/events/live-1")).toBe(
       "https://agent.test:9443/api/events/live-1",
     );

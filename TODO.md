@@ -1,5 +1,5 @@
-[X] Map current frontend API/type duplication and OpenAPI availability
-[X] Choose minimal generated-contract integration point
-[X] Add contract generation or schema export workflow
-[X] Update frontend API/types/tests to consume the contract where feasible
-[X] Validate and update memory
+[X] Map remaining WebSocket event route and frontend/test usage
+[X] Remove legacy WebSocket event endpoints/helpers
+[X] Update tests to use SSE or EventStream directly
+[X] Validate backend/frontend after removal
+[X] Update memory and commit phase

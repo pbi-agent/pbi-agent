@@ -12,8 +12,6 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
-    WebSocket,
-    WebSocketDisconnect,
 )
 from fastapi.responses import StreamingResponse
 
@@ -23,21 +21,6 @@ from pbi_agent.web.session_manager import WebSessionManager
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 _SSE_HEARTBEAT_SECONDS = 10.0
-
-
-@router.websocket("/{stream_id}")
-async def stream_events(
-    websocket: WebSocket,
-    stream_id: StreamIdPath,
-    since: int = Query(default=0, ge=0),
-) -> None:
-    manager = cast(WebSessionManager, websocket.app.state.manager)
-    try:
-        stream = manager.get_event_stream(stream_id)
-    except KeyError:
-        await websocket.close(code=4404)
-        return
-    await _stream_event_stream(websocket, stream, since=since)
 
 
 @router.get("/{stream_id}")
@@ -58,21 +41,6 @@ async def stream_events_sse(
     return _sse_response(stream, since=_resolve_since(since, last_event_id))
 
 
-@router.websocket("/sessions/{session_id}")
-async def stream_session_events(
-    websocket: WebSocket,
-    session_id: SessionIdPath,
-    since: int = Query(default=0, ge=0),
-) -> None:
-    manager = cast(WebSessionManager, websocket.app.state.manager)
-    try:
-        stream = manager.get_session_event_stream(session_id)
-    except KeyError:
-        await websocket.close(code=4404)
-        return
-    await _stream_event_stream(websocket, stream, since=since)
-
-
 @router.get("/sessions/{session_id}")
 async def stream_session_events_sse(
     request: Request,
@@ -89,37 +57,6 @@ async def stream_session_events_sse(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Event stream not found.") from exc
     return _sse_response(stream, since=_resolve_since(since, last_event_id))
-
-
-async def _stream_event_stream(
-    websocket: WebSocket,
-    stream,  # noqa: ANN001
-    *,
-    since: int = 0,
-) -> None:
-    await websocket.accept()
-    subscriber_id, queue = stream.subscribe()
-    last_sent_seq = since
-    try:
-        for event in stream.snapshot():
-            seq = _event_seq(event)
-            if seq <= since:
-                continue
-            await websocket.send_json(event)
-            last_sent_seq = max(last_sent_seq, seq)
-        while True:
-            event = await queue.get()
-            seq = _event_seq(event)
-            if seq <= last_sent_seq:
-                continue
-            await websocket.send_json(event)
-            last_sent_seq = max(last_sent_seq, seq)
-    except WebSocketDisconnect:
-        return
-    except asyncio.CancelledError:
-        return
-    finally:
-        stream.unsubscribe(subscriber_id)
 
 
 def _resolve_since(since: int, last_event_id: str | None) -> int:

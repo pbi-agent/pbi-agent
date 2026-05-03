@@ -65,11 +65,6 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function websocketUrl(path: string): string {
-  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${protocol}://${window.location.host}${path}`;
-}
-
 export function eventStreamUrl(path: string): string {
   return `${window.location.origin}${path}`;
 }

@@ -633,7 +633,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
         return nextState;
       }
       // Skip events already processed — prevents duplicates when the
-      // WebSocket reconnects and replays its snapshot over items that
+      // event stream reconnects and replays its snapshot over items that
       // were already hydrated from the API (which use different itemIds).
       if (event.seq <= current.lastEventSeq) {
         return nextState;

@@ -768,8 +768,7 @@ def test_update_session_title_endpoint_updates_workspace_session(
             f"/api/sessions/{session_id}",
             json={"title": "  Updated title  "},
         )
-        with client.websocket_connect("/api/events/app") as websocket:
-            event = websocket.receive_json()
+        event = app.state.manager.get_event_stream("app").snapshot()[-1]
 
     assert response.status_code == 200
     payload = response.json()
@@ -838,9 +837,7 @@ def test_task_creation_is_visible_on_app_event_stream() -> None:
             json={"title": "Task A", "prompt": "Investigate the workspace layout"},
         )
         assert create_response.status_code == 200
-
-        with client.websocket_connect("/api/events/app") as websocket:
-            event = websocket.receive_json()
+        event = app.state.manager.get_event_stream("app").snapshot()[-1]
 
     assert event["type"] == "task_updated"
     assert event["payload"]["task"]["title"] == "Task A"
@@ -853,11 +850,15 @@ def test_event_stream_since_skips_snapshot_events_at_or_before_cursor() -> None:
     first = stream.publish("first", {})
     second = stream.publish("second", {})
 
-    with TestClient(app) as client:
-        with client.websocket_connect(
-            f"/api/events/app?since={first['seq']}"
-        ) as websocket:
-            event = websocket.receive_json()
+    async def collect() -> dict[str, object]:
+        iterator = _iter_sse_events(stream, since=int(first["seq"]))
+        try:
+            await anext(iterator)
+            return _decode_sse_payload(await anext(iterator))
+        finally:
+            await iterator.aclose()
+
+    event = asyncio.run(collect())
 
     assert event["seq"] == second["seq"]
     assert event["type"] == "second"
@@ -1182,10 +1183,7 @@ def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) 
                 is manager._task_workers[task_id]
             )
             assert manager._live_sessions[live_session_id].worker is not None
-            with client.websocket_connect(
-                f"/api/events/{live_session_id}"
-            ) as websocket:
-                events = [websocket.receive_json(), websocket.receive_json()]
+            events = manager.get_event_stream(live_session_id).snapshot()[:2]
             assert [event["type"] for event in events] == [
                 "session_runtime_updated",
                 "session_state",
@@ -2729,49 +2727,22 @@ def test_delete_session_endpoint_accepts_saved_sessions_from_any_provider(
     assert response.status_code == 204
 
 
-def test_event_stream_treats_cancelled_error_as_clean_disconnect() -> None:
+def test_sse_event_stream_unsubscribes_when_closed() -> None:
     app = create_app(_settings())
-    route = next(
-        route
-        for route in app.routes
-        if getattr(route, "path", None) == "/api/events/{stream_id}"
-    )
-    endpoint = route.endpoint
-
-    class FakeWebSocket:
-        def __init__(self) -> None:
-            self.accepted = False
-            self.app = app
-            self.closed_code = None
-            self.sent: list[dict[str, object]] = []
-
-        async def accept(self) -> None:
-            self.accepted = True
-
-        async def close(self, code: int) -> None:
-            self.closed_code = code
-
-        async def send_json(self, payload: dict[str, object]) -> None:
-            self.sent.append(payload)
-
-    fake_websocket = FakeWebSocket()
     manager = app.state.manager
     stream = manager.get_event_stream("app")
+    stream.publish("test", {})
 
-    class CancellingQueue:
-        async def get(self) -> dict[str, object]:
-            raise asyncio.CancelledError()
+    async def open_and_close() -> None:
+        iterator = _iter_sse_events(stream, since=0)
+        await anext(iterator)
+        await anext(iterator)
+        await iterator.aclose()
 
-    subscriber_id = "subscriber-1"
-    with patch.object(
-        stream, "subscribe", return_value=(subscriber_id, CancellingQueue())
-    ):
-        with patch.object(stream, "unsubscribe") as mock_unsubscribe:
-            asyncio.run(endpoint(fake_websocket, "app"))
+    with patch.object(stream, "unsubscribe") as mock_unsubscribe:
+        asyncio.run(open_and_close())
 
-    assert fake_websocket.accepted is True
-    assert fake_websocket.closed_code is None
-    mock_unsubscribe.assert_called_once_with(subscriber_id)
+    mock_unsubscribe.assert_called_once()
 
 
 def test_lifespan_suppresses_cancelled_error_and_runs_shutdown() -> None:
