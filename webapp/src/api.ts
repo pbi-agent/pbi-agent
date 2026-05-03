@@ -2,7 +2,9 @@ import type {
   ApiJsonBody,
   ApiJsonRequestBodies,
   ApiOperation,
+  ApiOperationPathParams,
   ApiOperationQueryParams,
+  ApiPathParams,
   ApiQueryParams,
   ApiResponse,
   CreateSessionRequest,
@@ -135,6 +137,18 @@ function queryString<Operation extends keyof ApiOperationQueryParams>(
   return encoded ? `?${encoded}` : "";
 }
 
+function pathFor<Operation extends keyof ApiOperationPathParams>(
+  operation: Operation,
+  params: ApiPathParams<Operation>,
+): string {
+  const separator = operation.indexOf(" ");
+  let path = operation.slice(separator + 1);
+  for (const [name, value] of Object.entries(params)) {
+    path = path.split(`{${name}}`).join(encodeURIComponent(String(value)));
+  }
+  return path;
+}
+
 export function eventStreamUrl(path: string): string {
   return `${window.location.origin}${path}`;
 }
@@ -170,7 +184,7 @@ export async function updateSession(
     SessionResponsePayload
   >(
     "PATCH /api/sessions/{session_id}",
-    `/api/sessions/${sessionId}`,
+    pathFor("PATCH /api/sessions/{session_id}", { session_id: sessionId }),
     {
       method: "PATCH",
       body: jsonBody("PATCH /api/sessions/{session_id}", payload),
@@ -182,7 +196,7 @@ export async function updateSession(
 export async function deleteSession(sessionId: string): Promise<void> {
   await apiRequest<"DELETE /api/sessions/{session_id}">(
     "DELETE /api/sessions/{session_id}",
-    `/api/sessions/${sessionId}`,
+    pathFor("DELETE /api/sessions/{session_id}", { session_id: sessionId }),
     { method: "DELETE" },
   );
 }
@@ -190,7 +204,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
 export async function fetchSessionDetail(sessionId: string): Promise<SessionDetailPayload> {
   return apiRequest<"GET /api/sessions/{session_id}", SessionDetailPayload>(
     "GET /api/sessions/{session_id}",
-    `/api/sessions/${sessionId}`,
+    pathFor("GET /api/sessions/{session_id}", { session_id: sessionId }),
   );
 }
 
@@ -246,7 +260,9 @@ export async function createLiveSession(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/runs",
-    `/api/sessions/${created.session_id}/runs`,
+    pathFor("POST /api/sessions/{session_id}/runs", {
+      session_id: created.session_id,
+    }),
     {
       method: "POST",
       body: jsonBody("POST /api/sessions/{session_id}/runs", { text: "" }),
@@ -278,7 +294,9 @@ export async function submitQuestionResponse(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/question-response",
-    `/api/sessions/${sessionId}/question-response`,
+    pathFor("POST /api/sessions/{session_id}/question-response", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: jsonBody(
@@ -299,7 +317,9 @@ export async function submitSessionQuestionResponse(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/question-response",
-    `/api/sessions/${sessionId}/question-response`,
+    pathFor("POST /api/sessions/{session_id}/question-response", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: jsonBody(
@@ -329,7 +349,9 @@ export async function submitSessionInput(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/messages",
-    `/api/sessions/${sessionId}/messages`,
+    pathFor("POST /api/sessions/{session_id}/messages", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: jsonBody("POST /api/sessions/{session_id}/messages", payload),
@@ -347,7 +369,9 @@ export async function sendSessionMessage(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/messages",
-    `/api/sessions/${sessionId}/messages`,
+    pathFor("POST /api/sessions/{session_id}/messages", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: jsonBody("POST /api/sessions/{session_id}/messages", payload),
@@ -365,7 +389,9 @@ export async function runShellCommand(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/shell-command",
-    `/api/sessions/${sessionId}/shell-command`,
+    pathFor("POST /api/sessions/{session_id}/shell-command", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: jsonBody("POST /api/sessions/{session_id}/shell-command", payload),
@@ -383,7 +409,9 @@ export async function runSessionShellCommand(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/shell-command",
-    `/api/sessions/${sessionId}/shell-command`,
+    pathFor("POST /api/sessions/{session_id}/shell-command", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: jsonBody("POST /api/sessions/{session_id}/shell-command", payload),
@@ -400,7 +428,9 @@ export async function interruptLiveSession(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/interrupt",
-    `/api/sessions/${sessionId}/interrupt`,
+    pathFor("POST /api/sessions/{session_id}/interrupt", {
+      session_id: sessionId,
+    }),
     { method: "POST" },
   );
   return result.session;
@@ -412,7 +442,9 @@ export async function interruptSession(sessionId: string): Promise<LiveSession> 
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/interrupt",
-    `/api/sessions/${sessionId}/interrupt`,
+    pathFor("POST /api/sessions/{session_id}/interrupt", {
+      session_id: sessionId,
+    }),
     { method: "POST" },
   );
   return result.session;
@@ -446,7 +478,9 @@ export async function uploadSessionImages(
     ImageUploadResponsePayload
   >(
     "POST /api/sessions/{session_id}/images",
-    `/api/sessions/${sessionId}/images`,
+    pathFor("POST /api/sessions/{session_id}/images", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: formData,
@@ -468,7 +502,9 @@ export async function uploadSavedSessionImages(
     ImageUploadResponsePayload
   >(
     "POST /api/sessions/{session_id}/images",
-    `/api/sessions/${sessionId}/images`,
+    pathFor("POST /api/sessions/{session_id}/images", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: formData,
@@ -497,7 +533,9 @@ export async function requestNewSession(
     LiveSessionResponsePayload
   >(
     "POST /api/sessions/{session_id}/new-session",
-    `/api/sessions/${sessionId}/new-session`,
+    pathFor("POST /api/sessions/{session_id}/new-session", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: jsonBody("POST /api/sessions/{session_id}/new-session", {
@@ -517,7 +555,9 @@ export async function setLiveSessionProfile(
     LiveSessionResponsePayload
   >(
     "PUT /api/sessions/{session_id}/profile",
-    `/api/sessions/${sessionId}/profile`,
+    pathFor("PUT /api/sessions/{session_id}/profile", {
+      session_id: sessionId,
+    }),
     {
       method: "PUT",
       body: jsonBody("PUT /api/sessions/{session_id}/profile", {
@@ -537,7 +577,9 @@ export async function setSessionProfile(
     LiveSessionResponsePayload
   >(
     "PUT /api/sessions/{session_id}/profile",
-    `/api/sessions/${sessionId}/profile`,
+    pathFor("PUT /api/sessions/{session_id}/profile", {
+      session_id: sessionId,
+    }),
     {
       method: "PUT",
       body: jsonBody("PUT /api/sessions/{session_id}/profile", {
@@ -616,17 +658,21 @@ export async function updateTask(
   const result = await apiRequest<
     "PATCH /api/tasks/{task_id}",
     TaskResponsePayload
-  >("PATCH /api/tasks/{task_id}", `/api/tasks/${taskId}`, {
-    method: "PATCH",
-    body: jsonBody("PATCH /api/tasks/{task_id}", payload),
-  });
+  >(
+    "PATCH /api/tasks/{task_id}",
+    pathFor("PATCH /api/tasks/{task_id}", { task_id: taskId }),
+    {
+      method: "PATCH",
+      body: jsonBody("PATCH /api/tasks/{task_id}", payload),
+    },
+  );
   return result.task;
 }
 
 export async function deleteTask(taskId: string): Promise<void> {
   await apiRequest<"DELETE /api/tasks/{task_id}">(
     "DELETE /api/tasks/{task_id}",
-    `/api/tasks/${taskId}`,
+    pathFor("DELETE /api/tasks/{task_id}", { task_id: taskId }),
     { method: "DELETE" },
   );
 }
@@ -635,9 +681,11 @@ export async function runTask(taskId: string): Promise<TaskRecord> {
   const result = await apiRequest<
     "POST /api/tasks/{task_id}/run",
     TaskResponsePayload
-  >("POST /api/tasks/{task_id}/run", `/api/tasks/${taskId}/run`, {
-    method: "POST",
-  });
+  >(
+    "POST /api/tasks/{task_id}/run",
+    pathFor("POST /api/tasks/{task_id}/run", { task_id: taskId }),
+    { method: "POST" },
+  );
   return result.task;
 }
 
@@ -686,7 +734,9 @@ export async function updateProvider(
     ProviderResponsePayload
   >(
     "PATCH /api/config/providers/{provider_id}",
-    `/api/config/providers/${providerId}`,
+    pathFor("PATCH /api/config/providers/{provider_id}", {
+      provider_id: providerId,
+    }),
     {
       method: "PATCH",
       headers: { "If-Match": configRevision },
@@ -701,7 +751,9 @@ export async function deleteProvider(
 ): Promise<void> {
   await apiRequest<"DELETE /api/config/providers/{provider_id}">(
     "DELETE /api/config/providers/{provider_id}",
-    `/api/config/providers/${providerId}`,
+    pathFor("DELETE /api/config/providers/{provider_id}", {
+      provider_id: providerId,
+    }),
     {
       method: "DELETE",
       headers: { "If-Match": configRevision },
@@ -717,7 +769,9 @@ export async function fetchProviderModels(
     ProviderModelListPayload
   >(
     "GET /api/config/providers/{provider_id}/models",
-    `/api/config/providers/${providerId}/models`,
+    pathFor("GET /api/config/providers/{provider_id}/models", {
+      provider_id: providerId,
+    }),
   );
 }
 
@@ -729,7 +783,9 @@ export async function fetchProviderAuthStatus(
     ProviderAuthResponse
   >(
     "GET /api/provider-auth/{provider_id}",
-    `/api/provider-auth/${providerId}`,
+    pathFor("GET /api/provider-auth/{provider_id}", {
+      provider_id: providerId,
+    }),
   );
 }
 
@@ -742,7 +798,9 @@ export async function startProviderAuthFlow(
     ProviderAuthFlowResponse
   >(
     "POST /api/provider-auth/{provider_id}/flows",
-    `/api/provider-auth/${providerId}/flows`,
+    pathFor("POST /api/provider-auth/{provider_id}/flows", {
+      provider_id: providerId,
+    }),
     {
       method: "POST",
       body: jsonBody("POST /api/provider-auth/{provider_id}/flows", { method }),
@@ -759,7 +817,10 @@ export async function fetchProviderAuthFlow(
     ProviderAuthFlowResponse
   >(
     "GET /api/provider-auth/{provider_id}/flows/{flow_id}",
-    `/api/provider-auth/${providerId}/flows/${flowId}`,
+    pathFor("GET /api/provider-auth/{provider_id}/flows/{flow_id}", {
+      provider_id: providerId,
+      flow_id: flowId,
+    }),
   );
 }
 
@@ -772,7 +833,10 @@ export async function pollProviderAuthFlow(
     ProviderAuthFlowResponse
   >(
     "POST /api/provider-auth/{provider_id}/flows/{flow_id}/poll",
-    `/api/provider-auth/${providerId}/flows/${flowId}/poll`,
+    pathFor("POST /api/provider-auth/{provider_id}/flows/{flow_id}/poll", {
+      provider_id: providerId,
+      flow_id: flowId,
+    }),
     { method: "POST" },
   );
 }
@@ -785,7 +849,9 @@ export async function refreshProviderAuth(
     ProviderAuthResponse
   >(
     "POST /api/provider-auth/{provider_id}/refresh",
-    `/api/provider-auth/${providerId}/refresh`,
+    pathFor("POST /api/provider-auth/{provider_id}/refresh", {
+      provider_id: providerId,
+    }),
     { method: "POST" },
   );
 }
@@ -798,7 +864,9 @@ export async function logoutProviderAuth(
     ProviderAuthLogoutResponse
   >(
     "DELETE /api/provider-auth/{provider_id}",
-    `/api/provider-auth/${providerId}`,
+    pathFor("DELETE /api/provider-auth/{provider_id}", {
+      provider_id: providerId,
+    }),
     { method: "DELETE" },
   );
 }
@@ -811,7 +879,9 @@ export async function fetchProviderUsageLimits(
     ProviderUsageLimitsResponse
   >(
     "GET /api/provider-auth/{provider_id}/usage-limits",
-    `/api/provider-auth/${providerId}/usage-limits`,
+    pathFor("GET /api/provider-auth/{provider_id}/usage-limits", {
+      provider_id: providerId,
+    }),
   );
 }
 
@@ -874,7 +944,9 @@ export async function updateModelProfile(
     ModelProfileResponsePayload
   >(
     "PATCH /api/config/model-profiles/{profile_id}",
-    `/api/config/model-profiles/${modelProfileId}`,
+    pathFor("PATCH /api/config/model-profiles/{profile_id}", {
+      profile_id: modelProfileId,
+    }),
     {
       method: "PATCH",
       headers: { "If-Match": configRevision },
@@ -892,7 +964,9 @@ export async function deleteModelProfile(
 ): Promise<void> {
   await apiRequest<"DELETE /api/config/model-profiles/{profile_id}">(
     "DELETE /api/config/model-profiles/{profile_id}",
-    `/api/config/model-profiles/${modelProfileId}`,
+    pathFor("DELETE /api/config/model-profiles/{profile_id}", {
+      profile_id: modelProfileId,
+    }),
     {
       method: "DELETE",
       headers: { "If-Match": configRevision },
@@ -926,7 +1000,9 @@ export async function fetchSessionRuns(sessionId: string): Promise<RunSession[]>
     SessionRunsResponsePayload
   >(
     "GET /api/sessions/{session_id}/runs",
-    `/api/sessions/${sessionId}/runs`,
+    pathFor("GET /api/sessions/{session_id}/runs", {
+      session_id: sessionId,
+    }),
   );
   return result.runs;
 }
@@ -941,7 +1017,9 @@ export async function fetchRunDetail(
     RunDetailResponsePayload
   >(
     "GET /api/runs/{run_session_id}",
-    `/api/runs/${runSessionId}${qs}`,
+    `${pathFor("GET /api/runs/{run_session_id}", {
+      run_session_id: runSessionId,
+    })}${qs}`,
   );
 }
 

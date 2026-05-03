@@ -1,4 +1,4 @@
-[X] Extend generated API types with query/path parameter maps
-[X] Apply generated query parameter types in frontend API helpers
-[X] Validate API parameter typing slice
+[X] Add frontend typed path helper from generated path params
+[X] Replace dynamic API URL paths with typed path helper
+[X] Validate API path parameter typing slice
 [X] Update memory and commit phase
