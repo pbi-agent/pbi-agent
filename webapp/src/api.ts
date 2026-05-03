@@ -1,4 +1,11 @@
 import type {
+  CreateSessionRequest,
+  LiveSessionInputRequest,
+  LiveSessionShellCommandRequest,
+  SubmitQuestionResponseRequest,
+  UpdateSessionRequest,
+} from "./api-types.generated";
+import type {
   AllRunsPayload,
   BoardStage,
   BootstrapPayload,
@@ -22,7 +29,6 @@ import type {
   SessionRecord,
   SlashCommandItem,
   TaskRecord,
-  UpdateSessionPayload,
 } from "./types";
 
 export class ApiError extends Error {
@@ -83,7 +89,7 @@ export async function fetchSessions(): Promise<SessionRecord[]> {
 
 export async function updateSession(
   sessionId: string,
-  payload: UpdateSessionPayload,
+  payload: UpdateSessionRequest,
 ): Promise<SessionRecord> {
   const result = await requestJson<{ session: SessionRecord }>(
     `/api/sessions/${sessionId}`,
@@ -149,10 +155,9 @@ export async function createLiveSession(
   return result.session;
 }
 
-export async function createSession(payload: {
-  title?: string;
-  profile_id?: string | null;
-} = {}): Promise<SessionRecord> {
+export async function createSession(
+  payload: CreateSessionRequest = {},
+): Promise<SessionRecord> {
   const result = await requestJson<{ session: SessionRecord }>("/api/sessions", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -162,10 +167,7 @@ export async function createSession(payload: {
 
 export async function submitQuestionResponse(
   sessionId: string,
-  payload: {
-    prompt_id: string;
-    answers: UserQuestionAnswer[];
-  },
+  payload: SubmitQuestionResponseRequest & { answers: UserQuestionAnswer[] },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
     `/api/sessions/${sessionId}/question-response`,
@@ -179,10 +181,7 @@ export async function submitQuestionResponse(
 
 export async function submitSessionQuestionResponse(
   sessionId: string,
-  payload: {
-    prompt_id: string;
-    answers: UserQuestionAnswer[];
-  },
+  payload: SubmitQuestionResponseRequest & { answers: UserQuestionAnswer[] },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
     `/api/sessions/${sessionId}/question-response`,
@@ -194,7 +193,7 @@ export async function submitSessionQuestionResponse(
   return result.session;
 }
 
-export type SessionInputPayload = {
+export type SessionInputPayload = LiveSessionInputRequest & {
   text: string;
   file_paths: string[];
   image_paths: string[];
@@ -233,7 +232,7 @@ export async function sendSessionMessage(
 
 export async function runShellCommand(
   sessionId: string,
-  payload: { command: string },
+  payload: LiveSessionShellCommandRequest & { command: string },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
     `/api/sessions/${sessionId}/shell-command`,
@@ -247,7 +246,7 @@ export async function runShellCommand(
 
 export async function runSessionShellCommand(
   sessionId: string,
-  payload: { command: string },
+  payload: LiveSessionShellCommandRequest & { command: string },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
     `/api/sessions/${sessionId}/shell-command`,

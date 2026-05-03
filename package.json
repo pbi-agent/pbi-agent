@@ -13,6 +13,7 @@
     "test:web:watch": "vitest --config webapp/vitest.config.ts",
     "test:web:coverage": "vitest run --coverage --config webapp/vitest.config.ts",
     "typecheck": "tsc -p webapp/tsconfig.json --noEmit",
+    "web:api-types": "uv run python3 scripts/generate_api_types.py",
     "web:dev": "vite --config webapp/vite.config.ts",
     "web:build": "vite build --config webapp/vite.config.ts",
     "web:preview": "vite preview --config webapp/vite.config.ts"

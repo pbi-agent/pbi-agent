@@ -1,7 +1,3 @@
-export type UpdateSessionPayload = {
-  title: string;
-};
-
 export type SessionStatus =
   | "idle"
   | "starting"
