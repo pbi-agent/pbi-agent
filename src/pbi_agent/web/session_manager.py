@@ -226,6 +226,30 @@ def _deserialize_json_field(raw_value: str | None) -> Any:
         return raw_value
 
 
+def _web_event_from_record(record: ObservabilityEventRecord) -> dict[str, Any] | None:
+    if record.event_type != "web_event":
+        return None
+    metadata = _deserialize_json_field(record.metadata_json)
+    if not isinstance(metadata, dict):
+        return None
+    event_type = metadata.get("type")
+    payload = metadata.get("payload")
+    if not isinstance(event_type, str) or not isinstance(payload, dict):
+        return None
+    seq = metadata.get("seq")
+    if not isinstance(seq, int) or seq <= 0:
+        seq = abs(record.step_index) if record.step_index < 0 else record.step_index
+    if seq <= 0:
+        return None
+    created_at = metadata.get("created_at")
+    return {
+        "seq": seq,
+        "type": event_type,
+        "payload": payload,
+        "created_at": created_at if isinstance(created_at, str) else record.timestamp,
+    }
+
+
 def _timeline_snapshot_from_run(
     record: RunSessionRecord | None,
 ) -> dict[str, Any] | None:
@@ -503,6 +527,17 @@ class EventStream:
         for loop, queue in subscribers:
             loop.call_soon_threadsafe(queue.put_nowait, event)
         return event
+
+    def load(self, events: list[dict[str, Any]]) -> None:
+        with self._lock:
+            for event in events:
+                seq = event.get("seq")
+                if not isinstance(seq, int) or seq <= 0:
+                    continue
+                self._sequence = max(self._sequence, seq)
+                self._events.append(dict(event))
+            if len(self._events) > _MAX_EVENT_HISTORY:
+                self._events = self._events[-_MAX_EVENT_HISTORY:]
 
     def snapshot(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -1681,22 +1716,15 @@ class WebSessionManager:
                     run_session_id=run.run_session_id
                 )
             stream = EventStream()
-            web_events: list[tuple[int, dict[str, Any]]] = []
+            web_events: list[tuple[int, int, dict[str, Any]]] = []
             for record in events:
-                if record.event_type != "web_event":
+                event = _web_event_from_record(record)
+                if event is None:
                     continue
-                metadata = _deserialize_json_field(record.metadata_json)
-                if not isinstance(metadata, dict):
-                    continue
-                seq = metadata.get("seq")
-                web_events.append(
-                    (seq if isinstance(seq, int) else record.step_index, metadata)
-                )
-            for _, metadata in sorted(web_events, key=lambda item: item[0]):
-                event_type = metadata.get("type")
-                payload = metadata.get("payload")
-                if isinstance(event_type, str) and isinstance(payload, dict):
-                    stream.publish(event_type, payload)
+                web_events.append((int(event["seq"]), record.id, event))
+            stream.load(
+                [event for _, _, event in sorted(web_events, key=lambda item: item[:2])]
+            )
             return stream
         return live_session.event_stream
 
@@ -3161,6 +3189,7 @@ class WebSessionManager:
                     "type": event["type"],
                     "payload": event["payload"],
                     "seq": event["seq"],
+                    "created_at": event["created_at"],
                 },
             )
             store.update_run_session(

@@ -4166,7 +4166,7 @@ def test_saved_session_event_stream_replays_persisted_events_in_sequence(
             metadata={
                 "type": "message_added",
                 "payload": {"item_id": "second", "role": "assistant"},
-                "seq": 2,
+                "seq": 20,
             },
         )
         store.add_observability_event(
@@ -4177,14 +4177,29 @@ def test_saved_session_event_stream_replays_persisted_events_in_sequence(
             metadata={
                 "type": "message_added",
                 "payload": {"item_id": "first", "role": "user"},
-                "seq": 1,
+                "seq": 10,
             },
         )
 
     with TestClient(app):
-        events = app.state.manager.get_session_event_stream(session_id).snapshot()
+        stream = app.state.manager.get_session_event_stream(session_id)
+        events = stream.snapshot()
 
+    assert [event["seq"] for event in events] == [10, 20]
     assert [event["payload"]["item_id"] for event in events] == ["first", "second"]
+
+    async def collect() -> list[str]:
+        iterator = _iter_sse_events(stream, since=10)
+        try:
+            return [await anext(iterator), await anext(iterator)]
+        finally:
+            await iterator.aclose()
+
+    _connected_raw, event_raw = asyncio.run(collect())
+    event = _decode_sse_payload(event_raw)
+    assert event["seq"] == 20
+    assert event["payload"]["item_id"] == "second"
+    assert "id: 20" in event_raw
 
 
 def test_delete_task_endpoint_removes_task() -> None:

@@ -1,5 +1,5 @@
-[X] Map current message persistence/display write paths
-[X] Add canonical message/part identifiers to storage and APIs
-[X] Emit live events using canonical saved message IDs
-[X] Update frontend history/live dedupe to canonical IDs
+[X] Map current persisted web-event replay paths
+[X] Add durable replay for session event streams
+[X] Align app/live stream cursors with persisted event records
+[X] Update tests for restart/resume replay behavior
 [X] Validate and update memory
