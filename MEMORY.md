@@ -48,3 +48,4 @@
 ## Detailed Task Events
 ## 2026-05-04
 - Added generated API operation contracts: codegen exports API response/request-body maps, frontend `api.ts` uses operation-keyed `apiRequest()`/`jsonBody()`, and `LiveSessionSnapshot.pending_user_questions` now matches the required nullable generated schema. Validation: API codegen pytest, Ruff check/format-check, `bun run test:web -- api`, `bun run typecheck`, `bun run lint`, `bun run web:build`, and `git diff --check` passed.
+- Tightened saved-session image upload OpenAPI contract: `/api/sessions/{session_id}/images` now returns `SessionImageUploadResponse`, so generated operation responses use a named `{ uploads: ImageAttachmentModel[] }` model instead of a loose record. Validation: API codegen pytest, full web serve pytest, Ruff check/format-check, `bun run typecheck`, `bun run lint`, `bun run test:web -- api`, `bun run web:build`, and `git diff --check` passed.

@@ -185,6 +185,8 @@ export type SessionIdentitySseEventModel = { seq: number; created_at: string; ty
 
 export type SessionIdentitySseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null };
 
+export type SessionImageUploadResponse = { uploads: ImageAttachmentModel[] };
+
 export type SessionRecordModel = { session_id: string; directory: string; provider: string; provider_id: string | null; model: string; profile_id: string | null; previous_id: string | null; title: string; total_tokens: number; input_tokens: number; output_tokens: number; cost_usd: number; created_at: string; updated_at: string; status?: "idle" | "starting" | "running" | "waiting_for_input" | "ended" | "failed" | "stale"; active_run_id?: string | null; active_live_session_id?: string | null; task_id?: string | null };
 
 export type SessionResetSseEventModel = { seq: number; created_at: string; type: "session_reset"; payload: EmptyPayloadModel };
@@ -315,7 +317,7 @@ export type ApiOperationResponses = {
   "DELETE /api/sessions/{session_id}": void;
   "GET /api/sessions/{session_id}": SessionDetailResponse;
   "PATCH /api/sessions/{session_id}": SessionResponse;
-  "POST /api/sessions/{session_id}/images": Record<string, ImageAttachmentModel[]>;
+  "POST /api/sessions/{session_id}/images": SessionImageUploadResponse;
   "POST /api/sessions/{session_id}/interrupt": LiveSessionResponse;
   "POST /api/sessions/{session_id}/messages": LiveSessionResponse;
   "POST /api/sessions/{session_id}/new-session": LiveSessionResponse;

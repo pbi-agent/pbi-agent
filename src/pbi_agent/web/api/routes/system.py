@@ -42,6 +42,7 @@ from pbi_agent.web.api.schemas.system import (
     RunSessionDetailResponse,
     RunSessionModel,
     SessionDetailResponse,
+    SessionImageUploadResponse,
     SessionRecordModel,
     SessionResponse,
     SessionRunsResponse,
@@ -243,12 +244,12 @@ def interrupt_session_run(
     return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
 
 
-@router.post("/sessions/{session_id}/images")
+@router.post("/sessions/{session_id}/images", response_model=SessionImageUploadResponse)
 async def upload_saved_session_images(
     session_id: SessionIdPath,
     manager: SessionManagerDep,
     files: Annotated[list[UploadFile], File(description="One or more image files")],
-) -> dict[str, list[ImageAttachmentModel]]:
+) -> SessionImageUploadResponse:
     try:
         uploads = manager.upload_saved_session_images(
             session_id,
@@ -261,11 +262,9 @@ async def upload_saved_session_images(
         raise not_found("Session not found.") from exc
     except Exception as exc:
         raise bad_request(str(exc)) from exc
-    return {
-        "uploads": [
-            model_from_payload(ImageAttachmentModel, upload) for upload in uploads
-        ]
-    }
+    return SessionImageUploadResponse(
+        uploads=[model_from_payload(ImageAttachmentModel, upload) for upload in uploads]
+    )
 
 
 @router.post("/sessions/{session_id}/new-session", response_model=LiveSessionResponse)

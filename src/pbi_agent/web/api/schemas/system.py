@@ -206,6 +206,10 @@ class SessionResponse(BaseModel):
     session: SessionRecordModel
 
 
+class SessionImageUploadResponse(BaseModel):
+    uploads: list[ImageAttachmentModel]
+
+
 class MessagePartIdsModel(BaseModel):
     content: str
     file_paths: list[str] = Field(default_factory=list)
