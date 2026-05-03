@@ -47,7 +47,104 @@ def render_api_types() -> str:
     for name, model_names in sorted(API_TYPE_ALIASES.items()):
         lines.append(f"export type {name} = {' | '.join(model_names)};")
         lines.append("")
+    lines.extend(render_api_operations(app.openapi()))
     return "\n".join(lines)
+
+
+def render_api_operations(openapi: dict[str, Any]) -> list[str]:
+    paths = openapi.get("paths", {})
+    if not isinstance(paths, dict):
+        raise RuntimeError("OpenAPI paths is missing.")
+
+    response_fields: list[str] = []
+    json_body_fields: list[str] = []
+    for path, path_item in sorted(paths.items()):
+        if not isinstance(path, str) or not path.startswith("/api/"):
+            continue
+        if not isinstance(path_item, dict):
+            continue
+        for method in ("delete", "get", "patch", "post", "put"):
+            operation = path_item.get(method)
+            if not isinstance(operation, dict):
+                continue
+            operation_key = f"{method.upper()} {path}"
+            response_fields.append(
+                f"  {ts_property(operation_key)}: {operation_response_type(operation)};"
+            )
+            json_body_type = operation_json_body_type(operation)
+            if json_body_type is not None:
+                json_body_fields.append(
+                    f"  {ts_property(operation_key)}: {json_body_type};"
+                )
+
+    lines = [
+        "export type ApiOperationResponses = {",
+        *response_fields,
+        "};",
+        "",
+        "export type ApiJsonRequestBodies = {",
+        *json_body_fields,
+        "};",
+        "",
+        "export type ApiOperation = keyof ApiOperationResponses;",
+        "",
+        "export type ApiResponse<T extends ApiOperation> = ApiOperationResponses[T];",
+        "",
+        "export type ApiJsonBody<T extends keyof ApiJsonRequestBodies> = ApiJsonRequestBodies[T];",
+        "",
+    ]
+    return lines
+
+
+def operation_response_type(operation: dict[str, Any]) -> str:
+    responses = operation.get("responses")
+    if not isinstance(responses, dict):
+        return "unknown"
+    response = select_success_response(responses)
+    if response is None:
+        return "unknown"
+    status_code, response_spec = response
+    if status_code == "204":
+        return "void"
+    if not isinstance(response_spec, dict):
+        return "unknown"
+    schema = json_content_schema(response_spec.get("content"))
+    return ts_type(schema) if schema is not None else "unknown"
+
+
+def operation_json_body_type(operation: dict[str, Any]) -> str | None:
+    request_body = operation.get("requestBody")
+    if not isinstance(request_body, dict):
+        return None
+    schema = json_content_schema(request_body.get("content"))
+    return ts_type(schema) if schema is not None else None
+
+
+def select_success_response(
+    responses: dict[str, Any],
+) -> tuple[str, Any] | None:
+    for status_code in ("200", "201", "202", "204"):
+        if status_code in responses:
+            return status_code, responses[status_code]
+    success_codes = sorted(
+        status_code
+        for status_code in responses
+        if status_code.isdigit() and 200 <= int(status_code) < 300
+    )
+    if not success_codes:
+        return None
+    status_code = success_codes[0]
+    return status_code, responses[status_code]
+
+
+def json_content_schema(content: Any) -> dict[str, Any] | None:
+    if not isinstance(content, dict):
+        return None
+    json_content = content.get("application/json")
+    if not isinstance(json_content, dict):
+        return None
+    schema = json_content.get("schema")
+    return schema if isinstance(schema, dict) else None
 
 
 def ts_type(schema: dict[str, Any]) -> str:

@@ -180,7 +180,7 @@ export type LiveSessionSnapshot = Omit<
   turn_usage:
     | { usage: UsagePayload | null; elapsed_seconds?: number | null }
     | null;
-  pending_user_questions?: PendingUserQuestions | null;
+  pending_user_questions: PendingUserQuestions | null;
   sub_agents: Record<string, { title: string; status: string }>;
 };
 

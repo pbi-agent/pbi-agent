@@ -26,3 +26,16 @@ def test_generated_api_types_include_sse_event_union() -> None:
     assert "export type SseEventModel =" in generated
     assert "InputStateSseEventModel" in generated
     assert "LiveSessionEndedSseEventModel" in generated
+
+
+def test_generated_api_types_include_operation_contracts() -> None:
+    generated = generate_api_types.render_api_types()
+
+    assert "export type ApiOperationResponses =" in generated
+    assert '"GET /api/bootstrap": BootstrapResponse' in generated
+    assert (
+        '"POST /api/sessions/{session_id}/messages": LiveSessionResponse' in generated
+    )
+    assert "export type ApiJsonRequestBodies =" in generated
+    assert '"POST /api/sessions": CreateSessionRequest' in generated
+    assert '"PATCH /api/tasks/{task_id}": UpdateTaskRequest' in generated

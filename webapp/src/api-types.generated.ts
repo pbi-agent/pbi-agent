@@ -278,3 +278,86 @@ export type SessionSseEventModel = SessionResetSseEventModel | SessionIdentitySs
 export type SseControlEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel;
 
 export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel;
+
+export type ApiOperationResponses = {
+  "GET /api/board/stages": BoardStagesResponse;
+  "PUT /api/board/stages": BoardStagesResponse;
+  "GET /api/bootstrap": BootstrapResponse;
+  "PUT /api/config/active-model-profile": ActiveProfileResponse;
+  "GET /api/config/bootstrap": ConfigBootstrapResponse;
+  "GET /api/config/commands": CommandListResponse;
+  "GET /api/config/model-profiles": ModelProfileListResponse;
+  "POST /api/config/model-profiles": ModelProfileResponse;
+  "DELETE /api/config/model-profiles/{profile_id}": void;
+  "PATCH /api/config/model-profiles/{profile_id}": ModelProfileResponse;
+  "GET /api/config/providers": ProviderListResponse;
+  "POST /api/config/providers": ProviderResponse;
+  "DELETE /api/config/providers/{provider_id}": void;
+  "PATCH /api/config/providers/{provider_id}": ProviderResponse;
+  "GET /api/config/providers/{provider_id}/models": ProviderModelListResponse;
+  "GET /api/dashboard/stats": DashboardStatsResponse;
+  "GET /api/events/sessions/{session_id}": unknown;
+  "GET /api/events/{stream_id}": unknown;
+  "GET /api/files/search": FileMentionSearchResponse;
+  "DELETE /api/provider-auth/{provider_id}": ProviderAuthLogoutResponse;
+  "GET /api/provider-auth/{provider_id}": ProviderAuthResponse;
+  "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowResponse;
+  "GET /api/provider-auth/{provider_id}/flows/{flow_id}": ProviderAuthFlowResponse;
+  "POST /api/provider-auth/{provider_id}/flows/{flow_id}/poll": ProviderAuthFlowResponse;
+  "POST /api/provider-auth/{provider_id}/import": ProviderAuthResponse;
+  "POST /api/provider-auth/{provider_id}/refresh": ProviderAuthResponse;
+  "GET /api/provider-auth/{provider_id}/usage-limits": ProviderUsageLimitsResponse;
+  "GET /api/runs": AllRunsResponse;
+  "GET /api/runs/{run_session_id}": RunSessionDetailResponse;
+  "GET /api/sessions": SessionsResponse;
+  "POST /api/sessions": SessionResponse;
+  "POST /api/sessions/expand-input": ExpandInputResponse;
+  "DELETE /api/sessions/{session_id}": void;
+  "GET /api/sessions/{session_id}": SessionDetailResponse;
+  "PATCH /api/sessions/{session_id}": SessionResponse;
+  "POST /api/sessions/{session_id}/images": Record<string, ImageAttachmentModel[]>;
+  "POST /api/sessions/{session_id}/interrupt": LiveSessionResponse;
+  "POST /api/sessions/{session_id}/messages": LiveSessionResponse;
+  "POST /api/sessions/{session_id}/new-session": LiveSessionResponse;
+  "PUT /api/sessions/{session_id}/profile": LiveSessionResponse;
+  "POST /api/sessions/{session_id}/question-response": LiveSessionResponse;
+  "GET /api/sessions/{session_id}/runs": SessionRunsResponse;
+  "POST /api/sessions/{session_id}/runs": LiveSessionResponse;
+  "POST /api/sessions/{session_id}/shell-command": LiveSessionResponse;
+  "GET /api/slash-commands/search": SlashCommandSearchResponse;
+  "GET /api/tasks": TasksResponse;
+  "POST /api/tasks": TaskResponse;
+  "POST /api/tasks/images": TaskImageUploadResponse;
+  "DELETE /api/tasks/{task_id}": void;
+  "PATCH /api/tasks/{task_id}": TaskResponse;
+  "POST /api/tasks/{task_id}/run": TaskResponse;
+  "GET /api/uploads/{upload_id}": unknown;
+};
+
+export type ApiJsonRequestBodies = {
+  "PUT /api/board/stages": UpdateBoardStagesRequest;
+  "PUT /api/config/active-model-profile": ActiveProfileRequest;
+  "POST /api/config/model-profiles": ModelProfileMutationRequest;
+  "PATCH /api/config/model-profiles/{profile_id}": ModelProfileUpdateRequest;
+  "POST /api/config/providers": ProviderMutationRequest;
+  "PATCH /api/config/providers/{provider_id}": ProviderUpdateRequest;
+  "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowStartRequest;
+  "POST /api/provider-auth/{provider_id}/import": ProviderAuthImportRequest;
+  "POST /api/sessions": CreateSessionRequest;
+  "POST /api/sessions/expand-input": ExpandInputRequest;
+  "PATCH /api/sessions/{session_id}": UpdateSessionRequest;
+  "POST /api/sessions/{session_id}/messages": LiveSessionInputRequest;
+  "POST /api/sessions/{session_id}/new-session": NewSessionRequest;
+  "PUT /api/sessions/{session_id}/profile": ActiveProfileRequest;
+  "POST /api/sessions/{session_id}/question-response": SubmitQuestionResponseRequest;
+  "POST /api/sessions/{session_id}/runs": LiveSessionInputRequest;
+  "POST /api/sessions/{session_id}/shell-command": LiveSessionShellCommandRequest;
+  "POST /api/tasks": CreateTaskRequest;
+  "PATCH /api/tasks/{task_id}": UpdateTaskRequest;
+};
+
+export type ApiOperation = keyof ApiOperationResponses;
+
+export type ApiResponse<T extends ApiOperation> = ApiOperationResponses[T];
+
+export type ApiJsonBody<T extends keyof ApiJsonRequestBodies> = ApiJsonRequestBodies[T];
