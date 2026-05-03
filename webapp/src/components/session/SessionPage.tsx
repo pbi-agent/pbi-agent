@@ -32,6 +32,7 @@ import type {
   SessionDetailPayload,
   SessionRecord,
   TimelineItem,
+  LiveSessionSnapshot,
   UserQuestionAnswer,
 } from "../../types";
 import {
@@ -303,11 +304,19 @@ export function SessionPage({
       ?? sessionDetailQuery.data.active_run
       ?? timelineSessionFromDetail(sessionDetailQuery.data);
     if (snapshotSession) {
-      if (sessionDetailQuery.data.timeline) {
+      const timeline = sessionDetailQuery.data.timeline;
+      if (timeline) {
+        const hasActiveTimelineSource = Boolean(
+          sessionDetailQuery.data.active_live_session
+          || sessionDetailQuery.data.active_run,
+        );
+        const displayTimeline = timelineForDisplay(sessionDetailQuery.data, timeline);
         hydrateLiveSnapshot(
           sessionKey,
           snapshotSession,
-          sessionDetailQuery.data.timeline,
+          hasActiveTimelineSource
+            ? displayTimeline
+            : { ...displayTimeline, session_ended: true },
         );
       } else {
         attachLiveSession(sessionKey, snapshotSession, {
@@ -767,6 +776,98 @@ function mapHistoryItem(item: HistoryItem): TimelineItem {
     filePaths: item.file_paths,
     imageAttachments: item.image_attachments,
     markdown: item.markdown,
+  };
+}
+
+function historyItemToSnapshotItem(item: HistoryItem): Record<string, unknown> {
+  return {
+    kind: "message",
+    itemId: item.item_id,
+    role: item.role,
+    content: item.content,
+    file_paths: item.file_paths,
+    image_attachments: item.image_attachments,
+    markdown: item.markdown,
+  };
+}
+
+function messageSignature(item: Record<string, unknown>): string | null {
+  if (item.kind !== "message") return null;
+  const role = typeof item.role === "string" ? item.role : "";
+  const content = typeof item.content === "string" ? item.content : "";
+  const filePaths = Array.isArray(item.file_paths) ? item.file_paths : [];
+  const imageAttachments = Array.isArray(item.image_attachments) ? item.image_attachments : [];
+  return JSON.stringify([role, content, filePaths, imageAttachments]);
+}
+
+function snapshotItemId(item: Record<string, unknown>): string {
+  return typeof item.itemId === "string"
+    ? item.itemId
+    : typeof item.item_id === "string"
+      ? item.item_id
+      : "";
+}
+
+function isHistoricalSnapshotMessage(item: Record<string, unknown>): boolean {
+  return item.kind === "message"
+    && (item.historical === true || snapshotItemId(item).startsWith("history-"));
+}
+
+function timelineForDisplay(
+  detail: SessionDetailPayload,
+  timeline: LiveSessionSnapshot,
+): LiveSessionSnapshot {
+  const activeTimeline = Boolean(
+    !timeline.session_ended && (detail.active_live_session || detail.active_run),
+  );
+  const activeIdleTimeline = Boolean(
+    activeTimeline
+    && timeline.input_enabled
+    && !timeline.wait_message
+    && !timeline.processing?.active
+    && !timeline.pending_user_questions
+    && !timeline.fatal_error
+  );
+  const dormantTimeline = !activeTimeline && !timeline.session_ended;
+  if ((!activeTimeline && !dormantTimeline) || detail.history_items.length === 0) {
+    return timeline;
+  }
+
+  const historyItems = detail.history_items.map(historyItemToSnapshotItem);
+  const persistedMessageCounts = new Map<string, number>();
+  for (const item of historyItems) {
+    const signature = messageSignature(item);
+    if (signature) {
+      persistedMessageCounts.set(
+        signature,
+        (persistedMessageCounts.get(signature) ?? 0) + 1,
+      );
+    }
+  }
+  const lastHistorySignature = messageSignature(historyItems[historyItems.length - 1]);
+  const consumePersistedMessage = (signature: string): boolean => {
+    const count = persistedMessageCounts.get(signature) ?? 0;
+    if (count <= 0) return false;
+    if (count === 1) {
+      persistedMessageCounts.delete(signature);
+    } else {
+      persistedMessageCounts.set(signature, count - 1);
+    }
+    return true;
+  };
+  const liveItems = timeline.items.filter((item) => {
+    if (isHistoricalSnapshotMessage(item)) return false;
+    const signature = messageSignature(item);
+    if (!signature) return true;
+    if (dormantTimeline || activeIdleTimeline) {
+      return !consumePersistedMessage(signature);
+    }
+    return item.role !== "user" || signature !== lastHistorySignature;
+  });
+
+  return {
+    ...timeline,
+    items: [...historyItems, ...liveItems],
   };
 }
 

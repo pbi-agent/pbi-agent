@@ -26,6 +26,31 @@ Each task contains:
 
 You can add, edit, delete, drag, and run tasks from the board.
 
+## Creating tasks from the CLI
+
+Use `pbi-agent kanban create` when you want to add a task from automation, scripts, or a terminal workflow:
+
+```bash
+pbi-agent kanban create \
+  --title "Refactor API endpoint" \
+  --desc "Improve and optimize the main API endpoint for faster response time." \
+  --lane "In Progress"
+```
+
+The command creates a card on the current workspace board and exits without starting an agent run. Omit `--lane` to use the first board stage, normally Backlog. When provided, `--lane` (also available as `--stage` or `--state`) must match an existing stage ID, stage name, or slugified stage name. Configure custom stages in the web UI before targeting them from scripts.
+
+For automation, add `--json` to print the created task ID, stage, timestamps, and related fields as JSON.
+
+Use `pbi-agent kanban list` to inspect board tasks without opening the web UI:
+
+```bash
+pbi-agent kanban list
+pbi-agent kanban list --stage "In Progress"
+pbi-agent kanban list --json
+```
+
+The list command defaults to all stages. Its `--stage` filter (also available as `--lane` or `--state`) must match an existing stage ID, stage name, or slugified stage name. Human output includes each task's ID, title, full prompt, stage, position, project directory, associated session/profile IDs, run status, timestamps, last result summary, and image attachment count. JSON output returns an array with the same task fields and image attachment metadata.
+
 ## Board stages
 
 Use **Edit Stages** to configure the workflow. The board always has two fixed stages:

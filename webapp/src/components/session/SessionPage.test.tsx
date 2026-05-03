@@ -459,6 +459,407 @@ describe("SessionPage", () => {
     expect(screen.getByText("Connection ready")).toBeInTheDocument();
   });
 
+  it("keeps previous saved messages visible while hydrating an active run timeline", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: "live-processing" }),
+      history_items: [
+        {
+          item_id: "history-1",
+          role: "user",
+          content: "/plan",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-04-16T12:00:00Z",
+        },
+        {
+          item_id: "history-2",
+          role: "assistant",
+          content: "Previous plan",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-04-16T12:01:00Z",
+        },
+        {
+          item_id: "history-3",
+          role: "user",
+          content: "/review",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-04-16T12:02:00Z",
+        },
+      ],
+      active_live_session: makeLiveSession({
+        live_session_id: "live-processing",
+        session_id: "session-1",
+      }),
+      timeline: {
+        live_session_id: "live-processing",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "message-1",
+            role: "user",
+            content: "/review",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Thinking",
+            content: "reasoning",
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 12,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 4")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "history-2",
+      "history-3",
+      "thinking-1",
+    ]);
+  });
+
+  it("dedupes persisted messages from an idle active live timeline", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: "idle-live" }),
+      history_items: [
+        {
+          item_id: "history-1",
+          role: "user",
+          content: "hi",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-03T20:17:33Z",
+        },
+        {
+          item_id: "history-2",
+          role: "assistant",
+          content: "Hi! What would you like to work on in this repo?",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-03T20:17:38Z",
+        },
+      ],
+      active_live_session: makeLiveSession({
+        live_session_id: "idle-live",
+        session_id: "session-1",
+      }),
+      active_run: makeLiveSession({
+        live_session_id: "idle-live",
+        session_id: "session-1",
+      }),
+      timeline: {
+        live_session_id: "idle-live",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "message-user",
+            role: "user",
+            content: "hi",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-group-1",
+            label: "Tool calls (2)",
+            status: "completed",
+            items: [],
+          },
+          {
+            kind: "message",
+            itemId: "message-assistant",
+            role: "assistant",
+            content: "Hi! What would you like to work on in this repo?",
+            markdown: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 31,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 3")).toBeInTheDocument();
+    expect(screen.getByText("Composer live session idle-live")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "history-2",
+      "tool-group-1",
+    ]);
+  });
+
+  it("keeps Kanban-started continuation history in chronological order", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: "kanban-continuation" }),
+      history_items: [
+        {
+          item_id: "history-1",
+          role: "user",
+          content: "/plan\n# Task\ntest task",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-03T01:55:01Z",
+        },
+        {
+          item_id: "history-2",
+          role: "assistant",
+          content: "this is a test",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-03T01:55:11Z",
+        },
+        {
+          item_id: "history-3",
+          role: "user",
+          content: "/execute",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-03T01:55:12Z",
+        },
+        {
+          item_id: "history-4",
+          role: "assistant",
+          content: "this is a test",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-03T01:55:16Z",
+        },
+        {
+          item_id: "history-5",
+          role: "user",
+          content: "say this is a test again",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-03T19:30:05Z",
+        },
+      ],
+      active_live_session: makeLiveSession({
+        live_session_id: "kanban-continuation",
+        session_id: "session-1",
+      }),
+      timeline: {
+        live_session_id: "kanban-continuation",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "message-current-user",
+            role: "user",
+            content: "say this is a test again",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "message-plan",
+            role: "user",
+            content: "/plan\n# Task\ntest task",
+            markdown: false,
+            historical: true,
+          },
+          {
+            kind: "message",
+            itemId: "message-plan-answer",
+            role: "assistant",
+            content: "this is a test",
+            markdown: true,
+            historical: true,
+          },
+          {
+            kind: "message",
+            itemId: "message-execute",
+            role: "user",
+            content: "/execute",
+            markdown: false,
+            historical: true,
+          },
+          {
+            kind: "message",
+            itemId: "message-execute-answer",
+            role: "assistant",
+            content: "this is a test",
+            markdown: true,
+            historical: true,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-current",
+            title: "Thinking",
+            content: "working",
+          },
+          {
+            kind: "message",
+            itemId: "message-current-assistant",
+            role: "assistant",
+            content: "this is a test",
+            markdown: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 8,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 7")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "history-2",
+      "history-3",
+      "history-4",
+      "history-5",
+      "thinking-current",
+      "message-current-assistant",
+    ]);
+  });
+
+  it("hydrates dormant web-session projections over saved history without reconnecting", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-1",
+          role: "user",
+          content: "hi",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-03T20:10:37Z",
+        },
+        {
+          item_id: "history-2",
+          role: "assistant",
+          content: "Hi! What would you like to work on in the workspace?",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-03T20:10:41Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "dormant-web-session",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "message-user",
+            role: "user",
+            content: "hi",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "notice-1",
+            role: "notice",
+            content: "Retrying... (1/3)",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Working",
+            content: "reasoning",
+          },
+          {
+            kind: "message",
+            itemId: "message-assistant",
+            role: "assistant",
+            content: "Hi! What would you like to work on in the workspace?",
+            markdown: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 21,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 4")).toBeInTheDocument();
+    expect(screen.getByText("Composer live session")).toBeInTheDocument();
+    expect(screen.getByText("Composer can create true")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.liveSessionId).toBeNull();
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "history-2",
+      "notice-1",
+      "thinking-1",
+    ]);
+  });
+
   it("hydrates completed saved-session working trace from a persisted timeline", async () => {
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord({ status: "ended", active_run_id: null }),
