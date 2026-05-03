@@ -110,17 +110,47 @@ class BootstrapResponse(BaseModel):
     board_stages: list[BoardStageModel]
 
 
+ProcessingPhase = Literal[
+    "starting",
+    "model_wait",
+    "tool_execution",
+    "finalizing",
+    "interrupting",
+    "retry_wait",
+]
+
+
+class ProcessingStateModel(BaseModel):
+    active: bool
+    phase: ProcessingPhase | None = None
+    message: str | None = None
+    active_tool_count: int | None = None
+
+
+class PendingUserQuestionModel(BaseModel):
+    question_id: str
+    question: str
+    suggestions: list[str]
+    recommended_suggestion_index: Literal[0] = 0
+
+
+class PendingUserQuestionsModel(BaseModel):
+    prompt_id: str
+    questions: list[PendingUserQuestionModel]
+
+
 class LiveSessionSnapshotModel(BaseModel):
     live_session_id: str
     session_id: str | None
     runtime: RuntimeSummaryModel | None
     input_enabled: bool
     wait_message: str | None
+    processing: ProcessingStateModel | None
     session_usage: dict[str, Any] | None
     turn_usage: dict[str, Any] | None
     session_ended: bool
     fatal_error: str | None
-    pending_user_questions: dict[str, Any] | None = None
+    pending_user_questions: PendingUserQuestionsModel | None
     items: list[dict[str, Any]]
     sub_agents: dict[str, dict[str, str]]
     last_event_seq: int

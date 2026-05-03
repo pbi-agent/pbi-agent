@@ -2439,6 +2439,8 @@ def test_get_session_detail_does_not_attach_ended_web_run(
     assert payload["active_live_session"] is None
     assert payload["active_run"] is None
     assert payload["timeline"]["live_session_id"] == "ended-web-session"
+    assert payload["timeline"]["processing"] is None
+    assert payload["timeline"]["pending_user_questions"] is None
     assert payload["timeline"]["session_ended"] is True
     assert payload["timeline"]["items"][0]["content"] == "Done"
 

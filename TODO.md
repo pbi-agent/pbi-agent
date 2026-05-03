@@ -1,5 +1,6 @@
-[X] Map current session/live/run status schema usage
-[X] Split API status aliases for session lifecycle and run records
-[X] Update frontend generated/manual types and status helpers
-[X] Validate status-related backend/frontend tests
+[X] Map generated/manual frontend API type overlap
+[X] Add typed snapshot fields to API schema and generated types
+[X] Derive safe frontend boundary types from generated models
+[X] Regenerate/check API contract types if needed
+[X] Validate API type drift changes
 [X] Update memory and commit phase
