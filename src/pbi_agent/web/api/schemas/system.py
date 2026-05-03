@@ -8,8 +8,19 @@ from pbi_agent.web.api.deps import NonEmptyString
 from pbi_agent.web.api.schemas.common import ImageAttachmentModel, RuntimeSummaryModel
 from pbi_agent.web.api.schemas.tasks import BoardStageModel, TaskRecordModel
 
-SessionStatus = Literal[
+SessionLifecycleStatus = Literal[
     "idle", "starting", "running", "waiting_for_input", "ended", "failed", "stale"
+]
+RunSessionStatus = Literal[
+    "started",
+    "completed",
+    "interrupted",
+    "failed",
+    "starting",
+    "running",
+    "waiting_for_input",
+    "ended",
+    "stale",
 ]
 
 
@@ -58,7 +69,7 @@ class SessionRecordModel(BaseModel):
     cost_usd: float
     created_at: str
     updated_at: str
-    status: SessionStatus = "idle"
+    status: SessionLifecycleStatus = "idle"
     active_run_id: str | None = None
     active_live_session_id: str | None = None
     task_id: str | None = None
@@ -78,7 +89,7 @@ class LiveSessionModel(BaseModel):
     reasoning_effort: str
     compact_threshold: int
     created_at: str
-    status: SessionStatus
+    status: SessionLifecycleStatus
     exit_code: int | None
     fatal_error: str | None
     ended_at: str | None
@@ -186,7 +197,7 @@ class HistoryItemModel(BaseModel):
 
 class SessionDetailResponse(BaseModel):
     session: SessionRecordModel
-    status: SessionStatus = "idle"
+    status: SessionLifecycleStatus = "idle"
     history_items: list[HistoryItemModel]
     timeline: LiveSessionSnapshotModel | None = None
     live_session: LiveSessionModel | None = None
@@ -204,7 +215,7 @@ class RunSessionModel(BaseModel):
     provider_id: str | None
     profile_id: str | None
     model: str | None
-    status: SessionStatus
+    status: RunSessionStatus
     started_at: str
     ended_at: str | None
     total_duration_ms: int | None

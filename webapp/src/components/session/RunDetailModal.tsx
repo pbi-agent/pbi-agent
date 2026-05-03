@@ -93,14 +93,14 @@ export function RunDetailModal({
 }
 
 function isRunActive(status: string): boolean {
-  return !["ended", "failed", "stale"].includes(status);
+  return !["completed", "interrupted", "ended", "failed", "stale"].includes(status);
 }
 
 function RunSummary({ run }: { run: RunSession }) {
   const statusModifier =
-    run.status === "ended" ? "completed"
+    isRunComplete(run.status) ? "completed"
     : run.status === "failed" ? "failed"
-    : run.status === "running" ? "running"
+    : isRunActive(run.status) ? "running"
     : "idle";
 
   const durationLabel = run.total_duration_ms != null
@@ -154,6 +154,10 @@ function RunSummary({ run }: { run: RunSession }) {
       </div>
     </div>
   );
+}
+
+function isRunComplete(status: string): boolean {
+  return ["completed", "interrupted", "ended"].includes(status);
 }
 
 function KpiCounter({ icon: Icon, label, value, variant }: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; label: string; value: number; variant?: "danger" }) {

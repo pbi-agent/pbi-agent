@@ -1,5 +1,5 @@
-[X] Map remaining WebSocket event route and frontend/test usage
-[X] Remove legacy WebSocket event endpoints/helpers
-[X] Update tests to use SSE or EventStream directly
-[X] Validate backend/frontend after removal
+[X] Map current session/live/run status schema usage
+[X] Split API status aliases for session lifecycle and run records
+[X] Update frontend generated/manual types and status helpers
+[X] Validate status-related backend/frontend tests
 [X] Update memory and commit phase

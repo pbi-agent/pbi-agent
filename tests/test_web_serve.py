@@ -2185,7 +2185,7 @@ def test_web_session_worker_records_turn_run_separately_from_live_projection(
     assert live_projection.agent_type == "web_session"
     assert [run["agent_type"] for run in runs] == ["session_turn"]
     assert runs[0]["run_session_id"] != live_session_id
-    assert runs[0]["status"] == "ended"
+    assert runs[0]["status"] == "completed"
     assert all_runs["total_count"] == 1
     assert all_runs["runs"][0]["run_session_id"] == runs[0]["run_session_id"]
     assert stats["overview"]["total_runs"] == 1
@@ -2529,7 +2529,7 @@ def test_list_session_runs_returns_observability_runs(tmp_path, monkeypatch) -> 
     ]
     assert payload["runs"][0]["metadata"] == {"origin": "test"}
     assert payload["runs"][1]["parent_run_session_id"] == parent_run_id
-    assert payload["runs"][1]["status"] == "ended"
+    assert payload["runs"][1]["status"] == "completed"
     assert payload["runs"][1]["total_duration_ms"] == 42
     assert payload["runs"][1]["total_tool_calls"] == 1
     assert payload["runs"][1]["total_api_calls"] == 2
@@ -2611,7 +2611,7 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
     assert response.status_code == 200
     payload = response.json()
     assert payload["run"]["run_session_id"] == run_session_id
-    assert payload["run"]["status"] == "ended"
+    assert payload["run"]["status"] == "completed"
     assert [event["event_type"] for event in payload["events"]] == [
         "run_start",
         "model_call",
@@ -4353,11 +4353,11 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
         assert len(payload["runs"]) == 2
         assert payload["runs"][0]["session_title"] == "Paginated test"
 
-        response = client.get("/api/runs?status=ended")
+        response = client.get("/api/runs?status=completed")
         assert response.status_code == 200
         payload = response.json()
         assert payload["total_count"] == 3
-        assert all(run["status"] == "ended" for run in payload["runs"])
+        assert all(run["status"] == "completed" for run in payload["runs"])
 
         response = client.get("/api/runs?status=failed")
         assert response.status_code == 200

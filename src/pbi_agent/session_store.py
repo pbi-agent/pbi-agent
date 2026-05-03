@@ -434,11 +434,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _storage_statuses_for_api_status(status: str) -> tuple[str, ...]:
-    if status == "ended":
-        return ("ended", "completed", "interrupted")
-    if status == "running":
-        return ("running", "started")
+def _storage_statuses_for_run_status(status: str) -> tuple[str, ...]:
     return (status,)
 
 
@@ -1467,7 +1463,7 @@ class SessionStore:
             where_clauses.append("s.directory = ?")
             params.append(normalized_dir)
         if status is not None:
-            statuses = _storage_statuses_for_api_status(status)
+            statuses = _storage_statuses_for_run_status(status)
             placeholders = ", ".join("?" for _ in statuses)
             where_clauses.append(f"rs.status IN ({placeholders})")
             params.extend(statuses)

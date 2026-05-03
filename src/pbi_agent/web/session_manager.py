@@ -138,14 +138,8 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _normalize_run_status(
-    status: str,
-    *,
-    fatal_error: str | None = None,
-    ended_at: str | None = None,
-    exit_code: int | None = None,
-) -> str:
-    if status in {
+_SESSION_LIFECYCLE_STATUSES = frozenset(
+    {
         "idle",
         "starting",
         "running",
@@ -153,7 +147,31 @@ def _normalize_run_status(
         "ended",
         "failed",
         "stale",
-    }:
+    }
+)
+_RUN_RECORD_STATUSES = frozenset(
+    {
+        "started",
+        "completed",
+        "interrupted",
+        "failed",
+        "starting",
+        "running",
+        "waiting_for_input",
+        "ended",
+        "stale",
+    }
+)
+
+
+def _normalize_session_status(
+    status: str,
+    *,
+    fatal_error: str | None = None,
+    ended_at: str | None = None,
+    exit_code: int | None = None,
+) -> str:
+    if status in _SESSION_LIFECYCLE_STATUSES:
         return status
     if status in {"completed", "interrupted"}:
         return "ended"
@@ -167,12 +185,23 @@ def _normalize_run_status(
 
 
 def _session_status_from_run(record: RunSessionRecord) -> str:
-    return _normalize_run_status(
+    return _normalize_session_status(
         record.status,
         fatal_error=record.fatal_error,
         ended_at=record.ended_at,
         exit_code=record.exit_code,
     )
+
+
+def _run_status_from_run(record: RunSessionRecord) -> str:
+    status = record.status
+    if status in _RUN_RECORD_STATUSES:
+        return status
+    if record.fatal_error:
+        return "failed"
+    if record.ended_at is not None or record.exit_code is not None:
+        return "completed"
+    return "started"
 
 
 def _serialize_session(
@@ -298,7 +327,7 @@ def _serialize_run_session(record: RunSessionRecord) -> dict[str, Any]:
         "provider_id": record.provider_id,
         "profile_id": record.profile_id,
         "model": record.model,
-        "status": _session_status_from_run(record),
+        "status": _run_status_from_run(record),
         "started_at": record.started_at,
         "ended_at": record.ended_at,
         "total_duration_ms": record.total_duration_ms,
@@ -1007,24 +1036,10 @@ class WebSessionManager:
             # Deserialise metadata_json → metadata
             raw_meta = run_dict.pop("metadata_json", "{}")
             run_dict["metadata"] = _deserialize_json_field(raw_meta)
-            run_dict["status"] = _normalize_run_status(
-                str(run_dict.get("status") or ""),
-                fatal_error=(
-                    str(run_dict["fatal_error"])
-                    if run_dict.get("fatal_error") is not None
-                    else None
-                ),
-                ended_at=(
-                    str(run_dict["ended_at"])
-                    if run_dict.get("ended_at") is not None
-                    else None
-                ),
-                exit_code=(
-                    int(run_dict["exit_code"])
-                    if run_dict.get("exit_code") is not None
-                    else None
-                ),
-            )
+            if run_dict.get("status") not in _RUN_RECORD_STATUSES:
+                run_dict["status"] = (
+                    "failed" if run_dict.get("fatal_error") else "started"
+                )
             # Drop the autoincrement id; it's an internal detail.
             run_dict.pop("id", None)
             run_dict["session_title"] = session_title

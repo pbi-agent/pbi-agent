@@ -1,10 +1,23 @@
-export type SessionStatus =
+export type SessionLifecycleStatus =
   | "idle"
   | "starting"
   | "running"
   | "waiting_for_input"
   | "ended"
   | "failed"
+  | "stale";
+
+export type SessionStatus = SessionLifecycleStatus;
+
+export type RunSessionStatus =
+  | "started"
+  | "completed"
+  | "interrupted"
+  | "failed"
+  | "starting"
+  | "running"
+  | "waiting_for_input"
+  | "ended"
   | "stale";
 
 export type SessionRecord = {
@@ -557,7 +570,7 @@ export type RunSession = {
   provider_id: string | null;
   profile_id: string | null;
   model: string | null;
-  status: SessionStatus;
+  status: RunSessionStatus;
   started_at: string;
   ended_at: string | null;
   total_duration_ms: number | null;

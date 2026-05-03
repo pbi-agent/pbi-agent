@@ -26,7 +26,7 @@ function makeRun(overrides: Partial<RunSession>): RunSession {
     provider_id: "openai-main",
     profile_id: null,
     model: "gpt-5.4",
-    status: "ended",
+    status: "completed",
     started_at: "2026-04-27T10:00:00Z",
     ended_at: "2026-04-27T10:00:01Z",
     total_duration_ms: 1000,
@@ -85,12 +85,12 @@ describe("RunHistory", () => {
       .mockResolvedValueOnce([
         makeRun({
           run_session_id: "old-run",
-          status: "ended",
+          status: "completed",
           started_at: "2026-04-27T10:00:00Z",
         }),
         makeRun({
           run_session_id: "new-run",
-          status: "ended",
+          status: "completed",
           started_at: "2026-04-27T10:05:00Z",
           model: "gpt-5.5",
         }),
@@ -104,16 +104,16 @@ describe("RunHistory", () => {
     await waitFor(() => expect(mockFetchSessionRuns).toHaveBeenCalledTimes(2));
     await screen.findByText("gpt-5.5");
 
-    const statuses = screen.getAllByText("ended");
+    const statuses = screen.getAllByText("completed");
     expect(statuses[0].closest("button")).toHaveTextContent("gpt-5.5");
   });
 
-  it("shows ended runs as terminal completed-style runs", async () => {
+  it("shows completed runs as terminal completed-style runs", async () => {
     const user = userEvent.setup();
     mockFetchSessionRuns.mockResolvedValue([
       makeRun({
         run_session_id: "web-run",
-        status: "ended",
+        status: "completed",
         started_at: "2026-04-27T10:00:00Z",
       }),
     ]);
@@ -122,7 +122,7 @@ describe("RunHistory", () => {
 
     await user.click(await screen.findByRole("button", { name: /toggle run history/i }));
 
-    const status = await screen.findByText("ended");
+    const status = await screen.findByText("completed");
     expect(status).toHaveClass("status-pill--completed");
   });
 });
