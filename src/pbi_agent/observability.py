@@ -74,6 +74,7 @@ class RunTracer:
     _started_at_monotonic: float
     _lock: threading.Lock
     _run_metadata: dict[str, Any]
+    _owns_run_session: bool
     _next_step_index: int = 0
     _total_tool_calls: int = 0
     _total_api_calls: int = 0
@@ -86,6 +87,7 @@ class RunTracer:
         *,
         store: SessionStore | None,
         session_id: str | None,
+        run_session_id: str | None = None,
         parent_run_session_id: str | None = None,
         agent_name: str | None,
         agent_type: str | None,
@@ -97,9 +99,10 @@ class RunTracer:
     ) -> RunTracer:
         lock = threading.Lock()
         started_at_monotonic = time.perf_counter()
-        run_session_id: str | None = None
         run_metadata = _redacted_metadata(metadata)
-        if store is not None:
+        next_step_index = 0
+        owns_run_session = run_session_id is None
+        if store is not None and run_session_id is None:
             try:
                 run_session_id = store.create_run_session(
                     session_id=session_id,
@@ -114,6 +117,16 @@ class RunTracer:
                 )
             except Exception:
                 _log.warning("Failed to create run session", exc_info=True)
+        elif store is not None and run_session_id is not None:
+            try:
+                next_step_index = store.get_next_observability_step_index(
+                    run_session_id
+                )
+            except Exception:
+                _log.warning(
+                    "Failed to inspect existing run observability events",
+                    exc_info=True,
+                )
         tracer = cls(
             store=store,
             run_session_id=run_session_id,
@@ -128,6 +141,8 @@ class RunTracer:
             _started_at_monotonic=started_at_monotonic,
             _lock=lock,
             _run_metadata=run_metadata,
+            _owns_run_session=owns_run_session,
+            _next_step_index=next_step_index,
         )
         tracer.log_event(
             "run_start",
@@ -150,6 +165,7 @@ class RunTracer:
     ) -> RunTracer:
         return RunTracer.start(
             store=self.store,
+            run_session_id=None,
             session_id=self.session_id,
             parent_run_session_id=self.run_session_id,
             agent_name=agent_name,
@@ -342,8 +358,10 @@ class RunTracer:
         try:
             self.store.update_run_session(
                 self.run_session_id,
-                status=status,
-                ended_at=datetime.now(timezone.utc).isoformat(),
+                status=status if self._owns_run_session else None,
+                ended_at=datetime.now(timezone.utc).isoformat()
+                if self._owns_run_session
+                else None,
                 total_duration_ms=duration_ms,
                 input_tokens=snap.input_tokens if snap is not None else None,
                 cached_input_tokens=(

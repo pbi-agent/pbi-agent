@@ -43,6 +43,7 @@ interface ComposerProps {
   inputEnabled: boolean;
   sessionEnded: boolean;
   liveSessionId: string | null;
+  canCreateSession?: boolean;
   supportsImageInputs: boolean;
   isSubmitting: boolean;
   onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
@@ -171,6 +172,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   inputEnabled,
   sessionEnded,
   liveSessionId,
+  canCreateSession = false,
   supportsImageInputs,
   isSubmitting,
   onSubmit,
@@ -211,7 +213,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }, []);
 
   const canSend =
-    Boolean(liveSessionId) && inputEnabled && !sessionEnded && !isSubmitting;
+    (Boolean(liveSessionId) || canCreateSession) && inputEnabled && !sessionEnded && !isSubmitting;
   const shellInput = input.trimStart();
   const isShellMode = shellInput.startsWith("!");
   const shellCommandPreview = shellInput.slice(1).trim();

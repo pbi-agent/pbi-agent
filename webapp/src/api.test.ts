@@ -11,7 +11,6 @@ import {
   setActiveModelProfile,
   startProviderAuthFlow,
   updateSession,
-  uploadSessionImages,
   uploadTaskImages,
   websocketUrl,
 } from "./api";
@@ -35,28 +34,6 @@ describe("api helpers", () => {
       "/api/sessions",
       expect.anything(),
     );
-  });
-
-  it("omits the default content type for form uploads", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ uploads: [] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await uploadSessionImages("live-1", [
-      new File(["binary"], "diagram.png", { type: "image/png" }),
-    ]);
-
-    const uploadCall = fetchMock.mock.calls[0];
-    if (!uploadCall) {
-      throw new Error("Expected upload call");
-    }
-    const init = uploadCall[1] as RequestInit;
-    expect(init.body).toBeInstanceOf(FormData);
-    expect(new Headers(init.headers).has("Content-Type")).toBe(false);
   });
 
   it("uploads task images as form data", async () => {

@@ -8,7 +8,9 @@ from pbi_agent.web.api.deps import NonEmptyString
 from pbi_agent.web.api.schemas.common import ImageAttachmentModel, RuntimeSummaryModel
 from pbi_agent.web.api.schemas.tasks import BoardStageModel, TaskRecordModel
 
-SessionStatus = Literal["starting", "running", "ended"]
+SessionStatus = Literal[
+    "idle", "starting", "running", "waiting_for_input", "ended", "failed", "stale"
+]
 
 
 class FileMentionItemModel(BaseModel):
@@ -30,6 +32,17 @@ class SlashCommandSearchResponse(BaseModel):
     items: list[SlashCommandItemModel]
 
 
+class ExpandInputRequest(BaseModel):
+    text: str = ""
+
+
+class ExpandInputResponse(BaseModel):
+    text: str
+    file_paths: list[str] = Field(default_factory=list)
+    image_paths: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class SessionRecordModel(BaseModel):
     session_id: str
     directory: str
@@ -45,6 +58,10 @@ class SessionRecordModel(BaseModel):
     cost_usd: float
     created_at: str
     updated_at: str
+    status: SessionStatus = "idle"
+    active_run_id: str | None = None
+    active_live_session_id: str | None = None
+    task_id: str | None = None
 
 
 class LiveSessionModel(BaseModel):
@@ -98,21 +115,50 @@ class LiveSessionSnapshotModel(BaseModel):
     last_event_seq: int
 
 
-class LiveSessionsResponse(BaseModel):
-    live_sessions: list[LiveSessionModel]
-
-
-class LiveSessionDetailResponse(BaseModel):
-    live_session: LiveSessionModel
-    snapshot: LiveSessionSnapshotModel
-
-
 class SessionsResponse(BaseModel):
     sessions: list[SessionRecordModel]
 
 
+class CreateSessionRequest(BaseModel):
+    title: str = ""
+    profile_id: str | None = None
+
+
 class UpdateSessionRequest(BaseModel):
     title: NonEmptyString
+
+
+class QuestionAnswerRequest(BaseModel):
+    question_id: str
+    answer: str
+    selected_suggestion_index: int | None = None
+    custom: bool = False
+
+
+class SubmitQuestionResponseRequest(BaseModel):
+    prompt_id: str
+    answers: list[QuestionAnswerRequest] = Field(default_factory=list)
+
+
+class LiveSessionInputRequest(BaseModel):
+    text: str = ""
+    file_paths: list[str] = Field(default_factory=list)
+    image_paths: list[str] = Field(default_factory=list)
+    image_upload_ids: list[str] = Field(default_factory=list)
+    profile_id: str | None = None
+    interactive_mode: bool = False
+
+
+class LiveSessionShellCommandRequest(BaseModel):
+    command: str = ""
+
+
+class NewSessionRequest(BaseModel):
+    profile_id: str | None = None
+
+
+class LiveSessionResponse(BaseModel):
+    session: LiveSessionModel
 
 
 class SessionResponse(BaseModel):
@@ -132,9 +178,12 @@ class HistoryItemModel(BaseModel):
 
 class SessionDetailResponse(BaseModel):
     session: SessionRecordModel
+    status: SessionStatus = "idle"
     history_items: list[HistoryItemModel]
-    live_session: LiveSessionModel | None
-    active_live_session: LiveSessionModel | None
+    timeline: LiveSessionSnapshotModel | None = None
+    live_session: LiveSessionModel | None = None
+    active_live_session: LiveSessionModel | None = None
+    active_run: LiveSessionModel | None = None
 
 
 class RunSessionModel(BaseModel):
@@ -147,7 +196,7 @@ class RunSessionModel(BaseModel):
     provider_id: str | None
     profile_id: str | None
     model: str | None
-    status: str
+    status: SessionStatus
     started_at: str
     ended_at: str | None
     total_duration_ms: int | None
@@ -163,6 +212,13 @@ class RunSessionModel(BaseModel):
     total_tool_calls: int
     total_api_calls: int
     error_count: int
+    kind: str = "cli"
+    task_id: str | None = None
+    project_dir: str | None = None
+    last_event_seq: int = 0
+    snapshot: Any | None = None
+    exit_code: int | None = None
+    fatal_error: str | None = None
     metadata: Any | None
 
 

@@ -426,7 +426,7 @@ def test_openai_build_request_body_replays_restored_user_images_without_previous
                         name=stored.name,
                         mime_type=stored.mime_type,
                         byte_count=stored.byte_count,
-                        preview_url=f"/api/live-sessions/uploads/{stored.upload_id}",
+                        preview_url=f"/api/uploads/{stored.upload_id}",
                     )
                 ],
             ),

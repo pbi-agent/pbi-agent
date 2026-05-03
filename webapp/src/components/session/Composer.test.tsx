@@ -116,6 +116,17 @@ describe("Composer", () => {
     }
   });
 
+  it("enables message and image controls for lazy-created sessions", () => {
+    renderComposer({
+      liveSessionId: null,
+      canCreateSession: true,
+    });
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Actions" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+  });
+
   it("does not open the image picker when image inputs are unsupported", async () => {
     const user = userEvent.setup();
     const showPicker = vi.fn();

@@ -238,31 +238,6 @@ describe("SessionEndedNotificationEffects", () => {
     expect(NotificationMock.instances[0].close).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to the live-session route when the ended session is unbound", async () => {
-    vi.spyOn(window, "focus").mockImplementation(() => {});
-    const { rerender } = renderEffects([
-      makeLiveSession({ status: "running", session_id: null }),
-    ]);
-
-    rerender(effectsUi([
-      makeLiveSession({
-        status: "ended",
-        session_id: null,
-        ended_at: "2026-05-02T12:01:00.000Z",
-        last_event_seq: 2,
-      }),
-    ]));
-
-    await waitFor(() => expect(NotificationMock.instances).toHaveLength(1));
-    act(() => {
-      NotificationMock.instances[0].onclick?.(new Event("click"));
-    });
-
-    await waitFor(() =>
-      expect(screen.getByTestId("location-path")).toHaveTextContent("/sessions/live/live-1"),
-    );
-  });
-
   it("plays sound when an observed running session transitions to ended while hidden", async () => {
     const start = vi.fn();
     const stop = vi.fn();

@@ -7,7 +7,7 @@ export function StatusPill({
 }) {
   const modifier =
     status === "running" ? "running"
-    : status === "completed" ? "completed"
+    : status === "completed" || status === "ended" ? "completed"
     : status === "failed" ? "failed"
     : "idle";
 

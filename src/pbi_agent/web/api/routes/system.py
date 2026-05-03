@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, File, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 
 from pbi_agent.web.api.deps import (
     LimitQuery,
@@ -11,23 +12,31 @@ from pbi_agent.web.api.deps import (
     RunSessionIdPath,
     SessionIdPath,
     SessionManagerDep,
+    UploadIdPath,
     model_from_payload,
 )
 from pbi_agent.web.api.errors import bad_request, not_found
+from pbi_agent.web.api.schemas.common import ImageAttachmentModel
+from pbi_agent.web.api.schemas.config import ActiveProfileRequest
 from pbi_agent.web.api.schemas.system import (
     AllRunsResponse,
     AllRunsRunModel,
     BootstrapResponse,
+    CreateSessionRequest,
     DailyBucketModel,
     DashboardOverviewModel,
     DashboardStatsResponse,
+    ExpandInputRequest,
+    ExpandInputResponse,
     FileMentionItemModel,
     FileMentionSearchResponse,
     HistoryItemModel,
-    LiveSessionDetailResponse,
+    LiveSessionInputRequest,
     LiveSessionModel,
+    LiveSessionResponse,
+    LiveSessionShellCommandRequest,
     LiveSessionSnapshotModel,
-    LiveSessionsResponse,
+    NewSessionRequest,
     ObservabilityEventModel,
     ProviderBreakdownModel,
     RunSessionDetailResponse,
@@ -38,9 +47,12 @@ from pbi_agent.web.api.schemas.system import (
     SessionRunsResponse,
     SessionsResponse,
     SlashCommandItemModel,
+    SubmitQuestionResponseRequest,
     SlashCommandSearchResponse,
     UpdateSessionRequest,
 )
+from pbi_agent.web.input_mentions import expand_input_mentions
+from pbi_agent.web.uploads import load_uploaded_image_record, uploaded_image_path
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -63,6 +75,21 @@ def list_sessions(
     )
 
 
+@router.post("/sessions", response_model=SessionResponse)
+def create_session(
+    request: CreateSessionRequest,
+    manager: SessionManagerDep,
+) -> SessionResponse:
+    try:
+        session = manager.create_session_record(
+            title=request.title,
+            profile_id=request.profile_id,
+        )
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return SessionResponse(session=model_from_payload(SessionRecordModel, session))
+
+
 @router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
 def get_session_detail(
     session_id: SessionIdPath,
@@ -72,20 +99,33 @@ def get_session_detail(
         payload = manager.get_session_detail(session_id)
     except KeyError as exc:
         raise not_found("Session not found.") from exc
+    live_session = (
+        model_from_payload(LiveSessionModel, payload["live_session"])
+        if payload["live_session"] is not None
+        else None
+    )
+    active_live_session = (
+        model_from_payload(LiveSessionModel, payload["active_live_session"])
+        if payload["active_live_session"] is not None
+        else None
+    )
     return SessionDetailResponse(
         session=model_from_payload(SessionRecordModel, payload["session"]),
+        status=payload["status"],
         history_items=[
             model_from_payload(HistoryItemModel, item)
             for item in payload["history_items"]
         ],
-        live_session=(
-            model_from_payload(LiveSessionModel, payload["live_session"])
-            if payload["live_session"] is not None
+        timeline=(
+            model_from_payload(LiveSessionSnapshotModel, payload["timeline"])
+            if payload["timeline"] is not None
             else None
         ),
-        active_live_session=(
-            model_from_payload(LiveSessionModel, payload["active_live_session"])
-            if payload["active_live_session"] is not None
+        live_session=live_session,
+        active_live_session=active_live_session,
+        active_run=(
+            model_from_payload(LiveSessionModel, payload["active_run"])
+            if payload["active_run"] is not None
             else None
         ),
     )
@@ -102,6 +142,166 @@ def update_session(
     except KeyError as exc:
         raise not_found("Session not found.") from exc
     return SessionResponse(session=model_from_payload(SessionRecordModel, session))
+
+
+@router.post("/sessions/{session_id}/messages", response_model=LiveSessionResponse)
+def submit_session_message(
+    session_id: SessionIdPath,
+    request: LiveSessionInputRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.submit_saved_session_input(
+            session_id,
+            text=request.text,
+            file_paths=request.file_paths,
+            image_paths=request.image_paths,
+            image_upload_ids=request.image_upload_ids,
+            profile_id=request.profile_id,
+            interactive_mode=request.interactive_mode,
+        )
+    except KeyError as exc:
+        raise not_found("Session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.post("/sessions/{session_id}/runs", response_model=LiveSessionResponse)
+def start_session_run(
+    session_id: SessionIdPath,
+    request: LiveSessionInputRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.submit_saved_session_input(
+            session_id,
+            text=request.text,
+            file_paths=request.file_paths,
+            image_paths=request.image_paths,
+            image_upload_ids=request.image_upload_ids,
+            profile_id=request.profile_id,
+            interactive_mode=request.interactive_mode,
+        )
+    except KeyError as exc:
+        raise not_found("Session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.post(
+    "/sessions/{session_id}/question-response", response_model=LiveSessionResponse
+)
+def submit_session_question_response(
+    session_id: SessionIdPath,
+    request: SubmitQuestionResponseRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.submit_saved_session_question_response(
+            session_id,
+            prompt_id=request.prompt_id,
+            answers=[answer.model_dump() for answer in request.answers],
+        )
+    except KeyError as exc:
+        raise not_found("Active session run not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.post("/sessions/{session_id}/shell-command", response_model=LiveSessionResponse)
+def run_session_shell_command(
+    session_id: SessionIdPath,
+    request: LiveSessionShellCommandRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.run_saved_session_shell_command(
+            session_id,
+            command=request.command,
+        )
+    except KeyError as exc:
+        raise not_found("Session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.post("/sessions/{session_id}/interrupt", response_model=LiveSessionResponse)
+def interrupt_session_run(
+    session_id: SessionIdPath,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.interrupt_saved_session(session_id)
+    except KeyError as exc:
+        raise not_found("Active session run not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.post("/sessions/{session_id}/images")
+async def upload_saved_session_images(
+    session_id: SessionIdPath,
+    manager: SessionManagerDep,
+    files: Annotated[list[UploadFile], File(description="One or more image files")],
+) -> dict[str, list[ImageAttachmentModel]]:
+    try:
+        uploads = manager.upload_saved_session_images(
+            session_id,
+            files=[
+                (upload.filename or "pasted-image.png", await upload.read())
+                for upload in files
+            ],
+        )
+    except KeyError as exc:
+        raise not_found("Session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return {
+        "uploads": [
+            model_from_payload(ImageAttachmentModel, upload) for upload in uploads
+        ]
+    }
+
+
+@router.post("/sessions/{session_id}/new-session", response_model=LiveSessionResponse)
+def request_session_new_session(
+    session_id: SessionIdPath,
+    request: NewSessionRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.request_saved_new_session(
+            session_id,
+            profile_id=request.profile_id,
+        )
+    except KeyError as exc:
+        raise not_found("Session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
+
+
+@router.put("/sessions/{session_id}/profile", response_model=LiveSessionResponse)
+def set_session_profile(
+    session_id: SessionIdPath,
+    request: ActiveProfileRequest,
+    manager: SessionManagerDep,
+) -> LiveSessionResponse:
+    try:
+        session = manager.set_saved_session_profile(
+            session_id,
+            profile_id=request.profile_id,
+        )
+    except KeyError as exc:
+        raise not_found("Session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return LiveSessionResponse(session=model_from_payload(LiveSessionModel, session))
 
 
 @router.get("/sessions/{session_id}/runs", response_model=SessionRunsResponse)
@@ -196,34 +396,6 @@ def list_all_runs(
     )
 
 
-@router.get("/live-sessions", response_model=LiveSessionsResponse)
-def list_live_sessions(manager: SessionManagerDep) -> LiveSessionsResponse:
-    return LiveSessionsResponse(
-        live_sessions=[
-            model_from_payload(LiveSessionModel, item)
-            for item in manager.list_live_sessions()
-        ]
-    )
-
-
-@router.get(
-    "/live-sessions/{live_session_id}",
-    response_model=LiveSessionDetailResponse,
-)
-def get_live_session_detail(
-    live_session_id: str,
-    manager: SessionManagerDep,
-) -> LiveSessionDetailResponse:
-    try:
-        payload = manager.get_live_session_detail(live_session_id)
-    except KeyError as exc:
-        raise not_found("Live session not found.") from exc
-    return LiveSessionDetailResponse(
-        live_session=model_from_payload(LiveSessionModel, payload["live_session"]),
-        snapshot=model_from_payload(LiveSessionSnapshotModel, payload["snapshot"]),
-    )
-
-
 @router.delete("/sessions/{session_id}", status_code=204)
 def delete_session(
     session_id: SessionIdPath,
@@ -267,3 +439,30 @@ def search_available_slash_commands(
             for item in manager.search_slash_commands(q, limit=limit)
         ]
     )
+
+
+@router.post("/sessions/expand-input", response_model=ExpandInputResponse)
+def expand_session_input(
+    request: ExpandInputRequest,
+    manager: SessionManagerDep,
+) -> ExpandInputResponse:
+    expanded_text, file_paths, image_paths, warnings = expand_input_mentions(
+        request.text,
+        root=manager.workspace_root,
+    )
+    return ExpandInputResponse(
+        text=expanded_text,
+        file_paths=file_paths,
+        image_paths=image_paths,
+        warnings=warnings,
+    )
+
+
+@router.get("/uploads/{upload_id}")
+def get_uploaded_image(upload_id: UploadIdPath) -> FileResponse:
+    try:
+        record = load_uploaded_image_record(upload_id)
+        path = uploaded_image_path(record)
+    except KeyError as exc:
+        raise not_found("Upload not found.") from exc
+    return FileResponse(path, media_type=record.mime_type, filename=record.name)

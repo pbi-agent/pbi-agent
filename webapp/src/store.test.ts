@@ -137,15 +137,19 @@ describe("session store", () => {
   it("ignores events from a stale live session after saved hydration", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
-    useSessionStore.getState().hydrateSavedSession("session-1", [
-      {
-        kind: "message",
-        itemId: "history-1",
-        role: "assistant",
-        content: "stored",
-        markdown: true,
-      },
-    ]);
+    useSessionStore.getState().hydrateSavedSession(
+      "session-1",
+      [
+        {
+          kind: "message",
+          itemId: "history-1",
+          role: "assistant",
+          content: "stored",
+          markdown: true,
+        },
+      ],
+      5,
+    );
 
     useSessionStore.getState().applyEvent(
       sessionKey,
@@ -170,6 +174,36 @@ describe("session store", () => {
         content: "stored",
       }),
     );
+  });
+
+  it("detaches a finished live run from a saved session so chat can continue", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+
+    useSessionStore.getState().applyEvent(
+      sessionKey,
+      {
+        seq: 5,
+        type: "session_state",
+        created_at: "2026-04-16T12:00:03Z",
+        payload: {
+          state: "ended",
+          session_id: "session-1",
+          live_session_id: "live-1",
+          exit_code: 0,
+          fatal_error: null,
+        },
+      },
+      "live-1",
+    );
+
+    const store = useSessionStore.getState();
+    const state = store.sessionsByKey[sessionKey];
+    expect(state.liveSessionId).toBeNull();
+    expect(state.sessionEnded).toBe(false);
+    expect(state.inputEnabled).toBe(false);
+    expect(store.liveSessionIndex["live-1"]).toBeUndefined();
+    expect(store.sessionIndex["session-1"]).toBe(sessionKey);
   });
 
   it("captures turn usage updates with elapsed time", () => {

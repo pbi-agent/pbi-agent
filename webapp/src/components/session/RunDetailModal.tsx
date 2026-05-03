@@ -93,14 +93,14 @@ export function RunDetailModal({
 }
 
 function isRunActive(status: string): boolean {
-  return status !== "completed" && status !== "failed" && status !== "interrupted";
+  return !["ended", "failed", "stale"].includes(status);
 }
 
 function RunSummary({ run }: { run: RunSession }) {
   const statusModifier =
-    run.status === "completed" ? "completed"
+    run.status === "ended" ? "completed"
     : run.status === "failed" ? "failed"
-    : run.status === "started" ? "running"
+    : run.status === "running" ? "running"
     : "idle";
 
   const durationLabel = run.total_duration_ms != null

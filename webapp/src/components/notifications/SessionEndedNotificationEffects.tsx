@@ -21,7 +21,7 @@ function liveSessionDestination(liveSession: Pick<LiveSession, "live_session_id"
   if (liveSession.session_id) {
     return `/sessions/${encodeURIComponent(liveSession.session_id)}`;
   }
-  return `/sessions/live/${encodeURIComponent(liveSession.live_session_id)}`;
+  return "/sessions";
 }
 
 function createSessionEndedNotificationRequest(liveSession: LiveSession) {

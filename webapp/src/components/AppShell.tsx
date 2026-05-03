@@ -178,17 +178,6 @@ export function AppShell() {
                 )
               }
             />
-            <Route
-              path="/sessions/live/:liveSessionId"
-              element={
-                requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                  <SessionPage
-                    workspaceRoot={bootstrap?.workspace_root}
-                    supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                  />
-                )
-              }
-            />
             <Route path="/board" element={requiresOnboarding ? <Navigate to="/settings" replace /> : <BoardPage />} />
             <Route path="/dashboard" element={requiresOnboarding ? <Navigate to="/settings" replace /> : <DashboardPage />} />
             <Route path="/settings" element={<SettingsPage />} />

@@ -10,6 +10,7 @@ const MAX_DELAY = 30000;
 export function useLiveSessionEvents(
   sessionKey: string | null,
   liveSessionId: string | null,
+  sessionId: string | null = null,
 ): void {
   const applyEvent = useSessionStore((state) => state.applyEvent);
   const setConnection = useSessionStore((state) => state.setConnection);
@@ -25,6 +26,7 @@ export function useLiveSessionEvents(
     }
     const currentSessionKey = sessionKey;
     const currentLiveSessionId = liveSessionId;
+    const currentSessionId = sessionId;
 
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -33,7 +35,11 @@ export function useLiveSessionEvents(
     function connect() {
       if (disposed) return;
       setConnection(currentSessionKey, "connecting");
-      socket = new WebSocket(websocketUrl(`/api/events/${currentLiveSessionId}`));
+      const since = useSessionStore.getState().sessionsByKey[currentSessionKey]?.lastEventSeq ?? 0;
+      const eventPath = currentSessionId
+        ? `/api/events/sessions/${encodeURIComponent(currentSessionId)}`
+        : `/api/events/${currentLiveSessionId}`;
+      socket = new WebSocket(websocketUrl(`${eventPath}?since=${since}`));
 
       socket.onopen = () => {
         retryDelay.current = INITIAL_DELAY;
@@ -45,18 +51,26 @@ export function useLiveSessionEvents(
           return;
         }
         const event = JSON.parse(message.data) as WebEvent;
+        const resolvedLiveSessionId = readLiveSessionId(event) ?? currentLiveSessionId;
+        const targetSessionKey = resolvedLiveSessionId
+          ? useSessionStore.getState().liveSessionIndex[resolvedLiveSessionId] ?? currentSessionKey
+          : currentSessionKey;
         const wasInputEnabled = readCurrentInputEnabled(
           event,
-          currentSessionKey,
-          currentLiveSessionId,
+          targetSessionKey,
+          resolvedLiveSessionId ?? "",
         );
         const resolvedSessionKey = applyEvent(
-          currentSessionKey,
+          targetSessionKey,
           event,
-          currentLiveSessionId,
+          resolvedLiveSessionId,
         );
         if (shouldRefreshRunQueries(event, wasInputEnabled)) {
-          const sessionId = resolveSessionId(event, resolvedSessionKey, currentLiveSessionId);
+          const sessionId = resolveSessionId(
+            event,
+            resolvedSessionKey,
+            resolvedLiveSessionId ?? "",
+          );
           if (sessionId) {
             void queryClient.invalidateQueries({ queryKey: ["session-runs", sessionId] });
           }
@@ -85,7 +99,7 @@ export function useLiveSessionEvents(
       if (retryTimer) clearTimeout(retryTimer);
       socket?.close();
     };
-  }, [applyEvent, queryClient, sessionKey, liveSessionId, setConnection]);
+  }, [applyEvent, queryClient, sessionKey, liveSessionId, sessionId, setConnection]);
 }
 
 function shouldRefreshRunQueries(event: WebEvent, wasInputEnabled: boolean | null): boolean {
@@ -145,4 +159,8 @@ function findSessionKeyByLiveSessionId(
 
 function readSessionId(event: WebEvent): string | null {
   return typeof event.payload.session_id === "string" ? event.payload.session_id : null;
+}
+
+function readLiveSessionId(event: WebEvent): string | null {
+  return typeof event.payload.live_session_id === "string" ? event.payload.live_session_id : null;
 }

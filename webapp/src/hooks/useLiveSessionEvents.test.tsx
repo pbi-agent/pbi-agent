@@ -77,6 +77,133 @@ describe("useLiveSessionEvents", () => {
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.inputEnabled).toBe(true);
   });
 
+  it("does not connect saved sessions without an active live run", () => {
+    const queryClient = new QueryClient();
+    const sessionKey = getSavedSessionKey("session-1");
+
+    renderHook(() => useLiveSessionEvents(sessionKey, null, "session-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(0);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("disconnected");
+  });
+
+  it("can stream by stable saved session id when an active run exists", () => {
+    const queryClient = new QueryClient();
+    const sessionKey = getSavedSessionKey("session-1");
+
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const socket = MockWebSocket.instances[0];
+    expect(socket.url).toContain("/api/events/sessions/session-1");
+  });
+
+  it("requests only events newer than the current cursor", () => {
+    const queryClient = new QueryClient();
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.setState({
+      activeSessionKey: sessionKey,
+      sessionsByKey: {
+        [sessionKey]: {
+          liveSessionId: "live-1",
+          sessionId: "session-1",
+          runtime: null,
+          connection: "disconnected",
+          inputEnabled: false,
+          waitMessage: null,
+          processing: null,
+          restoredInput: null,
+          sessionUsage: null,
+          turnUsage: null,
+          sessionEnded: false,
+          fatalError: null,
+          pendingUserQuestions: null,
+          items: [],
+          itemsVersion: 0,
+          subAgents: {},
+          lastEventSeq: 20,
+        },
+      },
+      liveSessionIndex: { "live-1": sessionKey },
+      sessionIndex: { "session-1": sessionKey },
+    });
+
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const socket = MockWebSocket.instances[0];
+    expect(socket.url).toContain("/api/events/sessions/session-1?since=20");
+  });
+
+  it("preserves the live session id from session-scoped events", () => {
+    const queryClient = new QueryClient();
+    const sessionKey = getSavedSessionKey("session-1");
+
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const socket = MockWebSocket.instances[0];
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          seq: 1,
+          type: "input_state",
+          created_at: "2026-04-27T00:00:00Z",
+          payload: {
+            enabled: false,
+            session_id: "session-1",
+            live_session_id: "live-1",
+          },
+        }),
+      }),
+    );
+
+    const state = useSessionStore.getState();
+    expect(state.sessionsByKey[sessionKey]?.liveSessionId).toBe("live-1");
+    expect(state.liveSessionIndex["live-1"]).toBe(sessionKey);
+  });
+
+  it("accepts the first live id for an already hydrated saved session", () => {
+    const queryClient = new QueryClient();
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().hydrateSavedSession("session-1");
+
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const socket = MockWebSocket.instances[0];
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          seq: 1,
+          type: "message_added",
+          created_at: "2026-04-27T00:00:00Z",
+          payload: {
+            item_id: "item-1",
+            role: "user",
+            content: "Hello",
+            session_id: "session-1",
+            live_session_id: "live-1",
+          },
+        }),
+      }),
+    );
+
+    const state = useSessionStore.getState();
+    expect(state.sessionsByKey[sessionKey]?.liveSessionId).toBe("live-1");
+    expect(state.sessionsByKey[sessionKey]?.items).toHaveLength(1);
+    expect(state.sessionsByKey[sessionKey]?.items[0]).toMatchObject({
+      kind: "message",
+      content: "Hello",
+    });
+  });
+
   it("invalidates run queries when input transitions from disabled to enabled after a saved session turn", () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi

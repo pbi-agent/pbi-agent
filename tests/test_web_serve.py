@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 import pytest
 from rich.console import Console
 
-from pbi_agent.agent.session import NEW_SESSION_SENTINEL
 from pbi_agent.auth.browser_callback import (
     BrowserAuthCallbackOutcome,
     BrowserAuthCallbackParams,
@@ -42,11 +41,9 @@ from pbi_agent.config import (
 )
 from pbi_agent.session_store import (
     SESSION_DB_PATH_ENV,
-    MessageImageAttachment,
     SessionStore,
     WebManagerLeaseBusyError,
 )
-from pbi_agent.display.protocol import PendingToolCall, QueuedInput, QueuedRuntimeChange
 from pbi_agent.web.display import WebDisplay
 from pbi_agent.web.server_runtime import (
     _ExpectedStartupFailureFilter,
@@ -656,7 +653,7 @@ def test_expand_input_endpoint_expands_mentions_and_extracts_images(
 
     with TestClient(app) as client:
         response = client.post(
-            "/api/live-sessions/expand-input",
+            "/api/sessions/expand-input",
             json={"text": "Review @notes.md and @mockup.png carefully"},
         )
 
@@ -680,7 +677,7 @@ def test_expand_input_endpoint_handles_path_mention_followed_by_long_prompt(
 
     with TestClient(app) as client:
         response = client.post(
-            "/api/live-sessions/expand-input",
+            "/api/sessions/expand-input",
             json={
                 "text": "Update @.agents/commands/ship-task.md "
                 "we need to add instruction to wait for github workflow before merging PR"
@@ -708,7 +705,7 @@ def test_expand_input_endpoint_warns_for_overlong_path_mention(
 
     with TestClient(app) as client:
         response = client.post(
-            "/api/live-sessions/expand-input",
+            "/api/sessions/expand-input",
             json={"text": f"Review @{overlong_name}"},
         )
 
@@ -729,7 +726,7 @@ def test_expand_input_endpoint_keeps_image_mentions_for_any_provider(
 
     with TestClient(app) as client:
         response = client.post(
-            "/api/live-sessions/expand-input",
+            "/api/sessions/expand-input",
             json={"text": "Review @mockup.png carefully"},
         )
 
@@ -845,6 +842,23 @@ def test_task_creation_is_visible_on_app_event_stream() -> None:
 
     assert event["type"] == "task_updated"
     assert event["payload"]["task"]["title"] == "Task A"
+
+
+def test_event_stream_since_skips_snapshot_events_at_or_before_cursor() -> None:
+    app = create_app(_settings())
+    manager = app.state.manager
+    stream = manager.get_event_stream("app")
+    first = stream.publish("first", {})
+    second = stream.publish("second", {})
+
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            f"/api/events/app?since={first['seq']}"
+        ) as websocket:
+            event = websocket.receive_json()
+
+    assert event["seq"] == second["seq"]
+    assert event["type"] == "second"
 
 
 def test_task_creation_preserves_plain_prompt_content() -> None:
@@ -1978,28 +1992,6 @@ def test_run_task_rejects_orphaned_stage_profile(monkeypatch, tmp_path) -> None:
     assert run_response.json()["detail"] == "Unknown profile ID 'analysis'."
 
 
-def test_session_stream_replays_state_events() -> None:
-    with patch("pbi_agent.web.session_manager.run_session_loop", return_value=0):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            with client.websocket_connect(
-                f"/api/events/{live_session_id}"
-            ) as websocket:
-                events = [websocket.receive_json() for _ in range(3)]
-
-    state_events = [event for event in events if event["type"] == "session_state"]
-    assert state_events
-    assert {event["payload"]["state"] for event in state_events}.issuperset(
-        {"starting"}
-    )
-    assert {event["payload"]["state"] for event in state_events} & {"running", "ended"}
-
-
 def test_web_display_wait_stop_clears_model_wait_processing() -> None:
     published: list[tuple[str, dict]] = []
     display = WebDisplay(
@@ -2048,303 +2040,158 @@ def test_live_session_worker_refreshes_mentions_on_reload_and_end() -> None:
     assert refresh_calls == 2
 
 
-def test_interrupt_live_session_requires_active_processing() -> None:
-    release = threading.Event()
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, display, resume_session_id
-        release.wait(timeout=2)
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            interrupt_response = client.post(
-                f"/api/live-sessions/{live_session_id}/interrupt"
-            )
-            release.set()
-
-    assert interrupt_response.status_code == 400
-    assert "not currently processing" in interrupt_response.json()["detail"]
-
-
-def test_interrupt_live_session_sets_interrupt_and_removes_latest_user_item() -> None:
-    release = threading.Event()
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.bind_session("session-1")
-        display.submit_input("queued")
-        display.user_prompt()
-        display.assistant_start()
-        release.wait(timeout=2)
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-            manager = app.state.manager
-            deadline = time.monotonic() + 2
-            while time.monotonic() < deadline:
-                live_session = manager._require_live_session(live_session_id)
-                if (live_session.snapshot.processing or {}).get("active"):
-                    break
-                time.sleep(0.01)
-            user_event = manager._publish_live_event(
-                live_session_id,
-                "message_added",
-                {
-                    "item_id": "user-test",
-                    "role": "user",
-                    "content": "queued",
-                    "markdown": False,
-                },
-            )
-            assert user_event["type"] == "message_added"
-
-            interrupt_response = client.post(
-                f"/api/live-sessions/{live_session_id}/interrupt"
-            )
-            events = manager.get_event_stream(live_session_id).snapshot()
-            release.set()
-
-    assert interrupt_response.status_code == 200
-    assert any(event["type"] == "message_removed" for event in events)
-    assert events[-1]["type"] == "message_removed"
-    assert events[-1]["payload"]["item_id"] == "user-test"
-    assert events[-1]["payload"]["restore_input"] == "queued"
-
-
-def test_session_creation_with_model_profile_exposes_runtime_binding(
-    monkeypatch,
+def test_web_session_worker_records_turn_run_separately_from_live_projection(
+    tmp_path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
-    create_provider_config(
-        ProviderConfig(
-            id="openai-main",
-            name="OpenAI Main",
-            kind="openai",
-            api_key_env="OPENAI_API_KEY",
-        )
-    )
-    create_model_profile_config(
-        ModelProfileConfig(
-            id="analysis",
-            name="Analysis",
-            provider_id="openai-main",
-            model="gpt-5.4-2026-03-05",
-            reasoning_effort="xhigh",
-            compact_threshold=123456,
-        )
-    )
-    with patch("pbi_agent.web.session_manager.run_session_loop", return_value=0):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post(
-                "/api/live-sessions",
-                json={"profile_id": "analysis"},
-            )
-            assert response.status_code == 200
-            payload = response.json()["session"]
-            assert payload["profile_id"] == "analysis"
-            assert payload["model"] == "gpt-5.4-2026-03-05"
-            assert payload["compact_threshold"] == 123456
-
-            live_session_id = payload["live_session_id"]
-            events = app.state.manager.get_event_stream(live_session_id).snapshot()
-
-    runtime_events = [
-        event for event in events if event["type"] == "session_runtime_updated"
-    ]
-    assert runtime_events
-    assert runtime_events[0]["payload"]["profile_id"] == "analysis"
-    assert runtime_events[0]["payload"]["model"] == "gpt-5.4-2026-03-05"
-    assert runtime_events[0]["payload"]["compact_threshold"] == 123456
-
-
-def test_session_input_profile_override_emits_runtime_update(monkeypatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
-    create_provider_config(
-        ProviderConfig(
-            id="openai-main",
-            name="OpenAI Main",
-            kind="openai",
-            api_key_env="OPENAI_API_KEY",
-        )
-    )
-    create_model_profile_config(
-        ModelProfileConfig(
-            id="analysis",
-            name="Analysis",
-            provider_id="openai-main",
-            model="gpt-5.4-2026-03-05",
-            reasoning_effort="xhigh",
-        )
-    )
-    queued_values: list[object] = []
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        queued_values.append(display.user_prompt())
-        queued_values.append(display.user_prompt())
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            submit_response = client.post(
-                f"/api/live-sessions/{live_session_id}/input",
-                json={
-                    "text": "hello",
-                    "file_paths": [],
-                    "image_paths": [],
-                    "image_upload_ids": [],
-                    "profile_id": "analysis",
-                },
-            )
-            assert submit_response.status_code == 200, submit_response.text
-            events = app.state.manager.get_event_stream(live_session_id).snapshot()
-
-    assert isinstance(queued_values[0], QueuedRuntimeChange)
-    assert isinstance(queued_values[1], QueuedInput)
-    assert queued_values[1].text == "hello"
-    runtime_events = [
-        event for event in events if event["type"] == "session_runtime_updated"
-    ]
-    assert runtime_events[-1]["payload"]["profile_id"] == "analysis"
-
-
-def test_set_live_session_profile_emits_runtime_update(monkeypatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
-    create_provider_config(
-        ProviderConfig(
-            id="openai-main",
-            name="OpenAI Main",
-            kind="openai",
-            api_key_env="OPENAI_API_KEY",
-        )
-    )
-    create_model_profile_config(
-        ModelProfileConfig(
-            id="analysis",
-            name="Analysis",
-            provider_id="openai-main",
-            model="gpt-5.4-2026-03-05",
-            reasoning_effort="xhigh",
-        )
-    )
-    queued_values: list[object] = []
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        queued_values.append(display.user_prompt())
-        queued_values.append(display.user_prompt())
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            update_response = client.put(
-                f"/api/live-sessions/{live_session_id}/profile",
-                json={"profile_id": "analysis"},
-            )
-            assert update_response.status_code == 200
-            payload = update_response.json()["session"]
-            assert payload["profile_id"] == "analysis"
-            assert payload["model"] == "gpt-5.4-2026-03-05"
-
-            events = app.state.manager.get_event_stream(live_session_id).snapshot()
-
-    assert isinstance(queued_values[0], QueuedRuntimeChange)
-    runtime_events = [
-        event for event in events if event["type"] == "session_runtime_updated"
-    ]
-    assert runtime_events[-1]["payload"]["profile_id"] == "analysis"
-
-
-def test_session_resume_uses_saved_session_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
-    monkeypatch.setenv("OPENAI_API_KEY", "env-openai-key")
-    create_provider_config(
-        ProviderConfig(
-            id="openai-main",
-            name="OpenAI Main",
-            kind="openai",
-            api_key_env="OPENAI_API_KEY",
+    observed_run_session_ids: list[str | None] = []
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
         )
-    )
-    create_model_profile_config(
-        ModelProfileConfig(
-            id="analysis",
-            name="Analysis",
-            provider_id="openai-main",
-            model="gpt-5.4-2026-03-05",
-            reasoning_effort="xhigh",
-        )
-    )
-    observed_runtime = None
+
+    def fake_run_session_loop(
+        _settings,
+        _display,
+        *,
+        resume_session_id=None,
+        on_reload=None,
+        run_session_id=None,
+    ):
+        del _settings, _display, on_reload
+        observed_run_session_ids.append(run_session_id)
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            turn_run_id = store.create_run_session(
+                session_id=resume_session_id,
+                agent_name="main",
+                agent_type="session_turn",
+                provider="openai",
+                provider_id="default",
+                profile_id="analysis",
+                model="gpt-5.4",
+            )
+            store.update_run_session(turn_run_id, status="completed")
+        return 0
+
+    manager = WebSessionManager(_settings())
+    try:
+        with patch(
+            "pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop
+        ):
+            live_session = manager.create_live_session(session_id=session_id)
+            live_session_id = live_session["live_session_id"]
+            worker = manager._live_sessions[live_session_id].worker
+            assert worker is not None
+            worker.join(timeout=2)
+
+        runs = manager.list_session_runs(session_id)
+        all_runs = manager.list_all_runs()
+        stats = manager.get_dashboard_stats()
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            live_projection = store.get_run_session(live_session_id)
+    finally:
+        manager.shutdown()
+
+    assert observed_run_session_ids == [None]
+    assert live_projection is not None
+    assert live_projection.agent_type == "web_session"
+    assert [run["agent_type"] for run in runs] == ["session_turn"]
+    assert runs[0]["run_session_id"] != live_session_id
+    assert runs[0]["status"] == "ended"
+    assert all_runs["total_count"] == 1
+    assert all_runs["runs"][0]["run_session_id"] == runs[0]["run_session_id"]
+    assert stats["overview"]["total_runs"] == 1
+
+
+def test_saved_session_first_message_sets_blank_title(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
 
     def fake_run_session_loop(
         _settings, display, *, resume_session_id=None, on_reload=None
     ):
-        nonlocal observed_runtime
-        del display, resume_session_id
-        observed_runtime = _settings
+        del _settings, resume_session_id, on_reload
+        display.user_prompt()
         return 0
 
     with SessionStore(db_path=tmp_path / "sessions.db") as store:
         session_id = store.create_session(
             str(tmp_path),
             "openai",
-            "gpt-5.4-2026-03-05",
-            "saved session",
-            provider_id="openai-main",
-            profile_id="analysis",
+            "gpt-5.4",
+            "",
         )
 
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post(
-                "/api/live-sessions",
-                json={"resume_session_id": session_id},
+    manager = WebSessionManager(_settings())
+    try:
+        with patch(
+            "pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop
+        ):
+            manager.submit_saved_session_input(
+                session_id,
+                text="Summarize the first part of this request and keep going.",
             )
+            live_session = manager._find_stream_live_session_for_saved_session(
+                session_id
+            )
+            if live_session is not None and live_session.worker is not None:
+                live_session.worker.join(timeout=2)
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            updated = store.get_session(session_id)
+    finally:
+        manager.shutdown()
 
-    assert response.status_code == 200
-    assert observed_runtime is not None
-    assert observed_runtime.profile_id == "analysis"
-    assert observed_runtime.provider_id == "openai-main"
-    assert observed_runtime.settings.model == "gpt-5.4-2026-03-05"
+    assert updated is not None
+    assert updated.title == "Summarize the first part of this request and keep going."
+
+
+def test_saved_session_first_message_keeps_existing_title(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
+        del _settings, resume_session_id, on_reload
+        display.user_prompt()
+        return 0
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Manual title",
+        )
+
+    manager = WebSessionManager(_settings())
+    try:
+        with patch(
+            "pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop
+        ):
+            manager.submit_saved_session_input(
+                session_id,
+                text="This should not replace an existing title.",
+            )
+            live_session = manager._find_stream_live_session_for_saved_session(
+                session_id
+            )
+            if live_session is not None and live_session.worker is not None:
+                live_session.worker.join(timeout=2)
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            updated = store.get_session(session_id)
+    finally:
+        manager.shutdown()
+
+    assert updated is not None
+    assert updated.title == "Manual title"
 
 
 def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None:
@@ -2391,6 +2238,114 @@ def test_get_session_detail_returns_saved_history(tmp_path, monkeypatch) -> None
         },
     ]
     assert payload["live_session"] is None
+    assert payload["active_run"] is None
+    assert payload["timeline"] is None
+    assert payload["status"] == "idle"
+
+
+def test_get_session_detail_does_not_attach_ended_web_run(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Completed task",
+        )
+        store.add_message(session_id, "user", "/execute")
+        store.add_message(session_id, "assistant", "Done")
+        store.create_run_session(
+            run_session_id="completed-turn-run",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="single_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="completed",
+            kind="session",
+            project_dir=str(tmp_path),
+        )
+        run_id = store.create_run_session(
+            run_session_id="ended-web-session",
+            session_id=session_id,
+            agent_name="web",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="ended",
+            kind="task",
+            task_id="task-1",
+            project_dir=str(tmp_path),
+            last_event_seq=2,
+            snapshot={
+                "live_session_id": "ended-web-session",
+                "session_id": session_id,
+                "runtime": None,
+                "input_enabled": False,
+                "wait_message": None,
+                "processing": None,
+                "session_usage": None,
+                "turn_usage": None,
+                "session_ended": True,
+                "fatal_error": None,
+                "pending_user_questions": None,
+                "items": [
+                    {
+                        "kind": "message",
+                        "itemId": "message-1",
+                        "role": "assistant",
+                        "content": "Done",
+                        "markdown": True,
+                    }
+                ],
+                "sub_agents": {},
+                "last_event_seq": 2,
+            },
+            exit_code=0,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=-1,
+            event_type="web_event",
+            metadata={
+                "type": "message_added",
+                "payload": {
+                    "item_id": "message-1",
+                    "role": "assistant",
+                    "content": "Done",
+                    "markdown": True,
+                },
+                "seq": 1,
+            },
+        )
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/sessions/{session_id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["content"] for item in payload["history_items"]] == [
+        "/execute",
+        "Done",
+    ]
+    assert payload["status"] == "ended"
+    assert payload["session"]["status"] == "ended"
+    assert payload["live_session"] is None
+    assert payload["active_live_session"] is None
+    assert payload["active_run"] is None
+    assert payload["timeline"]["live_session_id"] == "ended-web-session"
+    assert payload["timeline"]["session_ended"] is True
+    assert payload["timeline"]["items"][0]["content"] == "Done"
 
 
 def test_get_session_detail_matches_legacy_mixed_case_directory(
@@ -2479,7 +2434,7 @@ def test_list_session_runs_returns_observability_runs(tmp_path, monkeypatch) -> 
     ]
     assert payload["runs"][0]["metadata"] == {"origin": "test"}
     assert payload["runs"][1]["parent_run_session_id"] == parent_run_id
-    assert payload["runs"][1]["status"] == "completed"
+    assert payload["runs"][1]["status"] == "ended"
     assert payload["runs"][1]["total_duration_ms"] == 42
     assert payload["runs"][1]["total_tool_calls"] == 1
     assert payload["runs"][1]["total_api_calls"] == 2
@@ -2538,6 +2493,17 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
             status_code=200,
             success=True,
         )
+        store.add_observability_event(
+            run_session_id=run_session_id,
+            session_id=session_id,
+            step_index=-1,
+            event_type="web_event",
+            metadata={
+                "type": "input_state",
+                "payload": {"enabled": True},
+                "seq": 1,
+            },
+        )
         store.update_run_session(
             run_session_id,
             status="completed",
@@ -2550,7 +2516,7 @@ def test_get_run_detail_returns_observability_events(tmp_path, monkeypatch) -> N
     assert response.status_code == 200
     payload = response.json()
     assert payload["run"]["run_session_id"] == run_session_id
-    assert payload["run"]["status"] == "completed"
+    assert payload["run"]["status"] == "ended"
     assert [event["event_type"] for event in payload["events"]] == [
         "run_start",
         "model_call",
@@ -2582,136 +2548,6 @@ def test_get_session_detail_returns_not_found_for_unknown_session() -> None:
     assert response.status_code == 404
 
 
-def test_create_live_session_rejects_unknown_resume_session() -> None:
-    app = create_app(_settings())
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/api/live-sessions",
-            json={"resume_session_id": "missing-session"},
-        )
-
-    assert response.status_code == 404
-
-
-def test_create_live_session_reuses_active_live_session_for_saved_chat(
-    tmp_path, monkeypatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.user_prompt()
-        return 0
-
-    with SessionStore(db_path=tmp_path / "sessions.db") as store:
-        session_id = store.create_session(
-            str(tmp_path),
-            "openai",
-            "gpt-5.4",
-            "Saved session",
-        )
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            first_response = client.post(
-                "/api/live-sessions",
-                json={"resume_session_id": session_id},
-            )
-            second_response = client.post(
-                "/api/live-sessions",
-                json={"resume_session_id": session_id},
-            )
-
-    assert first_response.status_code == 200
-    assert second_response.status_code == 200
-    assert (
-        first_response.json()["session"]["live_session_id"]
-        == second_response.json()["session"]["live_session_id"]
-    )
-
-
-def test_session_stream_replays_session_identity_event() -> None:
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.bind_session("saved-session-1")
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            with client.websocket_connect(
-                f"/api/events/{live_session_id}"
-            ) as websocket:
-                events = [websocket.receive_json() for _ in range(4)]
-
-    identity_events = [event for event in events if event["type"] == "session_identity"]
-    assert identity_events
-    assert identity_events[0]["payload"]["resume_session_id"] == "saved-session-1"
-
-
-def test_upload_endpoint_returns_uploaded_image_metadata() -> None:
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.user_prompt()
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            upload_response = client.post(
-                f"/api/live-sessions/{live_session_id}/images",
-                files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
-            )
-
-    assert upload_response.status_code == 200
-    payload = upload_response.json()
-    assert len(payload["uploads"]) == 1
-    assert payload["uploads"][0]["name"] == "chart.png"
-    assert payload["uploads"][0]["mime_type"] == "image/png"
-    assert payload["uploads"][0]["preview_url"].startswith(
-        "/api/live-sessions/uploads/"
-    )
-
-
-def test_task_image_upload_endpoint_returns_metadata(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
-    app = create_app(_settings())
-
-    with TestClient(app) as client:
-        upload_response = client.post(
-            "/api/tasks/images",
-            files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
-        )
-
-    assert upload_response.status_code == 200
-    payload = upload_response.json()
-    assert len(payload["uploads"]) == 1
-    upload = payload["uploads"][0]
-    assert upload["name"] == "chart.png"
-    assert upload["mime_type"] == "image/png"
-    assert upload["preview_url"].startswith("/api/live-sessions/uploads/")
-
-
 def test_create_task_accepts_uploaded_image_ids(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
     app = create_app(_settings())
@@ -2737,218 +2573,6 @@ def test_create_task_accepts_uploaded_image_ids(tmp_path, monkeypatch) -> None:
     task = create_response.json()["task"]
     assert task["image_attachments"][0]["upload_id"] == upload_id
     assert task["image_attachments"][0]["name"] == "chart.png"
-
-
-def test_submit_session_input_accepts_uploaded_image_ids() -> None:
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        queued = display.user_prompt()
-        assert isinstance(queued, QueuedInput)
-        assert queued.text == ""
-        assert len(queued.images) == 1
-        assert queued.images[0].path == "chart.png"
-        assert len(queued.image_attachments) == 1
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            upload_response = client.post(
-                f"/api/live-sessions/{live_session_id}/images",
-                files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
-            )
-            assert upload_response.status_code == 200
-            upload_id = upload_response.json()["uploads"][0]["upload_id"]
-
-            submit_response = client.post(
-                f"/api/live-sessions/{live_session_id}/input",
-                json={
-                    "text": "",
-                    "file_paths": [],
-                    "image_paths": [],
-                    "image_upload_ids": [upload_id],
-                },
-            )
-            assert submit_response.status_code == 200
-
-            events = app.state.manager.get_event_stream(live_session_id).snapshot()
-
-    message_events = [event for event in events if event["type"] == "message_added"]
-    assert message_events
-    assert (
-        message_events[0]["payload"]["image_attachments"][0]["upload_id"] == upload_id
-    )
-
-
-def test_shell_command_endpoint_runs_command_and_publishes_events(
-    tmp_path, monkeypatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "example.txt").write_text("hello\n", encoding="utf-8")
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.user_prompt()
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            shell_response = client.post(
-                f"/api/live-sessions/{live_session_id}/shell-command",
-                json={"command": "cat example.txt"},
-            )
-            assert shell_response.status_code == 200
-
-            events = app.state.manager.get_event_stream(live_session_id).snapshot()
-
-    user_events = [
-        event
-        for event in events
-        if event["type"] == "message_added" and event["payload"].get("role") == "user"
-    ]
-    assert user_events[-1]["payload"]["content"] == "!cat example.txt"
-    assert any(event["type"] == "tool_group_added" for event in events)
-    assistant_events = [
-        event
-        for event in events
-        if event["type"] == "message_added"
-        and event["payload"].get("role") == "assistant"
-    ]
-    assert "Status: `exit code 0`" in assistant_events[-1]["payload"]["content"]
-    assert "hello" in assistant_events[-1]["payload"]["content"]
-
-
-def test_shell_command_endpoint_persists_messages_for_bound_session(
-    tmp_path, monkeypatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
-    (tmp_path / "example.txt").write_text("hello\n", encoding="utf-8")
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.user_prompt()
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            with SessionStore() as store:
-                session_id = store.create_session(
-                    str(tmp_path),
-                    "openai",
-                    "gpt-5.4",
-                    provider_id="openai",
-                    profile_id="analysis",
-                )
-
-            create_response = client.post("/api/live-sessions", json={})
-            assert create_response.status_code == 200
-            create_response = client.post(
-                "/api/live-sessions",
-                json={"resume_session_id": session_id},
-            )
-            assert create_response.status_code == 200
-            live_session_id = create_response.json()["session"]["live_session_id"]
-
-            shell_response = client.post(
-                f"/api/live-sessions/{live_session_id}/shell-command",
-                json={"command": "cat example.txt"},
-            )
-            assert shell_response.status_code == 200
-
-            detail_response = client.get(f"/api/sessions/{session_id}")
-            assert detail_response.status_code == 200
-
-    history_items = detail_response.json()["history_items"]
-    assert history_items[-2]["role"] == "user"
-    assert history_items[-2]["content"] == "!cat example.txt"
-    assert history_items[-2]["markdown"] is False
-    assert history_items[-1]["role"] == "assistant"
-    assert "Status: `exit code 0`" in history_items[-1]["content"]
-    assert "hello" in history_items[-1]["content"]
-    assert history_items[-1]["markdown"] is True
-
-
-def test_shell_command_endpoint_rejects_empty_command() -> None:
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.user_prompt()
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            shell_response = client.post(
-                f"/api/live-sessions/{live_session_id}/shell-command",
-                json={"command": "   "},
-            )
-
-    assert shell_response.status_code == 400
-
-
-def test_submit_session_input_does_not_duplicate_workspace_image_mentions(
-    tmp_path, monkeypatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "chart.png").write_bytes(b"\x89PNG\r\n\x1a\n")
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        queued = display.user_prompt()
-        assert isinstance(queued, QueuedInput)
-        assert queued.text == "Describe chart.png"
-        assert queued.image_paths == []
-        assert len(queued.images) == 1
-        assert queued.images[0].path == "chart.png"
-        assert len(queued.image_attachments) == 1
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            submit_response = client.post(
-                f"/api/live-sessions/{live_session_id}/input",
-                json={
-                    "text": "Describe chart.png",
-                    "file_paths": ["chart.png"],
-                    "image_paths": ["chart.png"],
-                    "image_upload_ids": [],
-                },
-            )
-            assert submit_response.status_code == 200
 
 
 def test_delete_session_endpoint_removes_session_and_clears_task_links(
@@ -2985,54 +2609,6 @@ def test_delete_session_endpoint_removes_session_and_clears_task_links(
 
     assert sessions_response.json()["sessions"] == []
     assert tasks_response.json()["tasks"][0]["session_id"] is None
-
-
-def test_delete_session_endpoint_preserves_task_owned_uploads(
-    tmp_path, monkeypatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
-    app = create_app(_settings())
-    attachment = MessageImageAttachment(
-        upload_id="task-upload",
-        name="chart.png",
-        mime_type="image/png",
-        byte_count=8,
-        preview_url="/api/live-sessions/uploads/task-upload",
-    )
-
-    with SessionStore(db_path=tmp_path / "sessions.db") as store:
-        session_id = store.create_session(
-            str(tmp_path),
-            "openai",
-            "gpt-5.4",
-            "Saved session",
-        )
-        store.add_message(
-            session_id,
-            "user",
-            "Investigate",
-            image_attachments=[attachment],
-        )
-        store.create_kanban_task(
-            directory=str(tmp_path),
-            title="Task with image",
-            prompt="Investigate",
-            stage="backlog",
-            session_id=session_id,
-            image_attachments=[attachment],
-        )
-
-    with patch("pbi_agent.web.session_manager.delete_uploaded_images") as mock_delete:
-        with TestClient(app) as client:
-            response = client.delete(f"/api/sessions/{session_id}")
-
-    assert response.status_code == 204
-    mock_delete.assert_called_once_with([])
-    with SessionStore(db_path=tmp_path / "sessions.db") as store:
-        tasks = store.list_kanban_tasks(str(tmp_path))
-    assert tasks[0].session_id is None
-    assert tasks[0].image_attachments == [attachment]
 
 
 def test_delete_session_endpoint_accepts_saved_sessions_from_any_provider(
@@ -4415,167 +3991,103 @@ def test_sessions_endpoint_lists_saved_sessions(tmp_path, monkeypatch) -> None:
     assert payload[1]["provider"] == "openai"
 
 
-def test_live_session_list_and_detail_endpoints() -> None:
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.user_prompt()
-        return 0
+def test_sessions_endpoint_maps_completed_run_status_to_ended(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
 
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Completed run session",
+        )
+        store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="completed",
+        )
 
-        with TestClient(app) as client:
-            create_response = client.post("/api/live-sessions", json={})
-            assert create_response.status_code == 200
-            live_session_id = create_response.json()["session"]["live_session_id"]
-
-            list_response = client.get("/api/live-sessions")
-            detail_response = client.get(f"/api/live-sessions/{live_session_id}")
+    with TestClient(app) as client:
+        list_response = client.get("/api/sessions", params={"limit": 10})
+        detail_response = client.get(f"/api/sessions/{session_id}")
 
     assert list_response.status_code == 200
-    live_sessions = list_response.json()["live_sessions"]
-    assert [item["live_session_id"] for item in live_sessions] == [live_session_id]
+    assert list_response.json()["sessions"][0]["status"] == "ended"
+    assert list_response.json()["sessions"][0]["active_run_id"] is None
     assert detail_response.status_code == 200
-    detail_payload = detail_response.json()
-    assert detail_payload["live_session"]["live_session_id"] == live_session_id
-    assert detail_payload["snapshot"]["live_session_id"] == live_session_id
-    assert detail_payload["snapshot"]["last_event_seq"] >= 0
+    assert detail_response.json()["status"] == "ended"
+    assert detail_response.json()["live_session"] is None
+    assert detail_response.json()["active_run"] is None
 
 
-def test_live_session_apply_patch_event_includes_diff_metadata() -> None:
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.function_start(1)
-        display.patch_result(
-            "TODO.md",
-            "update_file",
-            True,
-            call_id="call_patch_1",
-            diff="-[ ] Old\n+[X] New",
-            diff_line_numbers=[
-                {"old": 12, "new": None},
-                {"old": None, "new": 12},
-            ],
+def test_saved_session_event_stream_replays_persisted_events_in_sequence(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Persisted events",
         )
-        display.tool_group_end()
-        display.user_prompt()
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-            detail_response = client.get(f"/api/live-sessions/{live_session_id}")
-
-    assert detail_response.status_code == 200
-    snapshot_items = detail_response.json()["snapshot"]["items"]
-    tool_item = next(item for item in snapshot_items if item["kind"] == "tool_group")
-    assert tool_item["label"] == "apply_patch"
-    metadata = tool_item["items"][0]["metadata"]
-    assert metadata == {
-        "tool_name": "apply_patch",
-        "path": "TODO.md",
-        "operation": "update_file",
-        "success": True,
-        "detail": "",
-        "diff": "-[ ] Old\n+[X] New",
-        "diff_line_numbers": [
-            {"old": 12, "new": None},
-            {"old": None, "new": 12},
-        ],
-        "call_id": "call_patch_1",
-        "status": "completed",
-        "arguments": None,
-        "result": {},
-        "error": None,
-    }
-
-
-def test_live_session_tool_group_updates_one_item_when_second_tool_finishes_first() -> (
-    None
-):
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.function_start(2)
-        display.tool_execution_start(
-            [
-                PendingToolCall(
-                    call_id="call_1",
-                    name="shell",
-                    arguments={"command": "slow"},
-                ),
-                PendingToolCall(
-                    call_id="call_2",
-                    name="read_file",
-                    arguments={"path": "README.md"},
-                ),
-            ]
+        run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="ended",
+            kind="session",
         )
-        display.function_result(
-            "read_file",
-            True,
-            call_id="call_2",
-            arguments={"path": "README.md"},
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="run_step",
+            metadata={"name": "ordinary observability event"},
         )
-        display.function_result(
-            "shell",
-            True,
-            call_id="call_1",
-            arguments={"command": "slow"},
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=-2,
+            event_type="web_event",
+            metadata={
+                "type": "message_added",
+                "payload": {"item_id": "second", "role": "assistant"},
+                "seq": 2,
+            },
         )
-        display.tool_group_end()
-        display.user_prompt()
-        return 0
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=-1,
+            event_type="web_event",
+            metadata={
+                "type": "message_added",
+                "payload": {"item_id": "first", "role": "user"},
+                "seq": 1,
+            },
+        )
 
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
+    with TestClient(app):
+        events = app.state.manager.get_session_event_stream(session_id).snapshot()
 
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-            detail_response = client.get(f"/api/live-sessions/{live_session_id}")
-
-    assert detail_response.status_code == 200
-    live_session = app.state.manager._live_sessions[live_session_id]
-    tool_events = [
-        event
-        for event in live_session.event_stream.snapshot()
-        if event["type"] == "tool_group_added"
-    ]
-    assert len(tool_events) == 4
-    item_id = tool_events[0]["payload"]["item_id"]
-    assert {event["payload"]["item_id"] for event in tool_events} == {item_id}
-
-    initial_items = tool_events[0]["payload"]["items"]
-    assert [item["metadata"]["status"] for item in initial_items] == [
-        "running",
-        "running",
-    ]
-    assert initial_items[0]["metadata"]["arguments"] == {"command": "slow"}
-    assert initial_items[1]["metadata"]["arguments"] == {"path": "README.md"}
-
-    second_completed_items = tool_events[1]["payload"]["items"]
-    assert [item["metadata"]["status"] for item in second_completed_items] == [
-        "running",
-        "completed",
-    ]
-
-    final_event = tool_events[-1]["payload"]
-    assert final_event["status"] == "completed"
-    assert [item["metadata"]["status"] for item in final_event["items"]] == [
-        "completed",
-        "completed",
-    ]
+    assert [event["payload"]["item_id"] for event in events] == ["first", "second"]
 
 
 def test_delete_task_endpoint_removes_task() -> None:
@@ -4596,66 +4108,6 @@ def test_delete_task_endpoint_removes_task() -> None:
 
     assert list_response.status_code == 200
     assert list_response.json()["tasks"] == []
-
-
-def test_request_new_session_endpoint_queues_new_session() -> None:
-    queued_values: list[object] = []
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        queued_values.append(display.user_prompt())
-        queued_values.append(display.user_prompt())
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            new_session_response = client.post(
-                f"/api/live-sessions/{live_session_id}/new-session",
-                json={},
-            )
-
-    assert new_session_response.status_code == 200
-    assert queued_values[0] == NEW_SESSION_SENTINEL
-
-
-def test_uploaded_session_image_route_returns_image_bytes() -> None:
-    image_bytes = b"\x89PNG\r\n\x1a\n"
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.user_prompt()
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-
-            upload_response = client.post(
-                f"/api/live-sessions/{live_session_id}/images",
-                files={"files": ("chart.png", image_bytes, "image/png")},
-            )
-            assert upload_response.status_code == 200
-            preview_url = upload_response.json()["uploads"][0]["preview_url"]
-
-            image_response = client.get(preview_url)
-
-    assert image_response.status_code == 200
-    assert image_response.headers["content-type"] == "image/png"
-    assert image_response.content == image_bytes
 
 
 def test_static_and_spa_routes_return_expected_responses() -> None:
@@ -4818,65 +4270,14 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
         assert len(payload["runs"]) == 2
         assert payload["runs"][0]["session_title"] == "Paginated test"
 
-        response = client.get("/api/runs?status=completed")
+        response = client.get("/api/runs?status=ended")
         assert response.status_code == 200
         payload = response.json()
         assert payload["total_count"] == 3
-        assert all(run["status"] == "completed" for run in payload["runs"])
+        assert all(run["status"] == "ended" for run in payload["runs"])
 
         response = client.get("/api/runs?status=failed")
         assert response.status_code == 200
         payload = response.json()
         assert payload["total_count"] == 2
         assert all(run["status"] == "failed" for run in payload["runs"])
-
-
-def test_interrupt_live_session_removes_queued_input_item() -> None:
-    release = threading.Event()
-
-    def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
-    ):
-        del _settings, resume_session_id
-        display.bind_session("session-1")
-        queued = display.user_prompt()
-        assert isinstance(queued, QueuedInput)
-        display.assistant_start()
-        release.wait(timeout=2)
-        return 0
-
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
-        app = create_app(_settings())
-
-        with TestClient(app) as client:
-            response = client.post("/api/live-sessions", json={})
-            assert response.status_code == 200
-            live_session_id = response.json()["session"]["live_session_id"]
-            submit_response = client.post(
-                f"/api/live-sessions/{live_session_id}/input",
-                json={
-                    "text": "queued from user",
-                    "file_paths": [],
-                    "image_paths": [],
-                    "image_upload_ids": [],
-                },
-            )
-            assert submit_response.status_code == 200, submit_response.text
-            manager = app.state.manager
-            deadline = time.monotonic() + 2
-            while time.monotonic() < deadline:
-                live_session = manager._require_live_session(live_session_id)
-                if (live_session.snapshot.processing or {}).get("active"):
-                    break
-                time.sleep(0.01)
-
-            interrupt_response = client.post(
-                f"/api/live-sessions/{live_session_id}/interrupt"
-            )
-            events = manager.get_event_stream(live_session_id).snapshot()
-            release.set()
-
-    assert interrupt_response.status_code == 200
-    removed = [event for event in events if event["type"] == "message_removed"]
-    assert removed
-    assert removed[-1]["payload"]["restore_input"] == "queued from user"

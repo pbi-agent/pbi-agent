@@ -19,9 +19,8 @@ import {
   deleteTask,
   fetchBoardStages,
   fetchConfigBootstrap,
-  fetchLiveSessions,
   fetchTasks,
-  interruptLiveSession,
+  interruptSession,
   runTask,
   updateBoardStages,
   updateTask,
@@ -89,10 +88,6 @@ export function BoardPage() {
   const client = useQueryClient();
   const tasksQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
   const stagesQuery = useQuery({ queryKey: ["board-stages"], queryFn: fetchBoardStages });
-  const liveSessionsQuery = useQuery({
-    queryKey: ["live-sessions"],
-    queryFn: fetchLiveSessions,
-  });
   const configQuery = useQuery({
     queryKey: ["config-bootstrap"],
     queryFn: fetchConfigBootstrap,
@@ -120,16 +115,15 @@ export function BoardPage() {
     onSuccess: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ["tasks"] }),
-        client.invalidateQueries({ queryKey: ["live-sessions"] }),
+        client.invalidateQueries({ queryKey: ["sessions"] }),
       ]);
     },
   });
   const interruptTaskMutation = useMutation({
-    mutationFn: interruptLiveSession,
+    mutationFn: interruptSession,
     onSuccess: async () => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ["tasks"] }),
-        client.invalidateQueries({ queryKey: ["live-sessions"] }),
         client.invalidateQueries({ queryKey: ["sessions"] }),
         client.invalidateQueries({ queryKey: ["bootstrap"] }),
       ]);
@@ -171,15 +165,15 @@ export function BoardPage() {
       }, {}),
     [boardStages, tasks],
   );
-  const activeTaskLiveSessionIds = useMemo(
+  const activeTaskSessionIds = useMemo(
     () =>
-      (liveSessionsQuery.data ?? []).reduce<Record<string, string>>((acc, session) => {
-        if (session.kind === "task" && session.task_id && session.status !== "ended") {
-          acc[session.task_id] = session.live_session_id;
+      tasks.reduce<Record<string, string>>((acc, task) => {
+        if (task.run_status === "running" && task.session_id) {
+          acc[task.task_id] = task.session_id;
         }
         return acc;
       }, {}),
-    [liveSessionsQuery.data],
+    [tasks],
   );
 
   const activeTask = activeDragId ? tasks.find((task) => task.task_id === activeDragId) : undefined;
@@ -355,7 +349,7 @@ export function BoardPage() {
     interruptTaskMutation.mutate(liveSessionId);
   };
 
-  if (tasksQuery.isLoading || stagesQuery.isLoading || liveSessionsQuery.isLoading || configQuery.isLoading) {
+  if (tasksQuery.isLoading || stagesQuery.isLoading || configQuery.isLoading) {
     return (
       <section className="board-layout">
         <div className="board-layout__header">
@@ -370,7 +364,7 @@ export function BoardPage() {
     );
   }
 
-  if (tasksQuery.isError || stagesQuery.isError || liveSessionsQuery.isError || configQuery.isError) {
+  if (tasksQuery.isError || stagesQuery.isError || configQuery.isError) {
     return (
       <section className="board-layout">
         <div className="board-layout__header">
@@ -459,7 +453,7 @@ export function BoardPage() {
                     const task = tasks.find((t) => t.task_id === taskId);
                     if (task) setTaskToDelete(task);
                   }}
-                  activeTaskLiveSessionIds={activeTaskLiveSessionIds}
+                  activeTaskLiveSessionIds={activeTaskSessionIds}
                   interruptingLiveSessionId={
                     interruptTaskMutation.isPending ? interruptTaskMutation.variables : null
                   }

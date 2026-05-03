@@ -1,10 +1,11 @@
 export function ConnectionBadge({
   connection,
 }: {
-  connection: "disconnected" | "connecting" | "connected";
+  connection: "disconnected" | "connecting" | "connected" | "ready";
 }) {
   const label =
     connection === "connected" ? "Connected"
+    : connection === "ready" ? "Ready"
     : connection === "connecting" ? "Connecting..."
     : "Disconnected";
 
