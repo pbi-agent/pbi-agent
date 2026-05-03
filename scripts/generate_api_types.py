@@ -58,6 +58,8 @@ def render_api_operations(openapi: dict[str, Any]) -> list[str]:
 
     response_fields: list[str] = []
     json_body_fields: list[str] = []
+    path_params_fields: list[str] = []
+    query_params_fields: list[str] = []
     for path, path_item in sorted(paths.items()):
         if not isinstance(path, str) or not path.startswith("/api/"):
             continue
@@ -76,6 +78,16 @@ def render_api_operations(openapi: dict[str, Any]) -> list[str]:
                 json_body_fields.append(
                     f"  {ts_property(operation_key)}: {json_body_type};"
                 )
+            path_params_type = operation_parameters_type(path_item, operation, "path")
+            if path_params_type is not None:
+                path_params_fields.append(
+                    f"  {ts_property(operation_key)}: {path_params_type};"
+                )
+            query_params_type = operation_parameters_type(path_item, operation, "query")
+            if query_params_type is not None:
+                query_params_fields.append(
+                    f"  {ts_property(operation_key)}: {query_params_type};"
+                )
 
     lines = [
         "export type ApiOperationResponses = {",
@@ -86,11 +98,23 @@ def render_api_operations(openapi: dict[str, Any]) -> list[str]:
         *json_body_fields,
         "};",
         "",
+        "export type ApiOperationPathParams = {",
+        *path_params_fields,
+        "};",
+        "",
+        "export type ApiOperationQueryParams = {",
+        *query_params_fields,
+        "};",
+        "",
         "export type ApiOperation = keyof ApiOperationResponses;",
         "",
         "export type ApiResponse<T extends ApiOperation> = ApiOperationResponses[T];",
         "",
         "export type ApiJsonBody<T extends keyof ApiJsonRequestBodies> = ApiJsonRequestBodies[T];",
+        "",
+        "export type ApiPathParams<T extends keyof ApiOperationPathParams> = ApiOperationPathParams[T];",
+        "",
+        "export type ApiQueryParams<T extends keyof ApiOperationQueryParams> = ApiOperationQueryParams[T];",
         "",
     ]
     return lines
@@ -118,6 +142,31 @@ def operation_json_body_type(operation: dict[str, Any]) -> str | None:
         return None
     schema = json_content_schema(request_body.get("content"))
     return ts_type(schema) if schema is not None else None
+
+
+def operation_parameters_type(
+    path_item: dict[str, Any], operation: dict[str, Any], location: str
+) -> str | None:
+    parameters_by_name: dict[str, dict[str, Any]] = {}
+    for source in (path_item.get("parameters"), operation.get("parameters")):
+        if not isinstance(source, list):
+            continue
+        for parameter in source:
+            if not isinstance(parameter, dict) or parameter.get("in") != location:
+                continue
+            name = parameter.get("name")
+            if isinstance(name, str):
+                parameters_by_name[name] = parameter
+    if not parameters_by_name:
+        return None
+
+    fields: list[str] = []
+    for name, parameter in parameters_by_name.items():
+        schema = parameter.get("schema")
+        value_type = ts_type(schema) if isinstance(schema, dict) else "unknown"
+        optional = "" if location == "path" or parameter.get("required") else "?"
+        fields.append(f"{ts_property(name)}{optional}: {value_type}")
+    return "{ " + "; ".join(fields) + " }"
 
 
 def select_success_response(

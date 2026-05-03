@@ -358,8 +358,58 @@ export type ApiJsonRequestBodies = {
   "PATCH /api/tasks/{task_id}": UpdateTaskRequest;
 };
 
+export type ApiOperationPathParams = {
+  "DELETE /api/config/model-profiles/{profile_id}": { profile_id: string };
+  "PATCH /api/config/model-profiles/{profile_id}": { profile_id: string };
+  "DELETE /api/config/providers/{provider_id}": { provider_id: string };
+  "PATCH /api/config/providers/{provider_id}": { provider_id: string };
+  "GET /api/config/providers/{provider_id}/models": { provider_id: string };
+  "GET /api/events/sessions/{session_id}": { session_id: string };
+  "GET /api/events/{stream_id}": { stream_id: string };
+  "DELETE /api/provider-auth/{provider_id}": { provider_id: string };
+  "GET /api/provider-auth/{provider_id}": { provider_id: string };
+  "POST /api/provider-auth/{provider_id}/flows": { provider_id: string };
+  "GET /api/provider-auth/{provider_id}/flows/{flow_id}": { provider_id: string; flow_id: string };
+  "POST /api/provider-auth/{provider_id}/flows/{flow_id}/poll": { provider_id: string; flow_id: string };
+  "POST /api/provider-auth/{provider_id}/import": { provider_id: string };
+  "POST /api/provider-auth/{provider_id}/refresh": { provider_id: string };
+  "GET /api/provider-auth/{provider_id}/usage-limits": { provider_id: string };
+  "GET /api/runs/{run_session_id}": { run_session_id: string };
+  "DELETE /api/sessions/{session_id}": { session_id: string };
+  "GET /api/sessions/{session_id}": { session_id: string };
+  "PATCH /api/sessions/{session_id}": { session_id: string };
+  "POST /api/sessions/{session_id}/images": { session_id: string };
+  "POST /api/sessions/{session_id}/interrupt": { session_id: string };
+  "POST /api/sessions/{session_id}/messages": { session_id: string };
+  "POST /api/sessions/{session_id}/new-session": { session_id: string };
+  "PUT /api/sessions/{session_id}/profile": { session_id: string };
+  "POST /api/sessions/{session_id}/question-response": { session_id: string };
+  "GET /api/sessions/{session_id}/runs": { session_id: string };
+  "POST /api/sessions/{session_id}/runs": { session_id: string };
+  "POST /api/sessions/{session_id}/shell-command": { session_id: string };
+  "DELETE /api/tasks/{task_id}": { task_id: string };
+  "PATCH /api/tasks/{task_id}": { task_id: string };
+  "POST /api/tasks/{task_id}/run": { task_id: string };
+  "GET /api/uploads/{upload_id}": { upload_id: string };
+};
+
+export type ApiOperationQueryParams = {
+  "GET /api/dashboard/stats": { start_date?: string | null; end_date?: string | null; scope?: string };
+  "GET /api/events/sessions/{session_id}": { since?: number };
+  "GET /api/events/{stream_id}": { since?: number };
+  "GET /api/files/search": { q?: string; limit?: number };
+  "GET /api/runs": { limit?: number; offset?: number; status?: string | null; provider?: string | null; model?: string | null; start_date?: string | null; end_date?: string | null; sort_by?: string; sort_dir?: string; scope?: string };
+  "GET /api/runs/{run_session_id}": { scope?: string };
+  "GET /api/sessions": { limit?: number };
+  "GET /api/slash-commands/search": { q?: string; limit?: number };
+};
+
 export type ApiOperation = keyof ApiOperationResponses;
 
 export type ApiResponse<T extends ApiOperation> = ApiOperationResponses[T];
 
 export type ApiJsonBody<T extends keyof ApiJsonRequestBodies> = ApiJsonRequestBodies[T];
+
+export type ApiPathParams<T extends keyof ApiOperationPathParams> = ApiOperationPathParams[T];
+
+export type ApiQueryParams<T extends keyof ApiOperationQueryParams> = ApiOperationQueryParams[T];

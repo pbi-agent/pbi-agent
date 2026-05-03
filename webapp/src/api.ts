@@ -2,6 +2,8 @@ import type {
   ApiJsonBody,
   ApiJsonRequestBodies,
   ApiOperation,
+  ApiOperationQueryParams,
+  ApiQueryParams,
   ApiResponse,
   CreateSessionRequest,
   LiveSessionInputRequest,
@@ -58,6 +60,12 @@ type RunDetailResponsePayload = {
   run: RunSession;
   events: ObservabilityEvent[];
 };
+type DashboardStatsQuery = ApiQueryParams<"GET /api/dashboard/stats"> & {
+  scope?: "workspace" | "global";
+};
+type AllRunsQuery = ApiQueryParams<"GET /api/runs"> & {
+  scope?: "workspace" | "global";
+};
 
 export class ApiError extends Error {
   constructor(
@@ -107,6 +115,24 @@ function jsonBody<Operation extends keyof ApiJsonRequestBodies>(
 ): string {
   void operation;
   return JSON.stringify(payload);
+}
+
+function queryString<Operation extends keyof ApiOperationQueryParams>(
+  operation: Operation,
+  params: ApiQueryParams<Operation>,
+): string {
+  void operation;
+  const query = new URLSearchParams();
+  for (const [name, value] of Object.entries(params)) {
+    if (value == null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) query.append(name, String(item));
+    } else {
+      query.set(name, String(value));
+    }
+  }
+  const encoded = query.toString();
+  return encoded ? `?${encoded}` : "";
 }
 
 export function eventStreamUrl(path: string): string {
@@ -172,16 +198,16 @@ export async function searchFileMentions(
   query: string,
   limit = 8,
 ): Promise<FileMentionItem[]> {
-  const params = new URLSearchParams({
+  const params = queryString("GET /api/files/search", {
     q: query,
-    limit: String(limit),
+    limit,
   });
   const result = await apiRequest<
     "GET /api/files/search",
     FileMentionSearchResponsePayload
   >(
     "GET /api/files/search",
-    `/api/files/search?${params.toString()}`,
+    `/api/files/search${params}`,
   );
   return result.items;
 }
@@ -190,16 +216,16 @@ export async function searchSlashCommands(
   query: string,
   limit = 8,
 ): Promise<SlashCommandItem[]> {
-  const params = new URLSearchParams({
+  const params = queryString("GET /api/slash-commands/search", {
     q: query,
-    limit: String(limit),
+    limit,
   });
   const result = await apiRequest<
     "GET /api/slash-commands/search",
     SlashCommandSearchResponsePayload
   >(
     "GET /api/slash-commands/search",
-    `/api/slash-commands/search?${params.toString()}`,
+    `/api/slash-commands/search${params}`,
   );
   return result.items;
 }
@@ -909,7 +935,7 @@ export async function fetchRunDetail(
   runSessionId: string,
   scope?: "workspace" | "global",
 ): Promise<{ run: RunSession; events: ObservabilityEvent[] }> {
-  const qs = scope === "global" ? "?scope=global" : "";
+  const qs = queryString("GET /api/runs/{run_session_id}", { scope });
   return apiRequest<
     "GET /api/runs/{run_session_id}",
     RunDetailResponsePayload
@@ -919,48 +945,20 @@ export async function fetchRunDetail(
   );
 }
 
-export async function fetchDashboardStats(params: {
-  start_date?: string;
-  end_date?: string;
-  scope?: "workspace" | "global";
-}): Promise<DashboardStatsPayload> {
-  const qs = new URLSearchParams();
-  if (params.start_date) qs.set("start_date", params.start_date);
-  if (params.end_date) qs.set("end_date", params.end_date);
-  if (params.scope) qs.set("scope", params.scope);
-  const query = qs.toString();
+export async function fetchDashboardStats(
+  params: DashboardStatsQuery,
+): Promise<DashboardStatsPayload> {
+  const qs = queryString("GET /api/dashboard/stats", params);
   return apiRequest<"GET /api/dashboard/stats", DashboardStatsPayload>(
     "GET /api/dashboard/stats",
-    `/api/dashboard/stats${query ? `?${query}` : ""}`,
+    `/api/dashboard/stats${qs}`,
   );
 }
 
-export async function fetchAllRuns(params: {
-  limit?: number;
-  offset?: number;
-  status?: string;
-  provider?: string;
-  model?: string;
-  start_date?: string;
-  end_date?: string;
-  sort_by?: string;
-  sort_dir?: string;
-  scope?: "workspace" | "global";
-}): Promise<AllRunsPayload> {
-  const qs = new URLSearchParams();
-  if (params.limit != null) qs.set("limit", String(params.limit));
-  if (params.offset != null) qs.set("offset", String(params.offset));
-  if (params.status) qs.set("status", params.status);
-  if (params.provider) qs.set("provider", params.provider);
-  if (params.model) qs.set("model", params.model);
-  if (params.start_date) qs.set("start_date", params.start_date);
-  if (params.end_date) qs.set("end_date", params.end_date);
-  if (params.sort_by) qs.set("sort_by", params.sort_by);
-  if (params.sort_dir) qs.set("sort_dir", params.sort_dir);
-  if (params.scope) qs.set("scope", params.scope);
-  const query = qs.toString();
+export async function fetchAllRuns(params: AllRunsQuery): Promise<AllRunsPayload> {
+  const qs = queryString("GET /api/runs", params);
   return apiRequest<"GET /api/runs", AllRunsPayload>(
     "GET /api/runs",
-    `/api/runs${query ? `?${query}` : ""}`,
+    `/api/runs${qs}`,
   );
 }

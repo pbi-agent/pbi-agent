@@ -39,3 +39,7 @@ def test_generated_api_types_include_operation_contracts() -> None:
     assert "export type ApiJsonRequestBodies =" in generated
     assert '"POST /api/sessions": CreateSessionRequest' in generated
     assert '"PATCH /api/tasks/{task_id}": UpdateTaskRequest' in generated
+    assert "export type ApiOperationPathParams =" in generated
+    assert '"GET /api/runs/{run_session_id}": { run_session_id: string }' in generated
+    assert "export type ApiOperationQueryParams =" in generated
+    assert '"GET /api/files/search": { q?: string; limit?: number }' in generated
