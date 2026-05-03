@@ -4,19 +4,18 @@ import { renderHook } from "@testing-library/react";
 import { useLiveSessionEvents } from "./useLiveSessionEvents";
 import { getSavedSessionKey, useSessionStore } from "../store";
 
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
+class MockEventSource {
+  static instances: MockEventSource[] = [];
 
   onopen: (() => void) | null = null;
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
-  onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
   readonly url: string;
   close = vi.fn();
 
   constructor(url: string) {
     this.url = url;
-    MockWebSocket.instances.push(this);
+    MockEventSource.instances.push(this);
   }
 }
 
@@ -39,8 +38,8 @@ describe("useLiveSessionEvents", () => {
       liveSessionIndex: {},
       sessionIndex: {},
     });
-    MockWebSocket.instances = [];
-    vi.stubGlobal("WebSocket", MockWebSocket);
+    MockEventSource.instances = [];
+    vi.stubGlobal("EventSource", MockEventSource);
   });
 
   afterEach(() => {
@@ -48,7 +47,7 @@ describe("useLiveSessionEvents", () => {
     vi.unstubAllGlobals();
   });
 
-  it("updates connection state and forwards websocket messages into the store", () => {
+  it("updates connection state and forwards SSE messages into the store", () => {
     const queryClient = new QueryClient();
     const sessionKey = getSavedSessionKey("session-1");
 
@@ -56,7 +55,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     expect(socket.url).toContain("/api/events/live-1");
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("connecting");
 
@@ -85,7 +84,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    expect(MockWebSocket.instances).toHaveLength(0);
+    expect(MockEventSource.instances).toHaveLength(0);
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("disconnected");
   });
 
@@ -97,7 +96,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     expect(socket.url).toContain("/api/events/sessions/session-1");
   });
 
@@ -135,7 +134,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     expect(socket.url).toContain("/api/events/sessions/session-1?since=20");
   });
 
@@ -147,7 +146,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     socket.onmessage?.(
       new MessageEvent("message", {
         data: JSON.stringify({
@@ -177,7 +176,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     socket.onmessage?.(
       new MessageEvent("message", {
         data: JSON.stringify({
@@ -215,7 +214,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     socket.onmessage?.(
       new MessageEvent("message", {
         data: JSON.stringify({
@@ -252,7 +251,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     socket.onmessage?.(
       new MessageEvent("message", {
         data: JSON.stringify({
@@ -300,7 +299,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     socket.onmessage?.(
       new MessageEvent("message", {
         data: JSON.stringify({
@@ -327,7 +326,7 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const socket = MockWebSocket.instances[0];
+    const socket = MockEventSource.instances[0];
     socket.onmessage?.(
       new MessageEvent("message", {
         data: JSON.stringify({
@@ -371,13 +370,13 @@ describe("useLiveSessionEvents", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    const firstSocket = MockWebSocket.instances[0];
-    firstSocket.onclose?.();
+    const firstSocket = MockEventSource.instances[0];
+    firstSocket.onerror?.();
 
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("disconnected");
-    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockEventSource.instances).toHaveLength(1);
 
     vi.advanceTimersByTime(1000);
-    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(MockEventSource.instances).toHaveLength(2);
   });
 });

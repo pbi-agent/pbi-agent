@@ -64,6 +64,10 @@ export function websocketUrl(path: string): string {
   return `${protocol}://${window.location.host}${path}`;
 }
 
+export function eventStreamUrl(path: string): string {
+  return `${window.location.origin}${path}`;
+}
+
 export async function fetchBootstrap(): Promise<BootstrapPayload> {
   return requestJson<BootstrapPayload>("/api/bootstrap");
 }

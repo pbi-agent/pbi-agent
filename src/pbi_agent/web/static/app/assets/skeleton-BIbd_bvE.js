@@ -1,0 +1,1 @@
+import{u as e}from"./markdown-TMFdla2q.js";import{et as t,nt as n}from"./dialog-Bb0IujIP.js";var r=t(`circle-check`,[[`circle`,{cx:`12`,cy:`12`,r:`10`,key:`1mglay`}],[`path`,{d:`m9 12 2 2 4-4`,key:`dzmm74`}]]),i=e();function a({className:e,...t}){return(0,i.jsx)(`div`,{"data-slot":`skeleton`,className:n(`animate-pulse rounded-md bg-muted`,e),...t})}export{r as n,a as t};

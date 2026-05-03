@@ -45,6 +45,7 @@ from pbi_agent.session_store import (
     WebManagerLeaseBusyError,
 )
 from pbi_agent.web.display import WebDisplay
+from pbi_agent.web.api.routes.events import _iter_sse_events, _resolve_since
 from pbi_agent.web.server_runtime import (
     _ExpectedStartupFailureFilter,
     _startup_error_message_from_traceback,
@@ -859,6 +860,44 @@ def test_event_stream_since_skips_snapshot_events_at_or_before_cursor() -> None:
 
     assert event["seq"] == second["seq"]
     assert event["type"] == "second"
+
+
+def _decode_sse_payload(raw: str) -> dict[str, object]:
+    data_lines = [
+        line.removeprefix("data: ")
+        for line in raw.splitlines()
+        if line.startswith("data: ")
+    ]
+    return json.loads("\n".join(data_lines))
+
+
+def test_sse_event_stream_sends_connected_and_filters_by_cursor() -> None:
+    app = create_app(_settings())
+    manager = app.state.manager
+    stream = manager.get_event_stream("app")
+    first = stream.publish("first", {})
+    second = stream.publish("second", {})
+
+    async def collect() -> list[str]:
+        iterator = _iter_sse_events(stream, since=int(first["seq"]))
+        try:
+            return [await anext(iterator), await anext(iterator)]
+        finally:
+            await iterator.aclose()
+
+    connected_raw, event_raw = asyncio.run(collect())
+
+    assert _decode_sse_payload(connected_raw)["type"] == "server.connected"
+    event = _decode_sse_payload(event_raw)
+    assert event["seq"] == second["seq"]
+    assert event["type"] == "second"
+    assert f"id: {second['seq']}" in event_raw
+
+
+def test_sse_event_stream_uses_last_event_id_as_resume_cursor() -> None:
+    assert _resolve_since(1, "5") == 5
+    assert _resolve_since(5, "1") == 5
+    assert _resolve_since(5, "not-a-number") == 5
 
 
 def test_task_creation_preserves_plain_prompt_content() -> None:

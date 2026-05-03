@@ -1,6 +1,7 @@
 import {
   ApiError,
   deleteModelProfile,
+  eventStreamUrl,
   fetchProviderAuthFlow,
   fetchProviderAuthStatus,
   fetchProviderUsageLimits,
@@ -245,11 +246,15 @@ describe("api helpers", () => {
       location: {
         protocol: "https:",
         host: "agent.test:9443",
+        origin: "https://agent.test:9443",
       },
     });
 
     expect(websocketUrl("/api/events/live-1")).toBe(
       "wss://agent.test:9443/api/events/live-1",
+    );
+    expect(eventStreamUrl("/api/events/live-1")).toBe(
+      "https://agent.test:9443/api/events/live-1",
     );
   });
 });

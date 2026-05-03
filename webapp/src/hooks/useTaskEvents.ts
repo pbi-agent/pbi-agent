@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { websocketUrl } from "../api";
+import { eventStreamUrl } from "../api";
 import type {
   LiveSession,
   LiveSessionLifecycleEvent,
@@ -64,23 +64,29 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
       startedAtMs.current = Date.now();
     }
     const hookStartedAtMs = startedAtMs.current;
-    let socket: WebSocket | null = null;
+    let source: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
     function connect() {
       if (disposed) return;
-      socket = new WebSocket(websocketUrl("/api/events/app"));
+      const since = latestHandledSeq.current;
+      const cursor = since > 0 ? `?since=${since}` : "";
+      const currentSource = new EventSource(eventStreamUrl(`/api/events/app${cursor}`));
+      source = currentSource;
 
-      socket.onopen = () => {
+      currentSource.onopen = () => {
         retryDelay.current = INITIAL_DELAY;
       };
 
-      socket.onmessage = (message) => {
+      currentSource.onmessage = (message) => {
         if (typeof message.data !== "string") {
           return;
         }
         const event = JSON.parse(message.data) as WebEvent;
+        if (event.type === "server.connected" || event.type === "server.heartbeat") {
+          return;
+        }
         if (event.type === "task_updated" || event.type === "task_deleted") {
           void client.invalidateQueries({ queryKey: ["tasks"] });
           return;
@@ -127,16 +133,14 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
         }
       };
 
-      socket.onclose = () => {
-        if (disposed) return;
+      currentSource.onerror = () => {
+        if (disposed || source !== currentSource || retryTimer) return;
+        currentSource.close();
         retryTimer = setTimeout(() => {
+          retryTimer = null;
           retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
           connect();
         }, retryDelay.current);
-      };
-
-      socket.onerror = () => {
-        socket?.close();
       };
     }
 
@@ -145,7 +149,7 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
     return () => {
       disposed = true;
       if (retryTimer) clearTimeout(retryTimer);
-      socket?.close();
+      source?.close();
     };
   }, [client]);
 

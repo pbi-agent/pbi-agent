@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { websocketUrl } from "../api";
+import { eventStreamUrl } from "../api";
 import { useSessionStore } from "../store";
 import type { WebEvent } from "../types";
 
@@ -28,7 +28,7 @@ export function useLiveSessionEvents(
     const currentLiveSessionId = liveSessionId;
     const currentSessionId = sessionId;
 
-    let socket: WebSocket | null = null;
+    let source: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
@@ -39,18 +39,18 @@ export function useLiveSessionEvents(
       const eventPath = currentSessionId
         ? `/api/events/sessions/${encodeURIComponent(currentSessionId)}`
         : `/api/events/${currentLiveSessionId}`;
-      socket = new WebSocket(websocketUrl(`${eventPath}?since=${since}`));
+      const currentSource = new EventSource(eventStreamUrl(`${eventPath}?since=${since}`));
+      source = currentSource;
 
-      socket.onopen = () => {
+      currentSource.onopen = () => {
         retryDelay.current = INITIAL_DELAY;
         setConnection(currentSessionKey, "connected");
       };
 
-      socket.onmessage = (message) => {
-        if (typeof message.data !== "string") {
-          return;
-        }
+      currentSource.onmessage = (message) => {
+        if (typeof message.data !== "string") return;
         const event = JSON.parse(message.data) as WebEvent;
+        if (event.type === "server.connected" || event.type === "server.heartbeat") return;
         const resolvedLiveSessionId = readLiveSessionId(event) ?? currentLiveSessionId;
         const targetSessionKey = resolvedLiveSessionId
           ? useSessionStore.getState().liveSessionIndex[resolvedLiveSessionId] ?? currentSessionKey
@@ -78,17 +78,15 @@ export function useLiveSessionEvents(
         }
       };
 
-      socket.onclose = () => {
-        if (disposed) return;
+      currentSource.onerror = () => {
+        if (disposed || source !== currentSource || retryTimer) return;
+        currentSource.close();
         setConnection(currentSessionKey, "disconnected");
         retryTimer = setTimeout(() => {
+          retryTimer = null;
           retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
           connect();
         }, retryDelay.current);
-      };
-
-      socket.onerror = () => {
-        socket?.close();
       };
     }
 
@@ -97,7 +95,7 @@ export function useLiveSessionEvents(
     return () => {
       disposed = true;
       if (retryTimer) clearTimeout(retryTimer);
-      socket?.close();
+      source?.close();
     };
   }, [applyEvent, queryClient, sessionKey, liveSessionId, sessionId, setConnection]);
 }
