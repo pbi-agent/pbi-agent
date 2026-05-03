@@ -3,31 +3,28 @@ import { Route, Routes } from "react-router-dom";
 import { screen, waitFor } from "@testing-library/react";
 import { SessionPage } from "./SessionPage";
 import { renderWithProviders } from "../../test/render";
+import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
 import {
   ApiError,
-  createLiveSession,
   expandSessionInput,
   fetchConfigBootstrap,
-  fetchLiveSessionDetail,
   fetchSessionDetail,
   fetchSessions,
-  interruptLiveSession,
-  runShellCommand,
-  submitSessionInput,
+  sendSessionMessage,
   updateSession,
-  uploadSessionImages,
+  uploadSavedSessionImages,
 } from "../../api";
+import { getSavedSessionKey, useSessionStore } from "../../store";
 import type {
   ConfigBootstrapPayload,
   ExpandedSessionInput,
   LiveSession,
-  LiveSessionSnapshot,
   SessionDetailPayload,
   SessionRecord,
-  UsagePayload,
 } from "../../types";
 
 const usageBarMock = vi.hoisted(() => vi.fn());
+const composerFocusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../hooks/useLiveSessionEvents", () => ({
   useLiveSessionEvents: vi.fn(),
@@ -90,6 +87,9 @@ vi.mock("./Composer", async () => {
       {
         supportsImageInputs,
         isSubmitting,
+        inputEnabled,
+        canCreateSession,
+        liveSessionId,
         onSubmit,
         isProcessing,
         canInterrupt,
@@ -99,6 +99,9 @@ vi.mock("./Composer", async () => {
       }: {
         supportsImageInputs: boolean;
         isSubmitting: boolean;
+        inputEnabled?: boolean;
+        canCreateSession?: boolean;
+        liveSessionId?: string | null;
         onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
         isProcessing?: boolean;
         canInterrupt?: boolean;
@@ -109,13 +112,16 @@ vi.mock("./Composer", async () => {
       ref,
     ) {
       React.useImperativeHandle(ref, () => ({
-        focus: vi.fn(),
+        focus: composerFocusMock,
       }));
 
       return (
         <div>
           <div>Composer images {String(supportsImageInputs)}</div>
           <div>Composer submitting {String(isSubmitting)}</div>
+          <div>Composer input enabled {String(inputEnabled)}</div>
+          <div>Composer can create {String(canCreateSession)}</div>
+          <div>Composer live session {liveSessionId ?? ""}</div>
           <div>Composer restored {restoredInput ?? ""}</div>
           {isProcessing && canInterrupt ? (
             <button
@@ -167,20 +173,16 @@ vi.mock("../../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api")>();
   return {
     ...actual,
-    createLiveSession: vi.fn(),
     deleteSession: vi.fn(),
     expandSessionInput: vi.fn(),
     fetchConfigBootstrap: vi.fn(),
-    fetchLiveSessionDetail: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
-    interruptLiveSession: vi.fn(),
-    runShellCommand: vi.fn(),
+    sendSessionMessage: vi.fn(),
     setActiveModelProfile: vi.fn(),
     setLiveSessionProfile: vi.fn(),
-    submitSessionInput: vi.fn(),
     updateSession: vi.fn(),
-    uploadSessionImages: vi.fn(),
+    uploadSavedSessionImages: vi.fn(),
   };
 });
 
@@ -312,62 +314,6 @@ function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
   };
 }
 
-function makeSnapshot(
-  overrides: Partial<LiveSessionSnapshot> = {},
-): LiveSessionSnapshot {
-  return {
-    live_session_id: "live-1",
-    session_id: null,
-    runtime: null,
-    input_enabled: true,
-    wait_message: null,
-    processing: null,
-    session_usage: null,
-    turn_usage: null,
-    session_ended: false,
-    fatal_error: null,
-    items: [
-      {
-        kind: "message",
-        itemId: "message-1",
-        role: "assistant",
-        content: "ready",
-        markdown: false,
-      },
-    ],
-    sub_agents: {},
-    last_event_seq: 1,
-    ...overrides,
-  };
-}
-
-function makeUsage(overrides: Partial<UsagePayload> = {}): UsagePayload {
-  return {
-    input_tokens: 0,
-    cached_input_tokens: 0,
-    cache_write_tokens: 0,
-    cache_write_1h_tokens: 0,
-    output_tokens: 0,
-    reasoning_tokens: 0,
-    tool_use_tokens: 0,
-    provider_total_tokens: 0,
-    sub_agent_input_tokens: 0,
-    sub_agent_output_tokens: 0,
-    sub_agent_reasoning_tokens: 0,
-    sub_agent_tool_use_tokens: 0,
-    sub_agent_provider_total_tokens: 0,
-    sub_agent_cost_usd: 0,
-    context_tokens: 0,
-    total_tokens: 0,
-    estimated_cost_usd: 0,
-    main_agent_total_tokens: 0,
-    sub_agent_total_tokens: 0,
-    model: "gpt-5.4",
-    service_tier: "",
-    ...overrides,
-  };
-}
-
 function makeSessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     session_id: "session-1",
@@ -399,10 +345,6 @@ function renderSessionRoute(route: string) {
         path="/sessions/:sessionId"
         element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
       />
-      <Route
-        path="/sessions/live/:liveSessionId"
-        element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
-      />
     </Routes>,
     { route },
   );
@@ -411,12 +353,14 @@ function renderSessionRoute(route: string) {
 describe("SessionPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    useSessionStore.setState({
+      activeSessionKey: null,
+      sessionsByKey: {},
+      liveSessionIndex: {},
+      sessionIndex: {},
+    });
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(fetchSessions).mockResolvedValue([makeSessionRecord()]);
-    vi.mocked(fetchLiveSessionDetail).mockResolvedValue({
-      live_session: makeLiveSession(),
-      snapshot: makeSnapshot(),
-    });
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord(),
       history_items: [],
@@ -428,104 +372,264 @@ describe("SessionPage", () => {
       image_paths: ["images/diagram.png", "images/diagram.png"],
       warnings: ["Expanded one mention."],
     } satisfies ExpandedSessionInput);
-    vi.mocked(uploadSessionImages).mockResolvedValue([
+    vi.mocked(uploadSavedSessionImages).mockResolvedValue([
       {
-        upload_id: "upload-1",
+        upload_id: "saved-upload-1",
         name: "diagram.png",
         mime_type: "image/png",
         byte_count: 5,
-        preview_url: "/api/uploads/upload-1",
+        preview_url: "/api/uploads/saved-upload-1",
       },
     ]);
-    vi.mocked(runShellCommand).mockResolvedValue(makeLiveSession());
-    vi.mocked(submitSessionInput).mockResolvedValue(makeLiveSession());
+    vi.mocked(sendSessionMessage).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-new", session_id: "session-1", last_event_seq: 3 }),
+    );
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
-    vi.mocked(interruptLiveSession).mockResolvedValue(makeLiveSession());
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    composerFocusMock.mockClear();
   });
 
-  it("expands input, shows warnings, uploads images, and submits the merged payload", async () => {
+  it("attaches a new run and uploads images through saved-session continuation", async () => {
     const user = userEvent.setup();
 
-    renderSessionRoute("/sessions/live/live-1");
+    renderSessionRoute("/sessions/session-1");
 
-    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Submit Expanded" }));
 
-    await waitFor(() => expect(submitSessionInput).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("Expanded one mention.")).toBeInTheDocument();
-    expect(uploadSessionImages).toHaveBeenCalledWith(
-      "live-1",
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    expect(uploadSavedSessionImages).toHaveBeenCalledWith(
+      "session-1",
       expect.arrayContaining([expect.any(File)]),
     );
-    expect(submitSessionInput).toHaveBeenCalledWith("live-1", {
+    expect(sendSessionMessage).toHaveBeenCalledWith("session-1", {
       text: "review @docs and @images/diagram.png",
       file_paths: ["docs/spec.md"],
       image_paths: ["images/diagram.png"],
-      image_upload_ids: ["upload-1"],
+      image_upload_ids: ["saved-upload-1"],
       profile_id: "analysis",
       interactive_mode: false,
     });
-  });
-
-  it("sends interactive mode as a per-message input flag from the topbar toggle", async () => {
-    const user = userEvent.setup();
-
-    renderSessionRoute("/sessions/live/live-1");
-
-    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
-    const toggle = screen.getByRole("button", {
-      name: "Toggle interactive mode for assistant questions",
+    await waitFor(() => {
+      const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+      expect(state?.liveSessionId).toBe("live-new");
+      expect(state?.lastEventSeq).toBe(0);
     });
-
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Submit Expanded" }));
-
-    await waitFor(() => expect(submitSessionInput).toHaveBeenCalledTimes(1));
-    expect(submitSessionInput).toHaveBeenCalledWith(
-      "live-1",
-      expect.objectContaining({ interactive_mode: true }),
-    );
-    expect(createLiveSession).not.toHaveBeenCalledWith(
-      expect.objectContaining({ interactive_mode: true }),
-    );
   });
 
-  it("shows interrupt only while processing and calls interrupt endpoint", async () => {
-    const user = userEvent.setup();
-    vi.mocked(fetchLiveSessionDetail).mockResolvedValue({
-      live_session: makeLiveSession(),
-      snapshot: makeSnapshot({
-        input_enabled: false,
-        processing: {
-          active: true,
-          phase: "model_wait",
-          message: "Working...",
+  it("keeps the composer enabled for lazy-created sessions", async () => {
+    renderSessionRoute("/sessions");
+
+    expect(await screen.findByText("Composer can create true")).toBeInTheDocument();
+    expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
+    expect(screen.getByText("Connection ready")).toBeInTheDocument();
+    expect(screen.getByText("Composer live session")).toBeInTheDocument();
+    await waitFor(() => expect(composerFocusMock).toHaveBeenCalled());
+  });
+
+  it("keeps completed saved sessions sendable without an active live run", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-1",
+          role: "assistant",
+          content: "done",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-04-16T12:00:00Z",
         },
-      }),
-    });
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: null,
+    } satisfies SessionDetailPayload);
 
-    renderSessionRoute("/sessions/live/live-1");
+    renderSessionRoute("/sessions/session-1");
 
-    const button = await screen.findByRole("button", {
-      name: "Interrupt assistant turn",
-    });
-    await user.click(button);
-
-    await waitFor(() => expect(interruptLiveSession).toHaveBeenCalledWith("live-1"));
+    expect(await screen.findByText("Composer can create true")).toBeInTheDocument();
+    expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
+    expect(screen.getByText("Composer live session")).toBeInTheDocument();
+    expect(screen.getByText("Connection ready")).toBeInTheDocument();
   });
 
-  it("hides interrupt while idle", async () => {
-    renderSessionRoute("/sessions/live/live-1");
+  it("hydrates completed saved-session working trace from a persisted timeline", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-1",
+          role: "assistant",
+          content: "done",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-04-16T12:00:00Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "ended-live-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Thinking",
+            content: "reasoning",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-group-1",
+            label: "Tool calls",
+            status: "completed",
+            items: [{ text: "shell output" }],
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 12,
+      },
+    } satisfies SessionDetailPayload);
 
-    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Interrupt assistant turn" })).toBeNull();
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 2")).toBeInTheDocument();
+    expect(screen.getByText("Composer can create true")).toBeInTheDocument();
+    expect(screen.getByText("Composer live session")).toBeInTheDocument();
+  });
+
+  it("keeps the composer disabled between tool phases until input state enables it", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord(),
+      history_items: [],
+      active_live_session: makeLiveSession({
+        live_session_id: "live-processing",
+        session_id: "session-1",
+      }),
+      timeline: {
+        live_session_id: "live-processing",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [],
+        sub_agents: {},
+        last_event_seq: 4,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Composer live session live-processing")).toBeInTheDocument();
+    expect(screen.getByText("Composer input enabled false")).toBeInTheDocument();
+    expect(screen.getByText("Connection disconnected")).toBeInTheDocument();
+  });
+
+  it("does not reuse a previous active session on the blank new-session route", async () => {
+    useSessionStore.setState({
+      activeSessionKey: getSavedSessionKey("session-1"),
+      sessionsByKey: {
+        [getSavedSessionKey("session-1")]: {
+          liveSessionId: "stale-live-1",
+          sessionId: "session-1",
+          runtime: null,
+          connection: "connected",
+          inputEnabled: false,
+          waitMessage: null,
+          processing: null,
+          restoredInput: null,
+          sessionUsage: null,
+          turnUsage: null,
+          sessionEnded: true,
+          fatalError: null,
+          pendingUserQuestions: null,
+          items: [],
+          itemsVersion: 0,
+          subAgents: {},
+          lastEventSeq: 3,
+        },
+      },
+      liveSessionIndex: { "stale-live-1": getSavedSessionKey("session-1") },
+      sessionIndex: { "session-1": getSavedSessionKey("session-1") },
+    });
+
+    renderSessionRoute("/sessions");
+
+    expect(await screen.findByText("Connection ready")).toBeInTheDocument();
+    expect(screen.getByText("Composer can create true")).toBeInTheDocument();
+    expect(screen.getByText("Composer live session")).toBeInTheDocument();
+    expect(vi.mocked(useLiveSessionEvents)).toHaveBeenLastCalledWith(null, null, null);
+  });
+
+  it("clears the selected saved session when using the new-session shortcut", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New Session" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Composer can create true")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Connection ready")).toBeInTheDocument();
+    expect(vi.mocked(useLiveSessionEvents)).toHaveBeenLastCalledWith(null, null, null);
+  });
+
+  it("marks direct sends pending and ignores duplicate submits", async () => {
+    const user = userEvent.setup();
+    let resolveSend!: (session: LiveSession) => void;
+    vi.mocked(sendSessionMessage).mockImplementation(
+      () =>
+        new Promise<LiveSession>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+
+    renderSessionRoute("/sessions/session-1");
+
+    await user.click(await screen.findByRole("button", { name: "Submit Expanded" }));
+
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Composer submitting true")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit Expanded" }));
+    expect(sendSessionMessage).toHaveBeenCalledTimes(1);
+
+    resolveSend(
+      makeLiveSession({
+        live_session_id: "live-new",
+        session_id: "session-1",
+        last_event_seq: 3,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Composer submitting false")).toBeInTheDocument();
+    });
   });
 
   it("renders the saved-session delete icon as a neutral toolbar action with destructive hover styling", async () => {
@@ -550,82 +654,6 @@ describe("SessionPage", () => {
     });
   });
 
-  it("passes live session usage to the context gauge before turn end", async () => {
-    const liveUsage = makeUsage({ context_tokens: 120000 });
-    const finalTurnUsage = makeUsage({ context_tokens: 85000 });
-    vi.mocked(fetchLiveSessionDetail).mockResolvedValue({
-      live_session: makeLiveSession({ compact_threshold: 200000 }),
-      snapshot: makeSnapshot({
-        session_usage: liveUsage,
-        turn_usage: { usage: finalTurnUsage, elapsed_seconds: 3.2 },
-      }),
-    });
-
-    renderSessionRoute("/sessions/live/live-1");
-
-    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
-    expect(usageBarMock).toHaveBeenLastCalledWith({
-      compactThreshold: 200000,
-      usage: liveUsage,
-    });
-  });
-
-  it("sends slash commands directly with image uploads and without expansion", async () => {
-    const user = userEvent.setup();
-
-    renderSessionRoute("/sessions/live/live-1");
-
-    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Submit Slash" }));
-
-    await waitFor(() => expect(submitSessionInput).toHaveBeenCalledTimes(1));
-    expect(expandSessionInput).not.toHaveBeenCalled();
-    expect(uploadSessionImages).toHaveBeenCalledWith(
-      "live-1",
-      expect.arrayContaining([expect.any(File)]),
-    );
-    expect(submitSessionInput).toHaveBeenCalledWith("live-1", {
-      text: "/plan",
-      file_paths: [],
-      image_paths: [],
-      image_upload_ids: ["upload-1"],
-      profile_id: "analysis",
-      interactive_mode: false,
-    });
-  });
-
-  it("runs bang-prefixed shell commands without expansion, uploads, or model input", async () => {
-    const user = userEvent.setup();
-
-    renderSessionRoute("/sessions/live/live-1");
-
-    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Submit Shell" }));
-
-    await waitFor(() => expect(runShellCommand).toHaveBeenCalledTimes(1));
-    expect(expandSessionInput).not.toHaveBeenCalled();
-    expect(uploadSessionImages).not.toHaveBeenCalled();
-    expect(submitSessionInput).not.toHaveBeenCalled();
-    expect(runShellCommand).toHaveBeenCalledWith("live-1", { command: "ls -la" });
-  });
-
-  it("marks the composer as submitting while shell commands are pending", async () => {
-    const user = userEvent.setup();
-    vi.mocked(runShellCommand).mockReturnValue(new Promise(() => undefined));
-
-    renderSessionRoute("/sessions/live/live-1");
-
-    expect(await screen.findByText("Timeline 1")).toBeInTheDocument();
-    expect(screen.getByText("Composer submitting false")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Submit Shell" }));
-
-    await waitFor(() => expect(runShellCommand).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Composer submitting true")).toBeInTheDocument();
-  });
-
   it("renders the not-found state for missing saved sessions", async () => {
     vi.mocked(fetchSessionDetail).mockRejectedValue(
       new ApiError("Session missing from this workspace.", 404),
@@ -638,18 +666,4 @@ describe("SessionPage", () => {
     expect(screen.getByRole("button", { name: "Start new session" })).toBeInTheDocument();
   });
 
-  it("reopens saved sessions with the explicit resume_session_id payload", async () => {
-    vi.mocked(createLiveSession).mockResolvedValue(
-      makeLiveSession({ session_id: "session-1" }),
-    );
-
-    renderSessionRoute("/sessions/session-1");
-
-    await waitFor(() => {
-      expect(createLiveSession).toHaveBeenCalled();
-      expect(vi.mocked(createLiveSession).mock.calls[0]?.[0]).toEqual({
-        resume_session_id: "session-1",
-      });
-    });
-  });
 });

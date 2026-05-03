@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 from pbi_agent.display.protocol import PendingUserQuestion, UserQuestionAnswer
 from pbi_agent.tools.ask_user import handle
@@ -113,4 +114,32 @@ def test_web_display_asks_and_waits_for_question_response() -> None:
             "suggestions": ["Yes", "No", "Later"],
             "recommended_suggestion_index": 0,
         }
+    ]
+
+
+def test_web_display_deduplicates_waiting_input_state_events() -> None:
+    events: list[tuple[str, dict[str, object]]] = []
+    display = WebDisplay(
+        publish_event=lambda event, payload: events.append((event, payload))
+    )
+    result: list[object] = []
+
+    worker = threading.Thread(target=lambda: result.append(display.user_prompt()))
+    worker.start()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        if events:
+            break
+        time.sleep(0.01)
+
+    time.sleep(0.65)
+    display.submit_input("hello")
+    worker.join(timeout=1)
+
+    assert not worker.is_alive()
+    assert result
+    assert [event for event, _payload in events] == ["input_state", "input_state"]
+    assert [payload for _event, payload in events] == [
+        {"enabled": True},
+        {"enabled": False},
     ]

@@ -138,7 +138,63 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _serialize_session(record: SessionRecord) -> dict[str, Any]:
+def _normalize_run_status(
+    status: str,
+    *,
+    fatal_error: str | None = None,
+    ended_at: str | None = None,
+    exit_code: int | None = None,
+) -> str:
+    if status in {
+        "idle",
+        "starting",
+        "running",
+        "waiting_for_input",
+        "ended",
+        "failed",
+        "stale",
+    }:
+        return status
+    if status in {"completed", "interrupted"}:
+        return "ended"
+    if status == "started":
+        return "running"
+    if fatal_error:
+        return "failed"
+    if ended_at is not None or exit_code is not None:
+        return "ended"
+    return "running"
+
+
+def _session_status_from_run(record: RunSessionRecord) -> str:
+    return _normalize_run_status(
+        record.status,
+        fatal_error=record.fatal_error,
+        ended_at=record.ended_at,
+        exit_code=record.exit_code,
+    )
+
+
+def _serialize_session(
+    record: SessionRecord,
+    *,
+    active_live_session: "LiveSessionState | None" = None,
+    active_run: RunSessionRecord | None = None,
+    status_run: RunSessionRecord | None = None,
+) -> dict[str, Any]:
+    status = "idle"
+    active_run_id = None
+    task_id = None
+    if status_run is not None:
+        status = _session_status_from_run(status_run)
+    if active_run is not None:
+        status = _session_status_from_run(active_run)
+        active_run_id = active_run.run_session_id
+        task_id = active_run.task_id
+    if active_live_session is not None:
+        status = active_live_session.status
+        active_run_id = active_live_session.live_session_id
+        task_id = active_live_session.task_id
     return {
         "session_id": record.session_id,
         "directory": record.directory,
@@ -154,6 +210,10 @@ def _serialize_session(record: SessionRecord) -> dict[str, Any]:
         "cost_usd": record.cost_usd,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
+        "status": status,
+        "active_run_id": active_run_id,
+        "active_live_session_id": active_run_id,
+        "task_id": task_id,
     }
 
 
@@ -164,6 +224,19 @@ def _deserialize_json_field(raw_value: str | None) -> Any:
         return json.loads(raw_value)
     except json.JSONDecodeError:
         return raw_value
+
+
+def _timeline_snapshot_from_run(
+    record: RunSessionRecord | None,
+) -> dict[str, Any] | None:
+    if record is None:
+        return None
+    snapshot = _deserialize_json_field(record.snapshot_json)
+    if not isinstance(snapshot, dict):
+        return None
+    if not isinstance(snapshot.get("live_session_id"), str):
+        return None
+    return snapshot
 
 
 def _format_shell_command_output(result: dict[str, Any] | str) -> str:
@@ -186,6 +259,10 @@ def _format_shell_command_output(result: dict[str, Any] | str) -> str:
     return "\n".join(sections)
 
 
+def _session_title_for_input(text: str) -> str:
+    return text.strip()[:80]
+
+
 def _serialize_run_session(record: RunSessionRecord) -> dict[str, Any]:
     return {
         "run_session_id": record.run_session_id,
@@ -197,7 +274,7 @@ def _serialize_run_session(record: RunSessionRecord) -> dict[str, Any]:
         "provider_id": record.provider_id,
         "profile_id": record.profile_id,
         "model": record.model,
-        "status": record.status,
+        "status": _session_status_from_run(record),
         "started_at": record.started_at,
         "ended_at": record.ended_at,
         "total_duration_ms": record.total_duration_ms,
@@ -213,7 +290,41 @@ def _serialize_run_session(record: RunSessionRecord) -> dict[str, Any]:
         "total_tool_calls": record.total_tool_calls,
         "total_api_calls": record.total_api_calls,
         "error_count": record.error_count,
+        "kind": record.kind,
+        "task_id": record.task_id,
+        "project_dir": record.project_dir,
+        "last_event_seq": record.last_event_seq,
+        "snapshot": _deserialize_json_field(record.snapshot_json),
+        "exit_code": record.exit_code,
+        "fatal_error": record.fatal_error,
         "metadata": _deserialize_json_field(record.metadata_json),
+    }
+
+
+def _serialize_run_as_live_session(record: RunSessionRecord) -> dict[str, Any]:
+    metadata = _deserialize_json_field(record.metadata_json)
+    runtime = metadata.get("runtime") if isinstance(metadata, dict) else None
+    runtime = runtime if isinstance(runtime, dict) else {}
+    return {
+        "live_session_id": record.run_session_id,
+        "run_id": record.run_session_id,
+        "session_id": record.session_id,
+        "resume_session_id": record.session_id,
+        "task_id": record.task_id,
+        "kind": record.kind if record.kind in {"session", "task"} else "session",
+        "project_dir": record.project_dir or ".",
+        "provider_id": record.provider_id,
+        "profile_id": record.profile_id,
+        "provider": record.provider or runtime.get("provider") or "",
+        "model": record.model or runtime.get("model") or "",
+        "reasoning_effort": str(runtime.get("reasoning_effort") or ""),
+        "compact_threshold": int(runtime.get("compact_threshold") or 0),
+        "created_at": record.started_at,
+        "status": _session_status_from_run(record),
+        "exit_code": record.exit_code,
+        "fatal_error": record.fatal_error,
+        "ended_at": record.ended_at,
+        "last_event_seq": record.last_event_seq,
     }
 
 
@@ -350,7 +461,7 @@ def _serialize_history_message(message: MessageRecord) -> dict[str, Any]:
 
 
 def _preview_url(upload_id: str) -> str:
-    return f"/api/live-sessions/uploads/{upload_id}"
+    return f"/api/uploads/{upload_id}"
 
 
 def _message_image_attachment(record: StoredImageUpload) -> MessageImageAttachment:
@@ -542,6 +653,7 @@ class WebSessionManager:
                             "Another web app instance is already managing this workspace."
                         )
                     store.normalize_kanban_running_tasks(directory=self._directory_key)
+                    store.mark_web_runs_stale(self._directory_key)
                 break
             except WebManagerLeaseBusyError as exc:
                 if time.monotonic() >= deadline:
@@ -684,7 +796,54 @@ class WebSessionManager:
                 self._directory_key,
                 limit=limit,
             )
-        return [_serialize_session(session) for session in sessions]
+            active_runs = {
+                session.session_id: store.get_latest_session_run(
+                    session.session_id,
+                    include_ended=False,
+                )
+                for session in sessions
+            }
+            latest_runs = {
+                session.session_id: store.get_latest_session_run(
+                    session.session_id,
+                    include_ended=True,
+                )
+                for session in sessions
+            }
+        return [
+            _serialize_session(
+                session,
+                active_live_session=self._find_live_session_for_saved_session(
+                    session.session_id
+                ),
+                active_run=active_runs.get(session.session_id),
+                status_run=latest_runs.get(session.session_id),
+            )
+            for session in sessions
+        ]
+
+    def create_session_record(
+        self,
+        *,
+        title: str = "",
+        profile_id: str | None = None,
+    ) -> dict[str, Any]:
+        runtime = self._resolve_runtime(profile_id)
+        with SessionStore() as store:
+            session_id = store.create_session(
+                str(self._workspace_root),
+                runtime.settings.provider,
+                runtime.settings.model,
+                title=title,
+                provider_id=runtime.provider_id,
+                profile_id=runtime.profile_id,
+            )
+            record = store.get_session(session_id)
+        if record is None:
+            raise KeyError(session_id)
+        serialized = _serialize_session(record)
+        self._app_stream.publish("session_created", {"session": serialized})
+        return serialized
 
     def get_session_detail(self, session_id: str) -> dict[str, Any]:
         with SessionStore() as store:
@@ -692,22 +851,43 @@ class WebSessionManager:
             if record is None or record.directory != self._directory_key:
                 raise KeyError(session_id)
             messages = store.list_messages(session_id)
+            latest_run = store.get_latest_session_run(session_id, include_ended=True)
+            active_run = store.get_latest_session_run(session_id, include_ended=False)
+            latest_web_run = store.get_latest_web_session_run(session_id)
         live_session = self._find_live_session_for_saved_session(session_id)
+        serialized_live_session = (
+            self._serialize_live_session(live_session)
+            if live_session is not None
+            else _serialize_run_as_live_session(active_run)
+            if active_run is not None
+            else None
+        )
+        timeline = (
+            self._serialize_live_snapshot(live_session)
+            if live_session is not None
+            else _timeline_snapshot_from_run(active_run or latest_web_run)
+        )
         return {
-            "session": _serialize_session(record),
+            "session": _serialize_session(
+                record,
+                active_live_session=live_session,
+                active_run=active_run,
+                status_run=active_run or latest_run,
+            ),
+            "status": live_session.status
+            if live_session is not None
+            else _session_status_from_run(active_run)
+            if active_run is not None
+            else _session_status_from_run(latest_run)
+            if latest_run is not None
+            else "idle",
             "history_items": [
                 _serialize_history_message(message) for message in messages
             ],
-            "live_session": (
-                self._serialize_live_session(live_session)
-                if live_session is not None
-                else None
-            ),
-            "active_live_session": (
-                self._serialize_live_session(live_session)
-                if live_session is not None
-                else None
-            ),
+            "timeline": timeline,
+            "live_session": serialized_live_session,
+            "active_live_session": serialized_live_session,
+            "active_run": serialized_live_session,
         }
 
     def update_session_title(self, session_id: str, title: str) -> dict[str, Any]:
@@ -745,7 +925,11 @@ class WebSessionManager:
             events = store.list_observability_events(run_session_id=run_session_id)
         return {
             "run": _serialize_run_session(run),
-            "events": [_serialize_observability_event(event) for event in events],
+            "events": [
+                _serialize_observability_event(event)
+                for event in events
+                if event.event_type != "web_event"
+            ],
         }
 
     def get_dashboard_stats(
@@ -800,6 +984,24 @@ class WebSessionManager:
             # Deserialise metadata_json → metadata
             raw_meta = run_dict.pop("metadata_json", "{}")
             run_dict["metadata"] = _deserialize_json_field(raw_meta)
+            run_dict["status"] = _normalize_run_status(
+                str(run_dict.get("status") or ""),
+                fatal_error=(
+                    str(run_dict["fatal_error"])
+                    if run_dict.get("fatal_error") is not None
+                    else None
+                ),
+                ended_at=(
+                    str(run_dict["ended_at"])
+                    if run_dict.get("ended_at") is not None
+                    else None
+                ),
+                exit_code=(
+                    int(run_dict["exit_code"])
+                    if run_dict.get("exit_code") is not None
+                    else None
+                ),
+            )
             # Drop the autoincrement id; it's an internal detail.
             run_dict.pop("id", None)
             run_dict["session_title"] = session_title
@@ -966,6 +1168,7 @@ class WebSessionManager:
                 created_at=_now_iso(),
             )
             self._live_sessions[new_live_session_id] = live_session
+            self._create_live_run_projection(live_session)
             self._publish_live_session_runtime(live_session)
             self._publish_live_event(
                 new_live_session_id,
@@ -1057,6 +1260,24 @@ class WebSessionManager:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
             raise RuntimeError("Live session has already ended.")
+        return self._store_session_image_uploads(files)
+
+    def upload_saved_session_images(
+        self,
+        session_id: str,
+        *,
+        files: list[tuple[str, bytes]],
+    ) -> list[dict[str, Any]]:
+        self._require_saved_session(session_id)
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is not None and live_session.status == "ended":
+            raise RuntimeError("Session run has already ended.")
+        return self._store_session_image_uploads(files)
+
+    def _store_session_image_uploads(
+        self,
+        files: list[tuple[str, bytes]],
+    ) -> list[dict[str, Any]]:
         attachments: list[dict[str, Any]] = []
         for original_name, raw_bytes in files:
             safe_name = (
@@ -1125,6 +1346,55 @@ class WebSessionManager:
         )
         self._set_latest_queued_input_item_id(live_session, optimistic_item_id)
         return self._serialize_live_session(live_session)
+
+    def submit_saved_session_input(
+        self,
+        session_id: str,
+        *,
+        text: str,
+        file_paths: list[str] | None = None,
+        image_paths: list[str] | None = None,
+        image_upload_ids: list[str] | None = None,
+        profile_id: str | None = None,
+        interactive_mode: bool = False,
+    ) -> dict[str, Any]:
+        self._ensure_saved_session_title(session_id, text)
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None:
+            created = self.create_live_session(
+                session_id=session_id,
+                profile_id=profile_id,
+            )
+            live_session_id = str(created["live_session_id"])
+        else:
+            live_session_id = live_session.live_session_id
+        return self.submit_session_input(
+            live_session_id,
+            text=text,
+            file_paths=file_paths,
+            image_paths=image_paths,
+            image_upload_ids=image_upload_ids,
+            profile_id=profile_id,
+            interactive_mode=interactive_mode,
+        )
+
+    def _ensure_saved_session_title(self, session_id: str, text: str) -> None:
+        title = _session_title_for_input(text)
+        if not title:
+            return
+        with SessionStore() as store:
+            record = store.get_session(session_id)
+            if record is None or record.directory != self._directory_key:
+                raise KeyError(session_id)
+            if record.title.strip():
+                return
+            store.update_session(session_id, title=title)
+            updated = store.get_session(session_id)
+        if updated is not None:
+            self._app_stream.publish(
+                "session_updated",
+                {"session": _serialize_session(updated)},
+            )
 
     def submit_question_response(
         self,
@@ -1196,6 +1466,22 @@ class WebSessionManager:
         )
         return self._serialize_live_session(live_session)
 
+    def submit_saved_session_question_response(
+        self,
+        session_id: str,
+        *,
+        prompt_id: str,
+        answers: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None:
+            raise KeyError(session_id)
+        return self.submit_question_response(
+            live_session.live_session_id,
+            prompt_id=prompt_id,
+            answers=answers,
+        )
+
     def interrupt_live_session(self, live_session_id: str) -> dict[str, Any]:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
@@ -1210,6 +1496,12 @@ class WebSessionManager:
             input_text=input_text,
         )
         return self._serialize_live_session(live_session)
+
+    def interrupt_saved_session(self, session_id: str) -> dict[str, Any]:
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None:
+            raise KeyError(session_id)
+        return self.interrupt_live_session(live_session.live_session_id)
 
     def run_shell_command(
         self,
@@ -1272,6 +1564,20 @@ class WebSessionManager:
             )
         return self._serialize_live_session(live_session)
 
+    def run_saved_session_shell_command(
+        self,
+        session_id: str,
+        *,
+        command: str,
+    ) -> dict[str, Any]:
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None:
+            created = self.create_live_session(session_id=session_id)
+            live_session_id = str(created["live_session_id"])
+        else:
+            live_session_id = live_session.live_session_id
+        return self.run_shell_command(live_session_id, command=command)
+
     def _persist_shell_command_messages(
         self,
         live_session: LiveSessionState,
@@ -1310,6 +1616,23 @@ class WebSessionManager:
         live_session.display.request_new_session()
         return self._serialize_live_session(live_session)
 
+    def request_saved_new_session(
+        self,
+        session_id: str,
+        *,
+        profile_id: str | None = None,
+    ) -> dict[str, Any]:
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None:
+            return self.create_live_session(
+                session_id=session_id,
+                profile_id=profile_id,
+            )
+        return self.request_new_session(
+            live_session.live_session_id,
+            profile_id=profile_id,
+        )
+
     def set_live_session_profile(
         self,
         live_session_id: str,
@@ -1324,12 +1647,63 @@ class WebSessionManager:
             self._queue_runtime_change(live_session, profile_id)
         return self._serialize_live_session(live_session)
 
+    def set_saved_session_profile(
+        self,
+        session_id: str,
+        *,
+        profile_id: str | None = None,
+    ) -> dict[str, Any]:
+        live_session = self._find_live_session_for_saved_session(session_id)
+        if live_session is None:
+            created = self.create_live_session(
+                session_id=session_id,
+                profile_id=profile_id,
+            )
+            return created
+        return self.set_live_session_profile(
+            live_session.live_session_id,
+            profile_id=profile_id,
+        )
+
     def get_event_stream(self, stream_id: str) -> EventStream:
         if stream_id == APP_EVENT_STREAM_ID:
             return self._app_stream
         live_session = self._live_sessions.get(stream_id)
         if live_session is None:
             raise KeyError(stream_id)
+        return live_session.event_stream
+
+    def get_session_event_stream(self, session_id: str) -> EventStream:
+        self._require_saved_session(session_id)
+        live_session = self._find_stream_live_session_for_saved_session(session_id)
+        if live_session is None:
+            with SessionStore() as store:
+                run = store.get_latest_session_run(session_id, include_ended=True)
+                web_run = store.get_latest_web_session_run(session_id)
+                run = web_run or run
+                if run is None:
+                    raise KeyError(session_id)
+                events = store.list_observability_events(
+                    run_session_id=run.run_session_id
+                )
+            stream = EventStream()
+            web_events: list[tuple[int, dict[str, Any]]] = []
+            for record in events:
+                if record.event_type != "web_event":
+                    continue
+                metadata = _deserialize_json_field(record.metadata_json)
+                if not isinstance(metadata, dict):
+                    continue
+                seq = metadata.get("seq")
+                web_events.append(
+                    (seq if isinstance(seq, int) else record.step_index, metadata)
+                )
+            for _, metadata in sorted(web_events, key=lambda item: item[0]):
+                event_type = metadata.get("type")
+                payload = metadata.get("payload")
+                if isinstance(event_type, str) and isinstance(payload, dict):
+                    stream.publish(event_type, payload)
+            return stream
         return live_session.event_stream
 
     def create_task(
@@ -2492,6 +2866,7 @@ class WebSessionManager:
         )
         with self._lock:
             self._live_sessions[new_live_session_id] = live_session
+        self._create_live_run_projection(live_session)
         self._publish_live_session_runtime(live_session)
         self._publish_live_event(
             new_live_session_id,
@@ -2662,6 +3037,21 @@ class WebSessionManager:
             return live_session
         return None
 
+    def _find_stream_live_session_for_saved_session(
+        self,
+        session_id: str,
+    ) -> LiveSessionState | None:
+        with self._lock:
+            active_live_session = self._find_live_session_for_saved_session_locked(
+                session_id
+            )
+            if active_live_session is not None:
+                return active_live_session
+            for live_session in reversed(self._live_sessions.values()):
+                if live_session.bound_session_id == session_id:
+                    return live_session
+        return None
+
     def _bind_live_session(
         self,
         live_session_id: str,
@@ -2673,6 +3063,7 @@ class WebSessionManager:
         previous_session_id = live_session.bound_session_id
         live_session.bound_session_id = session_id
         live_session.snapshot.session_id = session_id
+        self._update_live_run_projection(live_session)
         if previous_session_id != session_id:
             self._publish_live_session_lifecycle("live_session_bound", live_session)
 
@@ -2717,6 +3108,77 @@ class WebSessionManager:
             "sub_agents": dict(live_session.snapshot.sub_agents),
             "last_event_seq": live_session.snapshot.last_event_seq,
         }
+
+    def _create_live_run_projection(self, live_session: LiveSessionState) -> None:
+        with SessionStore() as store:
+            if store.get_run_session(live_session.live_session_id) is not None:
+                return
+            store.create_run_session(
+                run_session_id=live_session.live_session_id,
+                session_id=live_session.bound_session_id,
+                agent_name="main",
+                agent_type="web_session",
+                provider=live_session.runtime.settings.provider,
+                provider_id=live_session.runtime.provider_id,
+                profile_id=live_session.runtime.profile_id,
+                model=live_session.runtime.settings.model,
+                status=live_session.status,
+                kind=live_session.kind,
+                task_id=live_session.task_id,
+                project_dir=live_session.project_dir,
+                last_event_seq=live_session.snapshot.last_event_seq,
+                snapshot=self._serialize_live_snapshot(live_session),
+                exit_code=live_session.exit_code,
+                fatal_error=live_session.fatal_error,
+                metadata={
+                    "source": "web",
+                    "runtime": _runtime_summary(live_session.runtime),
+                },
+            )
+
+    def _update_live_run_projection(self, live_session: LiveSessionState) -> None:
+        with SessionStore() as store:
+            store.update_run_session(
+                live_session.live_session_id,
+                session_id=live_session.bound_session_id,
+                status=live_session.status,
+                ended_at=live_session.ended_at,
+                kind=live_session.kind,
+                task_id=live_session.task_id,
+                project_dir=live_session.project_dir,
+                last_event_seq=live_session.snapshot.last_event_seq,
+                snapshot=self._serialize_live_snapshot(live_session),
+                exit_code=live_session.exit_code,
+                fatal_error=live_session.fatal_error,
+            )
+
+    def _persist_live_event_record(
+        self,
+        live_session: LiveSessionState,
+        event: dict[str, Any],
+    ) -> None:
+        with SessionStore() as store:
+            store.add_observability_event(
+                run_session_id=live_session.live_session_id,
+                session_id=live_session.bound_session_id,
+                step_index=-int(event["seq"]),
+                event_type="web_event",
+                metadata={
+                    "type": event["type"],
+                    "payload": event["payload"],
+                    "seq": event["seq"],
+                },
+            )
+            store.update_run_session(
+                live_session.live_session_id,
+                session_id=live_session.bound_session_id,
+                status=live_session.status,
+                ended_at=live_session.ended_at,
+                last_event_seq=live_session.snapshot.last_event_seq,
+                snapshot=self._serialize_live_snapshot(live_session),
+                exit_code=live_session.exit_code,
+                fatal_error=live_session.fatal_error,
+            )
 
     def _serialize_task_record(self, record: KanbanTaskRecord) -> dict[str, Any]:
         stage_record = self._get_board_stage_record(record.stage)
@@ -2975,6 +3437,7 @@ class WebSessionManager:
         live_session = self._live_sessions[live_session_id]
         event = live_session.event_stream.publish(event_type, payload)
         self._apply_live_event(live_session, event)
+        self._persist_live_event_record(live_session, event)
         return event
 
     def _apply_live_event(

@@ -54,7 +54,7 @@ type SessionStore = {
   attachLiveSession: (
     sessionKey: string,
     session: LiveSession,
-    options?: { preserveItems?: boolean },
+    options?: { preserveItems?: boolean; preserveEventCursor?: boolean },
   ) => string;
   hydrateLiveSnapshot: (
     sessionKey: string,
@@ -445,13 +445,17 @@ export const useSessionStore = create<SessionStore>((set) => ({
             items: options.preserveItems ? current.items : [],
             itemsVersion: options.preserveItems ? current.itemsVersion : 0,
             subAgents: options.preserveItems ? current.subAgents : {},
-            // When reattaching the same live session, carry forward the
-            // high-water mark so the WS snapshot replay skips events
-            // already covered by API history.  When attaching a *new*
-            // live session (seq restarts from 1), reset to the server's
-            // value so we don't suppress the new session's events.
-            lastEventSeq:
-              current.liveSessionId === session.live_session_id
+            // When attaching the freshly returned run after a saved-session
+            // message submit, keep the current high-water mark so the WS
+            // snapshot can still replay the just-submitted turn. Otherwise,
+            // when reattaching the same live session, carry forward the
+            // high-water mark so the WS snapshot replay skips events already
+            // covered by API history. When attaching a *new* live session
+            // (seq restarts from 1), reset to the server's value so we don't
+            // suppress the new session's events.
+            lastEventSeq: options.preserveEventCursor
+              ? current.lastEventSeq
+              : current.liveSessionId === session.live_session_id
                 ? Math.max(
                     current.lastEventSeq,
                     typeof session.last_event_seq === "number" ? session.last_event_seq : 0,
@@ -484,13 +488,15 @@ export const useSessionStore = create<SessionStore>((set) => ({
       const items = snapshot.items
         .map((item) => mapSnapshotItem(item))
         .filter((item): item is TimelineItem => item !== null);
+      const savedEndedSnapshot = Boolean(snapshot.session_id && snapshot.session_ended);
+      const nextLiveSessionId = savedEndedSnapshot ? null : session.live_session_id;
       return {
         ...nextState,
         sessionsByKey: {
           ...nextState.sessionsByKey,
           [resolvedKey]: {
             ...current,
-            liveSessionId: session.live_session_id,
+            liveSessionId: nextLiveSessionId,
             sessionId: snapshot.session_id,
             runtime: runtimeFromSession(session),
             inputEnabled: snapshot.input_enabled,
@@ -507,7 +513,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
                       : undefined,
                 }
               : null,
-            sessionEnded: snapshot.session_ended,
+            sessionEnded: savedEndedSnapshot ? false : snapshot.session_ended,
             fatalError: snapshot.fatal_error,
             pendingUserQuestions: snapshot.pending_user_questions ?? null,
             items,
@@ -516,10 +522,12 @@ export const useSessionStore = create<SessionStore>((set) => ({
             lastEventSeq: snapshot.last_event_seq,
           },
         },
-        liveSessionIndex: {
-          ...nextState.liveSessionIndex,
-          [session.live_session_id]: resolvedKey,
-        },
+        liveSessionIndex: nextLiveSessionId
+          ? {
+              ...nextState.liveSessionIndex,
+              [nextLiveSessionId]: resolvedKey,
+            }
+          : nextState.liveSessionIndex,
         sessionIndex: snapshot.session_id
           ? { ...nextState.sessionIndex, [snapshot.session_id]: resolvedKey }
           : nextState.sessionIndex,
@@ -583,7 +591,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
       if (
         existingSession
         && eventLiveSessionId
-        && (current.liveSessionId || current.sessionId)
+        && current.liveSessionId
         && current.liveSessionId !== eventLiveSessionId
       ) {
         return nextState;
@@ -595,7 +603,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
         return nextState;
       }
       const patch: Partial<SessionRuntimeState> = { lastEventSeq: event.seq };
-      if (eventLiveSessionId && !current.liveSessionId && !current.sessionId) {
+      if (eventLiveSessionId && !current.liveSessionId) {
         patch.liveSessionId = eventLiveSessionId;
       }
 
@@ -723,7 +731,12 @@ export const useSessionStore = create<SessionStore>((set) => ({
         case "session_state":
           patch.sessionId = nextSessionId;
           if (payload.state === "ended") {
-            patch.sessionEnded = true;
+            if (nextSessionId) {
+              patch.liveSessionId = null;
+              patch.sessionEnded = false;
+            } else {
+              patch.sessionEnded = true;
+            }
             patch.inputEnabled = false;
             patch.waitMessage = null;
             patch.processing = null;
@@ -766,9 +779,13 @@ export const useSessionStore = create<SessionStore>((set) => ({
         sessionId: patch.sessionId ?? current.sessionId,
       };
 
-      const nextLiveSessionIndex = current.liveSessionId
-        ? { ...nextState.liveSessionIndex, [current.liveSessionId]: resolvedKey }
-        : nextState.liveSessionIndex;
+      const nextLiveSessionIndex = { ...nextState.liveSessionIndex };
+      if (current.liveSessionId && current.liveSessionId !== nextSessionState.liveSessionId) {
+        delete nextLiveSessionIndex[current.liveSessionId];
+      }
+      if (nextSessionState.liveSessionId) {
+        nextLiveSessionIndex[nextSessionState.liveSessionId] = resolvedKey;
+      }
       const nextSessionIndex = nextSessionState.sessionId
         ? { ...nextState.sessionIndex, [nextSessionState.sessionId]: resolvedKey }
         : nextState.sessionIndex;

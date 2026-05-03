@@ -6,10 +6,8 @@ import type {
   DashboardStatsPayload,
   ExpandedSessionInput,
   FileMentionItem,
-  HistoryItem,
   ImageAttachment,
   LiveSession,
-  LiveSessionSnapshot,
   UserQuestionAnswer,
   ModelProfileView,
   ObservabilityEvent,
@@ -98,22 +96,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
 }
 
 export async function fetchSessionDetail(sessionId: string): Promise<SessionDetailPayload> {
-  return requestJson<{
-    session: SessionRecord;
-    history_items: HistoryItem[];
-    active_live_session: LiveSession | null;
-  }>(`/api/sessions/${sessionId}`);
-}
-
-export async function fetchLiveSessions(): Promise<LiveSession[]> {
-  const result = await requestJson<{ live_sessions: LiveSession[] }>("/api/live-sessions");
-  return result.live_sessions;
-}
-
-export async function fetchLiveSessionDetail(
-  liveSessionId: string,
-): Promise<{ live_session: LiveSession; snapshot: LiveSessionSnapshot }> {
-  return requestJson(`/api/live-sessions/${liveSessionId}`);
+  return requestJson<SessionDetailPayload>(`/api/sessions/${sessionId}`);
 }
 
 export async function searchFileMentions(
@@ -152,7 +135,21 @@ export async function createLiveSession(
     profile_id: string | null;
   }> = {},
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>("/api/live-sessions", {
+  const created = await createSession({
+    profile_id: payload.profile_id ?? null,
+  });
+  const result = await requestJson<{ session: LiveSession }>(`/api/sessions/${created.session_id}/runs`, {
+    method: "POST",
+    body: JSON.stringify({ text: "" }),
+  });
+  return result.session;
+}
+
+export async function createSession(payload: {
+  title?: string;
+  profile_id?: string | null;
+} = {}): Promise<SessionRecord> {
+  const result = await requestJson<{ session: SessionRecord }>("/api/sessions", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -160,14 +157,14 @@ export async function createLiveSession(
 }
 
 export async function submitQuestionResponse(
-  liveSessionId: string,
+  sessionId: string,
   payload: {
     prompt_id: string;
     answers: UserQuestionAnswer[];
   },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/live-sessions/${liveSessionId}/question-response`,
+    `/api/sessions/${sessionId}/question-response`,
     {
       method: "POST",
       body: JSON.stringify(payload),
@@ -176,19 +173,52 @@ export async function submitQuestionResponse(
   return result.session;
 }
 
-export async function submitSessionInput(
-  liveSessionId: string,
+export async function submitSessionQuestionResponse(
+  sessionId: string,
   payload: {
-    text: string;
-    file_paths: string[];
-    image_paths: string[];
-    image_upload_ids: string[];
-    profile_id?: string | null;
-    interactive_mode?: boolean;
+    prompt_id: string;
+    answers: UserQuestionAnswer[];
   },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/live-sessions/${liveSessionId}/input`,
+    `/api/sessions/${sessionId}/question-response`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+  return result.session;
+}
+
+export type SessionInputPayload = {
+  text: string;
+  file_paths: string[];
+  image_paths: string[];
+  image_upload_ids: string[];
+  profile_id?: string | null;
+  interactive_mode?: boolean;
+};
+
+export async function submitSessionInput(
+  sessionId: string,
+  payload: SessionInputPayload,
+): Promise<LiveSession> {
+  const result = await requestJson<{ session: LiveSession }>(
+    `/api/sessions/${sessionId}/messages`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+  return result.session;
+}
+
+export async function sendSessionMessage(
+  sessionId: string,
+  payload: SessionInputPayload,
+): Promise<LiveSession> {
+  const result = await requestJson<{ session: LiveSession }>(
+    `/api/sessions/${sessionId}/messages`,
     {
       method: "POST",
       body: JSON.stringify(payload),
@@ -198,11 +228,25 @@ export async function submitSessionInput(
 }
 
 export async function runShellCommand(
-  liveSessionId: string,
+  sessionId: string,
   payload: { command: string },
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/live-sessions/${liveSessionId}/shell-command`,
+    `/api/sessions/${sessionId}/shell-command`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+  return result.session;
+}
+
+export async function runSessionShellCommand(
+  sessionId: string,
+  payload: { command: string },
+): Promise<LiveSession> {
+  const result = await requestJson<{ session: LiveSession }>(
+    `/api/sessions/${sessionId}/shell-command`,
     {
       method: "POST",
       body: JSON.stringify(payload),
@@ -212,10 +256,18 @@ export async function runShellCommand(
 }
 
 export async function interruptLiveSession(
-  liveSessionId: string,
+  sessionId: string,
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/live-sessions/${liveSessionId}/interrupt`,
+    `/api/sessions/${sessionId}/interrupt`,
+    { method: "POST" },
+  );
+  return result.session;
+}
+
+export async function interruptSession(sessionId: string): Promise<LiveSession> {
+  const result = await requestJson<{ session: LiveSession }>(
+    `/api/sessions/${sessionId}/interrupt`,
     { method: "POST" },
   );
   return result.session;
@@ -234,7 +286,7 @@ export async function uploadTaskImages(files: File[]): Promise<ImageAttachment[]
 }
 
 export async function uploadSessionImages(
-  liveSessionId: string,
+  sessionId: string,
   files: File[],
 ): Promise<ImageAttachment[]> {
   const formData = new FormData();
@@ -242,7 +294,25 @@ export async function uploadSessionImages(
     formData.append("files", file);
   }
   const result = await requestJson<{ uploads: ImageAttachment[] }>(
-    `/api/live-sessions/${liveSessionId}/images`,
+    `/api/sessions/${sessionId}/images`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  return result.uploads;
+}
+
+export async function uploadSavedSessionImages(
+  sessionId: string,
+  files: File[],
+): Promise<ImageAttachment[]> {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+  const result = await requestJson<{ uploads: ImageAttachment[] }>(
+    `/api/sessions/${sessionId}/images`,
     {
       method: "POST",
       body: formData,
@@ -252,18 +322,18 @@ export async function uploadSessionImages(
 }
 
 export async function expandSessionInput(text: string): Promise<ExpandedSessionInput> {
-  return requestJson<ExpandedSessionInput>("/api/live-sessions/expand-input", {
+  return requestJson<ExpandedSessionInput>("/api/sessions/expand-input", {
     method: "POST",
     body: JSON.stringify({ text }),
   });
 }
 
 export async function requestNewSession(
-  liveSessionId: string,
+  sessionId: string,
   profileId: string | null = null,
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/live-sessions/${liveSessionId}/new-session`,
+    `/api/sessions/${sessionId}/new-session`,
     {
       method: "POST",
       body: JSON.stringify({ profile_id: profileId }),
@@ -273,11 +343,25 @@ export async function requestNewSession(
 }
 
 export async function setLiveSessionProfile(
-  liveSessionId: string,
+  sessionId: string,
   profileId: string | null,
 ): Promise<LiveSession> {
   const result = await requestJson<{ session: LiveSession }>(
-    `/api/live-sessions/${liveSessionId}/profile`,
+    `/api/sessions/${sessionId}/profile`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ profile_id: profileId }),
+    },
+  );
+  return result.session;
+}
+
+export async function setSessionProfile(
+  sessionId: string,
+  profileId: string | null,
+): Promise<LiveSession> {
+  const result = await requestJson<{ session: LiveSession }>(
+    `/api/sessions/${sessionId}/profile`,
     {
       method: "PUT",
       body: JSON.stringify({ profile_id: profileId }),

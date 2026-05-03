@@ -25,7 +25,7 @@ function makeRun(overrides: Partial<RunSession> = {}): RunSession {
     provider_id: "openai-main",
     profile_id: null,
     model: "gpt-5.4",
-    status: "completed",
+    status: "ended",
     started_at: "2026-04-27T10:00:00Z",
     ended_at: "2026-04-27T10:00:01Z",
     total_duration_ms: 1000,
@@ -83,35 +83,47 @@ describe("RunDetailModal", () => {
 
   it("renders final status and event count from run detail", async () => {
     mockFetchRunDetail.mockResolvedValue({
-      run: makeRun({ status: "completed" }),
+      run: makeRun({ status: "ended" }),
       events: [makeEvent({ step_index: 1 }), makeEvent({ step_index: 2, event_type: "agent_step_end" })],
     });
 
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
-    expect(await screen.findByText("completed")).toBeInTheDocument();
+    expect(await screen.findByText("ended")).toBeInTheDocument();
     expect(screen.getByText("Events (2)")).toBeInTheDocument();
+  });
+
+  it("treats ended runs as terminal", async () => {
+    mockFetchRunDetail.mockResolvedValue({
+      run: makeRun({ status: "ended", ended_at: "2026-04-27T10:00:01Z" }),
+      events: [makeEvent({ step_index: 1 })],
+    });
+
+    renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
+
+    const status = await screen.findByText("ended");
+    expect(status).toHaveClass("status-pill--completed");
   });
 
   it("refetches when a viewed running run query is invalidated", async () => {
     mockFetchRunDetail
       .mockResolvedValueOnce({
-        run: makeRun({ status: "started", ended_at: null, total_duration_ms: null }),
+        run: makeRun({ status: "running", ended_at: null, total_duration_ms: null }),
         events: [makeEvent({ event_type: "run_start" })],
       })
       .mockResolvedValueOnce({
-        run: makeRun({ status: "completed" }),
+        run: makeRun({ status: "ended" }),
         events: [makeEvent({ event_type: "run_start" }), makeEvent({ step_index: 2, event_type: "run_end" })],
       });
 
     const { queryClient } = renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
-    expect(await screen.findByText("started")).toBeInTheDocument();
+    expect(await screen.findByText("running")).toBeInTheDocument();
 
     await queryClient.invalidateQueries({ queryKey: ["run-detail"] });
 
     await waitFor(() => {
-      expect(screen.getByText("completed")).toBeInTheDocument();
+      expect(screen.getByText("ended")).toBeInTheDocument();
       expect(screen.getByText("Events (2)")).toBeInTheDocument();
     });
   });

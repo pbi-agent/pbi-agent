@@ -10,24 +10,24 @@ import {
 } from "lucide-react";
 import {
   ApiError,
-  createLiveSession,
+  createSession,
   deleteSession,
   expandSessionInput,
   fetchConfigBootstrap,
-  fetchLiveSessionDetail,
   fetchSessionDetail,
   fetchSessions,
-  interruptLiveSession,
-  runShellCommand,
+  interruptSession,
+  runSessionShellCommand,
+  sendSessionMessage,
   setActiveModelProfile,
-  setLiveSessionProfile,
-  submitQuestionResponse,
-  submitSessionInput,
+  setSessionProfile,
+  submitSessionQuestionResponse,
   updateSession,
-  uploadSessionImages,
+  uploadSavedSessionImages,
 } from "../../api";
 import type {
   HistoryItem,
+  LiveSession,
   ModelProfileView,
   SessionDetailPayload,
   SessionRecord,
@@ -35,11 +35,10 @@ import type {
   UserQuestionAnswer,
 } from "../../types";
 import {
-  getLiveSessionKey,
   getSavedSessionKey,
   useSessionStore,
 } from "../../store";
-import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
+import { useSessionEvents } from "../../hooks/useSessionEvents";
 import { ConnectionBadge } from "./ConnectionBadge";
 import { DeleteSessionModal } from "./DeleteSessionModal";
 import { RunHistory } from "./RunHistory";
@@ -69,10 +68,7 @@ export function SessionPage({
 }) {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const {
-    sessionId: routeSessionId,
-    liveSessionId: routeLiveSessionId,
-  } = useParams<{ sessionId?: string; liveSessionId?: string }>();
+  const { sessionId: routeSessionId } = useParams<{ sessionId?: string }>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
@@ -81,25 +77,21 @@ export function SessionPage({
     window.localStorage.getItem("pbi-agent.interactive-mode") === "true",
   );
   const composerRef = useRef<ComposerHandle>(null);
-  const createRequestKeyRef = useRef<string | null>(null);
+  const submitInFlightRef = useRef(false);
+  const [directSubmitPending, setDirectSubmitPending] = useState(false);
 
   const routeSessionKey = routeSessionId
     ? getSavedSessionKey(routeSessionId)
-    : routeLiveSessionId
-      ? getLiveSessionKey(routeLiveSessionId)
-      : null;
+    : null;
 
   const activeSessionKey = useSessionStore((state) => {
     if (routeSessionId) {
       return state.sessionIndex[routeSessionId] ?? getSavedSessionKey(routeSessionId);
     }
-    if (routeLiveSessionId) {
-      return state.liveSessionIndex[routeLiveSessionId] ?? getLiveSessionKey(routeLiveSessionId);
-    }
     return state.activeSessionKey;
   });
   const selectedRouteSessionKey =
-    routeSessionId || routeLiveSessionId ? (activeSessionKey ?? routeSessionKey) : null;
+    routeSessionId ? (activeSessionKey ?? routeSessionKey) : null;
 
   const sessionState = useSessionStore((state) =>
     selectedRouteSessionKey ? state.sessionsByKey[selectedRouteSessionKey] ?? null : null,
@@ -128,13 +120,6 @@ export function SessionPage({
     retry: false,
   });
 
-  const liveSessionDetailQuery = useQuery({
-    queryKey: ["live-session", routeLiveSessionId],
-    queryFn: () => fetchLiveSessionDetail(routeLiveSessionId!),
-    enabled: Boolean(routeLiveSessionId),
-    retry: false,
-  });
-
   const configQuery = useQuery({
     queryKey: ["config-bootstrap"],
     queryFn: fetchConfigBootstrap,
@@ -142,24 +127,11 @@ export function SessionPage({
   });
 
   const createSessionMutation = useMutation({
-    mutationFn: createLiveSession,
-    onSuccess: (session, variables) => {
-      const requestSessionId =
-        variables?.resume_session_id ?? variables?.session_id ?? null;
-      const requestedKey = createRequestKeyRef.current
-        ?? (requestSessionId
-          ? getSavedSessionKey(requestSessionId)
-          : getLiveSessionKey(session.live_session_id));
-      const resolvedKey = attachLiveSession(requestedKey, session, {
-        preserveItems: Boolean(requestSessionId),
-      });
-      if (!requestSessionId) {
-        void navigate(`/sessions/live/${encodeURIComponent(session.live_session_id)}`, {
-          replace: true,
-        });
-      } else if (resolvedKey !== requestedKey && session.session_id) {
-        void navigate(`/sessions/${encodeURIComponent(session.session_id)}`, { replace: true });
-      }
+    mutationFn: createSession,
+    onSuccess: (session) => {
+      hydrateSavedSession(session.session_id, []);
+      void client.invalidateQueries({ queryKey: ["sessions"] });
+      void navigate(`/sessions/${encodeURIComponent(session.session_id)}`, { replace: true });
     },
   });
 
@@ -172,25 +144,34 @@ export function SessionPage({
       profile_id?: string | null;
       interactive_mode?: boolean;
     }) => {
-      if (!sessionState?.liveSessionId) throw new Error("No live session available.");
-      return submitSessionInput(sessionState.liveSessionId, payload);
+      const sessionId = routeSessionId ?? sessionState?.sessionId;
+      if (!sessionId) throw new Error("No session available.");
+      return sendSessionMessage(sessionId, payload);
     },
     onSuccess: (session) => {
-      if (selectedRouteSessionKey) {
-        updateRuntimeFromSession(selectedRouteSessionKey, session);
+      if (!selectedRouteSessionKey) return;
+      if (routeSessionId) {
+        attachLiveSession(selectedRouteSessionKey, session, {
+          preserveItems: true,
+          preserveEventCursor: true,
+        });
+        return;
       }
+      updateRuntimeFromSession(selectedRouteSessionKey, session);
     },
   });
 
   const questionResponseMutation = useMutation({
     mutationFn: (answers: UserQuestionAnswer[]) => {
-      if (!sessionState?.liveSessionId || !sessionState.pendingUserQuestions) {
+      const sessionId = routeSessionId ?? sessionState?.sessionId;
+      if (!sessionId || !sessionState?.pendingUserQuestions) {
         throw new Error("No pending assistant questions.");
       }
-      return submitQuestionResponse(sessionState.liveSessionId, {
+      const payload = {
         prompt_id: sessionState.pendingUserQuestions.prompt_id,
         answers,
-      });
+      };
+      return submitSessionQuestionResponse(sessionId, payload);
     },
     onSuccess: (session) => {
       if (selectedRouteSessionKey) {
@@ -201,8 +182,9 @@ export function SessionPage({
 
   const shellCommandMutation = useMutation({
     mutationFn: (payload: { command: string }) => {
-      if (!sessionState?.liveSessionId) throw new Error("No live session available.");
-      return runShellCommand(sessionState.liveSessionId, payload);
+      const sessionId = routeSessionId ?? sessionState?.sessionId;
+      if (!sessionId) throw new Error("No session available.");
+      return runSessionShellCommand(sessionId, payload);
     },
     onSuccess: (session) => {
       if (selectedRouteSessionKey) {
@@ -213,8 +195,9 @@ export function SessionPage({
 
   const interruptMutation = useMutation({
     mutationFn: () => {
-      if (!sessionState?.liveSessionId) throw new Error("No live session available.");
-      return interruptLiveSession(sessionState.liveSessionId);
+      const sessionId = routeSessionId ?? sessionState?.sessionId;
+      if (!sessionId) throw new Error("No session available.");
+      return interruptSession(sessionId);
     },
     onSuccess: (session) => {
       if (selectedRouteSessionKey) {
@@ -248,12 +231,15 @@ export function SessionPage({
 
   const setSessionProfileMutation = useMutation({
     mutationFn: ({
-      liveSessionId,
+      sessionId,
       profileId,
     }: {
-      liveSessionId: string;
+      sessionId?: string | null;
       profileId: string | null;
-    }) => setLiveSessionProfile(liveSessionId, profileId),
+    }) => {
+      if (sessionId) return setSessionProfile(sessionId, profileId);
+      throw new Error("No session available.");
+    },
     onSuccess: (session) => {
       const targetKey = session.session_id
         ? getSavedSessionKey(session.session_id)
@@ -312,92 +298,47 @@ export function SessionPage({
         typeof serverSeq === "number" ? serverSeq : undefined,
       );
     }
-    if (sessionDetailQuery.data.active_live_session) {
-      attachLiveSession(sessionKey, sessionDetailQuery.data.active_live_session, {
-        preserveItems: true,
-      });
+    const snapshotSession =
+      sessionDetailQuery.data.active_live_session
+      ?? sessionDetailQuery.data.active_run
+      ?? timelineSessionFromDetail(sessionDetailQuery.data);
+    if (snapshotSession) {
+      if (sessionDetailQuery.data.timeline) {
+        hydrateLiveSnapshot(
+          sessionKey,
+          snapshotSession,
+          sessionDetailQuery.data.timeline,
+        );
+      } else {
+        attachLiveSession(sessionKey, snapshotSession, {
+          preserveItems: true,
+        });
+      }
     }
   }, [
     attachLiveSession,
+    hydrateLiveSnapshot,
     hydrateSavedSession,
     routeSessionId,
     sessionDetailQuery.isSuccess,
     sessionDetailQuery.data,
   ]);
 
-  // Create a new live session for a saved session when one doesn't exist yet.
-  useEffect(() => {
-    if (!routeSessionId || !sessionDetailQuery.isSuccess) return;
-    if (sessionDetailQuery.data.active_live_session) return;
-    if (sessionState?.liveSessionId && !sessionState.sessionEnded) return;
-    if (createSessionMutation.isPending) return;
-    createRequestKeyRef.current = getSavedSessionKey(routeSessionId);
-    createSessionMutation.mutate({
-      resume_session_id: routeSessionId,
-    });
-  }, [
-    sessionState?.liveSessionId,
-    sessionState?.sessionEnded,
-    createSessionMutation,
-    routeSessionId,
-    sessionDetailQuery.isSuccess,
-    sessionDetailQuery.data?.active_live_session,
-  ]);
+  const composerInputEnabled = Boolean(
+    (!routeSessionId && !sessionState)
+    || (routeSessionId && !sessionState?.liveSessionId && !sessionState?.pendingUserQuestions)
+    || (sessionState?.inputEnabled && !sessionState.pendingUserQuestions),
+  );
+  const composerCanStartRun = Boolean(!routeSessionId || (routeSessionId && !sessionState?.liveSessionId));
+  const topbarConnection = composerInputEnabled && sessionState?.connection !== "connected"
+    ? "ready"
+    : sessionState?.connection ?? "disconnected";
 
   useEffect(() => {
-    if (!routeLiveSessionId || !liveSessionDetailQuery.isSuccess) return;
-    const resolvedKey = hydrateLiveSnapshot(
-      getLiveSessionKey(routeLiveSessionId),
-      liveSessionDetailQuery.data.live_session,
-      liveSessionDetailQuery.data.snapshot,
-    );
-    if (liveSessionDetailQuery.data.live_session.session_id) {
-      void navigate(
-        `/sessions/${encodeURIComponent(liveSessionDetailQuery.data.live_session.session_id)}`,
-        { replace: true },
-      );
-      setActiveSession(resolvedKey);
-    }
-  }, [
-    hydrateLiveSnapshot,
-    liveSessionDetailQuery.isSuccess,
-    liveSessionDetailQuery.data,
-    navigate,
-    routeLiveSessionId,
-    setActiveSession,
-  ]);
-
-  useEffect(() => {
-    if (routeSessionId || routeLiveSessionId) return;
-    if (createSessionMutation.isPending) return;
-    const profiles = configQuery.data?.model_profiles ?? [];
-    if (profiles.length === 0) return;
-    const profileId = resolveSavedProfileId(
-      pendingProfileId ?? configQuery.data?.active_profile_id ?? profiles[0]?.id ?? null,
-      profiles,
-    );
-    createRequestKeyRef.current = null;
-    createSessionMutation.mutate({
-      ...(profileId ? { profile_id: profileId } : {}),
-    });
-  }, [
-    configQuery.data,
-    createSessionMutation,
-    pendingProfileId,
-    routeLiveSessionId,
-    routeSessionId,
-  ]);
-
-  useEffect(() => {
-    if (!routeLiveSessionId || !sessionState?.sessionId) return;
-    void navigate(`/sessions/${encodeURIComponent(sessionState.sessionId)}`, { replace: true });
-  }, [sessionState?.sessionId, navigate, routeLiveSessionId]);
-
-  useEffect(() => {
-    if (sessionState?.inputEnabled && sessionState.liveSessionId && !sessionState.sessionEnded) {
+    if (composerInputEnabled && !sessionState?.sessionEnded) {
       composerRef.current?.focus();
     }
-  }, [sessionState?.inputEnabled, sessionState?.liveSessionId, sessionState?.sessionEnded]);
+  }, [composerInputEnabled, sessionState?.sessionEnded]);
 
   useEffect(() => {
     if (inputWarnings.length === 0) return undefined;
@@ -412,7 +353,11 @@ export function SessionPage({
     void client.invalidateQueries({ queryKey: ["session", sessionId] });
   }, [sessionState?.sessionId, client]);
 
-  useLiveSessionEvents(selectedRouteSessionKey, sessionState?.liveSessionId ?? null);
+  useSessionEvents(
+    selectedRouteSessionKey,
+    routeSessionId ?? null,
+    sessionState?.liveSessionId ?? null,
+  );
 
   const activeSessionRecord = useMemo(() => {
     if (!routeSessionId) return null;
@@ -454,14 +399,32 @@ export function SessionPage({
       : supportsImageInputs;
   const profileSelectorDisabled =
     modelProfiles.length === 0
-    || !sessionState?.liveSessionId
-    || !sessionState.inputEnabled
-    || sessionState.sessionEnded
+    || Boolean(sessionState && (!sessionState.inputEnabled || sessionState.sessionEnded))
     || createSessionMutation.isPending
     || setSessionProfileMutation.isPending
     || setActiveProfileMutation.isPending;
 
+  const ensureDraftSession = async (): Promise<string> => {
+    const existingSessionId = routeSessionId ?? sessionState?.sessionId;
+    if (existingSessionId) return existingSessionId;
+    const created = await createSessionMutation.mutateAsync({
+      ...(selectedSavedProfileId ? { profile_id: selectedSavedProfileId } : {}),
+    });
+    return created.session_id;
+  };
+
+  const uploadImagesForCurrentSession = async (images: File[], sessionId: string) => {
+    if (images.length === 0) return [];
+    return (await uploadSavedSessionImages(sessionId, images)).map(
+      (image) => image.upload_id,
+    );
+  };
+
   const handleSubmit = async (payload: { text: string; images: File[] }) => {
+    if (submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
+    setDirectSubmitPending(true);
+    try {
     const { text, images } = payload;
     setInputWarnings([]);
     if (text.startsWith("!")) {
@@ -472,15 +435,21 @@ export function SessionPage({
       if (!command) {
         throw new Error("Shell command must be a non-empty string.");
       }
-      await shellCommandMutation.mutateAsync({ command });
+      const sessionId = await ensureDraftSession();
+      if (!routeSessionId) {
+        void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+      }
+      const session = await runSessionShellCommand(sessionId, { command });
+      attachLiveSession(getSavedSessionKey(sessionId), session, {
+        preserveItems: true,
+        preserveEventCursor: true,
+      });
       return;
     }
     if (text.startsWith("/")) {
-      const uploadedImageIds =
-        images.length > 0 && sessionState?.liveSessionId
-          ? (await uploadSessionImages(sessionState.liveSessionId, images)).map((image) => image.upload_id)
-          : [];
-      await sendInputMutation.mutateAsync({
+      const sessionId = await ensureDraftSession();
+      const uploadedImageIds = await uploadImagesForCurrentSession(images, sessionId);
+      const session = await sendSessionMessage(sessionId, {
         text,
         file_paths: [],
         image_paths: [],
@@ -488,6 +457,13 @@ export function SessionPage({
         profile_id: selectedSavedProfileId,
         interactive_mode: interactiveMode,
       });
+      attachLiveSession(getSavedSessionKey(sessionId), session, {
+        preserveItems: true,
+        preserveEventCursor: true,
+      });
+      if (!routeSessionId) {
+        void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+      }
       return;
     }
 
@@ -495,11 +471,9 @@ export function SessionPage({
     if (expanded.warnings.length > 0) {
       setInputWarnings(expanded.warnings);
     }
-    const uploadedImageIds =
-      images.length > 0 && sessionState?.liveSessionId
-        ? (await uploadSessionImages(sessionState.liveSessionId, images)).map((image) => image.upload_id)
-        : [];
-    await sendInputMutation.mutateAsync({
+    const sessionId = await ensureDraftSession();
+    const uploadedImageIds = await uploadImagesForCurrentSession(images, sessionId);
+    const session = await sendSessionMessage(sessionId, {
       text: expanded.text,
       file_paths: expanded.file_paths,
       image_paths: Array.from(new Set(expanded.image_paths)),
@@ -507,6 +481,17 @@ export function SessionPage({
       profile_id: selectedSavedProfileId,
       interactive_mode: interactiveMode,
     });
+    attachLiveSession(getSavedSessionKey(sessionId), session, {
+      preserveItems: true,
+      preserveEventCursor: true,
+    });
+    if (!routeSessionId) {
+      void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+    }
+    } finally {
+      submitInFlightRef.current = false;
+      setDirectSubmitPending(false);
+    }
   };
 
   const handleProfileChange = async (nextProfileId: string) => {
@@ -520,9 +505,9 @@ export function SessionPage({
         profileId: nextProfileId,
         configRevision: nextConfigRevision,
       });
-      if (sessionState?.liveSessionId) {
+      if (routeSessionId || sessionState?.sessionId) {
         await setSessionProfileMutation.mutateAsync({
-          liveSessionId: sessionState.liveSessionId,
+          sessionId: routeSessionId ?? sessionState?.sessionId ?? null,
           profileId: nextProfileId,
         });
       }
@@ -533,7 +518,6 @@ export function SessionPage({
 
   const handleNewSession = () => {
     setSidebarOpen(false);
-    createRequestKeyRef.current = null;
     void navigate("/sessions");
   };
 
@@ -566,11 +550,11 @@ export function SessionPage({
     && !sessionState.inputEnabled,
   );
   const isDeleteBusy = deleteSessionMutation.isPending || createSessionMutation.isPending;
-  const sessionDetailError = routeSessionId ? sessionDetailQuery.error : liveSessionDetailQuery.error;
+  const sessionDetailError = routeSessionId ? sessionDetailQuery.error : null;
   const sessionNotFound =
     sessionDetailError instanceof ApiError && sessionDetailError.status === 404;
   const sessionDetailLoadError =
-    (routeSessionId || routeLiveSessionId) && sessionDetailError && !sessionNotFound
+    routeSessionId && sessionDetailError && !sessionNotFound
       ? "Unable to load this session right now."
       : null;
 
@@ -599,7 +583,7 @@ export function SessionPage({
       <div className="session-panel">
         <div className="session-topbar">
           <div className="session-topbar__leading">
-            <ConnectionBadge connection={sessionState?.connection ?? "disconnected"} />
+            <ConnectionBadge connection={topbarConnection} />
             <ProfileSelector
               selectedProfileId={selectedProfileId}
               modelProfiles={modelProfiles}
@@ -730,11 +714,12 @@ export function SessionPage({
             ) : null}
             <Composer
               ref={composerRef}
-              inputEnabled={Boolean(sessionState?.inputEnabled && !sessionState.pendingUserQuestions)}
+              inputEnabled={composerInputEnabled}
               sessionEnded={sessionState?.sessionEnded ?? false}
               liveSessionId={sessionState?.liveSessionId ?? null}
+              canCreateSession={composerCanStartRun}
               supportsImageInputs={providerSupportsImages}
-              isSubmitting={sendInputMutation.isPending || shellCommandMutation.isPending}
+              isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
               onSubmit={handleSubmit}
               isProcessing={Boolean(sessionState?.processing?.active)}
               canInterrupt={canInterruptActiveTurn}
@@ -782,6 +767,30 @@ function mapHistoryItem(item: HistoryItem): TimelineItem {
     filePaths: item.file_paths,
     imageAttachments: item.image_attachments,
     markdown: item.markdown,
+  };
+}
+
+function timelineSessionFromDetail(detail: SessionDetailPayload): LiveSession | null {
+  if (!detail.timeline) return null;
+  const session = detail.session;
+  return {
+    live_session_id: detail.timeline.live_session_id,
+    session_id: detail.timeline.session_id,
+    task_id: session.task_id ?? null,
+    kind: "session",
+    project_dir: session.directory,
+    provider_id: session.provider_id,
+    profile_id: session.profile_id,
+    provider: session.provider,
+    model: session.model,
+    reasoning_effort: detail.timeline.runtime?.reasoning_effort ?? "",
+    compact_threshold: detail.timeline.runtime?.compact_threshold ?? 0,
+    created_at: session.updated_at,
+    status: detail.status ?? session.status ?? "idle",
+    exit_code: null,
+    fatal_error: detail.timeline.fatal_error,
+    ended_at: null,
+    last_event_seq: detail.timeline.last_event_seq,
   };
 }
 

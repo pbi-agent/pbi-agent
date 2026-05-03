@@ -196,7 +196,7 @@ def test_add_and_list_messages_preserve_image_attachments(tmp_path) -> None:
         name="chart.png",
         mime_type="image/png",
         byte_count=8,
-        preview_url="/api/live-sessions/uploads/upload-1",
+        preview_url="/api/uploads/upload-1",
     )
 
     with SessionStore(db_path=db) as store:
@@ -434,7 +434,7 @@ def test_create_and_update_kanban_task_image_attachments(tmp_path) -> None:
         name="chart.png",
         mime_type="image/png",
         byte_count=8,
-        preview_url="/api/live-sessions/uploads/upload-1",
+        preview_url="/api/uploads/upload-1",
     )
     with SessionStore(db_path=db) as store:
         task = store.create_kanban_task(
@@ -496,7 +496,7 @@ def test_existing_kanban_task_table_adds_image_attachments_column(tmp_path) -> N
         name="chart.png",
         mime_type="image/png",
         byte_count=8,
-        preview_url="/api/live-sessions/uploads/upload-1",
+        preview_url="/api/uploads/upload-1",
     )
     with SessionStore(db_path=db) as store:
         tasks = store.list_kanban_tasks("/w")

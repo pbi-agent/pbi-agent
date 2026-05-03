@@ -2,6 +2,15 @@ export type UpdateSessionPayload = {
   title: string;
 };
 
+export type SessionStatus =
+  | "idle"
+  | "starting"
+  | "running"
+  | "waiting_for_input"
+  | "ended"
+  | "failed"
+  | "stale";
+
 export type SessionRecord = {
   session_id: string;
   directory: string;
@@ -17,6 +26,10 @@ export type SessionRecord = {
   cost_usd: number;
   created_at: string;
   updated_at: string;
+  status?: SessionStatus;
+  active_run_id?: string | null;
+  active_live_session_id?: string | null;
+  task_id?: string | null;
 };
 
 export type TaskRecord = {
@@ -97,7 +110,7 @@ export type LiveSession = LiveSessionRuntime & {
   kind: "session" | "task";
   project_dir: string;
   created_at: string;
-  status: "starting" | "running" | "ended";
+  status: SessionStatus;
   exit_code: number | null;
   fatal_error: string | null;
   ended_at: string | null;
@@ -136,8 +149,11 @@ export type HistoryItem = {
 
 export type SessionDetailPayload = {
   session: SessionRecord;
+  status?: SessionStatus;
   history_items: HistoryItem[];
+  timeline?: LiveSessionSnapshot | null;
   active_live_session: LiveSession | null;
+  active_run?: LiveSession | null;
 };
 
 export type LiveSessionSnapshot = {
@@ -535,7 +551,7 @@ export type RunSession = {
   provider_id: string | null;
   profile_id: string | null;
   model: string | null;
-  status: string;
+  status: SessionStatus;
   started_at: string;
   ended_at: string | null;
   total_duration_ms: number | null;
@@ -551,6 +567,13 @@ export type RunSession = {
   total_tool_calls: number;
   total_api_calls: number;
   error_count: number;
+  kind?: string;
+  task_id?: string | null;
+  project_dir?: string | null;
+  last_event_seq?: number;
+  snapshot?: unknown;
+  exit_code?: number | null;
+  fatal_error?: string | null;
   metadata: unknown;
 };
 

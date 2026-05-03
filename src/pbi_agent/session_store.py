@@ -99,6 +99,13 @@ CREATE TABLE IF NOT EXISTS run_sessions (
     total_tool_calls        INTEGER NOT NULL DEFAULT 0,
     total_api_calls         INTEGER NOT NULL DEFAULT 0,
     error_count             INTEGER NOT NULL DEFAULT 0,
+    kind                    TEXT NOT NULL DEFAULT 'cli',
+    task_id                 TEXT,
+    project_dir             TEXT,
+    last_event_seq          INTEGER NOT NULL DEFAULT 0,
+    snapshot_json           TEXT NOT NULL DEFAULT '{}',
+    exit_code               INTEGER,
+    fatal_error             TEXT,
     metadata_json           TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_run_sessions_session_id
@@ -260,6 +267,13 @@ class RunSessionRecord:
     total_tool_calls: int
     total_api_calls: int
     error_count: int
+    kind: str
+    task_id: str | None
+    project_dir: str | None
+    last_event_seq: int
+    snapshot_json: str
+    exit_code: int | None
+    fatal_error: str | None
     metadata_json: str
 
 
@@ -418,6 +432,14 @@ def _normalize_directory_key(directory: str) -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _storage_statuses_for_api_status(status: str) -> tuple[str, ...]:
+    if status == "ended":
+        return ("ended", "completed", "interrupted")
+    if status == "running":
+        return ("running", "started")
+    return (status,)
 
 
 def _is_stale_timestamp(timestamp: str, *, stale_after_seconds: float) -> bool:
@@ -611,6 +633,24 @@ class SessionStore:
                 "ALTER TABLE messages "
                 "ADD COLUMN image_attachments_json TEXT NOT NULL DEFAULT '[]'"
             )
+
+        run_session_columns = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(run_sessions)").fetchall()
+        }
+        for column_name, column_sql in (
+            ("kind", "TEXT NOT NULL DEFAULT 'cli'"),
+            ("task_id", "TEXT"),
+            ("project_dir", "TEXT"),
+            ("last_event_seq", "INTEGER NOT NULL DEFAULT 0"),
+            ("snapshot_json", "TEXT NOT NULL DEFAULT '{}'"),
+            ("exit_code", "INTEGER"),
+            ("fatal_error", "TEXT"),
+        ):
+            if column_name not in run_session_columns:
+                self._conn.execute(
+                    f"ALTER TABLE run_sessions ADD COLUMN {column_name} {column_sql}"
+                )
 
         kanban_task_columns = {
             row["name"]
@@ -977,6 +1017,7 @@ class SessionStore:
     def create_run_session(
         self,
         *,
+        run_session_id: str | None = None,
         session_id: str | None,
         agent_name: str | None,
         agent_type: str | None,
@@ -986,17 +1027,25 @@ class SessionStore:
         model: str | None,
         status: str = "started",
         parent_run_session_id: str | None = None,
+        kind: str = "cli",
+        task_id: str | None = None,
+        project_dir: str | None = None,
+        last_event_seq: int = 0,
+        snapshot: dict[str, object] | None = None,
+        exit_code: int | None = None,
+        fatal_error: str | None = None,
         metadata: dict[str, object] | None = None,
     ) -> str:
-        run_session_id = uuid.uuid4().hex
+        run_session_id = run_session_id or uuid.uuid4().hex
         now = _now_iso()
         with self._lock:
             self._conn.execute(
                 "INSERT INTO run_sessions "
                 "(run_session_id, session_id, parent_run_session_id, agent_name, "
                 "agent_type, provider, provider_id, profile_id, model, status, "
-                "started_at, metadata_json) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "started_at, kind, task_id, project_dir, last_event_seq, "
+                "snapshot_json, exit_code, fatal_error, metadata_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     run_session_id,
                     session_id,
@@ -1009,6 +1058,13 @@ class SessionStore:
                     model,
                     status,
                     now,
+                    kind,
+                    task_id,
+                    project_dir,
+                    last_event_seq,
+                    _serialize_json(snapshot, default="{}"),
+                    exit_code,
+                    fatal_error,
                     _serialize_json(metadata, default="{}"),
                 ),
             )
@@ -1019,6 +1075,7 @@ class SessionStore:
         self,
         run_session_id: str,
         *,
+        session_id: str | None = None,
         status: str | None = None,
         ended_at: str | None = None,
         total_duration_ms: int | None = None,
@@ -1034,11 +1091,19 @@ class SessionStore:
         total_tool_calls: int | None = None,
         total_api_calls: int | None = None,
         error_count: int | None = None,
+        kind: str | None = None,
+        task_id: str | None = None,
+        project_dir: str | None = None,
+        last_event_seq: int | None = None,
+        snapshot: dict[str, object] | None = None,
+        exit_code: int | None = None,
+        fatal_error: str | None = None,
         metadata: dict[str, object] | None = None,
     ) -> None:
         clauses: list[str] = []
         params: list[object] = []
         scalar_values = {
+            "session_id": session_id,
             "status": status,
             "ended_at": ended_at,
             "total_duration_ms": total_duration_ms,
@@ -1054,6 +1119,12 @@ class SessionStore:
             "total_tool_calls": total_tool_calls,
             "total_api_calls": total_api_calls,
             "error_count": error_count,
+            "kind": kind,
+            "task_id": task_id,
+            "project_dir": project_dir,
+            "last_event_seq": last_event_seq,
+            "exit_code": exit_code,
+            "fatal_error": fatal_error,
         }
         for key, value in scalar_values.items():
             if value is None:
@@ -1063,6 +1134,9 @@ class SessionStore:
         if metadata is not None:
             clauses.append("metadata_json = ?")
             params.append(_serialize_json(metadata, default="{}"))
+        if snapshot is not None:
+            clauses.append("snapshot_json = ?")
+            params.append(_serialize_json(snapshot, default="{}"))
         if not clauses:
             return
         params.append(run_session_id)
@@ -1084,14 +1158,74 @@ class SessionStore:
             return None
         return RunSessionRecord(**dict(row))
 
+    def get_next_observability_step_index(self, run_session_id: str) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT MAX(step_index) AS max_step FROM observability_events "
+                "WHERE run_session_id = ? AND step_index >= 0",
+                (run_session_id,),
+            ).fetchone()
+        max_step = row["max_step"] if row is not None else None
+        return int(max_step) + 1 if max_step is not None else 0
+
     def list_run_sessions(self, session_id: str) -> list[RunSessionRecord]:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM run_sessions WHERE session_id = ? "
+                "AND agent_type != 'web_session' "
                 "ORDER BY started_at ASC, id ASC",
                 (session_id,),
             ).fetchall()
         return [RunSessionRecord(**dict(row)) for row in rows]
+
+    def get_latest_session_run(
+        self,
+        session_id: str,
+        *,
+        include_ended: bool = True,
+    ) -> RunSessionRecord | None:
+        where = "session_id = ?"
+        params: list[object] = [session_id]
+        if not include_ended:
+            where += (
+                " AND status NOT IN "
+                "('ended', 'failed', 'completed', 'interrupted', 'stale')"
+            )
+        where += " AND agent_type != 'web_session'"
+        with self._lock:
+            row = self._conn.execute(
+                f"SELECT * FROM run_sessions WHERE {where} "
+                "ORDER BY started_at DESC, id DESC LIMIT 1",
+                params,
+            ).fetchone()
+        return RunSessionRecord(**dict(row)) if row is not None else None
+
+    def get_latest_web_session_run(
+        self,
+        session_id: str,
+    ) -> RunSessionRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM run_sessions WHERE session_id = ? "
+                "AND agent_type = 'web_session' "
+                "ORDER BY started_at DESC, id DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+        return RunSessionRecord(**dict(row)) if row is not None else None
+
+    def mark_web_runs_stale(self, directory: str) -> int:
+        normalized_directory = _normalize_directory_key(directory)
+        now = _now_iso()
+        with self._lock:
+            cursor = self._conn.execute(
+                "UPDATE run_sessions SET status = 'stale', ended_at = ? "
+                "WHERE kind IN ('session', 'task') "
+                "AND status IN ('starting', 'running', 'waiting_for_input') "
+                "AND session_id IN (SELECT session_id FROM sessions WHERE directory = ?)",
+                (now, normalized_directory),
+            )
+            self._conn.commit()
+        return cursor.rowcount
 
     def add_observability_event(
         self,
@@ -1189,6 +1323,7 @@ class SessionStore:
 
         base_where = "WHERE 1=1"
         params: list[object] = []
+        base_where += " AND rs.agent_type != 'web_session'"
         if normalized_dir is not None:
             base_where += " AND s.directory = ?"
             params.append(normalized_dir)
@@ -1320,12 +1455,15 @@ class SessionStore:
 
         where_clauses = ["1=1"]
         params: list[object] = []
+        where_clauses.append("rs.agent_type != 'web_session'")
         if normalized_dir is not None:
             where_clauses.append("s.directory = ?")
             params.append(normalized_dir)
         if status is not None:
-            where_clauses.append("rs.status = ?")
-            params.append(status)
+            statuses = _storage_statuses_for_api_status(status)
+            placeholders = ", ".join("?" for _ in statuses)
+            where_clauses.append(f"rs.status IN ({placeholders})")
+            params.extend(statuses)
         if provider is not None:
             where_clauses.append("rs.provider = ?")
             params.append(provider)

@@ -781,6 +781,13 @@ class WebDisplay(_EventDisplayBase):
         self._model = model
         self._reasoning_effort = reasoning_effort
         self._bind_session_callback = bind_session
+        self._input_enabled_state: bool | None = None
+
+    def _publish_input_state(self, enabled: bool) -> None:
+        if self._input_enabled_state is enabled:
+            return
+        self._input_enabled_state = enabled
+        self._publish("input_state", {"enabled": enabled})
 
     def request_shutdown(self) -> None:
         self._shutdown.set()
@@ -844,14 +851,14 @@ class WebDisplay(_EventDisplayBase):
         )
         self._input_queue.put(queued)
         self._input_event.set()
-        self._publish("input_state", {"enabled": False})
+        self._publish_input_state(False)
 
     def request_new_session(self) -> None:
         from pbi_agent.agent.session import NEW_SESSION_SENTINEL
 
         self._input_queue.put(NEW_SESSION_SENTINEL)
         self._input_event.set()
-        self._publish("input_state", {"enabled": False})
+        self._publish_input_state(False)
 
     def ask_user_questions(
         self, questions: list[PendingUserQuestion]
@@ -924,7 +931,7 @@ class WebDisplay(_EventDisplayBase):
             )
         )
         self._input_event.set()
-        self._publish("input_state", {"enabled": False})
+        self._publish_input_state(False)
 
     def user_prompt(self) -> str | QueuedInput | QueuedRuntimeChange:
         while True:
@@ -933,13 +940,13 @@ class WebDisplay(_EventDisplayBase):
             except queue.Empty:
                 if self._shutdown.is_set():
                     return "exit"
-                self._publish("input_state", {"enabled": True})
+                self._publish_input_state(True)
                 self._input_event.wait(timeout=0.5)
                 self._input_event.clear()
                 continue
             if self._input_queue.empty():
                 self._input_event.clear()
-            self._publish("input_state", {"enabled": False})
+            self._publish_input_state(False)
             return value
 
 

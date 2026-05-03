@@ -18,9 +18,6 @@ function sessionDestination(session: SessionRuntimeState): string {
   if (session.sessionId) {
     return `/sessions/${encodeURIComponent(session.sessionId)}`;
   }
-  if (session.liveSessionId) {
-    return `/sessions/live/${encodeURIComponent(session.liveSessionId)}`;
-  }
   return "/sessions";
 }
 

@@ -108,7 +108,7 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
         ) {
           void client.invalidateQueries({ queryKey: ["sessions"] });
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
-          void client.invalidateQueries({ queryKey: ["live-sessions"] });
+          void client.invalidateQueries({ queryKey: ["sessions"] });
           const latestSeq = latestHandledSeq.current;
           latestHandledSeq.current = Math.max(latestSeq, event.seq);
           if (

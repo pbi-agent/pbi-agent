@@ -7,16 +7,13 @@ import {
   ApiError,
   fetchBoardStages,
   fetchConfigBootstrap,
-  fetchLiveSessions,
   fetchTasks,
-  interruptLiveSession,
   runTask,
   updateBoardStages,
 } from "../../api";
 import type {
   BoardStage,
   ConfigBootstrapPayload,
-  LiveSession,
   TaskRecord,
 } from "../../types";
 
@@ -141,11 +138,9 @@ vi.mock("../../api", async (importOriginal) => {
     fetchTasks: vi.fn(),
     fetchBoardStages: vi.fn(),
     fetchConfigBootstrap: vi.fn(),
-    fetchLiveSessions: vi.fn(),
     createTask: vi.fn(),
     updateTask: vi.fn(),
     deleteTask: vi.fn(),
-    interruptLiveSession: vi.fn(),
     runTask: vi.fn(),
     updateBoardStages: vi.fn(),
     uploadTaskImages: vi.fn(),
@@ -177,29 +172,6 @@ function makeTask(overrides: Partial<TaskRecord> = {}): TaskRecord {
       model: null,
       reasoning_effort: null,
     },
-    ...overrides,
-  };
-}
-
-function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
-  return {
-    live_session_id: "live-1",
-    session_id: "session-1",
-    task_id: "task-1",
-    kind: "task",
-    project_dir: ".",
-    created_at: "2026-04-16T10:00:00Z",
-    status: "running",
-    exit_code: null,
-    fatal_error: null,
-    ended_at: null,
-    last_event_seq: 1,
-    provider: "OpenAI",
-    provider_id: "openai-main",
-    profile_id: "analysis",
-    model: "gpt-5.4",
-    reasoning_effort: "high",
-    compact_threshold: 1,
     ...overrides,
   };
 }
@@ -318,9 +290,7 @@ describe("BoardPage", () => {
   beforeEach(() => {
     vi.mocked(fetchTasks).mockResolvedValue([]);
     vi.mocked(fetchBoardStages).mockResolvedValue(backlogAndDoneStages);
-    vi.mocked(fetchLiveSessions).mockResolvedValue([]);
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
-    vi.mocked(interruptLiveSession).mockResolvedValue(makeLiveSession({ status: "ended" }));
     vi.mocked(runTask).mockResolvedValue(makeTask({ run_status: "running" }));
     vi.mocked(updateBoardStages).mockResolvedValue(backlogAndDoneStages);
   });
@@ -374,34 +344,6 @@ describe("BoardPage", () => {
 
     expect(runTask).toHaveBeenCalled();
     expect(vi.mocked(runTask).mock.calls[0]?.[0]).toBe("task-1");
-    expect(interruptLiveSession).not.toHaveBeenCalled();
-  });
-
-  it("interrupts the active task live session through the stop shortcut", async () => {
-    const user = userEvent.setup();
-    vi.mocked(fetchTasks).mockResolvedValue([makeTask({ run_status: "running" })]);
-    vi.mocked(fetchLiveSessions).mockResolvedValue([makeLiveSession()]);
-
-    renderWithProviders(<BoardPage />);
-
-    await user.click(await screen.findByRole("button", { name: "Stop Draft spec" }));
-
-    await waitFor(() => expect(interruptLiveSession).toHaveBeenCalled());
-    expect(vi.mocked(interruptLiveSession).mock.calls[0]?.[0]).toBe("live-1");
-    expect(runTask).not.toHaveBeenCalled();
-  });
-
-  it("shows the existing run error banner when interrupting fails", async () => {
-    const user = userEvent.setup();
-    vi.mocked(fetchTasks).mockResolvedValue([makeTask({ run_status: "running" })]);
-    vi.mocked(fetchLiveSessions).mockResolvedValue([makeLiveSession()]);
-    vi.mocked(interruptLiveSession).mockRejectedValue(new ApiError("Already stopped", 409));
-
-    renderWithProviders(<BoardPage />);
-
-    await user.click(await screen.findByRole("button", { name: "Stop Draft spec" }));
-
-    expect(await screen.findByText("Already stopped")).toBeInTheDocument();
   });
 
   it("orders done tasks by creation date descending", async () => {

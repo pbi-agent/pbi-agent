@@ -79,7 +79,6 @@ describe("useTaskEvents", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["board-stages"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["live-sessions"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
   });
 

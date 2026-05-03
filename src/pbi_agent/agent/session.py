@@ -318,6 +318,7 @@ def run_session_loop(
     display: DisplayProtocol,
     *,
     resume_session_id: str | None = None,
+    run_session_id: str | None = None,
     on_reload: Callable[[], None] | None = None,
     excluded_tools: set[str] | None = None,
 ) -> int:
@@ -519,6 +520,7 @@ def run_session_loop(
                 )
                 turn_tracer = RunTracer.start(
                     store=store,
+                    run_session_id=run_session_id,
                     session_id=session_id,
                     agent_name="main",
                     agent_type="session_turn",

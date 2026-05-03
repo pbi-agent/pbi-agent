@@ -60,6 +60,7 @@
 }
 
 .indicator-dot--connected    { background: var(--color-success); }
+.indicator-dot--ready        { background: var(--color-success); }
 .indicator-dot--connecting   { background: var(--color-warning); animation: pulse-dot 1.2s ease-in-out infinite; }
 .indicator-dot--disconnected { background: var(--color-text-tertiary); }
 
