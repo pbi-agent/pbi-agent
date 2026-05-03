@@ -3,6 +3,7 @@ import type {
   ProcessingStateModel,
   RunSessionModel,
   SessionRecordModel,
+  SseEventModel,
 } from "./api-types.generated";
 
 export type SessionLifecycleStatus = NonNullable<SessionRecordModel["status"]>;
@@ -527,12 +528,7 @@ export type TimelineItem =
   | TimelineThinkingItem
   | TimelineToolGroupItem;
 
-export type WebEvent = {
-  seq: number;
-  type: string;
-  created_at: string;
-  payload: Record<string, unknown>;
-};
+export type WebEvent = SseEventModel & { payload: Record<string, unknown> };
 
 export type LiveSessionLifecycleEventType =
   | "live_session_started"

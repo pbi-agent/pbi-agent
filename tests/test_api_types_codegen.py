@@ -18,3 +18,11 @@ def test_generated_api_types_are_current() -> None:
         generate_api_types.OUTPUT.read_text(encoding="utf-8")
         == generate_api_types.render_api_types()
     )
+
+
+def test_generated_api_types_include_sse_event_union() -> None:
+    generated = generate_api_types.render_api_types()
+
+    assert "export type SseEventModel =" in generated
+    assert "InputStateSseEventModel" in generated
+    assert "LiveSessionEndedSseEventModel" in generated

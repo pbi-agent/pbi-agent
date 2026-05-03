@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { eventStreamUrl } from "../api";
+import { parseSseEvent } from "../events";
 import { useSessionStore } from "../store";
 import type { WebEvent } from "../types";
 
@@ -49,7 +50,8 @@ export function useLiveSessionEvents(
 
       currentSource.onmessage = (message) => {
         if (typeof message.data !== "string") return;
-        const event = JSON.parse(message.data) as WebEvent;
+        const event = parseSseEvent(message.data);
+        if (!event) return;
         if (event.type === "server.connected" || event.type === "server.heartbeat") return;
         const resolvedLiveSessionId = readLiveSessionId(event) ?? currentLiveSessionId;
         const targetSessionKey = resolvedLiveSessionId

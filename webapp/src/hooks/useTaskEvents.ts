@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { eventStreamUrl } from "../api";
+import { parseSseEvent } from "../events";
 import type {
   LiveSession,
   LiveSessionLifecycleEvent,
@@ -83,7 +84,10 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
         if (typeof message.data !== "string") {
           return;
         }
-        const event = JSON.parse(message.data) as WebEvent;
+        const event = parseSseEvent(message.data);
+        if (!event) {
+          return;
+        }
         if (event.type === "server.connected" || event.type === "server.heartbeat") {
           return;
         }

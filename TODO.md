@@ -1,6 +1,5 @@
-[X] Map generated/manual frontend API type overlap
-[X] Add typed snapshot fields to API schema and generated types
-[X] Derive safe frontend boundary types from generated models
-[X] Regenerate/check API contract types if needed
-[X] Validate API type drift changes
+[X] Map backend/frontend SSE event shapes
+[X] Add OpenAPI-exported SSE event envelope/payload models
+[X] Generate frontend event union types and apply at stream boundary
+[X] Validate event typing slice
 [X] Update memory and commit phase
