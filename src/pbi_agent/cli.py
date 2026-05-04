@@ -67,6 +67,10 @@ from pbi_agent.log_config import configure_logging
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_COMMAND = "web"
+DEFAULT_SANDBOX_IMAGE = "pbi-agent-sandbox:local"
+SANDBOX_WORKSPACE = "/workspace"
+SANDBOX_HOME = "/home/pbi"
+SANDBOX_CONFIG_VOLUME = "pbi-agent-sandbox-config"
 WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS = 20.0
 WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS = 10.0
 WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS = 0.1
@@ -357,6 +361,105 @@ def build_parser() -> argparse.ArgumentParser:
         "--url",
         default=None,
         help="Optional public URL for reverse-proxy setups.",
+    )
+
+    sandbox_parser = add_command_parser(
+        "sandbox",
+        "Run pbi-agent inside a Docker Desktop sandbox.",
+    )
+    sandbox_parser.add_argument(
+        "--image",
+        default=DEFAULT_SANDBOX_IMAGE,
+        help=f"Sandbox image name (default: {DEFAULT_SANDBOX_IMAGE}).",
+    )
+    sandbox_parser.add_argument(
+        "--env-file",
+        type=Path,
+        default=None,
+        help="Optional env file to pass to the sandbox container.",
+    )
+    sandbox_parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="Rebuild the local sandbox image before running.",
+    )
+    sandbox_parser.add_argument(
+        "--read-only-repo",
+        action="store_true",
+        help="Mount the current repository read-only inside the sandbox.",
+    )
+    sandbox_parser.set_defaults(
+        sandbox_command="web",
+        host="127.0.0.1",
+        port=DEFAULT_WEB_PORT,
+        _explicit_web_port=False,
+        dev=False,
+        title=None,
+        url=None,
+    )
+    sandbox_subparsers = sandbox_parser.add_subparsers(
+        dest="sandbox_command",
+        metavar="<command>",
+    )
+    sandbox_web_parser = sandbox_subparsers.add_parser(
+        "web",
+        prog="pbi-agent sandbox web",
+        description="Serve the browser interface inside the Docker sandbox.",
+        help="Serve the browser interface inside the Docker sandbox.",
+        formatter_class=CleanHelpFormatter,
+    )
+    sandbox_web_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host interface to publish on the host (default: 127.0.0.1).",
+    )
+    sandbox_web_parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_WEB_PORT,
+        action=ExplicitPortAction,
+        help="Host and container web port (default: 8000).",
+    )
+    sandbox_web_parser.set_defaults(_explicit_web_port=False)
+    sandbox_web_parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Enable web development mode inside the sandbox.",
+    )
+    sandbox_web_parser.add_argument(
+        "--title",
+        default=None,
+        help="Optional browser title override.",
+    )
+    sandbox_web_parser.add_argument(
+        "--url",
+        default=None,
+        help="Optional public URL for reverse-proxy setups.",
+    )
+    sandbox_run_parser = sandbox_subparsers.add_parser(
+        "run",
+        prog="pbi-agent sandbox run",
+        description="Run a single prompt turn inside the Docker sandbox.",
+        help="Run a single prompt turn inside the Docker sandbox.",
+        formatter_class=CleanHelpFormatter,
+    )
+    sandbox_run_parser.add_argument("--prompt", required=True, help="User prompt.")
+    sandbox_run_parser.add_argument(
+        "--image",
+        dest="images",
+        action="append",
+        default=[],
+        help="Attach a local workspace image to the prompt. Repeatable.",
+    )
+    sandbox_run_parser.add_argument(
+        "--project-dir",
+        type=Path,
+        default=Path("."),
+        help="Relative project directory to scope tool execution to (default: current directory).",
+    )
+    sandbox_run_parser.add_argument(
+        "--session-id",
+        help="Resume a previous session by ID to continue the conversation.",
     )
 
     sessions_parser = add_command_parser(
@@ -937,6 +1040,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
 
+    if args.command == "sandbox":
+        configure_logging(args.verbose)
+        return _handle_sandbox_command(args)
+
     if args.command == "run" and args.session_id:
         _run_session = _load_session_record(args.session_id)
         if _run_session is None:
@@ -999,6 +1106,243 @@ def _handle_config_command(args: argparse.Namespace) -> int:
     if args.config_scope == "profiles":
         return _handle_config_profiles_command(args)
     raise ConfigError(f"Unknown config scope '{args.config_scope}'.")
+
+
+def _handle_sandbox_command(args: argparse.Namespace) -> int:
+    sandbox_command = args.sandbox_command or "web"
+    if sandbox_command == "web" and (args.port < 1 or args.port > 65535):
+        print("Error: --port must be between 1 and 65535.", file=sys.stderr)
+        return 2
+
+    docker_check = _check_docker_available()
+    if docker_check is not None:
+        print(f"Error: {docker_check}", file=sys.stderr)
+        return 1
+
+    dockerfile = _sandbox_dockerfile_path()
+    if dockerfile is None:
+        print(
+            "Error: bundled sandbox Dockerfile was not found. Reinstall pbi-agent "
+            "or run from a complete source checkout.",
+            file=sys.stderr,
+        )
+        return 1
+
+    image = str(args.image).strip() or DEFAULT_SANDBOX_IMAGE
+    if args.rebuild or not _docker_image_exists(image):
+        build_command = _build_sandbox_image_command(image, dockerfile)
+        build_result = subprocess.run(build_command)
+        if build_result.returncode != 0:
+            return build_result.returncode
+
+    run_command, container_env = _build_sandbox_run_command(args, image)
+    try:
+        completed = subprocess.run(run_command, env=container_env)
+    except KeyboardInterrupt:
+        return 130
+    return completed.returncode
+
+
+def _check_docker_available() -> str | None:
+    try:
+        completed = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except FileNotFoundError:
+        return "Docker CLI was not found. Install and start Docker Desktop."
+    except subprocess.TimeoutExpired:
+        return "Docker Desktop did not respond to `docker version`."
+    except OSError as exc:
+        return f"Unable to run Docker CLI: {exc}"
+    if completed.returncode != 0:
+        stderr = (completed.stderr or completed.stdout or "").strip()
+        detail = f" {stderr}" if stderr else ""
+        return f"Docker Desktop is not available or is not running.{detail}"
+    return None
+
+
+def _docker_image_exists(image: str) -> bool:
+    completed = subprocess.run(
+        ["docker", "image", "inspect", image],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return completed.returncode == 0
+
+
+def _sandbox_dockerfile_path() -> Path | None:
+    package_dockerfile = (
+        Path(__file__).resolve().parent / "sandbox" / "Dockerfile.sandbox"
+    )
+    if package_dockerfile.is_file():
+        return package_dockerfile
+    return None
+
+
+def _build_sandbox_image_command(image: str, dockerfile: Path) -> list[str]:
+    context_dir = dockerfile.parent
+    return [
+        "docker",
+        "build",
+        "--file",
+        str(dockerfile),
+        "--build-arg",
+        f"PBI_AGENT_VERSION={__version__}",
+        "--tag",
+        image,
+        str(context_dir),
+    ]
+
+
+def _build_sandbox_run_command(
+    args: argparse.Namespace,
+    image: str,
+) -> tuple[list[str], dict[str, str]]:
+    workspace = Path.cwd().resolve()
+    env_names, env_overrides = _sandbox_environment(args)
+    command = [
+        "docker",
+        "run",
+        "--rm",
+        "--init",
+        "--workdir",
+        SANDBOX_WORKSPACE,
+        "--mount",
+        _sandbox_workspace_mount(workspace, read_only=bool(args.read_only_repo)),
+        "--mount",
+        (
+            f"type=volume,source={SANDBOX_CONFIG_VOLUME},"
+            f"target={SANDBOX_HOME}/.pbi-agent"
+        ),
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges:true",
+        "--pids-limit",
+        "512",
+        "--memory",
+        "4g",
+        "--read-only",
+        "--tmpfs",
+        "/tmp:rw,noexec,nosuid,size=256m",
+        "--tmpfs",
+        f"{SANDBOX_HOME}/.cache:rw,noexec,nosuid,size=512m",
+    ]
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        command.append("-it")
+    if args.env_file is not None:
+        command.extend(["--env-file", str(args.env_file.resolve())])
+    for env_name in env_names:
+        command.extend(["--env", env_name])
+
+    sandbox_command = args.sandbox_command or "web"
+    if sandbox_command == "web":
+        command.extend(
+            [
+                "--publish",
+                f"{args.host}:{args.port}:{args.port}",
+            ]
+        )
+
+    command.append(image)
+    command.extend(_sandbox_inner_command(args))
+
+    container_env = os.environ.copy()
+    container_env.update(env_overrides)
+    return command, container_env
+
+
+def _sandbox_workspace_mount(workspace: Path, *, read_only: bool) -> str:
+    mount = f"type=bind,source={workspace},target={SANDBOX_WORKSPACE}"
+    if read_only:
+        mount += ",readonly"
+    return mount
+
+
+def _sandbox_environment(args: argparse.Namespace) -> tuple[list[str], dict[str, str]]:
+    inherited = {
+        name
+        for name in os.environ
+        if name.startswith("PBI_AGENT_") or name in _sandbox_passthrough_env_names()
+    }
+    overrides = _sandbox_cli_env_overrides(args)
+    names = sorted(inherited | set(overrides))
+    return names, overrides
+
+
+def _sandbox_passthrough_env_names() -> set[str]:
+    return {
+        "OPENAI_API_KEY",
+        "AZURE_API_KEY",
+        "XAI_API_KEY",
+        "GEMINI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GENERIC_API_KEY",
+        "HTTPS_PROXY",
+        "HTTP_PROXY",
+        "NO_PROXY",
+        "https_proxy",
+        "http_proxy",
+        "no_proxy",
+    }
+
+
+def _sandbox_cli_env_overrides(args: argparse.Namespace) -> dict[str, str]:
+    mapping = {
+        "provider": "PBI_AGENT_PROVIDER",
+        "api_key": "PBI_AGENT_API_KEY",
+        "responses_url": "PBI_AGENT_RESPONSES_URL",
+        "generic_api_url": "PBI_AGENT_GENERIC_API_URL",
+        "profile_id": "PBI_AGENT_PROFILE_ID",
+        "model": "PBI_AGENT_MODEL",
+        "sub_agent_model": "PBI_AGENT_SUB_AGENT_MODEL",
+        "max_tokens": "PBI_AGENT_MAX_TOKENS",
+        "reasoning_effort": "PBI_AGENT_REASONING_EFFORT",
+        "service_tier": "PBI_AGENT_SERVICE_TIER",
+        "max_tool_workers": "PBI_AGENT_MAX_TOOL_WORKERS",
+        "max_retries": "PBI_AGENT_MAX_RETRIES",
+        "compact_threshold": "PBI_AGENT_COMPACT_THRESHOLD",
+        "compact_tail_turns": "PBI_AGENT_COMPACT_TAIL_TURNS",
+        "compact_preserve_recent_tokens": "PBI_AGENT_COMPACT_PRESERVE_RECENT_TOKENS",
+        "compact_tool_output_max_chars": "PBI_AGENT_COMPACT_TOOL_OUTPUT_MAX_CHARS",
+    }
+    overrides: dict[str, str] = {}
+    for arg_name, env_name in mapping.items():
+        value = getattr(args, arg_name, None)
+        if value is None:
+            continue
+        overrides[env_name] = str(value)
+    if getattr(args, "no_web_search", False):
+        overrides["PBI_AGENT_WEB_SEARCH"] = "false"
+    return overrides
+
+
+def _sandbox_inner_command(args: argparse.Namespace) -> list[str]:
+    command: list[str] = []
+    if args.verbose:
+        command.append("--verbose")
+    sandbox_command = args.sandbox_command or "web"
+    if sandbox_command == "web":
+        command.extend(["web", "--host", "0.0.0.0", "--port", str(args.port)])
+        if args.dev:
+            command.append("--dev")
+        if args.title:
+            command.extend(["--title", args.title])
+        if args.url:
+            command.extend(["--url", args.url])
+        return command
+    if sandbox_command == "run":
+        command.extend(["run", "--prompt", args.prompt])
+        for image_path in args.images or []:
+            command.extend(["--image", image_path])
+        command.extend(["--project-dir", str(args.project_dir)])
+        if args.session_id:
+            command.extend(["--session-id", args.session_id])
+        return command
+    raise ConfigError(f"Unknown sandbox command '{sandbox_command}'.")
 
 
 def _handle_config_providers_command(args: argparse.Namespace) -> int:

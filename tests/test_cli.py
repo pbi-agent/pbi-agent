@@ -444,6 +444,220 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertTrue(args.agents)
 
+    def test_parser_accepts_sandbox_default_web_command(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(["sandbox", "--rebuild", "--read-only-repo"])
+
+        self.assertEqual(args.command, "sandbox")
+        self.assertIsNone(args.sandbox_command)
+        self.assertTrue(args.rebuild)
+        self.assertTrue(args.read_only_repo)
+        self.assertEqual(args.image, cli.DEFAULT_SANDBOX_IMAGE)
+        self.assertEqual(args.host, "127.0.0.1")
+        self.assertEqual(args.port, 8000)
+
+    def test_parser_accepts_sandbox_web_command(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(
+            [
+                "sandbox",
+                "--image",
+                "custom:dev",
+                "--env-file",
+                ".env.sandbox",
+                "web",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "9001",
+                "--title",
+                "Sandbox",
+            ]
+        )
+
+        self.assertEqual(args.command, "sandbox")
+        self.assertEqual(args.sandbox_command, "web")
+        self.assertEqual(args.image, "custom:dev")
+        self.assertEqual(args.env_file, Path(".env.sandbox"))
+        self.assertEqual(args.port, 9001)
+        self.assertEqual(args.title, "Sandbox")
+
+    def test_parser_accepts_sandbox_run_command(self) -> None:
+        parser = cli.build_parser()
+
+        args = parser.parse_args(
+            [
+                "sandbox",
+                "run",
+                "--prompt",
+                "Inspect the repo",
+                "--image",
+                "diagram.png",
+                "--project-dir",
+                "app",
+                "--session-id",
+                "session-1",
+            ]
+        )
+
+        self.assertEqual(args.command, "sandbox")
+        self.assertEqual(args.sandbox_command, "run")
+        self.assertEqual(args.prompt, "Inspect the repo")
+        self.assertEqual(args.images, ["diagram.png"])
+        self.assertEqual(args.project_dir, Path("app"))
+        self.assertEqual(args.session_id, "session-1")
+
+    def test_main_sandbox_routes_without_resolving_settings(self) -> None:
+        with (
+            patch(
+                "pbi_agent.cli._handle_sandbox_command", return_value=33
+            ) as mock_handle,
+            patch("pbi_agent.cli.resolve_runtime") as mock_resolve_runtime,
+            patch("pbi_agent.cli.resolve_web_runtime") as mock_resolve_web_runtime,
+        ):
+            rc = cli.main(["sandbox", "run", "--prompt", "hello"])
+
+        self.assertEqual(rc, 33)
+        self.assertEqual(mock_handle.call_args.args[0].command, "sandbox")
+        self.assertEqual(mock_handle.call_args.args[0].sandbox_command, "run")
+        mock_resolve_runtime.assert_not_called()
+        mock_resolve_web_runtime.assert_not_called()
+
+    def test_build_sandbox_run_command_hardens_container_and_mounts_workspace(
+        self,
+    ) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(
+            [
+                "--provider",
+                "openai",
+                "--api-key",
+                "secret-key",
+                "sandbox",
+                "--env-file",
+                ".env.sandbox",
+                "--read-only-repo",
+                "web",
+                "--port",
+                "9001",
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(tmpdir)
+                command, container_env = cli._build_sandbox_run_command(
+                    args,
+                    "sandbox:test",
+                )
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertEqual(command[:2], ["docker", "run"])
+        self.assertIn("--rm", command)
+        self.assertIn("--init", command)
+        self.assertIn("--read-only", command)
+        self.assertIn("--cap-drop", command)
+        self.assertIn("ALL", command)
+        self.assertIn("--security-opt", command)
+        self.assertIn("no-new-privileges:true", command)
+        self.assertIn("--pids-limit", command)
+        self.assertIn("512", command)
+        self.assertIn("--memory", command)
+        self.assertIn("4g", command)
+        self.assertIn("--tmpfs", command)
+        self.assertIn("/tmp:rw,noexec,nosuid,size=256m", command)
+        self.assertIn(
+            f"{cli.SANDBOX_HOME}/.cache:rw,noexec,nosuid,size=512m",
+            command,
+        )
+        self.assertIn("--env-file", command)
+        self.assertIn(str((Path(tmpdir) / ".env.sandbox").resolve()), command)
+        self.assertIn("--publish", command)
+        self.assertIn("127.0.0.1:9001:9001", command)
+        self.assertIn("sandbox:test", command)
+        self.assertNotIn("/var/run/docker.sock", " ".join(command))
+
+        mounts = [
+            command[index + 1]
+            for index, value in enumerate(command)
+            if value == "--mount"
+        ]
+        self.assertIn(
+            f"type=bind,source={Path(tmpdir).resolve()},target=/workspace,readonly",
+            mounts,
+        )
+        self.assertIn(
+            "type=volume,source=pbi-agent-sandbox-config,target=/home/pbi/.pbi-agent",
+            mounts,
+        )
+        self.assertIn("--env", command)
+        self.assertIn("PBI_AGENT_PROVIDER", command)
+        self.assertIn("PBI_AGENT_API_KEY", command)
+        self.assertEqual(container_env["PBI_AGENT_PROVIDER"], "openai")
+        self.assertEqual(container_env["PBI_AGENT_API_KEY"], "secret-key")
+        self.assertNotIn("secret-key", command)
+
+        image_index = command.index("sandbox:test")
+        self.assertEqual(
+            command[image_index + 1 :],
+            ["web", "--host", "0.0.0.0", "--port", "9001"],
+        )
+
+    def test_build_sandbox_run_command_for_one_shot_run(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(
+            [
+                "sandbox",
+                "run",
+                "--prompt",
+                "Inspect",
+                "--image",
+                "diagram.png",
+                "--project-dir",
+                "pkg",
+            ]
+        )
+
+        command, _container_env = cli._build_sandbox_run_command(
+            args,
+            "sandbox:test",
+        )
+
+        self.assertNotIn("--publish", command)
+        image_index = command.index("sandbox:test")
+        self.assertEqual(
+            command[image_index + 1 :],
+            [
+                "run",
+                "--prompt",
+                "Inspect",
+                "--image",
+                "diagram.png",
+                "--project-dir",
+                "pkg",
+            ],
+        )
+
+    def test_sandbox_dockerfile_path_ignores_workspace_dockerfile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace_dockerfile = Path(tmpdir) / "docker" / "Dockerfile.sandbox"
+            workspace_dockerfile.parent.mkdir()
+            workspace_dockerfile.write_text("FROM scratch\n", encoding="utf-8")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(tmpdir)
+                dockerfile = cli._sandbox_dockerfile_path()
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertIsNotNone(dockerfile)
+        self.assertNotEqual(dockerfile, workspace_dockerfile)
+        self.assertEqual(dockerfile.name, "Dockerfile.sandbox")
+
     def test_handle_web_command_serves_in_process(self) -> None:
         parser = cli.build_parser()
         args = parser.parse_args(["web", "--port", "9001"])

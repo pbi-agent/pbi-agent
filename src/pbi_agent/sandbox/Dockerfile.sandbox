@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1.7
+
+ARG PYTHON_VERSION=3.12.12
+FROM python:${PYTHON_VERSION}-slim-bookworm
+
+ARG PBI_AGENT_VERSION
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+SHELL ["/bin/sh", "-euxc"]
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        git \
+        patch \
+        procps \
+        ripgrep \
+        unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --home-dir /home/pbi --shell /bin/bash pbi \
+    && mkdir -p /workspace /home/pbi/.pbi-agent /home/pbi/.cache \
+    && chown -R pbi:pbi /workspace /home/pbi
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    test -n "${PBI_AGENT_VERSION}" \
+    && python -m pip install \
+        --only-binary=:all: \
+        "pbi-agent==${PBI_AGENT_VERSION}"
+
+USER pbi
+WORKDIR /workspace
+
+EXPOSE 8000
+
+ENTRYPOINT ["pbi-agent"]
