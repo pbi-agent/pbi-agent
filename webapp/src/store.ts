@@ -481,21 +481,18 @@ export const useSessionStore = create<SessionStore>((set) => ({
             items: options.preserveItems ? current.items : [],
             itemsVersion: options.preserveItems ? current.itemsVersion : 0,
             subAgents: options.preserveItems ? current.subAgents : {},
-            // When attaching the freshly returned run after a saved-session
-            // message submit, keep the current high-water mark so the WS
-            // snapshot can still replay the just-submitted turn. Otherwise,
-            // when reattaching the same live session, carry forward the
-            // high-water mark so the WS snapshot replay skips events already
-            // covered by API history. When attaching a *new* live session
-            // (seq restarts from 1), reset to the server's value so we don't
-            // suppress the new session's events.
-            lastEventSeq: options.preserveEventCursor
-              ? current.lastEventSeq
-              : current.liveSessionId === session.live_session_id
-                ? Math.max(
+            // Event seq is scoped to one live stream. Preserve the cursor only
+            // for the same stream. If saved-session submit returns a new live
+            // run, reset so the new stream can replay the submitted turn.
+            lastEventSeq: current.liveSessionId === session.live_session_id
+              ? options.preserveEventCursor
+                ? current.lastEventSeq
+                : Math.max(
                     current.lastEventSeq,
                     typeof session.last_event_seq === "number" ? session.last_event_seq : 0,
                   )
+              : options.preserveEventCursor
+                ? 0
                 : (typeof session.last_event_seq === "number" ? session.last_event_seq : 0),
           },
         },

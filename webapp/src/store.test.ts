@@ -257,6 +257,40 @@ describe("session store", () => {
     expect(store.sessionIndex["session-1"]).toBe(sessionKey);
   });
 
+  it("resets the event cursor when a saved session starts a new live run", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "old-live", last_event_seq: 46 }),
+    );
+    useSessionStore.getState().applyEvent(
+      sessionKey,
+      {
+        seq: 46,
+        type: "session_state",
+        created_at: "2026-04-16T12:00:03Z",
+        payload: {
+          state: "ended",
+          session_id: "session-1",
+          live_session_id: "old-live",
+          exit_code: 0,
+          fatal_error: null,
+        },
+      },
+      "old-live",
+    );
+
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "new-live", last_event_seq: 5 }),
+      { preserveItems: true, preserveEventCursor: true },
+    );
+
+    const store = useSessionStore.getState();
+    expect(store.sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
+    expect(store.liveSessionIndex["new-live"]).toBe(sessionKey);
+  });
+
   it("captures turn usage updates with elapsed time", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());

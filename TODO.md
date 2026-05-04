@@ -1,4 +1,5 @@
-[X] Add frontend typed path helper from generated path params
-[X] Replace dynamic API URL paths with typed path helper
-[X] Validate API path parameter typing slice
-[X] Update memory and commit phase
+[X] Inspect saved HTML and persisted session/run state for cc50122a388244399f80212bd9c0f996
+[X] Trace frontend live event routing for Kanban-started saved sessions
+[X] Patch minimal session-key/live-event cursor reset bug
+[X] Add regression coverage
+[>] Validate and commit fix
