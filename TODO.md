@@ -2,4 +2,4 @@
 [X] Trace frontend live event routing for Kanban-started saved sessions
 [X] Patch minimal session-key/live-event cursor reset bug
 [X] Add regression coverage
-[>] Validate and commit fix
+[X] Validate and commit fix
