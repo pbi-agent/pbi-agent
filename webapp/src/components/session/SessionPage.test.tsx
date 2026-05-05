@@ -1308,6 +1308,129 @@ describe("SessionPage", () => {
     ]);
   });
 
+  it("keeps duplicate historical work traces anchored before later saved messages", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-user-1",
+          message_id: "msg-user-1",
+          part_ids: { content: "msg-user-1:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "run the test",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:00:00Z",
+        },
+        {
+          item_id: "history-assistant-1",
+          message_id: "msg-assistant-1",
+          part_ids: { content: "msg-assistant-1:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "this is a test",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:01:00Z",
+        },
+        {
+          item_id: "history-user-2",
+          message_id: "msg-user-2",
+          part_ids: { content: "msg-user-2:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "run it again",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:02:00Z",
+        },
+        {
+          item_id: "history-assistant-2",
+          message_id: "msg-assistant-2",
+          part_ids: { content: "msg-assistant-2:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "this is a test",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:03:00Z",
+        },
+        {
+          item_id: "history-assistant-final",
+          message_id: "msg-assistant-final",
+          part_ids: { content: "msg-assistant-final:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "final answer",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:04:00Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "historical-run-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "historical-run-1:assistant-1",
+            role: "assistant",
+            content: "this is a test",
+            markdown: true,
+            historical: true,
+          },
+          {
+            kind: "tool_group",
+            itemId: "historical-run-1:tool-group-8",
+            label: "Tool calls",
+            status: "completed",
+            items: [],
+          },
+          {
+            kind: "message",
+            itemId: "historical-run-1:assistant-duplicate",
+            role: "assistant",
+            content: "this is a test",
+            markdown: true,
+            historical: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 32,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 6")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-user-1",
+      "history-assistant-1",
+      "historical-run-1:tool-group-8",
+      "history-user-2",
+      "history-assistant-2",
+      "history-assistant-final",
+    ]);
+  });
+
   it("keeps Kanban-started continuation history in chronological order", async () => {
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord({ status: "running", active_run_id: "kanban-continuation" }),

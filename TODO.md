@@ -1,4 +1,4 @@
 # Orchestrate TODO
 
-- [X] Prefer the current running task live session for saved-session detail and SSE routing.
-- [X] Run focused validation, update memory, and report handoff.
+[X] Fix saved-session timeline merge so historical Working blocks stay anchored to their turn.
+[X] Run focused/final validation, update memory, and report handoff.

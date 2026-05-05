@@ -896,6 +896,7 @@ function timelineForDisplay(
   );
   const mergedItems: Record<string, unknown>[] = [];
   const pendingUnanchoredItems: Record<string, unknown>[] = [];
+  let pendingHistoryBoundaryIndex: number | null = null;
   const consumedHistoryIndexes = new Set<number>();
   const appendHistoryRange = (endIndex: number, includeEnd: boolean) => {
     const upperBound = includeEnd ? endIndex : endIndex - 1;
@@ -933,9 +934,47 @@ function timelineForDisplay(
       && messageSignature(historyItem) === signature
     ));
   };
+  const skippedHistoryBoundaryIndex = (item: Record<string, unknown>): number => {
+    const messageId = persistedMessageId(item);
+    if (messageId) {
+      return historyItems.findIndex((historyItem, candidateIndex) => (
+        !consumedHistoryIndexes.has(candidateIndex)
+        && persistedMessageId(historyItem) === messageId
+      ));
+    }
+    if (!isHistoricalSnapshotMessage(item)) return -1;
+    const signature = messageSignature(item);
+    if (!signature) return -1;
+    return historyItems.findIndex((historyItem, candidateIndex) => (
+      !consumedHistoryIndexes.has(candidateIndex)
+      && messageSignature(historyItem) === signature
+    ));
+  };
+  const rememberPendingHistoryBoundary = (item: Record<string, unknown>) => {
+    if (consumedHistoryIndexes.size > 0) return;
+    const boundaryIndex = skippedHistoryBoundaryIndex(item);
+    if (boundaryIndex < 0) return;
+    pendingHistoryBoundaryIndex = pendingHistoryBoundaryIndex === null
+      ? boundaryIndex
+      : Math.min(pendingHistoryBoundaryIndex, boundaryIndex);
+  };
+  const flushPendingAtHistoryBoundary = (): boolean => {
+    if (pendingHistoryBoundaryIndex === null || pendingUnanchoredItems.length === 0) {
+      return false;
+    }
+    appendHistoryRange(pendingHistoryBoundaryIndex, true);
+    mergedItems.push(...pendingUnanchoredItems);
+    pendingUnanchoredItems.length = 0;
+    pendingHistoryBoundaryIndex = null;
+    return true;
+  };
 
   for (const item of timeline.items) {
     if (consumedHistoryIndexes.size === 0 && item.kind !== "message") {
+      if (flushPendingAtHistoryBoundary()) {
+        mergedItems.push(item);
+        continue;
+      }
       pendingUnanchoredItems.push(item);
       continue;
     }
@@ -948,20 +987,24 @@ function timelineForDisplay(
       appendHistoryRange(historyIndex, pendingUnanchoredItems.length === 0);
       mergedItems.push(...pendingUnanchoredItems);
       pendingUnanchoredItems.length = 0;
+      pendingHistoryBoundaryIndex = null;
       appendHistoryRange(historyIndex, true);
       continue;
     }
     const messageId = persistedMessageId(item);
     if (messageId && historyMessageIds.has(messageId)) {
+      rememberPendingHistoryBoundary(item);
       continue;
     }
     if (isHistoricalSnapshotMessage(item)) {
+      rememberPendingHistoryBoundary(item);
       continue;
     }
     if (activeTimeline && consumedHistoryIndexes.size === 0) {
       appendRemainingHistory();
       mergedItems.push(...pendingUnanchoredItems);
       pendingUnanchoredItems.length = 0;
+      pendingHistoryBoundaryIndex = null;
       mergedItems.push(item);
       continue;
     }
@@ -971,6 +1014,7 @@ function timelineForDisplay(
     }
     mergedItems.push(item);
   }
+  flushPendingAtHistoryBoundary();
   appendRemainingHistory();
   mergedItems.push(...pendingUnanchoredItems);
 
