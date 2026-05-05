@@ -231,6 +231,7 @@ class TasksMixin:
 
     def run_task(self, task_id: str) -> dict[str, Any]:
         with self._lock:
+            self._ensure_worker_creation_allowed_locked()
             if task_id in self._running_task_ids:
                 raise RuntimeError("Task is already running.")
             self._running_task_ids.add(task_id)

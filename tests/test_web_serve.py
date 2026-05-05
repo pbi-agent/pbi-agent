@@ -957,11 +957,13 @@ def test_sse_event_stream_sends_connected_and_filters_by_cursor() -> None:
     assert f"id: {second['seq']}" in event_raw
 
 
-def test_event_stream_subscriber_queue_is_bounded_and_drops_oldest() -> None:
+def test_event_stream_subscriber_queue_overflow_enqueues_recovery_control() -> None:
     app = create_app(_settings())
     stream = app.state.manager.get_event_stream("app")
 
-    async def fill_slow_subscriber() -> tuple[list[int], list[BaseException]]:
+    async def fill_slow_subscriber() -> tuple[
+        list[dict[str, object]], list[BaseException]
+    ]:
         loop = asyncio.get_running_loop()
         loop_errors: list[BaseException] = []
 
@@ -982,17 +984,84 @@ def test_event_stream_subscriber_queue_is_bounded_and_drops_oldest() -> None:
         finally:
             stream.unsubscribe(subscriber_id)
             loop.set_exception_handler(previous_handler)
-        return [int(event["seq"]) for event in queued], loop_errors
+        return queued, loop_errors
 
-    queued_seqs, loop_errors = asyncio.run(fill_slow_subscriber())
+    queued_events, loop_errors = asyncio.run(fill_slow_subscriber())
 
     assert loop_errors == []
-    assert len(queued_seqs) == _MAX_SUBSCRIBER_QUEUE_SIZE
-    assert queued_seqs[0] == 6
-    assert queued_seqs[-1] == _MAX_SUBSCRIBER_QUEUE_SIZE + 5
+    assert 0 < len(queued_events) <= _MAX_SUBSCRIBER_QUEUE_SIZE
+    assert queued_events[0]["type"] == "server.replay_incomplete"
+    assert queued_events[0]["seq"] == _MAX_SUBSCRIBER_QUEUE_SIZE + 1
+    assert queued_events[0]["payload"] == {
+        "reason": "subscriber_queue_overflow",
+        "requested_since": 0,
+        "resolved_since": 0,
+        "oldest_available_seq": None,
+        "latest_seq": _MAX_SUBSCRIBER_QUEUE_SIZE + 1,
+        "snapshot_required": True,
+    }
+    assert [int(event["seq"]) for event in queued_events[1:]] == list(
+        range(_MAX_SUBSCRIBER_QUEUE_SIZE + 2, _MAX_SUBSCRIBER_QUEUE_SIZE + 6)
+    )
     assert [int(event["seq"]) for event in stream.snapshot()] == list(
         range(6, _MAX_SUBSCRIBER_QUEUE_SIZE + 6)
     )
+
+
+def test_sse_event_stream_disconnects_on_subscriber_queue_overflow(monkeypatch) -> None:
+    app = create_app(_settings())
+    stream = app.state.manager.get_event_stream("app")
+
+    async def collect() -> dict[str, object]:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=_MAX_SUBSCRIBER_QUEUE_SIZE)
+        queue.put_nowait(
+            {
+                "seq": 10,
+                "type": "server.replay_incomplete",
+                "payload": {
+                    "reason": "subscriber_queue_overflow",
+                    "requested_since": 0,
+                    "resolved_since": 0,
+                    "oldest_available_seq": None,
+                    "latest_seq": 10,
+                    "snapshot_required": True,
+                },
+                "created_at": "2026-05-05T00:00:00Z",
+            }
+        )
+        queue.put_nowait(
+            {
+                "seq": 11,
+                "type": "item",
+                "payload": {},
+                "created_at": "2026-05-05T00:00:01Z",
+            }
+        )
+        monkeypatch.setattr(stream, "subscribe", lambda: ("slow", queue))
+        monkeypatch.setattr(stream, "unsubscribe", lambda _subscriber_id: None)
+        iterator = _iter_sse_events(stream, since=0, requested_since=0)
+        try:
+            connected = _decode_sse_payload(await anext(iterator))
+            assert connected["type"] == "server.connected"
+            control = _decode_sse_payload(await anext(iterator))
+            with pytest.raises(StopAsyncIteration):
+                await anext(iterator)
+            return control
+        finally:
+            await iterator.aclose()
+
+    event = asyncio.run(collect())
+
+    assert event["type"] == "server.replay_incomplete"
+    assert event["seq"] == 10
+    assert event["payload"] == {
+        "reason": "subscriber_queue_overflow",
+        "requested_since": 0,
+        "resolved_since": 0,
+        "oldest_available_seq": None,
+        "latest_seq": 10,
+        "snapshot_required": True,
+    }
 
 
 def test_sse_event_stream_logs_subscription_replay_range_and_unsubscribe(
@@ -2934,6 +3003,57 @@ def test_shutdown_keeps_lease_until_live_worker_finishes(monkeypatch, tmp_path) 
         manager.shutdown()
 
 
+def test_create_live_session_rejects_after_shutdown_requested(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        with manager._lock:
+            manager._shutdown_requested = True
+
+        with pytest.raises(RuntimeError, match="Manager shutdown is in progress"):
+            manager.create_live_session()
+
+        assert manager._live_sessions == {}
+    finally:
+        manager.shutdown()
+
+
+def test_run_task_rejects_after_shutdown_requested(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan"},
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+
+        with manager._lock:
+            manager._shutdown_requested = True
+
+        with pytest.raises(RuntimeError, match="Manager shutdown is in progress"):
+            manager.run_task(task_id)
+
+        assert manager._running_task_ids == set()
+        assert manager._task_workers == {}
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            current = store.get_kanban_task(task_id)
+        assert current is not None
+        assert current.run_status == "idle"
+        assert current.session_id is None
+    finally:
+        manager.shutdown()
+
+
 def test_manager_start_reports_busy_database_after_retry_window(
     monkeypatch, tmp_path
 ) -> None:
@@ -3203,11 +3323,17 @@ def test_live_session_worker_refreshes_mentions_on_reload_and_end() -> None:
 
     manager.refresh_file_mentions_cache = fake_refresh_file_mentions_cache  # type: ignore[method-assign]
 
-    with patch("pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop):
-        live_session = manager.create_live_session()
-        worker = manager._live_sessions[live_session["live_session_id"]].worker
-        assert worker is not None
-        worker.join(timeout=2)
+    manager.start()
+    try:
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
+        ):
+            live_session = manager.create_live_session()
+            worker = manager._live_sessions[live_session["live_session_id"]].worker
+            assert worker is not None
+            worker.join(timeout=2)
+    finally:
+        manager.shutdown()
 
     assert observed["on_reload_callable"] is True
     assert refresh_calls == 2
@@ -3253,6 +3379,7 @@ def test_web_session_worker_records_turn_run_separately_from_live_projection(
 
     manager = WebSessionManager(_settings())
     try:
+        manager.start()
         with patch(
             "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
         ):
@@ -3307,6 +3434,7 @@ def test_web_session_worker_persists_failed_projection_on_fatal_error(
 
     manager = WebSessionManager(_settings())
     try:
+        manager.start()
         with patch(
             "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
         ):
@@ -3352,6 +3480,7 @@ def test_saved_session_first_message_sets_blank_title(tmp_path, monkeypatch) -> 
 
     manager = WebSessionManager(_settings())
     try:
+        manager.start()
         with patch(
             "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
         ):
@@ -3396,6 +3525,7 @@ def test_saved_session_first_message_keeps_existing_title(
 
     manager = WebSessionManager(_settings())
     try:
+        manager.start()
         with patch(
             "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
         ):
@@ -4064,6 +4194,41 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
             project_dir=str(tmp_path / "other"),
             metadata={"source": "web", "directory": str(tmp_path / "other")},
         )
+        store.create_run_session(
+            run_session_id="malformed-metadata-unbound-web-run",
+            session_id=None,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="running",
+            kind="session",
+            project_dir=str(tmp_path),
+        )
+        store.create_run_session(
+            run_session_id="other-malformed-metadata-unbound-web-run",
+            session_id=None,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="running",
+            kind="session",
+            project_dir=str(tmp_path / "other"),
+        )
+        store._conn.execute(
+            "UPDATE run_sessions SET metadata_json = ? WHERE run_session_id IN (?, ?)",
+            (
+                "{malformed",
+                "malformed-metadata-unbound-web-run",
+                "other-malformed-metadata-unbound-web-run",
+            ),
+        )
+        store._conn.commit()
 
     manager = WebSessionManager(_settings())
     try:
@@ -4082,6 +4247,12 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
             unbound_web_run = store.get_run_session("unbound-web-run")
             other_directory_unbound_web_run = store.get_run_session(
                 "other-directory-unbound-web-run"
+            )
+            malformed_metadata_unbound_web_run = store.get_run_session(
+                "malformed-metadata-unbound-web-run"
+            )
+            other_malformed_metadata_unbound_web_run = store.get_run_session(
+                "other-malformed-metadata-unbound-web-run"
             )
             persisted_events = store.list_observability_events(
                 run_session_id="stale-live-run"
@@ -4102,6 +4273,12 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
     assert other_directory_unbound_web_run is not None
     assert other_directory_unbound_web_run.status == "running"
     assert other_directory_unbound_web_run.ended_at is None
+    assert malformed_metadata_unbound_web_run is not None
+    assert malformed_metadata_unbound_web_run.status == "stale"
+    assert malformed_metadata_unbound_web_run.ended_at is not None
+    assert other_malformed_metadata_unbound_web_run is not None
+    assert other_malformed_metadata_unbound_web_run.status == "running"
+    assert other_malformed_metadata_unbound_web_run.ended_at is None
     assert [record.event_type for record in persisted_events] == [
         "web_event",
         "web_event",

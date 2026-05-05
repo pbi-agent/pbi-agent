@@ -41,7 +41,7 @@ class ServerHeartbeatSseEventModel(SseEventBaseModel):
 
 
 class ServerReplayIncompleteSseEventPayloadModel(BaseModel):
-    reason: Literal["cursor_too_old", "cursor_ahead"]
+    reason: Literal["cursor_too_old", "cursor_ahead", "subscriber_queue_overflow"]
     requested_since: int
     resolved_since: int
     oldest_available_seq: int | None = None

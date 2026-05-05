@@ -1240,7 +1240,7 @@ class SessionStore:
             )
             stale_count = cursor.rowcount
             rows = self._conn.execute(
-                "SELECT id, metadata_json FROM run_sessions "
+                "SELECT id, project_dir, metadata_json FROM run_sessions "
                 "WHERE kind IN ('session', 'task') "
                 "AND agent_type = 'web_session' "
                 "AND session_id IS NULL "
@@ -1248,17 +1248,33 @@ class SessionStore:
             ).fetchall()
             unbound_ids: list[int] = []
             for row in rows:
+                should_fallback_to_project_dir = False
                 try:
                     metadata = json.loads(row["metadata_json"])
                 except json.JSONDecodeError:
-                    continue
-                if not isinstance(metadata, dict):
-                    continue
-                metadata_directory = metadata.get("directory")
+                    should_fallback_to_project_dir = True
+                else:
+                    if not isinstance(metadata, dict):
+                        should_fallback_to_project_dir = True
+                    else:
+                        metadata_source = metadata.get("source")
+                        metadata_directory = metadata.get("directory")
+                        if metadata_source == "web" and isinstance(
+                            metadata_directory, str
+                        ):
+                            if (
+                                _normalize_directory_key(metadata_directory)
+                                == normalized_directory
+                            ):
+                                unbound_ids.append(int(row["id"]))
+                            continue
+                        should_fallback_to_project_dir = (
+                            metadata_source is None and metadata_directory is None
+                        )
                 if (
-                    metadata.get("source") == "web"
-                    and isinstance(metadata_directory, str)
-                    and _normalize_directory_key(metadata_directory)
+                    should_fallback_to_project_dir
+                    and isinstance(row["project_dir"], str)
+                    and _normalize_directory_key(row["project_dir"])
                     == normalized_directory
                 ):
                     unbound_ids.append(int(row["id"]))

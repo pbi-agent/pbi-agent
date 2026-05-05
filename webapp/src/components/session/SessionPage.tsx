@@ -916,6 +916,7 @@ function timelineForDisplay(
       if (index >= 0) return index;
       return -1;
     }
+    if (activeTimeline && !isHistoricalSnapshotMessage(item)) return -1;
     const signature = messageSignature(item);
     if (!signature) return -1;
     if (historySignatureCounts.get(signature) !== 1 || snapshotSignatureCounts.get(signature) !== 1) {
@@ -949,6 +950,13 @@ function timelineForDisplay(
       continue;
     }
     if (isHistoricalSnapshotMessage(item)) {
+      continue;
+    }
+    if (activeTimeline && consumedHistoryIndexes.size === 0) {
+      appendRemainingHistory();
+      mergedItems.push(...pendingUnanchoredItems);
+      pendingUnanchoredItems.length = 0;
+      mergedItems.push(item);
       continue;
     }
     if (consumedHistoryIndexes.size === 0) {

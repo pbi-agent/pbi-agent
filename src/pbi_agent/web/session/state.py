@@ -94,14 +94,33 @@ def _put_subscriber_event(queue: asyncio.Queue, event: dict[str, Any]) -> None:
     try:
         queue.put_nowait(event)
     except asyncio.QueueFull:
+        while True:
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
         try:
-            queue.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
-        try:
-            queue.put_nowait(event)
+            queue.put_nowait(_subscriber_overflow_event(event))
         except asyncio.QueueFull:
             pass
+
+
+def _subscriber_overflow_event(event: dict[str, Any]) -> dict[str, Any]:
+    seq = event.get("seq")
+    latest_seq = seq if isinstance(seq, int) else 0
+    return {
+        "seq": latest_seq,
+        "type": "server.replay_incomplete",
+        "payload": {
+            "reason": "subscriber_queue_overflow",
+            "requested_since": 0,
+            "resolved_since": 0,
+            "oldest_available_seq": None,
+            "latest_seq": latest_seq,
+            "snapshot_required": True,
+        },
+        "created_at": _now_iso(),
+    }
 
 
 @dataclass(slots=True)

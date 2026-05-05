@@ -7,7 +7,12 @@ from typing import Any
 from pbi_agent.display.protocol import QueuedInput, UserQuestionAnswer
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
-from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
+from pbi_agent.session_store import (
+    KANBAN_RUN_STATUS_RUNNING,
+    MessageImageAttachment,
+    MessageRecord,
+    SessionStore,
+)
 from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.types import ToolContext
 from pbi_agent.web.display import WebDisplay, persisted_message_payload
@@ -55,6 +60,7 @@ class LiveSessionsMixin:
         session_id: str | None = None,
         live_session_id: str | None = None,
         profile_id: str | None = None,
+        reuse_existing: bool = True,
     ) -> dict[str, Any]:
         runtime = self._resolve_runtime(profile_id)
         bound_session_id = session_id
@@ -68,7 +74,7 @@ class LiveSessionsMixin:
             else:
                 self._update_saved_session_runtime(bound_session_id, runtime)
         with self._lock:
-            if bound_session_id is not None:
+            if bound_session_id is not None and reuse_existing:
                 existing_live_session = (
                     self._find_live_session_for_saved_session_locked(bound_session_id)
                 )
@@ -78,6 +84,7 @@ class LiveSessionsMixin:
                 return self._serialize_live_session(
                     self._live_sessions[live_session_id]
                 )
+            self._ensure_worker_creation_allowed_locked()
 
             new_live_session_id = live_session_id or uuid.uuid4().hex
             event_stream = EventStream()
@@ -272,10 +279,23 @@ class LiveSessionsMixin:
     ) -> dict[str, Any]:
         self._ensure_saved_session_title(session_id, text)
         live_session = self._find_live_session_for_saved_session(session_id)
+        reuse_existing = True
+        if live_session is not None and live_session.kind == "task":
+            with SessionStore() as store:
+                task = (
+                    store.get_kanban_task(live_session.task_id)
+                    if live_session.task_id is not None
+                    else None
+                )
+            if task is not None and task.run_status == KANBAN_RUN_STATUS_RUNNING:
+                raise RuntimeError("Task session is still running.")
+            live_session = None
+            reuse_existing = False
         if live_session is None:
             created = self.create_live_session(
                 session_id=session_id,
                 profile_id=profile_id,
+                reuse_existing=reuse_existing,
             )
             live_session_id = str(created["live_session_id"])
         else:

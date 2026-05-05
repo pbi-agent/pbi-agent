@@ -20,6 +20,34 @@ _WEB_MANAGER_LEASE_HEARTBEAT_SECS = 5.0
 
 
 class WorkersMixin:
+    def _ensure_worker_creation_allowed_locked(self) -> None:
+        if self._shutdown_requested:
+            raise RuntimeError("Manager shutdown is in progress.")
+        if not self._started:
+            raise RuntimeError("Manager is not started.")
+
+    def _finalize_live_session_locked(self, live_session) -> None:  # noqa: ANN001
+        if live_session.status == "ended" and live_session.ended_at is not None:
+            return
+        if live_session.exit_code is None:
+            live_session.exit_code = 0
+        live_session.status = "ended"
+        live_session.ended_at = _now_iso()
+        self._publish_live_event(
+            live_session.live_session_id,
+            "session_state",
+            {
+                "state": "ended",
+                "live_session_id": live_session.live_session_id,
+                "session_id": live_session.bound_session_id,
+                "resume_session_id": live_session.bound_session_id,
+                "exit_code": live_session.exit_code,
+                "fatal_error": live_session.fatal_error,
+            },
+        )
+        self._update_live_run_projection(live_session)
+        self._publish_live_session_lifecycle("live_session_ended", live_session)
+
     def shutdown(self) -> None:
         with self._lock:
             self._shutdown_requested = True
@@ -92,22 +120,7 @@ class WorkersMixin:
         finally:
             self.refresh_file_mentions_cache()
             with self._lock:
-                live_session.status = "ended"
-                live_session.ended_at = _now_iso()
-                self._publish_live_event(
-                    live_session_id,
-                    "session_state",
-                    {
-                        "state": "ended",
-                        "live_session_id": live_session_id,
-                        "session_id": live_session.bound_session_id,
-                        "resume_session_id": live_session.bound_session_id,
-                        "exit_code": live_session.exit_code,
-                        "fatal_error": live_session.fatal_error,
-                    },
-                )
-                self._update_live_run_projection(live_session)
-                self._publish_live_session_lifecycle("live_session_ended", live_session)
+                self._finalize_live_session_locked(live_session)
             self._finalize_shutdown_if_idle()
 
     def _run_task_worker(
@@ -246,12 +259,18 @@ class WorkersMixin:
                             next_record = moved or updated
                         else:
                             next_record = updated
+                terminal_task_update = status == KANBAN_RUN_STATUS_FAILED
+                if not terminal_task_update:
+                    terminal_task_update = (
+                        next_stage_id is None
+                        or next_record.stage != next_stage_id
+                        or not self._should_auto_start_stage(next_stage_id)
+                    )
+                if terminal_task_update and live_session is not None:
+                    with self._lock:
+                        self._finalize_live_session_locked(live_session)
                 self._publish_task_updated(next_record)
-                if status == KANBAN_RUN_STATUS_FAILED:
-                    break
-                if next_stage_id is None or next_record.stage != next_stage_id:
-                    break
-                if not self._should_auto_start_stage(next_stage_id):
+                if terminal_task_update:
                     break
                 with SessionStore() as store:
                     rerunning = store.set_kanban_task_running(task_id)
@@ -266,8 +285,6 @@ class WorkersMixin:
                     run_status=KANBAN_RUN_STATUS_FAILED,
                     summary=message,
                 )
-            if updated is not None:
-                self._publish_task_updated(updated)
             if live_session is not None:
                 live_session.exit_code = 130
                 live_session.terminal_status = "interrupted"
@@ -282,6 +299,10 @@ class WorkersMixin:
                         "markdown": False,
                     },
                 )
+                with self._lock:
+                    self._finalize_live_session_locked(live_session)
+            if updated is not None:
+                self._publish_task_updated(updated)
         except Exception as exc:
             message = shorten(format_user_facing_error(exc), 200)
             with SessionStore() as store:
@@ -290,8 +311,6 @@ class WorkersMixin:
                     run_status=KANBAN_RUN_STATUS_FAILED,
                     summary=message,
                 )
-            if updated is not None:
-                self._publish_task_updated(updated)
             if live_session is not None:
                 live_session.exit_code = 1
                 live_session.fatal_error = format_user_facing_error(exc)
@@ -305,29 +324,14 @@ class WorkersMixin:
                         "markdown": False,
                     },
                 )
+                with self._lock:
+                    self._finalize_live_session_locked(live_session)
+            if updated is not None:
+                self._publish_task_updated(updated)
         finally:
             if live_session is not None:
                 with self._lock:
-                    if live_session.exit_code is None:
-                        live_session.exit_code = 0
-                    live_session.status = "ended"
-                    live_session.ended_at = _now_iso()
-                    self._publish_live_event(
-                        live_session.live_session_id,
-                        "session_state",
-                        {
-                            "state": "ended",
-                            "live_session_id": live_session.live_session_id,
-                            "session_id": live_session.bound_session_id,
-                            "resume_session_id": live_session.bound_session_id,
-                            "exit_code": live_session.exit_code,
-                            "fatal_error": live_session.fatal_error,
-                        },
-                    )
-                    self._update_live_run_projection(live_session)
-                    self._publish_live_session_lifecycle(
-                        "live_session_ended", live_session
-                    )
+                    self._finalize_live_session_locked(live_session)
             with self._lock:
                 self._running_task_ids.discard(task_id)
                 self._task_workers.pop(task_id, None)

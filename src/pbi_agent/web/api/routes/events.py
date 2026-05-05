@@ -321,6 +321,20 @@ async def _iter_sse_events(
                 continue
 
             seq = _event_seq(event)
+            if event.get("type") == "server.replay_incomplete":
+                _log_sse(
+                    "replay_incomplete",
+                    **(log_context or {}),
+                    subscriber_id=subscriber_id,
+                    requested_since=requested_since,
+                    resolved_since=since,
+                    last_sent_seq=last_sent_seq,
+                    latest_seq=seq,
+                    reason=event.get("payload", {}).get("reason"),
+                    snapshot_required=event.get("payload", {}).get("snapshot_required"),
+                )
+                yield _format_sse(event)
+                break
             if seq <= last_sent_seq:
                 continue
             last_sent_seq = max(last_sent_seq, seq)

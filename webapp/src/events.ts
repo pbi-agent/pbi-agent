@@ -68,7 +68,9 @@ function isString(value: unknown): value is string {
 }
 
 function isReplayReason(value: unknown): boolean {
-  return value === "cursor_too_old" || value === "cursor_ahead";
+  return value === "cursor_too_old"
+    || value === "cursor_ahead"
+    || value === "subscriber_queue_overflow";
 }
 
 function isValidPayload(type: string, payload: Record<string, unknown>): boolean {

@@ -589,6 +589,7 @@ describe("SessionPage", () => {
             role: "user",
             content: "/plan",
             markdown: false,
+            historical: true,
           },
           {
             kind: "message",
@@ -596,6 +597,7 @@ describe("SessionPage", () => {
             role: "assistant",
             content: "Previous plan",
             markdown: true,
+            historical: true,
           },
           {
             kind: "message",
@@ -603,6 +605,7 @@ describe("SessionPage", () => {
             role: "user",
             content: "/review",
             markdown: false,
+            historical: true,
           },
           {
             kind: "thinking",
@@ -832,6 +835,92 @@ describe("SessionPage", () => {
       "history-1",
       "history-2",
       "history-3",
+      "message-current-user",
+      "thinking-current",
+      "message-current-assistant",
+    ]);
+  });
+
+  it("does not content-match a unique no-id live message to older history", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: "live-continue" }),
+      history_items: [
+        {
+          item_id: "history-1",
+          message_id: "",
+          part_ids: { content: "history-1:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "continue",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:00:00Z",
+        },
+        {
+          item_id: "history-2",
+          message_id: "",
+          part_ids: { content: "history-2:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "Previous answer",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:01:00Z",
+        },
+      ],
+      active_live_session: makeLiveSession({
+        live_session_id: "live-continue",
+        session_id: "session-1",
+      }),
+      active_run: null,
+      timeline: {
+        live_session_id: "live-continue",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: { active: true, phase: "model_wait", message: "Working" },
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "message-current-user",
+            role: "user",
+            content: "continue",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-current",
+            title: "Thinking",
+            content: "working",
+          },
+          {
+            kind: "message",
+            itemId: "message-current-assistant",
+            role: "assistant",
+            content: "Working on it",
+            markdown: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 15,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 5")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "history-2",
       "message-current-user",
       "thinking-current",
       "message-current-assistant",
@@ -1292,7 +1381,7 @@ describe("SessionPage", () => {
 
     renderSessionRoute("/sessions/session-1");
 
-    expect(await screen.findByText("Timeline 7")).toBeInTheDocument();
+    expect(await screen.findByText("Timeline 8")).toBeInTheDocument();
     const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
     expect(state?.items.map((item) => item.itemId)).toEqual([
       "history-1",
@@ -1300,6 +1389,7 @@ describe("SessionPage", () => {
       "history-3",
       "history-4",
       "history-5",
+      "message-current-user",
       "thinking-current",
       "message-current-assistant",
     ]);

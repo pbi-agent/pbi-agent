@@ -179,7 +179,7 @@ export type ServerHeartbeatSseEventModel = { seq: number; created_at: string; ty
 
 export type ServerReplayIncompleteSseEventModel = { seq: number; created_at: string; type: "server.replay_incomplete"; payload: ServerReplayIncompleteSseEventPayloadModel };
 
-export type ServerReplayIncompleteSseEventPayloadModel = { reason: "cursor_too_old" | "cursor_ahead"; requested_since: number; resolved_since: number; oldest_available_seq?: number | null; latest_seq: number; snapshot_required: boolean };
+export type ServerReplayIncompleteSseEventPayloadModel = { reason: "cursor_too_old" | "cursor_ahead" | "subscriber_queue_overflow"; requested_since: number; resolved_since: number; oldest_available_seq?: number | null; latest_seq: number; snapshot_required: boolean };
 
 export type SessionCreatedSseEventModel = { seq: number; created_at: string; type: "session_created"; payload: SessionCreatedSseEventPayloadModel };
 
