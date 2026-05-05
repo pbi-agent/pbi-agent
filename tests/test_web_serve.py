@@ -128,15 +128,22 @@ def _wait_for_first_task_status(client: TestClient, status: str) -> dict:
         time.sleep(0.01)
 
 
-def _wait_for_session_detail_detached(client: TestClient, session_id: str) -> dict:
+def _wait_for_session_detail_detached(
+    client: TestClient,
+    session_id: str,
+    *,
+    status: str | None = None,
+) -> dict:
     deadline = time.monotonic() + 2
     while True:
         detail = client.get(f"/api/sessions/{session_id}").json()
-        if (
+        is_detached = (
             detail["live_session"] is None
             and detail["active_live_session"] is None
             and detail["active_run"] is None
-        ):
+        )
+        status_matches = status is None or detail["status"] == status
+        if is_detached and status_matches:
             return detail
         if time.monotonic() > deadline:
             raise AssertionError("session detail did not detach in time")
@@ -3252,7 +3259,11 @@ def test_failed_task_run_session_can_be_manually_continued(
             failed_task = _wait_for_first_task_status(client, "failed")
             assert failed_task["session_id"] == session_id
 
-            failed_detail = _wait_for_session_detail_detached(client, session_id)
+            failed_detail = _wait_for_session_detail_detached(
+                client,
+                session_id,
+                status="failed",
+            )
             assert failed_detail["live_session"] is None
             assert failed_detail["active_live_session"] is None
             assert failed_detail["active_run"] is None
