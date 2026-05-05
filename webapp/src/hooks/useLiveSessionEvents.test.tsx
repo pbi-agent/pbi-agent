@@ -148,6 +148,57 @@ describe("useLiveSessionEvents", () => {
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
   });
 
+  it("accepts welcome events so replay cursors do not wedge on new sessions", () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
+    const sessionKey = getSavedSessionKey("session-1");
+
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const socket = MockEventSource.instances[0];
+    emit(socket, {
+      seq: 1,
+      type: "session_runtime_updated",
+      payload: {
+        session_id: "session-1",
+        live_session_id: "live-1",
+        provider: "chatgpt",
+        model: "gpt-5.5",
+        reasoning_effort: "low",
+        compact_threshold: 200000,
+      },
+    });
+    emit(socket, {
+      seq: 2,
+      type: "welcome",
+      payload: {
+        session_id: "session-1",
+        live_session_id: "live-1",
+        interactive: true,
+        model: "gpt-5.5",
+        reasoning_effort: "low",
+        single_turn_hint: null,
+      },
+    });
+    emit(socket, {
+      seq: 3,
+      type: "input_state",
+      payload: {
+        session_id: "session-1",
+        live_session_id: "live-1",
+        enabled: false,
+      },
+    });
+
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(3);
+    expect(socket.close).not.toHaveBeenCalled();
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+
   it("does not connect saved sessions without an active live run", () => {
     const queryClient = new QueryClient();
     const sessionKey = getSavedSessionKey("session-1");

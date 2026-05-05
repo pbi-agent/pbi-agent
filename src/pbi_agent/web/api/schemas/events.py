@@ -276,6 +276,18 @@ class SessionRuntimeUpdatedSseEventModel(SseEventBaseModel):
     payload: SessionRuntimeUpdatedSseEventPayloadModel
 
 
+class WelcomeSseEventPayloadModel(EventIdentityPayloadModel):
+    interactive: bool
+    model: str | None = None
+    reasoning_effort: str | None = None
+    single_turn_hint: str | None = None
+
+
+class WelcomeSseEventModel(SseEventBaseModel):
+    type: Literal["welcome"]
+    payload: WelcomeSseEventPayloadModel
+
+
 class SessionCreatedSseEventPayloadModel(BaseModel):
     session: SessionRecordModel
 
@@ -368,6 +380,7 @@ SESSION_SSE_EVENT_MODELS = [
     SubAgentStateSseEventModel,
     SessionStateSseEventModel,
     SessionRuntimeUpdatedSseEventModel,
+    WelcomeSseEventModel,
 ]
 
 APP_SSE_EVENT_MODELS = [

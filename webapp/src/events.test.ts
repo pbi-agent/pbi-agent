@@ -43,6 +43,7 @@ describe("parseSseEvent", () => {
     ["replay", { seq: 0, type: "server.replay_incomplete", payload: { snapshot_required: "true" } }],
     ["message_added", { seq: 1, type: "message_added", payload: { item_id: "m1", role: "assistant" } }],
     ["usage_updated", { seq: 1, type: "usage_updated", payload: { scope: "other", usage: {} } }],
+    ["welcome", { seq: 1, type: "welcome", payload: { interactive: "yes" } }],
   ])("rejects malformed SSE payloads: %s", (_label, event) => {
     expect(parseSseEvent(JSON.stringify({
       created_at: "2026-05-04T00:00:00Z",
@@ -128,6 +129,7 @@ describe("parseSseEvent", () => {
 
   it.each([
     { seq: 0, type: "server.connected", payload: {} },
+    { seq: 1, type: "welcome", payload: { interactive: true, model: "gpt-5.5", reasoning_effort: "low", single_turn_hint: null } },
     { seq: 1, type: "session_created", payload: { session: {} } },
     { seq: 2, type: "live_session_started", payload: { live_session: {} } },
   ])("accepts representative valid control and app events", (event) => {

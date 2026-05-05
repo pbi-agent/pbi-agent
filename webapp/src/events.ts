@@ -20,6 +20,7 @@ const EVENT_TYPES = new Set([
   "sub_agent_state",
   "session_state",
   "session_runtime_updated",
+  "welcome",
   "session_created",
   "session_updated",
   "board_stages_updated",
@@ -149,6 +150,15 @@ function isValidPayload(type: string, payload: Record<string, unknown>): boolean
         && isString(payload.model)
         && isString(payload.reasoning_effort)
         && typeof payload.compact_threshold === "number";
+    case "welcome":
+      return typeof payload.interactive === "boolean"
+        && (!("model" in payload) || payload.model === null || isString(payload.model))
+        && (!("reasoning_effort" in payload)
+          || payload.reasoning_effort === null
+          || isString(payload.reasoning_effort))
+        && (!("single_turn_hint" in payload)
+          || payload.single_turn_hint === null
+          || isString(payload.single_turn_hint));
     default:
       return true;
   }
