@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from pbi_agent.agent.error_formatting import format_user_facing_error
-from pbi_agent.agent.session import run_session_loop
+from pbi_agent.agent.session import SessionTurnInterrupted, run_session_loop
 from pbi_agent.auth.browser_callback import (
     BrowserAuthCallbackListener,
     BrowserAuthCallbackOutcome,
@@ -162,6 +162,13 @@ _RUN_RECORD_STATUSES = frozenset(
         "stale",
     }
 )
+_ACTIVE_LIVE_SESSION_STATUSES = frozenset(
+    {
+        "starting",
+        "running",
+        "waiting_for_input",
+    }
+)
 
 
 def _normalize_session_status(
@@ -204,6 +211,18 @@ def _run_status_from_run(record: RunSessionRecord) -> str:
     return "started"
 
 
+def _persisted_web_run_status(live_session: "LiveSessionState") -> str:
+    if live_session.terminal_status is not None:
+        return live_session.terminal_status
+    if live_session.status == "ended":
+        if live_session.fatal_error or (
+            live_session.exit_code is not None and live_session.exit_code != 0
+        ):
+            return "failed"
+        return "completed"
+    return live_session.status
+
+
 def _serialize_session(
     record: SessionRecord,
     *,
@@ -213,6 +232,7 @@ def _serialize_session(
 ) -> dict[str, Any]:
     status = "idle"
     active_run_id = None
+    active_live_session_id = None
     task_id = None
     if status_run is not None:
         status = _session_status_from_run(status_run)
@@ -222,7 +242,7 @@ def _serialize_session(
         task_id = active_run.task_id
     if active_live_session is not None:
         status = active_live_session.status
-        active_run_id = active_live_session.live_session_id
+        active_live_session_id = active_live_session.live_session_id
         task_id = active_live_session.task_id
     return {
         "session_id": record.session_id,
@@ -241,9 +261,16 @@ def _serialize_session(
         "updated_at": record.updated_at,
         "status": status,
         "active_run_id": active_run_id,
-        "active_live_session_id": active_run_id,
+        "active_live_session_id": active_live_session_id,
         "task_id": task_id,
     }
+
+
+def _is_active_live_session(live_session: "LiveSessionState") -> bool:
+    return (
+        live_session.status in _ACTIVE_LIVE_SESSION_STATUSES
+        and live_session.ended_at is None
+    )
 
 
 def _deserialize_json_field(raw_value: str | None) -> Any:
@@ -290,6 +317,75 @@ def _timeline_snapshot_from_run(
     if not isinstance(snapshot.get("live_session_id"), str):
         return None
     return snapshot
+
+
+def _copy_timeline_item_for_run(
+    item: Any,
+    run_session_id: str,
+    *,
+    namespace_non_messages: bool,
+) -> Any:
+    if not isinstance(item, dict):
+        return item
+    copied = dict(item)
+    if namespace_non_messages and copied.get("kind") != "message":
+        for key in ("itemId", "item_id"):
+            item_id = copied.get(key)
+            if isinstance(item_id, str):
+                copied[key] = f"{run_session_id}:{item_id}"
+    return copied
+
+
+def _combined_timeline_snapshot(
+    records: list[RunSessionRecord],
+    current_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    snapshots: list[tuple[str, dict[str, Any], bool]] = []
+    current_live_session_id = (
+        current_snapshot.get("live_session_id")
+        if isinstance(current_snapshot, dict)
+        else None
+    )
+    for record in records:
+        if record.run_session_id == current_live_session_id:
+            continue
+        snapshot = _timeline_snapshot_from_run(record)
+        if snapshot is None:
+            continue
+        snapshots.append((record.run_session_id, snapshot, True))
+    if current_snapshot is not None:
+        snapshots.append(
+            (
+                str(current_snapshot.get("live_session_id") or "live"),
+                current_snapshot,
+                False,
+            )
+        )
+    if not snapshots:
+        return None
+
+    latest = dict(snapshots[-1][1])
+    items: list[Any] = []
+    sub_agents: dict[str, Any] = {}
+    for run_session_id, snapshot, namespace_non_messages in snapshots:
+        raw_sub_agents = snapshot.get("sub_agents")
+        if isinstance(raw_sub_agents, dict):
+            sub_agents.update(raw_sub_agents)
+        raw_items = snapshot.get("items")
+        if not isinstance(raw_items, list):
+            continue
+        items.extend(
+            _copy_timeline_item_for_run(
+                item,
+                run_session_id,
+                namespace_non_messages=namespace_non_messages,
+            )
+            for item in raw_items
+        )
+
+    latest["items"] = items
+    latest["sub_agents"] = sub_agents
+    return latest
 
 
 def _format_shell_command_output(result: dict[str, Any] | str) -> str:
@@ -572,6 +668,14 @@ class EventStream:
         with self._lock:
             return list(self._events)
 
+    def bounds(self) -> tuple[int | None, int]:
+        with self._lock:
+            if not self._events:
+                return None, self._sequence
+            oldest_seq = self._events[0].get("seq")
+            oldest = oldest_seq if isinstance(oldest_seq, int) else None
+            return oldest, self._sequence
+
     def subscribe(self) -> tuple[str, asyncio.Queue]:
         subscriber_id = uuid.uuid4().hex
         queue: asyncio.Queue = asyncio.Queue()
@@ -582,6 +686,10 @@ class EventStream:
     def unsubscribe(self, subscriber_id: str) -> None:
         with self._lock:
             self._subscribers.pop(subscriber_id, None)
+
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return len(self._subscribers)
 
 
 @dataclass(slots=True)
@@ -600,6 +708,7 @@ class LiveSessionState:
     status: str = "starting"
     exit_code: int | None = None
     fatal_error: str | None = None
+    terminal_status: str | None = None
     ended_at: str | None = None
 
 
@@ -862,6 +971,10 @@ class WebSessionManager:
                 )
                 for session in sessions
             }
+            latest_web_runs = {
+                session.session_id: store.get_latest_web_session_run(session.session_id)
+                for session in sessions
+            }
         return [
             _serialize_session(
                 session,
@@ -869,7 +982,8 @@ class WebSessionManager:
                     session.session_id
                 ),
                 active_run=active_runs.get(session.session_id),
-                status_run=latest_runs.get(session.session_id),
+                status_run=latest_web_runs.get(session.session_id)
+                or latest_runs.get(session.session_id),
             )
             for session in sessions
         ]
@@ -906,30 +1020,37 @@ class WebSessionManager:
             latest_run = store.get_latest_session_run(session_id, include_ended=True)
             active_run = store.get_latest_session_run(session_id, include_ended=False)
             latest_web_run = store.get_latest_web_session_run(session_id)
+            web_runs = store.list_web_session_runs(session_id)
         live_session = self._find_live_session_for_saved_session(session_id)
-        serialized_live_session = (
+        serialized_active_live_session = (
             self._serialize_live_session(live_session)
             if live_session is not None
-            else _serialize_run_as_live_session(active_run)
-            if active_run is not None
             else None
         )
-        timeline = (
+        serialized_active_run = (
+            _serialize_run_as_live_session(active_run)
+            if active_run is not None and live_session is None
+            else None
+        )
+        live_snapshot = (
             self._serialize_live_snapshot(live_session)
             if live_session is not None
-            else _timeline_snapshot_from_run(active_run or latest_web_run)
+            else None
         )
+        timeline = _combined_timeline_snapshot(web_runs, live_snapshot)
         return {
             "session": _serialize_session(
                 record,
                 active_live_session=live_session,
                 active_run=active_run,
-                status_run=active_run or latest_run,
+                status_run=active_run or latest_web_run or latest_run,
             ),
             "status": live_session.status
             if live_session is not None
             else _session_status_from_run(active_run)
             if active_run is not None
+            else _session_status_from_run(latest_web_run)
+            if latest_web_run is not None
             else _session_status_from_run(latest_run)
             if latest_run is not None
             else "idle",
@@ -937,9 +1058,9 @@ class WebSessionManager:
                 _serialize_history_message(message) for message in messages
             ],
             "timeline": timeline,
-            "live_session": serialized_live_session,
-            "active_live_session": serialized_live_session,
-            "active_run": serialized_live_session,
+            "live_session": serialized_active_live_session,
+            "active_live_session": serialized_active_live_session,
+            "active_run": serialized_active_run,
         }
 
     def update_session_title(self, session_id: str, title: str) -> dict[str, Any]:
@@ -1713,35 +1834,138 @@ class WebSessionManager:
         if stream_id == APP_EVENT_STREAM_ID:
             return self._app_stream
         live_session = self._live_sessions.get(stream_id)
-        if live_session is None:
-            raise KeyError(stream_id)
-        return live_session.event_stream
+        if live_session is not None:
+            return live_session.event_stream
+        self._require_persisted_web_event_stream(stream_id)
+        stream = EventStream()
+        stream.load(self._load_persisted_web_events(stream_id))
+        return stream
+
+    def get_event_stream_replay(
+        self,
+        stream_id: str,
+        *,
+        since: int = 0,
+    ) -> list[dict[str, Any]]:
+        if stream_id == APP_EVENT_STREAM_ID:
+            return []
+        if stream_id not in self._live_sessions:
+            self._require_persisted_web_event_stream(stream_id)
+        return self._load_persisted_web_events(stream_id, since=since)
 
     def get_session_event_stream(self, session_id: str) -> EventStream:
         self._require_saved_session(session_id)
         live_session = self._find_stream_live_session_for_saved_session(session_id)
         if live_session is None:
             with SessionStore() as store:
-                run = store.get_latest_session_run(session_id, include_ended=True)
                 web_run = store.get_latest_web_session_run(session_id)
-                run = web_run or run
+                run = web_run or store.get_latest_session_run(
+                    session_id,
+                    include_ended=True,
+                )
                 if run is None:
                     raise KeyError(session_id)
-                events = store.list_observability_events(
-                    run_session_id=run.run_session_id
-                )
             stream = EventStream()
-            web_events: list[tuple[int, int, dict[str, Any]]] = []
-            for record in events:
-                event = _web_event_from_record(record)
-                if event is None:
-                    continue
-                web_events.append((int(event["seq"]), record.id, event))
-            stream.load(
-                [event for _, _, event in sorted(web_events, key=lambda item: item[:2])]
-            )
+            stream.load(self._load_persisted_web_events(run.run_session_id))
             return stream
         return live_session.event_stream
+
+    def get_session_event_stream_replay(
+        self,
+        session_id: str,
+        *,
+        since: int = 0,
+    ) -> list[dict[str, Any]]:
+        self._require_saved_session(session_id)
+        live_session = self._find_stream_live_session_for_saved_session(session_id)
+        if live_session is not None:
+            return self._load_persisted_web_events(
+                live_session.live_session_id,
+                since=since,
+            )
+        with SessionStore() as store:
+            web_run = store.get_latest_web_session_run(session_id)
+            run = web_run or store.get_latest_session_run(
+                session_id,
+                include_ended=True,
+            )
+        if run is None:
+            raise KeyError(session_id)
+        return self._load_persisted_web_events(run.run_session_id, since=since)
+
+    def resolve_session_event_since(self, session_id: str, since: int) -> int:
+        if since <= 0:
+            return since
+        self._require_saved_session(session_id)
+        live_session = self._find_stream_live_session_for_saved_session(session_id)
+        if live_session is not None:
+            latest_seq = live_session.snapshot.last_event_seq
+            if latest_seq <= 0:
+                latest_seq = self._latest_persisted_web_event_seq(
+                    live_session.live_session_id
+                )
+            return 0 if latest_seq > 0 and since > latest_seq else since
+
+        with SessionStore() as store:
+            web_run = store.get_latest_web_session_run(session_id)
+            run = web_run or store.get_latest_session_run(
+                session_id,
+                include_ended=True,
+            )
+        if run is None:
+            raise KeyError(session_id)
+        latest_seq = run.last_event_seq
+        if latest_seq <= 0:
+            latest_seq = self._latest_persisted_web_event_seq(run.run_session_id)
+        return 0 if latest_seq > 0 and since > latest_seq else since
+
+    def _latest_persisted_web_event_seq(self, run_session_id: str) -> int:
+        events = self._load_persisted_web_events(run_session_id)
+        return max((int(event["seq"]) for event in events), default=0)
+
+    def _require_persisted_web_event_stream(
+        self,
+        run_session_id: str,
+    ) -> RunSessionRecord:
+        with SessionStore() as store:
+            record = store.get_run_session(run_session_id)
+            if (
+                record is None
+                or record.agent_type != "web_session"
+                or record.kind not in {"session", "task"}
+            ):
+                raise KeyError(run_session_id)
+            if record.session_id is not None:
+                session = store.get_session(record.session_id)
+                if session is None or session.directory != self._directory_key:
+                    raise KeyError(run_session_id)
+            else:
+                metadata = _deserialize_json_field(record.metadata_json)
+                if not isinstance(metadata, dict):
+                    raise KeyError(run_session_id)
+                if metadata.get("directory") != self._directory_key:
+                    raise KeyError(run_session_id)
+        return record
+
+    def _load_persisted_web_events(
+        self,
+        run_session_id: str,
+        *,
+        since: int = 0,
+    ) -> list[dict[str, Any]]:
+        with SessionStore() as store:
+            records = store.list_observability_events(run_session_id=run_session_id)
+
+        web_events: list[tuple[int, int, dict[str, Any]]] = []
+        for record in records:
+            event = _web_event_from_record(record)
+            if event is None:
+                continue
+            seq = int(event["seq"])
+            if seq <= since:
+                continue
+            web_events.append((seq, record.id, event))
+        return [event for _, _, event in sorted(web_events, key=lambda item: item[:2])]
 
     def create_task(
         self,
@@ -2633,6 +2857,20 @@ class WebSessionManager:
                 on_reload=self.refresh_file_mentions_cache,
             )
             live_session.exit_code = exit_code
+        except SessionTurnInterrupted as exc:
+            live_session.exit_code = 130
+            live_session.terminal_status = "interrupted"
+            live_session.fatal_error = format_user_facing_error(exc)
+            self._publish_live_event(
+                live_session_id,
+                "message_added",
+                {
+                    "item_id": f"interrupted-{uuid.uuid4().hex}",
+                    "role": "error",
+                    "content": live_session.fatal_error,
+                    "markdown": False,
+                },
+            )
         except Exception as exc:
             live_session.exit_code = 1
             live_session.fatal_error = format_user_facing_error(exc)
@@ -2812,6 +3050,30 @@ class WebSessionManager:
                 if rerunning is None:
                     break
                 self._publish_task_updated(rerunning)
+        except SessionTurnInterrupted as exc:
+            message = shorten(format_user_facing_error(exc), 200)
+            with SessionStore() as store:
+                updated = store.set_kanban_task_result(
+                    task_id,
+                    run_status=KANBAN_RUN_STATUS_FAILED,
+                    summary=message,
+                )
+            if updated is not None:
+                self._publish_task_updated(updated)
+            if live_session is not None:
+                live_session.exit_code = 130
+                live_session.terminal_status = "interrupted"
+                live_session.fatal_error = format_user_facing_error(exc)
+                self._publish_live_event(
+                    live_session.live_session_id,
+                    "message_added",
+                    {
+                        "item_id": f"interrupted-{uuid.uuid4().hex}",
+                        "role": "error",
+                        "content": live_session.fatal_error,
+                        "markdown": False,
+                    },
+                )
         except Exception as exc:
             message = shorten(format_user_facing_error(exc), 200)
             with SessionStore() as store:
@@ -3069,7 +3331,7 @@ class WebSessionManager:
         for live_session in self._live_sessions.values():
             if live_session.bound_session_id != session_id:
                 continue
-            if live_session.status == "ended":
+            if not _is_active_live_session(live_session):
                 continue
             return live_session
         return None
@@ -3159,7 +3421,7 @@ class WebSessionManager:
                 provider_id=live_session.runtime.provider_id,
                 profile_id=live_session.runtime.profile_id,
                 model=live_session.runtime.settings.model,
-                status=live_session.status,
+                status=_persisted_web_run_status(live_session),
                 kind=live_session.kind,
                 task_id=live_session.task_id,
                 project_dir=live_session.project_dir,
@@ -3169,6 +3431,9 @@ class WebSessionManager:
                 fatal_error=live_session.fatal_error,
                 metadata={
                     "source": "web",
+                    "directory": self._directory_key,
+                    "workspace_root": str(self._workspace_root),
+                    "live_session_id": live_session.live_session_id,
                     "runtime": _runtime_summary(live_session.runtime),
                 },
             )
@@ -3178,7 +3443,7 @@ class WebSessionManager:
             store.update_run_session(
                 live_session.live_session_id,
                 session_id=live_session.bound_session_id,
-                status=live_session.status,
+                status=_persisted_web_run_status(live_session),
                 ended_at=live_session.ended_at,
                 kind=live_session.kind,
                 task_id=live_session.task_id,
@@ -3205,12 +3470,14 @@ class WebSessionManager:
                     "payload": event["payload"],
                     "seq": event["seq"],
                     "created_at": event["created_at"],
+                    "live_session_id": live_session.live_session_id,
+                    "session_id": live_session.bound_session_id,
                 },
             )
             store.update_run_session(
                 live_session.live_session_id,
                 session_id=live_session.bound_session_id,
-                status=live_session.status,
+                status=_persisted_web_run_status(live_session),
                 ended_at=live_session.ended_at,
                 last_event_seq=live_session.snapshot.last_event_seq,
                 snapshot=self._serialize_live_snapshot(live_session),
@@ -3473,7 +3740,12 @@ class WebSessionManager:
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         live_session = self._live_sessions[live_session_id]
-        event = live_session.event_stream.publish(event_type, payload)
+        enriched_payload = dict(payload)
+        enriched_payload["live_session_id"] = live_session.live_session_id
+        if live_session.bound_session_id is not None:
+            enriched_payload["session_id"] = live_session.bound_session_id
+            enriched_payload["resume_session_id"] = live_session.bound_session_id
+        event = live_session.event_stream.publish(event_type, enriched_payload)
         self._apply_live_event(live_session, event)
         self._persist_live_event_record(live_session, event)
         return event

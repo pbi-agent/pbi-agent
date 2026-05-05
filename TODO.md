@@ -1,5 +1,4 @@
-[X] Inspect saved HTML and persisted session/run state for cc50122a388244399f80212bd9c0f996
-[X] Trace frontend live event routing for Kanban-started saved sessions
-[X] Patch minimal session-key/live-event cursor reset bug
-[X] Add regression coverage
-[X] Validate and commit fix
+[X] Inspect timeline work-run rendering and persisted item shape
+[X] Identify why refreshed Working groups move or collapse to last turn
+[X] Implement focused fix and regression tests
+[X] Validate timeline refresh behavior

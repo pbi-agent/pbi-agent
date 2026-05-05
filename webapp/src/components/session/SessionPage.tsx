@@ -337,9 +337,18 @@ export function SessionPage({
     || (sessionState?.inputEnabled && !sessionState.pendingUserQuestions),
   );
   const composerCanStartRun = Boolean(!routeSessionId || (routeSessionId && !sessionState?.liveSessionId));
-  const topbarConnection = composerInputEnabled && sessionState?.connection !== "connected"
+  const rawConnection = sessionState?.connection ?? "disconnected";
+  const topbarConnection = composerInputEnabled && (rawConnection === "disconnected" || rawConnection === "connecting")
     ? "ready"
-    : sessionState?.connection ?? "disconnected";
+    : rawConnection;
+  const recoveryNotice = rawConnection === "reconnecting"
+    ? "Connection lost. Reconnecting to the live stream..."
+    : rawConnection === "recovering"
+      ? "Recovering the session from the latest snapshot..."
+      : null;
+  const recoveryFailed = rawConnection === "recovery_failed"
+    ? "Unable to recover the live stream. Refresh the session to reload the latest snapshot."
+    : null;
 
   useEffect(() => {
     if (composerInputEnabled && !sessionState?.sessionEnded) {
@@ -566,7 +575,14 @@ export function SessionPage({
       : null;
 
   return (
-    <section className={`session-layout ${sidebarOpen ? "session-layout--sidebar-open" : ""}`}>
+    <section
+      className={`session-layout ${sidebarOpen ? "session-layout--sidebar-open" : ""}`}
+      data-debug-session-key={selectedRouteSessionKey ?? undefined}
+      data-debug-session-id={sessionState?.sessionId ?? undefined}
+      data-debug-live-session-id={sessionState?.liveSessionId ?? undefined}
+      data-debug-event-cursor={sessionState?.lastEventSeq ?? undefined}
+      data-debug-connection={sessionState?.connection ?? undefined}
+    >
       <div className={`sidebar ${sidebarOpen ? "sidebar--open" : ""}`}>
         <SessionSidebar
           sessions={sessionsQuery.data ?? []}
@@ -646,6 +662,18 @@ export function SessionPage({
           <Alert className="banner banner--notice">
             <AlertTriangleIcon />
             <AlertDescription>{inputWarnings.join(" ")}</AlertDescription>
+          </Alert>
+        ) : null}
+        {recoveryNotice ? (
+          <Alert className="banner banner--notice">
+            <AlertTriangleIcon />
+            <AlertDescription>{recoveryNotice}</AlertDescription>
+          </Alert>
+        ) : null}
+        {recoveryFailed ? (
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{recoveryFailed}</AlertDescription>
           </Alert>
         ) : null}
         {sessionState?.fatalError ? (
@@ -831,62 +859,89 @@ function timelineForDisplay(
   const activeTimeline = Boolean(
     !timeline.session_ended && (detail.active_live_session || detail.active_run),
   );
-  const activeIdleTimeline = Boolean(
-    activeTimeline
-    && timeline.input_enabled
-    && !timeline.wait_message
-    && !timeline.processing?.active
-    && !timeline.pending_user_questions
-    && !timeline.fatal_error
-  );
-  const dormantTimeline = !activeTimeline && !timeline.session_ended;
+  const dormantTimeline = !activeTimeline;
   if ((!activeTimeline && !dormantTimeline) || detail.history_items.length === 0) {
     return timeline;
   }
 
   const historyItems = detail.history_items.map(historyItemToSnapshotItem);
-  const persistedMessageIds = new Set(
+  const historyMessageIds = new Set(
     historyItems.flatMap((item) => {
       const messageId = persistedMessageId(item);
       return messageId ? [messageId] : [];
     }),
   );
-  const persistedMessageCounts = new Map<string, number>();
-  for (const item of historyItems) {
-    const signature = messageSignature(item);
-    if (signature) {
-      persistedMessageCounts.set(
-        signature,
-        (persistedMessageCounts.get(signature) ?? 0) + 1,
-      );
+  const mergedItems: Record<string, unknown>[] = [];
+  const pendingUnanchoredItems: Record<string, unknown>[] = [];
+  const consumedHistoryIndexes = new Set<number>();
+  const appendHistoryRange = (endIndex: number, includeEnd: boolean) => {
+    const upperBound = includeEnd ? endIndex : endIndex - 1;
+    for (let index = 0; index <= upperBound; index += 1) {
+      if (consumedHistoryIndexes.has(index)) continue;
+      mergedItems.push(historyItems[index]);
+      consumedHistoryIndexes.add(index);
     }
-  }
-  const lastHistorySignature = messageSignature(historyItems[historyItems.length - 1]);
-  const consumePersistedMessage = (signature: string): boolean => {
-    const count = persistedMessageCounts.get(signature) ?? 0;
-    if (count <= 0) return false;
-    if (count === 1) {
-      persistedMessageCounts.delete(signature);
-    } else {
-      persistedMessageCounts.set(signature, count - 1);
-    }
-    return true;
   };
-  const liveItems = timeline.items.filter((item) => {
-    if (isHistoricalSnapshotMessage(item)) return false;
-    const messageId = persistedMessageId(item);
-    if (messageId && persistedMessageIds.has(messageId)) return false;
-    const signature = messageSignature(item);
-    if (!signature) return true;
-    if (dormantTimeline || activeIdleTimeline) {
-      return !consumePersistedMessage(signature);
+  const appendRemainingHistory = () => {
+    for (let index = 0; index < historyItems.length; index += 1) {
+      if (consumedHistoryIndexes.has(index)) continue;
+      mergedItems.push(historyItems[index]);
+      consumedHistoryIndexes.add(index);
     }
-    return item.role !== "user" || signature !== lastHistorySignature;
-  });
+  };
+  const matchingHistoryIndex = (item: Record<string, unknown>): number => {
+    const messageId = persistedMessageId(item);
+    if (messageId) {
+      const index = historyItems.findIndex((historyItem, candidateIndex) => (
+        !consumedHistoryIndexes.has(candidateIndex)
+        && persistedMessageId(historyItem) === messageId
+      ));
+      if (index >= 0) return index;
+    }
+    const signature = messageSignature(item);
+    if (!signature) return -1;
+    return historyItems.findIndex((historyItem, candidateIndex) => (
+      !consumedHistoryIndexes.has(candidateIndex)
+      && messageSignature(historyItem) === signature
+    ));
+  };
+
+  for (const item of timeline.items) {
+    if (consumedHistoryIndexes.size === 0 && item.kind !== "message") {
+      pendingUnanchoredItems.push(item);
+      continue;
+    }
+    if (item.kind !== "message") {
+      mergedItems.push(item);
+      continue;
+    }
+    const historyIndex = matchingHistoryIndex(item);
+    if (historyIndex >= 0) {
+      appendHistoryRange(historyIndex, pendingUnanchoredItems.length === 0);
+      mergedItems.push(...pendingUnanchoredItems);
+      pendingUnanchoredItems.length = 0;
+      appendHistoryRange(historyIndex, true);
+      continue;
+    }
+    const messageId = persistedMessageId(item);
+    if (messageId && historyMessageIds.has(messageId)) {
+      continue;
+    }
+    if (isHistoricalSnapshotMessage(item)) {
+      continue;
+    }
+    if (consumedHistoryIndexes.size === 0) {
+      pendingUnanchoredItems.push(item);
+      continue;
+    }
+    mergedItems.push(item);
+  }
+  appendRemainingHistory();
+  mergedItems.push(...pendingUnanchoredItems);
 
   return {
     ...timeline,
-    items: [...historyItems, ...liveItems],
+    items: mergedItems,
   };
 }
 

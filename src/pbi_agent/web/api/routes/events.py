@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 from typing import cast
@@ -19,8 +21,28 @@ from pbi_agent.web.api.deps import SessionIdPath, StreamIdPath
 from pbi_agent.web.session_manager import WebSessionManager
 
 router = APIRouter(prefix="/api/events", tags=["events"])
+logger = logging.getLogger(__name__)
 
 _SSE_HEARTBEAT_SECONDS = 10.0
+
+
+def _cursor_source(since: int, last_event_id: str | None) -> str:
+    return "last_event_id" if _resolve_since(since, last_event_id) != since else "query"
+
+
+def _seq_range(events: list[dict[str, Any]]) -> tuple[int | None, int | None]:
+    seqs = [_event_seq(event) for event in events if _event_seq(event) > 0]
+    return (min(seqs), max(seqs)) if seqs else (None, None)
+
+
+def _log_sse(action: str, **fields: Any) -> None:
+    payload = {"action": action, **fields}
+    logger.info(
+        "sse.%s %s",
+        action,
+        json.dumps(payload, sort_keys=True, separators=(",", ":")),
+        extra={"pbi_sse": payload},
+    )
 
 
 @router.get("/{stream_id}")
@@ -34,11 +56,30 @@ async def stream_events_sse(
     since: int = Query(default=0, ge=0),
 ) -> StreamingResponse:
     manager = cast(WebSessionManager, request.app.state.manager)
+    resume_since = _resolve_since(since, last_event_id)
     try:
         stream = manager.get_event_stream(stream_id)
+        replay_events = manager.get_event_stream_replay(
+            stream_id,
+            since=resume_since,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Event stream not found.") from exc
-    return _sse_response(stream, since=_resolve_since(since, last_event_id))
+    return _sse_response(
+        stream,
+        since=resume_since,
+        requested_since=resume_since,
+        replay_events=replay_events,
+        log_context={
+            "endpoint": "stream",
+            "stream_kind": "app" if stream_id == "app" else "live",
+            "stream_id": stream_id,
+            "requested_since": resume_since,
+            "resolved_since": resume_since,
+            "cursor_source": _cursor_source(since, last_event_id),
+            "cursor_reset": False,
+        },
+    )
 
 
 @router.get("/sessions/{session_id}")
@@ -52,20 +93,44 @@ async def stream_session_events_sse(
     since: int = Query(default=0, ge=0),
 ) -> StreamingResponse:
     manager = cast(WebSessionManager, request.app.state.manager)
+    requested_since = _resolve_since(since, last_event_id)
     try:
+        resume_since = manager.resolve_session_event_since(
+            session_id,
+            requested_since,
+        )
         stream = manager.get_session_event_stream(session_id)
+        replay_events = manager.get_session_event_stream_replay(
+            session_id,
+            since=resume_since,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Event stream not found.") from exc
-    return _sse_response(stream, since=_resolve_since(since, last_event_id))
+    return _sse_response(
+        stream,
+        since=resume_since,
+        requested_since=requested_since,
+        replay_events=replay_events,
+        log_context={
+            "endpoint": "session",
+            "stream_kind": "session",
+            "session_id": session_id,
+            "requested_since": requested_since,
+            "resolved_since": resume_since,
+            "cursor_source": _cursor_source(since, last_event_id),
+            "cursor_reset": requested_since != resume_since,
+        },
+    )
 
 
 def _resolve_since(since: int, last_event_id: str | None) -> int:
     if last_event_id is None:
         return since
     try:
-        return max(since, int(last_event_id))
+        parsed_last_event_id = int(last_event_id)
     except ValueError:
         return since
+    return parsed_last_event_id if parsed_last_event_id >= 0 else since
 
 
 def _event_seq(event: dict[str, Any]) -> int:
@@ -73,13 +138,71 @@ def _event_seq(event: dict[str, Any]) -> int:
     return seq if isinstance(seq, int) else 0
 
 
-def _control_event(event_type: str, seq: int) -> dict[str, Any]:
+def _control_event(
+    event_type: str,
+    seq: int,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "seq": seq,
         "type": event_type,
-        "payload": {},
+        "payload": payload or {},
         "created_at": "",
     }
+
+
+def _replay_incomplete_event(
+    *,
+    requested_since: int,
+    resolved_since: int,
+    oldest_available_seq: int | None,
+    latest_seq: int,
+) -> dict[str, Any] | None:
+    if requested_since <= 0:
+        return None
+    if requested_since != resolved_since or requested_since > latest_seq:
+        return _control_event(
+            "server.replay_incomplete",
+            resolved_since,
+            {
+                "reason": "cursor_ahead",
+                "requested_since": requested_since,
+                "resolved_since": resolved_since,
+                "oldest_available_seq": oldest_available_seq,
+                "latest_seq": latest_seq,
+                "snapshot_required": True,
+            },
+        )
+    if latest_seq > requested_since and (
+        oldest_available_seq is None or oldest_available_seq > requested_since + 1
+    ):
+        return _control_event(
+            "server.replay_incomplete",
+            resolved_since,
+            {
+                "reason": "cursor_too_old",
+                "requested_since": requested_since,
+                "resolved_since": resolved_since,
+                "oldest_available_seq": oldest_available_seq,
+                "latest_seq": latest_seq,
+                "snapshot_required": True,
+            },
+        )
+    return None
+
+
+def _oldest_available_seq(
+    replay_events: list[dict[str, Any]] | None,
+    snapshot_events: list[dict[str, Any]],
+    *,
+    since: int,
+) -> int | None:
+    seqs = [
+        seq
+        for event in [*(replay_events or []), *snapshot_events]
+        if (seq := _event_seq(event)) > since
+    ]
+    return min(seqs, default=None)
 
 
 def _format_sse(event: dict[str, Any], *, event_id: int | None = None) -> str:
@@ -92,9 +215,22 @@ def _format_sse(event: dict[str, Any], *, event_id: int | None = None) -> str:
     return "\n".join(lines) + "\n\n"
 
 
-def _sse_response(stream, *, since: int) -> StreamingResponse:  # noqa: ANN001
+def _sse_response(
+    stream,  # noqa: ANN001
+    *,
+    since: int,
+    requested_since: int | None = None,
+    replay_events: list[dict[str, Any]] | None = None,
+    log_context: dict[str, Any] | None = None,
+) -> StreamingResponse:
     return StreamingResponse(
-        _iter_sse_events(stream, since=since),
+        _iter_sse_events(
+            stream,
+            since=since,
+            requested_since=requested_since,
+            replay_events=replay_events,
+            log_context=log_context,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -104,18 +240,75 @@ def _sse_response(stream, *, since: int) -> StreamingResponse:  # noqa: ANN001
     )
 
 
-async def _iter_sse_events(stream, *, since: int) -> AsyncIterator[str]:  # noqa: ANN001
+async def _iter_sse_events(
+    stream,  # noqa: ANN001
+    *,
+    since: int,
+    requested_since: int | None = None,
+    replay_events: list[dict[str, Any]] | None = None,
+    log_context: dict[str, Any] | None = None,
+) -> AsyncIterator[str]:
+    requested_since = since if requested_since is None else requested_since
     last_sent_seq = since
+    started_at = time.monotonic()
     yield _format_sse(_control_event("server.connected", since))
 
     subscriber_id, queue = stream.subscribe()
     try:
-        for event in stream.snapshot():
+        snapshot_events = stream.snapshot()
+        oldest_retained_seq, latest_seq = stream.bounds()
+        replay_from_seq, replay_to_seq = _seq_range(replay_events or [])
+        snapshot_from_seq, snapshot_to_seq = _seq_range(snapshot_events)
+        oldest_available_seq = _oldest_available_seq(
+            replay_events,
+            snapshot_events,
+            since=since,
+        )
+        base_log_context = {
+            **(log_context or {}),
+            "subscriber_id": subscriber_id,
+            "requested_since": requested_since,
+            "resolved_since": since,
+            "replay_count": len(replay_events or []),
+            "replay_from_seq": replay_from_seq,
+            "replay_to_seq": replay_to_seq,
+            "snapshot_count": len(snapshot_events),
+            "snapshot_from_seq": snapshot_from_seq,
+            "snapshot_to_seq": snapshot_to_seq,
+            "oldest_retained_seq": oldest_retained_seq,
+            "oldest_available_seq": oldest_available_seq,
+            "latest_seq": latest_seq,
+            "subscriber_count": stream.subscriber_count(),
+        }
+        _log_sse("subscribe", **base_log_context)
+        incomplete_event = _replay_incomplete_event(
+            requested_since=requested_since,
+            resolved_since=since,
+            oldest_available_seq=oldest_available_seq,
+            latest_seq=latest_seq,
+        )
+        if incomplete_event is not None:
+            _log_sse(
+                "replay_incomplete",
+                **base_log_context,
+                reason=incomplete_event["payload"].get("reason"),
+                snapshot_required=incomplete_event["payload"].get("snapshot_required"),
+            )
+            yield _format_sse(incomplete_event)
+
+        for event in replay_events or []:
             seq = _event_seq(event)
-            if seq <= since:
+            if seq <= last_sent_seq:
                 continue
-            yield _format_sse(event, event_id=seq)
             last_sent_seq = max(last_sent_seq, seq)
+            yield _format_sse(event, event_id=seq)
+
+        for event in snapshot_events:
+            seq = _event_seq(event)
+            if seq <= last_sent_seq:
+                continue
+            last_sent_seq = max(last_sent_seq, seq)
+            yield _format_sse(event, event_id=seq)
 
         while True:
             try:
@@ -130,7 +323,15 @@ async def _iter_sse_events(stream, *, since: int) -> AsyncIterator[str]:  # noqa
             seq = _event_seq(event)
             if seq <= last_sent_seq:
                 continue
-            yield _format_sse(event, event_id=seq)
             last_sent_seq = max(last_sent_seq, seq)
+            yield _format_sse(event, event_id=seq)
     finally:
         stream.unsubscribe(subscriber_id)
+        _log_sse(
+            "unsubscribe",
+            **(log_context or {}),
+            subscriber_id=subscriber_id,
+            last_sent_seq=last_sent_seq,
+            subscriber_count=stream.subscriber_count(),
+            duration_ms=round((time.monotonic() - started_at) * 1000),
+        )

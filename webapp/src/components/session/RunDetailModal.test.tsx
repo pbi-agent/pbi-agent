@@ -105,6 +105,31 @@ describe("RunDetailModal", () => {
     expect(status).toHaveClass("status-pill--completed");
   });
 
+  it("renders fatal errors from run detail", async () => {
+    mockFetchRunDetail.mockResolvedValue({
+      run: makeRun({ status: "failed", fatal_error: "RuntimeError: boom" }),
+      events: [makeEvent({ step_index: 1, error_message: "RuntimeError: boom" })],
+    });
+
+    renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
+
+    expect(await screen.findByText("failed")).toBeInTheDocument();
+    expect(screen.getByText("RuntimeError: boom")).toBeInTheDocument();
+  });
+
+  it("treats interrupted runs as terminal", async () => {
+    mockFetchRunDetail.mockResolvedValue({
+      run: makeRun({ status: "interrupted", fatal_error: "Session interrupted." }),
+      events: [makeEvent({ step_index: 1 })],
+    });
+
+    renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
+
+    const status = await screen.findByText("interrupted");
+    expect(status).toHaveClass("status-pill--completed");
+    expect(screen.getByText("Session interrupted.")).toBeInTheDocument();
+  });
+
   it("refetches when a viewed running run query is invalidated", async () => {
     mockFetchRunDetail
       .mockResolvedValueOnce({

@@ -1,9 +1,13 @@
 import type {
+  AppSseEventModel,
   LiveSessionSnapshotModel,
   ProcessingStateModel,
   RunSessionModel,
   SessionRecordModel,
+  SessionSseEventModel,
+  SseControlEventModel,
   SseEventModel,
+  TokenUsagePayloadModel,
 } from "./api-types.generated";
 
 export type SessionLifecycleStatus = NonNullable<SessionRecordModel["status"]>;
@@ -71,29 +75,7 @@ export type BoardStage = {
   auto_start: boolean;
 };
 
-export type UsagePayload = {
-  input_tokens: number;
-  cached_input_tokens: number;
-  cache_write_tokens: number;
-  cache_write_1h_tokens: number;
-  output_tokens: number;
-  reasoning_tokens: number;
-  tool_use_tokens: number;
-  provider_total_tokens: number;
-  sub_agent_input_tokens: number;
-  sub_agent_output_tokens: number;
-  sub_agent_reasoning_tokens: number;
-  sub_agent_tool_use_tokens: number;
-  sub_agent_provider_total_tokens: number;
-  sub_agent_cost_usd: number;
-  context_tokens: number;
-  total_tokens: number;
-  estimated_cost_usd: number;
-  main_agent_total_tokens: number;
-  sub_agent_total_tokens: number;
-  model: string;
-  service_tier: string;
-};
+export type UsagePayload = TokenUsagePayloadModel;
 
 export type LiveSessionRuntime = {
   provider_id: string | null;
@@ -528,7 +510,13 @@ export type TimelineItem =
   | TimelineThinkingItem
   | TimelineToolGroupItem;
 
-export type WebEvent = SseEventModel & { payload: Record<string, unknown> };
+export type WebEvent = SseEventModel;
+export type WebEventType = WebEvent["type"];
+export type WebEventOf<T extends WebEventType> = Extract<WebEvent, { type: T }>;
+export type WebEventPayload<T extends WebEventType> = WebEventOf<T>["payload"];
+export type SessionWebEvent = SessionSseEventModel;
+export type AppWebEvent = AppSseEventModel;
+export type ControlWebEvent = SseControlEventModel;
 
 export type LiveSessionLifecycleEventType =
   | "live_session_started"

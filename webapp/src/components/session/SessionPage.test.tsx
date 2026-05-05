@@ -1,6 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { SessionPage } from "./SessionPage";
 import { renderWithProviders } from "../../test/render";
 import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
@@ -11,6 +11,7 @@ import {
   fetchSessionDetail,
   fetchSessions,
   sendSessionMessage,
+  submitSessionQuestionResponse,
   updateSession,
   uploadSavedSessionImages,
 } from "../../api";
@@ -181,6 +182,7 @@ vi.mock("../../api", async (importOriginal) => {
     sendSessionMessage: vi.fn(),
     setActiveModelProfile: vi.fn(),
     setLiveSessionProfile: vi.fn(),
+    submitSessionQuestionResponse: vi.fn(),
     updateSession: vi.fn(),
     uploadSavedSessionImages: vi.fn(),
   };
@@ -384,6 +386,9 @@ describe("SessionPage", () => {
     vi.mocked(sendSessionMessage).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-new", session_id: "session-1", last_event_seq: 3 }),
     );
+    vi.mocked(submitSessionQuestionResponse).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-question", session_id: "session-1" }),
+    );
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
   });
 
@@ -429,6 +434,62 @@ describe("SessionPage", () => {
     expect(screen.getByText("Connection ready")).toBeInTheDocument();
     expect(screen.getByText("Composer live session")).toBeInTheDocument();
     await waitFor(() => expect(composerFocusMock).toHaveBeenCalled());
+  });
+
+  it("shows recovery states instead of masking them as ready", async () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: "live-recovery" }),
+      history_items: [],
+      active_live_session: makeLiveSession({
+        live_session_id: "live-recovery",
+        session_id: "session-1",
+      }),
+      timeline: {
+        live_session_id: "live-recovery",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [],
+        sub_agents: {},
+        last_event_seq: 3,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Composer live session live-recovery")).toBeInTheDocument();
+    const layout = document.querySelector(".session-layout");
+    expect(layout).toHaveAttribute("data-debug-session-key", sessionKey);
+    expect(layout).toHaveAttribute("data-debug-session-id", "session-1");
+    expect(layout).toHaveAttribute("data-debug-live-session-id", "live-recovery");
+    expect(layout).toHaveAttribute("data-debug-event-cursor", "3");
+    expect(layout).toHaveAttribute("data-debug-connection", "disconnected");
+    act(() => {
+      useSessionStore.getState().setConnection(sessionKey, "recovering");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Connection recovering")).toBeInTheDocument();
+    });
+    expect(layout).toHaveAttribute("data-debug-connection", "recovering");
+    expect(screen.getByText("Recovering the session from the latest snapshot...")).toBeInTheDocument();
+
+    act(() => {
+      useSessionStore.getState().setConnection(sessionKey, "recovery_failed");
+    });
+
+    expect(screen.getByText("Connection recovery_failed")).toBeInTheDocument();
+    expect(screen.getByText(
+      "Unable to recover the live stream. Refresh the session to reload the latest snapshot.",
+    )).toBeInTheDocument();
   });
 
   it("keeps completed saved sessions sendable without an active live run", async () => {
@@ -512,7 +573,7 @@ describe("SessionPage", () => {
         runtime: null,
         input_enabled: false,
         wait_message: null,
-        processing: null,
+        processing: { active: true, phase: "model_wait", message: "Working" },
         session_usage: null,
         turn_usage: null,
         session_ended: false,
@@ -521,16 +582,37 @@ describe("SessionPage", () => {
         items: [
           {
             kind: "message",
-            itemId: "message-1",
+            itemId: "live-plan-user",
+            role: "user",
+            content: "/plan",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "live-plan-assistant",
+            role: "assistant",
+            content: "Previous plan",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "live-current-user",
             role: "user",
             content: "/review",
             markdown: false,
           },
           {
             kind: "thinking",
-            itemId: "thinking-1",
+            itemId: "thinking-current",
             title: "Thinking",
             content: "reasoning",
+          },
+          {
+            kind: "message",
+            itemId: "message-current-assistant",
+            role: "assistant",
+            content: "Review result",
+            markdown: true,
           },
         ],
         sub_agents: {},
@@ -540,14 +622,22 @@ describe("SessionPage", () => {
 
     renderSessionRoute("/sessions/session-1");
 
-    expect(await screen.findByText("Timeline 4")).toBeInTheDocument();
+    expect(await screen.findByText("Timeline 5")).toBeInTheDocument();
     const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.liveSessionId).toBe("live-processing");
+    expect(state?.lastEventSeq).toBe(12);
     expect(state?.items.map((item) => item.itemId)).toEqual([
       "history-1",
       "history-2",
       "history-3",
-      "thinking-1",
+      "thinking-current",
+      "message-current-assistant",
     ]);
+    expect(vi.mocked(useLiveSessionEvents)).toHaveBeenCalledWith(
+      getSavedSessionKey("session-1"),
+      "live-processing",
+      "session-1",
+    );
   });
 
   it("dedupes persisted messages from an idle active live timeline", async () => {
@@ -583,10 +673,7 @@ describe("SessionPage", () => {
         live_session_id: "idle-live",
         session_id: "session-1",
       }),
-      active_run: makeLiveSession({
-        live_session_id: "idle-live",
-        session_id: "session-1",
-      }),
+      active_run: null,
       timeline: {
         live_session_id: "idle-live",
         session_id: "session-1",
@@ -603,6 +690,7 @@ describe("SessionPage", () => {
           {
             kind: "message",
             itemId: "message-user",
+            messageId: "msg-1",
             role: "user",
             content: "hi",
             markdown: false,
@@ -617,8 +705,16 @@ describe("SessionPage", () => {
           {
             kind: "message",
             itemId: "message-assistant",
+            messageId: "msg-2",
             role: "assistant",
             content: "Hi! What would you like to work on in this repo?",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "message-live-extra",
+            role: "assistant",
+            content: "New live message",
             markdown: true,
           },
         ],
@@ -629,13 +725,178 @@ describe("SessionPage", () => {
 
     renderSessionRoute("/sessions/session-1");
 
-    expect(await screen.findByText("Timeline 3")).toBeInTheDocument();
+    expect(await screen.findByText("Timeline 4")).toBeInTheDocument();
     expect(screen.getByText("Composer live session idle-live")).toBeInTheDocument();
     const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
     expect(state?.items.map((item) => item.itemId)).toEqual([
       "history-1",
-      "history-2",
       "tool-group-1",
+      "history-2",
+      "message-live-extra",
+    ]);
+  });
+
+  it("keeps refreshed work traces anchored to their original turns", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-user-1",
+          message_id: "msg-user-1",
+          part_ids: { content: "msg-user-1:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "/plan",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:00:00Z",
+        },
+        {
+          item_id: "history-assistant-1",
+          message_id: "msg-assistant-1",
+          part_ids: { content: "msg-assistant-1:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "Plan result",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:01:00Z",
+        },
+        {
+          item_id: "history-user-2",
+          message_id: "msg-user-2",
+          part_ids: { content: "msg-user-2:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "/review",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:02:00Z",
+        },
+        {
+          item_id: "history-assistant-2",
+          message_id: "msg-assistant-2",
+          part_ids: { content: "msg-assistant-2:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "Review result",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:03:00Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "completed-live-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "snapshot-user-1",
+            messageId: "msg-user-1",
+            role: "user",
+            content: "/plan",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-plan",
+            title: "Thinking",
+            content: "planning",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-plan",
+            label: "Tool calls",
+            status: "completed",
+            items: [],
+          },
+          {
+            kind: "message",
+            itemId: "snapshot-assistant-1",
+            messageId: "msg-assistant-1",
+            role: "assistant",
+            content: "Plan result",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "snapshot-user-1-replayed",
+            messageId: "msg-user-1",
+            role: "user",
+            content: "/plan",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "snapshot-assistant-1-replayed",
+            messageId: "msg-assistant-1",
+            role: "assistant",
+            content: "Plan result",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "snapshot-user-2",
+            messageId: "msg-user-2",
+            role: "user",
+            content: "/review",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-review",
+            title: "Thinking",
+            content: "reviewing",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-review",
+            label: "Tool calls",
+            status: "completed",
+            items: [],
+          },
+          {
+            kind: "message",
+            itemId: "snapshot-assistant-2",
+            messageId: "msg-assistant-2",
+            role: "assistant",
+            content: "Review result",
+            markdown: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 24,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 8")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-user-1",
+      "thinking-plan",
+      "tool-plan",
+      "history-assistant-1",
+      "history-user-2",
+      "thinking-review",
+      "tool-review",
+      "history-assistant-2",
     ]);
   });
 
@@ -880,13 +1141,15 @@ describe("SessionPage", () => {
     expect(state?.liveSessionId).toBeNull();
     expect(state?.items.map((item) => item.itemId)).toEqual([
       "history-1",
-      "history-2",
       "notice-1",
       "thinking-1",
+      "history-2",
     ]);
   });
 
   it("hydrates completed saved-session working trace from a persisted timeline", async () => {
+    const user = userEvent.setup();
+
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord({ status: "ended", active_run_id: null }),
       history_items: [
@@ -939,9 +1202,199 @@ describe("SessionPage", () => {
 
     renderSessionRoute("/sessions/session-1");
 
-    expect(await screen.findByText("Timeline 2")).toBeInTheDocument();
+    expect(await screen.findByText("Timeline 3")).toBeInTheDocument();
     expect(screen.getByText("Composer can create true")).toBeInTheDocument();
     expect(screen.getByText("Composer live session")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "thinking-1",
+      "tool-group-1",
+    ]);
+    expect(state?.liveSessionId).toBeNull();
+    expect(vi.mocked(useLiveSessionEvents)).toHaveBeenCalledWith(
+      getSavedSessionKey("session-1"),
+      null,
+      "session-1",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Submit Expanded" }));
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    expect(sendSessionMessage).toHaveBeenCalledWith("session-1", {
+      text: "review @docs and @images/diagram.png",
+      file_paths: ["docs/spec.md"],
+      image_paths: ["images/diagram.png"],
+      image_upload_ids: ["saved-upload-1"],
+      profile_id: "analysis",
+      interactive_mode: false,
+    });
+  });
+
+  it("dedupes dormant timeline overlays by historical ids and signatures", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "hi",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-04-16T12:00:00Z",
+        },
+        {
+          item_id: "history-2",
+          message_id: "msg-2",
+          part_ids: { content: "msg-2:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "hello",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-04-16T12:01:00Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "ended-live-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "history-1",
+            role: "user",
+            content: "hi",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "live-assistant-copy",
+            role: "assistant",
+            content: "hello",
+            markdown: true,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Thinking",
+            content: "reasoning",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-group-1",
+            label: "Tool calls",
+            status: "completed",
+            items: [],
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 12,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 4")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "history-2",
+      "thinking-1",
+      "tool-group-1",
+    ]);
+    expect(state?.liveSessionId).toBeNull();
+  });
+
+  it("merges completed Kanban timelines with saved history without duplicates", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "Investigate",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-04-16T12:00:00Z",
+        },
+        {
+          item_id: "history-2",
+          message_id: "msg-2",
+          part_ids: { content: "msg-2:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "Done.",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-04-16T12:01:00Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "task-live-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "message-1",
+            role: "assistant",
+            content: "Done.",
+            markdown: true,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-1",
+            title: "Thinking",
+            content: "reasoning",
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 9,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 3")).toBeInTheDocument();
+    expect(screen.getByText("Composer can create true")).toBeInTheDocument();
+    expect(screen.getByText("Composer live session")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "history-2",
+      "thinking-1",
+    ]);
+    expect(state?.liveSessionId).toBeNull();
   });
 
   it("keeps the composer disabled between tool phases until input state enables it", async () => {
@@ -975,6 +1428,95 @@ describe("SessionPage", () => {
     expect(await screen.findByText("Composer live session live-processing")).toBeInTheDocument();
     expect(screen.getByText("Composer input enabled false")).toBeInTheDocument();
     expect(screen.getByText("Connection disconnected")).toBeInTheDocument();
+  });
+
+  it("submits hydrated pending questions through the saved-session endpoint", async () => {
+    const user = userEvent.setup();
+
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "waiting_for_input", active_run_id: "live-question" }),
+      history_items: [],
+      active_live_session: makeLiveSession({
+        live_session_id: "live-question",
+        session_id: "session-1",
+        status: "waiting_for_input",
+      }),
+      timeline: {
+        live_session_id: "live-question",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: { active: true, phase: "model_wait", message: "Waiting for input" },
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: {
+          prompt_id: "ask-1",
+          questions: [
+            {
+              question_id: "q-1",
+              question: "Which API style should I use?",
+              suggestions: ["Use REST", "Use GraphQL", "Use SSE"],
+              recommended_suggestion_index: 0,
+            },
+          ],
+        },
+        items: [],
+        sub_agents: {},
+        last_event_seq: 7,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Assistant needs your input")).toBeInTheDocument();
+    expect(screen.getByText("Which API style should I use?")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Send answers" }));
+
+    await waitFor(() => expect(submitSessionQuestionResponse).toHaveBeenCalledTimes(1));
+    expect(submitSessionQuestionResponse).toHaveBeenCalledWith("session-1", {
+      prompt_id: "ask-1",
+      answers: [
+        {
+          question_id: "q-1",
+          answer: "Use REST",
+          selected_suggestion_index: 0,
+          custom: false,
+        },
+      ],
+    });
+  });
+
+  it("surfaces fatal errors from hydrated session timelines", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "failed", active_run_id: null }),
+      history_items: [],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "failed-live",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: "RuntimeError: boom",
+        pending_user_questions: null,
+        items: [],
+        sub_agents: {},
+        last_event_seq: 4,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("RuntimeError: boom")).toBeInTheDocument();
   });
 
   it("does not reuse a previous active session on the blank new-session route", async () => {

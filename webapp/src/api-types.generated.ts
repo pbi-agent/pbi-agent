@@ -43,6 +43,8 @@ export type DashboardOverviewModel = { total_sessions: number; total_runs: numbe
 
 export type DashboardStatsResponse = { overview: DashboardOverviewModel; breakdown: ProviderBreakdownModel[]; daily: DailyBucketModel[] };
 
+export type DiffLineNumberModel = { old?: number | null; new?: number | null };
+
 export type EmptyPayloadModel = {  };
 
 export type ExpandInputRequest = { text?: string };
@@ -85,7 +87,7 @@ export type LiveSessionUpdatedSseEventModel = { seq: number; created_at: string;
 
 export type MessageAddedSseEventModel = { seq: number; created_at: string; type: "message_added"; payload: MessageAddedSseEventPayloadModel };
 
-export type MessageAddedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; role: string; content: string; markdown?: boolean; message_id?: string | null; part_ids?: MessagePartIdsModel | null; file_paths?: string[]; image_attachments?: ImageAttachmentModel[]; historical?: boolean | null; created_at?: string | null; sub_agent_id?: string | null };
+export type MessageAddedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; role: "user" | "assistant" | "notice" | "error" | "debug"; content: string; markdown?: boolean; message_id?: string | null; part_ids?: MessagePartIdsModel | null; file_paths?: string[]; image_attachments?: ImageAttachmentModel[]; historical?: boolean | null; created_at?: string | null; sub_agent_id?: string | null };
 
 export type MessagePartIdsModel = { content: string; file_paths?: string[]; image_attachments?: string[] };
 
@@ -175,6 +177,10 @@ export type ServerConnectedSseEventModel = { seq: number; created_at: string; ty
 
 export type ServerHeartbeatSseEventModel = { seq: number; created_at: string; type: "server.heartbeat"; payload: EmptyPayloadModel };
 
+export type ServerReplayIncompleteSseEventModel = { seq: number; created_at: string; type: "server.replay_incomplete"; payload: ServerReplayIncompleteSseEventPayloadModel };
+
+export type ServerReplayIncompleteSseEventPayloadModel = { reason: "cursor_too_old" | "cursor_ahead"; requested_since: number; resolved_since: number; oldest_available_seq?: number | null; latest_seq: number; snapshot_required: boolean };
+
 export type SessionCreatedSseEventModel = { seq: number; created_at: string; type: "session_created"; payload: SessionCreatedSseEventPayloadModel };
 
 export type SessionCreatedSseEventPayloadModel = { session: SessionRecordModel };
@@ -239,11 +245,15 @@ export type ThinkingUpdatedSseEventModel = { seq: number; created_at: string; ty
 
 export type ThinkingUpdatedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; title: string; content: string; sub_agent_id?: string | null };
 
+export type TokenUsagePayloadModel = { input_tokens: number; cached_input_tokens: number; cache_write_tokens: number; cache_write_1h_tokens: number; output_tokens: number; reasoning_tokens: number; tool_use_tokens: number; provider_total_tokens: number; sub_agent_input_tokens: number; sub_agent_output_tokens: number; sub_agent_reasoning_tokens: number; sub_agent_tool_use_tokens: number; sub_agent_provider_total_tokens: number; sub_agent_cost_usd: number; context_tokens: number; total_tokens: number; estimated_cost_usd: number; main_agent_total_tokens: number; sub_agent_total_tokens: number; model: string; service_tier: string };
+
+export type ToolCallMetadataModel = { tool_name?: string | null; path?: string | null; operation?: string | null; success?: boolean | null; detail?: string | null; diff?: string | null; diff_line_numbers?: DiffLineNumberModel[] | null; call_id?: string | null; status?: "running" | "completed" | "failed" | null; arguments?: Record<string, unknown> | string | null; result?: Record<string, unknown> | string | null; error?: unknown; command?: string | null; working_directory?: string | null; timeout_ms?: number | string | null; exit_code?: number | null; timed_out?: boolean | null };
+
 export type ToolGroupAddedSseEventModel = { seq: number; created_at: string; type: "tool_group_added"; payload: ToolGroupAddedSseEventPayloadModel };
 
 export type ToolGroupAddedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; label: string; status?: "running" | "completed" | null; items?: ToolGroupEntryModel[]; sub_agent_id?: string | null };
 
-export type ToolGroupEntryModel = { text: string; classes?: string; metadata?: Record<string, unknown> | null };
+export type ToolGroupEntryModel = { text: string; classes?: string; metadata?: ToolCallMetadataModel | null };
 
 export type UpdateBoardStagesRequest = { board_stages: BoardStageUpdateModel[] };
 
@@ -259,7 +269,7 @@ export type UsageLimitWindowModel = { name: string; used_percent?: number | null
 
 export type UsageUpdatedSseEventModel = { seq: number; created_at: string; type: "usage_updated"; payload: UsageUpdatedSseEventPayloadModel };
 
-export type UsageUpdatedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; scope: "session" | "turn"; usage: Record<string, unknown>; elapsed_seconds?: number | null; sub_agent_id?: string | null };
+export type UsageUpdatedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; scope: "session" | "turn"; usage: TokenUsagePayloadModel; elapsed_seconds?: number | null; sub_agent_id?: string | null };
 
 export type UserQuestionsRequestedSseEventModel = { seq: number; created_at: string; type: "user_questions_requested"; payload: PendingUserQuestionsModel };
 
@@ -277,9 +287,9 @@ export type AppSseEventModel = SessionCreatedSseEventModel | SessionUpdatedSseEv
 
 export type SessionSseEventModel = SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel;
 
-export type SseControlEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel;
+export type SseControlEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel;
 
-export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel;
+export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel;
 
 export type ApiOperationResponses = {
   "GET /api/board/stages": BoardStagesResponse;

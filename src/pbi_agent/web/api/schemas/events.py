@@ -40,6 +40,20 @@ class ServerHeartbeatSseEventModel(SseEventBaseModel):
     payload: EmptyPayloadModel
 
 
+class ServerReplayIncompleteSseEventPayloadModel(BaseModel):
+    reason: Literal["cursor_too_old", "cursor_ahead"]
+    requested_since: int
+    resolved_since: int
+    oldest_available_seq: int | None = None
+    latest_seq: int
+    snapshot_required: bool
+
+
+class ServerReplayIncompleteSseEventModel(SseEventBaseModel):
+    type: Literal["server.replay_incomplete"]
+    payload: ServerReplayIncompleteSseEventPayloadModel
+
+
 class SessionResetSseEventModel(SseEventBaseModel):
     type: Literal["session_reset"]
     payload: EmptyPayloadModel
@@ -92,9 +106,33 @@ class UserQuestionsResolvedSseEventModel(SseEventBaseModel):
     payload: UserQuestionsResolvedSseEventPayloadModel
 
 
+class TokenUsagePayloadModel(BaseModel):
+    input_tokens: int
+    cached_input_tokens: int
+    cache_write_tokens: int
+    cache_write_1h_tokens: int
+    output_tokens: int
+    reasoning_tokens: int
+    tool_use_tokens: int
+    provider_total_tokens: int
+    sub_agent_input_tokens: int
+    sub_agent_output_tokens: int
+    sub_agent_reasoning_tokens: int
+    sub_agent_tool_use_tokens: int
+    sub_agent_provider_total_tokens: int
+    sub_agent_cost_usd: float
+    context_tokens: int
+    total_tokens: int
+    estimated_cost_usd: float
+    main_agent_total_tokens: int
+    sub_agent_total_tokens: int
+    model: str
+    service_tier: str
+
+
 class UsageUpdatedSseEventPayloadModel(EventIdentityPayloadModel):
     scope: Literal["session", "turn"]
-    usage: dict[str, Any]
+    usage: TokenUsagePayloadModel
     elapsed_seconds: float | None = None
     sub_agent_id: str | None = None
 
@@ -104,9 +142,12 @@ class UsageUpdatedSseEventModel(SseEventBaseModel):
     payload: UsageUpdatedSseEventPayloadModel
 
 
+MessageRole = Literal["user", "assistant", "notice", "error", "debug"]
+
+
 class MessageAddedSseEventPayloadModel(EventIdentityPayloadModel):
     item_id: str
-    role: str
+    role: MessageRole
     content: str
     markdown: bool = False
     message_id: str | None = None
@@ -155,10 +196,35 @@ class ThinkingUpdatedSseEventModel(SseEventBaseModel):
     payload: ThinkingUpdatedSseEventPayloadModel
 
 
+class DiffLineNumberModel(BaseModel):
+    old: int | None = None
+    new: int | None = None
+
+
+class ToolCallMetadataModel(BaseModel):
+    tool_name: str | None = None
+    path: str | None = None
+    operation: str | None = None
+    success: bool | None = None
+    detail: str | None = None
+    diff: str | None = None
+    diff_line_numbers: list[DiffLineNumberModel] | None = None
+    call_id: str | None = None
+    status: Literal["running", "completed", "failed"] | None = None
+    arguments: dict[str, Any] | str | None = None
+    result: dict[str, Any] | str | None = None
+    error: Any = None
+    command: str | None = None
+    working_directory: str | None = None
+    timeout_ms: int | str | None = None
+    exit_code: int | None = None
+    timed_out: bool | None = None
+
+
 class ToolGroupEntryModel(BaseModel):
     text: str
     classes: str = ""
-    metadata: dict[str, Any] | None = None
+    metadata: ToolCallMetadataModel | None = None
 
 
 class ToolGroupAddedSseEventPayloadModel(EventIdentityPayloadModel):
@@ -282,6 +348,7 @@ class LiveSessionEndedSseEventModel(SseEventBaseModel):
 CONTROL_SSE_EVENT_MODELS = [
     ServerConnectedSseEventModel,
     ServerHeartbeatSseEventModel,
+    ServerReplayIncompleteSseEventModel,
 ]
 
 SESSION_SSE_EVENT_MODELS = [

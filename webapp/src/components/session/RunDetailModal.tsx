@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import { Alert, AlertDescription } from "../ui/alert";
 
 export function RunDetailModal({
   runSessionId,
@@ -124,6 +125,13 @@ function RunSummary({ run }: { run: RunSession }) {
           <span className="run-kpi__hero-value">{run.estimated_cost_usd > 0 ? `$${run.estimated_cost_usd.toFixed(4)}` : "--"}</span>
         </div>
       </div>
+
+      {run.fatal_error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <TriangleAlertIcon />
+          <AlertDescription>{run.fatal_error}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Counters row */}
       <div className="run-kpi__counters">

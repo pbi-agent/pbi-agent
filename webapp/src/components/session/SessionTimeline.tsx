@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
+import type { ConnectionState } from "../../store";
 import type {
   ProcessingPhase,
   ProcessingState,
@@ -297,7 +298,7 @@ export function SessionTimeline({
 }: {
   items: TimelineItem[];
   subAgents: Record<string, { title: string; status: string }>;
-  connection: "disconnected" | "connecting" | "connected";
+  connection: ConnectionState;
   waitMessage: string | null;
   processing: ProcessingState | null;
   itemsVersion: number;

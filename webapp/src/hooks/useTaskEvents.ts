@@ -36,6 +36,9 @@ function lifecycleEventFromWebEvent(event: WebEvent): LiveSessionLifecycleEvent 
   if (!isLiveSessionLifecycleType(event.type)) {
     return null;
   }
+  if (!("live_session" in event.payload)) {
+    return null;
+  }
   const liveSession = event.payload.live_session;
   if (!isLiveSession(liveSession)) {
     return null;

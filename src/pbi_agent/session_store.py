@@ -1216,6 +1216,16 @@ class SessionStore:
             ).fetchone()
         return RunSessionRecord(**dict(row)) if row is not None else None
 
+    def list_web_session_runs(self, session_id: str) -> list[RunSessionRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM run_sessions WHERE session_id = ? "
+                "AND agent_type = 'web_session' "
+                "ORDER BY started_at ASC, id ASC",
+                (session_id,),
+            ).fetchall()
+        return [RunSessionRecord(**dict(row)) for row in rows]
+
     def mark_web_runs_stale(self, directory: str) -> int:
         normalized_directory = _normalize_directory_key(directory)
         now = _now_iso()
@@ -1223,6 +1233,7 @@ class SessionStore:
             cursor = self._conn.execute(
                 "UPDATE run_sessions SET status = 'stale', ended_at = ? "
                 "WHERE kind IN ('session', 'task') "
+                "AND agent_type = 'web_session' "
                 "AND status IN ('starting', 'running', 'waiting_for_input') "
                 "AND session_id IN (SELECT session_id FROM sessions WHERE directory = ?)",
                 (now, normalized_directory),
