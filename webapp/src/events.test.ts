@@ -52,6 +52,59 @@ describe("parseSseEvent", () => {
   });
 
   it.each([
+    ["non-array file_paths", { file_paths: "docs/spec.md" }],
+    ["non-string file path", { file_paths: ["docs/spec.md", 2] }],
+    ["non-array image_attachments", { image_attachments: {} }],
+    ["non-object image attachment", { image_attachments: ["upload-1"] }],
+    ["missing image attachment upload_id", { image_attachments: [{ name: "image.png", preview_url: "/api/uploads/upload-1" }] }],
+    ["missing image attachment name", { image_attachments: [{ upload_id: "upload-1", preview_url: "/api/uploads/upload-1" }] }],
+    ["missing image attachment preview_url", { image_attachments: [{ upload_id: "upload-1", name: "image.png" }] }],
+    ["non-object part_ids", { part_ids: [] }],
+    ["missing part_ids content", { part_ids: { file_paths: [] } }],
+    ["non-string part_ids content", { part_ids: { content: 1 } }],
+    ["non-array part_ids file_paths", { part_ids: { content: "m1:content", file_paths: "m1:file-path:0" } }],
+    ["non-string part_ids image attachment", { part_ids: { content: "m1:content", image_attachments: [1] } }],
+  ])("rejects malformed message_added optional payload fields: %s", (_label, optionalFields) => {
+    expect(parseSseEvent(JSON.stringify({
+      seq: 1,
+      type: "message_added",
+      created_at: "2026-05-04T00:00:00Z",
+      payload: {
+        item_id: "m1",
+        role: "user",
+        content: "Hello",
+        ...optionalFields,
+      },
+    }))).toBeNull();
+  });
+
+  it("accepts valid message_added optional payload fields", () => {
+    const event = parseSseEvent(JSON.stringify({
+      seq: 1,
+      type: "message_added",
+      created_at: "2026-05-04T00:00:00Z",
+      payload: {
+        item_id: "m1",
+        role: "user",
+        content: "Hello docs/spec.md",
+        file_paths: ["docs/spec.md"],
+        image_attachments: [{
+          upload_id: "upload-1",
+          name: "image.png",
+          preview_url: "/api/uploads/upload-1",
+        }],
+        part_ids: {
+          content: "m1:content",
+          file_paths: ["m1:file-path:0"],
+          image_attachments: ["m1:image:upload-1"],
+        },
+      },
+    }));
+
+    expect(event?.type).toBe("message_added");
+  });
+
+  it.each([
     ["missing old_item_id", { item: { item_id: "m2", role: "assistant", content: "Hello" } }],
     ["non-object item", { old_item_id: "pending-1", item: null }],
     ["missing item_id", { old_item_id: "pending-1", item: { role: "assistant", content: "Hello" } }],
@@ -68,6 +121,30 @@ describe("parseSseEvent", () => {
     }))).toBeNull();
   });
 
+  it.each([
+    ["non-array file_paths", { file_paths: "docs/spec.md" }],
+    ["non-string file path", { file_paths: ["docs/spec.md", false] }],
+    ["non-array image_attachments", { image_attachments: {} }],
+    ["missing image attachment preview_url", { image_attachments: [{ upload_id: "upload-1", name: "image.png" }] }],
+    ["non-object part_ids", { part_ids: [] }],
+    ["non-array part_ids image_attachments", { part_ids: { content: "m2:content", image_attachments: "m2:image:upload-1" } }],
+  ])("rejects malformed message rekey item optional fields: %s", (_label, optionalFields) => {
+    expect(parseSseEvent(JSON.stringify({
+      seq: 1,
+      type: "message_rekeyed",
+      created_at: "2026-05-04T00:00:00Z",
+      payload: {
+        old_item_id: "pending-1",
+        item: {
+          item_id: "m2",
+          role: "assistant",
+          content: "Hello",
+          ...optionalFields,
+        },
+      },
+    }))).toBeNull();
+  });
+
   it("accepts valid message rekey payloads", () => {
     const event = parseSseEvent(JSON.stringify({
       seq: 1,
@@ -80,6 +157,7 @@ describe("parseSseEvent", () => {
           role: "assistant",
           content: "Hello",
           metadata: { source: "test" },
+          part_ids: null,
         },
       },
     }));

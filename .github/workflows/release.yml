@@ -141,6 +141,16 @@ jobs:
         if: ${{ steps.version.outputs.should_release == 'true' }}
         run: python -m build
 
+      - name: Verify current master before release draft
+        if: ${{ steps.version.outputs.should_release == 'true' }}
+        run: |
+          git fetch origin master
+          current_master="$(git rev-parse origin/master)"
+          if [ "$current_master" != "$GITHUB_SHA" ]; then
+            echo "Refusing to release $GITHUB_SHA because origin/master is $current_master." >&2
+            exit 1
+          fi
+
       - name: Prepare draft GitHub release
         id: draft_release
         if: ${{ steps.version.outputs.should_release == 'true' }}
@@ -165,7 +175,8 @@ jobs:
             exit 1
           fi
 
-          pypi_exists="$(python - <<'PY'
+          pypi_status="$(python - <<'PY'
+          import json
           import os
           import urllib.error
           import urllib.parse
@@ -180,17 +191,30 @@ jobs:
 
           request = urllib.request.Request(url, method="GET")
           try:
-              with urllib.request.urlopen(request, timeout=20):
-                  print("true")
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  data = json.load(response)
           except urllib.error.HTTPError as exc:
               if exc.code != 404:
                   raise
-              print("false")
+              print("missing")
+          else:
+              filenames = [item.get("filename", "") for item in data.get("urls", [])]
+              has_wheel = any(filename.endswith(".whl") for filename in filenames)
+              has_sdist = any(filename.endswith(".tar.gz") for filename in filenames)
+              if has_wheel and has_sdist:
+                  print("complete")
+              else:
+                  print("partial")
           PY
           )"
 
+          if [ "$pypi_status" = "partial" ]; then
+            echo "PyPI version $VERSION for $PROJECT_NAME has incomplete artifacts; expected at least one .whl and one .tar.gz." >&2
+            exit 1
+          fi
+
           if [ "$release_is_draft" = "false" ]; then
-            if [ "$pypi_exists" = "true" ]; then
+            if [ "$pypi_status" = "complete" ]; then
               echo "Release $TAG is already published for $GITHUB_SHA and PyPI has $VERSION."
               echo "upload_pypi=false" >> "$GITHUB_OUTPUT"
               echo "publish_release=false" >> "$GITHUB_OUTPUT"
@@ -201,7 +225,7 @@ jobs:
             exit 1
           fi
 
-          if [ "$pypi_exists" = "true" ] && [ "$release_is_draft" != "true" ]; then
+          if [ "$pypi_status" = "complete" ] && [ "$release_is_draft" != "true" ]; then
             echo "PyPI version $VERSION already exists for $PROJECT_NAME without a matching draft release." >&2
             exit 1
           fi
@@ -216,7 +240,7 @@ jobs:
               --notes-file "$NOTES_FILE"
           fi
 
-          if [ "$pypi_exists" = "true" ]; then
+          if [ "$pypi_status" = "complete" ]; then
             echo "PyPI version $VERSION already exists; publishing existing draft release."
             echo "upload_pypi=false" >> "$GITHUB_OUTPUT"
           else
@@ -224,12 +248,32 @@ jobs:
           fi
           echo "publish_release=true" >> "$GITHUB_OUTPUT"
 
+      - name: Verify current master before PyPI upload
+        if: ${{ steps.version.outputs.should_release == 'true' && steps.draft_release.outputs.upload_pypi == 'true' }}
+        run: |
+          git fetch origin master
+          current_master="$(git rev-parse origin/master)"
+          if [ "$current_master" != "$GITHUB_SHA" ]; then
+            echo "Refusing to release $GITHUB_SHA because origin/master is $current_master." >&2
+            exit 1
+          fi
+
       - name: Publish to PyPI
         if: ${{ steps.version.outputs.should_release == 'true' && steps.draft_release.outputs.upload_pypi == 'true' }}
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: twine upload dist/*
+
+      - name: Verify current master before GitHub release publish
+        if: ${{ steps.version.outputs.should_release == 'true' && steps.draft_release.outputs.publish_release == 'true' }}
+        run: |
+          git fetch origin master
+          current_master="$(git rev-parse origin/master)"
+          if [ "$current_master" != "$GITHUB_SHA" ]; then
+            echo "Refusing to release $GITHUB_SHA because origin/master is $current_master." >&2
+            exit 1
+          fi
 
       - name: Publish GitHub release
         if: ${{ steps.version.outputs.should_release == 'true' && steps.draft_release.outputs.publish_release == 'true' }}

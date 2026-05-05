@@ -97,7 +97,32 @@ function isValidUserQuestionsRequestedPayload(payload: Record<string, unknown>):
 function isValidMessageItemPayload(payload: Record<string, unknown>): boolean {
   return isString(payload.item_id)
     && MESSAGE_ROLES.has(String(payload.role))
-    && isString(payload.content);
+    && isString(payload.content)
+    && isValidOptionalStringArray(payload, "file_paths")
+    && isValidOptionalImageAttachments(payload.image_attachments)
+    && isValidOptionalMessagePartIds(payload.part_ids);
+}
+
+function isValidOptionalStringArray(payload: Record<string, unknown>, key: string): boolean {
+  return !(key in payload) || (Array.isArray(payload[key]) && payload[key].every(isString));
+}
+
+function isValidOptionalImageAttachments(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value)) return false;
+  return value.every((attachment) => {
+    if (!isRecord(attachment)) return false;
+    return isString(attachment.upload_id)
+      && isString(attachment.name)
+      && isString(attachment.preview_url);
+  });
+}
+
+function isValidOptionalMessagePartIds(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!isRecord(value) || !isString(value.content)) return false;
+  return isValidOptionalStringArray(value, "file_paths")
+    && isValidOptionalStringArray(value, "image_attachments");
 }
 
 function isValidPayload(type: string, payload: Record<string, unknown>): boolean {

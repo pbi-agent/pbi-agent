@@ -82,6 +82,32 @@ def test_release_workflow_rejects_release_target_mismatch_before_publishing() ->
     assert create_index < upload_index < publish_index
 
 
+def test_release_workflow_rejects_non_current_master_before_side_effects() -> None:
+    workflow = read_workflow("release.yml")
+
+    draft_guard_index = workflow.index("Verify current master before release draft")
+    fetch_index = workflow.index("git fetch origin master", draft_guard_index)
+    rev_parse_index = workflow.index("git rev-parse origin/master", fetch_index)
+    mismatch_index = workflow.index(
+        '[ "$current_master" != "$GITHUB_SHA" ]', rev_parse_index
+    )
+    message_index = workflow.index("Refusing to release $GITHUB_SHA", mismatch_index)
+    exit_index = workflow.index("exit 1", message_index)
+    create_index = workflow.index('gh release create "$TAG"')
+    upload_guard_index = workflow.index("Verify current master before PyPI upload")
+    upload_index = workflow.index("twine upload dist/*")
+    publish_guard_index = workflow.index(
+        "Verify current master before GitHub release publish"
+    )
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
+
+    assert fetch_index < rev_parse_index < mismatch_index < message_index < exit_index
+    assert exit_index < create_index < upload_guard_index < upload_index
+    assert upload_index < publish_guard_index < publish_index
+    assert workflow.count("git fetch origin master") == 3
+    assert workflow.count("git rev-parse origin/master") == 3
+
+
 def test_release_workflow_rejects_existing_tag_before_publishing() -> None:
     workflow = read_workflow("release.yml")
 
@@ -101,14 +127,40 @@ def test_release_workflow_rejects_existing_pypi_without_matching_draft() -> None
     workflow = read_workflow("release.yml")
 
     pypi_check_index = workflow.index("https://pypi.org/pypi/{}/{}/json")
+    complete_status_index = workflow.index('[ "$pypi_status" = "complete" ]')
     pypi_collision_index = workflow.index("without a matching draft release")
     create_index = workflow.index('gh release create "$TAG"')
     upload_index = workflow.index("twine upload dist/*")
     publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
 
     assert "urllib.request" in workflow
-    assert pypi_check_index < pypi_collision_index < create_index
+    assert (
+        pypi_check_index < complete_status_index < pypi_collision_index < create_index
+    )
     assert create_index < upload_index < publish_index
+
+
+def test_release_workflow_requires_complete_pypi_artifacts_before_publish() -> None:
+    workflow = read_workflow("release.yml")
+
+    pypi_check_index = workflow.index("https://pypi.org/pypi/{}/{}/json")
+    filenames_index = workflow.index('item.get("filename", "")')
+    wheel_index = workflow.index('filename.endswith(".whl")')
+    sdist_index = workflow.index('filename.endswith(".tar.gz")')
+    partial_status_index = workflow.index('print("partial")')
+    partial_guard_index = workflow.index('[ "$pypi_status" = "partial" ]')
+    partial_message_index = workflow.index("has incomplete artifacts")
+    partial_exit_index = workflow.index("exit 1", partial_message_index)
+    pypi_recovery_index = workflow.index(
+        'echo "PyPI version $VERSION already exists; publishing existing draft release."'
+    )
+    upload_index = workflow.index("twine upload dist/*")
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
+
+    assert pypi_check_index < filenames_index < wheel_index < sdist_index
+    assert sdist_index < partial_status_index < partial_guard_index
+    assert partial_guard_index < partial_message_index < partial_exit_index
+    assert partial_exit_index < pypi_recovery_index < upload_index < publish_index
 
 
 def test_release_workflow_skips_when_package_version_did_not_change() -> None:

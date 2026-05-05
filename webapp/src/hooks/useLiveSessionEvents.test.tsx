@@ -53,6 +53,10 @@ function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
   };
 }
 
+function mockSnapshotFetch(queryClient: QueryClient) {
+  return vi.spyOn(queryClient, "fetchQuery").mockResolvedValue({} as never);
+}
+
 function emit(source: MockEventSource, event: Record<string, unknown>) {
   source.onmessage?.(
     new MessageEvent("message", {
@@ -581,6 +585,12 @@ describe("useLiveSessionEvents", () => {
     const invalidateQueries = vi
       .spyOn(queryClient, "invalidateQueries")
       .mockResolvedValue(undefined);
+    let resolveSnapshotFetch: (value: unknown) => void = () => {};
+    const fetchQuery = vi.spyOn(queryClient, "fetchQuery").mockImplementation(() => (
+      new Promise((resolve) => {
+        resolveSnapshotFetch = resolve;
+      }) as never
+    ));
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
 
@@ -604,9 +614,16 @@ describe("useLiveSessionEvents", () => {
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session-runs", "session-1"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["run-detail"] });
+    expect(fetchQuery).toHaveBeenCalledWith(expect.objectContaining({
+      queryKey: ["session", "session-1"],
+    }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(4);
+    resolveSnapshotFetch({});
     await act(async () => {
       await Promise.resolve();
     });
@@ -654,6 +671,7 @@ describe("useLiveSessionEvents", () => {
     const invalidateQueries = vi
       .spyOn(queryClient, "invalidateQueries")
       .mockResolvedValue(undefined);
+    const fetchQuery = mockSnapshotFetch(queryClient);
     const sessionKey1 = getSavedSessionKey("session-1");
     const sessionKey2 = getSavedSessionKey("session-2");
     useSessionStore.getState().hydrateSavedSession("session-1", [
@@ -704,14 +722,18 @@ describe("useLiveSessionEvents", () => {
       expect.objectContaining({ itemId: "message-1" }),
     ]);
     expect(state.sessionsByKey[sessionKey1]?.lastEventSeq).toBe(3);
-    expect(state.sessionsByKey[sessionKey2]?.items).toEqual([]);
+    expect(state.sessionsByKey[sessionKey2]?.items).toEqual([
+      expect.objectContaining({ itemId: "message-2" }),
+    ]);
     expect(state.sessionsByKey[sessionKey2]?.lastEventSeq).toBe(0);
     expect(state.sessionsByKey[sessionKey2]?.liveSessionId).toBe("live-2");
     expect(state.sessionsByKey[sessionKey2]?.connection).toBe("disconnected");
     expect(socket.close).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1000);
     expect(MockEventSource.instances).toHaveLength(1);
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-2"] });
+    expect(fetchQuery).toHaveBeenCalledWith(expect.objectContaining({
+      queryKey: ["session", "session-2"],
+    }));
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session-runs", "session-2"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["run-detail"] });
   });
@@ -721,6 +743,7 @@ describe("useLiveSessionEvents", () => {
     const invalidateQueries = vi
       .spyOn(queryClient, "invalidateQueries")
       .mockResolvedValue(undefined);
+    const fetchQuery = mockSnapshotFetch(queryClient);
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().hydrateSavedSession("session-1", [
       { kind: "message", itemId: "message-1", role: "assistant", content: "partial", markdown: true },
@@ -754,7 +777,9 @@ describe("useLiveSessionEvents", () => {
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(3);
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
+    expect(fetchQuery).toHaveBeenCalledWith(expect.objectContaining({
+      queryKey: ["session", "session-1"],
+    }));
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session-runs", "session-1"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["run-detail"] });
     expect(firstSocket.close).toHaveBeenCalledTimes(1);
@@ -763,7 +788,9 @@ describe("useLiveSessionEvents", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([]);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([
+      expect.objectContaining({ itemId: "message-1" }),
+    ]);
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
 
     await vi.advanceTimersByTimeAsync(1000);
@@ -792,6 +819,7 @@ describe("useLiveSessionEvents", () => {
 
   it("reconnects from cursor zero after replay-incomplete recovery", async () => {
     const queryClient = new QueryClient();
+    mockSnapshotFetch(queryClient);
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(
       sessionKey,
@@ -830,6 +858,7 @@ describe("useLiveSessionEvents", () => {
 
   it("keeps store-driven live session identity while recovering from replay-incomplete", async () => {
     const queryClient = new QueryClient();
+    mockSnapshotFetch(queryClient);
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(
       sessionKey,
@@ -878,12 +907,13 @@ describe("useLiveSessionEvents", () => {
     expect(MockEventSource.instances[1].url).toContain("?since=0");
   });
 
-  it("keeps state and retries when snapshot invalidation fails", async () => {
+  it("keeps state and retries when snapshot fetch fails", async () => {
     const queryClient = new QueryClient();
-    const invalidateQueries = vi
-      .spyOn(queryClient, "invalidateQueries")
+    vi.spyOn(queryClient, "invalidateQueries").mockResolvedValue(undefined);
+    const fetchQuery = vi
+      .spyOn(queryClient, "fetchQuery")
       .mockRejectedValueOnce(new Error("boom"))
-      .mockResolvedValue(undefined);
+      .mockResolvedValue({} as never);
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().hydrateSavedSession("session-1", [
       { kind: "message", itemId: "message-1", role: "assistant", content: "keep", markdown: true },
@@ -941,12 +971,16 @@ describe("useLiveSessionEvents", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([]);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([
+      expect.objectContaining({ itemId: "message-1" }),
+    ]);
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
     await vi.advanceTimersByTimeAsync(2000);
     expect(MockEventSource.instances).toHaveLength(3);
     expect(MockEventSource.instances[2].url).toContain("?since=0");
-    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
+    expect(fetchQuery).toHaveBeenCalledWith(expect.objectContaining({
+      queryKey: ["session", "session-1"],
+    }));
   });
 
   it("invalidates run queries for an attached saved live stream", () => {

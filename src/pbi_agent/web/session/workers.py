@@ -19,6 +19,9 @@ from pbi_agent.web.uploads import load_uploaded_image
 
 _WEB_MANAGER_LEASE_HEARTBEAT_SECS = 5.0
 _SHUTDOWN_INTERRUPTED_MESSAGE = "Interrupted during app shutdown."
+_TASK_FINALIZATION_PERSISTENCE_FAILED_MESSAGE = (
+    "Failed to persist terminal live session finalization."
+)
 
 
 class WorkersMixin:
@@ -62,6 +65,26 @@ class WorkersMixin:
             live_session.terminal_status = previous_terminal_status
             raise
         self._publish_live_session_lifecycle("live_session_ended", live_session)
+
+    def _mark_task_live_session_finalization_failed_locked(
+        self,
+        live_session,  # noqa: ANN001
+        exc: Exception,
+    ) -> None:
+        if live_session.ended_at is not None:
+            return
+        message = f"{_TASK_FINALIZATION_PERSISTENCE_FAILED_MESSAGE} {exc}"
+        live_session.status = "failed"
+        live_session.ended_at = _now_iso()
+        if live_session.exit_code is None:
+            live_session.exit_code = 1
+        live_session.fatal_error = message
+        live_session.snapshot.session_ended = True
+        live_session.snapshot.input_enabled = False
+        live_session.snapshot.wait_message = None
+        live_session.snapshot.processing = None
+        live_session.snapshot.pending_user_questions = None
+        live_session.snapshot.fatal_error = message
 
     def shutdown(self) -> None:
         with self._lock:
@@ -290,14 +313,22 @@ class WorkersMixin:
                     try:
                         with self._lock:
                             self._finalize_live_session_locked(live_session)
-                    except Exception:
+                    except Exception as exc:
                         task_result_finalization_failed = True
+                        with self._lock:
+                            self._mark_task_live_session_finalization_failed_locked(
+                                live_session,
+                                exc,
+                            )
                         break
                 self._publish_task_updated(next_record)
                 if terminal_task_update:
                     break
-                with SessionStore() as store:
-                    rerunning = store.set_kanban_task_running(task_id)
+                with self._lock:
+                    if self._shutdown_requested:
+                        break
+                    with SessionStore() as store:
+                        rerunning = store.set_kanban_task_running(task_id)
                 if rerunning is None:
                     break
                 self._publish_task_updated(rerunning)

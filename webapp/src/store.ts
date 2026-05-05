@@ -72,7 +72,10 @@ type SessionStore = {
   ) => string;
   updateRuntimeFromSession: (sessionKey: string, session: LiveSession) => void;
   setConnection: (sessionKey: string, connection: ConnectionState) => void;
-  resetStreamState: (sessionKey: string, options?: { preserveLiveSession?: boolean }) => void;
+  resetStreamState: (sessionKey: string, options?: {
+    preserveItems?: boolean;
+    preserveLiveSession?: boolean;
+  }) => void;
   applyEvent: (
     sessionKey: string,
     event: WebEvent,
@@ -928,6 +931,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
             ...createEmptySessionState(current.sessionId),
             sessionId: current.sessionId,
             liveSessionId: options.preserveLiveSession ? current.liveSessionId : null,
+            items: options.preserveItems ? current.items : [],
+            itemsVersion: options.preserveItems ? current.itemsVersion : 0,
+            subAgents: options.preserveItems ? current.subAgents : {},
             connection: "disconnected",
           },
         },

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { eventStreamUrl } from "../api";
+import { eventStreamUrl, fetchSessionDetail } from "../api";
 import { nextClientStreamId, updateLiveSessionDebug } from "../debug/liveSessionDebug";
 import { parseSseEvent } from "../events";
 import { resolveSessionEventTarget, useSessionStore } from "../store";
@@ -84,14 +84,23 @@ export function useLiveSessionEvents(
       ];
       if (targetSessionId) {
         invalidations.push(
-          queryClient.invalidateQueries({ queryKey: ["session", targetSessionId] }),
           queryClient.invalidateQueries({ queryKey: ["session-runs", targetSessionId] }),
         );
       }
-      void Promise.all(invalidations)
+      const snapshotFetch = targetSessionId
+        ? queryClient.fetchQuery({
+            queryKey: ["session", targetSessionId],
+            queryFn: () => fetchSessionDetail(targetSessionId),
+            staleTime: 0,
+          })
+        : Promise.resolve(null);
+      void Promise.all([...invalidations, snapshotFetch])
         .then(() => {
           if (disposed || source !== currentSource) return;
-          resetStreamState(targetSessionKey, { preserveLiveSession: true });
+          resetStreamState(targetSessionKey, {
+            preserveItems: targetSessionId !== null,
+            preserveLiveSession: true,
+          });
           if (isCurrentStreamTarget) {
             setConnection(targetSessionKey, "recovering");
             scheduleReconnect(currentSource);

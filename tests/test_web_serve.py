@@ -2662,10 +2662,20 @@ def test_completed_task_terminal_persist_failure_does_not_mark_task_failed(
             task = client.get("/api/tasks").json()["tasks"][0]
             assert task["run_status"] == "completed"
             assert task["last_result_summary"] == "Done."
-            assert live_session.status == "running"
-            assert live_session.ended_at is None
-            assert live_session.exit_code is None
-            assert live_session.snapshot.session_ended is False
+            assert task_id not in manager._running_task_ids
+            assert task_id not in manager._task_workers
+            assert live_session.worker is worker
+            assert live_session.status == "failed"
+            assert live_session.ended_at is not None
+            assert live_session.exit_code == 1
+            assert "Failed to persist terminal live session finalization" in (
+                live_session.fatal_error or ""
+            )
+            assert live_session.snapshot.session_ended is True
+            assert live_session.snapshot.fatal_error == live_session.fatal_error
+            failed_detail = client.get(f"/api/sessions/{session_id}").json()
+            assert failed_detail["active_live_session"] is None
+            assert failed_detail["session"]["active_live_session_id"] is None
             assert not any(
                 event["type"] == "session_state"
                 and event["payload"].get("state") == "ended"
@@ -2684,20 +2694,6 @@ def test_completed_task_terminal_persist_failure_does_not_mark_task_failed(
                 and json.loads(record.metadata_json)["payload"].get("state") == "ended"
                 for record in failed_records
             )
-
-            with manager._lock:
-                manager._finalize_live_session_locked(live_session)
-
-            retried_task = client.get("/api/tasks").json()["tasks"][0]
-            assert retried_task["run_status"] == "completed"
-            assert live_session.status == "ended"
-            assert live_session.ended_at is not None
-            assert live_session.exit_code == 0
-            with SessionStore() as store:
-                retried_run = store.get_run_session(live_session_id)
-            assert retried_run is not None
-            assert retried_run.ended_at == live_session.ended_at
-            assert json.loads(retried_run.snapshot_json)["session_ended"] is True
 
 
 def test_delete_session_rejects_task_start_setup_before_live_registration(
@@ -3685,6 +3681,68 @@ def test_auto_start_stage_runs_once_before_done(monkeypatch, tmp_path) -> None:
     assert task_payload["stage"] == "done"
     assert task_payload["run_status"] == "completed"
     assert task_payload["session_id"] == "session-2"
+
+
+def test_shutdown_stops_task_auto_start_continuation(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    _write_default_commands(tmp_path)
+    manager = WebSessionManager(_settings())
+    call_count = 0
+
+    def fake_run_single_turn_in_directory(_prompt, _runtime, _display, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        with manager._lock:
+            manager._shutdown_requested = True
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Plan complete.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan", "command_id": "plan"},
+                {
+                    "id": "implement",
+                    "name": "Implement",
+                    "command_id": "implement",
+                    "auto_start": True,
+                },
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+
+        with patch(
+            "pbi_agent.web.session.workers.run_single_turn_in_directory",
+            side_effect=fake_run_single_turn_in_directory,
+        ):
+            manager.run_task(task_id)
+
+            deadline = time.monotonic() + 2
+            while True:
+                worker = manager._task_workers.get(task_id)
+                if worker is None or not worker.is_alive():
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("task worker did not stop in time")
+                time.sleep(0.01)
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            current = store.get_kanban_task(task_id)
+
+        assert call_count == 1
+        assert current is not None
+        assert current.stage == "implement"
+        assert current.run_status == "completed"
+        assert current.last_result_summary == "Plan complete."
+    finally:
+        manager.shutdown()
 
 
 def test_auto_started_stage_prompt_is_visible_while_running(
