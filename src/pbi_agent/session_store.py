@@ -1102,9 +1102,12 @@ class SessionStore:
         exit_code: int | None = None,
         fatal_error: str | None = None,
         metadata: dict[str, object] | None = None,
+        clear_session_id: bool = False,
     ) -> None:
         clauses: list[str] = []
         params: list[object] = []
+        if clear_session_id:
+            clauses.append("session_id = NULL")
         scalar_values = {
             "session_id": session_id,
             "status": status,
@@ -1130,6 +1133,8 @@ class SessionStore:
             "fatal_error": fatal_error,
         }
         for key, value in scalar_values.items():
+            if clear_session_id and key == "session_id":
+                continue
             if value is None:
                 continue
             clauses.append(f"{key} = ?")

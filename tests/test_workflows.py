@@ -44,6 +44,19 @@ def test_release_workflow_runs_validation_gates_and_changelog_notes() -> None:
     assert "--notes-file" in workflow
 
 
+def test_release_workflow_verifies_existing_release_target() -> None:
+    workflow = read_workflow("release.yml")
+
+    release_view_index = workflow.index(
+        'gh release view "$TAG" --json targetCommitish --jq .targetCommitish'
+    )
+    mismatch_index = workflow.index('[ "$release_target" != "$GITHUB_SHA" ]')
+    exit_index = workflow.index("exit 1", mismatch_index)
+    create_index = workflow.index('gh release create "$TAG"')
+
+    assert release_view_index < mismatch_index < exit_index < create_index
+
+
 def test_publish_workflow_rebuilds_static_assets_before_distribution() -> None:
     workflow = read_workflow("publish.yml")
 
@@ -54,6 +67,28 @@ def test_publish_workflow_rebuilds_static_assets_before_distribution() -> None:
     assert 'bun-version: "1.3.11"' in workflow
     assert "bun install --frozen-lockfile" in workflow
     assert build_index < diff_index < distribution_index
+
+
+def test_publish_workflow_verifies_release_target_before_building() -> None:
+    workflow = read_workflow("publish.yml")
+
+    checkout_index = workflow.index("ref: ${{ github.event.workflow_run.head_sha }}")
+    expected_sha_index = workflow.index(
+        "HEAD_SHA: ${{ github.event.workflow_run.head_sha }}"
+    )
+    release_view_index = workflow.index(
+        'gh release view "$EXPECTED_TAG" --json targetCommitish --jq .targetCommitish'
+    )
+    mismatch_index = workflow.index('[ "$release_target" != "$HEAD_SHA" ]')
+    install_index = workflow.index("bun install --frozen-lockfile")
+
+    assert (
+        checkout_index
+        < expected_sha_index
+        < release_view_index
+        < mismatch_index
+        < install_index
+    )
 
 
 def test_docs_deploy_workflow_pins_bun_version() -> None:

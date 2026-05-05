@@ -51,6 +51,42 @@ describe("parseSseEvent", () => {
   });
 
   it.each([
+    ["missing old_item_id", { item: { item_id: "m2", role: "assistant", content: "Hello" } }],
+    ["non-object item", { old_item_id: "pending-1", item: null }],
+    ["missing item_id", { old_item_id: "pending-1", item: { role: "assistant", content: "Hello" } }],
+    ["non-string item_id", { old_item_id: "pending-1", item: { item_id: 2, role: "assistant", content: "Hello" } }],
+    ["invalid role", { old_item_id: "pending-1", item: { item_id: "m2", role: "system", content: "Hello" } }],
+    ["missing content", { old_item_id: "pending-1", item: { item_id: "m2", role: "assistant" } }],
+    ["non-string content", { old_item_id: "pending-1", item: { item_id: "m2", role: "assistant", content: [] } }],
+  ])("rejects malformed message rekey payloads: %s", (_label, payload) => {
+    expect(parseSseEvent(JSON.stringify({
+      seq: 1,
+      type: "message_rekeyed",
+      created_at: "2026-05-04T00:00:00Z",
+      payload,
+    }))).toBeNull();
+  });
+
+  it("accepts valid message rekey payloads", () => {
+    const event = parseSseEvent(JSON.stringify({
+      seq: 1,
+      type: "message_rekeyed",
+      created_at: "2026-05-04T00:00:00Z",
+      payload: {
+        old_item_id: "pending-1",
+        item: {
+          item_id: "m2",
+          role: "assistant",
+          content: "Hello",
+          metadata: { source: "test" },
+        },
+      },
+    }));
+
+    expect(event?.type).toBe("message_rekeyed");
+  });
+
+  it.each([
     ["missing prompt_id", { questions: [{ question_id: "q1", question: "Pick?", suggestions: ["A", "B", "C"] }] }],
     ["empty questions", { prompt_id: "prompt-1", questions: [] }],
     ["missing question_id", { prompt_id: "prompt-1", questions: [{ question: "Pick?", suggestions: ["A", "B", "C"] }] }],

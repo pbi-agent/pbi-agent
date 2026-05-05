@@ -235,37 +235,45 @@ class SavedSessionsMixin:
         return {"runs": runs, "total_count": total_count}
 
     def delete_session(self, session_id: str) -> None:
-        with SessionStore() as store:
-            record = store.get_session(session_id)
-            if record is None:
-                raise KeyError(session_id)
-            if record.directory != self._directory_key:
-                raise KeyError(session_id)
+        with self._lock:
+            if self._find_live_session_for_saved_session_locked(session_id) is not None:
+                raise RuntimeError(
+                    "Cannot delete a session while an active run is still running."
+                )
 
-            affected_tasks = [
-                task
-                for task in store.list_kanban_tasks(self._directory_key)
-                if task.session_id == session_id
-            ]
-            updated_tasks: list[KanbanTaskRecord] = []
-            for task in affected_tasks:
-                updated = store.update_kanban_task(task.task_id, clear_session_id=True)
-                if updated is not None:
-                    updated_tasks.append(updated)
+            with SessionStore() as store:
+                record = store.get_session(session_id)
+                if record is None:
+                    raise KeyError(session_id)
+                if record.directory != self._directory_key:
+                    raise KeyError(session_id)
 
-            task_upload_ids = {
-                attachment.upload_id
-                for task in store.list_kanban_tasks(self._directory_key)
-                for attachment in task.image_attachments
-            }
-            upload_ids = [
-                attachment.upload_id
-                for message in store.list_messages(session_id)
-                for attachment in message.image_attachments
-                if attachment.upload_id not in task_upload_ids
-            ]
+                affected_tasks = [
+                    task
+                    for task in store.list_kanban_tasks(self._directory_key)
+                    if task.session_id == session_id
+                ]
+                updated_tasks: list[KanbanTaskRecord] = []
+                for task in affected_tasks:
+                    updated = store.update_kanban_task(
+                        task.task_id, clear_session_id=True
+                    )
+                    if updated is not None:
+                        updated_tasks.append(updated)
 
-            deleted = store.delete_session(session_id)
+                task_upload_ids = {
+                    attachment.upload_id
+                    for task in store.list_kanban_tasks(self._directory_key)
+                    for attachment in task.image_attachments
+                }
+                upload_ids = [
+                    attachment.upload_id
+                    for message in store.list_messages(session_id)
+                    for attachment in message.image_attachments
+                    if attachment.upload_id not in task_upload_ids
+                ]
+
+                deleted = store.delete_session(session_id)
 
         if not deleted:
             raise KeyError(session_id)

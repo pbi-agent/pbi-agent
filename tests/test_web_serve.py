@@ -1556,6 +1556,56 @@ def test_live_events_include_canonical_identity_in_stream_and_persistence(
     assert run_metadata["live_session_id"] == live_session_id
 
 
+def test_live_session_bind_none_clears_persisted_run_session_id(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = manager.create_live_session(session_id=session_id)
+        live_session_id = str(created["live_session_id"])
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            initial_run = store.get_run_session(live_session_id)
+        assert initial_run is not None
+        assert initial_run.session_id == session_id
+
+        manager._bind_live_session(live_session_id, None)
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            rebound_run = store.get_run_session(live_session_id)
+        assert rebound_run is not None
+        assert rebound_run.session_id is None
+        assert json.loads(rebound_run.snapshot_json)["session_id"] is None
+    finally:
+        manager.shutdown()
+
+
 def test_late_live_events_after_terminal_finalization_do_not_mutate_run(
     tmp_path, monkeypatch
 ) -> None:
@@ -5383,6 +5433,56 @@ def test_delete_session_endpoint_removes_session_and_clears_task_links(
 
     assert sessions_response.json()["sessions"] == []
     assert tasks_response.json()["tasks"][0]["session_id"] is None
+
+
+def test_delete_session_endpoint_rejects_active_bound_live_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+    run_started = threading.Event()
+    release_run = threading.Event()
+
+    def fake_run_single_turn(prompt, runtime, display, **kwargs):
+        del prompt, runtime, display
+        assert isinstance(kwargs["persisted_user_message_id"], int)
+        run_started.set()
+        assert release_run.wait(timeout=2)
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Done.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    with patch(
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
+        side_effect=fake_run_single_turn,
+    ):
+        with TestClient(app) as client:
+            _put_two_stage_board(client)
+            task_id, session_id = _start_task_session(client)
+            assert run_started.wait(timeout=2)
+
+            delete_response = client.delete(f"/api/sessions/{session_id}")
+
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                persisted_session = store.get_session(session_id)
+                persisted_task = store.get_kanban_task(task_id)
+                persisted_messages = store.list_messages(session_id)
+                persisted_run = store.get_latest_web_session_run(session_id)
+
+            release_run.set()
+            _wait_for_first_task_status(client, "completed")
+
+    assert delete_response.status_code == 400
+    assert "active run" in delete_response.json()["detail"]
+    assert persisted_session is not None
+    assert persisted_task is not None
+    assert persisted_task.session_id == session_id
+    assert [message.content for message in persisted_messages] == ["Investigate"]
+    assert persisted_run is not None
+    assert persisted_run.session_id == session_id
 
 
 def test_delete_session_endpoint_accepts_saved_sessions_from_any_provider(

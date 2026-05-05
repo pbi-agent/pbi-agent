@@ -93,6 +93,12 @@ function isValidUserQuestionsRequestedPayload(payload: Record<string, unknown>):
   });
 }
 
+function isValidMessageItemPayload(payload: Record<string, unknown>): boolean {
+  return isString(payload.item_id)
+    && MESSAGE_ROLES.has(String(payload.role))
+    && isString(payload.content);
+}
+
 function isValidPayload(type: string, payload: Record<string, unknown>): boolean {
   switch (type) {
     case "server.replay_incomplete":
@@ -117,11 +123,11 @@ function isValidPayload(type: string, payload: Record<string, unknown>): boolean
       return (payload.scope === "session" || payload.scope === "turn")
         && isRecord(payload.usage);
     case "message_added":
-      return isString(payload.item_id)
-        && MESSAGE_ROLES.has(String(payload.role))
-        && isString(payload.content);
+      return isValidMessageItemPayload(payload);
     case "message_rekeyed":
-      return isString(payload.old_item_id) && isRecord(payload.item);
+      return isString(payload.old_item_id)
+        && isRecord(payload.item)
+        && isValidMessageItemPayload(payload.item);
     case "message_removed":
       return isString(payload.item_id);
     case "thinking_updated":

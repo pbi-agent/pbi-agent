@@ -743,6 +743,7 @@ class LiveSessionsMixin:
             store.update_run_session(
                 live_session.live_session_id,
                 session_id=live_session.bound_session_id,
+                clear_session_id=live_session.bound_session_id is None,
                 status=_persisted_web_run_status(live_session),
                 ended_at=live_session.ended_at,
                 kind=live_session.kind,

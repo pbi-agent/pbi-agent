@@ -126,6 +126,10 @@ describe("session store", () => {
     const sessionKey2 = getSavedSessionKey("session-2");
     useSessionStore.getState().hydrateSavedSession("session-1", [], 0);
     useSessionStore.getState().hydrateSavedSession("session-2", [], 0);
+    useSessionStore.getState().attachLiveSession(
+      sessionKey2,
+      makeLiveSession({ live_session_id: "live-2", session_id: "session-2", last_event_seq: 0 }),
+    );
 
     const resolvedKey = useSessionStore.getState().applyEvent(sessionKey1, makeEvent({
       seq: 1,
@@ -179,7 +183,7 @@ describe("session store", () => {
     ]);
   });
 
-  it("creates an unknown saved target without moving or corrupting the fallback", () => {
+  it("rejects an unknown saved target with an unattached live id without corrupting the fallback", () => {
     const fallbackKey = getLiveSessionKey("live-1");
     const targetKey = getSavedSessionKey("session-2");
     useSessionStore.getState().attachLiveSession(
@@ -209,14 +213,16 @@ describe("session store", () => {
 
     const store = useSessionStore.getState();
     expect(resolvedKey.sessionKey).toBe(targetKey);
+    expect(resolvedKey).toEqual(expect.objectContaining({
+      applied: false,
+      reason: "stale-live-session",
+    }));
     expect(store.sessionsByKey[fallbackKey]?.items).toEqual([
       expect.objectContaining({ itemId: "fallback-message", content: "fallback" }),
     ]);
-    expect(store.sessionsByKey[targetKey]?.items).toEqual([
-      expect.objectContaining({ itemId: "target-message", content: "target" }),
-    ]);
+    expect(store.sessionsByKey[targetKey]).toBeUndefined();
     expect(store.liveSessionIndex["live-1"]).toBe(fallbackKey);
-    expect(store.liveSessionIndex["live-2"]).toBe(targetKey);
+    expect(store.liveSessionIndex["live-2"]).toBeUndefined();
   });
 
   it("still rekeys a live fallback when session identity binds the same stream", () => {
@@ -268,15 +274,87 @@ describe("session store", () => {
 
     const store = useSessionStore.getState();
     expect(resolvedKey.sessionKey).toBe(kanbanKey);
+    expect(resolvedKey).toEqual(expect.objectContaining({
+      applied: false,
+      reason: "stale-live-session",
+    }));
     expect(store.sessionsByKey[fallbackKey]?.items).toEqual([
       expect.objectContaining({ itemId: "other-message" }),
     ]);
     expect(store.sessionsByKey[kanbanKey]).toEqual(expect.objectContaining({
       liveSessionId: null,
       sessionEnded: false,
-      lastEventSeq: 3,
+      lastEventSeq: 2,
     }));
     expect(store.liveSessionIndex["task-live-1"]).toBeUndefined();
+  });
+
+  it("rejects late saved-session events carrying a stale detached live id", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "old-live-1", session_id: "session-1", last_event_seq: 0 }),
+    );
+    useSessionStore.getState().hydrateSavedSession("session-1", [
+      { kind: "message", itemId: "persisted-message", role: "assistant", content: "persisted", markdown: true },
+    ], 0);
+
+    const result = useSessionStore.getState().applyEvent(sessionKey, makeEvent({
+      seq: 1,
+      payload: {
+        session_id: "session-1",
+        live_session_id: "old-live-1",
+        item_id: "late-message",
+        role: "assistant",
+        content: "late",
+      },
+    }));
+
+    const store = useSessionStore.getState();
+    expect(result).toEqual(expect.objectContaining({
+      sessionKey,
+      applied: false,
+      reason: "stale-live-session",
+    }));
+    expect(store.sessionsByKey[sessionKey]).toEqual(expect.objectContaining({
+      liveSessionId: null,
+      lastEventSeq: 0,
+    }));
+    expect(store.sessionsByKey[sessionKey]?.items).toEqual([
+      expect.objectContaining({ itemId: "persisted-message", content: "persisted" }),
+    ]);
+    expect(store.liveSessionIndex["old-live-1"]).toBeUndefined();
+  });
+
+  it("applies saved-session events for an explicitly attached new live stream", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().hydrateSavedSession("session-1", [], 0);
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "new-live-1", session_id: "session-1", last_event_seq: 0 }),
+    );
+
+    const result = useSessionStore.getState().applyEvent(sessionKey, makeEvent({
+      seq: 1,
+      payload: {
+        session_id: "session-1",
+        live_session_id: "new-live-1",
+        item_id: "new-message",
+        role: "assistant",
+        content: "new",
+      },
+    }));
+
+    const store = useSessionStore.getState();
+    expect(result).toEqual(expect.objectContaining({ sessionKey, applied: true }));
+    expect(store.sessionsByKey[sessionKey]).toEqual(expect.objectContaining({
+      liveSessionId: "new-live-1",
+      lastEventSeq: 1,
+    }));
+    expect(store.sessionsByKey[sessionKey]?.items).toEqual([
+      expect.objectContaining({ itemId: "new-message", content: "new" }),
+    ]);
+    expect(store.liveSessionIndex["new-live-1"]).toBe(sessionKey);
   });
 
   it("reduces cursor decisions independently from the store", () => {
@@ -850,10 +928,38 @@ describe("session store", () => {
     expect(state.itemsVersion).toBe(2);
   });
 
-  it("removes stale live routing when hydrating a saved session", () => {
+  it("clears stale live and ask-user state when hydrating a saved session", () => {
     const sessionKey = getSavedSessionKey("session-1");
     const otherSessionKey = getSavedSessionKey("session-2");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+    useSessionStore.getState().setConnection(sessionKey, "connected");
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 5,
+      type: "wait_state",
+      created_at: "2026-04-16T12:00:02Z",
+      payload: { active: true, message: "Waiting" },
+    });
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 6,
+      type: "processing_state",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: { active: true, phase: "model_wait", message: "Thinking" },
+    });
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 7,
+      type: "user_questions_requested",
+      created_at: "2026-04-16T12:00:04Z",
+      payload: {
+        prompt_id: "prompt-1",
+        questions: [
+          {
+            question_id: "question-1",
+            question: "Which path?",
+            suggestions: ["A", "B", "C"],
+          },
+        ],
+      },
+    });
     useSessionStore.getState().attachLiveSession(
       otherSessionKey,
       makeLiveSession({ live_session_id: "live-2", session_id: "session-2", last_event_seq: 5 }),
@@ -869,17 +975,24 @@ describe("session store", () => {
           markdown: true,
         },
       ],
-      5,
+      7,
     );
 
     let store = useSessionStore.getState();
     expect(store.liveSessionIndex["live-1"]).toBeUndefined();
     expect(store.sessionsByKey[sessionKey]?.liveSessionId).toBeNull();
+    expect(store.sessionsByKey[sessionKey]).toEqual(expect.objectContaining({
+      connection: "disconnected",
+      inputEnabled: false,
+      waitMessage: null,
+      processing: null,
+      pendingUserQuestions: null,
+    }));
 
     const result = useSessionStore.getState().applyEvent(otherSessionKey, {
-      seq: 6,
+      seq: 8,
       type: "message_added",
-      created_at: "2026-04-16T12:00:02Z",
+      created_at: "2026-04-16T12:00:05Z",
       payload: {
         live_session_id: "live-1",
         item_id: "message-1",
@@ -907,9 +1020,9 @@ describe("session store", () => {
     expect(store.liveSessionIndex["live-2"]).toBe(otherSessionKey);
 
     const sameFallbackResult = useSessionStore.getState().applyEvent(sessionKey, {
-      seq: 6,
+      seq: 8,
       type: "message_added",
-      created_at: "2026-04-16T12:00:03Z",
+      created_at: "2026-04-16T12:00:06Z",
       payload: {
         live_session_id: "live-1",
         item_id: "message-2",

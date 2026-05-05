@@ -34,6 +34,7 @@ jobs:
       - name: Verify release tag matches package version
         env:
           GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           python - <<'PY'
           import os
@@ -47,7 +48,11 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
               fh.write(f"EXPECTED_TAG={expected_tag}\n")
           PY
-          gh release view "$EXPECTED_TAG" --json tagName >/dev/null
+          release_target="$(gh release view "$EXPECTED_TAG" --json targetCommitish --jq .targetCommitish)"
+          if [ "$release_target" != "$HEAD_SHA" ]; then
+            echo "Release $EXPECTED_TAG targets $release_target, expected $HEAD_SHA." >&2
+            exit 1
+          fi
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile

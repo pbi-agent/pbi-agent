@@ -229,6 +229,10 @@ describe("useLiveSessionEvents", () => {
     const queryClient = new QueryClient();
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().hydrateSavedSession("session-1", [], 2);
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", session_id: "session-1", last_event_seq: 2 }),
+    );
 
     renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
       wrapper: createWrapper(queryClient),
@@ -299,10 +303,14 @@ describe("useLiveSessionEvents", () => {
     expect(state.liveSessionIndex["live-1"]).toBe(sessionKey);
   });
 
-  it("accepts the first live id for an already hydrated saved session", () => {
+  it("applies events for an attached saved-session live stream", () => {
     const queryClient = new QueryClient();
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().hydrateSavedSession("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", session_id: "session-1", last_event_seq: 0 }),
+    );
 
     renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
       wrapper: createWrapper(queryClient),
@@ -341,6 +349,10 @@ describe("useLiveSessionEvents", () => {
     const sessionKey2 = getSavedSessionKey("session-2");
     useSessionStore.getState().hydrateSavedSession("session-1", [], 0);
     useSessionStore.getState().hydrateSavedSession("session-2", [], 0);
+    useSessionStore.getState().attachLiveSession(
+      sessionKey2,
+      makeLiveSession({ live_session_id: "live-2", session_id: "session-2", last_event_seq: 0 }),
+    );
 
     renderHook(() => useLiveSessionEvents(sessionKey1, "live-1", "session-1"), {
       wrapper: createWrapper(queryClient),
@@ -659,6 +671,11 @@ describe("useLiveSessionEvents", () => {
     useSessionStore.getState().hydrateSavedSession("session-1", [
       { kind: "message", itemId: "message-1", role: "assistant", content: "partial", markdown: true },
     ], 3);
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", session_id: "session-1", last_event_seq: 3 }),
+      { preserveItems: true },
+    );
 
     renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
       wrapper: createWrapper(queryClient),
@@ -830,14 +847,18 @@ describe("useLiveSessionEvents", () => {
     expect(MockEventSource.instances).toHaveLength(1);
   });
 
-  it("invalidates run queries for a saved session resolved from the live-session index", () => {
+  it("invalidates run queries for an attached saved live stream", () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi
       .spyOn(queryClient, "invalidateQueries")
       .mockResolvedValue(undefined);
-    const liveKey = "live:live-1";
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", session_id: "session-1", last_event_seq: 0 }),
+    );
 
-    renderHook(() => useLiveSessionEvents(liveKey, "live-1"), {
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
       wrapper: createWrapper(queryClient),
     });
 
@@ -848,7 +869,7 @@ describe("useLiveSessionEvents", () => {
           seq: 1,
           type: "input_state",
           created_at: "2026-04-27T00:00:00Z",
-          payload: { enabled: false },
+          payload: { enabled: false, session_id: "session-1", live_session_id: "live-1" },
         }),
       }),
     );
@@ -856,19 +877,9 @@ describe("useLiveSessionEvents", () => {
       new MessageEvent("message", {
         data: JSON.stringify({
           seq: 2,
-          type: "session_identity",
-          created_at: "2026-04-27T00:00:01Z",
-          payload: { session_id: "session-1" },
-        }),
-      }),
-    );
-    socket.onmessage?.(
-      new MessageEvent("message", {
-        data: JSON.stringify({
-          seq: 3,
           type: "input_state",
           created_at: "2026-04-27T00:00:02Z",
-          payload: { enabled: true },
+          payload: { enabled: true, session_id: "session-1", live_session_id: "live-1" },
         }),
       }),
     );
@@ -886,6 +897,11 @@ describe("useLiveSessionEvents", () => {
     useSessionStore.getState().hydrateSavedSession("session-1", [
       { kind: "message", itemId: "message-2", role: "assistant", content: "before", markdown: true },
     ], 2);
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", session_id: "session-1", last_event_seq: 2 }),
+      { preserveItems: true },
+    );
 
     renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
       wrapper: createWrapper(queryClient),

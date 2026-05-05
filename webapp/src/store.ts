@@ -746,6 +746,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             inputEnabled: false,
             waitMessage: null,
             processing: null,
+            pendingUserQuestions: null,
             restoredInput: null,
             sessionEnded: false,
             // Set lastEventSeq from the server so the WS snapshot
@@ -978,7 +979,6 @@ export const useSessionStore = create<SessionStore>((set) => ({
         target.liveSessionId
         && current.sessionId
         && !current.liveSessionId
-        && !target.sessionId
       );
       const reduced = reduceSessionEvent(current, event as SessionWebEvent, {
         eventLiveSessionId: target.liveSessionId,

@@ -1,8 +1,9 @@
 # TODO
 
-[X] Prevent task workers from starting after shutdown is requested
-[X] Fail and notify backlog task startup errors after auto-stage move
-[X] Remove stale live-session routing indexes on saved-session hydration
-[X] Validate `user_questions_requested` SSE payloads
-[X] Strengthen release CI validation and release notes
-[X] Run final validation and update memory
+[X] Reject deleting saved sessions with active live workers
+[X] Verify release tag target before publishing artifacts
+[X] Persist clearing web run `session_id` bindings
+[X] Reject stale saved-session events carrying old live ids
+[X] Clear stale pending questions on saved-session hydration
+[X] Strictly validate `message_rekeyed` SSE payloads
+[X] Run final validation, rebuild assets, and update memory

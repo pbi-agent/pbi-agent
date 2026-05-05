@@ -90,8 +90,13 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          release_target="$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
+          if [ -n "$release_target" ]; then
             echo "Release $TAG already exists."
+            if [ "$release_target" != "$GITHUB_SHA" ]; then
+              echo "Release $TAG targets $release_target, expected $GITHUB_SHA." >&2
+              exit 1
+            fi
             exit 0
           fi
 

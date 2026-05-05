@@ -1,13 +1,15 @@
 # Orchestrate Mode
 
-Decompose work into focused sub-agent tasks. Execute sequentially. Main agent owns quality.
+Decompose work into the fewest accurate sub-agent tasks. Use a single sub-agent task when the work is best handled as one coherent implementation. Execute in parallel only when tasks are fully isolated and dependency-free; otherwise execute sequentially. Main agent owns quality.
 
 ## Core Rules
 
 You own task. Sub-agents implement only.
 
 - Own scope, ordering, TODO state, memory, final correctness.
-- Run exactly one implementation sub-agent at a time.
+- Default to one implementation sub-agent at a time unless a safe parallel batch qualifies below.
+- Do not force multiple sub-agent steps when one bounded task is clearer or more accurate.
+- Run sub-agents in parallel only when their scopes are completely isolated, touch different code areas, and have no ordering, data, contract, or validation dependency.
 - Review every sub-agent result before accept.
 - Do not trust sub-agent success claim. Check diff, rerun focused validation.
 - If invalid, fix directly or launch repair sub-agent with exact finding.
@@ -33,13 +35,14 @@ Use compact markers:
 
 Convert findings to TODOs:
 - one reviewable fix per TODO
+- use a single TODO when the task is cohesive and splitting would reduce correctness, context, or efficiency
 - order by severity, dependency, risk
 - keep final TODO for full validation + memory/handoff
 - only main agent edits `TODO.md`
 
 ## Sequential Execution Loop
 
-For each TODO:
+For each TODO that is not part of a safe parallel batch. If there is only one TODO, run this loop once:
 1. Mark the TODO `[>]`.
 2. Launch one sub-agent with a narrow implementation prompt.
 3. Wait for the sub-agent result.
@@ -50,7 +53,30 @@ For each TODO:
 8. Rerun focused validation.
 9. Mark the TODO `[X]` only after acceptance.
 
-Never batch TODOs into one sub-agent unless inseparable.
+Prefer one sub-agent task when the requested change is cohesive, has one acceptance boundary, or requires shared context to avoid inconsistent edits. Split into multiple TODOs only when the work has independently reviewable fixes, separable risk, or clear ordering dependencies.
+
+## Parallel Execution
+
+Parallel sub-agents are allowed only for TODOs that are completely independent.
+
+Before launching a parallel batch, verify every TODO in the batch:
+- touches different files or clearly separate subsystems
+- has no shared symbols, schemas, generated files, routes, persistence, tests, fixtures, or configuration
+- has no ordering dependency on another TODO in the batch
+- can be reviewed and validated independently
+- cannot conflict with unrelated dirty worktree changes
+
+For a safe parallel batch:
+1. Mark each TODO `[>]`.
+2. Launch one bounded sub-agent per TODO at the same time.
+3. Wait for all sub-agent results.
+4. Review each result separately before accepting any dependent follow-up work.
+5. Inspect combined diff for conflicts, integration issues, and accidental overlap.
+6. Run focused validation for each TODO plus any combined validation needed by touched surfaces.
+7. If any TODO fails review, fix directly or launch a repair sub-agent for that TODO only.
+8. Mark each TODO `[X]` only after its own review and validation pass.
+
+If isolation is uncertain, do not run in parallel.
 
 ## Sub-Agent Prompt Requirements
 
