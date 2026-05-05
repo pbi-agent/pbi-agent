@@ -491,6 +491,9 @@ class _EventDisplayBase(DisplayProtocol):
             },
         )
 
+    def render_transient_markdown(self, text: str) -> None:
+        self.render_markdown(text)
+
     def render_thinking(
         self,
         text: str | None = None,
@@ -874,6 +877,20 @@ class WebDisplay(_EventDisplayBase):
             return
         self._input_enabled_state = enabled
         self._publish("input_state", {"enabled": enabled})
+
+    def render_transient_markdown(self, text: str) -> None:
+        from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
+
+        self._publish(
+            "message_added",
+            {
+                TRANSIENT_WEB_EVENT_KEY: True,
+                "item_id": self._next_id("message"),
+                "role": "assistant",
+                "content": text,
+                "markdown": True,
+            },
+        )
 
     def request_shutdown(self) -> None:
         self._shutdown.set()

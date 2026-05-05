@@ -458,11 +458,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       }
 
       try {
+        refocusAfterSubmitRef.current = true;
         await onSubmit({
           text: trimmed,
           images: pendingImages.map((image) => image.file),
         });
-        refocusAfterSubmitRef.current = true;
         clearPendingImages();
         setInput("");
         setAttachmentMessage(null);
@@ -472,6 +472,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           textareaRef.current.style.height = "auto";
         }
       } catch (error) {
+        refocusAfterSubmitRef.current = false;
         setAttachmentMessage(
           error instanceof Error ? error.message : "Unable to send the message.",
         );

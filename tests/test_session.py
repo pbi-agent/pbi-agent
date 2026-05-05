@@ -718,6 +718,15 @@ class _SessionDisplaySpy(_DisplaySpy):
         self.last_web_search_sources = list(sources)
 
 
+class _TransientSessionDisplaySpy(_SessionDisplaySpy):
+    def __init__(self, prompts: list[str | QueuedInput]) -> None:
+        super().__init__(prompts)
+        self.transient_markdown_calls: list[str] = []
+
+    def render_transient_markdown(self, text: str) -> None:
+        self.transient_markdown_calls.append(text)
+
+
 class _ChatProviderStub:
     @property
     def settings(self) -> Settings:
@@ -1264,6 +1273,47 @@ def test_run_session_loop_handles_reload_command_locally(monkeypatch) -> None:
     assert display.assistant_start_calls == 0
 
 
+def test_run_session_loop_uses_transient_renderer_for_temporary_commands(
+    monkeypatch,
+) -> None:
+    provider = _ChatProviderStub()
+    display = _TransientSessionDisplaySpy(
+        [SKILLS_COMMAND, MCP_COMMAND, AGENTS_COMMAND, RELOAD_COMMAND, "quit"]
+    )
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.format_project_skills_markdown",
+        lambda: "skills output",
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.format_project_mcp_servers_markdown",
+        lambda: "mcp output",
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.format_project_sub_agents_markdown",
+        lambda: "agents output",
+    )
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == []
+    assert display.markdown_calls == []
+    assert display.transient_markdown_calls == [
+        "skills output",
+        "mcp output",
+        "agents output",
+        "Reloaded workspace instructions, project rules, skills, sub-agents, "
+        "tool definitions, and file mention cache. MCP servers are not "
+        "reloaded; restart the session after changing MCP config.",
+    ]
+
+
 def test_run_session_loop_handles_compact_command_locally(
     monkeypatch,
     tmp_path,
@@ -1271,7 +1321,7 @@ def test_run_session_loop_handles_compact_command_locally(
     db_path = tmp_path / "sessions.db"
     provider = _CompactProviderStub()
     compact_provider = _CompactionSummaryProviderStub()
-    display = _SessionDisplaySpy(["hello", COMPACT_COMMAND, "quit"])
+    display = _TransientSessionDisplaySpy(["hello", COMPACT_COMMAND, "quit"])
     settings = Settings(api_key="test-key", provider="xai", max_tool_workers=2)
     monotonic_values = iter([5.0, 6.5])
 
@@ -1330,6 +1380,7 @@ def test_run_session_loop_handles_compact_command_locally(
         "Ack",
     ]
     assert any("Context compacted (manual)" in item for item in display.markdown_calls)
+    assert display.transient_markdown_calls == []
     assert display.wait_stop_calls >= 1
     compaction_runs = [run for run in runs if run.agent_type == "compaction"]
     assert len(compaction_runs) == 1

@@ -421,6 +421,49 @@ describe("session store", () => {
     expect(state.items).toEqual([]);
   });
 
+  it("applies transient message events without advancing the durable cursor", () => {
+    const current = {
+      ...createEmptySessionState("session-1"),
+      liveSessionId: "live-1",
+      lastEventSeq: 3,
+    };
+
+    const transient = reduceSessionEvent(
+      current,
+      makeEvent({
+        seq: 0,
+        payload: {
+          item_id: "temp-reload-output",
+          role: "assistant",
+          content: "Reloaded workspace instructions.",
+          markdown: true,
+          transient: true,
+        },
+      }),
+      { eventLiveSessionId: "live-1" },
+    );
+
+    expect(transient.applied).toBe(true);
+    expect(transient.state.lastEventSeq).toBe(3);
+    expect(transient.state.items).toEqual([
+      expect.objectContaining({
+        itemId: "temp-reload-output",
+        content: "Reloaded workspace instructions.",
+      }),
+    ]);
+
+    const nextDurable = reduceSessionEvent(
+      transient.state,
+      makeEvent({
+        seq: 4,
+        payload: { item_id: "durable-message", role: "assistant", content: "next" },
+      }),
+      { eventLiveSessionId: "live-1" },
+    );
+    expect(nextDurable.applied).toBe(true);
+    expect(nextDurable.state.lastEventSeq).toBe(4);
+  });
+
   it("reduces timeline mutations independently from routing", () => {
     const added = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
       seq: 1,
@@ -1103,6 +1146,45 @@ describe("session store", () => {
     const store = useSessionStore.getState();
     expect(store.sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
     expect(store.liveSessionIndex["new-live"]).toBe(sessionKey);
+  });
+
+  it("does not let a stale submit response disable input after newer stream events", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", last_event_seq: 8 }),
+    );
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 9,
+      type: "input_state",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: {
+        enabled: false,
+        session_id: "session-1",
+        live_session_id: "live-1",
+      },
+    });
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 10,
+      type: "input_state",
+      created_at: "2026-04-16T12:00:04Z",
+      payload: {
+        enabled: true,
+        session_id: "session-1",
+        live_session_id: "live-1",
+      },
+    });
+
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", last_event_seq: 9 }),
+      { preserveItems: true, preserveEventCursor: true },
+    );
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.lastEventSeq).toBe(10);
+    expect(state.inputEnabled).toBe(true);
+    expect(state.liveSessionId).toBe("live-1");
   });
 
   it("resets stream state so a snapshot can replace an incomplete replay", () => {

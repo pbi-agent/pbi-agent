@@ -59,6 +59,9 @@ MCP_COMMAND = "/mcp"
 AGENTS_COMMAND = "/agents"
 COMPACT_COMMAND = "/compact"
 RELOAD_COMMAND = "/reload"
+TEMPORARY_LOCAL_COMMANDS = frozenset(
+    {SKILLS_COMMAND, MCP_COMMAND, AGENTS_COMMAND, RELOAD_COMMAND}
+)
 COMPACTION_MARKER = "[compacted context]"
 COMPACTION_SUMMARY_PREFIX = (
     "[compacted context — reference only] "
@@ -339,6 +342,13 @@ def run_session_loop(
     should_exit = False
     base_excluded_tools = set(excluded_tools) if excluded_tools is not None else set()
 
+    def _render_temporary_command_markdown(text: str) -> None:
+        render_transient = getattr(display, "render_transient_markdown", None)
+        if callable(render_transient):
+            render_transient(text)
+        else:
+            display.render_markdown(text)
+
     def _turn_excluded_tools(*, interactive_mode: bool = False) -> set[str]:
         return base_excluded_tools | (
             set()
@@ -451,19 +461,23 @@ def run_session_loop(
                     break
                 normalized_command = _normalize_user_command(user_input)
                 if normalized_command == SKILLS_COMMAND:
-                    display.render_markdown(format_project_skills_markdown())
+                    _render_temporary_command_markdown(format_project_skills_markdown())
                     continue
                 if normalized_command == MCP_COMMAND:
-                    display.render_markdown(format_project_mcp_servers_markdown())
+                    _render_temporary_command_markdown(
+                        format_project_mcp_servers_markdown()
+                    )
                     continue
                 if normalized_command == AGENTS_COMMAND:
-                    display.render_markdown(format_project_sub_agents_markdown())
+                    _render_temporary_command_markdown(
+                        format_project_sub_agents_markdown()
+                    )
                     continue
                 if normalized_command == RELOAD_COMMAND:
                     _reload_provider_initialization(provider)
                     if on_reload is not None:
                         on_reload()
-                    display.render_markdown(
+                    _render_temporary_command_markdown(
                         "Reloaded workspace instructions, project rules, skills, "
                         "sub-agents, tool definitions, and file mention cache. "
                         "MCP servers are not reloaded; restart the session after "

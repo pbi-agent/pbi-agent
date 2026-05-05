@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 from pbi_agent.agent.error_formatting import format_user_facing_error
+from pbi_agent.agent.session import TEMPORARY_LOCAL_COMMANDS, _normalize_user_command
 from pbi_agent.display.protocol import QueuedInput, UserQuestionAnswer
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
@@ -28,6 +29,7 @@ from pbi_agent.web.session.serializers import (
     _session_title_for_input,
     _snapshot_item_id,
 )
+from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
 from pbi_agent.web.session.state import (
     EventStream,
     LiveSessionSnapshot,
@@ -258,10 +260,14 @@ class LiveSessionsMixin:
             )
         optimistic_item_id = f"user-{uuid.uuid4().hex}"
         if message_text or message_image_attachments:
+            is_temporary_command = (
+                _normalize_user_command(message_text) in TEMPORARY_LOCAL_COMMANDS
+            )
             self._publish_live_event(
                 live_session_id,
                 "message_added",
                 {
+                    **({TRANSIENT_WEB_EVENT_KEY: True} if is_temporary_command else {}),
                     "item_id": optimistic_item_id,
                     "role": "user",
                     "content": message_text,
