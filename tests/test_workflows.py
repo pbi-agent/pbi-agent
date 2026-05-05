@@ -44,6 +44,20 @@ def test_release_workflow_runs_validation_gates_and_changelog_notes() -> None:
     assert "--notes-file" in workflow
 
 
+def test_release_workflow_fails_when_changelog_notes_are_missing() -> None:
+    workflow = read_workflow("release.yml")
+
+    notes_file_index = workflow.index('NOTES_FILE="docs/changelog/v$VERSION.md"')
+    missing_check_index = workflow.index('[ ! -f "$NOTES_FILE" ]')
+    exit_index = workflow.index("exit 1", missing_check_index)
+    create_index = workflow.index('gh release create "$TAG"')
+    notes_arg_index = workflow.index('--notes-file "$NOTES_FILE"')
+
+    assert notes_file_index < missing_check_index < exit_index < create_index
+    assert create_index < notes_arg_index
+    assert "Release for pbi-agent version $VERSION" not in workflow
+
+
 def test_release_workflow_verifies_existing_release_target() -> None:
     workflow = read_workflow("release.yml")
 
@@ -89,6 +103,14 @@ def test_publish_workflow_verifies_release_target_before_building() -> None:
         < mismatch_index
         < install_index
     )
+
+
+def test_publish_workflow_does_not_skip_existing_pypi_artifacts() -> None:
+    workflow = read_workflow("publish.yml")
+
+    upload_index = workflow.index("twine upload dist/*")
+    assert "--skip-existing" not in workflow
+    assert workflow.index("python -m build") < upload_index
 
 
 def test_docs_deploy_workflow_pins_bun_version() -> None:

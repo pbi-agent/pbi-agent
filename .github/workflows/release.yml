@@ -100,13 +100,14 @@ jobs:
             exit 0
           fi
 
-          NOTES_ARGS=(--notes "Release for pbi-agent version $VERSION")
-          if [ -f "docs/changelog/v$VERSION.md" ]; then
-            NOTES_ARGS=(--notes-file "docs/changelog/v$VERSION.md")
+          NOTES_FILE="docs/changelog/v$VERSION.md"
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "Missing changelog notes: $NOTES_FILE" >&2
+            exit 1
           fi
 
           gh release create "$TAG" \
             --target "$GITHUB_SHA" \
             --title "$TAG" \
             --latest \
-            "${NOTES_ARGS[@]}"
+            --notes-file "$NOTES_FILE"

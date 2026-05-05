@@ -1556,6 +1556,199 @@ def test_live_events_include_canonical_identity_in_stream_and_persistence(
     assert run_metadata["live_session_id"] == live_session_id
 
 
+def test_live_event_persistence_failure_does_not_deliver_to_subscribers(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    with TestClient(app):
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = app.state.manager.create_live_session()
+        manager = app.state.manager
+        live_session_id = created["live_session_id"]
+        live_session = manager._live_sessions[live_session_id]
+        original_persist = manager._persist_live_event_record
+
+        def fail_failed_event(live_session, event):  # noqa: ANN001
+            if event["payload"].get("message") == "Failed":
+                raise RuntimeError("persist failed")
+            original_persist(live_session, event)
+
+        monkeypatch.setattr(manager, "_persist_live_event_record", fail_failed_event)
+
+        async def collect() -> dict[str, object]:
+            subscriber_id, queue = live_session.event_stream.subscribe()
+            try:
+                await asyncio.sleep(0)
+                while not queue.empty():
+                    queue.get_nowait()
+                _oldest_seq, latest_seq_before_failure = (
+                    live_session.event_stream.bounds()
+                )
+
+                with pytest.raises(RuntimeError, match="persist failed"):
+                    manager._publish_live_event(
+                        live_session_id,
+                        "wait_state",
+                        {"active": True, "message": "Failed"},
+                    )
+                await asyncio.sleep(0)
+                assert queue.empty()
+                assert all(
+                    event["payload"].get("message") != "Failed"
+                    for event in live_session.event_stream.snapshot()
+                )
+                assert (
+                    live_session.event_stream.bounds()[1] == latest_seq_before_failure
+                )
+
+                delivered = manager._publish_live_event(
+                    live_session_id,
+                    "wait_state",
+                    {"active": True, "message": "Delivered"},
+                )
+                queued = await asyncio.wait_for(queue.get(), timeout=1)
+                assert delivered is not None
+                assert delivered["seq"] == latest_seq_before_failure + 1
+                assert queued == delivered
+                return queued
+            finally:
+                live_session.event_stream.unsubscribe(subscriber_id)
+
+        event = asyncio.run(collect())
+
+    assert event["type"] == "wait_state"
+    assert event["payload"]["message"] == "Delivered"
+
+
+def test_concurrent_live_events_preserve_snapshot_items_and_persist_latest_snapshot(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = manager.create_live_session()
+        live_session_id = str(created["live_session_id"])
+
+        original_upsert = manager._upsert_snapshot_item
+        release_first_upsert = threading.Event()
+        first_upsert_entered = threading.Event()
+        upsert_guard = threading.Lock()
+        upsert_count = 0
+
+        def racing_upsert(
+            items: list[dict[str, object]],
+            next_item: dict[str, object],
+        ) -> list[dict[str, object]]:
+            nonlocal upsert_count
+            if str(next_item.get("itemId") or "").startswith("concurrent-"):
+                with upsert_guard:
+                    upsert_count += 1
+                    current_upsert = upsert_count
+                if current_upsert == 1:
+                    first_upsert_entered.set()
+                    release_first_upsert.wait(timeout=0.05)
+                elif current_upsert == 2:
+                    assert first_upsert_entered.is_set()
+                    release_first_upsert.set()
+            return original_upsert(items, next_item)
+
+        monkeypatch.setattr(manager, "_upsert_snapshot_item", racing_upsert)
+
+        start = threading.Barrier(3)
+        events: list[dict[str, object]] = []
+        errors: list[BaseException] = []
+        events_guard = threading.Lock()
+
+        def publish_message(index: int) -> None:
+            try:
+                start.wait(timeout=1)
+                event = manager._publish_live_event(
+                    live_session_id,
+                    "message_added",
+                    {
+                        "item_id": f"concurrent-{index}",
+                        "role": "assistant",
+                        "content": f"Concurrent {index}",
+                        "markdown": False,
+                    },
+                )
+                assert event is not None
+                with events_guard:
+                    events.append(event)
+            except BaseException as exc:  # pragma: no cover - surfaced below
+                with events_guard:
+                    errors.append(exc)
+
+        threads = [
+            threading.Thread(target=publish_message, args=(index,))
+            for index in range(2)
+        ]
+        for thread in threads:
+            thread.start()
+        start.wait(timeout=1)
+        for thread in threads:
+            thread.join(timeout=1)
+
+        assert errors == []
+        assert len(events) == 2
+
+        live_session = manager._live_sessions[live_session_id]
+        memory_item_ids = {
+            str(item.get("itemId") or "") for item in live_session.snapshot.items
+        }
+        expected_item_ids = {"concurrent-0", "concurrent-1"}
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            run = store.get_run_session(live_session_id)
+        assert run is not None
+        persisted_snapshot = json.loads(run.snapshot_json)
+        persisted_item_ids = {
+            str(item.get("itemId") or "") for item in persisted_snapshot["items"]
+        }
+        latest_seq = max(int(event["seq"]) for event in events)
+
+        assert expected_item_ids <= memory_item_ids
+        assert expected_item_ids <= persisted_item_ids
+        assert live_session.snapshot.last_event_seq == latest_seq
+        assert run.last_event_seq == latest_seq
+        assert persisted_snapshot["last_event_seq"] == latest_seq
+    finally:
+        manager.shutdown()
+
+
 def test_live_session_bind_none_clears_persisted_run_session_id(
     tmp_path, monkeypatch
 ) -> None:
@@ -3449,6 +3642,89 @@ def test_shutdown_keeps_lease_until_noncooperative_task_worker_stops(
         manager.shutdown()
 
 
+def test_lost_manager_lease_rejects_new_live_sessions(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    try:
+        with (
+            patch(
+                "pbi_agent.web.session.workers._WEB_MANAGER_LEASE_HEARTBEAT_SECS", 0.01
+            ),
+            patch(
+                "pbi_agent.web.session.workers.SessionStore.renew_web_manager_lease",
+                return_value=False,
+            ),
+        ):
+            manager.start()
+            deadline = time.monotonic() + 2
+            while manager._started or manager._lease_thread is not None:
+                if time.monotonic() > deadline:
+                    raise AssertionError("lost lease shutdown did not finish in time")
+                time.sleep(0.01)
+
+        assert manager._shutdown_requested is True
+        assert manager._started is False
+        with pytest.raises(RuntimeError, match="Manager shutdown is in progress"):
+            manager.create_live_session()
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            assert not store.has_active_web_manager_lease(
+                str(tmp_path), stale_after_seconds=30.0
+            )
+    finally:
+        manager.shutdown()
+
+
+def test_lost_manager_lease_interrupts_active_live_worker(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    started = threading.Event()
+    finish = threading.Event()
+
+    def blocking_run_session_loop(*args, **kwargs):
+        del args, kwargs
+        started.set()
+        if not finish.wait(timeout=5):
+            raise AssertionError("live worker did not unblock in time")
+        return 0
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop",
+            side_effect=blocking_run_session_loop,
+        ):
+            live_session = manager.create_live_session()
+            live_session_id = str(live_session["live_session_id"])
+            assert started.wait(timeout=2)
+
+            with (
+                patch(
+                    "pbi_agent.web.session.workers.SessionStore.renew_web_manager_lease",
+                    return_value=False,
+                ),
+                patch.object(manager._lease_stop, "wait", return_value=False),
+            ):
+                manager._renew_manager_lease_loop()
+
+            assert manager._shutdown_requested is True
+            with pytest.raises(RuntimeError, match="Manager shutdown is in progress"):
+                manager.create_live_session()
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                run = store.get_run_session(live_session_id)
+            assert run is not None
+            assert run.status == "interrupted"
+            assert run.ended_at is not None
+            assert run.exit_code == 130
+            assert run.fatal_error == "Interrupted during app shutdown."
+    finally:
+        finish.set()
+        manager.shutdown()
+
+
 def test_create_live_session_rejects_after_shutdown_requested(
     monkeypatch, tmp_path
 ) -> None:
@@ -3496,6 +3772,139 @@ def test_run_task_rejects_after_shutdown_requested(monkeypatch, tmp_path) -> Non
         assert current is not None
         assert current.run_status == "idle"
         assert current.session_id is None
+    finally:
+        manager.shutdown()
+
+
+def test_run_task_rejects_while_task_update_is_mutating(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan"},
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+        original_get_task = SessionStore.get_kanban_task
+        update_entered_store = threading.Event()
+        release_update = threading.Event()
+        update_errors: list[BaseException] = []
+
+        def blocking_get_task(self, current_task_id):
+            if (
+                current_task_id == task_id
+                and threading.current_thread().name == "task-update-race"
+                and not update_entered_store.is_set()
+            ):
+                update_entered_store.set()
+                assert release_update.wait(timeout=2)
+            return original_get_task(self, current_task_id)
+
+        def update_task_in_thread() -> None:
+            try:
+                manager.update_task(task_id, prompt="Changed")
+            except BaseException as exc:  # pragma: no cover - re-raised in test thread
+                update_errors.append(exc)
+
+        with (
+            patch.object(SessionStore, "get_kanban_task", blocking_get_task),
+            patch.object(
+                manager,
+                "_create_task_live_session",
+                side_effect=RuntimeError("run setup should not start"),
+            ),
+        ):
+            update_thread = threading.Thread(
+                target=update_task_in_thread,
+                name="task-update-race",
+            )
+            update_thread.start()
+            assert update_entered_store.wait(timeout=2)
+            try:
+                with pytest.raises(RuntimeError, match="Task is already running"):
+                    manager.run_task(task_id)
+            finally:
+                release_update.set()
+                update_thread.join(timeout=2)
+
+        assert not update_thread.is_alive()
+        assert update_errors == []
+        assert task_id not in manager._running_task_ids
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            current = store.get_kanban_task(task_id)
+        assert current is not None
+        assert current.prompt == "Changed"
+    finally:
+        manager.shutdown()
+
+
+def test_run_task_rejects_while_task_delete_is_mutating(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan"},
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+        original_get_task = SessionStore.get_kanban_task
+        delete_entered_store = threading.Event()
+        release_delete = threading.Event()
+        delete_errors: list[BaseException] = []
+
+        def blocking_get_task(self, current_task_id):
+            if (
+                current_task_id == task_id
+                and threading.current_thread().name == "task-delete-race"
+                and not delete_entered_store.is_set()
+            ):
+                delete_entered_store.set()
+                assert release_delete.wait(timeout=2)
+            return original_get_task(self, current_task_id)
+
+        def delete_task_in_thread() -> None:
+            try:
+                manager.delete_task(task_id)
+            except BaseException as exc:  # pragma: no cover - re-raised in test thread
+                delete_errors.append(exc)
+
+        with (
+            patch.object(SessionStore, "get_kanban_task", blocking_get_task),
+            patch.object(
+                manager,
+                "_create_task_live_session",
+                side_effect=RuntimeError("run setup should not start"),
+            ),
+        ):
+            delete_thread = threading.Thread(
+                target=delete_task_in_thread,
+                name="task-delete-race",
+            )
+            delete_thread.start()
+            assert delete_entered_store.wait(timeout=2)
+            try:
+                with pytest.raises(RuntimeError, match="Task is already running"):
+                    manager.run_task(task_id)
+            finally:
+                release_delete.set()
+                delete_thread.join(timeout=2)
+
+        assert not delete_thread.is_alive()
+        assert delete_errors == []
+        assert task_id not in manager._running_task_ids
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            current = store.get_kanban_task(task_id)
+        assert current is None
     finally:
         manager.shutdown()
 

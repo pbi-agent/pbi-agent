@@ -6,7 +6,7 @@ Make the pbi-agent web backend and frontend stable enough to ship as a productio
 
 ## Current Assessment
 
-The web UI is good enough for local beta use, but not production-stable. The main risk is not one isolated bug; it is that live events, saved-session hydration, Kanban task runs, run records, snapshots, and frontend reducers still form a loosely coupled sync system. Small lifecycle mismatches can silently drop or misroute updates.
+The critical and high-priority web sync hardening work is implemented and covered by automated validation. Release signoff remains pending until the manual smoke checklist passes against the production-built UI with captured evidence.
 
 ## Production Bar
 
@@ -63,7 +63,7 @@ Saved sessions own durable conversation history. Live runs own transient executi
 
 Snapshots are authoritative when replay cannot be proven complete. If the server cannot replay every event after the requested cursor, it must explicitly signal snapshot recovery. The frontend must invalidate the relevant session/run queries, hydrate from the canonical snapshot/detail payload, reset the stale stream cursor, and resubscribe.
 
-## Known Unstable Paths And Regression Targets
+## Original Risk Paths And Regression Targets
 
 | Priority | Path | Risk | Regression Target |
 | --- | --- | --- | --- |
@@ -167,7 +167,7 @@ For each checklist item in `todo.md`:
 
 ## Release Gate
 
-The web implementation is not production-ready until all critical and high-priority `todo.md` items are complete and these checks pass:
+The web implementation should not receive production-ready signoff until all critical and high-priority `todo.md` items are complete, automated checks pass, and the manual smoke checklist below passes with captured evidence:
 
 - `uv run ruff check .`
 - `uv run ruff format --check .`

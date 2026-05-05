@@ -66,5 +66,5 @@
 - [X] Run full backend validation: Ruff check, Ruff format check, and full pytest.
 - [X] Run full frontend validation: web tests with bounded workers, lint, typecheck, and web build.
 - [ ] Run manual smoke checklist from `plan.md`.
-- [ ] Update docs/release notes with web stability status and any known limitations.
-- [ ] Mark web UI production-ready only after all critical/high gaps are closed and validation passes.
+- [X] Update docs/release notes with web stability status and pending manual-smoke gate.
+- [ ] Sign off web UI production readiness only after the manual smoke checklist passes with captured evidence.

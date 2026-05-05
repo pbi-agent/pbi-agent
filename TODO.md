@@ -1,9 +1,9 @@
-# TODO
+# Orchestrate TODO
 
-[X] Reject deleting saved sessions with active live workers
-[X] Verify release tag target before publishing artifacts
-[X] Persist clearing web run `session_id` bindings
-[X] Reject stale saved-session events carrying old live ids
-[X] Clear stale pending questions on saved-session hydration
-[X] Strictly validate `message_rekeyed` SSE payloads
-[X] Run final validation, rebuild assets, and update memory
+- [X] Fix lost web-manager lease handling so a manager stops accepting work and finalizes safely when renewal fails.
+- [X] Fix task update/delete versus task-start TOCTOU races.
+- [X] Serialize live-session event snapshot/persistence updates.
+- [X] Make live-event visibility durable before SSE delivery.
+- [X] Harden release workflow changelog and PyPI publish safety.
+- [X] Resolve release-readiness docs/TODO contradictions.
+- [X] Run final validation, update memory, and report handoff.

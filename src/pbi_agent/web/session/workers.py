@@ -352,6 +352,7 @@ class WorkersMixin:
                     owner_id=self._manager_owner_id,
                 )
             if not renewed:
+                self.shutdown()
                 return
 
     def _interrupt_noncooperative_workers(self) -> None:
@@ -424,7 +425,11 @@ class WorkersMixin:
             self._lease_thread = None
             self._lease_stop.set()
             self._started = False
-        if lease_thread is not None and lease_thread.is_alive():
+        if (
+            lease_thread is not None
+            and lease_thread is not threading.current_thread()
+            and lease_thread.is_alive()
+        ):
             lease_thread.join(timeout=1.0)
         with SessionStore() as store:
             store.release_web_manager_lease(

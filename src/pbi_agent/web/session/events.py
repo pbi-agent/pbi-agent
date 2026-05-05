@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from pbi_agent.session_store import RunSessionRecord, SessionStore
@@ -207,17 +208,29 @@ class EventsMixin:
         allow_after_end: bool = False,
     ) -> dict[str, Any] | None:
         live_session = self._live_sessions[live_session_id]
-        if live_session.ended_at is not None and not allow_after_end:
-            return None
-        enriched_payload = dict(payload)
-        enriched_payload["live_session_id"] = live_session.live_session_id
-        if live_session.bound_session_id is not None:
-            enriched_payload["session_id"] = live_session.bound_session_id
-            enriched_payload["resume_session_id"] = live_session.bound_session_id
-        event = live_session.event_stream.publish(event_type, enriched_payload)
-        self._apply_live_event(live_session, event)
-        self._persist_live_event_record(live_session, event)
-        return event
+        with live_session.event_lock:
+            if live_session.ended_at is not None and not allow_after_end:
+                return None
+            enriched_payload = dict(payload)
+            enriched_payload["live_session_id"] = live_session.live_session_id
+            if live_session.bound_session_id is not None:
+                enriched_payload["session_id"] = live_session.bound_session_id
+                enriched_payload["resume_session_id"] = live_session.bound_session_id
+            event = live_session.event_stream.publish(
+                event_type,
+                enriched_payload,
+                deliver=False,
+            )
+            previous_snapshot = deepcopy(live_session.snapshot)
+            try:
+                self._apply_live_event(live_session, event)
+                self._persist_live_event_record(live_session, event)
+            except Exception:
+                live_session.snapshot = previous_snapshot
+                live_session.event_stream.discard(event)
+                raise
+            live_session.event_stream.deliver(event)
+            return event
 
     def _apply_live_event(
         self,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,7 +34,13 @@ class EventStream:
         ] = {}
         self._sequence = 0
 
-    def publish(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def publish(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+        *,
+        deliver: bool = True,
+    ) -> dict[str, Any]:
         with self._lock:
             self._sequence += 1
             event = {
@@ -46,6 +52,12 @@ class EventStream:
             self._events.append(event)
             if len(self._events) > _MAX_EVENT_HISTORY:
                 self._events = self._events[-_MAX_EVENT_HISTORY:]
+        if deliver:
+            self.deliver(event)
+        return event
+
+    def deliver(self, event: dict[str, Any]) -> None:
+        with self._lock:
             subscribers = [
                 (subscriber_id, loop, queue)
                 for subscriber_id, (loop, queue) in self._subscribers.items()
@@ -62,7 +74,19 @@ class EventStream:
                         and current[1] is queue
                     ):
                         self._subscribers.pop(subscriber_id, None)
-        return event
+
+    def discard(self, event: dict[str, Any]) -> None:
+        with self._lock:
+            self._events = [stored for stored in self._events if stored is not event]
+            if event.get("seq") == self._sequence:
+                self._sequence = max(
+                    (
+                        seq
+                        for stored in self._events
+                        if isinstance((seq := stored.get("seq")), int)
+                    ),
+                    default=0,
+                )
 
     def load(self, events: list[dict[str, Any]]) -> None:
         with self._lock:
@@ -150,6 +174,7 @@ class LiveSessionState:
     fatal_error: str | None = None
     terminal_status: str | None = None
     ended_at: str | None = None
+    event_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
 @dataclass(slots=True)

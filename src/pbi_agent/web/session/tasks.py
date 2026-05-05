@@ -171,74 +171,100 @@ class TasksMixin:
         with self._lock:
             if task_id in self._running_task_ids:
                 raise RuntimeError("Cannot update a running task.")
-        if project_dir is not None:
-            self._validate_project_dir(project_dir)
-        if profile_id_present and profile_id is not None:
-            self._resolve_runtime(profile_id)
-        image_attachments = (
-            self._message_attachments_for_upload_ids(image_upload_ids or [])
-            if image_upload_ids_present
-            else None
-        )
-        with SessionStore() as store:
-            current = store.get_kanban_task(task_id)
-            if current is None or current.directory != self._directory_key:
-                raise KeyError(task_id)
-            previous_stage = current.stage
-            normalized_title = current.title if title is None else title
-            normalized_prompt = current.prompt if prompt is None else prompt
-            if title is not None or prompt is not None:
-                normalized_title, normalized_prompt = self._normalize_task_content(
-                    title=normalized_title,
-                    prompt=normalized_prompt,
-                )
-            if stage is not None or position is not None:
-                current = store.move_kanban_task(
-                    task_id,
-                    stage=stage or current.stage,
-                    position=position,
-                )
-                assert current is not None
-            updated = store.update_kanban_task(
-                task_id,
-                title=normalized_title
-                if title is not None or prompt is not None
-                else title,
-                prompt=normalized_prompt
-                if title is not None or prompt is not None
-                else prompt,
-                project_dir=project_dir,
-                session_id=session_id,
-                clear_session_id=session_id_present and session_id is None,
-                model_profile_id=profile_id,
-                clear_model_profile_id=(profile_id_present and profile_id is None),
-                image_attachments=image_attachments,
-                image_attachments_present=image_upload_ids_present,
+            self._running_task_ids.add(task_id)
+        task_reserved = True
+        try:
+            if project_dir is not None:
+                self._validate_project_dir(project_dir)
+            if profile_id_present and profile_id is not None:
+                self._resolve_runtime(profile_id)
+            image_attachments = (
+                self._message_attachments_for_upload_ids(image_upload_ids or [])
+                if image_upload_ids_present
+                else None
             )
-        if updated is None:
-            raise KeyError(task_id)
-        payload = self._publish_task_updated(updated)
-        if stage is not None and stage != previous_stage:
-            return self._maybe_auto_start_task(updated) or payload
-        return payload
+            with SessionStore() as store:
+                current = store.get_kanban_task(task_id)
+                if current is None or current.directory != self._directory_key:
+                    raise KeyError(task_id)
+                previous_stage = current.stage
+                normalized_title = current.title if title is None else title
+                normalized_prompt = current.prompt if prompt is None else prompt
+                if title is not None or prompt is not None:
+                    normalized_title, normalized_prompt = self._normalize_task_content(
+                        title=normalized_title,
+                        prompt=normalized_prompt,
+                    )
+                if stage is not None or position is not None:
+                    current = store.move_kanban_task(
+                        task_id,
+                        stage=stage or current.stage,
+                        position=position,
+                    )
+                    assert current is not None
+                updated = store.update_kanban_task(
+                    task_id,
+                    title=normalized_title
+                    if title is not None or prompt is not None
+                    else title,
+                    prompt=normalized_prompt
+                    if title is not None or prompt is not None
+                    else prompt,
+                    project_dir=project_dir,
+                    session_id=session_id,
+                    clear_session_id=session_id_present and session_id is None,
+                    model_profile_id=profile_id,
+                    clear_model_profile_id=(profile_id_present and profile_id is None),
+                    image_attachments=image_attachments,
+                    image_attachments_present=image_upload_ids_present,
+                )
+            if updated is None:
+                raise KeyError(task_id)
+            payload = self._publish_task_updated(updated)
+            if stage is not None and stage != previous_stage:
+                auto_started = self._maybe_auto_start_task(
+                    updated,
+                    task_already_reserved=True,
+                )
+                if auto_started is not None:
+                    task_reserved = False
+                    return auto_started
+            return payload
+        finally:
+            if task_reserved:
+                with self._lock:
+                    self._running_task_ids.discard(task_id)
 
     def delete_task(self, task_id: str) -> None:
         with self._lock:
             if task_id in self._running_task_ids:
                 raise RuntimeError("Cannot delete a running task.")
-        with SessionStore() as store:
-            record = store.get_kanban_task(task_id)
-            if record is None or record.directory != self._directory_key:
+            self._running_task_ids.add(task_id)
+        try:
+            with SessionStore() as store:
+                record = store.get_kanban_task(task_id)
+                if record is None or record.directory != self._directory_key:
+                    raise KeyError(task_id)
+                deleted = store.delete_kanban_task(task_id)
+            if not deleted:
                 raise KeyError(task_id)
-            deleted = store.delete_kanban_task(task_id)
-        if not deleted:
-            raise KeyError(task_id)
-        self._app_stream.publish("task_deleted", {"task_id": task_id})
+            self._app_stream.publish("task_deleted", {"task_id": task_id})
+        finally:
+            with self._lock:
+                self._running_task_ids.discard(task_id)
 
     def run_task(self, task_id: str) -> dict[str, Any]:
+        return self._run_task(task_id, task_already_reserved=False)
+
+    def _run_task(
+        self,
+        task_id: str,
+        *,
+        task_already_reserved: bool,
+    ) -> dict[str, Any]:
         with self._lock:
             self._ensure_worker_creation_allowed_locked()
-            if task_id in self._running_task_ids:
+            if not task_already_reserved and task_id in self._running_task_ids:
                 raise RuntimeError("Task is already running.")
             self._running_task_ids.add(task_id)
         worker_registered = False
@@ -688,10 +714,18 @@ class TasksMixin:
     def _format_task_prompt(self, title: str, prompt: str) -> str:
         return f"# Task\n{title}\n\n## Goal\n{prompt}"
 
-    def _maybe_auto_start_task(self, record: KanbanTaskRecord) -> dict[str, Any] | None:
+    def _maybe_auto_start_task(
+        self,
+        record: KanbanTaskRecord,
+        *,
+        task_already_reserved: bool = False,
+    ) -> dict[str, Any] | None:
         if not self._should_auto_start_stage(record.stage):
             return None
-        return self.run_task(record.task_id)
+        return self._run_task(
+            record.task_id,
+            task_already_reserved=task_already_reserved,
+        )
 
     def _validate_project_dir(self, project_dir: str) -> None:
         candidate = project_dir.strip() or "."
