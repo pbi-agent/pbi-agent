@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { websocketUrl } from "../api";
-import { useSessionStore } from "../store";
+import { eventStreamUrl, fetchSessionDetail } from "../api";
+import { nextClientStreamId, updateLiveSessionDebug } from "../debug/liveSessionDebug";
+import { parseSseEvent } from "../events";
+import { resolveSessionEventTarget, useSessionStore } from "../store";
 import type { WebEvent } from "../types";
 
 const INITIAL_DELAY = 1000;
@@ -13,6 +15,7 @@ export function useLiveSessionEvents(
   sessionId: string | null = null,
 ): void {
   const applyEvent = useSessionStore((state) => state.applyEvent);
+  const resetStreamState = useSessionStore((state) => state.resetStreamState);
   const setConnection = useSessionStore((state) => state.setConnection);
   const queryClient = useQueryClient();
   const retryDelay = useRef(INITIAL_DELAY);
@@ -21,6 +24,13 @@ export function useLiveSessionEvents(
     if (!sessionKey || !liveSessionId) {
       if (sessionKey) {
         setConnection(sessionKey, "disconnected");
+        updateLiveSessionDebug(sessionKey, {
+          sessionId,
+          liveSessionId,
+          connection: "disconnected",
+          disposed: true,
+          closedAt: new Date().toISOString(),
+        });
       }
       return;
     }
@@ -28,47 +38,228 @@ export function useLiveSessionEvents(
     const currentLiveSessionId = liveSessionId;
     const currentSessionId = sessionId;
 
-    let socket: WebSocket | null = null;
+    let source: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
+    let hasOpened = false;
+    let recoveryMode = false;
+
+    function scheduleReconnect(currentSource: EventSource) {
+      if (!disposed && source === currentSource && !retryTimer) {
+        updateLiveSessionDebug(currentSessionKey, {
+          reconnect: { scheduled: true, retryDelayMs: retryDelay.current },
+        });
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
+          connect();
+        }, retryDelay.current);
+      }
+    }
+
+    function recoverFromSnapshot(
+      currentSource: EventSource,
+      targetSessionKey: string,
+      targetSessionId: string | null,
+      recoveryReason: string,
+      recovery: Record<string, unknown> | null,
+    ) {
+      const isCurrentStreamTarget = targetSessionKey === currentSessionKey;
+      if (isCurrentStreamTarget) {
+        recoveryMode = true;
+      }
+      setConnection(targetSessionKey, "recovering");
+      updateLiveSessionDebug(targetSessionKey, {
+        connection: "recovering",
+        recoveryReason,
+        recovery,
+      });
+      if (isCurrentStreamTarget) {
+        currentSource.close();
+      }
+      const invalidations = [
+        queryClient.invalidateQueries({ queryKey: ["sessions"] }),
+        queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
+        queryClient.invalidateQueries({ queryKey: ["run-detail"] }),
+      ];
+      if (targetSessionId) {
+        invalidations.push(
+          queryClient.invalidateQueries({ queryKey: ["session-runs", targetSessionId] }),
+        );
+      }
+      const snapshotFetch = targetSessionId
+        ? queryClient.fetchQuery({
+            queryKey: ["session", targetSessionId],
+            queryFn: () => fetchSessionDetail(targetSessionId),
+            staleTime: 0,
+          })
+        : Promise.resolve(null);
+      void Promise.all([...invalidations, snapshotFetch])
+        .then(() => {
+          if (disposed || source !== currentSource) return;
+          resetStreamState(targetSessionKey, {
+            preserveItems: targetSessionId !== null,
+            preserveLiveSession: true,
+          });
+          if (isCurrentStreamTarget) {
+            setConnection(targetSessionKey, "recovering");
+            scheduleReconnect(currentSource);
+            return;
+          }
+          recoveryMode = false;
+          setConnection(targetSessionKey, "disconnected");
+          updateLiveSessionDebug(targetSessionKey, {
+            connection: "disconnected",
+            recoveryReason: `${recoveryReason}-cross-target-refetch`,
+          });
+        })
+        .catch(() => {
+          if (disposed || source !== currentSource) return;
+          setConnection(targetSessionKey, "recovery_failed");
+          updateLiveSessionDebug(targetSessionKey, {
+            connection: "recovery_failed",
+            recoveryReason: "snapshot-invalidation-failed",
+          });
+          if (isCurrentStreamTarget) {
+            scheduleReconnect(currentSource);
+            return;
+          }
+          recoveryMode = false;
+        });
+    }
 
     function connect() {
       if (disposed) return;
-      setConnection(currentSessionKey, "connecting");
+      setConnection(
+        currentSessionKey,
+        recoveryMode ? "recovering" : hasOpened ? "reconnecting" : "connecting",
+      );
       const since = useSessionStore.getState().sessionsByKey[currentSessionKey]?.lastEventSeq ?? 0;
       const eventPath = currentSessionId
         ? `/api/events/sessions/${encodeURIComponent(currentSessionId)}`
         : `/api/events/${currentLiveSessionId}`;
-      socket = new WebSocket(websocketUrl(`${eventPath}?since=${since}`));
+      const params = new URLSearchParams({ since: String(since) });
+      if (currentSessionId) {
+        params.set("live_session_id", currentLiveSessionId);
+      }
+      const url = eventStreamUrl(`${eventPath}?${params.toString()}`);
+      const currentSource = new EventSource(url);
+      source = currentSource;
+      const clientStreamId = nextClientStreamId();
+      updateLiveSessionDebug(currentSessionKey, {
+        sessionId: currentSessionId,
+        liveSessionId: currentLiveSessionId,
+        clientStreamId,
+        eventPath,
+        url,
+        requestedSince: since,
+        cursor: since,
+        connection: recoveryMode ? "recovering" : hasOpened ? "reconnecting" : "connecting",
+        reconnect: { scheduled: false, retryDelayMs: null },
+        disposed: false,
+        closedAt: null,
+      });
 
-      socket.onopen = () => {
+      currentSource.onopen = () => {
+        if (disposed || source !== currentSource) return;
         retryDelay.current = INITIAL_DELAY;
-        setConnection(currentSessionKey, "connected");
+        const nextConnection = hasOpened || recoveryMode ? "recovered" : "connected";
+        hasOpened = true;
+        recoveryMode = false;
+        setConnection(currentSessionKey, nextConnection);
+        updateLiveSessionDebug(currentSessionKey, {
+          connection: nextConnection,
+          cursor: useSessionStore.getState().sessionsByKey[currentSessionKey]?.lastEventSeq ?? 0,
+          openedAt: new Date().toISOString(),
+        });
       };
 
-      socket.onmessage = (message) => {
-        if (typeof message.data !== "string") {
+      currentSource.onmessage = (message) => {
+        if (disposed || source !== currentSource) return;
+        if (typeof message.data !== "string") return;
+        const event = parseSseEvent(message.data);
+        if (!event) return;
+        if (event.type === "server.connected" || event.type === "server.heartbeat") return;
+        if (
+          event.type === "server.replay_incomplete"
+          && event.payload.snapshot_required === true
+        ) {
+          const resolvedLiveSessionId = readLiveSessionId(event) ?? currentLiveSessionId;
+          const store = useSessionStore.getState();
+          const target = resolveSessionEventTarget(
+            store,
+            currentSessionKey,
+            event,
+            resolvedLiveSessionId,
+          );
+          const targetSessionKey = target.sessionKey;
+          const targetSessionId = readSessionId(event)
+            ?? currentSessionId
+            ?? store.sessionsByKey[targetSessionKey]?.sessionId
+            ?? null;
+          recoverFromSnapshot(
+            currentSource,
+            targetSessionKey,
+            targetSessionId,
+            String(event.payload.reason),
+            {
+              requestedSince: event.payload.requested_since,
+              resolvedSince: event.payload.resolved_since,
+              oldestAvailableSeq: event.payload.oldest_available_seq,
+              latestSeq: event.payload.latest_seq,
+              snapshotRequired: event.payload.snapshot_required,
+            },
+          );
           return;
         }
-        const event = JSON.parse(message.data) as WebEvent;
         const resolvedLiveSessionId = readLiveSessionId(event) ?? currentLiveSessionId;
-        const targetSessionKey = resolvedLiveSessionId
-          ? useSessionStore.getState().liveSessionIndex[resolvedLiveSessionId] ?? currentSessionKey
-          : currentSessionKey;
+        const targetSessionKey = resolveSessionEventTarget(
+          useSessionStore.getState(),
+          currentSessionKey,
+          event,
+          resolvedLiveSessionId,
+        ).sessionKey;
         const wasInputEnabled = readCurrentInputEnabled(
           event,
           targetSessionKey,
           resolvedLiveSessionId ?? "",
         );
-        const resolvedSessionKey = applyEvent(
+        const applyResult = applyEvent(
           targetSessionKey,
           event,
           resolvedLiveSessionId,
         );
+        updateLiveSessionDebug(applyResult.sessionKey, {
+          cursor: useSessionStore.getState().sessionsByKey[applyResult.sessionKey]?.lastEventSeq ?? 0,
+          lastEvent: {
+            seq: event.seq,
+            type: event.type,
+            createdAt: event.created_at,
+            targetSessionKey: applyResult.sessionKey,
+            resolvedSessionId: readSessionId(event),
+            resolvedLiveSessionId,
+            applied: applyResult.applied,
+            applyReason: applyResult.reason,
+          },
+        });
+        if (applyResult.reloadRequired) {
+          const targetSessionId = readSessionId(event)
+            ?? currentSessionId
+            ?? useSessionStore.getState().sessionsByKey[applyResult.sessionKey]?.sessionId
+            ?? null;
+          recoverFromSnapshot(
+            currentSource,
+            applyResult.sessionKey,
+            targetSessionId,
+            applyResult.reason ?? "sequence-gap",
+            null,
+          );
+          return;
+        }
         if (shouldRefreshRunQueries(event, wasInputEnabled)) {
           const sessionId = resolveSessionId(
             event,
-            resolvedSessionKey,
+            applyResult.sessionKey,
             resolvedLiveSessionId ?? "",
           );
           if (sessionId) {
@@ -78,17 +269,15 @@ export function useLiveSessionEvents(
         }
       };
 
-      socket.onclose = () => {
-        if (disposed) return;
-        setConnection(currentSessionKey, "disconnected");
-        retryTimer = setTimeout(() => {
-          retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
-          connect();
-        }, retryDelay.current);
-      };
-
-      socket.onerror = () => {
-        socket?.close();
+      currentSource.onerror = () => {
+        if (disposed || source !== currentSource || retryTimer) return;
+        currentSource.close();
+        setConnection(currentSessionKey, hasOpened ? "reconnecting" : "disconnected");
+        updateLiveSessionDebug(currentSessionKey, {
+          connection: hasOpened ? "reconnecting" : "disconnected",
+          closedAt: new Date().toISOString(),
+        });
+        scheduleReconnect(currentSource);
       };
     }
 
@@ -97,9 +286,13 @@ export function useLiveSessionEvents(
     return () => {
       disposed = true;
       if (retryTimer) clearTimeout(retryTimer);
-      socket?.close();
+      source?.close();
+      updateLiveSessionDebug(currentSessionKey, {
+        disposed: true,
+        closedAt: new Date().toISOString(),
+      });
     };
-  }, [applyEvent, queryClient, sessionKey, liveSessionId, sessionId, setConnection]);
+  }, [applyEvent, queryClient, resetStreamState, sessionKey, liveSessionId, sessionId, setConnection]);
 }
 
 function shouldRefreshRunQueries(event: WebEvent, wasInputEnabled: boolean | null): boolean {
@@ -158,9 +351,13 @@ function findSessionKeyByLiveSessionId(
 }
 
 function readSessionId(event: WebEvent): string | null {
-  return typeof event.payload.session_id === "string" ? event.payload.session_id : null;
+  return "session_id" in event.payload && typeof event.payload.session_id === "string"
+    ? event.payload.session_id
+    : null;
 }
 
 function readLiveSessionId(event: WebEvent): string | null {
-  return typeof event.payload.live_session_id === "string" ? event.payload.live_session_id : null;
+  return "live_session_id" in event.payload && typeof event.payload.live_session_id === "string"
+    ? event.payload.live_session_id
+    : null;
 }

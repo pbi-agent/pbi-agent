@@ -1,7 +1,4 @@
-# TODO
+# Orchestrate TODO
 
-[X] Trace persisted working-history hydration after restart
-[X] Identify why trace is omitted
-[X] Propose or patch fix
-[X] Validate if patched
-[X] Update memory
+[X] Fix saved-session timeline merge so historical Working blocks stay anchored to their turn.
+[X] Run focused/final validation, update memory, and report handoff.

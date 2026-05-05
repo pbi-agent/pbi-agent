@@ -32,6 +32,131 @@ describe("SessionTimeline", () => {
     expect(screen.getByText("Send any prompt to begin")).toBeInTheDocument();
   });
 
+  it("coalesces interleaved sub-agent work into one turn-level Working block", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Research this",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "think-a",
+            title: "Thinking",
+            content: "Researcher plan",
+            subAgentId: "subagent-a",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-b",
+            label: "read_file",
+            status: "completed",
+            subAgentId: "subagent-b",
+            items: [{ text: "Designer inspected layout" }],
+          },
+          {
+            kind: "thinking",
+            itemId: "think-a-2",
+            title: "Thinking",
+            content: "Researcher synthesis",
+            subAgentId: "subagent-a",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-c",
+            label: "shell",
+            status: "completed",
+            subAgentId: "subagent-c",
+            items: [{ text: "Tester verified behavior" }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Done",
+            markdown: true,
+          },
+        ]}
+        subAgents={{
+          "subagent-a": { title: "Researcher", status: "completed" },
+          "subagent-b": { title: "Designer", status: "completed" },
+          "subagent-c": { title: "Tester", status: "completed" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButtons = screen.getAllByRole("button", { name: /Working/ });
+    expect(workingButtons).toHaveLength(1);
+    expect(workingButtons[0]).toHaveAccessibleName(/3 agents · Working/);
+    expect(workingButtons[0]).toHaveTextContent(/3 agents\s*·\s*Working/);
+
+    openWorking();
+
+    expect(screen.getAllByText("Researcher · completed")).toHaveLength(2);
+    expect(screen.getByText("Designer · completed")).toBeInTheDocument();
+    expect(screen.getByText("Tester · completed")).toBeInTheDocument();
+
+    const first = screen.getByText("Researcher plan");
+    const second = screen.getByText("Designer inspected layout");
+    const third = screen.getByText("Researcher synthesis");
+    const fourth = screen.getByText("Tester verified behavior");
+    expect(first.compareDocumentPosition(second)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(second.compareDocumentPosition(third)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(third.compareDocumentPosition(fourth)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("summarizes a single sub-agent in the collapsed Working header", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "thinking",
+            itemId: "think-1",
+            title: "Thinking",
+            content: "Planning",
+            subAgentId: "subagent-researcher",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "read_file",
+            status: "completed",
+            subAgentId: "subagent-researcher",
+            items: [{ text: "Read notes" }],
+          },
+        ]}
+        subAgents={{
+          "subagent-researcher": {
+            title: "Researcher",
+            status: "completed",
+          },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAccessibleName(/Researcher · Working/);
+    expect(workingButton).toHaveTextContent(/Researcher\s*·\s*Working/);
+  });
+
   it("preserves user-authored line breaks in message text", () => {
     const content =
       "/plan\n# Task\nadd shell command from UI\n\n## Goal\nPossibility to can run any shell command from UI using ! (e.g. !ls), use bash_tool in backend";

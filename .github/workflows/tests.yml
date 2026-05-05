@@ -42,5 +42,30 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
+      - name: Run Ruff
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
       - name: Run web tests
         run: bun run test:web
+
+      - name: Run web lint
+        run: bun run lint
+
+      - name: Run web typecheck
+        run: bun run typecheck
+
+      - name: Verify generated API types
+        run: |
+          bun run web:api-types
+          git diff --exit-code -- webapp/src/api-types.generated.ts
+
+      - name: Verify web static assets
+        run: |
+          bun run web:build
+          git diff --exit-code -- src/pbi_agent/web/static/app
+
+      - name: Build docs
+        run: bun run docs:build

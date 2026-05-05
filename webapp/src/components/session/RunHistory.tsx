@@ -99,9 +99,9 @@ function RunCard({
   onSelect: () => void;
 }) {
   const statusModifier =
-    run.status === "ended" ? "completed"
+    isRunComplete(run.status) ? "completed"
     : run.status === "failed" ? "failed"
-    : run.status === "running" ? "running"
+    : isRunActive(run.status) ? "running"
     : "idle";
 
   const agentLabel = run.agent_name ?? run.agent_type ?? "agent";
@@ -168,7 +168,11 @@ function RunCard({
 }
 
 function isRunActive(status: string): boolean {
-  return !["ended", "failed", "stale"].includes(status);
+  return !["completed", "interrupted", "ended", "failed", "stale"].includes(status);
+}
+
+function isRunComplete(status: string): boolean {
+  return ["completed", "interrupted", "ended"].includes(status);
 }
 
 function compareRunsNewestFirst(a: RunSession, b: RunSession): number {

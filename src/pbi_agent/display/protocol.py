@@ -159,6 +159,7 @@ class DisplayProtocol(Protocol):
         images: list[ImageAttachment] | None = None,
         image_attachments: list[MessageImageAttachment] | None = None,
         interactive_mode: bool = False,
+        item_id: str | None = None,
     ) -> None: ...
 
     def request_new_session(self) -> None: ...

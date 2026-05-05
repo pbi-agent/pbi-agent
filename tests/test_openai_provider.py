@@ -463,6 +463,119 @@ def test_openai_build_request_body_replays_restored_user_images_without_previous
     assert "previous_response_id" not in body
 
 
+def test_openai_chatgpt_replays_restored_user_images_without_previous_id(
+    monkeypatch,
+    tmp_path,
+    display_spy,
+) -> None:
+    monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path)
+    stored = uploads.store_uploaded_image_bytes(
+        raw_bytes=b"\x89PNG\r\n\x1a\nimage-bytes",
+        name="chart.png",
+        upload_id="upload-1",
+    )
+    requests: list[dict[str, object]] = []
+
+    def fake_send_websocket_request(self, *, request_body, headers, timeout):
+        del self, headers, timeout
+        requests.append(request_body)
+        return [
+            {"type": "response.created", "response": {"id": "resp_1"}},
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_1",
+                    "model": "gpt-5",
+                    "usage": {
+                        "input_tokens": 5,
+                        "input_tokens_details": {"cached_tokens": 0},
+                        "output_tokens": 3,
+                        "output_tokens_details": {"reasoning_tokens": 1},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "Done."}],
+                        }
+                    ],
+                },
+            },
+        ]
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+                account_id="acct_123",
+                expires_at=4070908800,
+                email="user@example.com",
+                plan_type="chatgpt_plus",
+            ),
+        )
+    )
+    provider.restore_messages(
+        [
+            MessageRecord(
+                id=1,
+                session_id="session-1",
+                role="user",
+                content="describe this",
+                created_at="2026-03-31T00:00:00+00:00",
+                image_attachments=[
+                    MessageImageAttachment(
+                        upload_id=stored.upload_id,
+                        name=stored.name,
+                        mime_type=stored.mime_type,
+                        byte_count=stored.byte_count,
+                        preview_url=f"/api/uploads/{stored.upload_id}",
+                    )
+                ],
+            ),
+            MessageRecord(
+                id=2,
+                session_id="session-1",
+                role="assistant",
+                content="it is a chart",
+                created_at="2026-03-31T00:00:01+00:00",
+            ),
+        ]
+    )
+
+    provider.request_turn(
+        user_message="continue",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert requests[0]["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "describe this"},
+                {
+                    "type": "input_image",
+                    "image_url": "data:image/png;base64,iVBORw0KGgppbWFnZS1ieXRlcw==",
+                    "detail": "original",
+                },
+            ],
+        },
+        {"role": "assistant", "content": "it is a chart"},
+        {"role": "user", "content": "continue"},
+    ]
+    assert "previous_response_id" not in requests[0]
+
+
 def test_openai_build_request_body_includes_service_tier() -> None:
     provider = OpenAIProvider(_make_settings(service_tier="flex"))
 

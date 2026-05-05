@@ -26,7 +26,9 @@ from pbi_agent.models.messages import (
     WebSearchSource,
 )
 from pbi_agent.providers.google_provider import GoogleProvider
+from pbi_agent.session_store import MessageImageAttachment, MessageRecord
 from pbi_agent.tools.types import ToolResult
+from pbi_agent.web import uploads
 
 
 class _FakeHTTPResponse:
@@ -117,6 +119,68 @@ def test_google_build_request_body_uses_interactions_shape() -> None:
         "thinking_summaries": "auto",
         "max_output_tokens": DEFAULT_MAX_TOKENS,
     }
+    assert "previous_interaction_id" not in body
+
+
+def test_google_build_request_body_replays_restored_user_images_without_previous_interaction_id(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path)
+    stored = uploads.store_uploaded_image_bytes(
+        raw_bytes=b"\x89PNG\r\n\x1a\nimage-bytes",
+        name="chart.png",
+        upload_id="upload-1",
+    )
+    provider = GoogleProvider(_make_settings())
+    provider.restore_messages(
+        [
+            MessageRecord(
+                id=1,
+                session_id="session-1",
+                role="user",
+                content="describe this",
+                created_at="2026-03-19T10:00:00+00:00",
+                image_attachments=[
+                    MessageImageAttachment(
+                        upload_id=stored.upload_id,
+                        name=stored.name,
+                        mime_type=stored.mime_type,
+                        byte_count=stored.byte_count,
+                        preview_url=f"/api/uploads/{stored.upload_id}",
+                    )
+                ],
+            ),
+            MessageRecord(
+                id=2,
+                session_id="session-1",
+                role="assistant",
+                content="it is a chart",
+                created_at="2026-03-19T10:00:01+00:00",
+            ),
+        ]
+    )
+
+    body = provider._build_request_body(
+        input_value="continue",
+        instructions="be concise",
+    )
+
+    assert body["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "describe this"},
+                {
+                    "type": "image",
+                    "mime_type": "image/png",
+                    "data": "iVBORw0KGgppbWFnZS1ieXRlcw==",
+                },
+            ],
+        },
+        {"role": "model", "content": "it is a chart"},
+        {"role": "user", "content": "continue"},
+    ]
     assert "previous_interaction_id" not in body
 
 

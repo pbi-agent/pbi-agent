@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
+import type { ConnectionState } from "../../store";
 import type {
   ProcessingPhase,
   ProcessingState,
@@ -15,6 +16,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
+import { Badge } from "../ui/badge";
 import { TimelineEntry } from "./TimelineEntry";
 import { SessionWelcome } from "./SessionWelcome";
 
@@ -33,7 +35,7 @@ type RenderUnit =
       kind: "work_run";
       key: string;
       items: WorkItem[];
-      subAgentId: string | undefined;
+      subAgentIds: string[];
       running: boolean;
     };
 
@@ -44,7 +46,6 @@ function isWorkItem(item: TimelineItem): item is WorkItem {
 function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
   const units: RenderUnit[] = [];
   let buffer: WorkItem[] = [];
-  let bufferSubAgent: string | undefined;
   let previousMessageItemId: string | undefined;
   let workRunSinceMessage = false;
 
@@ -60,11 +61,16 @@ function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
           ? `work-after-${previousMessageItemId}`
           : `work-${buffer[0].itemId}`,
       items: buffer,
-      subAgentId: bufferSubAgent,
+      subAgentIds: Array.from(
+        new Set(
+          buffer
+            .map((item) => item.subAgentId)
+            .filter((subAgentId): subAgentId is string => Boolean(subAgentId)),
+        ),
+      ),
       running,
     });
     buffer = [];
-    bufferSubAgent = undefined;
     workRunSinceMessage = true;
   };
 
@@ -76,16 +82,21 @@ function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
       workRunSinceMessage = false;
       continue;
     }
-    if (buffer.length > 0 && bufferSubAgent !== item.subAgentId) {
-      flush();
-    }
-    if (buffer.length === 0) {
-      bufferSubAgent = item.subAgentId;
-    }
     buffer.push(item);
   }
   flush();
   return units;
+}
+
+function formatAgentSummary(
+  subAgentIds: string[],
+  subAgents: Record<string, { title: string; status: string }>,
+) {
+  if (subAgentIds.length === 0) return null;
+  if (subAgentIds.length === 1) {
+    return subAgents[subAgentIds[0]]?.title ?? "sub_agent";
+  }
+  return `${subAgentIds.length} agents`;
 }
 
 /**
@@ -227,7 +238,7 @@ function WorkRun({
   closeSignal: string | null;
   onUserOpen?: (contentEl: HTMLElement | null) => void;
 }) {
-  const subAgent = unit.subAgentId ? subAgents[unit.subAgentId] : undefined;
+  const agentSummary = formatAgentSummary(unit.subAgentIds, subAgents);
   const hasItems = unit.items.length > 0;
   const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
   const [openState, setOpenState] = useState({
@@ -258,8 +269,24 @@ function WorkRun({
             size="sm"
             className="timeline-entry__header timeline-entry__header--work-run"
             data-phase={phase ?? undefined}
+            aria-label={
+              agentSummary ? `${agentSummary} · Working` : "Working"
+            }
           >
             <ChevronRightIcon className="timeline-entry__chevron" />
+            {agentSummary ? (
+              <>
+                <Badge
+                  variant="outline"
+                  className="timeline-entry__work-run-agent-summary"
+                >
+                  {agentSummary}
+                </Badge>
+                <span className="timeline-entry__work-run-separator" aria-hidden>
+                  ·
+                </span>
+              </>
+            ) : null}
             <span>Working</span>
             {active || unit.running ? (
               <span className="timeline-entry__running" aria-label="running" />
@@ -273,8 +300,16 @@ function WorkRun({
                 <TimelineEntry
                   key={item.itemId}
                   item={item}
-                  subAgentTitle={subAgent?.title}
-                  subAgentStatus={subAgent?.status}
+                  subAgentTitle={
+                    item.subAgentId
+                      ? subAgents[item.subAgentId]?.title
+                      : undefined
+                  }
+                  subAgentStatus={
+                    item.subAgentId
+                      ? subAgents[item.subAgentId]?.status
+                      : undefined
+                  }
                   closeSignal={closeSignal}
                   bare
                 />
@@ -297,7 +332,7 @@ export function SessionTimeline({
 }: {
   items: TimelineItem[];
   subAgents: Record<string, { title: string; status: string }>;
-  connection: "disconnected" | "connecting" | "connected";
+  connection: ConnectionState;
   waitMessage: string | null;
   processing: ProcessingState | null;
   itemsVersion: number;
@@ -324,7 +359,7 @@ export function SessionTimeline({
           ? `work-after-${latestItem.itemId}`
           : "work-active-placeholder",
         items: [],
-        subAgentId: undefined,
+        subAgentIds: [],
         running: true,
       },
     ];

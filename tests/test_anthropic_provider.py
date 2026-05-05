@@ -20,8 +20,9 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.providers.anthropic_provider import ANTHROPIC_API_URL, AnthropicProvider
-from pbi_agent.session_store import MessageRecord
+from pbi_agent.session_store import MessageImageAttachment, MessageRecord
 from pbi_agent.tools.types import ToolResult
+from pbi_agent.web import uploads
 
 
 def _make_settings(**overrides: object) -> Settings:
@@ -347,6 +348,96 @@ def test_anthropic_restore_messages_reuses_persisted_history(
             "role": "user",
             "content": [{"type": "text", "text": "Follow-up question"}],
         },
+    ]
+
+
+def test_anthropic_restore_messages_replays_restored_user_images(
+    monkeypatch,
+    tmp_path,
+    display_spy,
+    make_http_response,
+) -> None:
+    monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path)
+    stored = uploads.store_uploaded_image_bytes(
+        raw_bytes=b"\x89PNG\r\n\x1a\nimage-bytes",
+        name="chart.png",
+        upload_id="upload-1",
+    )
+    requests: list[dict[str, object]] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return make_http_response(
+            {
+                "id": "msg_3",
+                "content": [{"type": "text", "text": "Follow-up answer."}],
+                "usage": {"input_tokens": 8, "output_tokens": 3},
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = AnthropicProvider(_make_settings())
+    provider.restore_messages(
+        [
+            MessageRecord(
+                id=1,
+                session_id="session-1",
+                role="user",
+                content="describe this",
+                created_at="2026-03-19T10:00:00+00:00",
+                image_attachments=[
+                    MessageImageAttachment(
+                        upload_id=stored.upload_id,
+                        name=stored.name,
+                        mime_type=stored.mime_type,
+                        byte_count=stored.byte_count,
+                        preview_url=f"/api/uploads/{stored.upload_id}",
+                    )
+                ],
+            ),
+            MessageRecord(
+                id=2,
+                session_id="session-1",
+                role="assistant",
+                content="it is a chart",
+                created_at="2026-03-19T10:00:01+00:00",
+            ),
+        ]
+    )
+
+    provider.request_turn(
+        user_message="continue",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert requests[0]["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "iVBORw0KGgppbWFnZS1ieXRlcw==",
+                    },
+                },
+                {"type": "text", "text": "describe this"},
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "it is a chart"}],
+        },
+        {"role": "user", "content": [{"type": "text", "text": "continue"}]},
     ]
 
 
