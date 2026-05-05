@@ -2913,21 +2913,23 @@ class WebSessionManager:
             )
         finally:
             self.refresh_file_mentions_cache()
-            live_session.status = "ended"
-            live_session.ended_at = _now_iso()
-            self._publish_live_event(
-                live_session_id,
-                "session_state",
-                {
-                    "state": "ended",
-                    "live_session_id": live_session_id,
-                    "session_id": live_session.bound_session_id,
-                    "resume_session_id": live_session.bound_session_id,
-                    "exit_code": live_session.exit_code,
-                    "fatal_error": live_session.fatal_error,
-                },
-            )
-            self._publish_live_session_lifecycle("live_session_ended", live_session)
+            with self._lock:
+                live_session.status = "ended"
+                live_session.ended_at = _now_iso()
+                self._publish_live_event(
+                    live_session_id,
+                    "session_state",
+                    {
+                        "state": "ended",
+                        "live_session_id": live_session_id,
+                        "session_id": live_session.bound_session_id,
+                        "resume_session_id": live_session.bound_session_id,
+                        "exit_code": live_session.exit_code,
+                        "fatal_error": live_session.fatal_error,
+                    },
+                )
+                self._update_live_run_projection(live_session)
+                self._publish_live_session_lifecycle("live_session_ended", live_session)
 
     def _run_task_worker(
         self,
@@ -3126,23 +3128,27 @@ class WebSessionManager:
                 )
         finally:
             if live_session is not None:
-                if live_session.exit_code is None:
-                    live_session.exit_code = 0
-                live_session.status = "ended"
-                live_session.ended_at = _now_iso()
-                self._publish_live_event(
-                    live_session.live_session_id,
-                    "session_state",
-                    {
-                        "state": "ended",
-                        "live_session_id": live_session.live_session_id,
-                        "session_id": live_session.bound_session_id,
-                        "resume_session_id": live_session.bound_session_id,
-                        "exit_code": live_session.exit_code,
-                        "fatal_error": live_session.fatal_error,
-                    },
-                )
-                self._publish_live_session_lifecycle("live_session_ended", live_session)
+                with self._lock:
+                    if live_session.exit_code is None:
+                        live_session.exit_code = 0
+                    live_session.status = "ended"
+                    live_session.ended_at = _now_iso()
+                    self._publish_live_event(
+                        live_session.live_session_id,
+                        "session_state",
+                        {
+                            "state": "ended",
+                            "live_session_id": live_session.live_session_id,
+                            "session_id": live_session.bound_session_id,
+                            "resume_session_id": live_session.bound_session_id,
+                            "exit_code": live_session.exit_code,
+                            "fatal_error": live_session.fatal_error,
+                        },
+                    )
+                    self._update_live_run_projection(live_session)
+                    self._publish_live_session_lifecycle(
+                        "live_session_ended", live_session
+                    )
             with self._lock:
                 self._running_task_ids.discard(task_id)
                 self._task_workers.pop(task_id, None)
