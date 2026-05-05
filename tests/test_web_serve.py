@@ -1651,7 +1651,7 @@ def test_run_task_advances_to_next_configured_stage(monkeypatch, tmp_path) -> No
     app = create_app(_settings())
 
     with patch(
-        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
         return_value=SimpleNamespace(
             tool_errors=[],
             text="Planned.",
@@ -1729,11 +1729,11 @@ def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) 
 
     with (
         patch(
-            "pbi_agent.web.session_manager.run_single_turn_in_directory",
+            "pbi_agent.web.session.workers.run_single_turn_in_directory",
             side_effect=fake_run_single_turn,
         ),
         patch(
-            "pbi_agent.web.session_manager.run_session_loop",
+            "pbi_agent.web.session.workers.run_session_loop",
             side_effect=fake_run_session_loop,
         ),
     ):
@@ -1902,11 +1902,11 @@ def test_completed_task_session_can_be_repeatedly_continued(
 
     with (
         patch(
-            "pbi_agent.web.session_manager.run_single_turn_in_directory",
+            "pbi_agent.web.session.workers.run_single_turn_in_directory",
             side_effect=fake_run_single_turn,
         ),
         patch(
-            "pbi_agent.web.session_manager.run_session_loop",
+            "pbi_agent.web.session.workers.run_session_loop",
             side_effect=fake_run_session_loop,
         ),
     ):
@@ -1981,11 +1981,11 @@ def test_failed_task_run_session_can_be_manually_continued(
 
     with (
         patch(
-            "pbi_agent.web.session_manager.run_single_turn_in_directory",
+            "pbi_agent.web.session.workers.run_single_turn_in_directory",
             side_effect=fake_run_single_turn,
         ),
         patch(
-            "pbi_agent.web.session_manager.run_session_loop",
+            "pbi_agent.web.session.workers.run_session_loop",
             side_effect=fake_run_session_loop,
         ),
     ):
@@ -2053,11 +2053,11 @@ def test_interrupted_task_run_session_can_be_manually_continued(
 
     with (
         patch(
-            "pbi_agent.web.session_manager.run_single_turn_in_directory",
+            "pbi_agent.web.session.workers.run_single_turn_in_directory",
             side_effect=fake_run_single_turn,
         ),
         patch(
-            "pbi_agent.web.session_manager.run_session_loop",
+            "pbi_agent.web.session.workers.run_session_loop",
             side_effect=fake_run_session_loop,
         ),
     ):
@@ -2128,7 +2128,7 @@ def test_run_task_precreated_session_uses_project_directory(
         )
 
     with patch(
-        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
         side_effect=fake_run_single_turn,
     ):
         with TestClient(app) as client:
@@ -2181,7 +2181,7 @@ def test_run_task_from_backlog_moves_to_next_stage_before_execution(
     app = create_app(_settings())
 
     with patch(
-        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
         return_value=SimpleNamespace(
             tool_errors=[],
             text="Planned.",
@@ -2240,7 +2240,7 @@ def test_run_task_formats_multiline_prompt_without_altering_content(
     prompt = "Keep this exactly:\n\n- item 1\n- item 2"
 
     with patch(
-        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
         return_value=SimpleNamespace(
             tool_errors=[],
             text="Planned.",
@@ -2294,7 +2294,7 @@ def test_run_task_only_prepends_command_for_first_runnable_stage(
     app = create_app(_settings())
 
     with patch(
-        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
         return_value=SimpleNamespace(
             tool_errors=[],
             text="Reviewed.",
@@ -2360,7 +2360,7 @@ def test_run_task_continuing_existing_session_sends_command_only(
         store.add_message(session_id, "assistant", "Plan ready.")
 
     with patch(
-        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
         return_value=SimpleNamespace(
             tool_errors=[],
             text="Replanned.",
@@ -2488,7 +2488,7 @@ def test_auto_start_stage_runs_once_before_done(monkeypatch, tmp_path) -> None:
         )
 
     with patch(
-        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
         side_effect=fake_run_single_turn_in_directory,
     ):
         with TestClient(app) as client:
@@ -2569,7 +2569,7 @@ def test_auto_started_stage_prompt_is_visible_while_running(
         )
 
     with patch(
-        "pbi_agent.web.session_manager.run_single_turn_in_directory",
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
         side_effect=fake_run_single_turn_in_directory,
     ):
         with TestClient(app) as client:
@@ -2681,7 +2681,7 @@ def test_saved_session_continuation_persists_uploaded_image_attachments(
 
     app = create_app(_settings())
     with patch(
-        "pbi_agent.web.session_manager.run_session_loop",
+        "pbi_agent.web.session.workers.run_session_loop",
         fake_run_session_loop,
     ):
         with TestClient(app) as client:
@@ -2754,7 +2754,7 @@ def test_second_manager_start_does_not_mark_running_task_failed(
         task_id = str(task["task_id"])
 
         with patch(
-            "pbi_agent.web.session_manager.run_single_turn_in_directory",
+            "pbi_agent.web.session.workers.run_single_turn_in_directory",
             side_effect=blocking_run_single_turn_in_directory,
         ):
             manager.run_task(task_id)
@@ -3091,7 +3091,7 @@ def test_live_session_worker_refreshes_mentions_on_reload_and_end() -> None:
 
     manager.refresh_file_mentions_cache = fake_refresh_file_mentions_cache  # type: ignore[method-assign]
 
-    with patch("pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop):
+    with patch("pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop):
         live_session = manager.create_live_session()
         worker = manager._live_sessions[live_session["live_session_id"]].worker
         assert worker is not None
@@ -3142,7 +3142,7 @@ def test_web_session_worker_records_turn_run_separately_from_live_projection(
     manager = WebSessionManager(_settings())
     try:
         with patch(
-            "pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
         ):
             live_session = manager.create_live_session(session_id=session_id)
             live_session_id = live_session["live_session_id"]
@@ -3196,7 +3196,7 @@ def test_web_session_worker_persists_failed_projection_on_fatal_error(
     manager = WebSessionManager(_settings())
     try:
         with patch(
-            "pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
         ):
             live_session = manager.create_live_session(session_id=session_id)
             live_session_id = live_session["live_session_id"]
@@ -3241,7 +3241,7 @@ def test_saved_session_first_message_sets_blank_title(tmp_path, monkeypatch) -> 
     manager = WebSessionManager(_settings())
     try:
         with patch(
-            "pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
         ):
             manager.submit_saved_session_input(
                 session_id,
@@ -3285,7 +3285,7 @@ def test_saved_session_first_message_keeps_existing_title(
     manager = WebSessionManager(_settings())
     try:
         with patch(
-            "pbi_agent.web.session_manager.run_session_loop", fake_run_session_loop
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
         ):
             manager.submit_saved_session_input(
                 session_id,
@@ -3402,7 +3402,7 @@ def test_saved_session_pending_questions_survive_refresh_and_answer_submission(
 
     app = create_app(_settings())
     with patch(
-        "pbi_agent.web.session_manager.run_session_loop",
+        "pbi_agent.web.session.workers.run_session_loop",
         fake_run_session_loop,
     ):
         with TestClient(app) as client:
@@ -4535,16 +4535,19 @@ def test_provider_auth_browser_flow_endpoints_round_trip(
 
     with (
         patch(
-            "pbi_agent.web.session_manager.create_browser_auth_callback_listener",
+            "pbi_agent.web.session.provider_auth.create_browser_auth_callback_listener",
             side_effect=fake_create_browser_auth_callback_listener,
         ),
-        patch("pbi_agent.web.session_manager.threading.Timer", side_effect=fake_timer),
         patch(
-            "pbi_agent.web.session_manager.start_provider_browser_auth",
+            "pbi_agent.web.session.provider_auth.threading.Timer",
+            side_effect=fake_timer,
+        ),
+        patch(
+            "pbi_agent.web.session.provider_auth.start_provider_browser_auth",
             side_effect=fake_start_browser_auth,
         ),
         patch(
-            "pbi_agent.web.session_manager.complete_provider_browser_auth",
+            "pbi_agent.web.session.provider_auth.complete_provider_browser_auth",
             side_effect=fake_complete_browser_auth,
         ),
         TestClient(app) as client,
@@ -4625,12 +4628,15 @@ def test_provider_auth_browser_flow_uses_dedicated_local_callback_listener(
 
     with (
         patch(
-            "pbi_agent.web.session_manager.create_browser_auth_callback_listener",
+            "pbi_agent.web.session.provider_auth.create_browser_auth_callback_listener",
             side_effect=fake_create_browser_auth_callback_listener,
         ),
-        patch("pbi_agent.web.session_manager.threading.Timer", side_effect=fake_timer),
         patch(
-            "pbi_agent.web.session_manager.start_provider_browser_auth",
+            "pbi_agent.web.session.provider_auth.threading.Timer",
+            side_effect=fake_timer,
+        ),
+        patch(
+            "pbi_agent.web.session.provider_auth.start_provider_browser_auth",
             side_effect=fake_start_browser_auth,
         ),
         TestClient(app, base_url="http://127.0.0.1:8000") as client,
@@ -4708,16 +4714,19 @@ def test_provider_auth_browser_flow_registers_before_listener_start(
 
     with (
         patch(
-            "pbi_agent.web.session_manager.create_browser_auth_callback_listener",
+            "pbi_agent.web.session.provider_auth.create_browser_auth_callback_listener",
             side_effect=fake_create_browser_auth_callback_listener,
         ),
-        patch("pbi_agent.web.session_manager.threading.Timer", side_effect=fake_timer),
         patch(
-            "pbi_agent.web.session_manager.start_provider_browser_auth",
+            "pbi_agent.web.session.provider_auth.threading.Timer",
+            side_effect=fake_timer,
+        ),
+        patch(
+            "pbi_agent.web.session.provider_auth.start_provider_browser_auth",
             side_effect=fake_start_browser_auth,
         ),
         patch(
-            "pbi_agent.web.session_manager.complete_provider_browser_auth",
+            "pbi_agent.web.session.provider_auth.complete_provider_browser_auth",
             side_effect=fake_complete_browser_auth,
         ),
         TestClient(app) as client,
@@ -4772,12 +4781,15 @@ def test_provider_auth_browser_flow_timeout_stops_listener(
 
     with (
         patch(
-            "pbi_agent.web.session_manager.create_browser_auth_callback_listener",
+            "pbi_agent.web.session.provider_auth.create_browser_auth_callback_listener",
             side_effect=fake_create_browser_auth_callback_listener,
         ),
-        patch("pbi_agent.web.session_manager.threading.Timer", side_effect=fake_timer),
         patch(
-            "pbi_agent.web.session_manager.start_provider_browser_auth",
+            "pbi_agent.web.session.provider_auth.threading.Timer",
+            side_effect=fake_timer,
+        ),
+        patch(
+            "pbi_agent.web.session.provider_auth.start_provider_browser_auth",
             side_effect=fake_start_browser_auth,
         ),
         TestClient(app) as client,
@@ -4847,11 +4859,11 @@ def test_provider_auth_device_flow_endpoints_round_trip(
 
     with (
         patch(
-            "pbi_agent.web.session_manager.start_provider_device_auth",
+            "pbi_agent.web.session.provider_auth.start_provider_device_auth",
             side_effect=fake_start_device_auth,
         ),
         patch(
-            "pbi_agent.web.session_manager.poll_provider_device_auth",
+            "pbi_agent.web.session.provider_auth.poll_provider_device_auth",
             side_effect=fake_poll_device_auth,
         ),
         TestClient(app) as client,
