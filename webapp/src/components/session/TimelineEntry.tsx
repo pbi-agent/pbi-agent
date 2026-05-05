@@ -1,7 +1,5 @@
 import { useState, type JSX, type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { ImageAttachment, TimelineItem } from "../../types";
 import { Button } from "../ui/button";
 import {
@@ -9,12 +7,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
+import { MarkdownContent } from "../shared/MarkdownContent";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
 import { ToolResult } from "./ToolResult";
-
-function MarkdownContent({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
-}
 
 function renderUserContent(
   content: string,

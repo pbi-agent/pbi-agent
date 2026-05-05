@@ -1,4 +1,6 @@
-# Orchestrate TODO
+# TODO
 
-[X] Fix saved-session timeline merge so historical Working blocks stay anchored to their turn.
-[X] Run focused/final validation, update memory, and report handoff.
+[X] Inspect SettingsPage and CommandPreviewDialog close button styling
+[X] Apply matching hover/style to Settings close button
+[X] Run focused validation
+[X] Update memory
