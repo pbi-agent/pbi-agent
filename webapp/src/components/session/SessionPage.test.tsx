@@ -11,6 +11,8 @@ import {
   fetchSessionDetail,
   fetchSessions,
   sendSessionMessage,
+  setActiveModelProfile,
+  setSessionProfile,
   submitSessionQuestionResponse,
   updateSession,
   uploadSavedSessionImages,
@@ -181,6 +183,7 @@ vi.mock("../../api", async (importOriginal) => {
     fetchSessions: vi.fn(),
     sendSessionMessage: vi.fn(),
     setActiveModelProfile: vi.fn(),
+    setSessionProfile: vi.fn(),
     setLiveSessionProfile: vi.fn(),
     submitSessionQuestionResponse: vi.fn(),
     updateSession: vi.fn(),
@@ -900,6 +903,154 @@ describe("SessionPage", () => {
     ]);
   });
 
+  it("keeps overlapping run work traces before their assistant response", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "msg-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "/plan",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:00:00Z",
+        },
+        {
+          item_id: "msg-2",
+          message_id: "msg-2",
+          part_ids: { content: "msg-2:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "this is a test",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:01:00Z",
+        },
+        {
+          item_id: "msg-3",
+          message_id: "msg-3",
+          part_ids: { content: "msg-3:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "say again this is a test",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:02:00Z",
+        },
+        {
+          item_id: "msg-4",
+          message_id: "msg-4",
+          part_ids: { content: "msg-4:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "this is a test",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:03:00Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "latest-live",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "msg-1",
+            messageId: "msg-1",
+            role: "user",
+            content: "/plan",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-plan",
+            title: "Thinking",
+            content: "planning",
+          },
+          {
+            kind: "message",
+            itemId: "msg-2",
+            messageId: "msg-2",
+            role: "assistant",
+            content: "this is a test",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "msg-1-replayed",
+            messageId: "msg-1",
+            role: "user",
+            content: "/plan",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "msg-2-replayed",
+            messageId: "msg-2",
+            role: "assistant",
+            content: "this is a test",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "msg-3",
+            messageId: "msg-3",
+            role: "user",
+            content: "say again this is a test",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-repeat",
+            title: "Thinking",
+            content: "repeating",
+          },
+          {
+            kind: "message",
+            itemId: "msg-4",
+            messageId: "msg-4",
+            role: "assistant",
+            content: "this is a test",
+            markdown: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 28,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 6")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "msg-1",
+      "thinking-plan",
+      "msg-2",
+      "msg-3",
+      "thinking-repeat",
+      "msg-4",
+    ]);
+  });
+
   it("keeps Kanban-started continuation history in chronological order", async () => {
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord({ status: "running", active_run_id: "kanban-continuation" }),
@@ -1228,6 +1379,72 @@ describe("SessionPage", () => {
       profile_id: "analysis",
       interactive_mode: false,
     });
+  });
+
+  it("allows changing the profile for a dormant saved session after restart", async () => {
+    const user = userEvent.setup();
+    const baseConfig = makeConfigBootstrap();
+    const analysisProfile = baseConfig.model_profiles[0];
+    const reviewProfile = {
+      ...analysisProfile,
+      id: "review",
+      name: "Review",
+      model: "gpt-5.4-mini",
+      is_active_default: false,
+      resolved_runtime: {
+        ...analysisProfile.resolved_runtime,
+        profile_id: "review",
+        model: "gpt-5.4-mini",
+      },
+    };
+
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue({
+      ...baseConfig,
+      model_profiles: [analysisProfile, reviewProfile],
+    });
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "completed-live-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [],
+        sub_agents: {},
+        last_event_seq: 12,
+      },
+    } satisfies SessionDetailPayload);
+    vi.mocked(setActiveModelProfile).mockResolvedValue({
+      active_profile_id: "review",
+      config_revision: "rev-2",
+    });
+    vi.mocked(setSessionProfile).mockResolvedValue(makeLiveSession({
+      live_session_id: "session-1",
+      session_id: "session-1",
+      status: "idle",
+      profile_id: "review",
+      model: "gpt-5.4-mini",
+    }));
+
+    renderSessionRoute("/sessions/session-1");
+
+    const trigger = await screen.findByRole("button", { name: "Model profile: Analysis" });
+    expect(trigger).toBeEnabled();
+    await user.click(trigger);
+    await user.click(await screen.findByText("Review"));
+
+    await waitFor(() => expect(setSessionProfile).toHaveBeenCalledWith("session-1", "review"));
+    expect(setActiveModelProfile).toHaveBeenCalledWith("review", "rev-1");
   });
 
   it("dedupes dormant timeline overlays by historical ids and signatures", async () => {

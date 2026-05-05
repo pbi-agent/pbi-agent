@@ -415,7 +415,7 @@ export function SessionPage({
       : supportsImageInputs;
   const profileSelectorDisabled =
     modelProfiles.length === 0
-    || Boolean(sessionState && (!sessionState.inputEnabled || sessionState.sessionEnded))
+    || Boolean(sessionState && !composerInputEnabled)
     || createSessionMutation.isPending
     || setSessionProfileMutation.isPending
     || setActiveProfileMutation.isPending;
@@ -897,6 +897,7 @@ function timelineForDisplay(
         && persistedMessageId(historyItem) === messageId
       ));
       if (index >= 0) return index;
+      return -1;
     }
     const signature = messageSignature(item);
     if (!signature) return -1;

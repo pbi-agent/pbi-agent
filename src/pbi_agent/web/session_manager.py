@@ -477,6 +477,33 @@ def _serialize_run_as_live_session(record: RunSessionRecord) -> dict[str, Any]:
     }
 
 
+def _serialize_saved_session_runtime(
+    record: SessionRecord,
+    runtime: ResolvedRuntime,
+) -> dict[str, Any]:
+    return {
+        "live_session_id": record.session_id,
+        "run_id": record.session_id,
+        "session_id": record.session_id,
+        "resume_session_id": record.session_id,
+        "task_id": None,
+        "kind": "session",
+        "project_dir": record.directory,
+        "provider_id": runtime.provider_id,
+        "profile_id": runtime.profile_id,
+        "provider": runtime.settings.provider,
+        "model": runtime.settings.model,
+        "reasoning_effort": runtime.settings.reasoning_effort,
+        "compact_threshold": runtime.settings.compact_threshold,
+        "created_at": record.updated_at,
+        "status": "idle",
+        "exit_code": None,
+        "fatal_error": None,
+        "ended_at": None,
+        "last_event_seq": 0,
+    }
+
+
 def _serialize_observability_event(record: ObservabilityEventRecord) -> dict[str, Any]:
     return {
         "run_session_id": record.run_session_id,
@@ -1270,10 +1297,13 @@ class WebSessionManager:
         bound_session_id = session_id
         if bound_session_id is not None:
             self._require_saved_session(bound_session_id)
-            runtime = self._resolve_saved_session_runtime(
-                bound_session_id,
-                fallback=runtime,
-            )
+            if profile_id is None:
+                runtime = self._resolve_saved_session_runtime(
+                    bound_session_id,
+                    fallback=runtime,
+                )
+            else:
+                self._update_saved_session_runtime(bound_session_id, runtime)
         with self._lock:
             if bound_session_id is not None:
                 existing_live_session = (
@@ -1818,13 +1848,10 @@ class WebSessionManager:
         *,
         profile_id: str | None = None,
     ) -> dict[str, Any]:
+        requested_runtime = self._resolve_runtime(profile_id)
         live_session = self._find_live_session_for_saved_session(session_id)
         if live_session is None:
-            created = self.create_live_session(
-                session_id=session_id,
-                profile_id=profile_id,
-            )
-            return created
+            return self._update_saved_session_runtime(session_id, requested_runtime)
         return self.set_live_session_profile(
             live_session.live_session_id,
             profile_id=profile_id,
@@ -3702,6 +3729,29 @@ class WebSessionManager:
             profile_id=None,
         )
 
+    def _update_saved_session_runtime(
+        self,
+        session_id: str,
+        runtime: ResolvedRuntime,
+    ) -> dict[str, Any]:
+        with SessionStore() as store:
+            record = store.get_session(session_id)
+            if record is None or record.directory != self._directory_key:
+                raise KeyError(session_id)
+            store.update_session(
+                session_id,
+                provider=runtime.settings.provider,
+                provider_id=runtime.provider_id or None,
+                model=runtime.settings.model,
+                profile_id=runtime.profile_id or None,
+            )
+            updated = store.get_session(session_id)
+        if updated is None:
+            raise KeyError(session_id)
+        serialized = _serialize_session(updated)
+        self._app_stream.publish("session_updated", {"session": serialized})
+        return _serialize_saved_session_runtime(updated, runtime)
+
     def _queue_runtime_change(
         self,
         live_session: LiveSessionState,
@@ -3713,6 +3763,8 @@ class WebSessionManager:
             runtime=runtime,
             profile_id=runtime.profile_id,
         )
+        if live_session.bound_session_id is not None:
+            self._update_saved_session_runtime(live_session.bound_session_id, runtime)
         self._publish_live_session_runtime(live_session)
         self._publish_live_session_lifecycle("live_session_updated", live_session)
 

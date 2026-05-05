@@ -3744,6 +3744,74 @@ def test_get_session_detail_combines_completed_web_run_timelines(
     assert payload["timeline"]["items"][5]["itemId"] == "second-web-run:thinking-1"
 
 
+def test_set_saved_session_profile_updates_dormant_session_without_starting_run(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key_env="OPENAI_API_KEY",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="review",
+            name="Review",
+            provider_id="openai-main",
+            model="gpt-5.4-mini",
+            reasoning_effort="low",
+        )
+    )
+    app = create_app(_settings(), runtime_args=_runtime_args("web"))
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Old session",
+        )
+        store.add_message(session_id, "user", "hello")
+        store.create_run_session(
+            run_session_id="ended-web-run",
+            session_id=session_id,
+            agent_name="web",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id=None,
+            model="gpt-5.4",
+            status="completed",
+            kind="session",
+            project_dir=str(tmp_path),
+        )
+
+    with TestClient(app) as client:
+        response = client.put(
+            f"/api/sessions/{session_id}/profile",
+            json={"profile_id": "review"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["session"]["session_id"] == session_id
+    assert payload["session"]["profile_id"] == "review"
+    assert payload["session"]["model"] == "gpt-5.4-mini"
+    assert payload["session"]["status"] == "idle"
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        saved = store.get_session(session_id)
+        web_runs = store.list_web_session_runs(session_id)
+    assert saved is not None
+    assert saved.profile_id == "review"
+    assert saved.model == "gpt-5.4-mini"
+    assert [run.run_session_id for run in web_runs] == ["ended-web-run"]
+
+
 def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history(
     tmp_path, monkeypatch
 ) -> None:
