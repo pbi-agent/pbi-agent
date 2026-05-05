@@ -140,6 +140,11 @@ def _event_seq(event: dict[str, Any]) -> int:
     return seq if isinstance(seq, int) else 0
 
 
+def _is_transient_event(event: dict[str, Any]) -> bool:
+    payload = event.get("payload")
+    return isinstance(payload, dict) and payload.get("transient") is True
+
+
 def _control_event(
     event_type: str,
     seq: int,
@@ -290,7 +295,7 @@ async def _iter_sse_events(
 
     subscriber_id, queue = stream.subscribe()
     try:
-        snapshot_events = stream.snapshot()
+        snapshot_events = stream.replay_snapshot(include_transient_since=since)
         oldest_retained_seq, latest_seq = stream.bounds()
         replay_from_seq, replay_to_seq = _seq_range(replay_events or [])
         snapshot_from_seq, snapshot_to_seq = _seq_range(snapshot_events)
@@ -340,6 +345,9 @@ async def _iter_sse_events(
 
         for event in snapshot_events:
             seq = _event_seq(event)
+            if _is_transient_event(event):
+                yield _format_sse(event)
+                continue
             if seq <= last_sent_seq:
                 continue
             last_sent_seq = max(last_sent_seq, seq)
@@ -386,6 +394,9 @@ async def _iter_sse_events(
                 )
                 yield _format_sse(overflow_event, event_id=latest_seq)
                 break
+            if _is_transient_event(event):
+                yield _format_sse(event)
+                continue
             if seq <= last_sent_seq:
                 continue
             last_sent_seq = max(last_sent_seq, seq)

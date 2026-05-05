@@ -29,6 +29,7 @@ class EventStream:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._events: list[dict[str, Any]] = []
+        self._pending_transient_events: list[dict[str, Any]] = []
         self._subscribers: dict[
             str, tuple[asyncio.AbstractEventLoop, asyncio.Queue]
         ] = {}
@@ -55,6 +56,29 @@ class EventStream:
         if deliver:
             self.deliver(event)
         return event
+
+    def publish_transient(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        with self._lock:
+            event = {
+                "seq": 0,
+                "type": event_type,
+                "payload": {**payload, "transient": True},
+                "created_at": _now_iso(),
+                "_transient_after_seq": self._sequence,
+                "_transient_replay_once": not self._subscribers,
+            }
+            self._pending_transient_events.append(event)
+            if len(self._pending_transient_events) > _MAX_EVENT_HISTORY:
+                self._pending_transient_events = self._pending_transient_events[
+                    -_MAX_EVENT_HISTORY:
+                ]
+            deliver_event = _public_event(event)
+        self.deliver(deliver_event)
+        return deliver_event
 
     def deliver(self, event: dict[str, Any]) -> None:
         with self._lock:
@@ -103,6 +127,28 @@ class EventStream:
         with self._lock:
             return list(self._events)
 
+    def replay_snapshot(
+        self, *, include_transient_since: int | None = None
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            events = list(self._events)
+            if include_transient_since is None or not self._pending_transient_events:
+                return events
+            pending_transient: list[dict[str, Any]] = []
+            retained_transient: list[dict[str, Any]] = []
+            for event in self._pending_transient_events:
+                after_seq = event.get("_transient_after_seq")
+                if not isinstance(after_seq, int):
+                    continue
+                replay_once = event.get("_transient_replay_once") is True
+                if replay_once or after_seq >= include_transient_since:
+                    pending_transient.append(_public_event(event))
+                    if not replay_once:
+                        retained_transient.append(event)
+                    continue
+            self._pending_transient_events = retained_transient
+            return [*events, *pending_transient]
+
     def bounds(self) -> tuple[int | None, int]:
         with self._lock:
             if not self._events:
@@ -125,6 +171,10 @@ class EventStream:
     def subscriber_count(self) -> int:
         with self._lock:
             return len(self._subscribers)
+
+
+def _public_event(event: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in event.items() if not key.startswith("_")}
 
 
 def _put_subscriber_event(queue: asyncio.Queue, event: dict[str, Any]) -> None:

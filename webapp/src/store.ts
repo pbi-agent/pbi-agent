@@ -506,6 +506,8 @@ export function reduceSessionEvent(
 ): ReduceSessionEventResult {
   const nextSessionId = eventSessionId(event);
   const eventLiveId = options.eventLiveSessionId ?? eventLiveSessionId(event);
+  const transient = event.type === "message_added"
+    && (event.payload as Record<string, unknown>).transient === true;
   if (eventLiveId && current.liveSessionId && current.liveSessionId !== eventLiveId) {
     return { state: current, applied: false, reason: "stale-live-session" };
   }
@@ -516,10 +518,10 @@ export function reduceSessionEvent(
   ) {
     return { state: current, applied: false, reason: "stale-live-session" };
   }
-  if (event.seq <= current.lastEventSeq) {
+  if (!transient && event.seq <= current.lastEventSeq) {
     return { state: current, applied: false, reason: "duplicate-or-old" };
   }
-  if (event.seq > current.lastEventSeq + 1) {
+  if (!transient && event.seq > current.lastEventSeq + 1) {
     return {
       state: current,
       applied: false,
@@ -528,7 +530,7 @@ export function reduceSessionEvent(
     };
   }
 
-  const patch: Partial<SessionRuntimeState> = { lastEventSeq: event.seq };
+  const patch: Partial<SessionRuntimeState> = transient ? {} : { lastEventSeq: event.seq };
   if (eventLiveId && !current.liveSessionId) {
     patch.liveSessionId = eventLiveId;
   }
@@ -777,6 +779,13 @@ export const useSessionStore = create<SessionStore>((set) => ({
       const current =
         nextState.sessionsByKey[resolvedKey]
         ?? createEmptySessionState(session.session_id);
+      const returnedLastEventSeq = typeof session.last_event_seq === "number"
+        ? session.last_event_seq
+        : 0;
+      const sameLiveSession = current.liveSessionId === session.live_session_id;
+      const hasAppliedNewerStreamEvents = sameLiveSession
+        && options.preserveEventCursor
+        && current.lastEventSeq > returnedLastEventSeq;
       return {
         ...nextState,
         sessionsByKey: {
@@ -786,9 +795,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
             liveSessionId: session.live_session_id,
             sessionId: session.session_id,
             runtime: runtimeFromSession(session),
-            inputEnabled: false,
-            waitMessage: null,
-            processing: null,
+            inputEnabled: hasAppliedNewerStreamEvents ? current.inputEnabled : false,
+            waitMessage: hasAppliedNewerStreamEvents ? current.waitMessage : null,
+            processing: hasAppliedNewerStreamEvents ? current.processing : null,
             restoredInput: options.preserveItems ? current.restoredInput : null,
             sessionUsage: options.preserveItems ? current.sessionUsage : null,
             turnUsage: options.preserveItems ? current.turnUsage : null,
@@ -800,16 +809,13 @@ export const useSessionStore = create<SessionStore>((set) => ({
             // Event seq is scoped to one live stream. Preserve the cursor only
             // for the same stream. If saved-session submit returns a new live
             // run, reset so the new stream can replay the submitted turn.
-            lastEventSeq: current.liveSessionId === session.live_session_id
+            lastEventSeq: sameLiveSession
               ? options.preserveEventCursor
                 ? current.lastEventSeq
-                : Math.max(
-                    current.lastEventSeq,
-                    typeof session.last_event_seq === "number" ? session.last_event_seq : 0,
-                  )
+                : Math.max(current.lastEventSeq, returnedLastEventSeq)
               : options.preserveEventCursor
                 ? 0
-                : (typeof session.last_event_seq === "number" ? session.last_event_seq : 0),
+                : returnedLastEventSeq,
           },
         },
         liveSessionIndex: {

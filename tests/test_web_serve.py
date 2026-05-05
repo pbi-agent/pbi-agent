@@ -60,7 +60,7 @@ from pbi_agent.web.session_manager import (
     WebManagerStartupError,
     WebSessionManager,
 )
-from pbi_agent.web.session.state import _MAX_SUBSCRIBER_QUEUE_SIZE
+from pbi_agent.web.session.state import EventStream, _MAX_SUBSCRIBER_QUEUE_SIZE
 from pbi_agent.web.serve import PBIWebServer, create_app
 
 
@@ -128,15 +128,22 @@ def _wait_for_first_task_status(client: TestClient, status: str) -> dict:
         time.sleep(0.01)
 
 
-def _wait_for_session_detail_detached(client: TestClient, session_id: str) -> dict:
+def _wait_for_session_detail_detached(
+    client: TestClient,
+    session_id: str,
+    *,
+    status: str | None = None,
+) -> dict:
     deadline = time.monotonic() + 2
     while True:
         detail = client.get(f"/api/sessions/{session_id}").json()
-        if (
+        is_detached = (
             detail["live_session"] is None
             and detail["active_live_session"] is None
             and detail["active_run"] is None
-        ):
+        )
+        status_matches = status is None or detail["status"] == status
+        if is_detached and status_matches:
             return detail
         if time.monotonic() > deadline:
             raise AssertionError("session detail did not detach in time")
@@ -1057,6 +1064,126 @@ def test_event_stream_publish_ignores_closed_subscriber_loop() -> None:
 
     assert stream.subscriber_count() == 0
     stream.unsubscribe(subscriber_id)
+
+
+def test_event_stream_transient_replay_until_durable_cursor_passes() -> None:
+    stream = EventStream()
+
+    async def publish_with_subscriber() -> tuple[
+        dict[str, object], dict[str, object], dict[str, object]
+    ]:
+        subscriber_id, _queue = stream.subscribe()
+        try:
+            first_event = stream.publish("message_added", {"item_id": "durable-1"})
+            transient_event = stream.publish_transient(
+                "message_added", {"item_id": "temp-1"}
+            )
+            second_event = stream.publish("message_added", {"item_id": "durable-2"})
+            return first_event, transient_event, second_event
+        finally:
+            stream.unsubscribe(subscriber_id)
+
+    first, transient, second = asyncio.run(publish_with_subscriber())
+
+    assert first["seq"] == 1
+    assert transient["seq"] == 0
+    assert transient["payload"]["transient"] is True
+    assert second["seq"] == 2
+    assert [event["seq"] for event in stream.snapshot()] == [1, 2]
+    assert stream.bounds() == (1, 2)
+
+    replay = stream.replay_snapshot(include_transient_since=1)
+    assert [event["payload"]["item_id"] for event in replay] == [
+        "durable-1",
+        "durable-2",
+        "temp-1",
+    ]
+    assert [
+        event["payload"]["item_id"]
+        for event in stream.replay_snapshot(include_transient_since=1)
+    ] == [
+        "durable-1",
+        "durable-2",
+        "temp-1",
+    ]
+    assert [
+        event["payload"]["item_id"]
+        for event in stream.replay_snapshot(include_transient_since=2)
+    ] == [
+        "durable-1",
+        "durable-2",
+    ]
+
+
+def test_event_stream_replays_no_subscriber_transient_once_even_at_latest_cursor() -> (
+    None
+):
+    stream = EventStream()
+    stream.publish("input_state", {"enabled": False})
+    stream.publish_transient("message_added", {"item_id": "temp-input"})
+    stream.publish_transient("message_added", {"item_id": "temp-output"})
+    stream.publish("input_state", {"enabled": True})
+
+    replay = stream.replay_snapshot(include_transient_since=2)
+    assert [event["seq"] for event in replay] == [1, 2, 0, 0]
+    assert [event["payload"].get("item_id") for event in replay[-2:]] == [
+        "temp-input",
+        "temp-output",
+    ]
+
+    second_replay = stream.replay_snapshot(include_transient_since=2)
+    assert [event["seq"] for event in second_replay] == [1, 2]
+
+
+def test_sse_replays_pending_transient_events_without_advancing_cursor() -> None:
+    stream = EventStream()
+
+    async def publish_with_subscriber() -> None:
+        subscriber_id, _queue = stream.subscribe()
+        try:
+            stream.publish("message_added", {"item_id": "durable-1"})
+            stream.publish_transient("message_added", {"item_id": "temp-1"})
+            stream.publish("message_added", {"item_id": "durable-2"})
+        finally:
+            stream.unsubscribe(subscriber_id)
+
+    asyncio.run(publish_with_subscriber())
+
+    async def collect(since: int, event_count: int) -> list[dict[str, object]]:
+        iterator = _iter_sse_events(stream, since=since)
+        events: list[dict[str, object]] = []
+        try:
+            while len(events) < event_count:
+                chunk = await asyncio.wait_for(anext(iterator), timeout=1)
+                raw = "".join(
+                    line.removeprefix("data: ")
+                    for line in chunk.splitlines()
+                    if line.startswith("data: ")
+                )
+                events.append(json.loads(raw))
+        finally:
+            await iterator.aclose()
+        return events
+
+    events = asyncio.run(collect(0, 4))
+
+    assert [event["seq"] for event in events] == [0, 1, 2, 0]
+    assert [event["type"] for event in events] == [
+        "server.connected",
+        "message_added",
+        "message_added",
+        "message_added",
+    ]
+    assert events[-1]["payload"] == {"item_id": "temp-1", "transient": True}
+
+    resumed_events = asyncio.run(collect(1, 3))
+    assert [event["seq"] for event in resumed_events] == [1, 2, 0]
+    assert resumed_events[-1]["payload"] == {"item_id": "temp-1", "transient": True}
+
+    assert [
+        event["payload"]["item_id"]
+        for event in stream.replay_snapshot(include_transient_since=2)
+    ] == ["durable-1", "durable-2"]
 
 
 def test_sse_event_stream_disconnects_on_subscriber_queue_overflow(monkeypatch) -> None:
@@ -3132,7 +3259,11 @@ def test_failed_task_run_session_can_be_manually_continued(
             failed_task = _wait_for_first_task_status(client, "failed")
             assert failed_task["session_id"] == session_id
 
-            failed_detail = _wait_for_session_detail_detached(client, session_id)
+            failed_detail = _wait_for_session_detail_detached(
+                client,
+                session_id,
+                status="failed",
+            )
             assert failed_detail["live_session"] is None
             assert failed_detail["active_live_session"] is None
             assert failed_detail["active_run"] is None
@@ -5239,6 +5370,119 @@ def test_live_session_worker_refreshes_mentions_on_reload_and_end() -> None:
 
     assert observed["on_reload_callable"] is True
     assert refresh_calls == 2
+
+
+def test_temporary_slash_command_web_events_are_live_only(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    reload_output = (
+        "Reloaded workspace instructions, project rules, skills, sub-agents, "
+        "tool definitions, and file mention cache. MCP servers are not "
+        "reloaded; restart the session after changing MCP config."
+    )
+
+    def fake_run_session_loop(
+        _settings,
+        display,
+        *,
+        resume_session_id=None,
+        on_reload=None,
+        run_session_id=None,
+    ):
+        del _settings, resume_session_id, on_reload, run_session_id
+        for _ in range(2):
+            queued = display.user_prompt()
+            text = getattr(queued, "text", queued).strip()
+            if text == "/reload":
+                display.render_transient_markdown(reload_output)
+                continue
+            display.render_markdown("Normal response")
+        return 0
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
+        ):
+            created = manager.create_live_session(session_id=session_id)
+            live_session_id = str(created["live_session_id"])
+            live_session = manager._live_sessions[live_session_id]
+
+            async def collect_reload_events() -> list[dict[str, object]]:
+                subscriber_id, queue = live_session.event_stream.subscribe()
+                try:
+                    manager.submit_session_input(live_session_id, text="/reload")
+                    events: list[dict[str, object]] = []
+                    while len(events) < 2:
+                        event = await asyncio.wait_for(queue.get(), timeout=2)
+                        payload = event.get("payload")
+                        content = (
+                            payload.get("content")
+                            if isinstance(payload, dict)
+                            else None
+                        )
+                        if content in {"/reload", reload_output}:
+                            events.append(event)
+                    return events
+                finally:
+                    live_session.event_stream.unsubscribe(subscriber_id)
+
+            reload_events = asyncio.run(collect_reload_events())
+            manager.submit_session_input(live_session_id, text="normal prompt")
+            worker = live_session.worker
+            assert worker is not None
+            worker.join(timeout=2)
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            messages = store.list_messages(session_id)
+            records = store.list_observability_events(run_session_id=live_session_id)
+            run = store.get_run_session(live_session_id)
+        detail = manager.get_session_detail(session_id)
+    finally:
+        manager.shutdown()
+
+    assert [
+        event["payload"]["content"]
+        for event in reload_events
+        if isinstance(event.get("payload"), dict)
+    ] == ["/reload", reload_output]
+    assert [message.content for message in messages] == []
+    persisted_metadata = [json.loads(record.metadata_json) for record in records]
+    persisted_contents = [
+        metadata.get("payload", {}).get("content")
+        for metadata in persisted_metadata
+        if isinstance(metadata, dict)
+    ]
+    assert "/reload" not in persisted_contents
+    assert reload_output not in persisted_contents
+    assert "normal prompt" in persisted_contents
+    assert "Normal response" in persisted_contents
+
+    assert run is not None
+    snapshot = json.loads(run.snapshot_json)
+    snapshot_contents = [item.get("content") for item in snapshot["items"]]
+    assert "/reload" not in snapshot_contents
+    assert reload_output not in snapshot_contents
+    assert "normal prompt" in snapshot_contents
+    assert "Normal response" in snapshot_contents
+    assert detail["history_items"] == []
+    timeline_contents = [item.get("content") for item in detail["timeline"]["items"]]
+    assert "/reload" not in timeline_contents
+    assert reload_output not in timeline_contents
+    assert "normal prompt" in timeline_contents
+    assert "Normal response" in timeline_contents
 
 
 def test_web_session_worker_records_turn_run_separately_from_live_projection(

@@ -1,7 +1,7 @@
 # TODO
 
-[X] Investigate image attachment send/display failure using session and snapshot
-[X] Identify backend/frontend bug and implement fix
-[X] Add/update tests
+[X] Diagnose first-command disappearance in virgin sessions and focus loss after command
+[X] Implement backend/frontend fixes
+[X] Add/update regression tests
 [X] Run focused validation
-[X] Update MEMORY.md
+[X] Update memory

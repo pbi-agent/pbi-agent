@@ -16,6 +16,8 @@ from pbi_agent.web.session.state import (
     LiveSessionState,
 )
 
+TRANSIENT_WEB_EVENT_KEY = "__pbi_transient"
+
 
 class EventsMixin:
     def get_event_stream(self, stream_id: str) -> EventStream:
@@ -207,10 +209,16 @@ class EventsMixin:
             if live_session.ended_at is not None and not allow_after_end:
                 return None
             enriched_payload = dict(payload)
+            transient = bool(enriched_payload.pop(TRANSIENT_WEB_EVENT_KEY, False))
             enriched_payload["live_session_id"] = live_session.live_session_id
             if live_session.bound_session_id is not None:
                 enriched_payload["session_id"] = live_session.bound_session_id
                 enriched_payload["resume_session_id"] = live_session.bound_session_id
+            if transient:
+                return live_session.event_stream.publish_transient(
+                    event_type,
+                    enriched_payload,
+                )
             event = live_session.event_stream.publish(
                 event_type,
                 enriched_payload,
