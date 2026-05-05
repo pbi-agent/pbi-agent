@@ -65,7 +65,7 @@ export function useLiveSessionEvents(
       recovery: Record<string, unknown> | null,
     ) {
       recoveryMode = true;
-      resetStreamState(targetSessionKey);
+      resetStreamState(targetSessionKey, { preserveLiveSession: true });
       setConnection(targetSessionKey, "recovering");
       updateLiveSessionDebug(targetSessionKey, {
         connection: "recovering",

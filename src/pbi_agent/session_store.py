@@ -1238,8 +1238,40 @@ class SessionStore:
                 "AND session_id IN (SELECT session_id FROM sessions WHERE directory = ?)",
                 (now, normalized_directory),
             )
+            stale_count = cursor.rowcount
+            rows = self._conn.execute(
+                "SELECT id, metadata_json FROM run_sessions "
+                "WHERE kind IN ('session', 'task') "
+                "AND agent_type = 'web_session' "
+                "AND session_id IS NULL "
+                "AND status IN ('starting', 'running', 'waiting_for_input')"
+            ).fetchall()
+            unbound_ids: list[int] = []
+            for row in rows:
+                try:
+                    metadata = json.loads(row["metadata_json"])
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(metadata, dict):
+                    continue
+                metadata_directory = metadata.get("directory")
+                if (
+                    metadata.get("source") == "web"
+                    and isinstance(metadata_directory, str)
+                    and _normalize_directory_key(metadata_directory)
+                    == normalized_directory
+                ):
+                    unbound_ids.append(int(row["id"]))
+            if unbound_ids:
+                placeholders = ", ".join("?" for _ in unbound_ids)
+                cursor = self._conn.execute(
+                    f"UPDATE run_sessions SET status = 'stale', ended_at = ? "
+                    f"WHERE id IN ({placeholders})",
+                    (now, *unbound_ids),
+                )
+                stale_count += cursor.rowcount
             self._conn.commit()
-        return cursor.rowcount
+        return stale_count
 
     def add_observability_event(
         self,

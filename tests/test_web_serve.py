@@ -58,6 +58,7 @@ from pbi_agent.web.session_manager import (
     WebManagerStartupError,
     WebSessionManager,
 )
+from pbi_agent.web.session.state import _MAX_SUBSCRIBER_QUEUE_SIZE
 from pbi_agent.web.serve import PBIWebServer, create_app
 
 
@@ -954,6 +955,44 @@ def test_sse_event_stream_sends_connected_and_filters_by_cursor() -> None:
     assert event["seq"] == second["seq"]
     assert event["type"] == "second"
     assert f"id: {second['seq']}" in event_raw
+
+
+def test_event_stream_subscriber_queue_is_bounded_and_drops_oldest() -> None:
+    app = create_app(_settings())
+    stream = app.state.manager.get_event_stream("app")
+
+    async def fill_slow_subscriber() -> tuple[list[int], list[BaseException]]:
+        loop = asyncio.get_running_loop()
+        loop_errors: list[BaseException] = []
+
+        def capture_loop_error(_loop, context) -> None:  # noqa: ANN001
+            exception = context.get("exception")
+            if isinstance(exception, BaseException):
+                loop_errors.append(exception)
+
+        previous_handler = loop.get_exception_handler()
+        loop.set_exception_handler(capture_loop_error)
+        subscriber_id, queue = stream.subscribe()
+        try:
+            assert queue.maxsize == _MAX_SUBSCRIBER_QUEUE_SIZE
+            for index in range(_MAX_SUBSCRIBER_QUEUE_SIZE + 5):
+                stream.publish("item", {"index": index})
+            await asyncio.sleep(0)
+            queued = [queue.get_nowait() for _ in range(queue.qsize())]
+        finally:
+            stream.unsubscribe(subscriber_id)
+            loop.set_exception_handler(previous_handler)
+        return [int(event["seq"]) for event in queued], loop_errors
+
+    queued_seqs, loop_errors = asyncio.run(fill_slow_subscriber())
+
+    assert loop_errors == []
+    assert len(queued_seqs) == _MAX_SUBSCRIBER_QUEUE_SIZE
+    assert queued_seqs[0] == 6
+    assert queued_seqs[-1] == _MAX_SUBSCRIBER_QUEUE_SIZE + 5
+    assert [int(event["seq"]) for event in stream.snapshot()] == list(
+        range(6, _MAX_SUBSCRIBER_QUEUE_SIZE + 6)
+    )
 
 
 def test_sse_event_stream_logs_subscription_replay_range_and_unsubscribe(
@@ -2111,7 +2150,7 @@ def test_interrupted_task_run_session_can_be_manually_continued(
             ]
 
 
-def test_run_task_precreated_session_uses_project_directory(
+def test_run_task_precreated_session_is_accessible_from_root_manager(
     monkeypatch, tmp_path
 ) -> None:
     project_dir = tmp_path / "packages" / "api"
@@ -2130,7 +2169,7 @@ def test_run_task_precreated_session_uses_project_directory(
     with patch(
         "pbi_agent.web.session.workers.run_single_turn_in_directory",
         side_effect=fake_run_single_turn,
-    ):
+    ) as mock_run:
         with TestClient(app) as client:
             client.put(
                 "/api/board/stages",
@@ -2166,11 +2205,31 @@ def test_run_task_precreated_session_uses_project_directory(
                     raise AssertionError("task run did not finish in time")
                 time.sleep(0.01)
 
+            detail_response = client.get(f"/api/sessions/{session_id}")
+            assert detail_response.status_code == 200
+            detail = detail_response.json()
+            assert detail["session"]["session_id"] == session_id
+            assert detail["session"]["directory"] == str(tmp_path).lower()
+            assert [item["content"] for item in detail["history_items"]] == [
+                "Investigate"
+            ]
+
+            replay_events = app.state.manager.get_session_event_stream_replay(
+                session_id,
+                since=0,
+            )
+            assert replay_events
+            assert any(event["type"] == "session_state" for event in replay_events)
+
+    assert mock_run.call_args is not None
+    assert mock_run.call_args.kwargs["project_dir"] == "packages/api"
+    assert mock_run.call_args.kwargs["workspace_root"] == tmp_path
+
     with SessionStore(db_path=tmp_path / "sessions.db") as store:
         saved_session = store.get_session(session_id)
 
     assert saved_session is not None
-    assert saved_session.directory == str(project_dir).lower()
+    assert saved_session.directory == str(tmp_path).lower()
 
 
 def test_run_task_from_backlog_moves_to_next_stage_before_execution(
@@ -2820,6 +2879,59 @@ def test_manager_start_retries_busy_lease_then_succeeds(monkeypatch, tmp_path) -
     assert mock_acquire.call_count == 2
     mock_sleep.assert_called_once()
     manager.shutdown()
+
+
+def test_shutdown_keeps_lease_until_live_worker_finishes(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    started = threading.Event()
+    finish = threading.Event()
+
+    def blocking_run_session_loop(*args, **kwargs):
+        del args, kwargs
+        started.set()
+        if not finish.wait(timeout=5):
+            raise AssertionError("live worker did not unblock in time")
+        return 0
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop",
+            side_effect=blocking_run_session_loop,
+        ):
+            live_session = manager.create_live_session()
+            live_session_id = str(live_session["live_session_id"])
+            assert started.wait(timeout=2)
+
+            manager.shutdown()
+
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                assert store.has_active_web_manager_lease(
+                    str(tmp_path), stale_after_seconds=30.0
+                )
+
+            finish.set()
+            worker = manager._live_sessions[live_session_id].worker
+            assert worker is not None
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+
+            deadline = time.monotonic() + 2
+            while True:
+                with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                    active = store.has_active_web_manager_lease(
+                        str(tmp_path), stale_after_seconds=30.0
+                    )
+                if not active:
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("manager lease was not released")
+                time.sleep(0.01)
+    finally:
+        finish.set()
+        manager.shutdown()
 
 
 def test_manager_start_reports_busy_database_after_retry_window(
@@ -3924,6 +4036,34 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
             kind="session",
             project_dir=str(tmp_path),
         )
+        store.create_run_session(
+            run_session_id="unbound-web-run",
+            session_id=None,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="waiting_for_input",
+            kind="session",
+            project_dir=str(tmp_path),
+            metadata={"source": "web", "directory": str(tmp_path)},
+        )
+        store.create_run_session(
+            run_session_id="other-directory-unbound-web-run",
+            session_id=None,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="running",
+            kind="session",
+            project_dir=str(tmp_path / "other"),
+            metadata={"source": "web", "directory": str(tmp_path / "other")},
+        )
 
     manager = WebSessionManager(_settings())
     try:
@@ -3939,6 +4079,10 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
         with SessionStore(db_path=tmp_path / "sessions.db") as store:
             stale_run = store.get_run_session("stale-live-run")
             non_web_run = store.get_run_session("non-web-active-run")
+            unbound_web_run = store.get_run_session("unbound-web-run")
+            other_directory_unbound_web_run = store.get_run_session(
+                "other-directory-unbound-web-run"
+            )
             persisted_events = store.list_observability_events(
                 run_session_id="stale-live-run"
             )
@@ -3952,6 +4096,12 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
     assert json.loads(stale_run.snapshot_json)["items"][0]["content"] == "Working"
     assert non_web_run is not None
     assert non_web_run.status == "running"
+    assert unbound_web_run is not None
+    assert unbound_web_run.status == "stale"
+    assert unbound_web_run.ended_at is not None
+    assert other_directory_unbound_web_run is not None
+    assert other_directory_unbound_web_run.status == "running"
+    assert other_directory_unbound_web_run.ended_at is None
     assert [record.event_type for record in persisted_events] == [
         "web_event",
         "web_event",

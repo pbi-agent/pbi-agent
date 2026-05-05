@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import uuid
 
 from pbi_agent.agent.error_formatting import format_user_facing_error
@@ -107,6 +108,7 @@ class WorkersMixin:
                 )
                 self._update_live_run_projection(live_session)
                 self._publish_live_session_lifecycle("live_session_ended", live_session)
+            self._finalize_shutdown_if_idle()
 
     def _run_task_worker(
         self,
@@ -346,6 +348,16 @@ class WorkersMixin:
             if not self._started or not self._shutdown_requested:
                 return
             if any(worker.is_alive() for worker in self._task_workers.values()):
+                return
+            current_thread = threading.current_thread()
+            if any(
+                worker is not None
+                and worker is not current_thread
+                and worker.is_alive()
+                for worker in (
+                    session.worker for session in self._live_sessions.values()
+                )
+            ):
                 return
             lease_thread = self._lease_thread
             self._lease_thread = None

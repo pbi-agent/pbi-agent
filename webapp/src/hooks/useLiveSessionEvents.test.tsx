@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { useLiveSessionEvents } from "./useLiveSessionEvents";
 import { getLiveSessionKey, getSavedSessionKey, useSessionStore } from "../store";
 import type { LiveSession } from "../types";
@@ -686,6 +686,52 @@ describe("useLiveSessionEvents", () => {
     });
 
     const firstSocket = MockEventSource.instances[0];
+    await act(async () => {
+      emit(firstSocket, {
+        seq: 0,
+        type: "server.replay_incomplete",
+        payload: {
+          reason: "cursor_ahead",
+          requested_since: 20,
+          resolved_since: 0,
+          latest_seq: 1,
+          snapshot_required: true,
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(firstSocket.close).toHaveBeenCalledTimes(1);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("recovering");
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1].url).toContain("?since=0");
+    MockEventSource.instances[1].onopen?.();
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("recovered");
+  });
+
+  it("keeps store-driven live session identity while recovering from replay-incomplete", async () => {
+    const queryClient = new QueryClient();
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ last_event_seq: 20 }),
+    );
+
+    renderHook(() => {
+      const liveSessionId = useSessionStore(
+        (state) => state.sessionsByKey[sessionKey]?.liveSessionId ?? null,
+      );
+      const sessionId = useSessionStore(
+        (state) => state.sessionsByKey[sessionKey]?.sessionId ?? null,
+      );
+      useLiveSessionEvents(sessionKey, liveSessionId, sessionId);
+    }, {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const firstSocket = MockEventSource.instances[0];
     emit(firstSocket, {
       seq: 0,
       type: "server.replay_incomplete",
@@ -698,14 +744,16 @@ describe("useLiveSessionEvents", () => {
       },
     });
 
+    const recoveringState = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(recoveringState?.items).toEqual([]);
+    expect(recoveringState?.lastEventSeq).toBe(0);
+    expect(recoveringState?.liveSessionId).toBe("live-1");
     expect(firstSocket.close).toHaveBeenCalledTimes(1);
-    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("recovering");
+
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(MockEventSource.instances).toHaveLength(2);
     expect(MockEventSource.instances[1].url).toContain("?since=0");
-    MockEventSource.instances[1].onopen?.();
-    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("recovered");
   });
 
   it("marks recovery failed when snapshot invalidation fails", async () => {

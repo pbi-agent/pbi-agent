@@ -739,6 +739,105 @@ describe("SessionPage", () => {
     ]);
   });
 
+  it("does not content-match repeated no-id messages to the wrong history item", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: "live-repeat" }),
+      history_items: [
+        {
+          item_id: "history-1",
+          message_id: "",
+          part_ids: { content: "history-1:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "continue",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:00:00Z",
+        },
+        {
+          item_id: "history-2",
+          message_id: "",
+          part_ids: { content: "history-2:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "First answer",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-05T12:01:00Z",
+        },
+        {
+          item_id: "history-3",
+          message_id: "",
+          part_ids: { content: "history-3:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "continue",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-05T12:02:00Z",
+        },
+      ],
+      active_live_session: makeLiveSession({
+        live_session_id: "live-repeat",
+        session_id: "session-1",
+      }),
+      active_run: null,
+      timeline: {
+        live_session_id: "live-repeat",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: { active: true, phase: "model_wait", message: "Working" },
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "message-current-user",
+            role: "user",
+            content: "continue",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "thinking-current",
+            title: "Thinking",
+            content: "working",
+          },
+          {
+            kind: "message",
+            itemId: "message-current-assistant",
+            role: "assistant",
+            content: "Working on it",
+            markdown: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 14,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 6")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-1",
+      "history-2",
+      "history-3",
+      "message-current-user",
+      "thinking-current",
+      "message-current-assistant",
+    ]);
+  });
+
   it("keeps refreshed work traces anchored to their original turns", async () => {
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord({ status: "ended", active_run_id: null }),
@@ -1424,10 +1523,6 @@ describe("SessionPage", () => {
         last_event_seq: 12,
       },
     } satisfies SessionDetailPayload);
-    vi.mocked(setActiveModelProfile).mockResolvedValue({
-      active_profile_id: "review",
-      config_revision: "rev-2",
-    });
     vi.mocked(setSessionProfile).mockResolvedValue(makeLiveSession({
       live_session_id: "session-1",
       session_id: "session-1",
@@ -1444,7 +1539,43 @@ describe("SessionPage", () => {
     await user.click(await screen.findByText("Review"));
 
     await waitFor(() => expect(setSessionProfile).toHaveBeenCalledWith("session-1", "review"));
-    expect(setActiveModelProfile).toHaveBeenCalledWith("review", "rev-1");
+    expect(setActiveModelProfile).not.toHaveBeenCalled();
+  });
+
+  it("keeps blank-session profile changes on the active default", async () => {
+    const user = userEvent.setup();
+    const baseConfig = makeConfigBootstrap();
+    const analysisProfile = baseConfig.model_profiles[0];
+    const reviewProfile = {
+      ...analysisProfile,
+      id: "review",
+      name: "Review",
+      model: "gpt-5.4-mini",
+      is_active_default: false,
+      resolved_runtime: {
+        ...analysisProfile.resolved_runtime,
+        profile_id: "review",
+        model: "gpt-5.4-mini",
+      },
+    };
+
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue({
+      ...baseConfig,
+      model_profiles: [analysisProfile, reviewProfile],
+    });
+    vi.mocked(setActiveModelProfile).mockResolvedValue({
+      active_profile_id: "review",
+      config_revision: "rev-2",
+    });
+
+    renderSessionRoute("/sessions");
+
+    const trigger = await screen.findByRole("button", { name: "Model profile: Analysis" });
+    await user.click(trigger);
+    await user.click(await screen.findByText("Review"));
+
+    await waitFor(() => expect(setActiveModelProfile).toHaveBeenCalledWith("review", "rev-1"));
+    expect(setSessionProfile).not.toHaveBeenCalled();
   });
 
   it("dedupes dormant timeline overlays by historical ids and signatures", async () => {

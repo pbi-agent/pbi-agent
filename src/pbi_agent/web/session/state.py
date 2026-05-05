@@ -18,6 +18,7 @@ from pbi_agent.web.display import WebDisplay
 
 APP_EVENT_STREAM_ID = "app"
 _MAX_EVENT_HISTORY = 1000
+_MAX_SUBSCRIBER_QUEUE_SIZE = 1000
 
 
 def _now_iso() -> str:
@@ -47,7 +48,7 @@ class EventStream:
                 self._events = self._events[-_MAX_EVENT_HISTORY:]
             subscribers = list(self._subscribers.values())
         for loop, queue in subscribers:
-            loop.call_soon_threadsafe(queue.put_nowait, event)
+            loop.call_soon_threadsafe(_put_subscriber_event, queue, event)
         return event
 
     def load(self, events: list[dict[str, Any]]) -> None:
@@ -75,7 +76,7 @@ class EventStream:
 
     def subscribe(self) -> tuple[str, asyncio.Queue]:
         subscriber_id = uuid.uuid4().hex
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=_MAX_SUBSCRIBER_QUEUE_SIZE)
         with self._lock:
             self._subscribers[subscriber_id] = (asyncio.get_running_loop(), queue)
         return subscriber_id, queue
@@ -87,6 +88,20 @@ class EventStream:
     def subscriber_count(self) -> int:
         with self._lock:
             return len(self._subscribers)
+
+
+def _put_subscriber_event(queue: asyncio.Queue, event: dict[str, Any]) -> None:
+    try:
+        queue.put_nowait(event)
+    except asyncio.QueueFull:
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+        try:
+            queue.put_nowait(event)
+        except asyncio.QueueFull:
+            pass
 
 
 @dataclass(slots=True)

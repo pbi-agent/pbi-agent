@@ -984,6 +984,34 @@ describe("session store", () => {
     expect(store.sessionIndex["session-1"]).toBe(sessionKey);
   });
 
+  it("can reset stream state while preserving the active live session identity", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 5,
+      type: "message_added",
+      created_at: "2026-04-16T12:00:02Z",
+      payload: {
+        item_id: "message-1",
+        role: "assistant",
+        content: "partial",
+      },
+    });
+
+    useSessionStore.getState().resetStreamState(sessionKey, { preserveLiveSession: true });
+
+    const store = useSessionStore.getState();
+    expect(store.sessionsByKey[sessionKey]).toEqual(expect.objectContaining({
+      sessionId: "session-1",
+      liveSessionId: "live-1",
+      lastEventSeq: 0,
+      items: [],
+      connection: "disconnected",
+    }));
+    expect(store.liveSessionIndex["live-1"]).toBe(sessionKey);
+    expect(store.sessionIndex["session-1"]).toBe(sessionKey);
+  });
+
   it("captures turn usage updates with elapsed time", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());

@@ -513,6 +513,14 @@ export function SessionPage({
   const handleProfileChange = async (nextProfileId: string) => {
     setPendingProfileId(nextProfileId);
     try {
+      const sessionId = routeSessionId ?? sessionState?.sessionId ?? null;
+      if (sessionId) {
+        await setSessionProfileMutation.mutateAsync({
+          sessionId,
+          profileId: nextProfileId,
+        });
+        return;
+      }
       const nextConfigRevision = configQuery.data?.config_revision;
       if (!nextConfigRevision) {
         throw new Error("Settings are not loaded yet.");
@@ -521,12 +529,6 @@ export function SessionPage({
         profileId: nextProfileId,
         configRevision: nextConfigRevision,
       });
-      if (routeSessionId || sessionState?.sessionId) {
-        await setSessionProfileMutation.mutateAsync({
-          sessionId: routeSessionId ?? sessionState?.sessionId ?? null,
-          profileId: nextProfileId,
-        });
-      }
     } finally {
       setPendingProfileId(null);
     }
@@ -865,6 +867,21 @@ function timelineForDisplay(
   }
 
   const historyItems = detail.history_items.map(historyItemToSnapshotItem);
+  const historySignatureCounts = new Map<string, number>();
+  for (const item of historyItems) {
+    const signature = messageSignature(item);
+    if (signature) {
+      historySignatureCounts.set(signature, (historySignatureCounts.get(signature) ?? 0) + 1);
+    }
+  }
+  const snapshotSignatureCounts = new Map<string, number>();
+  for (const item of timeline.items) {
+    if (persistedMessageId(item)) continue;
+    const signature = messageSignature(item);
+    if (signature) {
+      snapshotSignatureCounts.set(signature, (snapshotSignatureCounts.get(signature) ?? 0) + 1);
+    }
+  }
   const historyMessageIds = new Set(
     historyItems.flatMap((item) => {
       const messageId = persistedMessageId(item);
@@ -901,6 +918,9 @@ function timelineForDisplay(
     }
     const signature = messageSignature(item);
     if (!signature) return -1;
+    if (historySignatureCounts.get(signature) !== 1 || snapshotSignatureCounts.get(signature) !== 1) {
+      return -1;
+    }
     return historyItems.findIndex((historyItem, candidateIndex) => (
       !consumedHistoryIndexes.has(candidateIndex)
       && messageSignature(historyItem) === signature
