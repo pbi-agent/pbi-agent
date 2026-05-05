@@ -903,6 +903,18 @@
   background: var(--color-muted);
 }
 
+.timeline-entry__work-run-agent-summary {
+  max-inline-size: min(14rem, 45vw);
+  min-height: 1.25rem;
+  padding: 0 var(--sp-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-entry__work-run-separator {
+  color: var(--color-text-tertiary);
+}
+
 .timeline-entry__header--work-run[data-phase="starting"],
 .timeline-entry__header--work-run[data-phase="model_wait"],
 .timeline-entry__header--work-run[data-phase="active"] {
