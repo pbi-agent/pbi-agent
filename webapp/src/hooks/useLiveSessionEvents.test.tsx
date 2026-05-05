@@ -525,7 +525,7 @@ describe("useLiveSessionEvents", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["run-detail"] });
   });
 
-  it("invalidates snapshots and run queries when replay is incomplete", () => {
+  it("invalidates snapshots and run queries when replay is incomplete", async () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi
       .spyOn(queryClient, "invalidateQueries")
@@ -556,6 +556,9 @@ describe("useLiveSessionEvents", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session-runs", "session-1"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["run-detail"] });
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([]);
   });
@@ -694,8 +697,10 @@ describe("useLiveSessionEvents", () => {
       },
     });
 
-    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([]);
-    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([
+      expect.objectContaining({ itemId: "message-1" }),
+    ]);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(3);
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
@@ -703,6 +708,12 @@ describe("useLiveSessionEvents", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["run-detail"] });
     expect(firstSocket.close).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("recovering");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([]);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
 
     await vi.advanceTimersByTimeAsync(1000);
 
@@ -800,10 +811,15 @@ describe("useLiveSessionEvents", () => {
     });
 
     const recoveringState = useSessionStore.getState().sessionsByKey[sessionKey];
-    expect(recoveringState?.items).toEqual([]);
-    expect(recoveringState?.lastEventSeq).toBe(0);
+    expect(recoveringState?.lastEventSeq).toBe(20);
     expect(recoveringState?.liveSessionId).toBe("live-1");
     expect(firstSocket.close).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([]);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
 
     await vi.advanceTimersByTimeAsync(1000);
 
@@ -811,13 +827,20 @@ describe("useLiveSessionEvents", () => {
     expect(MockEventSource.instances[1].url).toContain("?since=0");
   });
 
-  it("marks recovery failed when snapshot invalidation fails", async () => {
+  it("keeps state and retries when snapshot invalidation fails", async () => {
     const queryClient = new QueryClient();
-    vi.spyOn(queryClient, "invalidateQueries").mockRejectedValue(new Error("boom"));
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValue(undefined);
     const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().hydrateSavedSession("session-1", [
+      { kind: "message", itemId: "message-1", role: "assistant", content: "keep", markdown: true },
+    ], 20);
     useSessionStore.getState().attachLiveSession(
       sessionKey,
       makeLiveSession({ last_event_seq: 20 }),
+      { preserveItems: true },
     );
 
     renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
@@ -839,12 +862,40 @@ describe("useLiveSessionEvents", () => {
 
     expect(firstSocket.close).toHaveBeenCalledTimes(1);
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("recovering");
-    for (let index = 0; index < 5; index += 1) {
+    await act(async () => {
       await Promise.resolve();
-    }
+    });
     expect(useSessionStore.getState().sessionsByKey[sessionKey]?.connection).toBe("recovery_failed");
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([
+      expect.objectContaining({ itemId: "message-1" }),
+    ]);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(20);
+
     await vi.advanceTimersByTimeAsync(1000);
-    expect(MockEventSource.instances).toHaveLength(1);
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1].url).toContain("?since=20");
+
+    emit(MockEventSource.instances[1], {
+      seq: 0,
+      type: "server.replay_incomplete",
+      payload: {
+        reason: "cursor_ahead",
+        requested_since: 20,
+        resolved_since: 0,
+        latest_seq: 1,
+        snapshot_required: true,
+      },
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.items).toEqual([]);
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.lastEventSeq).toBe(0);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(MockEventSource.instances).toHaveLength(3);
+    expect(MockEventSource.instances[2].url).toContain("?since=0");
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
   });
 
   it("invalidates run queries for an attached saved live stream", () => {

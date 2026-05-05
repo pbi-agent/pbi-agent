@@ -306,15 +306,9 @@ class TasksMixin:
                     record = moved_record
                     mutated_record = record
                 existing_session_id = record.session_id
+                existing_messages: list[MessageRecord] = []
                 if existing_session_id is not None:
                     existing_messages = store.list_messages(existing_session_id)
-                    is_continuation = any(
-                        message.content.strip() != record.prompt.strip()
-                        for message in existing_messages
-                        if message.role == "user"
-                    )
-                if started_from_backlog:
-                    is_continuation = False
                 stage_record = store.get_kanban_stage_config(
                     self._directory_key,
                     record.stage,
@@ -324,11 +318,36 @@ class TasksMixin:
                     stage_record=stage_record,
                     allow_fallback=False,
                 )
-                initial_prompt = self._task_prompt_for_run(
+                first_run_prompt = self._task_prompt_for_run(
                     record,
                     stage_record,
                     store=store,
-                    is_continuation=is_continuation,
+                    is_continuation=False,
+                )
+                initial_prompt_values = {
+                    record.prompt.strip(),
+                    first_run_prompt.strip(),
+                }
+                has_non_initial_user_message = any(
+                    message.content.strip() not in initial_prompt_values
+                    for message in existing_messages
+                    if message.role == "user"
+                )
+                has_assistant_message = any(
+                    message.role == "assistant" for message in existing_messages
+                )
+                is_continuation = has_non_initial_user_message or has_assistant_message
+                if started_from_backlog:
+                    is_continuation = False
+                initial_prompt = (
+                    self._task_prompt_for_run(
+                        record,
+                        stage_record,
+                        store=store,
+                        is_continuation=True,
+                    )
+                    if is_continuation
+                    else first_run_prompt
                 )
                 if record.session_id is None:
                     session_id = store.create_session(
@@ -350,7 +369,20 @@ class TasksMixin:
                     record = updated_record
                     mutated_record = record
                 initial_user_message_id = None
-                if not is_continuation:
+                initial_user_message_was_persisted = False
+                persisted_initial_prompt = next(
+                    (
+                        message
+                        for message in existing_messages
+                        if message.role == "user"
+                        and message.content.strip() == first_run_prompt.strip()
+                    ),
+                    None,
+                )
+                initial_prompt_already_persisted = (
+                    not has_assistant_message and persisted_initial_prompt is not None
+                )
+                if not is_continuation and not initial_prompt_already_persisted:
                     initial_user_message_id = self._persist_task_user_prompt(
                         store,
                         record,
@@ -358,13 +390,19 @@ class TasksMixin:
                         initial_prompt,
                         list(record.image_attachments),
                     )
+                    initial_user_message_was_persisted = True
+                elif initial_prompt_already_persisted:
+                    initial_user_message_id = persisted_initial_prompt.id
                 running_record = store.set_kanban_task_running(task_id)
             if running_record is None:
                 with self._lock:
                     self._running_task_ids.discard(task_id)
                 raise KeyError(task_id)
             live_session = self._create_task_live_session(running_record, runtime)
-            if initial_user_message_id is not None:
+            if (
+                initial_user_message_was_persisted
+                and initial_user_message_id is not None
+            ):
                 self._publish_persisted_user_message(
                     live_session,
                     running_record,

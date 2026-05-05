@@ -2017,6 +2017,97 @@ def test_late_live_events_after_terminal_finalization_do_not_mutate_run(
         manager.shutdown()
 
 
+def test_live_session_finalization_persistence_failure_rolls_back_terminal_fields(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = manager.create_live_session()
+        live_session_id = str(created["live_session_id"])
+        live_session = manager._live_sessions[live_session_id]
+        original_status = live_session.status
+        original_persist = manager._persist_live_event_record
+        failed = False
+
+        def fail_terminal_persist(session, event):
+            nonlocal failed
+            if (
+                not failed
+                and event["type"] == "session_state"
+                and event["payload"].get("state") == "ended"
+            ):
+                failed = True
+                raise RuntimeError("terminal persist failed")
+            original_persist(session, event)
+
+        monkeypatch.setattr(
+            manager, "_persist_live_event_record", fail_terminal_persist
+        )
+
+        with pytest.raises(RuntimeError, match="terminal persist failed"):
+            with manager._lock:
+                manager._finalize_live_session_locked(live_session)
+
+        assert live_session.status == original_status
+        assert live_session.ended_at is None
+        assert live_session.exit_code is None
+        assert live_session.snapshot.session_ended is False
+        assert not any(
+            event["type"] == "live_session_ended"
+            for event in manager._app_stream.snapshot()
+        )
+        assert not any(
+            event["type"] == "session_state"
+            and event["payload"].get("state") == "ended"
+            for event in manager.get_event_stream(live_session_id).snapshot()
+        )
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            failed_run = store.get_run_session(live_session_id)
+            failed_records = store.list_observability_events(
+                run_session_id=live_session_id
+            )
+        assert failed_run is not None
+        assert failed_run.ended_at is None
+        assert json.loads(failed_run.snapshot_json)["session_ended"] is False
+        assert not any(
+            json.loads(record.metadata_json)["type"] == "session_state"
+            and json.loads(record.metadata_json)["payload"].get("state") == "ended"
+            for record in failed_records
+        )
+
+        with manager._lock:
+            manager._finalize_live_session_locked(live_session)
+
+        assert live_session.status == "ended"
+        assert live_session.ended_at is not None
+        assert live_session.exit_code == 0
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            retried_run = store.get_run_session(live_session_id)
+        assert retried_run is not None
+        assert retried_run.ended_at == live_session.ended_at
+        assert json.loads(retried_run.snapshot_json)["session_ended"] is True
+    finally:
+        manager.shutdown()
+
+
 def test_live_event_sse_replays_persisted_events_when_memory_snapshot_is_empty(
     tmp_path, monkeypatch
 ) -> None:
@@ -2504,6 +2595,111 @@ def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) 
             ]
 
 
+def test_completed_task_terminal_persist_failure_does_not_mark_task_failed(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    app = create_app(_settings())
+    run_started = threading.Event()
+    release_run = threading.Event()
+
+    def fake_run_single_turn(_prompt, _runtime, _display, **kwargs):
+        run_started.set()
+        assert release_run.wait(timeout=2)
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Done.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    with patch(
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
+        side_effect=fake_run_single_turn,
+    ):
+        with TestClient(app) as client:
+            _put_two_stage_board(client)
+            create_response = client.post(
+                "/api/tasks",
+                json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+            session_id = run_response.json()["task"]["session_id"]
+            assert run_started.wait(timeout=2)
+
+            detail = client.get(f"/api/sessions/{session_id}").json()
+            live_session_id = detail["active_live_session"]["live_session_id"]
+            manager = app.state.manager
+            live_session = manager._live_sessions[live_session_id]
+            worker = manager._task_workers[task_id]
+            original_persist = manager._persist_live_event_record
+            failed = False
+
+            def fail_terminal_persist(session, event):
+                nonlocal failed
+                if (
+                    not failed
+                    and event["type"] == "session_state"
+                    and event["payload"].get("state") == "ended"
+                ):
+                    failed = True
+                    raise RuntimeError("terminal persist failed")
+                original_persist(session, event)
+
+            monkeypatch.setattr(
+                manager,
+                "_persist_live_event_record",
+                fail_terminal_persist,
+            )
+
+            release_run.set()
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+
+            task = client.get("/api/tasks").json()["tasks"][0]
+            assert task["run_status"] == "completed"
+            assert task["last_result_summary"] == "Done."
+            assert live_session.status == "running"
+            assert live_session.ended_at is None
+            assert live_session.exit_code is None
+            assert live_session.snapshot.session_ended is False
+            assert not any(
+                event["type"] == "session_state"
+                and event["payload"].get("state") == "ended"
+                for event in manager.get_event_stream(live_session_id).snapshot()
+            )
+            with SessionStore() as store:
+                failed_run = store.get_run_session(live_session_id)
+                failed_records = store.list_observability_events(
+                    run_session_id=live_session_id
+                )
+            assert failed_run is not None
+            assert failed_run.ended_at is None
+            assert json.loads(failed_run.snapshot_json)["session_ended"] is False
+            assert not any(
+                json.loads(record.metadata_json)["type"] == "session_state"
+                and json.loads(record.metadata_json)["payload"].get("state") == "ended"
+                for record in failed_records
+            )
+
+            with manager._lock:
+                manager._finalize_live_session_locked(live_session)
+
+            retried_task = client.get("/api/tasks").json()["tasks"][0]
+            assert retried_task["run_status"] == "completed"
+            assert live_session.status == "ended"
+            assert live_session.ended_at is not None
+            assert live_session.exit_code == 0
+            with SessionStore() as store:
+                retried_run = store.get_run_session(live_session_id)
+            assert retried_run is not None
+            assert retried_run.ended_at == live_session.ended_at
+            assert json.loads(retried_run.snapshot_json)["session_ended"] is True
+
+
 def test_delete_session_rejects_task_start_setup_before_live_registration(
     monkeypatch, tmp_path
 ) -> None:
@@ -2558,9 +2754,94 @@ def test_delete_session_rejects_task_start_setup_before_live_registration(
                 saved_session = store.get_session(session_id)
                 task = store.get_kanban_task(task_id)
 
-            assert saved_session is not None
-            assert task is not None
-            assert task.session_id == session_id
+    assert saved_session is not None
+    assert task is not None
+    assert task.session_id == session_id
+
+
+def test_startup_retry_of_partial_task_start_does_not_duplicate_prompt(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(db_path))
+
+    first_app = create_app(_settings())
+    with TestClient(first_app) as client:
+        _put_two_stage_board(client)
+        create_response = client.post(
+            "/api/tasks",
+            json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task"]["task_id"]
+
+    with SessionStore(db_path=db_path) as store:
+        session_id = store.create_session(
+            directory=str(tmp_path),
+            provider="openai",
+            model="gpt-5.4",
+            title="Task A",
+        )
+        store.update_kanban_task(task_id, session_id=session_id)
+        initial_message_id = store.add_message(session_id, "user", "Investigate")
+
+    def fake_run_single_turn(prompt, _runtime, _display, **kwargs):
+        assert prompt == "Investigate"
+        assert kwargs["persisted_user_message_id"] == initial_message_id
+        with SessionStore() as store:
+            store.add_message(kwargs["resume_session_id"], "assistant", "Done.")
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Done.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    second_app = create_app(_settings())
+    with patch(
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
+        side_effect=fake_run_single_turn,
+    ):
+        with TestClient(second_app) as client:
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+            completed_task = _wait_for_first_task_status(client, "completed")
+
+    assert completed_task["session_id"] == session_id
+    with SessionStore(db_path=db_path) as store:
+        messages = store.list_messages(session_id)
+    assert [message.content for message in messages] == ["Investigate", "Done."]
+
+
+def test_startup_marks_running_task_without_live_run_failed(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(db_path))
+
+    first_app = create_app(_settings())
+    with TestClient(first_app) as client:
+        _put_two_stage_board(client)
+        create_response = client.post(
+            "/api/tasks",
+            json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task"]["task_id"]
+
+    with SessionStore(db_path=db_path) as store:
+        running = store.set_kanban_task_running(task_id)
+    assert running is not None
+    assert running.run_status == "running"
+
+    second_app = create_app(_settings())
+    with TestClient(second_app) as client:
+        task = client.get("/api/tasks").json()["tasks"][0]
+
+    assert task["task_id"] == task_id
+    assert task["run_status"] == "failed"
+    assert task["last_result_summary"] == "Interrupted while the app was not running."
 
 
 def test_running_task_rejects_unsafe_patch_updates(monkeypatch, tmp_path) -> None:
@@ -3725,6 +4006,12 @@ def test_shutdown_keeps_lease_until_noncooperative_live_worker_stops(
                     str(tmp_path), stale_after_seconds=30.0
                 )
                 run = store.get_run_session(live_session_id)
+            second_manager = WebSessionManager(_settings())
+            with pytest.raises(
+                RuntimeError,
+                match="Another web app instance is already managing this workspace",
+            ):
+                second_manager.start()
             assert run is not None
             assert run.status == "interrupted"
             assert run.ended_at is not None
@@ -3743,6 +4030,8 @@ def test_shutdown_keeps_lease_until_noncooperative_live_worker_stops(
                     str(tmp_path), stale_after_seconds=30.0
                 )
                 completed_run = store.get_run_session(live_session_id)
+            second_manager.start()
+            second_manager.shutdown()
             assert completed_run is not None
             assert completed_run.status == "interrupted"
             assert completed_run.exit_code == 130
@@ -3804,6 +4093,12 @@ def test_shutdown_keeps_lease_until_noncooperative_task_worker_stops(
                 )
                 current = store.get_kanban_task(task_id)
                 run = store.get_run_session(live_session_id)
+            second_manager = WebSessionManager(_settings())
+            with pytest.raises(
+                RuntimeError,
+                match="Another web app instance is already managing this workspace",
+            ):
+                second_manager.start()
             assert current is not None
             assert current.run_status == "failed"
             assert current.last_result_summary == "Interrupted during app shutdown."
@@ -3822,6 +4117,8 @@ def test_shutdown_keeps_lease_until_noncooperative_task_worker_stops(
                 )
                 completed_task = store.get_kanban_task(task_id)
                 completed_run = store.get_run_session(live_session_id)
+            second_manager.start()
+            second_manager.shutdown()
             assert completed_task is not None
             assert completed_task.run_status == "failed"
             assert completed_run is not None

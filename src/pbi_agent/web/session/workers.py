@@ -31,24 +31,36 @@ class WorkersMixin:
     def _finalize_live_session_locked(self, live_session) -> None:  # noqa: ANN001
         if live_session.ended_at is not None:
             return
+        previous_status = live_session.status
+        previous_ended_at = live_session.ended_at
+        previous_exit_code = live_session.exit_code
+        previous_fatal_error = live_session.fatal_error
+        previous_terminal_status = live_session.terminal_status
         if live_session.exit_code is None:
             live_session.exit_code = 0
         live_session.status = "ended"
         live_session.ended_at = _now_iso()
-        self._publish_live_event(
-            live_session.live_session_id,
-            "session_state",
-            {
-                "state": "ended",
-                "live_session_id": live_session.live_session_id,
-                "session_id": live_session.bound_session_id,
-                "resume_session_id": live_session.bound_session_id,
-                "exit_code": live_session.exit_code,
-                "fatal_error": live_session.fatal_error,
-            },
-            allow_after_end=True,
-        )
-        self._update_live_run_projection(live_session)
+        try:
+            self._publish_live_event(
+                live_session.live_session_id,
+                "session_state",
+                {
+                    "state": "ended",
+                    "live_session_id": live_session.live_session_id,
+                    "session_id": live_session.bound_session_id,
+                    "resume_session_id": live_session.bound_session_id,
+                    "exit_code": live_session.exit_code,
+                    "fatal_error": live_session.fatal_error,
+                },
+                allow_after_end=True,
+            )
+        except Exception:
+            live_session.status = previous_status
+            live_session.ended_at = previous_ended_at
+            live_session.exit_code = previous_exit_code
+            live_session.fatal_error = previous_fatal_error
+            live_session.terminal_status = previous_terminal_status
+            raise
         self._publish_live_session_lifecycle("live_session_ended", live_session)
 
     def shutdown(self) -> None:
@@ -139,6 +151,7 @@ class WorkersMixin:
         )
         current_user_message_id = initial_user_message_id
         is_initial_worker_turn = initial_user_message_id is not None
+        task_result_finalization_failed = False
 
         def publish_summary(summary: str) -> None:
             with SessionStore() as store:
@@ -274,8 +287,12 @@ class WorkersMixin:
                         or not self._should_auto_start_stage(next_stage_id)
                     )
                 if terminal_task_update and live_session is not None:
-                    with self._lock:
-                        self._finalize_live_session_locked(live_session)
+                    try:
+                        with self._lock:
+                            self._finalize_live_session_locked(live_session)
+                    except Exception:
+                        task_result_finalization_failed = True
+                        break
                 self._publish_task_updated(next_record)
                 if terminal_task_update:
                     break
@@ -336,7 +353,7 @@ class WorkersMixin:
             if updated is not None:
                 self._publish_task_updated(updated)
         finally:
-            if live_session is not None:
+            if live_session is not None and not task_result_finalization_failed:
                 with self._lock:
                     self._finalize_live_session_locked(live_session)
             with self._lock:
@@ -409,17 +426,7 @@ class WorkersMixin:
             if self._running_task_ids - self._shutdown_interrupted_task_ids:
                 return
             current_thread = threading.current_thread()
-            if any(
-                worker is not current_thread and worker.is_alive()
-                for worker in self._task_workers.values()
-            ):
-                return
-            if any(
-                session.worker is not None
-                and session.worker is not current_thread
-                and session.worker.is_alive()
-                for session in self._live_sessions.values()
-            ):
+            if self._has_live_worker_threads_locked(current_thread):
                 return
             lease_thread = self._lease_thread
             self._lease_thread = None
@@ -436,3 +443,14 @@ class WorkersMixin:
                 self._directory_key,
                 owner_id=self._manager_owner_id,
             )
+
+    def _has_live_worker_threads_locked(self, current_thread: threading.Thread) -> bool:
+        return any(
+            worker is not current_thread and worker.is_alive()
+            for worker in self._task_workers.values()
+        ) or any(
+            session.worker is not None
+            and session.worker is not current_thread
+            and session.worker.is_alive()
+            for session in self._live_sessions.values()
+        )

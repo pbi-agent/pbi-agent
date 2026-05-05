@@ -72,12 +72,9 @@ jobs:
         if: ${{ steps.version.outputs.should_release != 'true' }}
         run: echo "Package version did not change; skipping release."
 
-      - name: Check release inputs and collisions
+      - name: Check release notes
         if: ${{ steps.version.outputs.should_release == 'true' }}
         env:
-          GH_TOKEN: ${{ github.token }}
-          PROJECT_NAME: ${{ steps.version.outputs.project_name }}
-          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           NOTES_FILE="docs/changelog/v$VERSION.md"
@@ -85,42 +82,6 @@ jobs:
             echo "Missing changelog notes: $NOTES_FILE" >&2
             exit 1
           fi
-
-          release_target="$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
-          if [ -n "$release_target" ]; then
-            echo "Release $TAG already exists and targets $release_target." >&2
-            exit 1
-          fi
-
-          tag_ref="$(git ls-remote --tags origin "refs/tags/$TAG")"
-          if [ -n "$tag_ref" ]; then
-            echo "Tag $TAG already exists." >&2
-            exit 1
-          fi
-
-          python - <<'PY'
-          import os
-          import sys
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          project_name = os.environ["PROJECT_NAME"]
-          version = os.environ["VERSION"]
-          url = "https://pypi.org/pypi/{}/{}/json".format(
-              urllib.parse.quote(project_name, safe=""),
-              urllib.parse.quote(version, safe=""),
-          )
-
-          request = urllib.request.Request(url, method="GET")
-          try:
-              with urllib.request.urlopen(request, timeout=20):
-                  print(f"PyPI version {version} already exists for {project_name}.", file=sys.stderr)
-                  sys.exit(1)
-          except urllib.error.HTTPError as exc:
-              if exc.code != 404:
-                  raise
-          PY
 
       - name: Install dependencies
         if: ${{ steps.version.outputs.should_release == 'true' }}
@@ -180,23 +141,100 @@ jobs:
         if: ${{ steps.version.outputs.should_release == 'true' }}
         run: python -m build
 
-      - name: Publish to PyPI
+      - name: Prepare draft GitHub release
+        id: draft_release
         if: ${{ steps.version.outputs.should_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROJECT_NAME: ${{ steps.version.outputs.project_name }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          NOTES_FILE="docs/changelog/v$VERSION.md"
+
+          release_target="$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
+          release_is_draft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ -n "$release_target" ] && [ "$release_target" != "$GITHUB_SHA" ]; then
+            echo "Release $TAG already exists and targets $release_target, not $GITHUB_SHA." >&2
+            exit 1
+          fi
+
+          tag_ref="$(git ls-remote --tags origin "refs/tags/$TAG")"
+          if [ -n "$tag_ref" ] && [ -z "$release_target" ]; then
+            echo "Tag $TAG already exists without a matching GitHub release." >&2
+            exit 1
+          fi
+
+          pypi_exists="$(python - <<'PY'
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          project_name = os.environ["PROJECT_NAME"]
+          version = os.environ["VERSION"]
+          url = "https://pypi.org/pypi/{}/{}/json".format(
+              urllib.parse.quote(project_name, safe=""),
+              urllib.parse.quote(version, safe=""),
+          )
+
+          request = urllib.request.Request(url, method="GET")
+          try:
+              with urllib.request.urlopen(request, timeout=20):
+                  print("true")
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+              print("false")
+          PY
+          )"
+
+          if [ "$release_is_draft" = "false" ]; then
+            if [ "$pypi_exists" = "true" ]; then
+              echo "Release $TAG is already published for $GITHUB_SHA and PyPI has $VERSION."
+              echo "upload_pypi=false" >> "$GITHUB_OUTPUT"
+              echo "publish_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Release $TAG is already published, but PyPI version $VERSION is missing." >&2
+            exit 1
+          fi
+
+          if [ "$pypi_exists" = "true" ] && [ "$release_is_draft" != "true" ]; then
+            echo "PyPI version $VERSION already exists for $PROJECT_NAME without a matching draft release." >&2
+            exit 1
+          fi
+
+          if [ "$release_is_draft" = "true" ]; then
+            echo "Reusing draft release $TAG for $GITHUB_SHA."
+          else
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --draft \
+              --notes-file "$NOTES_FILE"
+          fi
+
+          if [ "$pypi_exists" = "true" ]; then
+            echo "PyPI version $VERSION already exists; publishing existing draft release."
+            echo "upload_pypi=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "upload_pypi=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "publish_release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to PyPI
+        if: ${{ steps.version.outputs.should_release == 'true' && steps.draft_release.outputs.upload_pypi == 'true' }}
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: twine upload dist/*
 
-      - name: Create GitHub release
-        if: ${{ steps.version.outputs.should_release == 'true' }}
+      - name: Publish GitHub release
+        if: ${{ steps.version.outputs.should_release == 'true' && steps.draft_release.outputs.publish_release == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          NOTES_FILE="docs/changelog/v$VERSION.md"
-          gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
-            --title "$TAG" \
-            --latest \
-            --notes-file "$NOTES_FILE"
+          gh release edit "$TAG" --draft=false --latest

@@ -68,7 +68,6 @@ export function useLiveSessionEvents(
       if (isCurrentStreamTarget) {
         recoveryMode = true;
       }
-      resetStreamState(targetSessionKey, { preserveLiveSession: true });
       setConnection(targetSessionKey, "recovering");
       updateLiveSessionDebug(targetSessionKey, {
         connection: "recovering",
@@ -91,7 +90,10 @@ export function useLiveSessionEvents(
       }
       void Promise.all(invalidations)
         .then(() => {
+          if (disposed || source !== currentSource) return;
+          resetStreamState(targetSessionKey, { preserveLiveSession: true });
           if (isCurrentStreamTarget) {
+            setConnection(targetSessionKey, "recovering");
             scheduleReconnect(currentSource);
             return;
           }
@@ -103,12 +105,17 @@ export function useLiveSessionEvents(
           });
         })
         .catch(() => {
-          recoveryMode = false;
+          if (disposed || source !== currentSource) return;
           setConnection(targetSessionKey, "recovery_failed");
           updateLiveSessionDebug(targetSessionKey, {
             connection: "recovery_failed",
             recoveryReason: "snapshot-invalidation-failed",
           });
+          if (isCurrentStreamTarget) {
+            scheduleReconnect(currentSource);
+            return;
+          }
+          recoveryMode = false;
         });
     }
 
@@ -145,6 +152,7 @@ export function useLiveSessionEvents(
       });
 
       currentSource.onopen = () => {
+        if (disposed || source !== currentSource) return;
         retryDelay.current = INITIAL_DELAY;
         const nextConnection = hasOpened || recoveryMode ? "recovered" : "connected";
         hasOpened = true;
@@ -158,6 +166,7 @@ export function useLiveSessionEvents(
       };
 
       currentSource.onmessage = (message) => {
+        if (disposed || source !== currentSource) return;
         if (typeof message.data !== "string") return;
         const event = parseSseEvent(message.data);
         if (!event) return;

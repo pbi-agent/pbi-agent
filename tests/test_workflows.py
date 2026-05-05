@@ -43,6 +43,8 @@ def test_release_workflow_runs_validation_gates_and_changelog_notes() -> None:
     assert "docs/changelog/v$VERSION.md" in workflow
     assert "--notes-file" in workflow
     assert "twine upload dist/*" in workflow
+    assert 'gh release create "$TAG"' in workflow
+    assert 'gh release edit "$TAG" --draft=false --latest' in workflow
 
 
 def test_release_workflow_fails_when_changelog_notes_are_missing() -> None:
@@ -53,53 +55,60 @@ def test_release_workflow_fails_when_changelog_notes_are_missing() -> None:
     exit_index = workflow.index("exit 1", missing_check_index)
     upload_index = workflow.index("twine upload dist/*")
     create_index = workflow.index('gh release create "$TAG"')
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
     notes_arg_index = workflow.index('--notes-file "$NOTES_FILE"')
 
-    assert notes_file_index < missing_check_index < exit_index < upload_index
-    assert upload_index < create_index
+    assert notes_file_index < missing_check_index < exit_index < create_index
+    assert create_index < upload_index < publish_index
     assert create_index < notes_arg_index
     assert "Release for pbi-agent version $VERSION" not in workflow
 
 
-def test_release_workflow_rejects_existing_release_before_publishing() -> None:
+def test_release_workflow_rejects_release_target_mismatch_before_publishing() -> None:
     workflow = read_workflow("release.yml")
 
     release_view_index = workflow.index(
         'gh release view "$TAG" --json targetCommitish --jq .targetCommitish'
     )
-    existing_release_index = workflow.index('[ -n "$release_target" ]')
-    exit_index = workflow.index("exit 1", existing_release_index)
-    upload_index = workflow.index("twine upload dist/*")
+    mismatch_index = workflow.index(
+        '[ -n "$release_target" ] && [ "$release_target" != "$GITHUB_SHA" ]'
+    )
+    exit_index = workflow.index("exit 1", mismatch_index)
     create_index = workflow.index('gh release create "$TAG"')
+    upload_index = workflow.index("twine upload dist/*")
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
 
-    assert release_view_index < existing_release_index < exit_index < upload_index
-    assert upload_index < create_index
+    assert release_view_index < mismatch_index < exit_index < create_index
+    assert create_index < upload_index < publish_index
 
 
 def test_release_workflow_rejects_existing_tag_before_publishing() -> None:
     workflow = read_workflow("release.yml")
 
     tag_check_index = workflow.index('git ls-remote --tags origin "refs/tags/$TAG"')
-    existing_tag_index = workflow.index('[ -n "$tag_ref" ]')
+    existing_tag_index = workflow.index('[ -n "$tag_ref" ] && [ -z "$release_target" ]')
     exit_index = workflow.index("exit 1", existing_tag_index)
-    upload_index = workflow.index("twine upload dist/*")
     create_index = workflow.index('gh release create "$TAG"')
+    upload_index = workflow.index("twine upload dist/*")
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
 
-    assert tag_check_index < existing_tag_index < exit_index < upload_index
-    assert upload_index < create_index
+    assert tag_check_index < existing_tag_index < exit_index < create_index
+    assert create_index < upload_index < publish_index
+    assert "without a matching GitHub release" in workflow
 
 
-def test_release_workflow_rejects_existing_pypi_version_before_publishing() -> None:
+def test_release_workflow_rejects_existing_pypi_without_matching_draft() -> None:
     workflow = read_workflow("release.yml")
 
     pypi_check_index = workflow.index("https://pypi.org/pypi/{}/{}/json")
-    pypi_collision_index = workflow.index("already exists for {project_name}")
-    upload_index = workflow.index("twine upload dist/*")
+    pypi_collision_index = workflow.index("without a matching draft release")
     create_index = workflow.index('gh release create "$TAG"')
+    upload_index = workflow.index("twine upload dist/*")
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
 
     assert "urllib.request" in workflow
-    assert pypi_check_index < pypi_collision_index < upload_index
-    assert upload_index < create_index
+    assert pypi_check_index < pypi_collision_index < create_index
+    assert create_index < upload_index < publish_index
 
 
 def test_release_workflow_skips_when_package_version_did_not_change() -> None:
@@ -116,11 +125,11 @@ def test_release_workflow_skips_when_package_version_did_not_change() -> None:
         "if: ${{ steps.version.outputs.should_release == 'true' }}"
     )
     upload_index = workflow.index("twine upload dist/*")
-    create_index = workflow.index('gh release create "$TAG"')
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
 
     assert fetch_depth_index < before_index < previous_version_index
     assert previous_version_index < should_release_index < skip_index
-    assert skip_index < guard_index < upload_index < create_index
+    assert skip_index < guard_index < upload_index < publish_index
 
 
 def test_release_workflow_rebuilds_static_assets_before_distribution() -> None:
@@ -135,14 +144,40 @@ def test_release_workflow_rebuilds_static_assets_before_distribution() -> None:
     assert build_index < diff_index < distribution_index
 
 
-def test_release_workflow_publishes_to_pypi_before_github_release() -> None:
+def test_release_workflow_creates_draft_before_pypi_then_publishes_release() -> None:
     workflow = read_workflow("release.yml")
 
     build_index = workflow.index("python -m build")
-    upload_index = workflow.index("twine upload dist/*")
     create_index = workflow.index('gh release create "$TAG"')
+    upload_index = workflow.index("twine upload dist/*")
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
 
-    assert build_index < upload_index < create_index
+    assert build_index < create_index < upload_index < publish_index
+
+
+def test_release_workflow_reuses_draft_for_partial_release_recovery() -> None:
+    workflow = read_workflow("release.yml")
+
+    draft_check_index = workflow.index(
+        'gh release view "$TAG" --json isDraft --jq .isDraft'
+    )
+    reuse_index = workflow.index("Reusing draft release $TAG for $GITHUB_SHA.")
+    pypi_recovery_index = workflow.index(
+        'echo "PyPI version $VERSION already exists; publishing existing draft release."'
+    )
+    skip_upload_index = workflow.index(
+        'echo "upload_pypi=false" >> "$GITHUB_OUTPUT"', pypi_recovery_index
+    )
+    upload_guard_index = workflow.index(
+        "steps.draft_release.outputs.upload_pypi == 'true'"
+    )
+    publish_guard_index = workflow.index(
+        "steps.draft_release.outputs.publish_release == 'true'"
+    )
+    publish_index = workflow.index('gh release edit "$TAG" --draft=false --latest')
+
+    assert draft_check_index < reuse_index < pypi_recovery_index < skip_upload_index
+    assert skip_upload_index < upload_guard_index < publish_guard_index < publish_index
 
 
 def test_release_workflow_does_not_skip_existing_pypi_artifacts() -> None:
