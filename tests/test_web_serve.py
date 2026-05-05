@@ -3975,6 +3975,10 @@ def test_saved_session_continuation_persists_uploaded_image_attachments(
             )
             assert upload_response.status_code == 200
             upload = upload_response.json()["uploads"][0]
+            preview_response = client.get(upload["preview_url"])
+            assert preview_response.status_code == 200
+            assert preview_response.headers["content-type"] == "image/png"
+            assert preview_response.content == b"\x89PNG\r\n\x1a\n"
 
             run_response = client.post(
                 f"/api/sessions/{session_id}/runs",
