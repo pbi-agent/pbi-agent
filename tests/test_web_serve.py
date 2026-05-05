@@ -1004,6 +1004,24 @@ def test_event_stream_subscriber_queue_overflow_enqueues_recovery_control() -> N
     )
 
 
+def test_event_stream_publish_ignores_closed_subscriber_loop() -> None:
+    app = create_app(_settings())
+    stream = app.state.manager.get_event_stream("app")
+    loop = asyncio.new_event_loop()
+
+    async def subscribe() -> str:
+        subscriber_id, _queue = stream.subscribe()
+        return subscriber_id
+
+    subscriber_id = loop.run_until_complete(subscribe())
+    loop.close()
+
+    stream.publish("item", {})
+
+    assert stream.subscriber_count() == 0
+    stream.unsubscribe(subscriber_id)
+
+
 def test_sse_event_stream_disconnects_on_subscriber_queue_overflow(monkeypatch) -> None:
     app = create_app(_settings())
     stream = app.state.manager.get_event_stream("app")
@@ -2608,6 +2626,71 @@ def test_task_stage_move_keeps_prompt_content(monkeypatch, tmp_path) -> None:
     assert move_response.json()["task"]["prompt"] == original_prompt
 
 
+def test_task_move_into_auto_start_stage_runs(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_default_commands(tmp_path)
+    app = create_app(_settings())
+    prompts: list[str] = []
+
+    def fake_run_single_turn_in_directory(prompt, _runtime, _display, **kwargs):
+        prompts.append(prompt)
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Review complete.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    with patch(
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
+        side_effect=fake_run_single_turn_in_directory,
+    ):
+        with TestClient(app) as client:
+            response = client.put(
+                "/api/board/stages",
+                json={
+                    "board_stages": [
+                        {"id": "backlog", "name": "Backlog"},
+                        {"id": "plan", "name": "Plan", "command_id": "plan"},
+                        {
+                            "id": "review",
+                            "name": "Review",
+                            "command_id": "review",
+                            "auto_start": True,
+                        },
+                    ]
+                },
+            )
+            assert response.status_code == 200
+
+            create_response = client.post(
+                "/api/tasks",
+                json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            move_response = client.patch(
+                f"/api/tasks/{task_id}",
+                json={"stage": "review"},
+            )
+            assert move_response.status_code == 200
+
+            deadline = time.monotonic() + 2
+            while True:
+                task_payload = client.get("/api/tasks").json()["tasks"][0]
+                if (
+                    task_payload["stage"] == "done"
+                    and task_payload["run_status"] == "completed"
+                ):
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("moved auto-start task did not finish in time")
+                time.sleep(0.01)
+
+    assert prompts == ["/review"]
+    assert task_payload["session_id"]
+
+
 def test_auto_start_stage_runs_once_before_done(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     _write_default_commands(tmp_path)
@@ -2960,7 +3043,9 @@ def test_manager_start_retries_busy_lease_then_succeeds(monkeypatch, tmp_path) -
     manager.shutdown()
 
 
-def test_shutdown_keeps_lease_until_live_worker_finishes(monkeypatch, tmp_path) -> None:
+def test_shutdown_releases_lease_and_interrupts_noncooperative_live_worker(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
     started = threading.Event()
@@ -2986,28 +3071,108 @@ def test_shutdown_keeps_lease_until_live_worker_finishes(monkeypatch, tmp_path) 
 
             manager.shutdown()
 
-            with SessionStore(db_path=tmp_path / "sessions.db") as store:
-                assert store.has_active_web_manager_lease(
-                    str(tmp_path), stale_after_seconds=30.0
-                )
-
-            finish.set()
             worker = manager._live_sessions[live_session_id].worker
             assert worker is not None
+            assert worker.is_alive()
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                assert not store.has_active_web_manager_lease(
+                    str(tmp_path), stale_after_seconds=30.0
+                )
+                run = store.get_run_session(live_session_id)
+            assert run is not None
+            assert run.status == "interrupted"
+            assert run.ended_at is not None
+            assert run.exit_code == 130
+            snapshot = json.loads(run.snapshot_json)
+            assert snapshot["session_ended"] is True
+            assert snapshot["processing"] is None
+            assert snapshot["wait_message"] is None
+            assert snapshot["fatal_error"] == "Interrupted during app shutdown."
+
+            finish.set()
             worker.join(timeout=2)
             assert not worker.is_alive()
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                completed_run = store.get_run_session(live_session_id)
+            assert completed_run is not None
+            assert completed_run.status == "interrupted"
+            assert completed_run.exit_code == 130
+    finally:
+        finish.set()
+        manager.shutdown()
 
-            deadline = time.monotonic() + 2
-            while True:
-                with SessionStore(db_path=tmp_path / "sessions.db") as store:
-                    active = store.has_active_web_manager_lease(
-                        str(tmp_path), stale_after_seconds=30.0
-                    )
-                if not active:
-                    break
-                if time.monotonic() > deadline:
-                    raise AssertionError("manager lease was not released")
-                time.sleep(0.01)
+
+def test_shutdown_releases_lease_and_marks_noncooperative_task_failed(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    started = threading.Event()
+    finish = threading.Event()
+
+    def blocking_run_single_turn(_prompt, _runtime, _display, **kwargs):
+        started.set()
+        if not finish.wait(timeout=5):
+            raise AssertionError("task worker did not unblock in time")
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Done.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan"},
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+
+        with patch(
+            "pbi_agent.web.session.workers.run_single_turn_in_directory",
+            side_effect=blocking_run_single_turn,
+        ):
+            manager.run_task(task_id)
+            assert started.wait(timeout=2)
+            live_session_id = next(
+                live_session_id
+                for live_session_id, live_session in manager._live_sessions.items()
+                if live_session.task_id == task_id
+            )
+
+            manager.shutdown()
+
+            worker = manager._task_workers[task_id]
+            assert worker.is_alive()
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                assert not store.has_active_web_manager_lease(
+                    str(tmp_path), stale_after_seconds=30.0
+                )
+                current = store.get_kanban_task(task_id)
+                run = store.get_run_session(live_session_id)
+            assert current is not None
+            assert current.run_status == "failed"
+            assert current.last_result_summary == "Interrupted during app shutdown."
+            assert current.last_run_finished_at is not None
+            assert run is not None
+            assert run.status == "interrupted"
+            assert run.ended_at is not None
+            assert run.exit_code == 130
+
+            finish.set()
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                completed_task = store.get_kanban_task(task_id)
+                completed_run = store.get_run_session(live_session_id)
+            assert completed_task is not None
+            assert completed_task.run_status == "failed"
+            assert completed_run is not None
+            assert completed_run.status == "interrupted"
     finally:
         finish.set()
         manager.shutdown()
@@ -3122,6 +3287,115 @@ def test_run_task_setup_failure_clears_running_task_id(monkeypatch, tmp_path) ->
             if time.monotonic() > deadline:
                 raise AssertionError("task worker did not finish in time")
             time.sleep(0.01)
+    finally:
+        manager.shutdown()
+
+
+def test_run_task_live_session_creation_failure_marks_task_failed(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan"},
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+
+        with patch.object(
+            manager,
+            "_publish_live_session_runtime",
+            side_effect=RuntimeError("live setup failed"),
+        ):
+            with pytest.raises(RuntimeError, match="live setup failed"):
+                manager.run_task(task_id)
+
+        assert task_id not in manager._running_task_ids
+        assert manager._task_workers == {}
+        assert len(manager._live_sessions) == 1
+        live_session = next(iter(manager._live_sessions.values()))
+        assert live_session.task_id == task_id
+        assert live_session.worker is None
+        assert live_session.status == "ended"
+        assert live_session.exit_code == 1
+        assert live_session.fatal_error == "live setup failed"
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            current = store.get_kanban_task(task_id)
+            run = store.get_run_session(live_session.live_session_id)
+        assert current is not None
+        assert current.run_status == "failed"
+        assert current.last_result_summary == "live setup failed"
+        assert run is not None
+        assert run.status == "failed"
+        assert run.ended_at is not None
+        assert run.exit_code == 1
+        assert run.fatal_error == "live setup failed"
+    finally:
+        manager.shutdown()
+
+
+def test_run_task_worker_start_failure_finalizes_live_projection(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    manager.start()
+
+    class FailingThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            raise RuntimeError("thread start failed")
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan"},
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+
+        with patch("pbi_agent.web.session.tasks.threading.Thread", FailingThread):
+            with pytest.raises(RuntimeError, match="thread start failed"):
+                manager.run_task(task_id)
+
+        assert task_id not in manager._running_task_ids
+        assert manager._task_workers == {}
+        assert len(manager._live_sessions) == 1
+        live_session = next(iter(manager._live_sessions.values()))
+        assert live_session.task_id == task_id
+        assert live_session.worker is None
+        assert live_session.status == "ended"
+        assert live_session.exit_code == 1
+        assert live_session.fatal_error == "thread start failed"
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            current = store.get_kanban_task(task_id)
+            run = store.get_run_session(live_session.live_session_id)
+        assert current is not None
+        assert current.run_status == "failed"
+        assert current.last_result_summary == "thread start failed"
+        assert run is not None
+        assert run.status == "failed"
+        assert run.ended_at is not None
+        assert run.exit_code == 1
+        assert run.fatal_error == "thread start failed"
     finally:
         manager.shutdown()
 

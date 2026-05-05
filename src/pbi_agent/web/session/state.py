@@ -46,9 +46,22 @@ class EventStream:
             self._events.append(event)
             if len(self._events) > _MAX_EVENT_HISTORY:
                 self._events = self._events[-_MAX_EVENT_HISTORY:]
-            subscribers = list(self._subscribers.values())
-        for loop, queue in subscribers:
-            loop.call_soon_threadsafe(_put_subscriber_event, queue, event)
+            subscribers = [
+                (subscriber_id, loop, queue)
+                for subscriber_id, (loop, queue) in self._subscribers.items()
+            ]
+        for subscriber_id, loop, queue in subscribers:
+            try:
+                loop.call_soon_threadsafe(_put_subscriber_event, queue, event)
+            except RuntimeError:
+                with self._lock:
+                    current = self._subscribers.get(subscriber_id)
+                    if (
+                        current is not None
+                        and current[0] is loop
+                        and current[1] is queue
+                    ):
+                        self._subscribers.pop(subscriber_id, None)
         return event
 
     def load(self, events: list[dict[str, Any]]) -> None:

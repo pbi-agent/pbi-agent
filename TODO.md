@@ -1,7 +1,8 @@
 # TODO
 
-[X] Prevent `run_task()` from racing with shutdown before worker registration
-[X] Ensure `run_task()` setup failures always clear `_running_task_ids`
-[X] Improve SSE overflow recovery cursor/id semantics
-[X] Validate `oldest_available_seq` in frontend replay parser
+[X] Guard SSE publishing against closed subscriber event loops
+[X] Fix task auto-start when moving into an auto-start stage
+[X] Clean persisted task/live state on startup failure after `running`
+[X] Harden shutdown behavior for non-cooperative workers
+[X] Fix cross-target frontend recovery reconnect semantics
 [X] Run final validation and update memory

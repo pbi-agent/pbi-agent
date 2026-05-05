@@ -64,7 +64,10 @@ export function useLiveSessionEvents(
       recoveryReason: string,
       recovery: Record<string, unknown> | null,
     ) {
-      recoveryMode = true;
+      const isCurrentStreamTarget = targetSessionKey === currentSessionKey;
+      if (isCurrentStreamTarget) {
+        recoveryMode = true;
+      }
       resetStreamState(targetSessionKey, { preserveLiveSession: true });
       setConnection(targetSessionKey, "recovering");
       updateLiveSessionDebug(targetSessionKey, {
@@ -72,7 +75,9 @@ export function useLiveSessionEvents(
         recoveryReason,
         recovery,
       });
-      currentSource.close();
+      if (isCurrentStreamTarget) {
+        currentSource.close();
+      }
       const invalidations = [
         queryClient.invalidateQueries({ queryKey: ["sessions"] }),
         queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
@@ -85,7 +90,18 @@ export function useLiveSessionEvents(
         );
       }
       void Promise.all(invalidations)
-        .then(() => scheduleReconnect(currentSource))
+        .then(() => {
+          if (isCurrentStreamTarget) {
+            scheduleReconnect(currentSource);
+            return;
+          }
+          recoveryMode = false;
+          setConnection(targetSessionKey, "disconnected");
+          updateLiveSessionDebug(targetSessionKey, {
+            connection: "disconnected",
+            recoveryReason: `${recoveryReason}-cross-target-refetch`,
+          });
+        })
         .catch(() => {
           recoveryMode = false;
           setConnection(targetSessionKey, "recovery_failed");

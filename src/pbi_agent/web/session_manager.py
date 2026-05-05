@@ -74,6 +74,7 @@ class WebSessionManager(
         self._provider_auth_flows: dict[str, PendingProviderAuthFlow] = {}
         self._task_workers: dict[str, threading.Thread] = {}
         self._running_task_ids: set[str] = set()
+        self._shutdown_interrupted_task_ids: set[str] = set()
         self._manager_owner_id = uuid.uuid4().hex
         self._lease_stop = threading.Event()
         self._lease_thread: threading.Thread | None = None
@@ -122,6 +123,7 @@ class WebSessionManager(
             if self._started:
                 return
             self._shutdown_requested = False
+            self._shutdown_interrupted_task_ids.clear()
             self._lease_stop.clear()
             self._lease_thread = threading.Thread(
                 target=self._renew_manager_lease_loop,

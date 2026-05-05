@@ -9,6 +9,7 @@ from pbi_agent.display.formatting import shorten
 from pbi_agent.session_store import (
     KANBAN_RUN_STATUS_COMPLETED,
     KANBAN_RUN_STATUS_FAILED,
+    KANBAN_RUN_STATUS_RUNNING,
     SessionStore,
 )
 from pbi_agent.task_runner import run_single_turn_in_directory
@@ -17,6 +18,7 @@ from pbi_agent.web.session.state import _now_iso
 from pbi_agent.web.uploads import load_uploaded_image
 
 _WEB_MANAGER_LEASE_HEARTBEAT_SECS = 5.0
+_SHUTDOWN_INTERRUPTED_MESSAGE = "Interrupted during app shutdown."
 
 
 class WorkersMixin:
@@ -27,7 +29,7 @@ class WorkersMixin:
             raise RuntimeError("Manager is not started.")
 
     def _finalize_live_session_locked(self, live_session) -> None:  # noqa: ANN001
-        if live_session.status == "ended" and live_session.ended_at is not None:
+        if live_session.ended_at is not None:
             return
         if live_session.exit_code is None:
             live_session.exit_code = 0
@@ -60,6 +62,7 @@ class WorkersMixin:
         task_workers = list(self._task_workers.values())
         for worker in task_workers:
             worker.join(timeout=1.5)
+        self._interrupt_noncooperative_workers()
         with self._lock:
             provider_auth_flows = list(self._provider_auth_flows.values())
             self._provider_auth_flows.clear()
@@ -89,7 +92,8 @@ class WorkersMixin:
                 resume_session_id=live_session.bound_session_id,
                 on_reload=self.refresh_file_mentions_cache,
             )
-            live_session.exit_code = exit_code
+            if live_session.terminal_status is None:
+                live_session.exit_code = exit_code
         except SessionTurnInterrupted as exc:
             live_session.exit_code = 130
             live_session.terminal_status = "interrupted"
@@ -221,6 +225,8 @@ class WorkersMixin:
                     persisted_user_message_id=current_user_message_id,
                     replay_history=False,
                 )
+                if task_id in self._shutdown_interrupted_task_ids:
+                    raise SessionTurnInterrupted(_SHUTDOWN_INTERRUPTED_MESSAGE)
                 current_user_message_id = None
                 is_initial_worker_turn = False
                 if live_session is not None:
@@ -347,22 +353,72 @@ class WorkersMixin:
             if not renewed:
                 return
 
+    def _interrupt_noncooperative_workers(self) -> None:
+        stale_live_sessions = []
+        stale_task_ids = []
+        with self._lock:
+            for live_session in self._live_sessions.values():
+                worker = live_session.worker
+                if worker is None or not worker.is_alive():
+                    continue
+                if live_session.ended_at is not None:
+                    continue
+                live_session.exit_code = 130
+                live_session.terminal_status = "interrupted"
+                live_session.fatal_error = (
+                    live_session.fatal_error or _SHUTDOWN_INTERRUPTED_MESSAGE
+                )
+                stale_live_sessions.append(live_session)
+                if live_session.task_id is not None:
+                    stale_task_ids.append(live_session.task_id)
+                    self._shutdown_interrupted_task_ids.add(live_session.task_id)
+
+        for live_session in stale_live_sessions:
+            self._publish_live_event(
+                live_session.live_session_id,
+                "message_added",
+                {
+                    "item_id": f"interrupted-{uuid.uuid4().hex}",
+                    "role": "error",
+                    "content": live_session.fatal_error,
+                    "markdown": False,
+                },
+            )
+            with self._lock:
+                self._finalize_live_session_locked(live_session)
+
+        for task_id in stale_task_ids:
+            with SessionStore() as store:
+                record = store.get_kanban_task(task_id)
+                if record is None or record.run_status != KANBAN_RUN_STATUS_RUNNING:
+                    continue
+                updated = store.set_kanban_task_result(
+                    task_id,
+                    run_status=KANBAN_RUN_STATUS_FAILED,
+                    summary=_SHUTDOWN_INTERRUPTED_MESSAGE,
+                )
+            if updated is not None:
+                self._publish_task_updated(updated)
+
     def _finalize_shutdown_if_idle(self) -> None:
         with self._lock:
             if not self._started or not self._shutdown_requested:
                 return
-            if self._running_task_ids:
+            if self._running_task_ids - self._shutdown_interrupted_task_ids:
                 return
-            if any(worker.is_alive() for worker in self._task_workers.values()):
+            if any(
+                worker.is_alive()
+                for task_id, worker in self._task_workers.items()
+                if task_id not in self._shutdown_interrupted_task_ids
+            ):
                 return
             current_thread = threading.current_thread()
             if any(
-                worker is not None
-                and worker is not current_thread
-                and worker.is_alive()
-                for worker in (
-                    session.worker for session in self._live_sessions.values()
-                )
+                session.worker is not None
+                and session.worker is not current_thread
+                and session.worker.is_alive()
+                and session.ended_at is None
+                for session in self._live_sessions.values()
             ):
                 return
             lease_thread = self._lease_thread

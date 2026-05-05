@@ -568,7 +568,7 @@ describe("useLiveSessionEvents", () => {
     expect(socket.close).not.toHaveBeenCalled();
   });
 
-  it("resets the targeted session when replay is incomplete on another socket", () => {
+  it("resets the targeted session when replay is incomplete on another socket", async () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi
       .spyOn(queryClient, "invalidateQueries")
@@ -578,15 +578,29 @@ describe("useLiveSessionEvents", () => {
     useSessionStore.getState().hydrateSavedSession("session-1", [
       { kind: "message", itemId: "message-1", role: "assistant", content: "keep", markdown: true },
     ], 3);
-    useSessionStore.getState().hydrateSavedSession("session-2", [
-      { kind: "message", itemId: "message-2", role: "assistant", content: "reset", markdown: true },
-    ], 8);
+    useSessionStore.getState().attachLiveSession(
+      sessionKey2,
+      makeLiveSession({ live_session_id: "live-2", session_id: "session-2", last_event_seq: 8 }),
+    );
+    useSessionStore.getState().applyEvent(sessionKey2, {
+      seq: 9,
+      type: "message_added",
+      created_at: "2026-04-27T00:00:00Z",
+      payload: {
+        session_id: "session-2",
+        live_session_id: "live-2",
+        item_id: "message-2",
+        role: "assistant",
+        content: "reset",
+      },
+    });
 
     renderHook(() => useLiveSessionEvents(sessionKey1, "live-1", "session-1"), {
       wrapper: createWrapper(queryClient),
     });
 
-    emit(MockEventSource.instances[0], {
+    const socket = MockEventSource.instances[0];
+    emit(socket, {
       seq: 0,
       type: "server.replay_incomplete",
       payload: {
@@ -600,6 +614,10 @@ describe("useLiveSessionEvents", () => {
       },
     });
 
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     const state = useSessionStore.getState();
     expect(state.sessionsByKey[sessionKey1]?.items).toEqual([
       expect.objectContaining({ itemId: "message-1" }),
@@ -607,6 +625,11 @@ describe("useLiveSessionEvents", () => {
     expect(state.sessionsByKey[sessionKey1]?.lastEventSeq).toBe(3);
     expect(state.sessionsByKey[sessionKey2]?.items).toEqual([]);
     expect(state.sessionsByKey[sessionKey2]?.lastEventSeq).toBe(0);
+    expect(state.sessionsByKey[sessionKey2]?.liveSessionId).toBe("live-2");
+    expect(state.sessionsByKey[sessionKey2]?.connection).toBe("disconnected");
+    expect(socket.close).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(MockEventSource.instances).toHaveLength(1);
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-2"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session-runs", "session-2"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["run-detail"] });

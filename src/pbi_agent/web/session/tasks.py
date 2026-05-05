@@ -4,11 +4,13 @@ import threading
 import uuid
 from typing import Any
 
+from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.config import ConfigError, ResolvedRuntime, load_internal_config, slugify
 from pbi_agent.display.formatting import shorten
 from pbi_agent.session_store import (
     KANBAN_STAGE_BACKLOG,
     KANBAN_STAGE_DONE,
+    KANBAN_RUN_STATUS_FAILED,
     KanbanStageConfigRecord,
     KanbanStageConfigSpec,
     KanbanTaskRecord,
@@ -179,6 +181,7 @@ class TasksMixin:
             current = store.get_kanban_task(task_id)
             if current is None or current.directory != self._directory_key:
                 raise KeyError(task_id)
+            previous_stage = current.stage
             normalized_title = current.title if title is None else title
             normalized_prompt = current.prompt if prompt is None else prompt
             if title is not None or prompt is not None:
@@ -212,7 +215,7 @@ class TasksMixin:
         if updated is None:
             raise KeyError(task_id)
         payload = self._publish_task_updated(updated)
-        if stage is not None and stage != current.stage:
+        if stage is not None and stage != previous_stage:
             return self._maybe_auto_start_task(updated) or payload
         return payload
 
@@ -236,7 +239,9 @@ class TasksMixin:
                 raise RuntimeError("Task is already running.")
             self._running_task_ids.add(task_id)
         worker_registered = False
+        worker_started = False
         live_session: LiveSessionState | None = None
+        running_record: KanbanTaskRecord | None = None
         initial_user_message_id: int | None = None
         try:
             with SessionStore() as store:
@@ -351,11 +356,44 @@ class TasksMixin:
                 self._task_workers[task_id] = worker
                 worker_registered = True
             worker.start()
+            worker_started = True
             return self._serialize_task_record(running_record)
-        except Exception:
-            if not worker_registered:
+        except Exception as exc:
+            if not worker_started:
+                if worker_registered:
+                    with self._lock:
+                        self._task_workers.pop(task_id, None)
+                        if live_session is not None:
+                            live_session.worker = None
                 with self._lock:
                     self._running_task_ids.discard(task_id)
+                if running_record is not None:
+                    message = shorten(format_user_facing_error(exc), 200)
+                    with SessionStore() as store:
+                        updated = store.set_kanban_task_result(
+                            task_id,
+                            run_status=KANBAN_RUN_STATUS_FAILED,
+                            summary=message,
+                        )
+                    live_sessions = []
+                    if live_session is not None:
+                        live_sessions.append(live_session)
+                    else:
+                        with self._lock:
+                            live_sessions.extend(
+                                candidate
+                                for candidate in self._live_sessions.values()
+                                if candidate.task_id == task_id
+                                and candidate.worker is None
+                                and candidate.status != "ended"
+                            )
+                    for current_live_session in live_sessions:
+                        current_live_session.exit_code = 1
+                        current_live_session.fatal_error = format_user_facing_error(exc)
+                        with self._lock:
+                            self._finalize_live_session_locked(current_live_session)
+                    if updated is not None:
+                        self._publish_task_updated(updated)
             raise
 
     def _create_task_live_session(
