@@ -73,6 +73,26 @@ function isReplayReason(value: unknown): boolean {
     || value === "subscriber_queue_overflow";
 }
 
+function isValidUserQuestionsRequestedPayload(payload: Record<string, unknown>): boolean {
+  if (!isString(payload.prompt_id) || !Array.isArray(payload.questions) || payload.questions.length === 0) {
+    return false;
+  }
+  return payload.questions.every((question) => {
+    if (!isRecord(question)) return false;
+    if (!isString(question.question_id) || !isString(question.question)) return false;
+    if (
+      !Array.isArray(question.suggestions)
+      || question.suggestions.length !== 3
+      || !question.suggestions.every(isString)
+    ) {
+      return false;
+    }
+    if (!("recommended_suggestion_index" in question)) return true;
+    const index = question.recommended_suggestion_index;
+    return typeof index === "number" && Number.isInteger(index) && index >= 0 && index <= 2;
+  });
+}
+
 function isValidPayload(type: string, payload: Record<string, unknown>): boolean {
   switch (type) {
     case "server.replay_incomplete":
@@ -89,6 +109,8 @@ function isValidPayload(type: string, payload: Record<string, unknown>): boolean
     case "wait_state":
     case "processing_state":
       return typeof payload.active === "boolean";
+    case "user_questions_requested":
+      return isValidUserQuestionsRequestedPayload(payload);
     case "user_questions_resolved":
       return isString(payload.prompt_id);
     case "usage_updated":

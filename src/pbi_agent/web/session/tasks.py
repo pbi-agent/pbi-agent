@@ -245,6 +245,7 @@ class TasksMixin:
         worker_started = False
         live_session: LiveSessionState | None = None
         running_record: KanbanTaskRecord | None = None
+        mutated_record: KanbanTaskRecord | None = None
         initial_user_message_id: int | None = None
         try:
             with SessionStore() as store:
@@ -277,6 +278,7 @@ class TasksMixin:
                             self._running_task_ids.discard(task_id)
                         raise KeyError(task_id)
                     record = moved_record
+                    mutated_record = record
                 existing_session_id = record.session_id
                 if existing_session_id is not None:
                     existing_messages = store.list_messages(existing_session_id)
@@ -320,6 +322,7 @@ class TasksMixin:
                             self._running_task_ids.discard(task_id)
                         raise KeyError(task_id)
                     record = updated_record
+                    mutated_record = record
                 initial_user_message_id = None
                 if not is_continuation:
                     initial_user_message_id = self._persist_task_user_prompt(
@@ -352,9 +355,7 @@ class TasksMixin:
                 name=f"pbi-agent-web-task-{task_id[:8]}",
             )
             with self._lock:
-                if not self._started:
-                    self._running_task_ids.discard(task_id)
-                    raise RuntimeError("Manager is not started.")
+                self._ensure_worker_creation_allowed_locked()
                 live_session.worker = worker
                 self._task_workers[task_id] = worker
                 worker_registered = True
@@ -370,7 +371,8 @@ class TasksMixin:
                             live_session.worker = None
                 with self._lock:
                     self._running_task_ids.discard(task_id)
-                if running_record is not None:
+                failure_record = running_record or mutated_record
+                if failure_record is not None:
                     message = shorten(format_user_facing_error(exc), 200)
                     with SessionStore() as store:
                         updated = store.set_kanban_task_result(
@@ -397,6 +399,7 @@ class TasksMixin:
                             self._finalize_live_session_locked(current_live_session)
                     if updated is not None:
                         self._publish_task_updated(updated)
+                self._finalize_shutdown_if_idle()
             raise
 
     def _create_task_live_session(

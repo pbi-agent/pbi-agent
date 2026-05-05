@@ -496,11 +496,21 @@ export function resolveSessionEventTarget(
 export function reduceSessionEvent(
   current: SessionRuntimeState,
   event: SessionWebEvent,
-  options: { eventLiveSessionId?: string | null } = {},
+  options: {
+    eventLiveSessionId?: string | null;
+    allowLiveSessionAdoption?: boolean;
+  } = {},
 ): ReduceSessionEventResult {
   const nextSessionId = eventSessionId(event);
   const eventLiveId = options.eventLiveSessionId ?? eventLiveSessionId(event);
   if (eventLiveId && current.liveSessionId && current.liveSessionId !== eventLiveId) {
+    return { state: current, applied: false, reason: "stale-live-session" };
+  }
+  if (
+    eventLiveId
+    && !current.liveSessionId
+    && options.allowLiveSessionAdoption === false
+  ) {
     return { state: current, applied: false, reason: "stale-live-session" };
   }
   if (event.seq <= current.lastEventSeq) {
@@ -714,6 +724,10 @@ export const useSessionStore = create<SessionStore>((set) => ({
     set((state) => {
       const sessionKey = getSavedSessionKey(sessionId);
       const current = state.sessionsByKey[sessionKey] ?? createEmptySessionState(sessionId);
+      const nextLiveSessionIndex = { ...state.liveSessionIndex };
+      if (current.liveSessionId) {
+        delete nextLiveSessionIndex[current.liveSessionId];
+      }
       return {
         ...state,
         sessionsByKey: {
@@ -744,6 +758,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
               : 0,
           },
         },
+        liveSessionIndex: nextLiveSessionIndex,
         sessionIndex: { ...state.sessionIndex, [sessionId]: sessionKey },
       };
     }),
@@ -820,6 +835,13 @@ export const useSessionStore = create<SessionStore>((set) => ({
         .filter((item): item is TimelineItem => item !== null);
       const savedEndedSnapshot = Boolean(snapshot.session_id && snapshot.session_ended);
       const nextLiveSessionId = savedEndedSnapshot ? null : session.live_session_id;
+      const nextLiveSessionIndex = { ...nextState.liveSessionIndex };
+      if (current.liveSessionId && current.liveSessionId !== nextLiveSessionId) {
+        delete nextLiveSessionIndex[current.liveSessionId];
+      }
+      if (nextLiveSessionId) {
+        nextLiveSessionIndex[nextLiveSessionId] = resolvedKey;
+      }
       return {
         ...nextState,
         sessionsByKey: {
@@ -852,12 +874,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             lastEventSeq: snapshot.last_event_seq,
           },
         },
-        liveSessionIndex: nextLiveSessionId
-          ? {
-              ...nextState.liveSessionIndex,
-              [nextLiveSessionId]: resolvedKey,
-            }
-          : nextState.liveSessionIndex,
+        liveSessionIndex: nextLiveSessionIndex,
         sessionIndex: snapshot.session_id
           ? { ...nextState.sessionIndex, [snapshot.session_id]: resolvedKey }
           : nextState.sessionIndex,
@@ -957,8 +974,15 @@ export const useSessionStore = create<SessionStore>((set) => ({
       const current =
         existingSession
         ?? createEmptySessionState(target.sessionId);
+      const allowLiveSessionAdoption = !(
+        target.liveSessionId
+        && current.sessionId
+        && !current.liveSessionId
+        && !target.sessionId
+      );
       const reduced = reduceSessionEvent(current, event as SessionWebEvent, {
         eventLiveSessionId: target.liveSessionId,
+        allowLiveSessionAdoption,
       });
       if (!reduced.applied) {
         result = {

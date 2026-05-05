@@ -575,10 +575,12 @@ describe("SessionPage", () => {
     renderSessionRoute("/sessions/session-1");
 
     await waitFor(() => {
-      const state = useSessionStore.getState().sessionsByKey[sessionKey];
+      const store = useSessionStore.getState();
+      const state = store.sessionsByKey[sessionKey];
       expect(state?.liveSessionId).toBeNull();
       expect(state?.connection).toBe("disconnected");
       expect(state?.lastEventSeq).toBe(0);
+      expect(store.liveSessionIndex["stale-live"]).toBeUndefined();
     });
     expect(screen.getByText("Composer can create true")).toBeInTheDocument();
     expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();

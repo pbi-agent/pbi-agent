@@ -3758,34 +3758,45 @@ def test_shutdown_waits_for_run_task_setup_before_releasing_lease(
             release_setup.set()
             run_thread.join(timeout=2)
             assert not run_thread.is_alive()
-            assert "error" not in run_result
-            started_task = run_result["task"]
-            assert isinstance(started_task, dict)
-            assert worker_started.wait(timeout=2)
+            assert "task" not in run_result
+            error = run_result["error"]
+            assert isinstance(error, RuntimeError)
+            assert str(error) == "Manager shutdown is in progress."
+            assert not worker_started.wait(timeout=0.1)
             live_session_id = next(
                 live_session_id
                 for live_session_id, live_session in manager._live_sessions.items()
                 if live_session.task_id == task_id
             )
-            worker = manager._task_workers[task_id]
-            assert manager._live_sessions[live_session_id].worker is worker
-            assert worker.is_alive()
-
-            release_worker.set()
-            worker.join(timeout=2)
-            assert not worker.is_alive()
+            assert manager._task_workers == {}
+            assert manager._live_sessions[live_session_id].worker is None
 
             deadline = time.monotonic() + 2
             while True:
+                with manager._lock:
+                    running_task_ids = set(manager._running_task_ids)
+                    task_workers = dict(manager._task_workers)
                 with SessionStore(db_path=tmp_path / "sessions.db") as store:
                     active = store.has_active_web_manager_lease(
                         str(tmp_path), stale_after_seconds=30.0
                     )
-                if not active:
+                    current = store.get_kanban_task(task_id)
+                    run = store.get_run_session(live_session_id)
+                if not active and not running_task_ids:
                     break
                 if time.monotonic() > deadline:
                     raise AssertionError("manager lease was not released")
                 time.sleep(0.01)
+            assert task_workers == {}
+            assert current is not None
+            assert current.run_status == "failed"
+            assert current.last_result_summary == "Manager shutdown is in progress."
+            assert current.last_run_finished_at is not None
+            assert run is not None
+            assert run.status == "failed"
+            assert run.ended_at is not None
+            assert run.exit_code == 1
+            assert run.fatal_error == "Manager shutdown is in progress."
     finally:
         release_setup.set()
         release_worker.set()
@@ -3978,6 +3989,73 @@ def test_run_task_rejects_orphaned_stage_profile(monkeypatch, tmp_path) -> None:
 
     assert run_response.status_code == 404
     assert run_response.json()["detail"] == "Unknown profile ID 'analysis'."
+
+
+def test_run_task_backlog_setup_failure_marks_moved_task_failed(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "saved-openai-key")
+    runtime_args = _runtime_args("web")
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key_env="OPENAI_API_KEY",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-main",
+            model="gpt-5.4-2026-03-05",
+        )
+    )
+    app = create_app(_settings(), runtime_args=runtime_args)
+
+    with TestClient(app) as client:
+        update_response = client.put(
+            "/api/board/stages",
+            json={
+                "board_stages": [
+                    {"id": "backlog", "name": "Backlog"},
+                    {"id": "plan", "name": "Plan", "profile_id": "analysis"},
+                    {"id": "done", "name": "Done"},
+                ]
+            },
+        )
+        assert update_response.status_code == 200
+
+        create_response = client.post(
+            "/api/tasks",
+            json={"title": "Task A", "prompt": "Investigate", "stage": "backlog"},
+        )
+        assert create_response.status_code == 200
+        task_id = create_response.json()["task"]["task_id"]
+
+        delete_model_profile_config("analysis")
+
+        run_response = client.post(f"/api/tasks/{task_id}/run")
+        tasks_response = client.get("/api/tasks")
+        event = app.state.manager.get_event_stream("app").snapshot()[-1]
+
+    assert run_response.status_code == 404
+    assert run_response.json()["detail"] == "Unknown profile ID 'analysis'."
+    assert task_id not in app.state.manager._running_task_ids
+
+    assert tasks_response.status_code == 200
+    task_payload = tasks_response.json()["tasks"][0]
+    assert task_payload["task_id"] == task_id
+    assert task_payload["stage"] == "plan"
+    assert task_payload["run_status"] == "failed"
+    assert task_payload["last_result_summary"] == "Unknown profile ID 'analysis'."
+
+    assert event["type"] == "task_updated"
+    assert event["payload"]["task"]["task_id"] == task_id
+    assert event["payload"]["task"]["stage"] == "plan"
+    assert event["payload"]["task"]["run_status"] == "failed"
 
 
 def test_web_display_wait_stop_clears_model_wait_processing() -> None:

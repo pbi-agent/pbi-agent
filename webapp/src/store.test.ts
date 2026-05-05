@@ -850,9 +850,14 @@ describe("session store", () => {
     expect(state.itemsVersion).toBe(2);
   });
 
-  it("ignores events from a stale live session after saved hydration", () => {
+  it("removes stale live routing when hydrating a saved session", () => {
     const sessionKey = getSavedSessionKey("session-1");
+    const otherSessionKey = getSavedSessionKey("session-2");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
+    useSessionStore.getState().attachLiveSession(
+      otherSessionKey,
+      makeLiveSession({ live_session_id: "live-2", session_id: "session-2", last_event_seq: 5 }),
+    );
     useSessionStore.getState().hydrateSavedSession(
       "session-1",
       [
@@ -867,22 +872,29 @@ describe("session store", () => {
       5,
     );
 
-    useSessionStore.getState().applyEvent(
-      sessionKey,
-      {
-        seq: 5,
-        type: "message_added",
-        created_at: "2026-04-16T12:00:02Z",
-        payload: {
-          item_id: "message-1",
-          role: "assistant",
-          content: "stored",
-        },
-      },
-      "live-1",
-    );
+    let store = useSessionStore.getState();
+    expect(store.liveSessionIndex["live-1"]).toBeUndefined();
+    expect(store.sessionsByKey[sessionKey]?.liveSessionId).toBeNull();
 
-    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    const result = useSessionStore.getState().applyEvent(otherSessionKey, {
+      seq: 6,
+      type: "message_added",
+      created_at: "2026-04-16T12:00:02Z",
+      payload: {
+        live_session_id: "live-1",
+        item_id: "message-1",
+        role: "assistant",
+        content: "stale live event",
+      },
+    });
+
+    store = useSessionStore.getState();
+    const state = store.sessionsByKey[sessionKey];
+    expect(result.sessionKey).toBe(otherSessionKey);
+    expect(result).toEqual(expect.objectContaining({
+      applied: false,
+      reason: "stale-live-session",
+    }));
     expect(state.items).toHaveLength(1);
     expect(state.items[0]).toEqual(
       expect.objectContaining({
@@ -890,6 +902,30 @@ describe("session store", () => {
         content: "stored",
       }),
     );
+    expect(state.liveSessionId).toBeNull();
+    expect(store.liveSessionIndex["live-1"]).toBeUndefined();
+    expect(store.liveSessionIndex["live-2"]).toBe(otherSessionKey);
+
+    const sameFallbackResult = useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 6,
+      type: "message_added",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: {
+        live_session_id: "live-1",
+        item_id: "message-2",
+        role: "assistant",
+        content: "late stale live event",
+      },
+    });
+
+    store = useSessionStore.getState();
+    expect(sameFallbackResult).toEqual(expect.objectContaining({
+      sessionKey,
+      applied: false,
+      reason: "stale-live-session",
+    }));
+    expect(store.sessionsByKey[sessionKey]?.liveSessionId).toBeNull();
+    expect(store.sessionsByKey[sessionKey]?.items).toHaveLength(1);
   });
 
   it("detaches a finished live run from a saved session so chat can continue", () => {

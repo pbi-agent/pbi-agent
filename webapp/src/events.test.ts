@@ -51,6 +51,46 @@ describe("parseSseEvent", () => {
   });
 
   it.each([
+    ["missing prompt_id", { questions: [{ question_id: "q1", question: "Pick?", suggestions: ["A", "B", "C"] }] }],
+    ["empty questions", { prompt_id: "prompt-1", questions: [] }],
+    ["missing question_id", { prompt_id: "prompt-1", questions: [{ question: "Pick?", suggestions: ["A", "B", "C"] }] }],
+    ["missing question", { prompt_id: "prompt-1", questions: [{ question_id: "q1", suggestions: ["A", "B", "C"] }] }],
+    ["too few suggestions", { prompt_id: "prompt-1", questions: [{ question_id: "q1", question: "Pick?", suggestions: ["A", "B"] }] }],
+    ["too many suggestions", { prompt_id: "prompt-1", questions: [{ question_id: "q1", question: "Pick?", suggestions: ["A", "B", "C", "D"] }] }],
+    ["non-string suggestion", { prompt_id: "prompt-1", questions: [{ question_id: "q1", question: "Pick?", suggestions: ["A", 2, "C"] }] }],
+    ["fractional recommended index", { prompt_id: "prompt-1", questions: [{ question_id: "q1", question: "Pick?", suggestions: ["A", "B", "C"], recommended_suggestion_index: 1.5 }] }],
+    ["out-of-range recommended index", { prompt_id: "prompt-1", questions: [{ question_id: "q1", question: "Pick?", suggestions: ["A", "B", "C"], recommended_suggestion_index: 3 }] }],
+  ])("rejects malformed user questions requested payloads: %s", (_label, payload) => {
+    expect(parseSseEvent(JSON.stringify({
+      seq: 1,
+      type: "user_questions_requested",
+      created_at: "2026-05-04T00:00:00Z",
+      payload,
+    }))).toBeNull();
+  });
+
+  it("accepts valid user questions requested payloads", () => {
+    const event = parseSseEvent(JSON.stringify({
+      seq: 1,
+      type: "user_questions_requested",
+      created_at: "2026-05-04T00:00:00Z",
+      payload: {
+        prompt_id: "prompt-1",
+        questions: [
+          {
+            question_id: "question-1",
+            question: "Which path?",
+            suggestions: ["A", "B", "C"],
+            recommended_suggestion_index: 2,
+          },
+        ],
+      },
+    }));
+
+    expect(event?.type).toBe("user_questions_requested");
+  });
+
+  it.each([
     { seq: 0, type: "server.connected", payload: {} },
     { seq: 1, type: "session_created", payload: { session: {} } },
     { seq: 2, type: "live_session_started", payload: { live_session: {} } },

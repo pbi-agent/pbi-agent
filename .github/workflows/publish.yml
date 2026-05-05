@@ -21,6 +21,11 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -43,6 +48,14 @@ jobs:
               fh.write(f"EXPECTED_TAG={expected_tag}\n")
           PY
           gh release view "$EXPECTED_TAG" --json tagName >/dev/null
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify web static assets
+        run: |
+          bun run web:build
+          git diff --exit-code -- src/pbi_agent/web/static/app
 
       - name: Install build dependencies
         run: |
