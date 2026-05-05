@@ -174,11 +174,10 @@ class EventsMixin:
         event: dict[str, Any],
     ) -> None:
         with SessionStore() as store:
-            store.add_observability_event(
+            store.add_web_observability_event_and_update_run_session(
                 run_session_id=live_session.live_session_id,
                 session_id=live_session.bound_session_id,
                 step_index=-int(event["seq"]),
-                event_type="web_event",
                 metadata={
                     "type": event["type"],
                     "payload": event["payload"],
@@ -187,10 +186,6 @@ class EventsMixin:
                     "live_session_id": live_session.live_session_id,
                     "session_id": live_session.bound_session_id,
                 },
-            )
-            store.update_run_session(
-                live_session.live_session_id,
-                session_id=live_session.bound_session_id,
                 status=_persisted_web_run_status(live_session),
                 ended_at=live_session.ended_at,
                 last_event_seq=live_session.snapshot.last_event_seq,

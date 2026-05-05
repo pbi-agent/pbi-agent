@@ -1156,6 +1156,59 @@ class SessionStore:
             )
             self._conn.commit()
 
+    def add_web_observability_event_and_update_run_session(
+        self,
+        *,
+        run_session_id: str,
+        session_id: str | None,
+        step_index: int,
+        metadata: dict[str, object],
+        status: str,
+        ended_at: str | None,
+        last_event_seq: int,
+        snapshot: dict[str, object],
+        exit_code: int | None,
+        fatal_error: str | None,
+    ) -> int:
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                cursor = self._conn.execute(
+                    "INSERT INTO observability_events "
+                    "(run_session_id, session_id, step_index, event_type, "
+                    "timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        run_session_id,
+                        session_id,
+                        step_index,
+                        "web_event",
+                        _now_iso(),
+                        _serialize_json(metadata, default="{}"),
+                    ),
+                )
+                update_cursor = self._conn.execute(
+                    "UPDATE run_sessions SET session_id = ?, status = ?, "
+                    "ended_at = ?, last_event_seq = ?, snapshot_json = ?, "
+                    "exit_code = ?, fatal_error = ? WHERE run_session_id = ?",
+                    (
+                        session_id,
+                        status,
+                        ended_at,
+                        last_event_seq,
+                        _serialize_json(snapshot, default="{}"),
+                        exit_code,
+                        fatal_error,
+                        run_session_id,
+                    ),
+                )
+                if update_cursor.rowcount != 1:
+                    raise KeyError(run_session_id)
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+        return cursor.lastrowid  # type: ignore[return-value]
+
     def get_run_session(self, run_session_id: str) -> RunSessionRecord | None:
         with self._lock:
             row = self._conn.execute(

@@ -5,6 +5,7 @@ import base64
 import json
 import logging
 import re
+import sqlite3
 from io import BytesIO, StringIO
 from pathlib import Path
 import threading
@@ -1556,6 +1557,45 @@ def test_live_events_include_canonical_identity_in_stream_and_persistence(
     assert run_metadata["live_session_id"] == live_session_id
 
 
+def test_live_session_creation_rechecks_saved_session_under_registration_lock(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Delete race",
+        )
+    app = create_app(_settings())
+
+    class DeleteBeforeAcquire:
+        def __init__(self) -> None:
+            self._lock = threading.Lock()
+            self._deleted = False
+
+        def __enter__(self):
+            if not self._deleted:
+                self._deleted = True
+                with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                    assert store.delete_session(session_id)
+            return self._lock.__enter__()
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return self._lock.__exit__(exc_type, exc_value, traceback)
+
+    with TestClient(app):
+        manager = app.state.manager
+        manager._lock = DeleteBeforeAcquire()
+
+        with pytest.raises(KeyError):
+            manager.create_live_session(session_id=session_id)
+
+        assert manager._live_sessions == {}
+
+
 def test_live_event_persistence_failure_does_not_deliver_to_subscribers(
     tmp_path, monkeypatch
 ) -> None:
@@ -1634,6 +1674,96 @@ def test_live_event_persistence_failure_does_not_deliver_to_subscribers(
 
     assert event["type"] == "wait_state"
     assert event["payload"]["message"] == "Delivered"
+
+
+def test_live_event_run_update_failure_rolls_back_persisted_event(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "sessions.db"
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(db_path))
+    app = create_app(_settings())
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    with TestClient(app):
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = app.state.manager.create_live_session()
+        manager = app.state.manager
+        live_session_id = created["live_session_id"]
+        live_session = manager._live_sessions[live_session_id]
+        _oldest_seq, latest_seq_before_failure = live_session.event_stream.bounds()
+
+        escaped_live_session_id = live_session_id.replace("'", "''")
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "CREATE TRIGGER block_web_run_update "
+                "BEFORE UPDATE ON run_sessions "
+                f"WHEN OLD.run_session_id = '{escaped_live_session_id}' "
+                "BEGIN SELECT RAISE(ABORT, 'run update blocked'); END"
+            )
+
+        with pytest.raises(sqlite3.IntegrityError, match="run update blocked"):
+            manager._publish_live_event(
+                live_session_id,
+                "wait_state",
+                {"active": True, "message": "Failed"},
+            )
+
+        assert live_session.event_stream.bounds()[1] == latest_seq_before_failure
+        assert all(
+            event["payload"].get("message") != "Failed"
+            for event in live_session.event_stream.snapshot()
+        )
+        with SessionStore(db_path=db_path) as store:
+            run = store.get_run_session(live_session_id)
+            records = store.list_observability_events(run_session_id=live_session_id)
+        assert run is not None
+        assert run.last_event_seq == latest_seq_before_failure
+        assert all(
+            json.loads(record.metadata_json).get("payload", {}).get("message")
+            != "Failed"
+            for record in records
+        )
+
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("DROP TRIGGER block_web_run_update")
+
+        delivered = manager._publish_live_event(
+            live_session_id,
+            "wait_state",
+            {"active": True, "message": "Delivered"},
+        )
+        assert delivered is not None
+        assert delivered["seq"] == latest_seq_before_failure + 1
+
+        replay = manager.get_event_stream_replay(
+            live_session_id,
+            since=latest_seq_before_failure,
+        )
+
+    assert [event["payload"].get("message") for event in replay] == ["Delivered"]
+    with SessionStore(db_path=db_path) as store:
+        run = store.get_run_session(live_session_id)
+        records = store.list_observability_events(run_session_id=live_session_id)
+    assert run is not None
+    assert run.last_event_seq == delivered["seq"]
+    assert [
+        json.loads(record.metadata_json).get("payload", {}).get("message")
+        for record in records
+        if json.loads(record.metadata_json).get("type") == "wait_state"
+    ] == ["Delivered"]
 
 
 def test_concurrent_live_events_preserve_snapshot_items_and_persist_latest_snapshot(
@@ -2372,6 +2502,65 @@ def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) 
                 "Follow up",
                 "Continued.",
             ]
+
+
+def test_delete_session_rejects_task_start_setup_before_live_registration(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+    delete_rejected = False
+
+    def fake_run_single_turn(_prompt, _runtime, _display, **kwargs):
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Done.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    with patch(
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
+        side_effect=fake_run_single_turn,
+    ):
+        with TestClient(app) as client:
+            _put_two_stage_board(client)
+            create_response = client.post(
+                "/api/tasks",
+                json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            manager = app.state.manager
+            original_create_task_live_session = manager._create_task_live_session
+
+            def guarded_create_task_live_session(record, runtime):
+                nonlocal delete_rejected
+                assert record.session_id is not None
+                with pytest.raises(RuntimeError, match="active run"):
+                    manager.delete_session(record.session_id)
+                delete_rejected = True
+                return original_create_task_live_session(record, runtime)
+
+            monkeypatch.setattr(
+                manager,
+                "_create_task_live_session",
+                guarded_create_task_live_session,
+            )
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+            session_id = run_response.json()["task"]["session_id"]
+
+            assert delete_rejected is True
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                saved_session = store.get_session(session_id)
+                task = store.get_kanban_task(task_id)
+
+            assert saved_session is not None
+            assert task is not None
+            assert task.session_id == session_id
 
 
 def test_running_task_rejects_unsafe_patch_updates(monkeypatch, tmp_path) -> None:

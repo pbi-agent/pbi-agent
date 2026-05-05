@@ -65,16 +65,16 @@ class LiveSessionsMixin:
     ) -> dict[str, Any]:
         runtime = self._resolve_runtime(profile_id)
         bound_session_id = session_id
-        if bound_session_id is not None:
-            self._require_saved_session(bound_session_id)
-            if profile_id is None:
-                runtime = self._resolve_saved_session_runtime(
-                    bound_session_id,
-                    fallback=runtime,
-                )
-            else:
-                self._update_saved_session_runtime(bound_session_id, runtime)
         with self._lock:
+            if bound_session_id is not None:
+                self._require_saved_session(bound_session_id)
+                if profile_id is None:
+                    runtime = self._resolve_saved_session_runtime(
+                        bound_session_id,
+                        fallback=runtime,
+                    )
+                else:
+                    self._update_saved_session_runtime(bound_session_id, runtime)
             if bound_session_id is not None and reuse_existing:
                 existing_live_session = (
                     self._find_live_session_for_saved_session_locked(bound_session_id)

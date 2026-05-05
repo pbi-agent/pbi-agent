@@ -1,9 +1,7 @@
 # Orchestrate TODO
 
-- [X] Fix lost web-manager lease handling so a manager stops accepting work and finalizes safely when renewal fails.
-- [X] Fix task update/delete versus task-start TOCTOU races.
-- [X] Serialize live-session event snapshot/persistence updates.
-- [X] Make live-event visibility durable before SSE delivery.
-- [X] Harden release workflow changelog and PyPI publish safety.
-- [X] Resolve release-readiness docs/TODO contradictions.
+- [X] Make live-event persistence atomic with snapshot/sequence updates.
+- [X] Close saved-session delete races with task startup and live-session creation.
+- [X] Harden release workflow ordering/collision semantics.
+- [X] Add app-stream frontend gap recovery and `session_created` handling.
 - [X] Run final validation, update memory, and report handoff.

@@ -73,11 +73,40 @@ describe("useTaskEvents", () => {
       payload: { session: { session_id: "session-1" } },
       seq: 4,
     });
+    emitAppEvent(source, {
+      type: "session_created",
+      payload: { session: { session_id: "session-2" } },
+      seq: 5,
+    });
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["tasks"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["board-stages"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-2"] });
+  });
+
+  it("invalidates session queries for session-created app events", () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
+
+    renderHook(() => useTaskEvents(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const source = MockEventSource.instances[0];
+
+    emitAppEvent(source, {
+      type: "session_created",
+      payload: { session: { session_id: "session-1" } },
+      seq: 1,
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["session", "session-1"] });
   });
 
@@ -168,19 +197,49 @@ describe("useTaskEvents", () => {
 
     const source = MockEventSource.instances[0];
 
-    emitAppEvent(source, { type: "task_updated", payload: {}, seq: 3 });
-    emitAppEvent(source, { type: "board_stages_updated", payload: {}, seq: 4 });
+    emitAppEvent(source, { type: "task_updated", payload: {}, seq: 1 });
+    emitAppEvent(source, { type: "board_stages_updated", payload: {}, seq: 2 });
     emitAppEvent(source, {
       type: "session_updated",
       payload: { session: { session_id: "session-1" } },
-      seq: 5,
+      seq: 3,
     });
 
     source.onerror?.();
     vi.advanceTimersByTime(1000);
 
     expect(MockEventSource.instances).toHaveLength(2);
-    expect(MockEventSource.instances[1].url).toContain("/api/events/app?since=5");
+    expect(MockEventSource.instances[1].url).toContain("/api/events/app?since=3");
+  });
+
+  it("recovers app snapshots and reconnects from cursor zero after sequence gaps", () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
+
+    renderHook(() => useTaskEvents(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const source = MockEventSource.instances[0];
+
+    emitAppEvent(source, { type: "task_updated", payload: {}, seq: 1 });
+    emitAppEvent(source, { type: "board_stages_updated", payload: {}, seq: 3 });
+
+    expect(source.close).toHaveBeenCalledTimes(1);
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["tasks"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["board-stages"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["dashboard-stats"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["dashboard-runs"] });
+
+    vi.advanceTimersByTime(1000);
+
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1].url).toContain("/api/events/app");
+    expect(MockEventSource.instances[1].url).not.toContain("since=");
   });
 
   it("resets the reconnect cursor and invalidates app snapshots after replay-incomplete", () => {
@@ -195,7 +254,7 @@ describe("useTaskEvents", () => {
 
     const source = MockEventSource.instances[0];
 
-    emitAppEvent(source, { type: "task_updated", payload: {}, seq: 12 });
+    emitAppEvent(source, { type: "task_updated", payload: {}, seq: 1 });
     emitAppEvent(source, {
       type: "server.replay_incomplete",
       payload: {

@@ -81,6 +81,22 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
+    function scheduleReconnect(currentSource: EventSource) {
+      if (disposed || source !== currentSource || retryTimer) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
+        connect();
+      }, retryDelay.current);
+    }
+
+    function recoverAppSnapshot(currentSource: EventSource) {
+      latestHandledSeq.current = 0;
+      invalidateAppSnapshotQueries(client);
+      currentSource.close();
+      scheduleReconnect(currentSource);
+    }
+
     function connect() {
       if (disposed) return;
       const since = latestHandledSeq.current;
@@ -104,8 +120,7 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
           event.type === "server.replay_incomplete"
           && event.payload.snapshot_required === true
         ) {
-          latestHandledSeq.current = 0;
-          invalidateAppSnapshotQueries(client);
+          recoverAppSnapshot(currentSource);
           return;
         }
         if (event.type === "server.connected" || event.type === "server.heartbeat") {
@@ -115,6 +130,10 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
           return;
         }
         const latestSeq = latestHandledSeq.current;
+        if (event.seq > latestSeq + 1) {
+          recoverAppSnapshot(currentSource);
+          return;
+        }
         if (event.seq > 0) {
           latestHandledSeq.current = Math.max(latestSeq, event.seq);
         }
@@ -128,7 +147,7 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
           return;
         }
-        if (event.type === "session_updated") {
+        if (event.type === "session_created" || event.type === "session_updated") {
           void client.invalidateQueries({ queryKey: ["sessions"] });
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
           const session = event.payload.session as { session_id?: unknown } | undefined;
@@ -165,11 +184,7 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
       currentSource.onerror = () => {
         if (disposed || source !== currentSource || retryTimer) return;
         currentSource.close();
-        retryTimer = setTimeout(() => {
-          retryTimer = null;
-          retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
-          connect();
-        }, retryDelay.current);
+        scheduleReconnect(currentSource);
       };
     }
 

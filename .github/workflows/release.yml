@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -31,7 +33,97 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Read package version
+        id: version
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+          from subprocess import CalledProcessError, check_output
+
+          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          project_name = data["project"]["name"]
+          version = data["project"]["version"]
+          previous_version = None
+          before_sha = os.environ.get("BEFORE_SHA")
+          if before_sha and before_sha != "0" * 40:
+              try:
+                  previous_pyproject = check_output(
+                      ["git", "show", f"{before_sha}:pyproject.toml"],
+                      text=True,
+                  )
+              except CalledProcessError:
+                  previous_pyproject = ""
+              if previous_pyproject:
+                  previous_version = tomllib.loads(previous_pyproject)["project"]["version"]
+          should_release = previous_version != version
+
+          with open(Path(os.environ["GITHUB_OUTPUT"]), "a", encoding="utf-8") as fh:
+              fh.write(f"project_name={project_name}\n")
+              fh.write(f"version={version}\n")
+              fh.write(f"tag=v{version}\n")
+              fh.write(f"should_release={str(should_release).lower()}\n")
+          PY
+
+      - name: Skip unchanged package version
+        if: ${{ steps.version.outputs.should_release != 'true' }}
+        run: echo "Package version did not change; skipping release."
+
+      - name: Check release inputs and collisions
+        if: ${{ steps.version.outputs.should_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROJECT_NAME: ${{ steps.version.outputs.project_name }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          NOTES_FILE="docs/changelog/v$VERSION.md"
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "Missing changelog notes: $NOTES_FILE" >&2
+            exit 1
+          fi
+
+          release_target="$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
+          if [ -n "$release_target" ]; then
+            echo "Release $TAG already exists and targets $release_target." >&2
+            exit 1
+          fi
+
+          tag_ref="$(git ls-remote --tags origin "refs/tags/$TAG")"
+          if [ -n "$tag_ref" ]; then
+            echo "Tag $TAG already exists." >&2
+            exit 1
+          fi
+
+          python - <<'PY'
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          project_name = os.environ["PROJECT_NAME"]
+          version = os.environ["VERSION"]
+          url = "https://pypi.org/pypi/{}/{}/json".format(
+              urllib.parse.quote(project_name, safe=""),
+              urllib.parse.quote(version, safe=""),
+          )
+
+          request = urllib.request.Request(url, method="GET")
+          try:
+              with urllib.request.urlopen(request, timeout=20):
+                  print(f"PyPI version {version} already exists for {project_name}.", file=sys.stderr)
+                  sys.exit(1)
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+          PY
+
       - name: Install dependencies
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: |
           python -m pip install --upgrade pip
           python -m pip install uv
@@ -39,73 +131,70 @@ jobs:
           bun install --frozen-lockfile
 
       - name: Run tests
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: uv run pytest
 
       - name: Run Ruff
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: uv run ruff check .
 
       - name: Check formatting
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: uv run ruff format --check .
 
       - name: Run web tests
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: bun run test:web
 
       - name: Run web lint
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: bun run lint
 
       - name: Run web typecheck
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: bun run typecheck
 
       - name: Verify generated API types
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: |
           bun run web:api-types
           git diff --exit-code -- webapp/src/api-types.generated.ts
 
       - name: Verify web static assets
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: |
           bun run web:build
           git diff --exit-code -- src/pbi_agent/web/static/app
 
       - name: Build docs
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: bun run docs:build
 
-      - name: Read package version
-        id: version
+      - name: Install build dependencies
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         run: |
-          python - <<'PY'
-          import tomllib
-          from pathlib import Path
+          python -m pip install --upgrade pip
+          python -m pip install build twine
 
-          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-          version = data["project"]["version"]
+      - name: Build distributions
+        if: ${{ steps.version.outputs.should_release == 'true' }}
+        run: python -m build
 
-          with open(Path(__import__("os").environ["GITHUB_OUTPUT"]), "a", encoding="utf-8") as fh:
-              fh.write(f"version={version}\n")
-              fh.write(f"tag=v{version}\n")
-          PY
+      - name: Publish to PyPI
+        if: ${{ steps.version.outputs.should_release == 'true' }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
 
-      - name: Create GitHub release if version is new
+      - name: Create GitHub release
+        if: ${{ steps.version.outputs.should_release == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          release_target="$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish 2>/dev/null || true)"
-          if [ -n "$release_target" ]; then
-            echo "Release $TAG already exists."
-            if [ "$release_target" != "$GITHUB_SHA" ]; then
-              echo "Release $TAG targets $release_target, expected $GITHUB_SHA." >&2
-              exit 1
-            fi
-            exit 0
-          fi
-
           NOTES_FILE="docs/changelog/v$VERSION.md"
-          if [ ! -f "$NOTES_FILE" ]; then
-            echo "Missing changelog notes: $NOTES_FILE" >&2
-            exit 1
-          fi
-
           gh release create "$TAG" \
             --target "$GITHUB_SHA" \
             --title "$TAG" \

@@ -253,6 +253,12 @@ class SavedSessionsMixin:
                     for task in store.list_kanban_tasks(self._directory_key)
                     if task.session_id == session_id
                 ]
+                if any(
+                    task.task_id in self._running_task_ids for task in affected_tasks
+                ):
+                    raise RuntimeError(
+                        "Cannot delete a session while an active run is still running."
+                    )
                 updated_tasks: list[KanbanTaskRecord] = []
                 for task in affected_tasks:
                     updated = store.update_kanban_task(

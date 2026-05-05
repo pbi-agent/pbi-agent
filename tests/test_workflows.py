@@ -42,6 +42,7 @@ def test_release_workflow_runs_validation_gates_and_changelog_notes() -> None:
     assert_release_gates(workflow)
     assert "docs/changelog/v$VERSION.md" in workflow
     assert "--notes-file" in workflow
+    assert "twine upload dist/*" in workflow
 
 
 def test_release_workflow_fails_when_changelog_notes_are_missing() -> None:
@@ -50,29 +51,80 @@ def test_release_workflow_fails_when_changelog_notes_are_missing() -> None:
     notes_file_index = workflow.index('NOTES_FILE="docs/changelog/v$VERSION.md"')
     missing_check_index = workflow.index('[ ! -f "$NOTES_FILE" ]')
     exit_index = workflow.index("exit 1", missing_check_index)
+    upload_index = workflow.index("twine upload dist/*")
     create_index = workflow.index('gh release create "$TAG"')
     notes_arg_index = workflow.index('--notes-file "$NOTES_FILE"')
 
-    assert notes_file_index < missing_check_index < exit_index < create_index
+    assert notes_file_index < missing_check_index < exit_index < upload_index
+    assert upload_index < create_index
     assert create_index < notes_arg_index
     assert "Release for pbi-agent version $VERSION" not in workflow
 
 
-def test_release_workflow_verifies_existing_release_target() -> None:
+def test_release_workflow_rejects_existing_release_before_publishing() -> None:
     workflow = read_workflow("release.yml")
 
     release_view_index = workflow.index(
         'gh release view "$TAG" --json targetCommitish --jq .targetCommitish'
     )
-    mismatch_index = workflow.index('[ "$release_target" != "$GITHUB_SHA" ]')
-    exit_index = workflow.index("exit 1", mismatch_index)
+    existing_release_index = workflow.index('[ -n "$release_target" ]')
+    exit_index = workflow.index("exit 1", existing_release_index)
+    upload_index = workflow.index("twine upload dist/*")
     create_index = workflow.index('gh release create "$TAG"')
 
-    assert release_view_index < mismatch_index < exit_index < create_index
+    assert release_view_index < existing_release_index < exit_index < upload_index
+    assert upload_index < create_index
 
 
-def test_publish_workflow_rebuilds_static_assets_before_distribution() -> None:
-    workflow = read_workflow("publish.yml")
+def test_release_workflow_rejects_existing_tag_before_publishing() -> None:
+    workflow = read_workflow("release.yml")
+
+    tag_check_index = workflow.index('git ls-remote --tags origin "refs/tags/$TAG"')
+    existing_tag_index = workflow.index('[ -n "$tag_ref" ]')
+    exit_index = workflow.index("exit 1", existing_tag_index)
+    upload_index = workflow.index("twine upload dist/*")
+    create_index = workflow.index('gh release create "$TAG"')
+
+    assert tag_check_index < existing_tag_index < exit_index < upload_index
+    assert upload_index < create_index
+
+
+def test_release_workflow_rejects_existing_pypi_version_before_publishing() -> None:
+    workflow = read_workflow("release.yml")
+
+    pypi_check_index = workflow.index("https://pypi.org/pypi/{}/{}/json")
+    pypi_collision_index = workflow.index("already exists for {project_name}")
+    upload_index = workflow.index("twine upload dist/*")
+    create_index = workflow.index('gh release create "$TAG"')
+
+    assert "urllib.request" in workflow
+    assert pypi_check_index < pypi_collision_index < upload_index
+    assert upload_index < create_index
+
+
+def test_release_workflow_skips_when_package_version_did_not_change() -> None:
+    workflow = read_workflow("release.yml")
+
+    fetch_depth_index = workflow.index("fetch-depth: 0")
+    before_index = workflow.index("BEFORE_SHA: ${{ github.event.before }}")
+    previous_version_index = workflow.index("previous_version = tomllib.loads")
+    should_release_index = workflow.index(
+        "should_release = previous_version != version"
+    )
+    skip_index = workflow.index("Package version did not change; skipping release.")
+    guard_index = workflow.index(
+        "if: ${{ steps.version.outputs.should_release == 'true' }}"
+    )
+    upload_index = workflow.index("twine upload dist/*")
+    create_index = workflow.index('gh release create "$TAG"')
+
+    assert fetch_depth_index < before_index < previous_version_index
+    assert previous_version_index < should_release_index < skip_index
+    assert skip_index < guard_index < upload_index < create_index
+
+
+def test_release_workflow_rebuilds_static_assets_before_distribution() -> None:
+    workflow = read_workflow("release.yml")
 
     build_index = workflow.index("bun run web:build")
     diff_index = workflow.index("git diff --exit-code -- src/pbi_agent/web/static/app")
@@ -83,34 +135,26 @@ def test_publish_workflow_rebuilds_static_assets_before_distribution() -> None:
     assert build_index < diff_index < distribution_index
 
 
-def test_publish_workflow_verifies_release_target_before_building() -> None:
-    workflow = read_workflow("publish.yml")
+def test_release_workflow_publishes_to_pypi_before_github_release() -> None:
+    workflow = read_workflow("release.yml")
 
-    checkout_index = workflow.index("ref: ${{ github.event.workflow_run.head_sha }}")
-    expected_sha_index = workflow.index(
-        "HEAD_SHA: ${{ github.event.workflow_run.head_sha }}"
-    )
-    release_view_index = workflow.index(
-        'gh release view "$EXPECTED_TAG" --json targetCommitish --jq .targetCommitish'
-    )
-    mismatch_index = workflow.index('[ "$release_target" != "$HEAD_SHA" ]')
-    install_index = workflow.index("bun install --frozen-lockfile")
+    build_index = workflow.index("python -m build")
+    upload_index = workflow.index("twine upload dist/*")
+    create_index = workflow.index('gh release create "$TAG"')
 
-    assert (
-        checkout_index
-        < expected_sha_index
-        < release_view_index
-        < mismatch_index
-        < install_index
-    )
+    assert build_index < upload_index < create_index
 
 
-def test_publish_workflow_does_not_skip_existing_pypi_artifacts() -> None:
-    workflow = read_workflow("publish.yml")
+def test_release_workflow_does_not_skip_existing_pypi_artifacts() -> None:
+    workflow = read_workflow("release.yml")
 
     upload_index = workflow.index("twine upload dist/*")
     assert "--skip-existing" not in workflow
     assert workflow.index("python -m build") < upload_index
+
+
+def test_publish_workflow_is_not_a_downstream_release_side_effect() -> None:
+    assert not (WORKFLOWS / "publish.yml").exists()
 
 
 def test_docs_deploy_workflow_pins_bun_version() -> None:
