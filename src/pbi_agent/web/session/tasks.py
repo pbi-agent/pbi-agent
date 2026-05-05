@@ -235,117 +235,128 @@ class TasksMixin:
             if task_id in self._running_task_ids:
                 raise RuntimeError("Task is already running.")
             self._running_task_ids.add(task_id)
+        worker_registered = False
         live_session: LiveSessionState | None = None
         initial_user_message_id: int | None = None
-        with SessionStore() as store:
-            record = store.get_kanban_task(task_id)
-            if record is None or record.directory != self._directory_key:
+        try:
+            with SessionStore() as store:
+                record = store.get_kanban_task(task_id)
+                if record is None or record.directory != self._directory_key:
+                    with self._lock:
+                        self._running_task_ids.discard(task_id)
+                    raise KeyError(task_id)
+                if self._is_non_runnable_stage(record.stage):
+                    if record.stage == KANBAN_STAGE_DONE:
+                        with self._lock:
+                            self._running_task_ids.discard(task_id)
+                        raise RuntimeError("Done tasks cannot run.")
+                is_continuation = False
+                started_from_backlog = record.stage == KANBAN_STAGE_BACKLOG
+                if started_from_backlog:
+                    next_stage_id = self._next_runnable_board_stage_id(
+                        record.stage,
+                        store=store,
+                    )
+                    if next_stage_id is None:
+                        with self._lock:
+                            self._running_task_ids.discard(task_id)
+                        raise RuntimeError(
+                            "Backlog tasks require a runnable board stage before they can run."
+                        )
+                    moved_record = store.move_kanban_task(task_id, stage=next_stage_id)
+                    if moved_record is None:
+                        with self._lock:
+                            self._running_task_ids.discard(task_id)
+                        raise KeyError(task_id)
+                    record = moved_record
+                existing_session_id = record.session_id
+                if existing_session_id is not None:
+                    existing_messages = store.list_messages(existing_session_id)
+                    is_continuation = any(
+                        message.content.strip() != record.prompt.strip()
+                        for message in existing_messages
+                        if message.role == "user"
+                    )
+                if started_from_backlog:
+                    is_continuation = False
+                stage_record = store.get_kanban_stage_config(
+                    self._directory_key,
+                    record.stage,
+                )
+                runtime = self._resolve_task_runtime(
+                    record,
+                    stage_record=stage_record,
+                    allow_fallback=False,
+                )
+                initial_prompt = self._task_prompt_for_run(
+                    record,
+                    stage_record,
+                    store=store,
+                    is_continuation=is_continuation,
+                )
+                if record.session_id is None:
+                    session_id = store.create_session(
+                        directory=self._directory_key,
+                        provider=runtime.settings.provider,
+                        provider_id=runtime.provider_id or None,
+                        model=runtime.settings.model,
+                        profile_id=runtime.profile_id or None,
+                        title=record.title,
+                    )
+                    updated_record = store.update_kanban_task(
+                        task_id,
+                        session_id=session_id,
+                    )
+                    if updated_record is None:
+                        with self._lock:
+                            self._running_task_ids.discard(task_id)
+                        raise KeyError(task_id)
+                    record = updated_record
+                initial_user_message_id = None
+                if not is_continuation:
+                    initial_user_message_id = self._persist_task_user_prompt(
+                        store,
+                        record,
+                        runtime,
+                        initial_prompt,
+                        list(record.image_attachments),
+                    )
+                running_record = store.set_kanban_task_running(task_id)
+            if running_record is None:
                 with self._lock:
                     self._running_task_ids.discard(task_id)
                 raise KeyError(task_id)
-            if self._is_non_runnable_stage(record.stage):
-                if record.stage == KANBAN_STAGE_DONE:
-                    with self._lock:
-                        self._running_task_ids.discard(task_id)
-                    raise RuntimeError("Done tasks cannot run.")
-            is_continuation = False
-            started_from_backlog = record.stage == KANBAN_STAGE_BACKLOG
-            if started_from_backlog:
-                next_stage_id = self._next_runnable_board_stage_id(
-                    record.stage,
-                    store=store,
-                )
-                if next_stage_id is None:
-                    with self._lock:
-                        self._running_task_ids.discard(task_id)
-                    raise RuntimeError(
-                        "Backlog tasks require a runnable board stage before they can run."
-                    )
-                moved_record = store.move_kanban_task(task_id, stage=next_stage_id)
-                if moved_record is None:
-                    with self._lock:
-                        self._running_task_ids.discard(task_id)
-                    raise KeyError(task_id)
-                record = moved_record
-            existing_session_id = record.session_id
-            if existing_session_id is not None:
-                existing_messages = store.list_messages(existing_session_id)
-                is_continuation = any(
-                    message.content.strip() != record.prompt.strip()
-                    for message in existing_messages
-                    if message.role == "user"
-                )
-            if started_from_backlog:
-                is_continuation = False
-            stage_record = store.get_kanban_stage_config(
-                self._directory_key,
-                record.stage,
-            )
-            runtime = self._resolve_task_runtime(
-                record,
-                stage_record=stage_record,
-                allow_fallback=False,
-            )
-            initial_prompt = self._task_prompt_for_run(
-                record,
-                stage_record,
-                store=store,
-                is_continuation=is_continuation,
-            )
-            if record.session_id is None:
-                session_id = store.create_session(
-                    directory=self._directory_key,
-                    provider=runtime.settings.provider,
-                    provider_id=runtime.provider_id or None,
-                    model=runtime.settings.model,
-                    profile_id=runtime.profile_id or None,
-                    title=record.title,
-                )
-                updated_record = store.update_kanban_task(
-                    task_id,
-                    session_id=session_id,
-                )
-                if updated_record is None:
-                    with self._lock:
-                        self._running_task_ids.discard(task_id)
-                    raise KeyError(task_id)
-                record = updated_record
-            initial_user_message_id = None
-            if not is_continuation:
-                initial_user_message_id = self._persist_task_user_prompt(
-                    store,
-                    record,
+            live_session = self._create_task_live_session(running_record, runtime)
+            if initial_user_message_id is not None:
+                self._publish_persisted_user_message(
+                    live_session,
+                    running_record,
                     runtime,
                     initial_prompt,
-                    list(record.image_attachments),
+                    initial_user_message_id,
+                    list(running_record.image_attachments),
                 )
-            running_record = store.set_kanban_task_running(task_id)
-        if running_record is None:
-            with self._lock:
-                self._running_task_ids.discard(task_id)
-            raise KeyError(task_id)
-        live_session = self._create_task_live_session(running_record, runtime)
-        if initial_user_message_id is not None:
-            self._publish_persisted_user_message(
-                live_session,
-                running_record,
-                runtime,
-                initial_prompt,
-                initial_user_message_id,
-                list(running_record.image_attachments),
+            self._publish_task_updated(running_record)
+            worker = threading.Thread(
+                target=self._run_task_worker,
+                args=(task_id, live_session.live_session_id, initial_user_message_id),
+                daemon=True,
+                name=f"pbi-agent-web-task-{task_id[:8]}",
             )
-        self._publish_task_updated(running_record)
-        worker = threading.Thread(
-            target=self._run_task_worker,
-            args=(task_id, live_session.live_session_id, initial_user_message_id),
-            daemon=True,
-            name=f"pbi-agent-web-task-{task_id[:8]}",
-        )
-        with self._lock:
-            live_session.worker = worker
-            self._task_workers[task_id] = worker
-        worker.start()
-        return self._serialize_task_record(running_record)
+            with self._lock:
+                if not self._started:
+                    self._running_task_ids.discard(task_id)
+                    raise RuntimeError("Manager is not started.")
+                live_session.worker = worker
+                self._task_workers[task_id] = worker
+                worker_registered = True
+            worker.start()
+            return self._serialize_task_record(running_record)
+        except Exception:
+            if not worker_registered:
+                with self._lock:
+                    self._running_task_ids.discard(task_id)
+            raise
 
     def _create_task_live_session(
         self,

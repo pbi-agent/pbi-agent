@@ -80,6 +80,9 @@ function isValidPayload(type: string, payload: Record<string, unknown>): boolean
         && Number.isInteger(payload.requested_since)
         && Number.isInteger(payload.resolved_since)
         && Number.isInteger(payload.latest_seq)
+        && (!("oldest_available_seq" in payload)
+          || payload.oldest_available_seq === null
+          || Number.isInteger(payload.oldest_available_seq))
         && typeof payload.snapshot_required === "boolean";
     case "input_state":
       return typeof payload.enabled === "boolean";

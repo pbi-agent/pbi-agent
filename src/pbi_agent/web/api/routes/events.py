@@ -191,6 +191,26 @@ def _replay_incomplete_event(
     return None
 
 
+def _subscriber_queue_overflow_event(
+    *,
+    cursor: int,
+    oldest_available_seq: int | None,
+    latest_seq: int,
+) -> dict[str, Any]:
+    return _control_event(
+        "server.replay_incomplete",
+        latest_seq,
+        {
+            "reason": "subscriber_queue_overflow",
+            "requested_since": cursor,
+            "resolved_since": cursor,
+            "oldest_available_seq": oldest_available_seq,
+            "latest_seq": latest_seq,
+            "snapshot_required": True,
+        },
+    )
+
+
 def _oldest_available_seq(
     replay_events: list[dict[str, Any]] | None,
     snapshot_events: list[dict[str, Any]],
@@ -203,6 +223,19 @@ def _oldest_available_seq(
         if (seq := _event_seq(event)) > since
     ]
     return min(seqs, default=None)
+
+
+def _oldest_available_after_cursor(
+    *,
+    oldest_retained_seq: int | None,
+    latest_seq: int,
+    cursor: int,
+) -> int | None:
+    if latest_seq <= cursor:
+        return None
+    if oldest_retained_seq is None:
+        return None
+    return max(oldest_retained_seq, cursor + 1)
 
 
 def _format_sse(event: dict[str, Any], *, event_id: int | None = None) -> str:
@@ -322,18 +355,34 @@ async def _iter_sse_events(
 
             seq = _event_seq(event)
             if event.get("type") == "server.replay_incomplete":
+                _oldest_retained_seq, current_latest_seq = stream.bounds()
+                latest_seq = max(seq, current_latest_seq)
+                overflow_event = _subscriber_queue_overflow_event(
+                    cursor=last_sent_seq,
+                    oldest_available_seq=_oldest_available_after_cursor(
+                        oldest_retained_seq=_oldest_retained_seq,
+                        latest_seq=latest_seq,
+                        cursor=last_sent_seq,
+                    ),
+                    latest_seq=latest_seq,
+                )
                 _log_sse(
                     "replay_incomplete",
                     **(log_context or {}),
                     subscriber_id=subscriber_id,
-                    requested_since=requested_since,
-                    resolved_since=since,
+                    requested_since=last_sent_seq,
+                    resolved_since=last_sent_seq,
                     last_sent_seq=last_sent_seq,
-                    latest_seq=seq,
-                    reason=event.get("payload", {}).get("reason"),
-                    snapshot_required=event.get("payload", {}).get("snapshot_required"),
+                    latest_seq=latest_seq,
+                    oldest_available_seq=overflow_event["payload"].get(
+                        "oldest_available_seq"
+                    ),
+                    reason=overflow_event["payload"].get("reason"),
+                    snapshot_required=overflow_event["payload"].get(
+                        "snapshot_required"
+                    ),
                 )
-                yield _format_sse(event)
+                yield _format_sse(overflow_event, event_id=latest_seq)
                 break
             if seq <= last_sent_seq:
                 continue

@@ -60,4 +60,50 @@ describe("parseSseEvent", () => {
       ...event,
     }))?.type).toBe(event.type);
   });
+
+  it.each([
+    ["absent", undefined],
+    ["null", null],
+    ["integer", 2],
+  ])("accepts valid subscriber queue overflow replay-incomplete with oldest_available_seq %s", (_label, oldestAvailableSeq) => {
+    const payload: Record<string, unknown> = {
+      reason: "subscriber_queue_overflow",
+      requested_since: 1,
+      resolved_since: 1,
+      latest_seq: 4,
+      snapshot_required: true,
+    };
+    if (oldestAvailableSeq !== undefined) {
+      payload.oldest_available_seq = oldestAvailableSeq;
+    }
+
+    const event = parseSseEvent(JSON.stringify({
+      seq: 4,
+      type: "server.replay_incomplete",
+      created_at: "2026-05-04T00:00:00Z",
+      payload,
+    }));
+
+    expect(event?.type).toBe("server.replay_incomplete");
+  });
+
+  it.each([
+    ["fractional", 1.5],
+    ["string", "1"],
+    ["object", {}],
+  ])("rejects malformed oldest_available_seq: %s", (_label, oldestAvailableSeq) => {
+    expect(parseSseEvent(JSON.stringify({
+      seq: 4,
+      type: "server.replay_incomplete",
+      created_at: "2026-05-04T00:00:00Z",
+      payload: {
+        reason: "subscriber_queue_overflow",
+        requested_since: 1,
+        resolved_since: 1,
+        latest_seq: 4,
+        oldest_available_seq: oldestAvailableSeq,
+        snapshot_required: true,
+      },
+    }))).toBeNull();
+  });
 });

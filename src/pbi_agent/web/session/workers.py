@@ -351,6 +351,8 @@ class WorkersMixin:
         with self._lock:
             if not self._started or not self._shutdown_requested:
                 return
+            if self._running_task_ids:
+                return
             if any(worker.is_alive() for worker in self._task_workers.values()):
                 return
             current_thread = threading.current_thread()

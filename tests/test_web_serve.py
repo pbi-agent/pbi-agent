@@ -994,11 +994,7 @@ def test_event_stream_subscriber_queue_overflow_enqueues_recovery_control() -> N
     assert queued_events[0]["seq"] == _MAX_SUBSCRIBER_QUEUE_SIZE + 1
     assert queued_events[0]["payload"] == {
         "reason": "subscriber_queue_overflow",
-        "requested_since": 0,
-        "resolved_since": 0,
-        "oldest_available_seq": None,
         "latest_seq": _MAX_SUBSCRIBER_QUEUE_SIZE + 1,
-        "snapshot_required": True,
     }
     assert [int(event["seq"]) for event in queued_events[1:]] == list(
         range(_MAX_SUBSCRIBER_QUEUE_SIZE + 2, _MAX_SUBSCRIBER_QUEUE_SIZE + 6)
@@ -1012,56 +1008,70 @@ def test_sse_event_stream_disconnects_on_subscriber_queue_overflow(monkeypatch) 
     app = create_app(_settings())
     stream = app.state.manager.get_event_stream("app")
 
-    async def collect() -> dict[str, object]:
+    async def collect() -> tuple[str, dict[str, object], str, dict[str, object]]:
         queue: asyncio.Queue = asyncio.Queue(maxsize=_MAX_SUBSCRIBER_QUEUE_SIZE)
         queue.put_nowait(
             {
-                "seq": 10,
-                "type": "server.replay_incomplete",
-                "payload": {
-                    "reason": "subscriber_queue_overflow",
-                    "requested_since": 0,
-                    "resolved_since": 0,
-                    "oldest_available_seq": None,
-                    "latest_seq": 10,
-                    "snapshot_required": True,
-                },
+                "seq": 8,
+                "type": "item",
+                "payload": {},
                 "created_at": "2026-05-05T00:00:00Z",
             }
         )
         queue.put_nowait(
             {
-                "seq": 11,
+                "seq": 12,
+                "type": "server.replay_incomplete",
+                "payload": {
+                    "reason": "subscriber_queue_overflow",
+                    "latest_seq": 12,
+                },
+                "created_at": "2026-05-05T00:00:01Z",
+            }
+        )
+        queue.put_nowait(
+            {
+                "seq": 13,
                 "type": "item",
                 "payload": {},
-                "created_at": "2026-05-05T00:00:01Z",
+                "created_at": "2026-05-05T00:00:02Z",
             }
         )
         monkeypatch.setattr(stream, "subscribe", lambda: ("slow", queue))
         monkeypatch.setattr(stream, "unsubscribe", lambda _subscriber_id: None)
+        monkeypatch.setattr(stream, "snapshot", lambda: [])
+        monkeypatch.setattr(stream, "bounds", lambda: (8, 12))
         iterator = _iter_sse_events(stream, since=0, requested_since=0)
         try:
             connected = _decode_sse_payload(await anext(iterator))
             assert connected["type"] == "server.connected"
-            control = _decode_sse_payload(await anext(iterator))
+            item_raw = await anext(iterator)
+            item = _decode_sse_payload(item_raw)
+            control_raw = await anext(iterator)
+            control = _decode_sse_payload(control_raw)
             with pytest.raises(StopAsyncIteration):
                 await anext(iterator)
-            return control
+            return item_raw, item, control_raw, control
         finally:
             await iterator.aclose()
 
-    event = asyncio.run(collect())
+    item_raw, item, control_raw, event = asyncio.run(collect())
 
+    assert item["type"] == "item"
+    assert item["seq"] == 8
+    assert "id: 8" in item_raw
     assert event["type"] == "server.replay_incomplete"
-    assert event["seq"] == 10
+    assert event["seq"] == 12
     assert event["payload"] == {
         "reason": "subscriber_queue_overflow",
-        "requested_since": 0,
-        "resolved_since": 0,
-        "oldest_available_seq": None,
-        "latest_seq": 10,
+        "requested_since": 8,
+        "resolved_since": 8,
+        "oldest_available_seq": 9,
+        "latest_seq": 12,
         "snapshot_required": True,
     }
+    assert "id: 12" in control_raw
+    assert _resolve_since(0, "12") == 12
 
 
 def test_sse_event_stream_logs_subscription_replay_range_and_unsubscribe(
@@ -3051,6 +3061,177 @@ def test_run_task_rejects_after_shutdown_requested(monkeypatch, tmp_path) -> Non
         assert current.run_status == "idle"
         assert current.session_id is None
     finally:
+        manager.shutdown()
+
+
+def test_run_task_setup_failure_clears_running_task_id(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan"},
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+        original_resolve_task_runtime = manager._resolve_task_runtime
+        resolve_calls = 0
+
+        def fail_first_resolve_task_runtime(*args, **kwargs):
+            nonlocal resolve_calls
+            resolve_calls += 1
+            if resolve_calls == 1:
+                raise RuntimeError("setup failed")
+            return original_resolve_task_runtime(*args, **kwargs)
+
+        def fake_run_single_turn(_prompt, _runtime, _display, **kwargs):
+            return SimpleNamespace(
+                tool_errors=[],
+                text="Done.",
+                session_id=kwargs["resume_session_id"],
+            )
+
+        with patch.object(
+            manager,
+            "_resolve_task_runtime",
+            side_effect=fail_first_resolve_task_runtime,
+        ):
+            with pytest.raises(RuntimeError, match="setup failed"):
+                manager.run_task(task_id)
+
+            assert task_id not in manager._running_task_ids
+
+            with patch(
+                "pbi_agent.web.session.workers.run_single_turn_in_directory",
+                side_effect=fake_run_single_turn,
+            ):
+                rerun_task = manager.run_task(task_id)
+
+        assert rerun_task["task_id"] == task_id
+        assert resolve_calls >= 2
+        deadline = time.monotonic() + 2
+        while True:
+            with manager._lock:
+                running = task_id in manager._running_task_ids
+            if not running:
+                break
+            if time.monotonic() > deadline:
+                raise AssertionError("task worker did not finish in time")
+            time.sleep(0.01)
+    finally:
+        manager.shutdown()
+
+
+def test_shutdown_waits_for_run_task_setup_before_releasing_lease(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    setup_entered = threading.Event()
+    release_setup = threading.Event()
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+    run_result: dict[str, object] = {}
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        manager.replace_board_stages(
+            stages=[
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "plan", "name": "Plan"},
+            ]
+        )
+        task = manager.create_task(title="Task A", prompt="Investigate", stage="plan")
+        task_id = str(task["task_id"])
+        original_resolve_task_runtime = manager._resolve_task_runtime
+
+        def blocking_resolve_task_runtime(*args, **kwargs):
+            setup_entered.set()
+            if not release_setup.wait(timeout=5):
+                raise AssertionError("run_task setup did not unblock in time")
+            return original_resolve_task_runtime(*args, **kwargs)
+
+        def blocking_run_single_turn(prompt, runtime, display, **kwargs):
+            del prompt, runtime, display
+            worker_started.set()
+            if not release_worker.wait(timeout=5):
+                raise AssertionError("task worker did not unblock in time")
+            return SimpleNamespace(
+                tool_errors=[],
+                text="Done.",
+                session_id=kwargs["resume_session_id"],
+            )
+
+        def run_task_in_thread() -> None:
+            try:
+                run_result["task"] = manager.run_task(task_id)
+            except Exception as exc:  # pragma: no cover - surfaced by assertion below
+                run_result["error"] = exc
+
+        with (
+            patch.object(
+                manager,
+                "_resolve_task_runtime",
+                side_effect=blocking_resolve_task_runtime,
+            ),
+            patch(
+                "pbi_agent.web.session.workers.run_single_turn_in_directory",
+                side_effect=blocking_run_single_turn,
+            ),
+        ):
+            run_thread = threading.Thread(target=run_task_in_thread)
+            run_thread.start()
+            assert setup_entered.wait(timeout=2)
+            with manager._lock:
+                assert task_id in manager._running_task_ids
+                assert manager._task_workers == {}
+
+            manager.shutdown()
+
+            with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                assert store.has_active_web_manager_lease(
+                    str(tmp_path), stale_after_seconds=30.0
+                )
+
+            release_setup.set()
+            run_thread.join(timeout=2)
+            assert not run_thread.is_alive()
+            assert "error" not in run_result
+            started_task = run_result["task"]
+            assert isinstance(started_task, dict)
+            assert worker_started.wait(timeout=2)
+            live_session_id = next(
+                live_session_id
+                for live_session_id, live_session in manager._live_sessions.items()
+                if live_session.task_id == task_id
+            )
+            worker = manager._task_workers[task_id]
+            assert manager._live_sessions[live_session_id].worker is worker
+            assert worker.is_alive()
+
+            release_worker.set()
+            worker.join(timeout=2)
+            assert not worker.is_alive()
+
+            deadline = time.monotonic() + 2
+            while True:
+                with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                    active = store.has_active_web_manager_lease(
+                        str(tmp_path), stale_after_seconds=30.0
+                    )
+                if not active:
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("manager lease was not released")
+                time.sleep(0.01)
+    finally:
+        release_setup.set()
+        release_worker.set()
         manager.shutdown()
 
 

@@ -113,11 +113,7 @@ def _subscriber_overflow_event(event: dict[str, Any]) -> dict[str, Any]:
         "type": "server.replay_incomplete",
         "payload": {
             "reason": "subscriber_queue_overflow",
-            "requested_since": 0,
-            "resolved_since": 0,
-            "oldest_available_seq": None,
             "latest_seq": latest_seq,
-            "snapshot_required": True,
         },
         "created_at": _now_iso(),
     }
