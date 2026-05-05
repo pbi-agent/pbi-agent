@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def configure_logging(verbose: bool) -> None:
-    console_level = logging.DEBUG if verbose else logging.INFO
+    console_level = logging.DEBUG if verbose else logging.WARNING
 
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -22,7 +22,7 @@ def configure_logging(verbose: bool) -> None:
         handlers.append(file_handler)
 
     logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
+        level=logging.DEBUG if verbose else logging.WARNING,
         handlers=handlers,
         force=True,
     )
