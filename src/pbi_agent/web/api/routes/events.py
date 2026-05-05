@@ -91,6 +91,7 @@ async def stream_session_events_sse(
         Header(alias="Last-Event-ID"),
     ] = None,
     since: int = Query(default=0, ge=0),
+    live_session_id: str | None = Query(default=None),
 ) -> StreamingResponse:
     manager = cast(WebSessionManager, request.app.state.manager)
     requested_since = _resolve_since(since, last_event_id)
@@ -98,6 +99,7 @@ async def stream_session_events_sse(
         resume_since = manager.resolve_session_event_since(
             session_id,
             requested_since,
+            live_session_id=live_session_id,
         )
         stream = manager.get_session_event_stream(session_id)
         replay_events = manager.get_session_event_stream_replay(

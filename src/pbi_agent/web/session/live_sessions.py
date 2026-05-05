@@ -4,6 +4,7 @@ import threading
 import uuid
 from typing import Any
 
+from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.display.protocol import QueuedInput, UserQuestionAnswer
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
@@ -143,7 +144,24 @@ class LiveSessionsMixin:
                 "live_session_started",
                 {"live_session": self._serialize_live_session(live_session)},
             )
-            worker.start()
+            try:
+                worker.start()
+            except Exception as exc:
+                live_session.worker = None
+                live_session.exit_code = 1
+                live_session.fatal_error = format_user_facing_error(exc)
+                self._publish_live_event(
+                    new_live_session_id,
+                    "message_added",
+                    {
+                        "item_id": f"fatal-{uuid.uuid4().hex}",
+                        "role": "error",
+                        "content": live_session.fatal_error,
+                        "markdown": False,
+                    },
+                )
+                self._finalize_live_session_locked(live_session)
+                raise
             return self._serialize_live_session(live_session)
 
     def _message_attachments_for_upload_ids(

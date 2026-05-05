@@ -56,6 +56,15 @@ function eventCreatedAtOrAfter(event: WebEvent, timestampMs: number): boolean {
   return Number.isFinite(eventCreatedAtMs) && eventCreatedAtMs >= timestampMs;
 }
 
+function invalidateAppSnapshotQueries(client: ReturnType<typeof useQueryClient>) {
+  void client.invalidateQueries({ queryKey: ["sessions"] });
+  void client.invalidateQueries({ queryKey: ["tasks"] });
+  void client.invalidateQueries({ queryKey: ["board-stages"] });
+  void client.invalidateQueries({ queryKey: ["bootstrap"] });
+  void client.invalidateQueries({ queryKey: ["dashboard-stats"] });
+  void client.invalidateQueries({ queryKey: ["dashboard-runs"] });
+}
+
 export function useTaskEvents(): LiveSessionLifecycleEvent[] {
   const client = useQueryClient();
   const retryDelay = useRef(INITIAL_DELAY);
@@ -91,8 +100,23 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
         if (!event) {
           return;
         }
-        if (event.type === "server.connected" || event.type === "server.heartbeat") {
+        if (
+          event.type === "server.replay_incomplete"
+          && event.payload.snapshot_required === true
+        ) {
+          latestHandledSeq.current = 0;
+          invalidateAppSnapshotQueries(client);
           return;
+        }
+        if (event.type === "server.connected" || event.type === "server.heartbeat") {
+          if (event.seq > 0) {
+            latestHandledSeq.current = Math.max(latestHandledSeq.current, event.seq);
+          }
+          return;
+        }
+        const latestSeq = latestHandledSeq.current;
+        if (event.seq > 0) {
+          latestHandledSeq.current = Math.max(latestSeq, event.seq);
         }
         if (event.type === "task_updated" || event.type === "task_deleted") {
           void client.invalidateQueries({ queryKey: ["tasks"] });
@@ -122,8 +146,6 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
           void client.invalidateQueries({ queryKey: ["sessions"] });
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
           void client.invalidateQueries({ queryKey: ["sessions"] });
-          const latestSeq = latestHandledSeq.current;
-          latestHandledSeq.current = Math.max(latestSeq, event.seq);
           if (
             event.seq <= latestSeq
             || !eventCreatedAtOrAfter(event, hookStartedAtMs)

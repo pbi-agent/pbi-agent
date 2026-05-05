@@ -172,6 +172,21 @@ describe("useLiveSessionEvents", () => {
     expect(socket.url).toContain("/api/events/sessions/session-1");
   });
 
+  it("includes the current live run identity for session-scoped streams", () => {
+    const queryClient = new QueryClient();
+    const sessionKey = getSavedSessionKey("session-1");
+
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1", "session-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const socket = MockEventSource.instances[0];
+    const url = new URL(socket.url, window.location.origin);
+    expect(url.pathname).toBe("/api/events/sessions/session-1");
+    expect(url.searchParams.get("since")).toBe("0");
+    expect(url.searchParams.get("live_session_id")).toBe("live-1");
+  });
+
   it("requests only events newer than the current cursor", () => {
     const queryClient = new QueryClient();
     const sessionKey = getSavedSessionKey("session-1");

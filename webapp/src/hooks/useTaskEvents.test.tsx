@@ -158,4 +158,69 @@ describe("useTaskEvents", () => {
     vi.advanceTimersByTime(1);
     expect(MockEventSource.instances).toHaveLength(3);
   });
+
+  it("advances the reconnect cursor for task, board, and session app events", () => {
+    const queryClient = new QueryClient();
+
+    renderHook(() => useTaskEvents(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const source = MockEventSource.instances[0];
+
+    emitAppEvent(source, { type: "task_updated", payload: {}, seq: 3 });
+    emitAppEvent(source, { type: "board_stages_updated", payload: {}, seq: 4 });
+    emitAppEvent(source, {
+      type: "session_updated",
+      payload: { session: { session_id: "session-1" } },
+      seq: 5,
+    });
+
+    source.onerror?.();
+    vi.advanceTimersByTime(1000);
+
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1].url).toContain("/api/events/app?since=5");
+  });
+
+  it("resets the reconnect cursor and invalidates app snapshots after replay-incomplete", () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
+
+    renderHook(() => useTaskEvents(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const source = MockEventSource.instances[0];
+
+    emitAppEvent(source, { type: "task_updated", payload: {}, seq: 12 });
+    emitAppEvent(source, {
+      type: "server.replay_incomplete",
+      payload: {
+        reason: "subscriber_queue_overflow",
+        requested_since: 12,
+        resolved_since: 13,
+        latest_seq: 20,
+        oldest_available_seq: 18,
+        snapshot_required: true,
+      },
+      seq: 13,
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["sessions"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["tasks"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["board-stages"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["dashboard-stats"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["dashboard-runs"] });
+
+    source.onerror?.();
+    vi.advanceTimersByTime(1000);
+
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1].url).toContain("/api/events/app");
+    expect(MockEventSource.instances[1].url).not.toContain("since=");
+  });
 });

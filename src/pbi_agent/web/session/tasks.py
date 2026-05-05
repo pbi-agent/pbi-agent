@@ -168,6 +168,9 @@ class TasksMixin:
         image_upload_ids: list[str] | None = None,
         image_upload_ids_present: bool = False,
     ) -> dict[str, Any]:
+        with self._lock:
+            if task_id in self._running_task_ids:
+                raise RuntimeError("Cannot update a running task.")
         if project_dir is not None:
             self._validate_project_dir(project_dir)
         if profile_id_present and profile_id is not None:
@@ -511,8 +514,10 @@ class TasksMixin:
         task_id: str,
         event_type: str,
         payload: dict[str, Any],
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | None:
         event = self._publish_live_event(live_session_id, event_type, payload)
+        if event is None:
+            return None
         summary = self._summary_for_task_live_event(event_type, payload)
         if summary is not None:
             with SessionStore() as store:

@@ -80,12 +80,23 @@ class EventsMixin:
             raise KeyError(session_id)
         return self._load_persisted_web_events(run.run_session_id, since=since)
 
-    def resolve_session_event_since(self, session_id: str, since: int) -> int:
+    def resolve_session_event_since(
+        self,
+        session_id: str,
+        since: int,
+        *,
+        live_session_id: str | None = None,
+    ) -> int:
         if since <= 0:
             return since
         self._require_saved_session(session_id)
         live_session = self._find_stream_live_session_for_saved_session(session_id)
         if live_session is not None:
+            if (
+                live_session_id is not None
+                and live_session_id != live_session.live_session_id
+            ):
+                return 0
             latest_seq = live_session.snapshot.last_event_seq
             if latest_seq <= 0:
                 latest_seq = self._latest_persisted_web_event_seq(
@@ -101,6 +112,8 @@ class EventsMixin:
             )
         if run is None:
             raise KeyError(session_id)
+        if live_session_id is not None and live_session_id != run.run_session_id:
+            return 0
         latest_seq = run.last_event_seq
         if latest_seq <= 0:
             latest_seq = self._latest_persisted_web_event_seq(run.run_session_id)
@@ -190,8 +203,12 @@ class EventsMixin:
         live_session_id: str,
         event_type: str,
         payload: dict[str, Any],
-    ) -> dict[str, Any]:
+        *,
+        allow_after_end: bool = False,
+    ) -> dict[str, Any] | None:
         live_session = self._live_sessions[live_session_id]
+        if live_session.ended_at is not None and not allow_after_end:
+            return None
         enriched_payload = dict(payload)
         enriched_payload["live_session_id"] = live_session.live_session_id
         if live_session.bound_session_id is not None:

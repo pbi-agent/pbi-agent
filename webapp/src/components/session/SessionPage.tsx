@@ -284,8 +284,14 @@ export function SessionPage({
     if (!routeSessionId || !sessionDetailQuery.isSuccess) return;
     const sessionKey = getSavedSessionKey(routeSessionId);
     const existing = useSessionStore.getState().sessionsByKey[sessionKey];
+    const hasServerLiveSource = Boolean(
+      sessionDetailQuery.data.active_live_session
+      || sessionDetailQuery.data.active_run
+      || sessionDetailQuery.data.timeline,
+    );
     const skipHydration =
-      existing?.liveSessionId
+      hasServerLiveSource
+      && existing?.liveSessionId
       && !existing.sessionEnded
       && existing.items.length > 0;
     if (!skipHydration) {

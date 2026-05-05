@@ -122,7 +122,11 @@ export function useLiveSessionEvents(
       const eventPath = currentSessionId
         ? `/api/events/sessions/${encodeURIComponent(currentSessionId)}`
         : `/api/events/${currentLiveSessionId}`;
-      const url = eventStreamUrl(`${eventPath}?since=${since}`);
+      const params = new URLSearchParams({ since: String(since) });
+      if (currentSessionId) {
+        params.set("live_session_id", currentLiveSessionId);
+      }
+      const url = eventStreamUrl(`${eventPath}?${params.toString()}`);
       const currentSource = new EventSource(url);
       source = currentSource;
       const clientStreamId = nextClientStreamId();

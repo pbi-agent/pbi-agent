@@ -17,7 +17,7 @@ import {
   updateSession,
   uploadSavedSessionImages,
 } from "../../api";
-import { getSavedSessionKey, useSessionStore } from "../../store";
+import { createEmptySessionState, getSavedSessionKey, useSessionStore } from "../../store";
 import type {
   ConfigBootstrapPayload,
   ExpandedSessionInput,
@@ -523,6 +523,73 @@ describe("SessionPage", () => {
     expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
     expect(screen.getByText("Composer live session")).toBeInTheDocument();
     expect(screen.getByText("Connection ready")).toBeInTheDocument();
+  });
+
+  it("detaches a stale saved-session live id when refresh has no live source", async () => {
+    const user = userEvent.setup();
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.setState({
+      activeSessionKey: sessionKey,
+      sessionsByKey: {
+        [sessionKey]: {
+          ...createEmptySessionState("session-1"),
+          liveSessionId: "stale-live",
+          connection: "connected",
+          items: [
+            {
+              kind: "message",
+              itemId: "stale-message",
+              role: "assistant",
+              content: "stale local message",
+              markdown: true,
+            },
+          ],
+          itemsVersion: 1,
+          lastEventSeq: 8,
+        },
+      },
+      liveSessionIndex: { "stale-live": sessionKey },
+      sessionIndex: { "session-1": sessionKey },
+    });
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "done",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-04-16T12:00:00Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: null,
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    await waitFor(() => {
+      const state = useSessionStore.getState().sessionsByKey[sessionKey];
+      expect(state?.liveSessionId).toBeNull();
+      expect(state?.connection).toBe("disconnected");
+      expect(state?.lastEventSeq).toBe(0);
+    });
+    expect(screen.getByText("Composer can create true")).toBeInTheDocument();
+    expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
+    expect(screen.getByText("Composer live session")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit Expanded" }));
+
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    expect(sendSessionMessage).toHaveBeenCalledWith("session-1", expect.objectContaining({
+      text: "review @docs and @images/diagram.png",
+    }));
   });
 
   it("keeps previous saved messages visible while hydrating an active run timeline", async () => {

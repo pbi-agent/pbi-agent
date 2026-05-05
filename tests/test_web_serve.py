@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 from io import BytesIO, StringIO
 from pathlib import Path
 import threading
@@ -230,6 +231,41 @@ def test_web_server_prints_banner_and_starts_uvicorn() -> None:
     assert f"v{__version__}" in rendered
     assert "http://127.0.0.1:9001" in rendered
     mock_run.assert_called_once()
+
+
+def test_built_static_app_serving_smoke() -> None:
+    built_index_path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "pbi_agent"
+        / "web"
+        / "static"
+        / "app"
+        / "index.html"
+    )
+    built_index_html = built_index_path.read_text(encoding="utf-8")
+    asset_paths = re.findall(
+        r"""(?:src|href)=["'](?P<path>/assets/[^"']+)["']""", built_index_html
+    )
+    assert asset_paths
+
+    client = TestClient(create_app(_settings()))
+
+    root_response = client.get("/")
+    assert root_response.status_code == 200
+    assert root_response.text == built_index_html
+    assert "pbi-agent web assets are missing" not in root_response.text
+
+    asset_response = client.get(asset_paths[0])
+    assert asset_response.status_code == 200
+    assert asset_response.content
+
+    spa_response = client.get("/sessions/example-session")
+    assert spa_response.status_code == 200
+    assert spa_response.text == built_index_html
+
+    api_response = client.get("/api/not-a-real-route")
+    assert api_response.status_code == 404
 
 
 def test_web_server_prints_warning_for_expected_startup_failure() -> None:
@@ -1520,6 +1556,94 @@ def test_live_events_include_canonical_identity_in_stream_and_persistence(
     assert run_metadata["live_session_id"] == live_session_id
 
 
+def test_late_live_events_after_terminal_finalization_do_not_mutate_run(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = manager.create_live_session()
+        live_session_id = str(created["live_session_id"])
+        manager._publish_live_event(
+            live_session_id,
+            "message_added",
+            {
+                "item_id": "assistant-before-end",
+                "role": "assistant",
+                "content": "Before end",
+                "markdown": False,
+            },
+        )
+
+        live_session = manager._live_sessions[live_session_id]
+        with manager._lock:
+            manager._finalize_live_session_locked(live_session)
+
+        terminal_stream_events = manager.get_event_stream(live_session_id).snapshot()
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            terminal_run = store.get_run_session(live_session_id)
+            terminal_records = store.list_observability_events(
+                run_session_id=live_session_id
+            )
+        assert terminal_run is not None
+        terminal_snapshot = json.loads(terminal_run.snapshot_json)
+        terminal_metadata = [record.metadata_json for record in terminal_records]
+        assert terminal_snapshot["session_ended"] is True
+        assert terminal_snapshot["items"][0]["content"] == "Before end"
+        assert all(record.event_type == "web_event" for record in terminal_records)
+        assert any(
+            json.loads(record.metadata_json)["type"] == "session_state"
+            and json.loads(record.metadata_json)["payload"]["state"] == "ended"
+            for record in terminal_records
+        )
+
+        late_event = manager._publish_live_event(
+            live_session_id,
+            "message_added",
+            {
+                "item_id": "assistant-after-end",
+                "role": "assistant",
+                "content": "After end",
+                "markdown": False,
+            },
+        )
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            late_run = store.get_run_session(live_session_id)
+            late_records = store.list_observability_events(
+                run_session_id=live_session_id
+            )
+
+        assert late_event is None
+        assert late_run is not None
+        assert late_run.snapshot_json == terminal_run.snapshot_json
+        assert late_run.last_event_seq == terminal_run.last_event_seq
+        assert (
+            manager.get_event_stream(live_session_id).snapshot()
+            == terminal_stream_events
+        )
+        assert [record.metadata_json for record in late_records] == terminal_metadata
+    finally:
+        manager.shutdown()
+
+
 def test_live_event_sse_replays_persisted_events_when_memory_snapshot_is_empty(
     tmp_path, monkeypatch
 ) -> None:
@@ -2005,6 +2129,95 @@ def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) 
                 "Follow up",
                 "Continued.",
             ]
+
+
+def test_running_task_rejects_unsafe_patch_updates(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    app = create_app(_settings())
+    run_started = threading.Event()
+    release_run = threading.Event()
+
+    def blocking_run_single_turn(_prompt, _runtime, _display, **kwargs):
+        run_started.set()
+        assert release_run.wait(timeout=2)
+        return SimpleNamespace(
+            tool_errors=[],
+            text="Done.",
+            session_id=kwargs["resume_session_id"],
+        )
+
+    with patch(
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
+        side_effect=blocking_run_single_turn,
+    ):
+        with TestClient(app) as client:
+            client.put(
+                "/api/board/stages",
+                json={
+                    "board_stages": [
+                        {"id": "backlog", "name": "Backlog"},
+                        {"id": "plan", "name": "Plan"},
+                        {"id": "review", "name": "Review"},
+                    ]
+                },
+            )
+            upload_response = client.post(
+                "/api/tasks/images",
+                files={"files": ("chart.png", b"\x89PNG\r\n\x1a\n", "image/png")},
+            )
+            assert upload_response.status_code == 200
+            upload_id = upload_response.json()["uploads"][0]["upload_id"]
+
+            create_response = client.post(
+                "/api/tasks",
+                json={
+                    "title": "Task A",
+                    "prompt": "Investigate",
+                    "stage": "plan",
+                    "project_dir": ".",
+                    "image_upload_ids": [upload_id],
+                },
+            )
+            assert create_response.status_code == 200
+            created_task = create_response.json()["task"]
+            task_id = created_task["task_id"]
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+            running_task = run_response.json()["task"]
+            assert run_started.wait(timeout=2)
+
+            update_response = client.patch(
+                f"/api/tasks/{task_id}",
+                json={
+                    "prompt": "Mutated prompt",
+                    "stage": "review",
+                    "project_dir": "missing-project",
+                    "session_id": "mutated-session",
+                    "profile_id": "mutated-profile",
+                    "image_upload_ids": [],
+                },
+            )
+            listed_task = client.get("/api/tasks").json()["tasks"][0]
+            release_run.set()
+
+            deadline = time.monotonic() + 2
+            while True:
+                final_task = client.get("/api/tasks").json()["tasks"][0]
+                if final_task["run_status"] == "completed":
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("task run did not finish in time")
+                time.sleep(0.01)
+
+    assert update_response.status_code == 400
+    assert update_response.json()["detail"] == "Cannot update a running task."
+    assert listed_task["prompt"] == created_task["prompt"]
+    assert listed_task["stage"] == created_task["stage"]
+    assert listed_task["project_dir"] == created_task["project_dir"]
+    assert listed_task["session_id"] == running_task["session_id"]
+    assert listed_task["profile_id"] == created_task["profile_id"]
+    assert listed_task["image_attachments"] == created_task["image_attachments"]
 
 
 def test_completed_task_session_can_be_repeatedly_continued(
@@ -3043,7 +3256,7 @@ def test_manager_start_retries_busy_lease_then_succeeds(monkeypatch, tmp_path) -
     manager.shutdown()
 
 
-def test_shutdown_releases_lease_and_interrupts_noncooperative_live_worker(
+def test_shutdown_keeps_lease_until_noncooperative_live_worker_stops(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -3074,8 +3287,9 @@ def test_shutdown_releases_lease_and_interrupts_noncooperative_live_worker(
             worker = manager._live_sessions[live_session_id].worker
             assert worker is not None
             assert worker.is_alive()
+            assert manager._started is True
             with SessionStore(db_path=tmp_path / "sessions.db") as store:
-                assert not store.has_active_web_manager_lease(
+                assert store.has_active_web_manager_lease(
                     str(tmp_path), stale_after_seconds=30.0
                 )
                 run = store.get_run_session(live_session_id)
@@ -3093,6 +3307,9 @@ def test_shutdown_releases_lease_and_interrupts_noncooperative_live_worker(
             worker.join(timeout=2)
             assert not worker.is_alive()
             with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                assert not store.has_active_web_manager_lease(
+                    str(tmp_path), stale_after_seconds=30.0
+                )
                 completed_run = store.get_run_session(live_session_id)
             assert completed_run is not None
             assert completed_run.status == "interrupted"
@@ -3102,7 +3319,7 @@ def test_shutdown_releases_lease_and_interrupts_noncooperative_live_worker(
         manager.shutdown()
 
 
-def test_shutdown_releases_lease_and_marks_noncooperative_task_failed(
+def test_shutdown_keeps_lease_until_noncooperative_task_worker_stops(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -3148,8 +3365,9 @@ def test_shutdown_releases_lease_and_marks_noncooperative_task_failed(
 
             worker = manager._task_workers[task_id]
             assert worker.is_alive()
+            assert manager._started is True
             with SessionStore(db_path=tmp_path / "sessions.db") as store:
-                assert not store.has_active_web_manager_lease(
+                assert store.has_active_web_manager_lease(
                     str(tmp_path), stale_after_seconds=30.0
                 )
                 current = store.get_kanban_task(task_id)
@@ -3167,6 +3385,9 @@ def test_shutdown_releases_lease_and_marks_noncooperative_task_failed(
             worker.join(timeout=2)
             assert not worker.is_alive()
             with SessionStore(db_path=tmp_path / "sessions.db") as store:
+                assert not store.has_active_web_manager_lease(
+                    str(tmp_path), stale_after_seconds=30.0
+                )
                 completed_task = store.get_kanban_task(task_id)
                 completed_run = store.get_run_session(live_session_id)
             assert completed_task is not None
@@ -3396,6 +3617,68 @@ def test_run_task_worker_start_failure_finalizes_live_projection(
         assert run.ended_at is not None
         assert run.exit_code == 1
         assert run.fatal_error == "thread start failed"
+    finally:
+        manager.shutdown()
+
+
+def test_create_live_session_worker_start_failure_finalizes_live_projection(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+    manager = WebSessionManager(_settings())
+    manager.start()
+
+    class FailingThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            raise RuntimeError("thread start failed")
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    try:
+        with patch(
+            "pbi_agent.web.session.live_sessions.threading.Thread", FailingThread
+        ):
+            with pytest.raises(RuntimeError, match="thread start failed"):
+                manager.create_live_session(session_id=session_id)
+
+        assert len(manager._live_sessions) == 1
+        live_session = next(iter(manager._live_sessions.values()))
+        assert live_session.worker is None
+        assert live_session.status == "ended"
+        assert live_session.exit_code == 1
+        assert live_session.fatal_error == "thread start failed"
+        assert manager._find_live_session_for_saved_session(session_id) is None
+
+        detail = manager.get_session_detail(session_id)
+        run_detail = manager.get_run_detail(live_session.live_session_id)
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            run = store.get_run_session(live_session.live_session_id)
+        assert detail["active_live_session"] is None
+        assert detail["active_run"] is None
+        assert detail["status"] == "failed"
+        assert detail["session"]["active_live_session_id"] is None
+        assert run is not None
+        assert run.status == "failed"
+        assert run.ended_at is not None
+        assert run.exit_code == 1
+        assert run.fatal_error == "thread start failed"
+        assert run_detail["run"]["status"] == "failed"
+        assert run_detail["run"]["fatal_error"] == "thread start failed"
     finally:
         manager.shutdown()
 
@@ -6613,6 +6896,204 @@ def test_saved_session_sse_replays_latest_web_run_when_prior_cursor_is_high(
         "resolved_since": 0,
         "cursor_source": "query",
         "cursor_reset": True,
+    }
+
+
+def test_saved_session_sse_replays_latest_web_run_when_prior_cursor_is_low(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Persisted events across low cursor runs",
+        )
+        old_run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="ended",
+            kind="session",
+            last_event_seq=1,
+        )
+        new_run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="ended",
+            kind="session",
+            last_event_seq=5,
+        )
+        same_started_at = "2026-05-04T00:00:00+00:00"
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ? WHERE run_session_id IN (?, ?)",
+            (same_started_at, old_run_id, new_run_id),
+        )
+        store._conn.commit()
+        store.add_observability_event(
+            run_session_id=old_run_id,
+            session_id=session_id,
+            step_index=-1,
+            event_type="web_event",
+            metadata={
+                "type": "message_added",
+                "payload": {"item_id": "old-1", "role": "assistant"},
+                "seq": 1,
+            },
+        )
+        for seq in range(1, 6):
+            store.add_observability_event(
+                run_session_id=new_run_id,
+                session_id=session_id,
+                step_index=-seq,
+                event_type="web_event",
+                metadata={
+                    "type": "message_added",
+                    "payload": {"item_id": f"new-{seq}", "role": "assistant"},
+                    "seq": seq,
+                },
+            )
+
+    captured: dict[str, object] = {}
+
+    def fake_sse_response(  # noqa: ANN001
+        stream,
+        *,
+        since,
+        requested_since=None,
+        replay_events=None,
+        log_context=None,
+    ):
+        captured["since"] = since
+        captured["requested_since"] = requested_since
+        captured["snapshot"] = stream.snapshot()
+        captured["replay_events"] = replay_events
+        captured["log_context"] = log_context
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"ok": True})
+
+    from pbi_agent.web.api.routes import events as events_route
+
+    monkeypatch.setattr(events_route, "_sse_response", fake_sse_response)
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/events/sessions/{session_id}",
+            params={"since": 1, "live_session_id": old_run_id},
+        )
+
+    assert response.status_code == 200
+    replay_events = captured["replay_events"]
+    assert [event["seq"] for event in captured["snapshot"]] == [1, 2, 3, 4, 5]
+    assert [event["seq"] for event in replay_events] == [1, 2, 3, 4, 5]
+    assert [event["payload"]["item_id"] for event in replay_events][0] == "new-1"
+    assert captured["since"] == 0
+    assert captured["requested_since"] == 1
+    assert captured["log_context"] == {
+        "endpoint": "session",
+        "stream_kind": "session",
+        "session_id": session_id,
+        "requested_since": 1,
+        "resolved_since": 0,
+        "cursor_source": "query",
+        "cursor_reset": True,
+    }
+
+
+def test_saved_session_sse_continues_when_cursor_matches_current_run(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Persisted events same run cursor",
+        )
+        run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="ended",
+            kind="session",
+            last_event_seq=5,
+        )
+        for seq in range(1, 6):
+            store.add_observability_event(
+                run_session_id=run_id,
+                session_id=session_id,
+                step_index=-seq,
+                event_type="web_event",
+                metadata={
+                    "type": "message_added",
+                    "payload": {"item_id": f"current-{seq}", "role": "assistant"},
+                    "seq": seq,
+                },
+            )
+
+    captured: dict[str, object] = {}
+
+    def fake_sse_response(  # noqa: ANN001
+        stream,
+        *,
+        since,
+        requested_since=None,
+        replay_events=None,
+        log_context=None,
+    ):
+        captured["since"] = since
+        captured["requested_since"] = requested_since
+        captured["replay_events"] = replay_events
+        captured["log_context"] = log_context
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse({"ok": True})
+
+    from pbi_agent.web.api.routes import events as events_route
+
+    monkeypatch.setattr(events_route, "_sse_response", fake_sse_response)
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/events/sessions/{session_id}",
+            params={"since": 1, "live_session_id": run_id},
+        )
+
+    assert response.status_code == 200
+    replay_events = captured["replay_events"]
+    assert [event["seq"] for event in replay_events] == [2, 3, 4, 5]
+    assert captured["since"] == 1
+    assert captured["requested_since"] == 1
+    assert captured["log_context"] == {
+        "endpoint": "session",
+        "stream_kind": "session",
+        "session_id": session_id,
+        "requested_since": 1,
+        "resolved_since": 1,
+        "cursor_source": "query",
+        "cursor_reset": False,
     }
 
 

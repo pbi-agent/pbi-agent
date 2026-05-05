@@ -46,6 +46,7 @@ class WorkersMixin:
                 "exit_code": live_session.exit_code,
                 "fatal_error": live_session.fatal_error,
             },
+            allow_after_end=True,
         )
         self._update_live_run_projection(live_session)
         self._publish_live_session_lifecycle("live_session_ended", live_session)
@@ -406,18 +407,16 @@ class WorkersMixin:
                 return
             if self._running_task_ids - self._shutdown_interrupted_task_ids:
                 return
+            current_thread = threading.current_thread()
             if any(
-                worker.is_alive()
-                for task_id, worker in self._task_workers.items()
-                if task_id not in self._shutdown_interrupted_task_ids
+                worker is not current_thread and worker.is_alive()
+                for worker in self._task_workers.values()
             ):
                 return
-            current_thread = threading.current_thread()
             if any(
                 session.worker is not None
                 and session.worker is not current_thread
                 and session.worker.is_alive()
-                and session.ended_at is None
                 for session in self._live_sessions.values()
             ):
                 return

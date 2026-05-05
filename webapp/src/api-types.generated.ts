@@ -405,7 +405,7 @@ export type ApiOperationPathParams = {
 
 export type ApiOperationQueryParams = {
   "GET /api/dashboard/stats": { start_date?: string | null; end_date?: string | null; scope?: string };
-  "GET /api/events/sessions/{session_id}": { since?: number };
+  "GET /api/events/sessions/{session_id}": { since?: number; live_session_id?: string | null };
   "GET /api/events/{stream_id}": { since?: number };
   "GET /api/files/search": { q?: string; limit?: number };
   "GET /api/runs": { limit?: number; offset?: number; status?: string | null; provider?: string | null; model?: string | null; start_date?: string | null; end_date?: string | null; sort_by?: string; sort_dir?: string; scope?: string };
