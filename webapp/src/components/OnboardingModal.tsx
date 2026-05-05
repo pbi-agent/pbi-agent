@@ -1,5 +1,5 @@
-import { useNavigate } from "react-router-dom";
 import { SparklesIcon } from "lucide-react";
+import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function OnboardingModal({ isOnSettingsPage, onDismissOnSettings }: Props) {
-  const navigate = useNavigate();
+  const { openSettings } = useSettingsDialog();
 
   return (
     <Dialog open>
@@ -44,9 +44,7 @@ export function OnboardingModal({ isOnSettingsPage, onDismissOnSettings }: Props
             <Button
               className="task-form__action-button"
               type="button"
-              onClick={() => {
-                void navigate("/settings");
-              }}
+              onClick={openSettings}
             >
               Go to Settings
             </Button>

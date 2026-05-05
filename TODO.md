@@ -1,4 +1,7 @@
-# Orchestrate TODO
+# TODO
 
-[X] Fix saved-session timeline merge so historical Working blocks stay anchored to their turn.
-[X] Run focused/final validation, update memory, and report handoff.
+[X] Investigate image attachment send/display failure using session and snapshot
+[X] Identify backend/frontend bug and implement fix
+[X] Add/update tests
+[X] Run focused validation
+[X] Update MEMORY.md

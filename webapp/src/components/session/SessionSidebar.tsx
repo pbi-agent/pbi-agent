@@ -5,9 +5,11 @@ import {
   PanelLeftOpenIcon,
   PencilIcon,
   PlusIcon,
+  SettingsIcon,
   Trash2Icon,
 } from "lucide-react";
 import type { SessionRecord } from "../../types";
+import { useSettingsDialog } from "../../hooks/useSettingsDialog";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -62,6 +64,7 @@ export function SessionSidebar({
   const [draftTitle, setDraftTitle] = useState("");
   const [savingSessionId, setSavingSessionId] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  const { openSettings } = useSettingsDialog();
 
   const beginEdit = (session: SessionRecord) => {
     setOpenMenuSessionId(null);
@@ -117,6 +120,15 @@ export function SessionSidebar({
         >
           <PlusIcon />
         </Button>
+        <button
+          type="button"
+          className="sidebar__collapsed-settings"
+          title="Settings"
+          aria-label="Settings"
+          onClick={openSettings}
+        >
+          <SettingsIcon />
+        </button>
       </div>
     );
   }
@@ -277,6 +289,13 @@ export function SessionSidebar({
             );
           })
         )}
+      </div>
+
+      <div className="sidebar__footer">
+        <button type="button" className="sidebar__footer-link" onClick={openSettings}>
+          <SettingsIcon />
+          <span>Settings</span>
+        </button>
       </div>
     </>
   );

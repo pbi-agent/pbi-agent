@@ -1,7 +1,8 @@
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { SettingsPage } from "./SettingsPage";
 import { renderWithProviders } from "../../test/render";
+import { useSettingsDialog } from "../../hooks/useSettingsDialog";
 import {
   ApiError,
   createProvider,
@@ -311,8 +312,21 @@ function makeConfigBootstrap(
   };
 }
 
+async function openSettingsTab(
+  user: ReturnType<typeof userEvent.setup>,
+  tabName: string,
+) {
+  const label = await screen.findByText(tabName, {
+    selector: ".settings-nav__item-label",
+  });
+  const button = label.closest("button");
+  expect(button).not.toBeNull();
+  await user.click(button!);
+}
+
 describe("SettingsPage", () => {
   beforeEach(() => {
+    useSettingsDialog.getState().openSettings();
     resetNotificationPreferencesForTests();
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(createProvider).mockResolvedValue({
@@ -471,6 +485,7 @@ describe("SettingsPage", () => {
   });
 
   afterEach(() => {
+    useSettingsDialog.getState().closeSettings();
     restoreNotificationMock();
     vi.clearAllMocks();
     vi.restoreAllMocks();
@@ -620,7 +635,43 @@ describe("SettingsPage", () => {
     expect(stop).toHaveBeenCalledTimes(start.mock.calls.length);
   });
 
+  it("shows compact command cards and previews command markdown in a dialog", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        commands: [
+          {
+            id: "review",
+            name: "Review",
+            slash_alias: "/review",
+            description: "Review Mode",
+            path: ".agents/commands/review.md",
+            instructions:
+              "# Review Mode\n\nReview proposed code changes.\n\n- Bugs\n- Tests",
+          },
+        ],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Commands");
+
+    expect(await screen.findByText("Review")).toBeInTheDocument();
+    expect(screen.getAllByText(/\/review/).length).toBeGreaterThanOrEqual(1);
+
+    // Card is now a single-row clickable element
+    const card = screen.getByText("Review").closest("[role='button']")!;
+    await user.click(card);
+
+    const dialog = await screen.findByRole("dialog", { name: "Review" });
+    expect(within(dialog).getByRole("heading", { name: "Review Mode" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Review proposed code changes.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Bugs")).toBeInTheDocument();
+  });
+
   it("renders the onboarding and empty-provider states when config is blank", async () => {
+    const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(
       makeConfigBootstrap({
         providers: [],
@@ -632,7 +683,9 @@ describe("SettingsPage", () => {
     renderWithProviders(<SettingsPage />);
 
     expect(await screen.findByText(/First-time setup:/)).toBeInTheDocument();
+    await openSettingsTab(user, "Providers");
     expect(screen.getByText("No providers configured")).toBeInTheDocument();
+    await openSettingsTab(user, "Model Profiles");
     expect(screen.getByRole("button", { name: "Add Profile" })).toBeDisabled();
   });
 
@@ -641,6 +694,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Model Profiles");
     await screen.findByRole("button", { name: "Add Profile" });
     await user.selectOptions(
       document.querySelector<HTMLSelectElement>('select[name="active-profile"]')!,
@@ -717,6 +771,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
 
     // Usage data must NOT be fetched eagerly on render.
@@ -747,6 +802,7 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     const { queryClient } = renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
 
@@ -862,8 +918,8 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     expect(await screen.findByText("Copilot Main")).toBeInTheDocument();
-    expect(screen.getByText("GitHub Copilot account")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
@@ -883,6 +939,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
 
     const dialog = screen.getByRole("dialog", { name: "Add Provider" });
@@ -907,6 +964,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
 
     expect(screen.getAllByRole("option", { name: "OpenAI API" })[0]).toBeInTheDocument();
@@ -932,6 +990,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
     await user.selectOptions(
       document.querySelector('select[name="provider-kind"]') as HTMLSelectElement,
@@ -978,6 +1037,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
     await user.selectOptions(
       document.querySelector('select[name="provider-kind"]') as HTMLSelectElement,
@@ -1066,15 +1126,16 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
-    expect(screen.getByText("not connected")).toBeInTheDocument();
+    expect(screen.getByText(/not connected/)).toBeInTheDocument();
 
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
     await user.click(screen.getByRole("button", { name: "Check status" }));
 
     expect(await screen.findByText(/Connected as user@example.com/)).toBeInTheDocument();
-    expect(await screen.findByText("connected")).toBeInTheDocument();
+    expect((await screen.findAllByText(/user@example\.com/)).length).toBeGreaterThanOrEqual(1);
     expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2);
   });
 
@@ -1091,6 +1152,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
@@ -1127,6 +1189,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Providers");
     await screen.findByText("ChatGPT Main");
     await user.click(screen.getByRole("button", { name: "Refresh" }));
     await waitFor(() =>
@@ -1249,6 +1312,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Model Profiles");
     await user.click(await screen.findByRole("button", { name: "Add Profile" }));
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
@@ -1279,6 +1343,7 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Model Profiles");
     await user.click(await screen.findByRole("button", { name: "Add Profile" }));
 
     const dialog = screen.getByRole("dialog", { name: "Add Profile" });
@@ -1302,6 +1367,7 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Model Profiles");
     await user.click(await screen.findByRole("button", { name: "Add Profile" }));
 
     await waitFor(() =>
@@ -1331,6 +1397,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Model Profiles");
     await user.click(await screen.findByRole("button", { name: "Add Profile" }));
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
@@ -1382,6 +1449,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Model Profiles");
     await user.click(await screen.findByRole("button", { name: "Add Profile" }));
 
     await screen.findByText("Missing authentication for provider 'openai'.");
@@ -1407,8 +1475,9 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Model Profiles");
     await screen.findByRole("button", { name: "Add Profile" });
-    await user.click(screen.getAllByRole("button", { name: "Edit" })[2]);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
 
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
@@ -1432,6 +1501,7 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Model Profiles");
     await screen.findByRole("button", { name: "Add Profile" });
     await user.selectOptions(
       document.querySelector<HTMLSelectElement>('select[name="active-profile"]')!,
