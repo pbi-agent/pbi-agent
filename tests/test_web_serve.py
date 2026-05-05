@@ -1494,6 +1494,85 @@ def test_saved_session_sse_reports_cursor_ahead_when_since_resets_for_new_run(
     assert event["payload"]["snapshot_required"] is True
 
 
+def test_saved_session_detail_and_sse_prefer_running_task_live_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Running task preference",
+        )
+        task = store.create_kanban_task(
+            directory=str(tmp_path),
+            title="Task A",
+            prompt="Investigate",
+            session_id=session_id,
+        )
+        running_task = store.set_kanban_task_running(task.task_id)
+    assert running_task is not None
+
+    with TestClient(app):
+        manager = app.state.manager
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            manual_live_session = manager.create_live_session(session_id=session_id)
+        manual_live_session_id = str(manual_live_session["live_session_id"])
+        manager._publish_live_event(
+            manual_live_session_id,
+            "message_added",
+            {"item_id": "manual-item", "role": "assistant", "content": "Manual"},
+        )
+
+        task_live_session = manager._create_task_live_session(
+            running_task,
+            manager._resolve_runtime(None),
+        )
+        manager._publish_task_live_event(
+            task_live_session.live_session_id,
+            running_task.task_id,
+            "message_added",
+            {"item_id": "task-item", "role": "assistant", "content": "Task"},
+        )
+
+        detail = manager.get_session_detail(session_id)
+        stream = manager.get_session_event_stream(session_id)
+        replay_events = manager.get_session_event_stream_replay(session_id, since=0)
+
+    active_live_session = detail["active_live_session"]
+    assert active_live_session["live_session_id"] == task_live_session.live_session_id
+    assert active_live_session["kind"] == "task"
+    assert active_live_session["task_id"] == running_task.task_id
+    assert detail["live_session"] == active_live_session
+    assert stream is task_live_session.event_stream
+    assert {event["payload"]["live_session_id"] for event in replay_events} == {
+        task_live_session.live_session_id
+    }
+    assert any(
+        event["payload"].get("item_id") == "task-item" for event in replay_events
+    )
+    assert all(
+        event["payload"].get("item_id") != "manual-item" for event in replay_events
+    )
+
+
 def test_live_events_include_canonical_identity_in_stream_and_persistence(
     tmp_path, monkeypatch
 ) -> None:

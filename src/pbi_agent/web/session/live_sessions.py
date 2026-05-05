@@ -628,13 +628,24 @@ class LiveSessionsMixin:
         self,
         session_id: str,
     ) -> LiveSessionState | None:
+        active_live_sessions = []
         for live_session in self._live_sessions.values():
             if live_session.bound_session_id != session_id:
                 continue
             if not _is_active_live_session(live_session):
                 continue
-            return live_session
-        return None
+            active_live_sessions.append(live_session)
+        if not active_live_sessions:
+            return None
+
+        with SessionStore() as store:
+            for live_session in reversed(active_live_sessions):
+                if live_session.kind != "task" or live_session.task_id is None:
+                    continue
+                task = store.get_kanban_task(live_session.task_id)
+                if task is not None and task.run_status == KANBAN_RUN_STATUS_RUNNING:
+                    return live_session
+        return active_live_sessions[-1]
 
     def _find_stream_live_session_for_saved_session(
         self,
