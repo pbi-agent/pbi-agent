@@ -1,6 +1,7 @@
 # TODO
 
-[X] Inspect SettingsPage and CommandPreviewDialog close button styling
-[X] Apply matching hover/style to Settings close button
+[X] Investigate image attachment send/display failure using session and snapshot
+[X] Identify backend/frontend bug and implement fix
+[X] Add/update tests
 [X] Run focused validation
-[X] Update memory
+[X] Update MEMORY.md

@@ -461,7 +461,7 @@ def expand_session_input(
 def get_uploaded_image(upload_id: UploadIdPath) -> FileResponse:
     try:
         record = load_uploaded_image_record(upload_id)
-        path = uploaded_image_path(record)
+        path = uploaded_image_path(upload_id)
     except KeyError as exc:
         raise not_found("Upload not found.") from exc
     return FileResponse(path, media_type=record.mime_type, filename=record.name)
