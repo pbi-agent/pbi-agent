@@ -24,6 +24,7 @@ class DisplaySpy:
         self.thinking_calls: list[dict[str, object | None]] = []
         self.redacted_thinking_calls = 0
         self.markdown_calls: list[str] = []
+        self.user_message_calls: list[str] = []
         self.function_counts: list[int] = []
         self.function_results: list[dict[str, object]] = []
         self.tool_execution_starts: list[list[object]] = []
@@ -94,6 +95,9 @@ class DisplaySpy:
 
     def render_redacted_thinking(self) -> None:
         self.redacted_thinking_calls += 1
+
+    def render_user_message(self, text: str) -> None:
+        self.user_message_calls.append(text)
 
     def render_markdown(self, text: str) -> None:
         self.markdown_calls.append(text)

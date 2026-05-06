@@ -218,6 +218,9 @@ class ConsoleDisplay(DisplayProtocol):
     def wait_stop(self) -> None:
         self._stop_spinner()
 
+    def render_user_message(self, text: str) -> None:
+        del text
+
     def render_markdown(self, text: str) -> None:
         self._stop_spinner()
         self._console.print(Markdown(text))

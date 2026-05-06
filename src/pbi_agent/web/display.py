@@ -474,6 +474,20 @@ class _EventDisplayBase(DisplayProtocol):
                 {"active": False, "phase": None, "message": None},
             )
 
+    def render_user_message(self, text: str) -> None:
+        content = text.strip()
+        if not content:
+            return
+        self._publish(
+            "message_added",
+            {
+                "item_id": self._next_id("message"),
+                "role": "user",
+                "content": content,
+                "markdown": False,
+            },
+        )
+
     def render_markdown(self, text: str) -> None:
         item_id = self._next_id("message")
         self._remember_message_item_id(

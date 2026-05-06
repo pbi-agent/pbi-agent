@@ -782,6 +782,7 @@ def run_sub_agent_task(
                 include_context=include_context,
                 parent_context=parent_context,
             )
+            child_display.render_user_message(child_user_message)
             _raise_if_sub_agent_timed_out(started_at)
             response = provider.request_turn(
                 user_message=child_user_message,

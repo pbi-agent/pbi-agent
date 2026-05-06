@@ -5292,6 +5292,32 @@ def test_web_display_wait_stop_clears_model_wait_processing() -> None:
     ]
 
 
+def test_web_sub_agent_display_publishes_initial_user_message() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+
+    child_display = display.begin_sub_agent(
+        task_instruction="Read the license",
+        name="Researcher",
+    )
+    child_display.render_user_message("Read the license")
+
+    assert published[-1] == (
+        "message_added",
+        {
+            "item_id": "subagent-1-message-1",
+            "role": "user",
+            "content": "Read the license",
+            "markdown": False,
+            "sub_agent_id": "subagent-1",
+        },
+    )
+
+
 def test_web_display_rekeys_persisted_assistant_message() -> None:
     published: list[tuple[str, dict]] = []
     display = WebDisplay(

@@ -1,2 +1,2 @@
 [X] Call sub-agent to summarize LICENSE
-[X] Report finding
+[X] Report findings
