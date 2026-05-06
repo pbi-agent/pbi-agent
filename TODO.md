@@ -1,3 +1,3 @@
-[X] Inspect current Back to main session button spacing
-[X] Increase button inner padding/margin
-[X] Validate frontend changes
+[X] Update compact tool row labels to single words
+[X] Validate frontend tests/build surface
+[X] Update task memory

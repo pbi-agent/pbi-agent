@@ -183,11 +183,13 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Activity/i }));
-    expect(screen.getByRole("button", { name: /read_file.*README.md/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /shell.*bun run typecheck/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Read.*README.md/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Command.*bun run typecheck/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /shell.*bun run typecheck/i })).not.toBeInTheDocument();
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /read_file.*README.md/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Read.*README.md/i }));
     expect(screen.getByText("file contents")).toBeInTheDocument();
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
   });

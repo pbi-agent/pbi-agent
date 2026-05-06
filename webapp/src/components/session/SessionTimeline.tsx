@@ -111,6 +111,28 @@ function toolNameFor(metadata: ToolCallMetadata | undefined, fallback: string) {
   return stringValue(metadata?.tool_name) ?? fallback;
 }
 
+function friendlyToolName(toolName: string) {
+  const labels: Record<string, string> = {
+    apply_patch: "Edit",
+    ask_user: "Ask user",
+    read_file: "Read",
+    read_image: "Inspect image",
+    read_web_url: "Read webpage",
+    replace_in_file: "Update",
+    shell: "Command",
+    sub_agent: "Ask agent",
+    web_search: "Search web",
+    write_file: "Write",
+  };
+  return labels[toolName] ?? (
+    toolName
+      .split("_")
+      .filter(Boolean)
+      .map((part) => part[0]?.toUpperCase() + part.slice(1))
+      .join(" ")
+  );
+}
+
 function toolItemStatus(toolItem: TimelineToolGroupEntry): string | null {
   if (toolItem.metadata?.status) return toolItem.metadata.status;
   if (toolItem.metadata?.success === true) return "completed";
@@ -170,6 +192,7 @@ function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
       key: `${item.itemId}-${index}`,
       itemId: item.itemId,
       label,
+      displayLabel: friendlyToolName(label),
       entry,
       category,
       status,
@@ -213,6 +236,7 @@ type ToolListEntry = {
   key: string;
   itemId: string;
   label: string;
+  displayLabel: string;
   entry: TimelineToolGroupEntry;
   category: ToolCategory;
   status: string | null;
@@ -450,7 +474,7 @@ function WorkingItemsPanel({
                         <CollapsibleTrigger asChild>
                           <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
                             <ChevronRightIcon className="timeline-entry__chevron" />
-                            <span className="working-items__tool-title">{entry.label}</span>
+                            <span className="working-items__tool-title">{entry.displayLabel}</span>
                             <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
                             {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
                           </Button>
