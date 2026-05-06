@@ -58,12 +58,6 @@ export function NotificationsSettingsSection() {
 
   return (
     <section className="settings-section settings-section--active">
-      <div className="settings-section__header">
-        <div>
-          <div className="settings-section__eyebrow">Desktop</div>
-          <h1 className="settings-section__title">Notifications</h1>
-        </div>
-      </div>
       <Card className="settings-panel">
         <CardHeader className="settings-panel__header">
           <div>
