@@ -116,8 +116,8 @@ describe("SessionTimeline", () => {
 
     const workingButtons = screen.getAllByRole("button", { name: /Working/ });
     expect(workingButtons).toHaveLength(1);
-    expect(workingButtons[0]).toHaveAccessibleName("Working");
-    expect(workingButtons[0]).toHaveTextContent(/^Working$/);
+    expect(workingButtons[0]).toHaveAccessibleName("Working 3 agents");
+    expect(workingButtons[0]).toHaveTextContent(/^Working3 agents$/);
 
     openWorking(0, false);
 
@@ -143,6 +143,12 @@ describe("SessionTimeline", () => {
       <SessionTimeline
         items={[
           {
+            kind: "thinking",
+            itemId: "think-1",
+            title: "Thinking",
+            content: "Planning the next steps",
+          },
+          {
             kind: "tool_group",
             itemId: "tools-1",
             label: "Tools",
@@ -167,9 +173,11 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Working.*1 read, 1 shell/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Working.*1 thought, 1 read, 1 shell/i })).toBeInTheDocument();
 
     openWorking(0, false);
+    expect(screen.getByRole("button", { name: /^Thinking$/i })).toBeInTheDocument();
+    expect(screen.queryByText(/thinking block/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Activity.*1 read, 1 shell/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
@@ -184,7 +192,7 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
   });
 
-  it("keeps sub-agent labels out of the collapsed Working header", () => {
+  it("summarizes thoughts and sub-agent calls in the collapsed Working header without showing sub-agent names", () => {
     render(
       <SessionTimeline
         items={[
@@ -218,8 +226,8 @@ describe("SessionTimeline", () => {
     );
 
     const workingButton = screen.getByRole("button", { name: /Working/ });
-    expect(workingButton).toHaveAccessibleName("Working");
-    expect(workingButton).toHaveTextContent(/^Working$/);
+    expect(workingButton).toHaveAccessibleName("Working 1 agent");
+    expect(workingButton).toHaveTextContent(/^Working1 agent$/);
     expect(screen.queryByText("Researcher")).not.toBeInTheDocument();
   });
 

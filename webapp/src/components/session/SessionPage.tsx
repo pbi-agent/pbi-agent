@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangleIcon,
+  ArrowLeftIcon,
   CheckIcon,
   ChevronDownIcon,
   CpuIcon,
@@ -784,8 +785,14 @@ export function SessionPage({
             ) : null}
             {isSubAgentRoute && routeSessionId ? (
               <div className="session-readonly-footer">
-                <Button type="button" variant="outline" asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="session-readonly-footer__button"
+                  asChild
+                >
                   <Link to={`/sessions/${encodeURIComponent(routeSessionId)}`}>
+                    <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
                     Back to main session
                   </Link>
                 </Button>

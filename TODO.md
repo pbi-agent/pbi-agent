@@ -1,3 +1,3 @@
-[>] Inspect current Working summary logic for thinking/sub-agent omissions
-[ ] Include thinking blocks and sub-agent calls in top-level Working summaries
-[ ] Update tests/build assets and validate
+[X] Inspect current Back to main session button spacing
+[X] Increase button inner padding/margin
+[X] Validate frontend changes

@@ -135,19 +135,23 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
 }
 
 function summarizeCounts(entries: ToolListEntry[]) {
+  const counts = new Map<ToolCategory, number>();
+  for (const entry of entries) {
+    counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
+  }
+  return summarizeCategoryCounts(counts);
+}
+
+function summarizeCategoryCounts(counts: Map<ToolCategory, number>) {
   const labels: Record<ToolCategory, string> = {
     read: "read",
     search: "search",
     list: "list",
     shell: "shell",
     edit: "edit",
-    "sub-agent": "sub-agent",
+    "sub-agent": "agent",
     other: "other",
   };
-  const counts = new Map<ToolCategory, number>();
-  for (const entry of entries) {
-    counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
-  }
   return (["read", "search", "list", "shell", "edit", "sub-agent", "other"] as ToolCategory[])
     .map((category) => {
       const count = counts.get(category) ?? 0;
@@ -174,13 +178,35 @@ function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
 }
 
 function summarizeWorkRun(items: WorkItem[], showSubAgentCards: boolean) {
-  const entries: ToolListEntry[] = [];
+  let thinkingCount = 0;
+  const categoryCounts = new Map<ToolCategory, number>();
+  const subAgentIds = new Set<string>();
+
   for (const item of items) {
+    if (showSubAgentCards && item.subAgentId) {
+      subAgentIds.add(item.subAgentId);
+      continue;
+    }
+    if (item.kind === "thinking") {
+      thinkingCount += 1;
+      continue;
+    }
     if (item.kind !== "tool_group") continue;
-    if (showSubAgentCards && item.subAgentId) continue;
-    entries.push(...toolEntriesForGroup(item));
+    for (const entry of toolEntriesForGroup(item)) {
+      categoryCounts.set(entry.category, (categoryCounts.get(entry.category) ?? 0) + 1);
+    }
   }
-  return summarizeCounts(entries);
+
+  if (showSubAgentCards) {
+    categoryCounts.set("sub-agent", subAgentIds.size);
+  }
+
+  return [
+    thinkingCount > 0 ? pluralize(thinkingCount, "thought") : null,
+    summarizeCategoryCounts(categoryCounts),
+  ]
+    .filter((label): label is string => Boolean(label))
+    .join(", ");
 }
 
 type ToolListEntry = {
@@ -631,10 +657,10 @@ function WorkRun({
           >
             <ChevronRightIcon className="timeline-entry__chevron" />
             <span>Working</span>
-            {workRunSummary ? <span className="working-items__summary">{workRunSummary}</span> : null}
             {active || unit.running ? (
               <span className="timeline-entry__running" aria-label="running" />
             ) : null}
+            {workRunSummary ? <span className="working-items__summary">{workRunSummary}</span> : null}
           </Button>
         </CollapsibleTrigger>
         {hasItems ? (
