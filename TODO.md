@@ -1,3 +1,3 @@
-[X] Find current sub-agent card rendering/styles
-[X] Simplify sub-agent card content and badge styling
-[X] Update tests/static build and validate
+[>] Inspect current Working summary logic for thinking/sub-agent omissions
+[ ] Include thinking blocks and sub-agent calls in top-level Working summaries
+[ ] Update tests/build assets and validate

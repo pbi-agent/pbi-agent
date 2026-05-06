@@ -18,7 +18,7 @@ function openWorking(index = 0, expandInner = true) {
   const workingButton = screen.getAllByRole("button", { name: /Working/ })[index];
   fireEvent.click(workingButton);
   if (expandInner) {
-    for (const groupButton of screen.queryAllByRole("button", { name: /Used tools|Using tools|Thinking/i })) {
+    for (const groupButton of screen.queryAllByRole("button", { name: /Activity|In motion|Thinking/i })) {
       fireEvent.click(groupButton);
     }
     for (const toolButton of screen.queryAllByRole("button").filter((button) =>
@@ -167,12 +167,14 @@ describe("SessionTimeline", () => {
       />,
     );
 
+    expect(screen.getByRole("button", { name: /Working.*1 read, 1 shell/i })).toBeInTheDocument();
+
     openWorking(0, false);
-    expect(screen.getByRole("button", { name: /Used tools.*1 read, 1 shell/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Activity.*1 read, 1 shell/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Used tools/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Activity/i }));
     expect(screen.getByRole("button", { name: /read_file.*README.md/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /shell.*bun run typecheck/i })).toBeInTheDocument();
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();

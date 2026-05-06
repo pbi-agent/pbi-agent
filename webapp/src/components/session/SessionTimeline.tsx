@@ -157,6 +157,32 @@ function summarizeCounts(entries: ToolListEntry[]) {
     .join(", ");
 }
 
+function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
+  return item.items.map((entry, index) => {
+    const label = toolNameFor(entry.metadata, item.label);
+    const status = toolItemStatus(entry) ?? item.status ?? null;
+    const category = categorizeTool(label);
+    return {
+      key: `${item.itemId}-${index}`,
+      itemId: item.itemId,
+      label,
+      entry,
+      category,
+      status,
+    };
+  });
+}
+
+function summarizeWorkRun(items: WorkItem[], showSubAgentCards: boolean) {
+  const entries: ToolListEntry[] = [];
+  for (const item of items) {
+    if (item.kind !== "tool_group") continue;
+    if (showSubAgentCards && item.subAgentId) continue;
+    entries.push(...toolEntriesForGroup(item));
+  }
+  return summarizeCounts(entries);
+}
+
 type ToolListEntry = {
   key: string;
   itemId: string;
@@ -246,19 +272,7 @@ function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): Work
       continue;
     }
     flushThinking();
-    item.items.forEach((entry, index) => {
-      const label = toolNameFor(entry.metadata, item.label);
-      const status = toolItemStatus(entry) ?? item.status ?? null;
-      const category = categorizeTool(label);
-      toolBuffer.push({
-        key: `${item.itemId}-${index}`,
-        itemId: item.itemId,
-        label,
-        entry,
-        category,
-        status,
-      });
-    });
+    toolBuffer.push(...toolEntriesForGroup(item));
   }
   flushSubAgent();
   flushThinking();
@@ -364,9 +378,7 @@ function WorkingItemsPanel({
         }
         const open = Boolean(openGroups[group.key]);
         const isThinking = group.kind === "thinking";
-        const summary = isThinking
-          ? pluralize(group.items.length, "thinking block")
-          : summarizeCounts(group.entries);
+        const summary = isThinking ? null : summarizeCounts(group.entries);
         return (
           <Collapsible
             key={group.key}
@@ -382,8 +394,8 @@ function WorkingItemsPanel({
             <CollapsibleTrigger asChild>
               <Button type="button" variant="ghost" size="sm" className="working-items__group-trigger">
                 <ChevronRightIcon className="timeline-entry__chevron" />
-                <span>{isThinking ? "Thinking" : group.running ? "Using tools" : "Used tools"}</span>
-                <span className="working-items__summary">{summary}</span>
+                <span>{isThinking ? "Thinking" : group.running ? "In motion" : "Activity"}</span>
+                {summary ? <span className="working-items__summary">{summary}</span> : null}
                 {group.kind === "tools" && group.running ? <span className="timeline-entry__running" aria-label="running" /> : null}
               </Button>
             </CollapsibleTrigger>
@@ -589,6 +601,10 @@ function WorkRun({
   });
   const open = openState.closeSignal === closeSignal ? openState.open : false;
   const contentRef = useRef<HTMLDivElement>(null);
+  const workRunSummary = useMemo(
+    () => summarizeWorkRun(unit.items, showSubAgentCards ?? true),
+    [showSubAgentCards, unit.items],
+  );
 
   return (
     <div
@@ -611,10 +627,11 @@ function WorkRun({
             size="sm"
             className="timeline-entry__header timeline-entry__header--work-run"
             data-phase={phase ?? undefined}
-            aria-label="Working"
+            aria-label={workRunSummary ? `Working ${workRunSummary}` : "Working"}
           >
             <ChevronRightIcon className="timeline-entry__chevron" />
             <span>Working</span>
+            {workRunSummary ? <span className="working-items__summary">{workRunSummary}</span> : null}
             {active || unit.running ? (
               <span className="timeline-entry__running" aria-label="running" />
             ) : null}
