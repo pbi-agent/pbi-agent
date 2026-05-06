@@ -27,6 +27,7 @@ import type {
 } from "../../types";
 
 const usageBarMock = vi.hoisted(() => vi.fn());
+const sessionTimelineMock = vi.hoisted(() => vi.fn());
 const composerFocusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../hooks/useLiveSessionEvents", () => ({
@@ -68,7 +69,10 @@ vi.mock("./SessionSidebar", () => ({
 }));
 
 vi.mock("./SessionTimeline", () => ({
-  SessionTimeline: ({ items }: { items: unknown[] }) => <div>Timeline {items.length}</div>,
+  SessionTimeline: (props: { items: unknown[] }) => {
+    sessionTimelineMock(props);
+    return <div>Timeline {props.items.length}</div>;
+  },
 }));
 
 vi.mock("./UsageBar", () => ({
@@ -443,8 +447,48 @@ describe("SessionPage", () => {
     );
   });
 
+  it("does not show parent processing as child sub-agent activity", async () => {
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessionIndex: { "session-1": getSavedSessionKey("session-1") },
+      sessionsByKey: {
+        [getSavedSessionKey("session-1")]: {
+          ...createEmptySessionState(),
+          key: getSavedSessionKey("session-1"),
+          sessionId: "session-1",
+          connection: "connected",
+          waitMessage: "Parent is still working",
+          processing: { active: true, phase: "model_wait", message: "Working" },
+          items: [
+            {
+              kind: "message",
+              itemId: "sub-msg",
+              role: "assistant",
+              content: "Sub-agent done",
+              markdown: true,
+              subAgentId: "sub-1",
+            },
+          ],
+          subAgents: { "sub-1": { title: "Researcher", status: "completed" } },
+          itemsVersion: 1,
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await screen.findByText("Timeline 1");
+    await waitFor(() => {
+      expect(sessionTimelineMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        processing: null,
+        waitMessage: null,
+      }));
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
+    sessionTimelineMock.mockClear();
     composerFocusMock.mockClear();
   });
 

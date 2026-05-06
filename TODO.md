@@ -1,3 +1,3 @@
-[X] Fix sub-agent drilldown filtering namespace
-[X] Validate focused frontend/backend surface
+[X] Fix child sub-agent timeline processing state
+[X] Validate focused frontend surface
 [X] Update task memory

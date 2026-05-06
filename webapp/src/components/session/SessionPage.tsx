@@ -34,6 +34,7 @@ import type {
   SessionRecord,
   TimelineItem,
   LiveSessionSnapshot,
+  ProcessingState,
   UserQuestionAnswer,
 } from "../../types";
 import {
@@ -588,6 +589,10 @@ export function SessionPage({
     routeSessionId && sessionDetailError && !sessionNotFound
       ? "Unable to load this session right now."
       : null;
+  const selectedSubAgent = isSubAgentRoute && routeSubAgentId
+    ? sessionState?.subAgents[routeSubAgentId] ?? null
+    : null;
+  const selectedSubAgentIsRunning = selectedSubAgent?.status === "running";
   const displayedItems = useMemo(
     () => isSubAgentRoute && routeSubAgentId
       ? (sessionState?.items ?? []).filter((item) => item.subAgentId === routeSubAgentId)
@@ -597,14 +602,22 @@ export function SessionPage({
   const displayedSubAgents = useMemo(
     () => isSubAgentRoute && routeSubAgentId
       ? {
-          [routeSubAgentId]: sessionState?.subAgents[routeSubAgentId] ?? {
+          [routeSubAgentId]: selectedSubAgent ?? {
             title: routeSubAgentId,
-            status: sessionState?.processing?.active ? "running" : "completed",
+            status: "completed",
           },
         }
       : sessionState?.subAgents ?? {},
-    [isSubAgentRoute, routeSubAgentId, sessionState?.processing?.active, sessionState?.subAgents],
+    [isSubAgentRoute, routeSubAgentId, selectedSubAgent, sessionState?.subAgents],
   );
+  const displayedProcessing: ProcessingState | null = isSubAgentRoute
+    ? selectedSubAgentIsRunning
+      ? sessionState?.processing ?? null
+      : null
+    : sessionState?.processing ?? null;
+  const displayedWaitMessage = isSubAgentRoute && !selectedSubAgentIsRunning
+    ? null
+    : sessionState?.waitMessage ?? null;
 
   return (
     <section
@@ -768,8 +781,8 @@ export function SessionPage({
               itemsVersion={sessionState?.itemsVersion ?? 0}
               subAgents={displayedSubAgents}
               connection={sessionState?.connection ?? "disconnected"}
-              waitMessage={sessionState?.waitMessage ?? null}
-              processing={sessionState?.processing ?? null}
+              waitMessage={displayedWaitMessage}
+              processing={displayedProcessing}
               parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
               showSubAgentCards={!isSubAgentRoute}
             />
