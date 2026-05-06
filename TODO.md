@@ -1,7 +1,4 @@
-# TODO
-
-[X] Diagnose first-command disappearance in virgin sessions and focus loss after command
-[X] Implement backend/frontend fixes
-[X] Add/update regression tests
+[X] Locate upload root usage in tests
+[X] Add pytest isolation for web uploads
 [X] Run focused validation
 [X] Update memory

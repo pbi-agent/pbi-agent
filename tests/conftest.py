@@ -10,6 +10,7 @@ from typing import Any, Callable
 import pytest
 
 from pbi_agent.models.messages import TokenUsage, WebSearchSource
+from pbi_agent.web import uploads
 
 
 class DisplaySpy:
@@ -194,6 +195,11 @@ def isolate_internal_config_path(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
 @pytest.fixture(autouse=True)
 def isolate_session_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+
+
+@pytest.fixture(autouse=True)
+def isolate_web_uploads(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path / "web_uploads")
 
 
 @pytest.fixture
