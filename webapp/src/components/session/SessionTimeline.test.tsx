@@ -139,7 +139,7 @@ describe("SessionTimeline", () => {
   });
 
   it("renders working items as a strict three-level hierarchy", () => {
-    render(
+    const { container } = render(
       <SessionTimeline
         items={[
           {
@@ -174,11 +174,18 @@ describe("SessionTimeline", () => {
     );
 
     expect(screen.getByRole("button", { name: /Working.*1 thought, 1 read, 1 shell/i })).toBeInTheDocument();
+    const workingSummary = container.querySelector(".timeline-entry__header--work-run .working-items__summary");
+    expect(workingSummary).toHaveTextContent("1 thought, 1 read, 1 shell");
+    expect(workingSummary?.querySelectorAll('[data-component="animated-number"]')).toHaveLength(3);
+    expect(workingSummary?.querySelector('[data-slot="animated-number-strip"]')).toBeInTheDocument();
 
     openWorking(0, false);
     expect(screen.getByRole("button", { name: /^Thinking$/i })).toBeInTheDocument();
     expect(screen.queryByText(/thinking block/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Activity.*1 read, 1 shell/i })).toBeInTheDocument();
+    const activitySummary = container.querySelector(".working-items__group-trigger .working-items__summary");
+    expect(activitySummary).toHaveTextContent("1 read, 1 shell");
+    expect(activitySummary?.querySelectorAll('[data-component="animated-number"]')).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
 
@@ -231,6 +238,71 @@ describe("SessionTimeline", () => {
     expect(workingButton).toHaveAccessibleName("Working 1 agent");
     expect(workingButton).toHaveTextContent(/^Working1 agent$/);
     expect(screen.queryByText("Researcher")).not.toBeInTheDocument();
+  });
+
+  it("renders animated odometer counts when working summaries update", () => {
+    const baseItems = [
+      {
+        kind: "tool_group" as const,
+        itemId: "tools-1",
+        label: "Tools",
+        status: "running" as const,
+        items: [
+          {
+            text: "first read",
+            metadata: { tool_name: "read_file", arguments: { path: "README.md" } },
+          },
+        ],
+      },
+    ];
+    const { container, rerender } = render(
+      <SessionTimeline
+        items={baseItems}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: /Working 1 read/i });
+    expect(workingButton).toHaveTextContent(/^Working1 read$/);
+    expect(
+      workingButton.querySelectorAll('[data-component="animated-number"]'),
+    ).toHaveLength(1);
+    expect(
+      workingButton.querySelector('[data-slot="animated-number-strip"]'),
+    ).toBeInTheDocument();
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            ...baseItems[0],
+            items: [
+              ...baseItems[0].items,
+              {
+                text: "second read",
+                metadata: { tool_name: "read_file", arguments: { path: "package.json" } },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={2}
+      />,
+    );
+
+    const updatedWorkingButton = screen.getByRole("button", { name: /Working 2 reads/i });
+    expect(updatedWorkingButton).toHaveTextContent(/^Working2 reads$/);
+    expect(
+      updatedWorkingButton.querySelector('[data-slot="animated-number-strip"]'),
+    ).toHaveAttribute("data-animating", "true");
+    expect(container.querySelector('[data-slot="animated-number-cell"]')).toBeInTheDocument();
   });
 
   it("shows only the sub-agent name in per-turn metadata headers", () => {

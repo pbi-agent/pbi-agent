@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { BotIcon, ChevronRightIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
@@ -156,31 +156,48 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function summarizeCounts(entries: ToolListEntry[]) {
+type CountSummaryItem = {
+  key: string;
+  count: number;
+  singular: string;
+  plural: string;
+};
+
+function summaryItemLabel(item: CountSummaryItem) {
+  return pluralize(item.count, item.singular, item.plural);
+}
+
+function summarizeCountItems(items: CountSummaryItem[]) {
+  return items
+    .filter((item) => item.count > 0)
+    .map(summaryItemLabel)
+    .join(", ");
+}
+
+function countItemsForEntries(entries: ToolListEntry[]) {
   const counts = new Map<ToolCategory, number>();
   for (const entry of entries) {
     counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
   }
-  return summarizeCategoryCounts(counts);
+  return categoryCountItems(counts);
 }
 
-function summarizeCategoryCounts(counts: Map<ToolCategory, number>) {
-  const labels: Record<ToolCategory, string> = {
-    read: "read",
-    search: "search",
-    list: "list",
-    shell: "shell",
-    edit: "edit",
-    "sub-agent": "agent",
-    other: "other",
+function categoryCountItems(counts: Map<ToolCategory, number>): CountSummaryItem[] {
+  const labels: Record<ToolCategory, { singular: string; plural: string }> = {
+    read: { singular: "read", plural: "reads" },
+    search: { singular: "search", plural: "searches" },
+    list: { singular: "list", plural: "lists" },
+    shell: { singular: "shell", plural: "shells" },
+    edit: { singular: "edit", plural: "edits" },
+    "sub-agent": { singular: "agent", plural: "agents" },
+    other: { singular: "other", plural: "others" },
   };
-  return (["read", "search", "list", "shell", "edit", "sub-agent", "other"] as ToolCategory[])
-    .map((category) => {
-      const count = counts.get(category) ?? 0;
-      return count > 0 ? pluralize(count, labels[category]) : null;
-    })
-    .filter((label): label is string => Boolean(label))
-    .join(", ");
+  return (["read", "search", "list", "shell", "edit", "sub-agent", "other"] as ToolCategory[]).map((category) => ({
+    key: category,
+    count: counts.get(category) ?? 0,
+    singular: labels[category].singular,
+    plural: labels[category].plural,
+  }));
 }
 
 function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
@@ -201,6 +218,10 @@ function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
 }
 
 function summarizeWorkRun(items: WorkItem[], showSubAgentCards: boolean) {
+  return summarizeCountItems(workRunCountItems(items, showSubAgentCards));
+}
+
+function workRunCountItems(items: WorkItem[], showSubAgentCards: boolean): CountSummaryItem[] {
   let thinkingCount = 0;
   const categoryCounts = new Map<ToolCategory, number>();
   const subAgentIds = new Set<string>();
@@ -225,11 +246,9 @@ function summarizeWorkRun(items: WorkItem[], showSubAgentCards: boolean) {
   }
 
   return [
-    thinkingCount > 0 ? pluralize(thinkingCount, "thought") : null,
-    summarizeCategoryCounts(categoryCounts),
-  ]
-    .filter((label): label is string => Boolean(label))
-    .join(", ");
+    { key: "thought", count: thinkingCount, singular: "thought", plural: "thoughts" },
+    ...categoryCountItems(categoryCounts),
+  ];
 }
 
 type ToolListEntry = {
@@ -356,6 +375,127 @@ function subAgentStatusModifier(status: string): "completed" | "failed" | "idle"
   return "idle";
 }
 
+const ANIMATED_NUMBER_TRACK = Array.from({ length: 30 }, (_, index) => index % 10);
+
+function normalizeDigit(value: number) {
+  return ((value % 10) + 10) % 10;
+}
+
+function digitSpin(from: number, to: number, direction: 1 | -1) {
+  if (from === to) return 0;
+  if (direction > 0) return (to - from + 10) % 10;
+  return -((from - to + 10) % 10);
+}
+
+function AnimatedNumberDigit({ value, direction }: { value: number; direction: 1 | -1 }) {
+  const [state, setState] = useState({
+    step: value + 10,
+    animating: false,
+    lastValue: value,
+    direction,
+  });
+
+  if (state.lastValue !== value || state.direction !== direction) {
+    const delta = digitSpin(state.lastValue, value, direction);
+    if (delta === 0) {
+      setState({ step: value + 10, animating: false, lastValue: value, direction });
+    } else {
+      setState({
+        step: state.step + delta,
+        animating: true,
+        lastValue: value,
+        direction,
+      });
+    }
+  }
+
+  return (
+    <span data-slot="animated-number-digit">
+      <span
+        data-slot="animated-number-strip"
+        data-animating={state.animating ? "true" : "false"}
+        onTransitionEnd={() => {
+          setState((current) => ({
+            ...current,
+            animating: false,
+            step: normalizeDigit(current.step) + 10,
+          }));
+        }}
+        style={{
+          "--animated-number-offset": state.step,
+        } as CSSProperties}
+      >
+        {ANIMATED_NUMBER_TRACK.map((digit, index) => (
+          <span key={`${digit}-${index}`} data-slot="animated-number-cell" data-digit={digit} />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function AnimatedNumber({ value }: { value: number }) {
+  const target = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+  const [state, setState] = useState({ displayValue: target, direction: 1 as 1 | -1 });
+
+  if (state.displayValue !== target) {
+    setState({
+      displayValue: target,
+      direction: target > state.displayValue ? 1 : -1,
+    });
+  }
+
+  const label = state.displayValue.toString();
+  const digits = Array.from(label, (char) => {
+    const digit = Number.parseInt(char, 10);
+    return Number.isNaN(digit) ? 0 : digit;
+  }).reverse();
+
+  return (
+    <span data-component="animated-number" className="animated-count-number">
+      <span className="animated-count-number__text">{label}</span>
+      <span
+        data-slot="animated-number-value"
+        aria-hidden="true"
+        style={{
+          "--animated-number-width": `${digits.length}ch`,
+        } as CSSProperties}
+      >
+        {digits.map((digit, index) => (
+          <AnimatedNumberDigit key={index} value={digit} direction={state.direction} />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function AnimatedCountSummary({
+  items,
+  className,
+}: {
+  items: CountSummaryItem[];
+  className?: string;
+}) {
+  const visible = items.filter((item) => item.count > 0);
+  if (visible.length === 0) return null;
+
+  return (
+    <span data-component="tool-count-summary" className={className}>
+      {visible.map((item, index) => (
+        <span key={item.key} data-slot="tool-count-summary-item">
+          {index > 0 ? <span data-slot="tool-count-summary-prefix">, </span> : null}
+          <span data-component="tool-count-label">
+            <AnimatedNumber value={item.count} />
+            <span data-slot="tool-count-label-space"> </span>
+            <span data-slot="tool-count-label-word">
+              {item.count === 1 ? item.singular : item.plural}
+            </span>
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function SubAgentCard({
   group,
   subAgents,
@@ -428,7 +568,9 @@ function WorkingItemsPanel({
         }
         const open = Boolean(openGroups[group.key]);
         const isThinking = group.kind === "thinking";
-        const summary = isThinking ? null : summarizeCounts(group.entries);
+        const summaryItems = isThinking ? [] : countItemsForEntries(group.entries);
+        const summary = summarizeCountItems(summaryItems);
+        const groupLabel = isThinking ? "Thinking" : group.running ? "In motion" : "Activity";
         return (
           <Collapsible
             key={group.key}
@@ -442,10 +584,16 @@ function WorkingItemsPanel({
             }))}
           >
             <CollapsibleTrigger asChild>
-              <Button type="button" variant="ghost" size="sm" className="working-items__group-trigger">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="working-items__group-trigger"
+                aria-label={summary ? `${groupLabel} ${summary}` : groupLabel}
+              >
                 <ChevronRightIcon className="timeline-entry__chevron" />
-                <span>{isThinking ? "Thinking" : group.running ? "In motion" : "Activity"}</span>
-                {summary ? <span className="working-items__summary">{summary}</span> : null}
+                <span>{groupLabel}</span>
+                <AnimatedCountSummary items={summaryItems} className="working-items__summary" />
                 {group.kind === "tools" && group.running ? <span className="timeline-entry__running" aria-label="running" /> : null}
               </Button>
             </CollapsibleTrigger>
@@ -655,6 +803,10 @@ function WorkRun({
     () => summarizeWorkRun(unit.items, showSubAgentCards ?? true),
     [showSubAgentCards, unit.items],
   );
+  const workRunSummaryItems = useMemo(
+    () => workRunCountItems(unit.items, showSubAgentCards ?? true),
+    [showSubAgentCards, unit.items],
+  );
 
   return (
     <div
@@ -684,7 +836,7 @@ function WorkRun({
             {active || unit.running ? (
               <span className="timeline-entry__running" aria-label="running" />
             ) : null}
-            {workRunSummary ? <span className="working-items__summary">{workRunSummary}</span> : null}
+            <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
           </Button>
         </CollapsibleTrigger>
         {hasItems ? (

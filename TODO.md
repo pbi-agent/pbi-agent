@@ -1,3 +1,3 @@
-[X] Fix child sub-agent timeline processing state
-[X] Validate focused frontend surface
+[X] Fix summary count alignment
+[X] Validate frontend timeline
 [X] Update task memory

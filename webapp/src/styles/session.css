@@ -1043,6 +1043,115 @@
   white-space: nowrap;
 }
 
+[data-component="tool-count-summary"] {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+[data-slot="tool-count-summary-item"],
+[data-component="tool-count-label"] {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+[data-slot="tool-count-label-space"] {
+  display: inline-block;
+  width: 0.25em;
+  white-space: pre;
+}
+
+[data-slot="tool-count-summary-prefix"] {
+  white-space: pre;
+}
+
+[data-component="animated-number"] {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: baseline;
+  line-height: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.animated-count-number__text {
+  color: transparent;
+}
+
+[data-slot="animated-number-value"] {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  bottom: auto;
+  display: inline-flex;
+  flex-direction: row-reverse;
+  align-items: baseline;
+  justify-content: flex-end;
+  width: var(--animated-number-width, 1ch);
+  height: 1em;
+  overflow: hidden;
+  line-height: 1;
+  transform: translateY(-50%);
+  transition: width 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-slot="animated-number-digit"] {
+  display: inline-block;
+  width: 1ch;
+  height: 1em;
+  line-height: 1em;
+  overflow: hidden;
+  vertical-align: baseline;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 18%,
+    #000 82%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 18%,
+    #000 82%,
+    transparent 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+[data-slot="animated-number-strip"] {
+  display: inline-flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--animated-number-offset, 10) * -1em));
+  transition-property: transform;
+  transition-duration: 600ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-slot="animated-number-strip"][data-animating="false"] {
+  transition-duration: 0ms;
+}
+
+[data-slot="animated-number-cell"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1ch;
+  height: 1em;
+  line-height: 1em;
+}
+
+[data-slot="animated-number-cell"]::before {
+  content: attr(data-digit);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="animated-number-value"],
+  [data-slot="animated-number-strip"] {
+    transition-duration: 0ms;
+  }
+}
+
 .working-items__level-2 {
   display: flex;
   flex-direction: column;
