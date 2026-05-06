@@ -53,11 +53,11 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 
 ## Docs
 
-- [Installation](https://pbi-agent.github.io/pbi-agent/guide/installation)
-- [Provider Setup](https://pbi-agent.github.io/pbi-agent/guide/providers)
-- [CLI Reference](https://pbi-agent.github.io/pbi-agent/reference/cli)
-- [Environment Variables](https://pbi-agent.github.io/pbi-agent/reference/environment)
-- [Customization](https://pbi-agent.github.io/pbi-agent/guide/customization)
+- [Installation](https://pbi-agent.github.io/pbi-agent/installation)
+- [Provider Setup](https://pbi-agent.github.io/pbi-agent/providers)
+- [CLI Reference](https://pbi-agent.github.io/pbi-agent/cli)
+- [Environment Variables](https://pbi-agent.github.io/pbi-agent/environment)
+- [Customization](https://pbi-agent.github.io/pbi-agent/customization)
 
 ## Customization
 
