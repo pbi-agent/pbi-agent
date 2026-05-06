@@ -116,8 +116,8 @@ describe("SessionTimeline", () => {
 
     const workingButtons = screen.getAllByRole("button", { name: /Working/ });
     expect(workingButtons).toHaveLength(1);
-    expect(workingButtons[0]).toHaveAccessibleName(/3 agents · Working/);
-    expect(workingButtons[0]).toHaveTextContent(/3 agents\s*·\s*Working/);
+    expect(workingButtons[0]).toHaveAccessibleName("Working");
+    expect(workingButtons[0]).toHaveTextContent(/^Working$/);
 
     openWorking(0, false);
 
@@ -182,7 +182,7 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
   });
 
-  it("summarizes a single sub-agent in the collapsed Working header", () => {
+  it("keeps sub-agent labels out of the collapsed Working header", () => {
     render(
       <SessionTimeline
         items={[
@@ -216,8 +216,9 @@ describe("SessionTimeline", () => {
     );
 
     const workingButton = screen.getByRole("button", { name: /Working/ });
-    expect(workingButton).toHaveAccessibleName(/Researcher · Working/);
-    expect(workingButton).toHaveTextContent(/Researcher\s*·\s*Working/);
+    expect(workingButton).toHaveAccessibleName("Working");
+    expect(workingButton).toHaveTextContent(/^Working$/);
+    expect(screen.queryByText("Researcher")).not.toBeInTheDocument();
   });
 
   it("opens a read-only child route from a sub-agent card", () => {

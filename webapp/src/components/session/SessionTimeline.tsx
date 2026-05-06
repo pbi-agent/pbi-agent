@@ -40,7 +40,6 @@ type RenderUnit =
       kind: "work_run";
       key: string;
       items: WorkItem[];
-      subAgentIds: string[];
       running: boolean;
     };
 
@@ -76,13 +75,6 @@ function buildRenderUnits(
           ? `work-after-${previousMessageItemId}`
           : `work-${buffer[0].itemId}`,
       items: buffer,
-      subAgentIds: Array.from(
-        new Set(
-          buffer
-            .map((item) => item.subAgentId)
-            .filter((subAgentId): subAgentId is string => Boolean(subAgentId)),
-        ),
-      ),
       running,
     });
     buffer = [];
@@ -103,17 +95,6 @@ function buildRenderUnits(
   }
   flush();
   return units;
-}
-
-function formatAgentSummary(
-  subAgentIds: string[],
-  subAgents: Record<string, { title: string; status: string }>,
-) {
-  if (subAgentIds.length === 0) return null;
-  if (subAgentIds.length === 1) {
-    return subAgents[subAgentIds[0]]?.title ?? "sub_agent";
-  }
-  return `${subAgentIds.length} agents`;
 }
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {
@@ -589,7 +570,6 @@ function WorkRun({
   parentSessionId?: string;
   showSubAgentCards?: boolean;
 }) {
-  const agentSummary = formatAgentSummary(unit.subAgentIds, subAgents);
   const hasItems = unit.items.length > 0;
   const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
   const [openState, setOpenState] = useState({
@@ -620,24 +600,9 @@ function WorkRun({
             size="sm"
             className="timeline-entry__header timeline-entry__header--work-run"
             data-phase={phase ?? undefined}
-            aria-label={
-              agentSummary ? `${agentSummary} · Working` : "Working"
-            }
+            aria-label="Working"
           >
             <ChevronRightIcon className="timeline-entry__chevron" />
-            {agentSummary ? (
-              <>
-                <Badge
-                  variant="outline"
-                  className="timeline-entry__work-run-agent-summary"
-                >
-                  {agentSummary}
-                </Badge>
-                <span className="timeline-entry__work-run-separator" aria-hidden>
-                  ·
-                </span>
-              </>
-            ) : null}
             <span>Working</span>
             {active || unit.running ? (
               <span className="timeline-entry__running" aria-label="running" />
@@ -706,7 +671,6 @@ export function SessionTimeline({
           ? `work-after-${latestItem.itemId}`
           : "work-active-placeholder",
         items: [],
-        subAgentIds: [],
         running: true,
       },
     ];
