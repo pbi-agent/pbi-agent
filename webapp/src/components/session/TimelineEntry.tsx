@@ -101,6 +101,10 @@ function toolItemStatus(toolItem: { metadata?: { status?: string; success?: bool
   return null;
 }
 
+function subAgentHeaderName(title: string | undefined): string | undefined {
+  return title?.split("·", 1)[0]?.trim() || title;
+}
+
 export function TimelineEntry({
   item,
   subAgentTitle,
@@ -141,11 +145,12 @@ export function TimelineEntry({
       ? toolGroupOpenState.open
       : false;
 
+  const subAgentName = subAgentHeaderName(subAgentTitle);
   const subAgentBanner =
-    subAgentTitle || subAgentStatus ? (
+    subAgentName || subAgentStatus ? (
       <div className="timeline-entry__subagent">
         <span className={`indicator-dot indicator-dot--${subAgentStatus === "running" ? "connecting" : "connected"}`} />
-        <span>{subAgentTitle ?? "sub_agent"} &middot; {subAgentStatus ?? "running"}</span>
+        <span>{subAgentName ?? "sub_agent"}</span>
       </div>
     ) : null;
 

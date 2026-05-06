@@ -221,7 +221,39 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("Researcher")).not.toBeInTheDocument();
   });
 
-  it("opens a read-only child route from a sub-agent card", () => {
+  it("shows only the sub-agent name in per-turn metadata headers", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "sub-message-1",
+            role: "assistant",
+            content: "Sub-agent answer",
+            markdown: true,
+            subAgentId: "subagent-dionysus",
+          },
+        ]}
+        subAgents={{
+          "subagent-dionysus": {
+            title: "Dionysus · Read the workspace LICENSE file and summarize its license terms. · low",
+            status: "completed",
+          },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        showSubAgentCards={false}
+      />,
+    );
+
+    expect(screen.getByText("Dionysus")).toBeInTheDocument();
+    expect(screen.queryByText(/Read the workspace LICENSE file/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/low/)).not.toBeInTheDocument();
+  });
+
+  it("opens a read-only child route from a simplified sub-agent card", () => {
     render(
       <SessionTimeline
         items={[
@@ -236,7 +268,7 @@ describe("SessionTimeline", () => {
         ]}
         subAgents={{
           "subagent-researcher": {
-            title: "Researcher",
+            title: "Researcher · Read the workspace LICENSE file and summarize its license terms. · low",
             status: "completed",
           },
         }}
@@ -250,8 +282,11 @@ describe("SessionTimeline", () => {
 
     openWorking(0, false);
     expect(screen.queryByText("Hidden sub-agent transcript")).not.toBeInTheDocument();
+    expect(screen.getByText("Researcher")).toBeInTheDocument();
+    expect(screen.queryByText(/Read the workspace LICENSE file/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/low/)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Open read-only sub-agent session/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Open Researcher agent session/i }));
     expect(navigateMock).toHaveBeenCalledWith(
       "/sessions/parent-session/sub-agents/subagent-researcher",
     );

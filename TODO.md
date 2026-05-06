@@ -1,3 +1,3 @@
-[X] Find source of sub-agent label before Working
-[X] Remove label while keeping Working grouping intact
-[X] Validate frontend tests/checks
+[X] Find current sub-agent card rendering/styles
+[X] Simplify sub-agent card content and badge styling
+[X] Update tests/static build and validate

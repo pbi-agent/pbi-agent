@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BotIcon, BrainIcon, ChevronRightIcon } from "lucide-react";
+import { BotIcon, ChevronRightIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { ConnectionState } from "../../store";
 import type {
@@ -281,6 +281,17 @@ function toolSubtitle(entry: ToolListEntry) {
   );
 }
 
+function subAgentDisplayName(title: string | undefined, fallback: string): string {
+  return title?.split("·", 1)[0]?.trim() || title || fallback;
+}
+
+function subAgentStatusModifier(status: string): "completed" | "failed" | "idle" | "running" {
+  if (status === "running" || status === "starting") return "running";
+  if (status === "failed" || status === "error") return "failed";
+  if (status === "completed") return "completed";
+  return "idle";
+}
+
 function SubAgentCard({
   group,
   subAgents,
@@ -293,10 +304,13 @@ function SubAgentCard({
   const navigate = useNavigate();
   const agent = subAgents[group.subAgentId];
   const status = agent?.status ?? (group.running ? "running" : "completed");
+  const name = subAgentDisplayName(agent?.title, group.subAgentId);
+  const statusModifier = subAgentStatusModifier(status);
   return (
     <button
       type="button"
       className="working-items__sub-agent-card"
+      aria-label={`Open ${name} agent session`}
       onClick={() => {
         if (parentSessionId) {
           void navigate(`/sessions/${encodeURIComponent(parentSessionId)}/sub-agents/${encodeURIComponent(group.subAgentId)}`);
@@ -305,12 +319,10 @@ function SubAgentCard({
       disabled={!parentSessionId}
     >
       <BotIcon />
-      <span className="working-items__sub-agent-main">
-        <span>{agent?.title ?? group.subAgentId}</span>
-        <span>Open read-only sub-agent session</span>
-      </span>
-      <Badge variant="outline">{status}</Badge>
-      {status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
+      <span className="working-items__sub-agent-main">{name}</span>
+      <Badge variant="secondary" className={`working-items__sub-agent-status status-pill status-pill--${statusModifier}`}>
+        {status}
+      </Badge>
     </button>
   );
 }
@@ -369,7 +381,6 @@ function WorkingItemsPanel({
           >
             <CollapsibleTrigger asChild>
               <Button type="button" variant="ghost" size="sm" className="working-items__group-trigger">
-                {isThinking ? <BrainIcon /> : null}
                 <ChevronRightIcon className="timeline-entry__chevron" />
                 <span>{isThinking ? "Thinking" : group.running ? "Using tools" : "Used tools"}</span>
                 <span className="working-items__summary">{summary}</span>
