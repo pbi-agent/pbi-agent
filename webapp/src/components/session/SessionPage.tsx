@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangleIcon,
@@ -69,7 +69,11 @@ export function SessionPage({
 }) {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const { sessionId: routeSessionId } = useParams<{ sessionId?: string }>();
+  const { sessionId: routeSessionId, subAgentId: routeSubAgentId } = useParams<{
+    sessionId?: string;
+    subAgentId?: string;
+  }>();
+  const isSubAgentRoute = Boolean(routeSessionId && routeSubAgentId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
@@ -337,7 +341,7 @@ export function SessionPage({
     sessionDetailQuery.data,
   ]);
 
-  const composerInputEnabled = Boolean(
+  const composerInputEnabled = !isSubAgentRoute && Boolean(
     (!routeSessionId && !sessionState)
     || (routeSessionId && !sessionState?.liveSessionId && !sessionState?.pendingUserQuestions)
     || (sessionState?.inputEnabled && !sessionState.pendingUserQuestions),
@@ -420,7 +424,8 @@ export function SessionPage({
         )
       : supportsImageInputs;
   const profileSelectorDisabled =
-    modelProfiles.length === 0
+    isSubAgentRoute
+    || modelProfiles.length === 0
     || Boolean(sessionState && !composerInputEnabled)
     || createSessionMutation.isPending
     || setSessionProfileMutation.isPending
@@ -566,9 +571,10 @@ export function SessionPage({
     }
   };
 
-  const canDeleteActiveSession = Boolean(routeSessionId && activeSessionRecord);
+  const canDeleteActiveSession = Boolean(routeSessionId && activeSessionRecord && !isSubAgentRoute);
   const canInterruptActiveTurn = Boolean(
-    sessionState?.liveSessionId
+    !isSubAgentRoute
+    && sessionState?.liveSessionId
     && !sessionState.sessionEnded
     && sessionState.processing?.active
     && !sessionState.inputEnabled,
@@ -581,6 +587,23 @@ export function SessionPage({
     routeSessionId && sessionDetailError && !sessionNotFound
       ? "Unable to load this session right now."
       : null;
+  const displayedItems = useMemo(
+    () => isSubAgentRoute && routeSubAgentId
+      ? (sessionState?.items ?? []).filter((item) => item.subAgentId === routeSubAgentId)
+      : sessionState?.items ?? [],
+    [isSubAgentRoute, routeSubAgentId, sessionState?.items],
+  );
+  const displayedSubAgents = useMemo(
+    () => isSubAgentRoute && routeSubAgentId
+      ? {
+          [routeSubAgentId]: sessionState?.subAgents[routeSubAgentId] ?? {
+            title: routeSubAgentId,
+            status: sessionState?.processing?.active ? "running" : "completed",
+          },
+        }
+      : sessionState?.subAgents ?? {},
+    [isSubAgentRoute, routeSubAgentId, sessionState?.processing?.active, sessionState?.subAgents],
+  );
 
   return (
     <section
@@ -626,19 +649,21 @@ export function SessionPage({
             />
           </div>
           <div className="session-topbar__actions">
-            <Toggle
-              type="button"
-              variant="outline"
-              size="sm"
-              className="interactive-mode-toggle"
-              pressed={interactiveMode}
-              aria-label="Toggle interactive mode for assistant questions"
-              title="Allow the assistant to pause and ask questions for each message while this is on."
-              onPressedChange={setInteractiveMode}
-            >
-              Interactive
-            </Toggle>
-            {routeSessionId ? (
+            {!isSubAgentRoute ? (
+              <Toggle
+                type="button"
+                variant="outline"
+                size="sm"
+                className="interactive-mode-toggle"
+                pressed={interactiveMode}
+                aria-label="Toggle interactive mode for assistant questions"
+                title="Allow the assistant to pause and ask questions for each message while this is on."
+                onPressedChange={setInteractiveMode}
+              >
+                Interactive
+              </Toggle>
+            ) : null}
+            {routeSessionId && !isSubAgentRoute ? (
               <RunHistory sessionId={routeSessionId} />
             ) : null}
             <UsageBar
@@ -708,7 +733,7 @@ export function SessionPage({
             <AlertDescription>{setActiveProfileMutation.error.message}</AlertDescription>
           </Alert>
         ) : null}
-        {interruptMutation.error ? (
+        {!isSubAgentRoute && interruptMutation.error ? (
           <Alert variant="destructive" className="banner banner--error">
             <AlertTriangleIcon />
             <AlertDescription>{interruptMutation.error.message}</AlertDescription>
@@ -738,14 +763,16 @@ export function SessionPage({
         ) : (
           <>
             <SessionTimeline
-              items={sessionState?.items ?? []}
+              items={displayedItems}
               itemsVersion={sessionState?.itemsVersion ?? 0}
-              subAgents={sessionState?.subAgents ?? {}}
+              subAgents={displayedSubAgents}
               connection={sessionState?.connection ?? "disconnected"}
               waitMessage={sessionState?.waitMessage ?? null}
               processing={sessionState?.processing ?? null}
+              parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
+              showSubAgentCards={!isSubAgentRoute}
             />
-            {sessionState?.pendingUserQuestions ? (
+            {!isSubAgentRoute && sessionState?.pendingUserQuestions ? (
               <UserQuestionsPanel
                 prompt={sessionState.pendingUserQuestions}
                 isSubmitting={questionResponseMutation.isPending}
@@ -755,28 +782,38 @@ export function SessionPage({
                 }}
               />
             ) : null}
-            <Composer
-              ref={composerRef}
-              inputEnabled={composerInputEnabled}
-              sessionEnded={sessionState?.sessionEnded ?? false}
-              liveSessionId={sessionState?.liveSessionId ?? null}
-              canCreateSession={composerCanStartRun}
-              supportsImageInputs={providerSupportsImages}
-              isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
-              onSubmit={handleSubmit}
-              isProcessing={Boolean(sessionState?.processing?.active)}
-              canInterrupt={canInterruptActiveTurn}
-              isInterrupting={interruptMutation.isPending}
-              restoredInput={sessionState?.restoredInput ?? null}
-              onRestoredInputConsumed={() => {
-                if (selectedRouteSessionKey) {
-                  consumeRestoredInput(selectedRouteSessionKey);
-                }
-              }}
-              onInterrupt={() => {
-                interruptMutation.mutate();
-              }}
-            />
+            {isSubAgentRoute && routeSessionId ? (
+              <div className="session-readonly-footer">
+                <Button type="button" variant="outline" asChild>
+                  <Link to={`/sessions/${encodeURIComponent(routeSessionId)}`}>
+                    Back to main session
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <Composer
+                ref={composerRef}
+                inputEnabled={composerInputEnabled}
+                sessionEnded={sessionState?.sessionEnded ?? false}
+                liveSessionId={sessionState?.liveSessionId ?? null}
+                canCreateSession={composerCanStartRun}
+                supportsImageInputs={providerSupportsImages}
+                isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
+                onSubmit={handleSubmit}
+                isProcessing={Boolean(sessionState?.processing?.active)}
+                canInterrupt={canInterruptActiveTurn}
+                isInterrupting={interruptMutation.isPending}
+                restoredInput={sessionState?.restoredInput ?? null}
+                onRestoredInputConsumed={() => {
+                  if (selectedRouteSessionKey) {
+                    consumeRestoredInput(selectedRouteSessionKey);
+                  }
+                }}
+                onInterrupt={() => {
+                  interruptMutation.mutate();
+                }}
+              />
+            )}
           </>
         )}
       </div>

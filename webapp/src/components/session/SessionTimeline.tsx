@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { BotIcon, BrainIcon, ChevronRightIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { ConnectionState } from "../../store";
 import type {
@@ -9,6 +10,8 @@ import type {
   TimelineMessageItem,
   TimelineThinkingItem,
   TimelineToolGroupItem,
+  TimelineToolGroupEntry,
+  ToolCallMetadata,
 } from "../../types";
 import { Button } from "../ui/button";
 import {
@@ -17,6 +20,8 @@ import {
   CollapsibleTrigger,
 } from "../ui/collapsible";
 import { Badge } from "../ui/badge";
+import { MarkdownContent } from "../shared/MarkdownContent";
+import { ToolResult } from "./ToolResult";
 import { TimelineEntry } from "./TimelineEntry";
 import { SessionWelcome } from "./SessionWelcome";
 
@@ -27,7 +32,7 @@ const WORK_RUN_PHASE_TRANSITION_MS = 300;
 const WORK_RUN_PHASE_HOLD_MS =
   WORK_RUN_PHASE_MIN_VISIBLE_MS + WORK_RUN_PHASE_TRANSITION_MS;
 
-type WorkItem = TimelineThinkingItem | TimelineToolGroupItem;
+type WorkItem = TimelineMessageItem | TimelineThinkingItem | TimelineToolGroupItem;
 
 type RenderUnit =
   | { kind: "message"; item: TimelineMessageItem }
@@ -39,11 +44,21 @@ type RenderUnit =
       running: boolean;
     };
 
-function isWorkItem(item: TimelineItem): item is WorkItem {
-  return item.kind === "thinking" || item.kind === "tool_group";
+function shouldCoalesceInWorkRun(
+  item: TimelineItem,
+  options: { showSubAgentCards: boolean },
+): boolean {
+  const { showSubAgentCards } = options;
+  return item.kind === "thinking"
+    || item.kind === "tool_group"
+    || (showSubAgentCards && Boolean(item.subAgentId));
 }
 
-function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
+function buildRenderUnits(
+  items: TimelineItem[],
+  options: { showSubAgentCards: boolean },
+): RenderUnit[] {
+  const { showSubAgentCards } = options;
   const units: RenderUnit[] = [];
   let buffer: WorkItem[] = [];
   let previousMessageItemId: string | undefined;
@@ -51,8 +66,8 @@ function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
 
   const flush = () => {
     if (buffer.length === 0) return;
-    const running = buffer.some(
-      (it) => it.kind === "tool_group" && it.status === "running",
+    const running = buffer.some((it) =>
+      it.kind === "tool_group" && it.status === "running",
     );
     units.push({
       kind: "work_run",
@@ -75,11 +90,13 @@ function buildRenderUnits(items: TimelineItem[]): RenderUnit[] {
   };
 
   for (const item of items) {
-    if (!isWorkItem(item)) {
+    if (!shouldCoalesceInWorkRun(item, { showSubAgentCards })) {
       flush();
-      units.push({ kind: "message", item });
-      previousMessageItemId = item.itemId;
-      workRunSinceMessage = false;
+      if (item.kind === "message") {
+        units.push({ kind: "message", item });
+        previousMessageItemId = item.itemId;
+        workRunSinceMessage = false;
+      }
       continue;
     }
     buffer.push(item);
@@ -97,6 +114,336 @@ function formatAgentSummary(
     return subAgents[subAgentIds[0]]?.title ?? "sub_agent";
   }
   return `${subAgentIds.length} agents`;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function toolNameFor(metadata: ToolCallMetadata | undefined, fallback: string) {
+  return stringValue(metadata?.tool_name) ?? fallback;
+}
+
+function toolItemStatus(toolItem: TimelineToolGroupEntry): string | null {
+  if (toolItem.metadata?.status) return toolItem.metadata.status;
+  if (toolItem.metadata?.success === true) return "completed";
+  if (toolItem.metadata?.success === false) return "failed";
+  return null;
+}
+
+type ToolCategory = "read" | "search" | "list" | "shell" | "edit" | "sub-agent" | "other";
+
+function categorizeTool(toolName: string): ToolCategory {
+  if (["read_file", "read_image", "read_web_url"].includes(toolName)) return "read";
+  if (["web_search", "grep", "glob", "search"].includes(toolName)) return "search";
+  if (["list", "ls"].includes(toolName)) return "list";
+  if (toolName === "shell") return "shell";
+  if (["apply_patch", "write_file", "replace_in_file"].includes(toolName)) return "edit";
+  if (toolName === "sub_agent") return "sub-agent";
+  return "other";
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function summarizeCounts(entries: ToolListEntry[]) {
+  const labels: Record<ToolCategory, string> = {
+    read: "read",
+    search: "search",
+    list: "list",
+    shell: "shell",
+    edit: "edit",
+    "sub-agent": "sub-agent",
+    other: "other",
+  };
+  const counts = new Map<ToolCategory, number>();
+  for (const entry of entries) {
+    counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
+  }
+  return (["read", "search", "list", "shell", "edit", "sub-agent", "other"] as ToolCategory[])
+    .map((category) => {
+      const count = counts.get(category) ?? 0;
+      return count > 0 ? pluralize(count, labels[category]) : null;
+    })
+    .filter((label): label is string => Boolean(label))
+    .join(", ");
+}
+
+type ToolListEntry = {
+  key: string;
+  itemId: string;
+  label: string;
+  entry: TimelineToolGroupEntry;
+  category: ToolCategory;
+  status: string | null;
+};
+
+type WorkingGroup =
+  | { kind: "thinking"; key: string; items: TimelineThinkingItem[] }
+  | { kind: "tools"; key: string; entries: ToolListEntry[]; running: boolean }
+  | { kind: "sub_agent"; key: string; subAgentId: string; items: WorkItem[]; running: boolean };
+
+function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): WorkingGroup[] {
+  const groups: WorkingGroup[] = [];
+  let thinkingBuffer: TimelineThinkingItem[] = [];
+  let toolBuffer: ToolListEntry[] = [];
+  let subAgentBufferId: string | null = null;
+  let subAgentBufferItems: WorkItem[] = [];
+  let subAgentBufferRunning = false;
+  const subAgentGroups = new Map<
+    string,
+    Extract<WorkingGroup, { kind: "sub_agent" }>
+  >();
+
+  const flushThinking = () => {
+    if (thinkingBuffer.length === 0) return;
+    groups.push({ kind: "thinking", key: `thinking-${thinkingBuffer[0].itemId}`, items: thinkingBuffer });
+    thinkingBuffer = [];
+  };
+  const flushTools = () => {
+    if (toolBuffer.length === 0) return;
+    groups.push({
+      kind: "tools",
+      key: `tools-${toolBuffer[0].key}`,
+      entries: toolBuffer,
+      running: toolBuffer.some((entry) => entry.status === "running"),
+    });
+    toolBuffer = [];
+  };
+  const flushSubAgent = () => {
+    if (!subAgentBufferId || subAgentBufferItems.length === 0) return;
+    const group: Extract<WorkingGroup, { kind: "sub_agent" }> = {
+      kind: "sub_agent",
+      key: `sub-agent-${subAgentBufferId}-${subAgentBufferItems[0].itemId}`,
+      subAgentId: subAgentBufferId,
+      items: subAgentBufferItems,
+      running: subAgentBufferRunning,
+    };
+    groups.push(group);
+    subAgentGroups.set(subAgentBufferId, group);
+    subAgentBufferId = null;
+    subAgentBufferItems = [];
+    subAgentBufferRunning = false;
+  };
+
+  for (const item of items) {
+    if (showSubAgentCards && item.subAgentId) {
+      flushThinking();
+      flushTools();
+      const running = item.kind === "tool_group" && item.status === "running";
+      const existingGroup = subAgentGroups.get(item.subAgentId);
+      if (existingGroup) {
+        existingGroup.items = [...existingGroup.items, item];
+        existingGroup.running = existingGroup.running || running;
+        continue;
+      }
+      if (subAgentBufferId === item.subAgentId) {
+        subAgentBufferItems = [...subAgentBufferItems, item];
+        subAgentBufferRunning = subAgentBufferRunning || running;
+      } else {
+        flushSubAgent();
+        subAgentBufferId = item.subAgentId;
+        subAgentBufferItems = [item];
+        subAgentBufferRunning = running;
+      }
+      continue;
+    }
+    flushSubAgent();
+    if (item.kind === "thinking") {
+      flushTools();
+      thinkingBuffer.push(item);
+      continue;
+    }
+    if (item.kind === "message") {
+      continue;
+    }
+    flushThinking();
+    item.items.forEach((entry, index) => {
+      const label = toolNameFor(entry.metadata, item.label);
+      const status = toolItemStatus(entry) ?? item.status ?? null;
+      const category = categorizeTool(label);
+      toolBuffer.push({
+        key: `${item.itemId}-${index}`,
+        itemId: item.itemId,
+        label,
+        entry,
+        category,
+        status,
+      });
+    });
+  }
+  flushSubAgent();
+  flushThinking();
+  flushTools();
+  return groups;
+}
+
+function toolSubtitle(entry: ToolListEntry) {
+  const args = objectValue(entry.entry.metadata?.arguments);
+  const result = objectValue(entry.entry.metadata?.result);
+  return (
+    stringValue(entry.entry.metadata?.path)
+    ?? stringValue(result?.path)
+    ?? stringValue(args?.path)
+    ?? stringValue(entry.entry.metadata?.command)
+    ?? stringValue(args?.command)
+    ?? stringValue(result?.url)
+    ?? stringValue(args?.url)
+    ?? entry.entry.text.split("\n")[0]
+  );
+}
+
+function SubAgentCard({
+  group,
+  subAgents,
+  parentSessionId,
+}: {
+  group: Extract<WorkingGroup, { kind: "sub_agent" }>;
+  subAgents: Record<string, { title: string; status: string }>;
+  parentSessionId?: string;
+}) {
+  const navigate = useNavigate();
+  const agent = subAgents[group.subAgentId];
+  const status = agent?.status ?? (group.running ? "running" : "completed");
+  return (
+    <button
+      type="button"
+      className="working-items__sub-agent-card"
+      onClick={() => {
+        if (parentSessionId) {
+          void navigate(`/sessions/${encodeURIComponent(parentSessionId)}/sub-agents/${encodeURIComponent(group.subAgentId)}`);
+        }
+      }}
+      disabled={!parentSessionId}
+    >
+      <BotIcon />
+      <span className="working-items__sub-agent-main">
+        <span>{agent?.title ?? group.subAgentId}</span>
+        <span>Open read-only sub-agent session</span>
+      </span>
+      <Badge variant="outline">{status}</Badge>
+      {status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
+    </button>
+  );
+}
+
+function WorkingItemsPanel({
+  items,
+  subAgents,
+  closeSignal,
+  parentSessionId,
+  showSubAgentCards = true,
+}: {
+  items: WorkItem[];
+  subAgents: Record<string, { title: string; status: string }>;
+  closeSignal: string | null;
+  parentSessionId?: string;
+  showSubAgentCards?: boolean;
+}) {
+  const groups = useMemo(() => buildWorkingGroups(items, showSubAgentCards), [items, showSubAgentCards]);
+  const [openGroupsState, setOpenGroupsState] = useState<{
+    closeSignal: string | null;
+    groups: Record<string, boolean>;
+  }>({ closeSignal, groups: {} });
+  const [openToolsState, setOpenToolsState] = useState<{
+    closeSignal: string | null;
+    tools: Record<string, boolean>;
+  }>({ closeSignal, tools: {} });
+  const openGroups = openGroupsState.closeSignal === closeSignal
+    ? openGroupsState.groups
+    : {};
+  const openTools = openToolsState.closeSignal === closeSignal
+    ? openToolsState.tools
+    : {};
+
+  return (
+    <div className="working-items">
+      {groups.map((group) => {
+        if (group.kind === "sub_agent") {
+          return <SubAgentCard key={group.key} group={group} subAgents={subAgents} parentSessionId={parentSessionId} />;
+        }
+        const open = Boolean(openGroups[group.key]);
+        const isThinking = group.kind === "thinking";
+        const summary = isThinking
+          ? pluralize(group.items.length, "thinking block")
+          : summarizeCounts(group.entries);
+        return (
+          <Collapsible
+            key={group.key}
+            open={open}
+            onOpenChange={(nextOpen) => setOpenGroupsState((prev) => ({
+              closeSignal,
+              groups: {
+                ...(prev.closeSignal === closeSignal ? prev.groups : {}),
+                [group.key]: nextOpen,
+              },
+            }))}
+          >
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="working-items__group-trigger">
+                {isThinking ? <BrainIcon /> : null}
+                <ChevronRightIcon className="timeline-entry__chevron" />
+                <span>{isThinking ? "Thinking" : group.running ? "Using tools" : "Used tools"}</span>
+                <span className="working-items__summary">{summary}</span>
+                {group.kind === "tools" && group.running ? <span className="timeline-entry__running" aria-label="running" /> : null}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="working-items__level-2">
+                {isThinking
+                  ? group.items.map((item) => (
+                    <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
+                      <MarkdownContent content={item.content} />
+                    </div>
+                  ))
+                  : group.entries.map((entry) => {
+                    const toolOpen = Boolean(openTools[entry.key]);
+                    return (
+                      <Collapsible
+                        key={entry.key}
+                        open={toolOpen}
+                        onOpenChange={(nextOpen) => setOpenToolsState((prev) => ({
+                          closeSignal,
+                          tools: {
+                            ...(prev.closeSignal === closeSignal ? prev.tools : {}),
+                            [entry.key]: nextOpen,
+                          },
+                        }))}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
+                            <ChevronRightIcon className="timeline-entry__chevron" />
+                            <span className="working-items__tool-title">{entry.label}</span>
+                            <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
+                            {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="working-items__tool-detail">
+                            <ToolResult
+                              metadata={entry.entry.metadata}
+                              text={entry.entry.text}
+                              running={entry.status === "running"}
+                            />
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    );
+                  })}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        );
+      })}
+    </div>
+  );
 }
 
 /**
@@ -230,6 +577,8 @@ function WorkRun({
   phase,
   closeSignal,
   onUserOpen,
+  parentSessionId,
+  showSubAgentCards,
 }: {
   unit: Extract<RenderUnit, { kind: "work_run" }>;
   subAgents: Record<string, { title: string; status: string }>;
@@ -237,6 +586,8 @@ function WorkRun({
   phase: WorkRunPhase | null;
   closeSignal: string | null;
   onUserOpen?: (contentEl: HTMLElement | null) => void;
+  parentSessionId?: string;
+  showSubAgentCards?: boolean;
 }) {
   const agentSummary = formatAgentSummary(unit.subAgentIds, subAgents);
   const hasItems = unit.items.length > 0;
@@ -296,24 +647,13 @@ function WorkRun({
         {hasItems ? (
           <CollapsibleContent>
             <div className="timeline-entry__work-run-body" ref={contentRef}>
-              {unit.items.map((item) => (
-                <TimelineEntry
-                  key={item.itemId}
-                  item={item}
-                  subAgentTitle={
-                    item.subAgentId
-                      ? subAgents[item.subAgentId]?.title
-                      : undefined
-                  }
-                  subAgentStatus={
-                    item.subAgentId
-                      ? subAgents[item.subAgentId]?.status
-                      : undefined
-                  }
-                  closeSignal={closeSignal}
-                  bare
-                />
-              ))}
+              <WorkingItemsPanel
+                items={unit.items}
+                subAgents={subAgents}
+                closeSignal={closeSignal}
+                parentSessionId={parentSessionId}
+                showSubAgentCards={showSubAgentCards}
+              />
             </div>
           </CollapsibleContent>
         ) : null}
@@ -329,6 +669,8 @@ export function SessionTimeline({
   waitMessage,
   processing,
   itemsVersion,
+  parentSessionId,
+  showSubAgentCards = true,
 }: {
   items: TimelineItem[];
   subAgents: Record<string, { title: string; status: string }>;
@@ -336,12 +678,17 @@ export function SessionTimeline({
   waitMessage: string | null;
   processing: ProcessingState | null;
   itemsVersion: number;
+  parentSessionId?: string;
+  showSubAgentCards?: boolean;
 }) {
   const previousLengthRef = useRef<number | undefined>(undefined);
   const latestItem = items.at(-1);
   const latestItemIsUserMessage =
     latestItem?.kind === "message" && latestItem.role === "user";
-  const baseRenderUnits = useMemo(() => buildRenderUnits(items), [items]);
+  const baseRenderUnits = useMemo(
+    () => buildRenderUnits(items, { showSubAgentCards }),
+    [items, showSubAgentCards],
+  );
   const sessionIsActive = Boolean(processing?.active || waitMessage);
   const activePhase: WorkRunPhase | null = sessionIsActive
     ? processing?.phase ?? "active"
@@ -540,6 +887,8 @@ export function SessionTimeline({
               onUserOpen={
                 isActiveRunningUnit ? handleUserOpenCollapsible : undefined
               }
+              parentSessionId={parentSessionId}
+              showSubAgentCards={showSubAgentCards}
             />
           );
         })}

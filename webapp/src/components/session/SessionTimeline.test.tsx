@@ -4,9 +4,29 @@ import { SessionTimeline } from "./SessionTimeline";
 
 const EMPTY_DIFF_TEXT = "No diff content was provided for this operation.";
 
-function openWorking(index = 0) {
+const navigateMock = vi.hoisted(() => vi.fn());
+
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
+function openWorking(index = 0, expandInner = true) {
   const workingButton = screen.getAllByRole("button", { name: /Working/ })[index];
   fireEvent.click(workingButton);
+  if (expandInner) {
+    for (const groupButton of screen.queryAllByRole("button", { name: /Used tools|Using tools|Thinking/i })) {
+      fireEvent.click(groupButton);
+    }
+    for (const toolButton of screen.queryAllByRole("button").filter((button) =>
+      button.classList.contains("working-items__tool-trigger"),
+    )) {
+      fireEvent.click(toolButton);
+    }
+  }
   return workingButton;
 }
 
@@ -14,6 +34,7 @@ describe("SessionTimeline", () => {
   beforeEach(() => {
     vi.useRealTimers();
     HTMLElement.prototype.scrollTo = vi.fn();
+    navigateMock.mockReset();
   });
 
   it("shows the welcome screen for connected live sessions with no events yet", () => {
@@ -98,25 +119,67 @@ describe("SessionTimeline", () => {
     expect(workingButtons[0]).toHaveAccessibleName(/3 agents · Working/);
     expect(workingButtons[0]).toHaveTextContent(/3 agents\s*·\s*Working/);
 
-    openWorking();
+    openWorking(0, false);
 
-    expect(screen.getAllByText("Researcher · completed")).toHaveLength(2);
-    expect(screen.getByText("Designer · completed")).toBeInTheDocument();
-    expect(screen.getByText("Tester · completed")).toBeInTheDocument();
+    expect(screen.getAllByText("Researcher")).toHaveLength(1);
+    expect(screen.getByText("Designer")).toBeInTheDocument();
+    expect(screen.getByText("Tester")).toBeInTheDocument();
+    expect(screen.queryByText("Researcher plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("Designer inspected layout")).not.toBeInTheDocument();
 
-    const first = screen.getByText("Researcher plan");
-    const second = screen.getByText("Designer inspected layout");
-    const third = screen.getByText("Researcher synthesis");
-    const fourth = screen.getByText("Tester verified behavior");
+    const first = screen.getByText("Researcher");
+    const second = screen.getByText("Designer");
+    const third = screen.getByText("Tester");
     expect(first.compareDocumentPosition(second)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(second.compareDocumentPosition(third)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(third.compareDocumentPosition(fourth)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
+  });
+
+  it("renders working items as a strict three-level hierarchy", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tools",
+            status: "completed",
+            items: [
+              {
+                text: "file contents",
+                metadata: { tool_name: "read_file", arguments: { path: "README.md" }, result: { path: "README.md", content: "file contents" } },
+              },
+              {
+                text: "command output",
+                metadata: { tool_name: "shell", command: "bun run typecheck", result: { stdout: "ok", stderr: "", exit_code: 0 } },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
     );
+
+    openWorking(0, false);
+    expect(screen.getByRole("button", { name: /Used tools.*1 read, 1 shell/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("file contents")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Used tools/i }));
+    expect(screen.getByRole("button", { name: /read_file.*README.md/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /shell.*bun run typecheck/i })).toBeInTheDocument();
+    expect(screen.queryByText("file contents")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /read_file.*README.md/i }));
+    expect(screen.getByText("file contents")).toBeInTheDocument();
+    expect(screen.queryByText("ok")).not.toBeInTheDocument();
   });
 
   it("summarizes a single sub-agent in the collapsed Working header", () => {
@@ -155,6 +218,42 @@ describe("SessionTimeline", () => {
     const workingButton = screen.getByRole("button", { name: /Working/ });
     expect(workingButton).toHaveAccessibleName(/Researcher · Working/);
     expect(workingButton).toHaveTextContent(/Researcher\s*·\s*Working/);
+  });
+
+  it("opens a read-only child route from a sub-agent card", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "sub-message-1",
+            role: "assistant",
+            content: "Hidden sub-agent transcript",
+            markdown: true,
+            subAgentId: "subagent-researcher",
+          },
+        ]}
+        subAgents={{
+          "subagent-researcher": {
+            title: "Researcher",
+            status: "completed",
+          },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        parentSessionId="parent-session"
+      />,
+    );
+
+    openWorking(0, false);
+    expect(screen.queryByText("Hidden sub-agent transcript")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open read-only sub-agent session/i }));
+    expect(navigateMock).toHaveBeenCalledWith(
+      "/sessions/parent-session/sub-agents/subagent-researcher",
+    );
   });
 
   it("preserves user-authored line breaks in message text", () => {
@@ -305,7 +404,7 @@ describe("SessionTimeline", () => {
 
     openWorking();
 
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
     expect(screen.getByText("Updated")).toBeInTheDocument();
     expect(screen.getByText(/Old/).closest("code")?.textContent).toBe("[ ] Old");
     expect(screen.getByText(/New/).closest("code")?.textContent).toBe("[X] New");
@@ -396,8 +495,11 @@ describe("SessionTimeline", () => {
 
     openWorking();
 
-    const title = screen.getByText("TODO.md");
-    const card = title.closest(".git-diff-result");
+    const title = screen.getAllByText("TODO.md").find((element) =>
+      element.classList.contains("git-diff-result__title--deleted"),
+    );
+    expect(title).toBeDefined();
+    const card = title?.closest(".git-diff-result");
 
     expect(title).toHaveClass("git-diff-result__title--deleted");
     expect(card).toHaveAttribute("data-operation", "delete_file");
@@ -482,9 +584,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+    openWorking();
 
-    expect(screen.getByText("echo hello")).toBeInTheDocument();
+expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     expect(screen.getByText("Stdout")).toBeInTheDocument();
     expect(screen.getByText("hello")).toBeInTheDocument();
     expect(screen.getByText("call_shell_1")).toBeInTheDocument();
@@ -526,9 +628,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+    openWorking();
 
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
     expect(screen.getByText("lines 1-2 of 2")).toBeInTheDocument();
     expect(screen.getByText(/\[X\] Done/)).toBeInTheDocument();
   });
@@ -603,11 +705,11 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+    openWorking();
 
-    expect(screen.getByText("logo.jpg")).toBeInTheDocument();
+expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     expect(screen.getByText(/2.0 KB/)).toBeInTheDocument();
-    expect(screen.getByText("https://example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("https://example.com")[0]).toBeInTheDocument();
     expect(screen.getByText("# Example")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://example.com/docs");
     expect(screen.getByText("Review tests")).toBeInTheDocument();
@@ -881,13 +983,13 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    const workingButton = screen.getByRole("button", { name: /Working/ });
+    let workingButton = screen.getByRole("button", { name: /Working/ });
     expect(workingButton).toHaveAttribute("aria-expanded", "false");
 
-    fireEvent.click(workingButton);
+    workingButton = openWorking();
 
     expect(workingButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
 
     rerender(
       <SessionTimeline
@@ -984,7 +1086,7 @@ describe("SessionTimeline", () => {
 
     openWorking();
 
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
 
     fireEvent.scroll(scrollArea!);
 
@@ -1642,10 +1744,10 @@ describe("SessionTimeline", () => {
     expect(workingButton).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
 
-    fireEvent.click(workingButton);
+    workingButton = openWorking();
 
     expect(workingButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
     expect(screen.getByText("Updated")).toBeInTheDocument();
   });
 
@@ -1792,10 +1894,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    const firstWorkingButton = screen.getByRole("button", { name: /Working/ });
-    fireEvent.click(firstWorkingButton);
+    const firstWorkingButton = openWorking();
     expect(firstWorkingButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("first output")).toBeInTheDocument();
+expect(screen.getAllByText("first output")[0]).toBeInTheDocument();
 
     rerender(
       <SessionTimeline

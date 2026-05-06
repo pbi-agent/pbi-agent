@@ -347,6 +347,10 @@ function renderSessionRoute(route: string) {
         element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
       />
       <Route
+        path="/sessions/:sessionId/sub-agents/:subAgentId"
+        element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
+      />
+      <Route
         path="/sessions/:sessionId"
         element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
       />
@@ -393,6 +397,50 @@ describe("SessionPage", () => {
       makeLiveSession({ live_session_id: "live-question", session_id: "session-1" }),
     );
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
+  });
+
+  it("renders sub-agent routes as hidden read-only child sessions", async () => {
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessionIndex: { "session-1": getSavedSessionKey("session-1") },
+      sessionsByKey: {
+        [getSavedSessionKey("session-1")]: {
+          ...createEmptySessionState(),
+          key: getSavedSessionKey("session-1"),
+          sessionId: "session-1",
+          connection: "connected",
+          items: [
+            {
+              kind: "message",
+              itemId: "parent-msg",
+              role: "assistant",
+              content: "Parent only",
+              markdown: true,
+            },
+            {
+              kind: "message",
+              itemId: "sub-msg",
+              role: "assistant",
+              content: "Sub-agent only",
+              markdown: true,
+              subAgentId: "sub-1",
+            },
+          ],
+          subAgents: { "sub-1": { title: "Researcher", status: "completed" } },
+          itemsVersion: 1,
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await screen.findByText("Timeline 1");
+    expect(screen.queryByText("Composer images true")).not.toBeInTheDocument();
+    expect(screen.queryByText("Interactive")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to main session" })).toHaveAttribute(
+      "href",
+      "/sessions/session-1",
+    );
   });
 
   afterEach(() => {

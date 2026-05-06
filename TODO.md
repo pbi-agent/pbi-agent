@@ -1,4 +1,2 @@
-[X] Locate upload root usage in tests
-[X] Add pytest isolation for web uploads
-[X] Run focused validation
-[X] Update memory
+[X] Call sub-agent to summarize LICENSE
+[X] Report finding
