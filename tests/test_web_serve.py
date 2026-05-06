@@ -6062,6 +6062,7 @@ def test_get_session_detail_combines_completed_web_run_timelines(
                         "itemId": "thinking-1",
                         "title": "Thinking",
                         "content": "planning",
+                        "sub_agent_id": "subagent-1",
                     },
                     {
                         "kind": "tool_group",
@@ -6079,7 +6080,9 @@ def test_get_session_detail_combines_completed_web_run_timelines(
                         "markdown": True,
                     },
                 ],
-                "sub_agents": {},
+                "sub_agents": {
+                    "subagent-1": {"title": "Athena", "status": "completed"},
+                },
                 "last_event_seq": 10,
             },
         )
@@ -6122,6 +6125,7 @@ def test_get_session_detail_combines_completed_web_run_timelines(
                         "itemId": "thinking-1",
                         "title": "Thinking",
                         "content": "reviewing",
+                        "sub_agent_id": "subagent-1",
                     },
                     {
                         "kind": "message",
@@ -6132,7 +6136,9 @@ def test_get_session_detail_combines_completed_web_run_timelines(
                         "markdown": True,
                     },
                 ],
-                "sub_agents": {},
+                "sub_agents": {
+                    "subagent-1": {"title": "Dionysus", "status": "completed"},
+                },
                 "last_event_seq": 12,
             },
         )
@@ -6156,6 +6162,14 @@ def test_get_session_detail_combines_completed_web_run_timelines(
     assert payload["timeline"]["items"][1]["itemId"] == "first-web-run:thinking-1"
     assert payload["timeline"]["items"][2]["itemId"] == "first-web-run:tool-group-2"
     assert payload["timeline"]["items"][5]["itemId"] == "second-web-run:thinking-1"
+    assert payload["timeline"]["items"][1]["sub_agent_id"] == "first-web-run:subagent-1"
+    assert (
+        payload["timeline"]["items"][5]["sub_agent_id"] == "second-web-run:subagent-1"
+    )
+    assert payload["timeline"]["sub_agents"] == {
+        "first-web-run:subagent-1": {"title": "Athena", "status": "completed"},
+        "second-web-run:subagent-1": {"title": "Dionysus", "status": "completed"},
+    }
 
 
 def test_set_saved_session_profile_updates_dormant_session_without_starting_run(

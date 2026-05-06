@@ -1,3 +1,3 @@
-[X] Update compact tool row labels to single words
-[X] Validate frontend tests/build surface
+[X] Fix sub-agent drilldown filtering namespace
+[X] Validate focused frontend/backend surface
 [X] Update task memory
