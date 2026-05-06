@@ -69,7 +69,7 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 - `.agents/agents/<agent-name>.md` adds project-local sub-agents that can be selected through the `sub_agent` tool.
 - `.agents/mcp.json` declares MCP servers whose tools are exposed to the model at startup.
 
-See the full [Customization guide](https://pbi-agent.github.io/pbi-agent/guide/customization) for examples and behavior details.
+See the full [Customization guide](https://pbi-agent.github.io/pbi-agent/customization) for examples and behavior details.
 
 ## Common Commands
 
