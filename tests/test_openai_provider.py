@@ -33,6 +33,8 @@ from pbi_agent.providers.chatgpt_codex_backend import (
     CHATGPT_ORIGINATOR,
     CHATGPT_TURN_STATE_HEADER,
     CHATGPT_WEBSOCKET_BETA_HEADER,
+    _WS_OPCODE_PING,
+    _WS_OPCODE_PONG,
     _WS_OPCODE_TEXT,
     ChatGPTCodexBackend,
     ChatGPTCodexWebSocketError,
@@ -1067,6 +1069,28 @@ def test_chatgpt_codex_websocket_send_failure_is_retryable() -> None:
     assert error.__cause__ is send_error
     assert websocket.closed is True
     websocket._recv_frame.assert_not_called()
+    websocket._sock.close.assert_called_once()
+
+
+def test_chatgpt_codex_websocket_ping_pong_send_failure_is_retryable() -> None:
+    websocket = ResponsesWebSocket(Mock(), response_headers={})
+    send_error = ssl.SSLEOFError("EOF occurred in violation of protocol")
+    websocket._send_text = Mock()
+    websocket._recv_frame = Mock(return_value=(_WS_OPCODE_PING, b"ping"))
+    websocket._send_frame = Mock(side_effect=send_error)
+
+    with pytest.raises(ChatGPTCodexWebSocketError) as exc_info:
+        websocket.send_response_create(
+            {"model": "gpt-5", "input": [], "stream": True},
+            timeout=30,
+        )
+
+    error = exc_info.value
+    assert error.retryable is True
+    assert "WebSocket send failed" in str(error)
+    assert error.__cause__ is send_error
+    assert websocket.closed is True
+    websocket._send_frame.assert_any_call(_WS_OPCODE_PONG, b"ping")
     websocket._sock.close.assert_called_once()
 
 
