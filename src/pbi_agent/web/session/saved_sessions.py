@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+import threading
+from typing import TYPE_CHECKING, Any, cast
 
+from pbi_agent.config import ResolvedRuntime
 from pbi_agent.session_store import KanbanTaskRecord, SessionRecord, SessionStore
 from pbi_agent.web.session.serializers import (
     _RUN_RECORD_STATUSES,
@@ -16,8 +18,42 @@ from pbi_agent.web.session.serializers import (
 )
 from pbi_agent.web.uploads import delete_uploaded_images
 
+if TYPE_CHECKING:
+    from pbi_agent.web.session.state import EventStream, LiveSessionState
+
 
 class SavedSessionsMixin:
+    _app_stream: EventStream
+    _directory_key: str
+    _lock: threading.Lock
+    _running_task_ids: set[str]
+
+    if TYPE_CHECKING:
+
+        def _find_live_session_for_saved_session(
+            self,
+            _saved_session_id: str,
+        ) -> LiveSessionState | None: ...
+
+        def _find_live_session_for_saved_session_locked(
+            self,
+            _saved_session_id: str,
+        ) -> LiveSessionState | None: ...
+
+        def _publish_task_updated(self, record: KanbanTaskRecord) -> None: ...
+
+        def _resolve_runtime(self, profile_id: str | None) -> ResolvedRuntime: ...
+
+        def _serialize_live_session(
+            self,
+            live_session: LiveSessionState,
+        ) -> dict[str, Any]: ...
+
+        def _serialize_live_snapshot(
+            self,
+            live_session: LiveSessionState,
+        ) -> dict[str, Any]: ...
+
     def list_sessions(self, limit: int = 30) -> list[dict[str, Any]]:
         with SessionStore() as store:
             sessions = store.list_sessions(
@@ -222,7 +258,7 @@ class SavedSessionsMixin:
             run_dict = dict(row)
             session_title = run_dict.pop("session_title", None)
             # Deserialise metadata_json → metadata
-            raw_meta = run_dict.pop("metadata_json", "{}")
+            raw_meta = cast(str | None, run_dict.pop("metadata_json", "{}"))
             run_dict["metadata"] = _deserialize_json_field(raw_meta)
             if run_dict.get("status") not in _RUN_RECORD_STATUSES:
                 run_dict["status"] = (

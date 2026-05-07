@@ -7,7 +7,7 @@ from pathlib import Path
 from .shared import _workspace_directory_for_args
 
 
-def _handle_skills_command(args: argparse.Namespace) -> int:
+def _handle_skills_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     if args.skills_action == "list":
         return _handle_skills_list_command(args)
     if args.skills_action == "add":
@@ -56,7 +56,7 @@ def _handle_skills_add_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_commands_command(args: argparse.Namespace) -> int:
+def _handle_commands_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     if args.commands_action == "list":
         return _handle_commands_list_command(args)
     if args.commands_action == "add":
@@ -105,7 +105,7 @@ def _handle_commands_add_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_agents_command(args: argparse.Namespace) -> int:
+def _handle_agents_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     if args.agents_action == "list":
         return _handle_agents_list_command(args)
     if args.agents_action == "add":
@@ -153,7 +153,7 @@ def _handle_agents_add_command(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_mcp_flag(args: argparse.Namespace) -> int:
+def _handle_mcp_flag(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     from pbi_agent.mcp import discover_mcp_server_configs
     from rich.console import Console
     from rich.table import Table
@@ -181,7 +181,7 @@ def _handle_mcp_flag(args: argparse.Namespace) -> int:
     return 0
 
 
-def _handle_agents_flag(args: argparse.Namespace) -> int:
+def _handle_agents_flag(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
     from rich.console import Console
     from rich.table import Table

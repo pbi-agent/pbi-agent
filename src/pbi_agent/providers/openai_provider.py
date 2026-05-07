@@ -1564,15 +1564,16 @@ def _get_or_create_sse_item(
         item_indexes[item_id] = output_index
     item = output_items.get(output_index)
     if item is None:
-        item = {"id": item_id, "type": item_type}
+        new_item: dict[str, Any] = {"id": item_id, "type": item_type}
         if item_type == "message":
-            item["role"] = "assistant"
-            item["content"] = []
+            new_item["role"] = "assistant"
+            new_item["content"] = []
         elif item_type == "reasoning":
-            item["summary"] = []
+            new_item["summary"] = []
         elif item_type == "function_call":
-            item["arguments"] = ""
-        output_items[output_index] = item
+            new_item["arguments"] = ""
+        output_items[output_index] = new_item
+        return new_item
     return item
 
 

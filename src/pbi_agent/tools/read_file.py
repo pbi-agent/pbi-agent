@@ -215,16 +215,16 @@ def _handle_excel_workbook(target_path: Path) -> dict[str, Any]:
         }
 
     workbook = _read_excel_workbook(target_path)
-    sheets: list[dict[str, Any]] = []
+    workbook_sheets: list[dict[str, Any]] = []
 
     for sheet_name, dataframe in workbook.items():
         sheet_result = _summarize_dataframe(dataframe)
         sheet_result["name"] = sheet_name
-        sheets.append(sheet_result)
+        workbook_sheets.append(sheet_result)
 
     return {
-        "sheet_count": len(sheets),
-        "sheets": sheets,
+        "sheet_count": len(workbook_sheets),
+        "sheets": workbook_sheets,
     }
 
 

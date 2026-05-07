@@ -12,7 +12,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 
 from pbi_agent import __version__
 from pbi_agent.agent.system_prompt import get_system_prompt
@@ -704,7 +704,7 @@ def _display_web_search_result(
                         "url": source.url,
                         "snippet": source.snippet,
                     }
-                    for source in sources
+                    for source in cast(list[WebSearchSource], sources)
                 ]
             ),
         },

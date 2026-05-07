@@ -195,11 +195,12 @@ def resolve_github_source_ref(
 ) -> str:
     token = _lookup_github_token()
     if source.tree_parts:
-        return _resolve_github_tree_selection_from_api(
+        selection = _resolve_github_tree_selection_from_api(
             source,
             token=token,
             source_label=source_label,
-        ).ref
+        )
+        return _require_resolved_github_ref(selection, source=source)
     return _resolve_default_branch_via_api(
         source,
         token=token,
@@ -258,9 +259,10 @@ def _materialize_github_archive(
         token=token,
         source_label=source_label,
     )
+    selection_ref = _require_resolved_github_ref(selection, source=source)
     archive_url = (
         f"{_GITHUB_API_ROOT}/repos/{source.owner}/{source.repo}/zipball/"
-        f"{urllib.parse.quote(selection.ref, safe='')}"
+        f"{urllib.parse.quote(selection_ref, safe='')}"
     )
     try:
         archive_bytes = _read_github_bytes(
@@ -322,6 +324,18 @@ def _materialize_github_with_git(
         resolved_root=resolved_root,
         ref=selection.ref,
     )
+
+
+def _require_resolved_github_ref(
+    selection: ResolvedGitHubSelection,
+    *,
+    source: GitHubProjectSource,
+) -> str:
+    if selection.ref is None:
+        raise ProjectSourceError(
+            f"Could not resolve a GitHub ref for {source.owner_repo}."
+        )
+    return selection.ref
 
 
 def _resolve_github_selection_from_api(

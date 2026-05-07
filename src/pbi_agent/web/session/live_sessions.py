@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from pathlib import Path
 from typing import Any
 
 from pbi_agent.agent.error_formatting import format_user_facing_error
@@ -45,6 +46,21 @@ from pbi_agent.web.uploads import (
 
 
 class LiveSessionsMixin:
+    _app_stream: EventStream
+    _directory_key: str
+    _ensure_worker_creation_allowed_locked: Any
+    _finalize_live_session_locked: Any
+    _live_sessions: dict[str, LiveSessionState]
+    _lock: threading.Lock
+    _publish_live_event: Any
+    _require_saved_session: Any
+    _resolve_runtime: Any
+    _resolve_saved_session_runtime: Any
+    _run_session_worker: Any
+    _update_saved_session_runtime: Any
+    _workspace_context: Any
+    _workspace_root: Path
+
     def list_live_sessions(self) -> list[dict[str, Any]]:
         with self._lock:
             sessions = list(self._live_sessions.values())

@@ -17,6 +17,8 @@ from pbi_agent.display.protocol import (
     DisplayProtocol,
     PendingToolCall,
     PendingToolGroup,
+    PendingUserQuestion,
+    UserQuestionAnswer,
 )
 from pbi_agent.display.formatting import (
     REDACTED_THINKING_NOTICE,
@@ -84,6 +86,18 @@ class ConsoleDisplay(DisplayProtocol):
     def request_shutdown(self) -> None:
         return None
 
+    def request_interrupt(
+        self, *, item_id: str | None = None, input_text: str | None = None
+    ) -> None:
+        del item_id, input_text
+        return None
+
+    def clear_interrupt(self) -> None:
+        return None
+
+    def interrupt_requested(self) -> bool:
+        return False
+
     def bind_session(self, session_id: str | None) -> None:
         del session_id
 
@@ -114,6 +128,12 @@ class ConsoleDisplay(DisplayProtocol):
             "ConsoleDisplay does not support interactive new-session requests."
         )
 
+    def ask_user_questions(
+        self, questions: list[PendingUserQuestion]
+    ) -> list[UserQuestionAnswer]:
+        del questions
+        return []
+
     def reset_session(self) -> None:
         self._stop_spinner()
         self._tool_group.reset()
@@ -129,7 +149,8 @@ class ConsoleDisplay(DisplayProtocol):
     ) -> DisplayProtocol:
         from pbi_agent.display.console_sub_agent_display import ConsoleSubAgentDisplay
 
-        return ConsoleSubAgentDisplay(
+        display_class: Any = ConsoleSubAgentDisplay
+        return display_class(
             parent=self,
             task_instruction=task_instruction,
             reasoning_effort=reasoning_effort,

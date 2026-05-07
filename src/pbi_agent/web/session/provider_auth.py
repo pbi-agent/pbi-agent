@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent.auth.browser_callback import (
     BrowserAuthCallbackListener,
@@ -15,6 +15,7 @@ from pbi_agent.auth.models import (
     AUTH_FLOW_STATUS_COMPLETED,
     AUTH_FLOW_STATUS_FAILED,
     AUTH_FLOW_STATUS_PENDING,
+    StoredAuthSession,
 )
 from pbi_agent.auth.service import (
     complete_provider_browser_auth,
@@ -27,13 +28,35 @@ from pbi_agent.auth.service import (
     start_provider_device_auth,
 )
 from pbi_agent.auth.usage_limits import get_provider_usage_limits
-from pbi_agent.config import ConfigError, load_internal_config
+from pbi_agent.config import (
+    ConfigError,
+    InternalConfig,
+    ProviderConfig,
+    load_internal_config,
+)
 from pbi_agent.web.session.state import PendingProviderAuthFlow, _now_iso
 
 _PROVIDER_AUTH_BROWSER_FLOW_TIMEOUT_SECS = 5 * 60
 
 
 class ProviderAuthMixin:
+    _lock: Any
+    _provider_auth_flows: dict[str, PendingProviderAuthFlow]
+
+    if TYPE_CHECKING:
+
+        def _require_provider(
+            self, config: InternalConfig, provider_id: str
+        ) -> ProviderConfig: ...
+
+        def _provider_view(self, provider: ProviderConfig) -> dict[str, Any]: ...
+
+        def _auth_status_view(self, status: Any) -> dict[str, Any]: ...
+
+        def _auth_session_view(
+            self, session: StoredAuthSession | None
+        ) -> dict[str, Any] | None: ...
+
     def get_provider_auth_status(self, provider_id: str) -> dict[str, Any]:
         config = load_internal_config()
         provider = self._require_provider(config, provider_id)

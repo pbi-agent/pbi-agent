@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from pbi_agent.auth.models import AUTH_MODE_API_KEY, StoredAuthSession
@@ -47,9 +49,16 @@ from pbi_agent.web.session.serializers import (
     _serialize_saved_session_runtime,
     _serialize_session,
 )
+from pbi_agent.web.session.state import EventStream
 
 
 class ConfigurationMixin:
+    _app_stream: EventStream
+    _default_runtime: ResolvedRuntime
+    _directory_key: str
+    _runtime_args: argparse.Namespace | None
+    _workspace_root: Path
+
     def config_bootstrap(self) -> dict[str, Any]:
         config, revision = load_internal_config_snapshot()
         return {

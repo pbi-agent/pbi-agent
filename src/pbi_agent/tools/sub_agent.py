@@ -99,7 +99,31 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             },
         }
 
-    if any(value is None for value in (settings, display, session_usage, turn_usage)):
+    if settings is None:
+        return {
+            "status": "failed",
+            "error": {
+                "type": "invalid_runtime_context",
+                "message": "sub_agent requires runtime settings, display, session_usage, and turn_usage context.",
+            },
+        }
+    if display is None:
+        return {
+            "status": "failed",
+            "error": {
+                "type": "invalid_runtime_context",
+                "message": "sub_agent requires runtime settings, display, session_usage, and turn_usage context.",
+            },
+        }
+    if session_usage is None:
+        return {
+            "status": "failed",
+            "error": {
+                "type": "invalid_runtime_context",
+                "message": "sub_agent requires runtime settings, display, session_usage, and turn_usage context.",
+            },
+        }
+    if turn_usage is None:
         return {
             "status": "failed",
             "error": {

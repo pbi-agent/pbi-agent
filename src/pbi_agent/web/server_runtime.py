@@ -23,7 +23,7 @@ class PBIWebServer:
     def __init__(
         self,
         *,
-        settings: Settings,
+        settings: Settings | ResolvedRuntime,
         runtime_args: argparse.Namespace | None = None,
         host: str = "127.0.0.1",
         port: int = DEFAULT_WEB_PORT,

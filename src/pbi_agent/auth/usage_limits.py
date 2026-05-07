@@ -331,13 +331,14 @@ def _copilot_legacy_buckets(
         if total is None or remaining is None:
             continue
         remaining_percent = _clamp_percent((remaining / total) * 100 if total else 0)
+        used_percent = None if remaining_percent is None else 100 - remaining_percent
         bucket = UsageLimitBucket(
             id=key,
             label=label,
             windows=[
                 UsageLimitWindow(
                     name="monthly",
-                    used_percent=100 - remaining_percent,
+                    used_percent=used_percent,
                     remaining_percent=remaining_percent,
                     reset_at_iso=reset_at_iso,
                     used_requests=total - remaining,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from typing import Any
 
 from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.agent.session import SessionTurnInterrupted, run_session_loop
@@ -25,6 +26,33 @@ _TASK_FINALIZATION_PERSISTENCE_FAILED_MESSAGE = (
 
 
 class WorkersMixin:
+    _directory_key: str
+    _lease_stop: Any
+    _lease_thread: threading.Thread | None
+    _live_sessions: Any
+    _lock: Any
+    _manager_owner_id: str
+    _provider_auth_flows: Any
+    _running_task_ids: set[str]
+    _shutdown_interrupted_task_ids: set[str]
+    _shutdown_requested: bool
+    _started: bool
+    _task_workers: dict[str, threading.Thread]
+    _workspace_root: Any
+    _bind_live_session: Any
+    _cancel_provider_auth_flow_browser_timeout: Any
+    _next_board_stage_id: Any
+    _persist_task_user_prompt: Any
+    _publish_live_event: Any
+    _publish_live_session_lifecycle: Any
+    _publish_persisted_user_message: Any
+    _publish_task_updated: Any
+    _resolve_task_runtime: Any
+    _should_auto_start_stage: Any
+    _shutdown_provider_auth_flow_browser_listener: Any
+    _task_prompt_for_run: Any
+    refresh_file_mentions_cache: Any
+
     def _ensure_worker_creation_allowed_locked(self) -> None:
         if self._shutdown_requested:
             raise RuntimeError("Manager shutdown is in progress.")
@@ -254,7 +282,7 @@ class WorkersMixin:
                     replay_history=False,
                 )
                 if task_id in self._shutdown_interrupted_task_ids:
-                    raise SessionTurnInterrupted(_SHUTDOWN_INTERRUPTED_MESSAGE)
+                    raise SessionTurnInterrupted(_SHUTDOWN_INTERRUPTED_MESSAGE)  # pyright: ignore[reportCallIssue]
                 current_user_message_id = None
                 is_initial_worker_turn = False
                 if live_session is not None:

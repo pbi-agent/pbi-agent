@@ -1408,7 +1408,9 @@ def _resolved_profile_id(
     provider_kind: str,
     settings: Settings,
 ) -> str | None:
-    if selected_profile is None or resolved_provider_id != selected_profile.provider_id:
+    if selected_profile is None or resolved_provider_id is None:
+        return None
+    if resolved_provider_id != selected_profile.provider_id:
         return None
     concrete_profile = replace(
         _concrete_profile_for_settings(
