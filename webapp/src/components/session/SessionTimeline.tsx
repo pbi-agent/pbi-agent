@@ -942,6 +942,8 @@ export function SessionTimeline({
   const latestItem = visibleItems.at(-1);
   const latestItemIsUserMessage =
     latestItem?.kind === "message" && latestItem.role === "user";
+  const latestUserMessageHasImages =
+    latestItemIsUserMessage && Boolean(latestItem.imageAttachments?.length);
   const baseRenderUnits = useMemo(
     () => buildRenderUnits(visibleItems, { showSubAgentCards }),
     [visibleItems, showSubAgentCards],
@@ -1001,6 +1003,23 @@ export function SessionTimeline({
       markProgrammaticScroll();
       container.scrollTo({
         top: Math.max(target.offsetTop - offset, 0),
+        behavior: "instant",
+      });
+    },
+    [markProgrammaticScroll],
+  );
+
+  const scrollToTargetBottomIfNeeded = useCallback(
+    (container: HTMLElement, target: HTMLElement) => {
+      if (!container.isConnected || !target.isConnected) return;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const delta = targetRect.bottom - containerRect.bottom;
+      if (delta <= 0) return;
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      markProgrammaticScroll();
+      container.scrollTo({
+        top: Math.min(container.scrollTop + delta, maxScrollTop),
         behavior: "instant",
       });
     },
@@ -1088,7 +1107,11 @@ export function SessionTimeline({
         // Always scroll to user messages
         if (target) {
           void waitForImages(container).then(() => {
-            scrollToTarget(container, target, USER_MESSAGE_TOP_OFFSET);
+            if (latestUserMessageHasImages) {
+              scrollToTargetBottomIfNeeded(container, target);
+            } else {
+              scrollToTarget(container, target, USER_MESSAGE_TOP_OFFSET);
+            }
           });
         }
         userScrolledRef.current = false;
@@ -1111,7 +1134,7 @@ export function SessionTimeline({
         setShowNewMessages(true);
       }
     }
-  }, [containerRef, itemsVersion, latestRawItem, visibleItemsChangeKey, visibleItems.length, latestItem, latestItemIsUserMessage, userScrolledRef, setShowNewMessages, scrollToTarget, markProgrammaticScroll]);
+  }, [containerRef, itemsVersion, latestRawItem, visibleItemsChangeKey, visibleItems.length, latestItem, latestItemIsUserMessage, latestUserMessageHasImages, userScrolledRef, setShowNewMessages, scrollToTarget, scrollToTargetBottomIfNeeded, markProgrammaticScroll]);
 
   if (visibleItems.length === 0 && connection === "connected" && !sessionIsActive) {
     return (

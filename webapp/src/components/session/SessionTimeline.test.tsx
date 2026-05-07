@@ -1505,6 +1505,223 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     expect(screen.queryByText("New messages below")).not.toBeInTheDocument();
   });
 
+  it("top-aligns newly sent text-only user messages", async () => {
+    const { container, rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Ready.",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    expect(scrollArea).not.toBeNull();
+    Object.defineProperties(scrollArea!, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1200 },
+      scrollTop: { configurable: true, writable: true, value: 500 },
+    });
+    const scrollSpy = vi.spyOn(scrollArea!, "scrollTo");
+    scrollSpy.mockClear();
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Ready.",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={2}
+      />,
+    );
+
+    const userEntry = container.querySelector<HTMLElement>('[data-timeline-item-id="user-1"]');
+    expect(userEntry).not.toBeNull();
+    Object.defineProperty(userEntry!, "offsetTop", {
+      configurable: true,
+      value: 650,
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalledWith({
+        top: 642,
+        behavior: "instant",
+      });
+    });
+  });
+
+  it("keeps the bottom of newly sent image user messages visible without jumping upward", async () => {
+    const originalImageComplete = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype,
+      "complete",
+    );
+    let rectSpy: ReturnType<typeof vi.spyOn> | undefined;
+    Object.defineProperty(HTMLImageElement.prototype, "complete", {
+      configurable: true,
+      get: () => false,
+    });
+
+    const { container, rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Ready.",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    expect(scrollArea).not.toBeNull();
+    Object.defineProperties(scrollArea!, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1400 },
+      scrollTop: { configurable: true, writable: true, value: 600 },
+    });
+    const scrollSpy = vi.spyOn(scrollArea!, "scrollTo");
+    scrollSpy.mockClear();
+
+    try {
+      rerender(
+        <SessionTimeline
+          items={[
+            {
+              kind: "message",
+              itemId: "assistant-1",
+              role: "assistant",
+              content: "Ready.",
+              markdown: false,
+            },
+            {
+              kind: "message",
+              itemId: "user-1",
+              role: "user",
+              content: "Describe this image",
+              markdown: false,
+              imageAttachments: [
+                {
+                  upload_id: "upload-1",
+                  name: "tall.png",
+                  mime_type: "image/png",
+                  byte_count: 1234,
+                  preview_url: "/uploads/upload-1/preview",
+                },
+              ],
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={null}
+          itemsVersion={2}
+        />,
+      );
+
+      const userEntry = container.querySelector<HTMLElement>('[data-timeline-item-id="user-1"]');
+      const image = screen.getByRole("img", { name: "tall.png" });
+      expect(userEntry).not.toBeNull();
+      Object.defineProperty(userEntry!, "offsetTop", {
+        configurable: true,
+        value: 200,
+      });
+      rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+      rectSpy.mockImplementation(function getMockRect(this: HTMLElement) {
+        if (this === scrollArea) {
+          return {
+            x: 0,
+            y: 0,
+            top: 0,
+            right: 400,
+            bottom: 400,
+            left: 0,
+            width: 400,
+            height: 400,
+            toJSON: () => ({}),
+          };
+        }
+        if (this === userEntry) {
+          return {
+            x: 0,
+            y: 0,
+            top: 0,
+            right: 400,
+            bottom: 700,
+            left: 0,
+            width: 400,
+            height: 700,
+            toJSON: () => ({}),
+          };
+        }
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          width: 0,
+          height: 0,
+          toJSON: () => ({}),
+        };
+      });
+
+      fireEvent.load(image);
+
+      await waitFor(() => {
+        expect(scrollSpy).toHaveBeenCalledWith({
+          top: 900,
+          behavior: "instant",
+        });
+      });
+      expect(scrollSpy).not.toHaveBeenCalledWith({
+        top: 192,
+        behavior: "instant",
+      });
+    } finally {
+      rectSpy?.mockRestore();
+      if (originalImageComplete) {
+        Object.defineProperty(HTMLImageElement.prototype, "complete", originalImageComplete);
+      } else {
+        delete (HTMLImageElement.prototype as { complete?: boolean }).complete;
+      }
+    }
+  });
+
   it("color-codes the active Working header for tool_execution phase", () => {
     render(
       <SessionTimeline
