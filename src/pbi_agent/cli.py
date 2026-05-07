@@ -96,6 +96,13 @@ SANDBOX_WORKSPACE = "/workspace"
 SANDBOX_HOME = "/home/pbi"
 SANDBOX_CONFIG_VOLUME_PREFIX = "pbi-agent-sandbox-config"
 SANDBOX_HOME_VOLUME_PREFIX = "pbi-agent-sandbox-home"
+SANDBOX_HOST_GIT_PATHS = (
+    (Path(".gitconfig"), f"{SANDBOX_HOME}/.gitconfig"),
+    (Path(".git-credentials"), f"{SANDBOX_HOME}/.git-credentials"),
+    (Path(".config/git"), f"{SANDBOX_HOME}/.config/git"),
+    (Path(".config/gh"), f"{SANDBOX_HOME}/.config/gh"),
+    (Path(".ssh"), f"{SANDBOX_HOME}/.ssh"),
+)
 WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS = 20.0
 WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS = 10.0
 WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS = 0.1
@@ -1652,6 +1659,8 @@ def _build_sandbox_run_command(
         "--tmpfs",
         f"{SANDBOX_HOME}/.cache:rw,noexec,nosuid,uid=1000,gid=1000,mode=755,size=512m",
     ]
+    for mount in _sandbox_host_git_mounts():
+        command.extend(["--mount", mount])
     if getattr(args, "detach", False):
         command.append("--detach")
     elif sys.stdin.isatty() and sys.stdout.isatty():
@@ -1715,8 +1724,12 @@ def _sandbox_home_volume(workspace: Path) -> str:
     return f"{SANDBOX_HOME_VOLUME_PREFIX}-{_sandbox_workspace_id(workspace)}"
 
 
+def _sandbox_host_home_dir() -> Path:
+    return Path.home()
+
+
 def _sandbox_host_config_dir() -> Path:
-    return Path.home() / ".pbi-agent"
+    return _sandbox_host_home_dir() / ".pbi-agent"
 
 
 def _sandbox_home_mount(workspace: Path) -> str:
@@ -1728,6 +1741,19 @@ def _sandbox_config_mount(workspace: Path) -> str:
     host_config_dir = _sandbox_host_config_dir()
     host_config_dir.mkdir(parents=True, exist_ok=True)
     return f"type=bind,source={host_config_dir},target={SANDBOX_HOME}/.pbi-agent"
+
+
+def _sandbox_host_git_mounts() -> list[str]:
+    host_home = _sandbox_host_home_dir()
+    mounts: list[str] = []
+    for relative_source, container_target in SANDBOX_HOST_GIT_PATHS:
+        host_source = host_home / relative_source
+        if host_source.is_file() or host_source.is_dir():
+            mounts.append(
+                f"type=bind,source={host_source.resolve()},"
+                f"target={container_target},readonly"
+            )
+    return mounts
 
 
 def _sandbox_workspace_mount(

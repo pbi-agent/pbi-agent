@@ -752,6 +752,113 @@ class DefaultWebCommandTests(unittest.TestCase):
             )
             self.assertTrue(host_config_dir.is_dir())
 
+    def test_build_sandbox_run_command_mounts_host_git_account_files(
+        self,
+    ) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["sandbox", "run", "--prompt", "hello"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir) / "repo"
+            workspace.mkdir()
+            host_home = Path(tmpdir) / "home"
+            host_home.mkdir()
+            (host_home / ".gitconfig").write_text("[user]\n", encoding="utf-8")
+            (host_home / ".git-credentials").write_text(
+                "https://token@example.invalid\n",
+                encoding="utf-8",
+            )
+            git_config_dir = host_home / ".config" / "git"
+            git_config_dir.mkdir(parents=True)
+            (git_config_dir / "config").write_text("[credential]\n", encoding="utf-8")
+            gh_config_dir = host_home / ".config" / "gh"
+            gh_config_dir.mkdir()
+            (gh_config_dir / "hosts.yml").write_text("github.com:\n", encoding="utf-8")
+            ssh_dir = host_home / ".ssh"
+            ssh_dir.mkdir()
+            (ssh_dir / "config").write_text("Host github.com\n", encoding="utf-8")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(workspace)
+                with patch(
+                    "pbi_agent.cli._sandbox_host_home_dir",
+                    return_value=host_home,
+                ):
+                    command, _container_env = cli._build_sandbox_run_command(
+                        args,
+                        "sandbox:test",
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+        mounts = [
+            command[index + 1]
+            for index, value in enumerate(command)
+            if value == "--mount"
+        ]
+        self.assertIn(
+            f"type=bind,source={(host_home / '.gitconfig').resolve()},"
+            f"target={cli.SANDBOX_HOME}/.gitconfig,readonly",
+            mounts,
+        )
+        self.assertIn(
+            f"type=bind,source={(host_home / '.git-credentials').resolve()},"
+            f"target={cli.SANDBOX_HOME}/.git-credentials,readonly",
+            mounts,
+        )
+        self.assertIn(
+            f"type=bind,source={git_config_dir.resolve()},"
+            f"target={cli.SANDBOX_HOME}/.config/git,readonly",
+            mounts,
+        )
+        self.assertIn(
+            f"type=bind,source={gh_config_dir.resolve()},"
+            f"target={cli.SANDBOX_HOME}/.config/gh,readonly",
+            mounts,
+        )
+        self.assertIn(
+            f"type=bind,source={ssh_dir.resolve()},"
+            f"target={cli.SANDBOX_HOME}/.ssh,readonly",
+            mounts,
+        )
+
+    def test_build_sandbox_run_command_skips_missing_host_git_account_files(
+        self,
+    ) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["sandbox", "run", "--prompt", "hello"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir) / "repo"
+            workspace.mkdir()
+            host_home = Path(tmpdir) / "home"
+            host_home.mkdir()
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(workspace)
+                with patch(
+                    "pbi_agent.cli._sandbox_host_home_dir",
+                    return_value=host_home,
+                ):
+                    command, _container_env = cli._build_sandbox_run_command(
+                        args,
+                        "sandbox:test",
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+        mounts = [
+            command[index + 1]
+            for index, value in enumerate(command)
+            if value == "--mount"
+        ]
+        mount_text = " ".join(mounts)
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.gitconfig", mount_text)
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.git-credentials", mount_text)
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.config/git", mount_text)
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.config/gh", mount_text)
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.ssh", mount_text)
+
     def test_handle_sandbox_web_opens_browser_from_host(self) -> None:
         parser = cli.build_parser()
         args = parser.parse_args(["sandbox", "web", "--port", "9001"])

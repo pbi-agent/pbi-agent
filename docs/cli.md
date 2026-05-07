@@ -288,6 +288,8 @@ Run the whole agent inside a Docker Desktop Linux container with the current rep
 
 The internal `/workspace/<id>` path is used only for execution inside the container. Workspace identity and the web UI workspace label use the real host path, so the same folder has the same history and board with or without sandbox.
 
+When available, standard host Git and GitHub account files are mounted read-only into the sandbox user's home: `~/.gitconfig`, `~/.config/git`, `~/.git-credentials`, `~/.ssh`, and `~/.config/gh`. This lets sandbox Git commands reuse the user's normal identity and common GitHub auth setup without exposing the whole host home directory.
+
 ```bash
 pbi-agent sandbox web
 pbi-agent sandbox -d web

@@ -92,6 +92,10 @@ pbi-agent sandbox run --prompt "Inspect this package" --project-dir packages/api
 
 The sandbox wrapper passes through `PBI_AGENT_*` variables and the provider key variables used by pbi-agent, such as `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `ANTHROPIC_API_KEY`.
 
+For Git and GitHub access, the sandbox also reuses standard host account files when they exist by mounting them read-only into the container user's home: `~/.gitconfig`, `~/.config/git`, `~/.git-credentials`, `~/.ssh`, and `~/.config/gh`. That lets commits use the same Git identity and lets common SSH, credential-store, and GitHub CLI auth setups work inside the sandbox without mounting the whole host home directory.
+
+Host-specific credential helpers such as macOS Keychain or Windows Credential Manager only work inside the Linux sandbox if the matching helper is installed there. For portable sandbox auth, use SSH keys, Git's credential-store file, or a GitHub CLI auth config that is available through those mounted paths.
+
 You can also pass an explicit env file:
 
 ```bash
@@ -141,7 +145,7 @@ This mode is useful for inspection, but file-edit tools and commands that write 
 
 The sandbox uses a non-root container user, drops Linux capabilities, sets `no-new-privileges`, limits processes and memory, uses a read-only image filesystem, and limits writable home storage to project-scoped Docker volumes plus temporary `tmpfs` paths.
 
-It does not mount the Docker socket, the host home directory, an SSH agent, or broad host filesystem paths.
+It does not mount the Docker socket, the host home directory, an SSH agent, or broad host filesystem paths. When available, only the selected Git and GitHub account paths listed above are mounted from the host home, and they are mounted read-only.
 
 Important limitation: a writable bind mount gives the agent full write access to the mounted repository. Docker Desktop isolates the process from the host OS, but it does not protect files that you intentionally mount writable.
 
