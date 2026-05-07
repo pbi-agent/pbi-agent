@@ -63,7 +63,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         settings = getattr(runtime, "settings", runtime)
         self.assertEqual(args.command, "web")
         self.assertEqual(args.host, "127.0.0.1")
-        self.assertEqual(args.port, 8000)
+        self.assertEqual(args.port, cli.DEFAULT_WEB_PORT)
         self.assertEqual(settings.provider, "openai")
 
     def test_main_inserts_web_before_web_specific_flags(self) -> None:
@@ -456,7 +456,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertTrue(args.read_only_repo)
         self.assertEqual(args.image, cli.DEFAULT_SANDBOX_IMAGE)
         self.assertEqual(args.host, "127.0.0.1")
-        self.assertEqual(args.port, 8000)
+        self.assertEqual(args.port, cli.DEFAULT_WEB_PORT)
 
     def test_sandbox_default_image_is_versioned(self) -> None:
         self.assertEqual(
@@ -690,7 +690,11 @@ class DefaultWebCommandTests(unittest.TestCase):
         mock_build_run.assert_called_once()
         mock_run.assert_called_once_with(["docker", "run"], env={"ENV": "value"})
         mock_browser_thread.assert_called_once_with(
-            "127.0.0.1", 9001, "http://127.0.0.1:9001"
+            "127.0.0.1",
+            9001,
+            "http://127.0.0.1:9001",
+            ready_grace_seconds=cli.SANDBOX_BROWSER_READY_GRACE_SECONDS,
+            status_message="Waiting for sandbox web server before opening browser...",
         )
 
     def test_handle_sandbox_web_rejects_unavailable_explicit_host_port(self) -> None:
@@ -850,14 +854,14 @@ class DefaultWebCommandTests(unittest.TestCase):
             rc = cli._handle_web_command(args, settings)
 
         self.assertEqual(rc, 0)
-        mock_available.assert_called_once_with("127.0.0.1", 8000)
+        mock_available.assert_called_once_with("127.0.0.1", cli.DEFAULT_WEB_PORT)
         mock_find_port.assert_not_called()
         mock_browser_thread.assert_called_once_with(
             "127.0.0.1",
-            8000,
-            "http://127.0.0.1:8000",
+            cli.DEFAULT_WEB_PORT,
+            f"http://127.0.0.1:{cli.DEFAULT_WEB_PORT}",
         )
-        self.assertEqual(mock_server.call_args.args[0].port, 8000)
+        self.assertEqual(mock_server.call_args.args[0].port, cli.DEFAULT_WEB_PORT)
 
     def test_handle_web_command_auto_selects_free_default_port(self) -> None:
         parser = cli.build_parser()
@@ -883,7 +887,10 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         self.assertEqual(args.port, 8123)
-        self.assertIn("Port 8000 is unavailable; using port 8123", stderr.getvalue())
+        self.assertIn(
+            f"Port {cli.DEFAULT_WEB_PORT} is unavailable; using port 8123",
+            stderr.getvalue(),
+        )
         mock_browser_thread.assert_called_once_with(
             "127.0.0.1",
             8123,
@@ -1060,6 +1067,38 @@ class DefaultWebCommandTests(unittest.TestCase):
         ):
             cli._open_browser_when_ready("127.0.0.1", 9001, "http://127.0.0.1:9001")
 
+        mock_open.assert_called_once_with("http://127.0.0.1:9001")
+
+    def test_open_browser_when_ready_waits_grace_period_before_opening(self) -> None:
+        status_message = "Waiting for sandbox web server before opening browser..."
+        with (
+            patch(
+                "pbi_agent.cli._wait_for_web_server",
+                return_value=cli.WebServerWaitResult(
+                    ready=True,
+                    connect_host="127.0.0.1",
+                    port=9001,
+                    timeout_seconds=20.0,
+                    elapsed_seconds=0.5,
+                    attempts=3,
+                ),
+            ),
+            patch("pbi_agent.cli._sleep_before_browser_open") as mock_sleep,
+            patch("pbi_agent.cli._is_wsl_environment", return_value=False),
+            patch("pbi_agent.cli.webbrowser.open", return_value=True) as mock_open,
+        ):
+            cli._open_browser_when_ready(
+                "127.0.0.1",
+                9001,
+                "http://127.0.0.1:9001",
+                ready_grace_seconds=cli.SANDBOX_BROWSER_READY_GRACE_SECONDS,
+                status_message=status_message,
+            )
+
+        mock_sleep.assert_called_once_with(
+            cli.SANDBOX_BROWSER_READY_GRACE_SECONDS,
+            status_message,
+        )
         mock_open.assert_called_once_with("http://127.0.0.1:9001")
 
     def test_open_browser_when_ready_uses_windows_browser_opener_on_wsl(self) -> None:
