@@ -8,7 +8,7 @@
 ## Long-Term Memory
 - Memory: token-efficient; keep durable decisions/follow-ups only, not logs.
 - Workflow: no commit/push/merge/PR unless asked. Use session-only `TODO.md`; markers `[ ]`, `[>]`, `[X]`, `[!]`, `[-]`. Shell from workspace root; use `python3` for direct Python shell commands.
-- Validate touched surface: Python Ruff+pytest; frontend Bun tests/lint/typecheck/build; docs build. Note skipped/hung checks.
+- Validate touched surface: Python Ruff+basedpyright+pytest; frontend Bun tests/lint/typecheck/build; docs build. Note skipped/hung checks.
 - Architecture: CLI `src/pbi_agent/__main__.py` -> `src/pbi_agent/cli.py`; default command `web`; backend FastAPI `src/pbi_agent/web/`; frontend Vite React `webapp/`.
 - API changes: align routes/schemas/session manager with `webapp/src/api.ts` + `webapp/src/types.ts`.
 - Web API contract: `bun run web:api-types` runs `scripts/generate_api_types.py` to regenerate `webapp/src/api-types.generated.ts` from FastAPI OpenAPI plus extra SSE models; output includes schema types, SSE event unions, `ApiOperationResponses`, and `ApiJsonRequestBodies`. Pytest `test_api_types_codegen.py` enforces generated output is current.
@@ -105,3 +105,4 @@
 - Diagnosed session `ee5f63efde2b4af2bc4b3970060e9439`: resumed run `a9760a30f85f48a28e74766b69306595` failed during a 4-tool iteration because `ThreadPoolExecutor.submit()` raised `RuntimeError: can't start new thread`. Fixed shared tool runtime to warm worker threads before submitting tool calls, retry with fewer workers on thread-start exhaustion, then fall back to serial execution if needed. Validation: `uv run pytest -q --tb=short -x tests/test_tool_runtime.py`, Ruff check/format-check for touched files, and `git diff --check` passed.
 - Removed `SettingsPage.test.tsx` React `act(...)` warning noise by wrapping settings-dialog Zustand open/close setup in `act`; product code unchanged. Validation: `bun run test:web -- SettingsPage`, `bun run test:web` (one transient unrelated first-run timeout, rerun passed), `bun run lint`, `bun run typecheck`, and `git diff --check` passed.
 - Added GitHub CLI (`gh`, Alpine package `github-cli`) to the sandbox image package list and updated sandbox docs/tests to mention it. Validation: focused sandbox pytest, Ruff check/format-check for `tests/test_cli.py`, docs build, and `git diff --check` passed.
+- Prepared BasedPyright dev workflow for shipping without re-running BasedPyright per user request; local validation used Ruff, format, dead-code, full Python pytest, web tests/lint/typecheck/build, and docs build. Next: GitHub checks pending after PR.

@@ -488,13 +488,6 @@ def _read_xlsx_sheet_bounds(worksheet: Any) -> tuple[int, int]:
     return (max_row, max_column)
 
 
-def _excel_column_letters_to_index(letters: str) -> int:
-    index = 0
-    for character in letters:
-        index = index * 26 + (ord(character) - ord("A") + 1)
-    return index
-
-
 def _coerce_temporal_columns(dataframe: Any) -> Any:
     from pandas.api import types as ptypes
 

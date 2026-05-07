@@ -142,7 +142,7 @@ If review fails:
 Run validation for every touched surface.
 
 Common final checks:
-- Python: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q --tb=short -x`
+- Python: `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, `uv run pytest -q --tb=short -x`
 - Frontend: `bun run test:web -- --maxWorkers=2`, `bun run lint`, `bun run typecheck`, `bun run web:build`
 - API/SSE contract changes: run the project codegen command and codegen tests
 - Static web assets: verify rebuilt hashed chunks are tracked

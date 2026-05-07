@@ -81,6 +81,7 @@ When user asks to continue, merge, or publish existing release workflow:
 11. Validate:
    - `uv run ruff check .`
    - `uv run ruff format --check .`
+   - `uv run basedpyright`
    - `uv run python scripts/dead_code.py`
    - `uv run pytest -q --tb=short -x`
    - `bun run docs:build`

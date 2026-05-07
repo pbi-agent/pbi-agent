@@ -48,8 +48,26 @@ markers = [
 ]
 addopts = "-q --tb=short -x"
 
+[tool.basedpyright]
+include = ["src"]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "build",
+    "dist",
+    "node_modules",
+    "webapp",
+]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+reportUnusedFunction = "error"
+reportUnusedClass = "error"
+reportUnusedVariable = "error"
+reportUnusedImport = "error"
+
 [dependency-groups]
 dev = [
+    "basedpyright==1.39.3",
     "httpx==0.28.1",
     "pytest==9.0.3",
     "pytest-asyncio>=1.3.0",

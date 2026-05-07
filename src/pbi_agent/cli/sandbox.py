@@ -286,7 +286,7 @@ def _sandbox_container_workspace(workspace: Path) -> str:
     return f"{SANDBOX_WORKSPACE}/{_sandbox_workspace_id(workspace)}"
 
 
-def _sandbox_config_volume(workspace: Path) -> str:
+def _sandbox_config_volume(workspace: Path) -> str:  # pyright: ignore[reportUnusedFunction] - imported by sandbox tests
     return f"{SANDBOX_CONFIG_VOLUME_PREFIX}-{_sandbox_workspace_id(workspace)}"
 
 

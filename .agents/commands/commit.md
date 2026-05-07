@@ -29,7 +29,7 @@ Do not commit failing or unvalidated changes. Validation must be current enough 
    - If relevant validation already passed after the latest edits, reuse that evidence.
    - Always run `git diff --check` before commit.
    - If validation is missing or stale, run focused commands for the touched surface:
-     - Python: relevant pytest plus `uv run ruff check ...` and `uv run ruff format --check ...`
+     - Python: relevant pytest plus `uv run ruff check ...`, `uv run ruff format --check ...`, and `uv run basedpyright`
      - Frontend: relevant `bun run test:web -- ...`, plus `bun run lint`, `bun run typecheck`, and `bun run web:build` when frontend build/static assets are touched
      - Docs: `bun run docs:build` when docs are touched
    - Stop if validation fails unless failure is clearly unrelated and documented.
