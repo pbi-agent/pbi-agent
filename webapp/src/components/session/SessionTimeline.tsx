@@ -43,6 +43,41 @@ type RenderUnit =
       running: boolean;
     };
 
+const GENERIC_RETRY_MESSAGE_PATTERN = /^Retrying\.\.\. \(\d+\/\d+\)$/;
+
+function isGenericRetryMessageItem(item: TimelineItem): boolean {
+  return item.kind === "message"
+    && (item.role === "notice" || item.role === "error")
+    && GENERIC_RETRY_MESSAGE_PATTERN.test(item.content.trim());
+}
+
+function timelineItemChangeKey(item: TimelineItem): string {
+  if (item.kind === "message") {
+    return [
+      item.kind,
+      item.itemId,
+      item.role,
+      item.content,
+      item.filePaths?.join("\0") ?? "",
+      item.imageAttachments?.map((attachment) => attachment.upload_id).join("\0") ?? "",
+    ].join("\0");
+  }
+  if (item.kind === "thinking") {
+    return [item.kind, item.itemId, item.title, item.content].join("\0");
+  }
+  return [
+    item.kind,
+    item.itemId,
+    item.label,
+    item.status ?? "",
+    ...item.items.map((entry) => [
+      entry.text,
+      entry.classes ?? "",
+      JSON.stringify(entry.metadata ?? null),
+    ].join("\0")),
+  ].join("\0");
+}
+
 function shouldCoalesceInWorkRun(
   item: TimelineItem,
   options: { showSubAgentCards: boolean },
@@ -894,12 +929,22 @@ export function SessionTimeline({
   showSubAgentCards?: boolean;
 }) {
   const previousLengthRef = useRef<number | undefined>(undefined);
-  const latestItem = items.at(-1);
+  const previousVisibleItemsChangeKeyRef = useRef<string | undefined>(undefined);
+  const latestRawItem = items.at(-1);
+  const visibleItems = useMemo(
+    () => items.filter((item) => !isGenericRetryMessageItem(item)),
+    [items],
+  );
+  const visibleItemsChangeKey = useMemo(
+    () => visibleItems.map(timelineItemChangeKey).join("\n"),
+    [visibleItems],
+  );
+  const latestItem = visibleItems.at(-1);
   const latestItemIsUserMessage =
     latestItem?.kind === "message" && latestItem.role === "user";
   const baseRenderUnits = useMemo(
-    () => buildRenderUnits(items, { showSubAgentCards }),
-    [items, showSubAgentCards],
+    () => buildRenderUnits(visibleItems, { showSubAgentCards }),
+    [visibleItems, showSubAgentCards],
   );
   const sessionIsActive = Boolean(processing?.active || waitMessage);
   const activePhase: WorkRunPhase | null = sessionIsActive
@@ -944,7 +989,7 @@ export function SessionTimeline({
     userScrolledRef,
     markProgrammaticScroll,
   } =
-    useAutoScroll(itemsVersion, { followOnChange: false });
+    useAutoScroll(visibleItemsChangeKey, { followOnChange: false });
 
   const closeCollapsiblesSignal =
     latestItem?.kind === "message" && latestItem.role === "assistant"
@@ -1008,13 +1053,24 @@ export function SessionTimeline({
 
   useEffect(() => {
     const previousLength = previousLengthRef.current;
-    previousLengthRef.current = items.length;
+    const previousVisibleItemsChangeKey = previousVisibleItemsChangeKeyRef.current;
+    previousLengthRef.current = visibleItems.length;
+    previousVisibleItemsChangeKeyRef.current = visibleItemsChangeKey;
+
+    if (
+      previousVisibleItemsChangeKey !== undefined
+      && previousVisibleItemsChangeKey === visibleItemsChangeKey
+      && latestRawItem
+      && isGenericRetryMessageItem(latestRawItem)
+    ) {
+      return;
+    }
 
     const container = containerRef.current;
     if (!container) return;
 
     const isNewItem =
-      previousLength !== undefined && items.length > previousLength;
+      previousLength !== undefined && visibleItems.length > previousLength;
 
     if (isNewItem && latestItem) {
       // New item added — scroll to the top of that item
@@ -1055,9 +1111,9 @@ export function SessionTimeline({
         setShowNewMessages(true);
       }
     }
-  }, [containerRef, itemsVersion, items.length, latestItem, latestItemIsUserMessage, userScrolledRef, setShowNewMessages, scrollToTarget, markProgrammaticScroll]);
+  }, [containerRef, itemsVersion, latestRawItem, visibleItemsChangeKey, visibleItems.length, latestItem, latestItemIsUserMessage, userScrolledRef, setShowNewMessages, scrollToTarget, markProgrammaticScroll]);
 
-  if (items.length === 0 && connection === "connected" && !sessionIsActive) {
+  if (visibleItems.length === 0 && connection === "connected" && !sessionIsActive) {
     return (
       <div className="session-scroll-area" ref={containerRef}>
         <div className="timeline">

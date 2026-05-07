@@ -53,6 +53,121 @@ describe("SessionTimeline", () => {
     expect(screen.getByText("Send any prompt to begin")).toBeInTheDocument();
   });
 
+  it("hides generic retry notice and error messages while preserving other timeline messages", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "retry-notice",
+            role: "notice",
+            content: "Retrying... (1/3)",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "retry-error",
+            role: "error",
+            content: "  Retrying... (2/3)  ",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "rate-limit",
+            role: "notice",
+            content: "Rate limit reached. Retrying in 5s...",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "overloaded",
+            role: "notice",
+            content: "Provider overloaded. Retrying in 10s...",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "real-error",
+            role: "error",
+            content: "Request failed after retries",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "assistant-retry-text",
+            role: "assistant",
+            content: "Retrying... (3/3)",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={6}
+      />,
+    );
+
+    expect(screen.queryByText("Retrying... (1/3)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Retrying... (2/3)")).not.toBeInTheDocument();
+    expect(screen.getByText("Rate limit reached. Retrying in 5s...")).toBeInTheDocument();
+    expect(screen.getByText("Provider overloaded. Retrying in 10s...")).toBeInTheDocument();
+    expect(screen.getByText("Request failed after retries")).toBeInTheDocument();
+    expect(screen.getByText("Retrying... (3/3)")).toBeInTheDocument();
+  });
+
+  it("keeps active Working anchored after the latest visible message when a hidden retry arrives", () => {
+    const { rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: "Working" });
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "retry-1",
+            role: "error",
+            content: "Retrying... (1/3)",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={2}
+      />,
+    );
+
+    expect(screen.queryByText("Retrying... (1/3)")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Working" })).toBe(workingButton);
+  });
+
   it("renders a stable startup Working placeholder before first activity", () => {
     render(
       <SessionTimeline
