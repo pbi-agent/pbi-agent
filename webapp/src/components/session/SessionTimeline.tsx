@@ -174,14 +174,6 @@ function summarizeCountItems(items: CountSummaryItem[]) {
     .join(", ");
 }
 
-function countItemsForEntries(entries: ToolListEntry[]) {
-  const counts = new Map<ToolCategory, number>();
-  for (const entry of entries) {
-    counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
-  }
-  return categoryCountItems(counts);
-}
-
 function categoryCountItems(counts: Map<ToolCategory, number>): CountSummaryItem[] {
   const labels: Record<ToolCategory, { singular: string; plural: string }> = {
     read: { singular: "read", plural: "reads" },
@@ -263,13 +255,12 @@ type ToolListEntry = {
 
 type WorkingGroup =
   | { kind: "thinking"; key: string; items: TimelineThinkingItem[] }
-  | { kind: "tools"; key: string; entries: ToolListEntry[]; running: boolean }
+  | { kind: "tool"; key: string; entry: ToolListEntry }
   | { kind: "sub_agent"; key: string; subAgentId: string; items: WorkItem[]; running: boolean };
 
 function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): WorkingGroup[] {
   const groups: WorkingGroup[] = [];
   let thinkingBuffer: TimelineThinkingItem[] = [];
-  let toolBuffer: ToolListEntry[] = [];
   let subAgentBufferId: string | null = null;
   let subAgentBufferItems: WorkItem[] = [];
   let subAgentBufferRunning = false;
@@ -282,16 +273,6 @@ function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): Work
     if (thinkingBuffer.length === 0) return;
     groups.push({ kind: "thinking", key: `thinking-${thinkingBuffer[0].itemId}`, items: thinkingBuffer });
     thinkingBuffer = [];
-  };
-  const flushTools = () => {
-    if (toolBuffer.length === 0) return;
-    groups.push({
-      kind: "tools",
-      key: `tools-${toolBuffer[0].key}`,
-      entries: toolBuffer,
-      running: toolBuffer.some((entry) => entry.status === "running"),
-    });
-    toolBuffer = [];
   };
   const flushSubAgent = () => {
     if (!subAgentBufferId || subAgentBufferItems.length === 0) return;
@@ -312,7 +293,6 @@ function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): Work
   for (const item of items) {
     if (showSubAgentCards && item.subAgentId) {
       flushThinking();
-      flushTools();
       const running = item.kind === "tool_group" && item.status === "running";
       const existingGroup = subAgentGroups.get(item.subAgentId);
       if (existingGroup) {
@@ -333,7 +313,6 @@ function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): Work
     }
     flushSubAgent();
     if (item.kind === "thinking") {
-      flushTools();
       thinkingBuffer.push(item);
       continue;
     }
@@ -341,11 +320,14 @@ function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): Work
       continue;
     }
     flushThinking();
-    toolBuffer.push(...toolEntriesForGroup(item));
+    groups.push(...toolEntriesForGroup(item).map((entry) => ({
+      kind: "tool" as const,
+      key: `tool-${entry.key}`,
+      entry,
+    })));
   }
   flushSubAgent();
   flushThinking();
-  flushTools();
   return groups;
 }
 
@@ -597,11 +579,43 @@ function WorkingItemsPanel({
         if (group.kind === "sub_agent") {
           return <SubAgentCard key={group.key} group={group} subAgents={subAgents} parentSessionId={parentSessionId} />;
         }
+        if (group.kind === "tool") {
+          const entry = group.entry;
+          const toolOpen = Boolean(openTools[entry.key]);
+          return (
+            <Collapsible
+              key={group.key}
+              open={toolOpen}
+              onOpenChange={(nextOpen) => setOpenToolsState((prev) => ({
+                closeSignal,
+                tools: {
+                  ...(prev.closeSignal === closeSignal ? prev.tools : {}),
+                  [entry.key]: nextOpen,
+                },
+              }))}
+            >
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
+                  <ChevronRightIcon className="timeline-entry__chevron" />
+                  <span className="working-items__tool-title">{entry.displayLabel}</span>
+                  <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
+                  {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="working-items__tool-detail">
+                  <ToolResult
+                    metadata={entry.entry.metadata}
+                    text={entry.entry.text}
+                    running={entry.status === "running"}
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        }
         const open = Boolean(openGroups[group.key]);
-        const isThinking = group.kind === "thinking";
-        const summaryItems = isThinking ? [] : countItemsForEntries(group.entries);
-        const summary = summarizeCountItems(summaryItems);
-        const groupLabel = isThinking ? "Thinking" : group.running ? "In motion" : "Activity";
+        const groupLabel = "Thinking";
         return (
           <Collapsible
             key={group.key}
@@ -620,57 +634,18 @@ function WorkingItemsPanel({
                 variant="ghost"
                 size="sm"
                 className="working-items__group-trigger"
-                aria-label={summary ? `${groupLabel} ${summary}` : groupLabel}
+                aria-label={groupLabel}
               >
                 <ChevronRightIcon className="timeline-entry__chevron" />
                 <span>{groupLabel}</span>
-                <AnimatedCountSummary items={summaryItems} className="working-items__summary" />
-                {group.kind === "tools" && group.running ? <span className="timeline-entry__running" aria-label="running" /> : null}
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="working-items__level-2">
-                {isThinking
-                  ? group.items.map((item) => (
-                    <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
-                      <MarkdownContent content={item.content} />
-                    </div>
-                  ))
-                  : group.entries.map((entry) => {
-                    const toolOpen = Boolean(openTools[entry.key]);
-                    return (
-                      <Collapsible
-                        key={entry.key}
-                        open={toolOpen}
-                        onOpenChange={(nextOpen) => setOpenToolsState((prev) => ({
-                          closeSignal,
-                          tools: {
-                            ...(prev.closeSignal === closeSignal ? prev.tools : {}),
-                            [entry.key]: nextOpen,
-                          },
-                        }))}
-                      >
-                        <CollapsibleTrigger asChild>
-                          <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
-                            <ChevronRightIcon className="timeline-entry__chevron" />
-                            <span className="working-items__tool-title">{entry.displayLabel}</span>
-                            <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
-                            {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
-                          </Button>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <div className="working-items__tool-detail">
-                            <ToolResult
-                              metadata={entry.entry.metadata}
-                              text={entry.entry.text}
-                              running={entry.status === "running"}
-                            />
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    );
-                  })}
-              </div>
+              {group.items.map((item) => (
+                <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
+                  <MarkdownContent content={item.content} />
+                </div>
+              ))}
             </CollapsibleContent>
           </Collapsible>
         );

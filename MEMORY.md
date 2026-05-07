@@ -57,3 +57,4 @@
 ## Detailed Task Events
 ## 2026-05-07
 - Slowed the active web Working `TextShimmer` wave by increasing shimmer duration and rebuilt static web assets. Validation: `bun run test:web -- SessionTimeline`, `bun run lint`, `bun run typecheck`, `bun run web:build`, and `git diff --check` passed.
+- Simplified expanded web Working groups by removing the intermediate Activity/In motion collapsible level; Thinking, tool rows, and sub-agent cards now share the first expanded level while tool rows still expand to detail. Validation: `bun run test:web -- SessionTimeline`, `bun run lint`, `bun run typecheck`, `bun run web:build`, and `git diff --check` passed.

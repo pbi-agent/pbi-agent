@@ -18,7 +18,7 @@ function openWorking(index = 0, expandInner = true) {
   const workingButton = screen.getAllByRole("button", { name: /Working/ })[index];
   fireEvent.click(workingButton);
   if (expandInner) {
-    for (const groupButton of screen.queryAllByRole("button", { name: /Activity|In motion|Thinking/i })) {
+    for (const groupButton of screen.queryAllByRole("button", { name: /^Thinking$/i })) {
       fireEvent.click(groupButton);
     }
     for (const toolButton of screen.queryAllByRole("button").filter((button) =>
@@ -138,7 +138,7 @@ describe("SessionTimeline", () => {
     );
   });
 
-  it("renders working items as a strict three-level hierarchy", () => {
+  it("renders thinking and tool rows directly inside an expanded Working group", () => {
     const { container } = render(
       <SessionTimeline
         items={[
@@ -182,16 +182,10 @@ describe("SessionTimeline", () => {
     openWorking(0, false);
     expect(screen.getByRole("button", { name: /^Thinking$/i })).toBeInTheDocument();
     expect(screen.queryByText(/thinking block/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Activity.*1 read, 1 shell/i })).toBeInTheDocument();
-    const activitySummary = container.querySelector(".working-items__group-trigger .working-items__summary");
-    expect(activitySummary).toHaveTextContent("1 read, 1 shell");
-    expect(activitySummary?.querySelectorAll('[data-component="animated-number"]')).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
-    expect(screen.queryByText("file contents")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Activity/i }));
     expect(screen.getByRole("button", { name: /Read.*README.md/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Command.*bun run typecheck/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Activity/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /In motion/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /shell.*bun run typecheck/i })).not.toBeInTheDocument();
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
