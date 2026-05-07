@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import ssl
 import urllib.request
 from unittest.mock import Mock
 
@@ -1046,6 +1047,27 @@ def test_chatgpt_codex_websocket_sends_response_create_body_at_top_level() -> No
         "stream": True,
     }
     assert "response" not in payload
+
+
+def test_chatgpt_codex_websocket_send_failure_is_retryable() -> None:
+    websocket = ResponsesWebSocket(Mock(), response_headers={})
+    send_error = ssl.SSLEOFError("EOF occurred in violation of protocol")
+    websocket._send_text = Mock(side_effect=send_error)
+    websocket._recv_frame = Mock()
+
+    with pytest.raises(ChatGPTCodexWebSocketError) as exc_info:
+        websocket.send_response_create(
+            {"model": "gpt-5", "input": [], "stream": True},
+            timeout=30,
+        )
+
+    error = exc_info.value
+    assert error.retryable is True
+    assert "WebSocket send failed" in str(error)
+    assert error.__cause__ is send_error
+    assert websocket.closed is True
+    websocket._recv_frame.assert_not_called()
+    websocket._sock.close.assert_called_once()
 
 
 def _unmasked_websocket_text_frame(payload: dict[str, object]) -> bytes:
