@@ -102,6 +102,7 @@ export function AppShell() {
       <SessionEndedNotificationEffects
         liveSessionEvents={liveSessionEvents}
         liveSessions={bootstrap?.live_sessions ?? []}
+        tasks={bootstrap?.tasks ?? []}
       />
       <header className="header">
         <div className="header__left">

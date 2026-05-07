@@ -7,7 +7,7 @@ import {
   setNotificationPreferences,
 } from "../../lib/notificationPreferences";
 import { renderWithProviders } from "../../test/render";
-import type { LiveSession, LiveSessionLifecycleEvent } from "../../types";
+import type { LiveSession, LiveSessionLifecycleEvent, TaskRecord } from "../../types";
 
 class NotificationMock {
   static instances: NotificationMock[] = [];
@@ -53,6 +53,36 @@ function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
   };
 }
 
+function makeTaskRecord(overrides: Partial<TaskRecord> = {}): TaskRecord {
+  return {
+    task_id: "task-1",
+    directory: "/workspace",
+    title: "Fix login bug",
+    prompt: "Fix the login bug",
+    stage: "done",
+    position: 1,
+    project_dir: "/workspace",
+    session_id: "session-1",
+    profile_id: null,
+    run_status: "completed",
+    last_result_summary: "",
+    created_at: "2026-05-02T12:00:00.000Z",
+    updated_at: "2026-05-02T12:01:00.000Z",
+    last_run_started_at: "2026-05-02T12:00:00.000Z",
+    last_run_finished_at: "2026-05-02T12:01:00.000Z",
+    image_attachments: [],
+    runtime_summary: {
+      provider: "openai",
+      provider_id: null,
+      profile_id: null,
+      model: "gpt-4.1",
+      reasoning_effort: "medium",
+      compact_threshold: 0.5,
+    },
+    ...overrides,
+  };
+}
+
 function makeLifecycleEvent(
   seq: number,
   type: LiveSessionLifecycleEvent["type"],
@@ -83,12 +113,14 @@ function renderEffects(
   liveSessions: LiveSession[],
   route = "/board",
   liveSessionEvents: LiveSessionLifecycleEvent[] = [],
+  tasks: TaskRecord[] = [],
 ) {
   return renderWithProviders(
     <>
       <SessionEndedNotificationEffects
         liveSessionEvents={liveSessionEvents}
         liveSessions={liveSessions}
+        tasks={tasks}
       />
       <LocationProbe />
     </>,
@@ -99,12 +131,14 @@ function renderEffects(
 function effectsUi(
   liveSessions: LiveSession[],
   liveSessionEvents: LiveSessionLifecycleEvent[] = [],
+  tasks: TaskRecord[] = [],
 ) {
   return (
     <>
       <SessionEndedNotificationEffects
         liveSessionEvents={liveSessionEvents}
         liveSessions={liveSessions}
+        tasks={tasks}
       />
       <LocationProbe />
     </>
@@ -171,10 +205,74 @@ describe("SessionEndedNotificationEffects", () => {
 
     await waitFor(() => expect(NotificationMock.instances).toHaveLength(1));
     expect(NotificationMock.instances[0].title).toBe("pbi-agent session finished");
+    expect(NotificationMock.instances[0].options?.body).toBe(
+      "A session finished while this tab was hidden or unfocused.",
+    );
     expect(NotificationMock.instances[0].options?.tag).toBe("session-ended:live-1");
 
     rerender(effectsUi([ended]));
     expect(NotificationMock.instances).toHaveLength(1);
+  });
+
+  it("includes the task title when an observed kanban task session transitions to ended while hidden", async () => {
+    const focusSpy = vi.spyOn(window, "focus").mockImplementation(() => {});
+    const task = makeTaskRecord({ title: "Ship kanban notifications" });
+    const running = makeLiveSession({
+      kind: "task",
+      task_id: task.task_id,
+      status: "running",
+      last_event_seq: 1,
+    });
+    const ended = makeLiveSession({
+      kind: "task",
+      task_id: task.task_id,
+      status: "ended",
+      ended_at: "2026-05-02T12:01:00.000Z",
+      last_event_seq: 2,
+    });
+    const { rerender } = renderEffects([running], "/board", [], [task]);
+
+    rerender(effectsUi([ended], [], [task]));
+
+    await waitFor(() => expect(NotificationMock.instances).toHaveLength(1));
+    expect(NotificationMock.instances[0].title).toBe("pbi-agent session finished");
+    expect(NotificationMock.instances[0].options?.body).toBe(
+      "“Ship kanban notifications” finished while this tab was hidden or unfocused.",
+    );
+
+    act(() => {
+      NotificationMock.instances[0].onclick?.(new Event("click"));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location-path")).toHaveTextContent("/sessions/session-1"),
+    );
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+    expect(NotificationMock.instances[0].close).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the generic finished notification when a kanban task record is missing", async () => {
+    const running = makeLiveSession({
+      kind: "task",
+      task_id: "missing-task",
+      status: "running",
+      last_event_seq: 1,
+    });
+    const ended = makeLiveSession({
+      kind: "task",
+      task_id: "missing-task",
+      status: "ended",
+      ended_at: "2026-05-02T12:01:00.000Z",
+      last_event_seq: 2,
+    });
+    const { rerender } = renderEffects([running]);
+
+    rerender(effectsUi([ended]));
+
+    await waitFor(() => expect(NotificationMock.instances).toHaveLength(1));
+    expect(NotificationMock.instances[0].options?.body).toBe(
+      "A session finished while this tab was hidden or unfocused.",
+    );
   });
 
   it("uses fresh lifecycle events before dropping ended bootstrap snapshots", async () => {
