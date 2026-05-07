@@ -62,6 +62,11 @@ from pbi_agent.web.session_manager import (
 )
 from pbi_agent.web.session.state import EventStream, _MAX_SUBSCRIBER_QUEUE_SIZE
 from pbi_agent.web.serve import PBIWebServer, create_app
+from pbi_agent.workspace_context import (
+    SANDBOX_ENV,
+    WORKSPACE_DISPLAY_PATH_ENV,
+    WORKSPACE_KEY_ENV,
+)
 
 
 def _settings() -> Settings:
@@ -76,6 +81,47 @@ def _write_command(root: Path, name: str, content: str) -> None:
     commands_dir = root / ".agents" / "commands"
     commands_dir.mkdir(parents=True, exist_ok=True)
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
+
+
+def test_web_manager_uses_host_workspace_key_in_sandbox(monkeypatch, tmp_path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    host_path = "/Users/Ada/Repo"
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv(SANDBOX_ENV, "1")
+    monkeypatch.setenv(WORKSPACE_KEY_ENV, host_path)
+    monkeypatch.setenv(WORKSPACE_DISPLAY_PATH_ENV, host_path)
+    manager = WebSessionManager(_settings())
+    manager.start()
+    try:
+        bootstrap = manager.bootstrap()
+        session = manager.create_session_record(title="Sandbox session")
+        task = manager.create_task(
+            title="Sandbox task",
+            prompt="Use the host workspace identity.",
+        )
+
+        assert manager.workspace_root == repo
+        assert manager.workspace_key == host_path
+        assert manager.workspace_display_path == host_path
+        assert manager.is_sandbox is True
+        assert bootstrap["workspace_root"] == str(repo)
+        assert bootstrap["workspace_key"] == host_path
+        assert bootstrap["workspace_display_path"] == host_path
+        assert bootstrap["is_sandbox"] is True
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            host_sessions = store.list_sessions(host_path)
+            internal_sessions = store.list_sessions(str(repo))
+            host_tasks = store.list_kanban_tasks(host_path)
+            internal_tasks = store.list_kanban_tasks(str(repo))
+
+        assert [item.session_id for item in host_sessions] == [session["session_id"]]
+        assert internal_sessions == []
+        assert [item.task_id for item in host_tasks] == [task["task_id"]]
+        assert internal_tasks == []
+    finally:
+        manager.shutdown()
 
 
 def _write_default_commands(root: Path) -> None:

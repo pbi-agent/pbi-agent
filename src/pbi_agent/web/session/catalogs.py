@@ -30,6 +30,9 @@ class CatalogsMixin:
         default_runtime = self._resolve_runtime_optional(None)
         return {
             "workspace_root": str(self._workspace_root),
+            "workspace_key": self._workspace_context.key,
+            "workspace_display_path": self._workspace_context.display_path,
+            "is_sandbox": self._workspace_context.is_sandbox,
             "provider": (
                 default_runtime.settings.provider
                 if default_runtime is not None

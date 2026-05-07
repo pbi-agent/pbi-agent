@@ -4,7 +4,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -45,6 +44,7 @@ from pbi_agent.display.protocol import (
     QueuedInput,
     QueuedRuntimeChange,
 )
+from pbi_agent.workspace_context import current_workspace_context
 
 _log = logging.getLogger(__name__)
 
@@ -916,8 +916,9 @@ def _run_tool_iterations(
     current_user_turn_text: str | None = None,
     instructions: str | None = None,
     tracer: RunTracer | None = None,
-    current_turn_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
-    | None = None,
+    current_turn_tool_exchanges: (
+        list[tuple[list[ToolCall], list[dict[str, Any]]]] | None
+    ) = None,
 ) -> tuple[CompletedResponse, bool, int]:
     had_errors = False
     tool_exchanges = current_turn_tool_exchanges
@@ -1127,7 +1128,7 @@ def _create_session(
     try:
         settings = runtime.settings
         return store.create_session(
-            directory=os.getcwd(),
+            directory=current_workspace_context().directory_key,
             provider=settings.provider,
             provider_id=runtime.provider_id or None,
             model=settings.model,
@@ -1137,21 +1138,6 @@ def _create_session(
     except Exception:
         _log.warning("Failed to create session", exc_info=True)
         return None
-
-
-def _open_session_store(
-    runtime: ResolvedRuntime,
-    *,
-    resume_session_id: str | None = None,
-    title: str = "",
-) -> tuple[SessionStore | None, str | None]:
-    store = _open_store(runtime.settings)
-    if store is None:
-        return None, None
-    if resume_session_id:
-        return store, resume_session_id
-    sid = _create_session(store, runtime, title=title)
-    return store, sid
 
 
 def _update_session_after_turn(
@@ -1573,8 +1559,9 @@ def _compact_live_session(
     reason: str,
     pending_tool_calls: list[ToolCall] | None = None,
     pending_tool_result_items: list[dict[str, Any]] | None = None,
-    pending_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
-    | None = None,
+    pending_tool_exchanges: (
+        list[tuple[list[ToolCall], list[dict[str, Any]]]] | None
+    ) = None,
 ) -> int:
     if store is None or session_id is None:
         return session_usage.snapshot().context_tokens
@@ -1708,8 +1695,9 @@ def _summarize_session_context(
     previous_summary: str | None = None,
     pending_tool_calls: list[ToolCall] | None = None,
     pending_tool_result_items: list[dict[str, Any]] | None = None,
-    pending_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
-    | None = None,
+    pending_tool_exchanges: (
+        list[tuple[list[ToolCall], list[dict[str, Any]]]] | None
+    ) = None,
 ) -> str:
     transcript = _format_messages_for_compaction(
         messages,
@@ -1762,8 +1750,9 @@ def _format_messages_for_compaction(
     tool_output_max_chars: int = 2000,
     pending_tool_calls: list[ToolCall] | None = None,
     pending_tool_result_items: list[dict[str, Any]] | None = None,
-    pending_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
-    | None = None,
+    pending_tool_exchanges: (
+        list[tuple[list[ToolCall], list[dict[str, Any]]]] | None
+    ) = None,
 ) -> str:
     chunks: list[str] = []
     for message in messages:
@@ -1790,8 +1779,9 @@ def _format_messages_for_compaction(
 
 def _normalize_tool_exchanges_for_compaction(
     *,
-    pending_tool_exchanges: list[tuple[list[ToolCall], list[dict[str, Any]]]]
-    | None = None,
+    pending_tool_exchanges: (
+        list[tuple[list[ToolCall], list[dict[str, Any]]]] | None
+    ) = None,
     pending_tool_calls: list[ToolCall] | None = None,
     pending_tool_result_items: list[dict[str, Any]] | None = None,
 ) -> list[tuple[list[ToolCall], list[dict[str, Any]]]]:
@@ -1916,9 +1906,11 @@ def _truncate_for_compaction(value: Any, *, max_chars: int) -> Any:
         )
     if isinstance(value, dict):
         return {
-            key: item
-            if _is_tool_result_metadata_key(key)
-            else _truncate_for_compaction(item, max_chars=max_chars)
+            key: (
+                item
+                if _is_tool_result_metadata_key(key)
+                else _truncate_for_compaction(item, max_chars=max_chars)
+            )
             for key, item in value.items()
         }
     if isinstance(value, list):

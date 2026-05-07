@@ -90,9 +90,13 @@ export function AppShell() {
     settingsOpen && dismissedOnboardingOnSettings
   );
 
-  const folderLabel = bootstrap?.workspace_root
-    ? bootstrap.workspace_root.split(/[/\\]/).filter(Boolean).slice(-2).join("/")
+  const workspaceDisplayPath = bootstrap?.workspace_display_path;
+  const folderLabel = workspaceDisplayPath
+    ? workspaceDisplayPath.split(/[/\\]/).filter(Boolean).slice(-2).join("/")
     : null;
+  const workspaceBadgeLabel = bootstrap?.is_sandbox && folderLabel
+    ? `Sandbox · ${folderLabel}`
+    : folderLabel;
 
   const ThemeIcon = themeIcons[theme];
 
@@ -106,9 +110,9 @@ export function AppShell() {
       />
       <header className="header">
         <div className="header__left">
-          {folderLabel && (
-            <Badge variant="outline" className="header__workspace overflow-visible" title={bootstrap?.workspace_root}>
-              {folderLabel}
+          {workspaceBadgeLabel && (
+            <Badge variant="outline" className="header__workspace overflow-visible" title={workspaceDisplayPath}>
+              {workspaceBadgeLabel}
             </Badge>
           )}
         </div>

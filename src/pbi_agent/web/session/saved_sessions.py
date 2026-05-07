@@ -64,7 +64,7 @@ class SavedSessionsMixin:
         runtime = self._resolve_runtime(profile_id)
         with SessionStore() as store:
             session_id = store.create_session(
-                str(self._workspace_root),
+                self._directory_key,
                 runtime.settings.provider,
                 runtime.settings.model,
                 title=title,

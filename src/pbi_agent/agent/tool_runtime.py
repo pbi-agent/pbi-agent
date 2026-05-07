@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -50,18 +51,73 @@ def execute_tool_calls(
             results=results, had_errors=any(r.is_error for r in results)
         )
 
+    worker_count = max_workers
+    while worker_count > 1:
+        try:
+            return _execute_tool_calls_parallel(
+                calls,
+                max_workers=worker_count,
+                tool_catalog=tool_catalog,
+                context=context,
+                on_result=on_result,
+            )
+        except ToolThreadStartError as exc:
+            next_worker_count = worker_count - 1
+            if next_worker_count > 1:
+                _log.warning(
+                    "Retrying tool execution with %d workers after thread start "
+                    "failure: %s",
+                    next_worker_count,
+                    exc,
+                )
+            else:
+                _log.warning(
+                    "Falling back to serial tool execution after thread start "
+                    "failure: %s",
+                    exc,
+                )
+            worker_count = next_worker_count
+
+    results = []
+    for call in calls:
+        result = _execute_one_tool_call(
+            call,
+            tool_catalog=tool_catalog,
+            context=context,
+        )
+        results.append(result)
+        if on_result is not None:
+            on_result(call, result)
+    return ToolExecutionBatch(
+        results=results, had_errors=any(r.is_error for r in results)
+    )
+
+
+def _execute_tool_calls_parallel(
+    calls: list[ToolCall],
+    *,
+    max_workers: int,
+    tool_catalog: ToolCatalog | None,
+    context: ToolContext | None,
+    on_result: Callable[[ToolCall, ToolResult], None] | None,
+) -> ToolExecutionBatch:
     results: list[ToolResult | None] = [None] * len(calls)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures: dict[Future[ToolResult], tuple[int, ToolCall]] = {}
-        for idx, call in enumerate(calls):
-            futures[
-                executor.submit(
-                    _execute_one_tool_call,
-                    call,
-                    tool_catalog,
-                    context,
-                )
-            ] = (idx, call)
+        try:
+            _warm_executor(executor, max_workers)
+        except RuntimeError as exc:
+            if _is_thread_start_failure(exc):
+                raise ToolThreadStartError(str(exc)) from exc
+            raise
+        futures: dict[Future[ToolResult], tuple[int, ToolCall]] = {
+            executor.submit(
+                _execute_one_tool_call,
+                call,
+                tool_catalog,
+                context,
+            ): (idx, call)
+            for idx, call in enumerate(calls)
+        }
         for future in as_completed(futures):
             idx, call = futures[future]
             result = future.result()
@@ -74,6 +130,22 @@ def execute_tool_calls(
         results=ordered_results,
         had_errors=any(result.is_error for result in ordered_results),
     )
+
+
+def _warm_executor(executor: ThreadPoolExecutor, max_workers: int) -> None:
+    release = threading.Event()
+    futures = []
+    try:
+        for _ in range(max_workers):
+            futures.append(executor.submit(_executor_warmup_wait, release))
+    finally:
+        release.set()
+    for future in futures:
+        future.result()
+
+
+def _executor_warmup_wait(release: threading.Event) -> None:
+    release.wait()
 
 
 def to_function_call_output_items(results: list[ToolResult]) -> list[dict[str, Any]]:
@@ -200,6 +272,14 @@ def _execute_one_tool_call(
             exc,
         )
         return result
+
+
+def _is_thread_start_failure(exc: RuntimeError) -> bool:
+    return "can't start new thread" in str(exc)
+
+
+class ToolThreadStartError(RuntimeError):
+    """Raised before any real tool call is queued when workers cannot start."""
 
 
 def _normalize_arguments(
