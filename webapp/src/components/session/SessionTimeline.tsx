@@ -778,6 +778,12 @@ function useVisibleWorkRunPhase(phase: WorkRunPhase | null) {
   return visiblePhase;
 }
 
+const ACTIVE_WORK_RUN_PLACEHOLDER_KEY = "work-active-placeholder";
+
+function shouldUseActivePlaceholderKey(unit: Extract<RenderUnit, { kind: "work_run" }>) {
+  return !unit.key.startsWith("work-after-");
+}
+
 function WorkRun({
   unit,
   subAgents,
@@ -813,6 +819,8 @@ function WorkRun({
     () => workRunCountItems(unit.items, showSubAgentCards ?? true),
     [showSubAgentCards, unit.items],
   );
+  const hasVisibleSummary = workRunSummaryItems.some((item) => item.count > 0);
+  const showPlaceholderSummary = active && !hasVisibleSummary;
 
   return (
     <div
@@ -839,7 +847,13 @@ function WorkRun({
           >
             <ChevronRightIcon className="timeline-entry__chevron" />
             <TextShimmer text="Working" active={active || unit.running} className="timeline-entry__working-label" />
-            <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
+            {showPlaceholderSummary ? (
+              <span className="working-items__summary working-items__summary--placeholder" aria-hidden="true">
+                Preparing…
+              </span>
+            ) : (
+              <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
+            )}
           </Button>
         </CollapsibleTrigger>
         {hasItems ? (
@@ -895,14 +909,23 @@ export function SessionTimeline({
   const renderUnits = useMemo(() => {
     if (!sessionIsActive) return baseRenderUnits;
     const last = baseRenderUnits[baseRenderUnits.length - 1];
-    if (last?.kind === "work_run") return baseRenderUnits;
+    if (last?.kind === "work_run") {
+      if (!shouldUseActivePlaceholderKey(last)) return baseRenderUnits;
+      return [
+        ...baseRenderUnits.slice(0, -1),
+        {
+          ...last,
+          key: ACTIVE_WORK_RUN_PLACEHOLDER_KEY,
+        },
+      ];
+    }
     return [
       ...baseRenderUnits,
       {
         kind: "work_run" as const,
         key: latestItem?.kind === "message"
           ? `work-after-${latestItem.itemId}`
-          : "work-active-placeholder",
+          : ACTIVE_WORK_RUN_PLACEHOLDER_KEY,
         items: [],
         running: true,
       },
@@ -1034,7 +1057,7 @@ export function SessionTimeline({
     }
   }, [containerRef, itemsVersion, items.length, latestItem, latestItemIsUserMessage, userScrolledRef, setShowNewMessages, scrollToTarget, markProgrammaticScroll]);
 
-  if (items.length === 0 && connection === "connected") {
+  if (items.length === 0 && connection === "connected" && !sessionIsActive) {
     return (
       <div className="session-scroll-area" ref={containerRef}>
         <div className="timeline">

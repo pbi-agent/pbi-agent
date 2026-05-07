@@ -1,6 +1,7 @@
 # TODO
 
-- [X] Locate sub-agent provider request limit default
-- [X] Update limit from 100 to 200
-- [X] Run focused validation
-- [X] Update memory
+[X] Inspect SessionTimeline implementation and tests
+[X] Implement stable startup Working placeholder/key behavior
+[X] Add/update frontend tests for startup flicker cases
+[X] Run targeted and required frontend validation
+[X] Update memory and summarize handoff
