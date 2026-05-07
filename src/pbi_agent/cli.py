@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
+import hashlib
 import logging
 import os
 import shutil
@@ -67,10 +68,20 @@ from pbi_agent.log_config import configure_logging
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_COMMAND = "web"
-DEFAULT_SANDBOX_IMAGE = "pbi-agent-sandbox:local"
+
+
+def _docker_tag_safe(text: str) -> str:
+    tag = "".join(
+        character if character.isalnum() or character in "_.-" else "-"
+        for character in text
+    ).strip(".-")
+    return tag or "local"
+
+
+DEFAULT_SANDBOX_IMAGE = f"pbi-agent-sandbox:{_docker_tag_safe(__version__)}"
 SANDBOX_WORKSPACE = "/workspace"
 SANDBOX_HOME = "/home/pbi"
-SANDBOX_CONFIG_VOLUME = "pbi-agent-sandbox-config"
+SANDBOX_CONFIG_VOLUME_PREFIX = "pbi-agent-sandbox-config"
 WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS = 20.0
 WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS = 10.0
 WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS = 0.1
@@ -362,6 +373,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional public URL for reverse-proxy setups.",
     )
+    web_parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
 
     sandbox_parser = add_command_parser(
         "sandbox",
@@ -396,6 +412,7 @@ def build_parser() -> argparse.ArgumentParser:
         dev=False,
         title=None,
         url=None,
+        no_open=False,
     )
     sandbox_subparsers = sandbox_parser.add_subparsers(
         dest="sandbox_command",
@@ -1113,6 +1130,16 @@ def _handle_sandbox_command(args: argparse.Namespace) -> int:
     if sandbox_command == "web" and (args.port < 1 or args.port > 65535):
         print("Error: --port must be between 1 and 65535.", file=sys.stderr)
         return 2
+    if sandbox_command == "web":
+        if getattr(args, "_explicit_web_port", False):
+            if not _is_web_port_available(args.host, args.port):
+                print(
+                    f"Error: host port {args.port} is unavailable for sandbox web.",
+                    file=sys.stderr,
+                )
+                return 1
+        elif not _resolve_web_command_port(args):
+            return 1
 
     docker_check = _check_docker_available()
     if docker_check is not None:
@@ -1136,6 +1163,8 @@ def _handle_sandbox_command(args: argparse.Namespace) -> int:
             return build_result.returncode
 
     run_command, container_env = _build_sandbox_run_command(args, image)
+    if sandbox_command == "web":
+        _start_browser_open_thread(args.host, args.port, _browser_target_url(args))
     try:
         completed = subprocess.run(run_command, env=container_env)
     except KeyboardInterrupt:
@@ -1202,21 +1231,27 @@ def _build_sandbox_run_command(
     image: str,
 ) -> tuple[list[str], dict[str, str]]:
     workspace = Path.cwd().resolve()
+    container_workspace = _sandbox_container_workspace(workspace)
     env_names, env_overrides = _sandbox_environment(args)
+    sandbox_command = args.sandbox_command or "web"
+    if sandbox_command == "web":
+        env_overrides["BROWSER"] = "/bin/true"
+        env_names = sorted(set(env_names) | {"BROWSER"})
     command = [
         "docker",
         "run",
         "--rm",
         "--init",
         "--workdir",
-        SANDBOX_WORKSPACE,
+        container_workspace,
         "--mount",
-        _sandbox_workspace_mount(workspace, read_only=bool(args.read_only_repo)),
-        "--mount",
-        (
-            f"type=volume,source={SANDBOX_CONFIG_VOLUME},"
-            f"target={SANDBOX_HOME}/.pbi-agent"
+        _sandbox_workspace_mount(
+            workspace,
+            target=container_workspace,
+            read_only=bool(args.read_only_repo),
         ),
+        "--mount",
+        _sandbox_config_mount(workspace),
         "--cap-drop",
         "ALL",
         "--security-opt",
@@ -1238,7 +1273,6 @@ def _build_sandbox_run_command(
     for env_name in env_names:
         command.extend(["--env", env_name])
 
-    sandbox_command = args.sandbox_command or "web"
     if sandbox_command == "web":
         command.extend(
             [
@@ -1255,8 +1289,39 @@ def _build_sandbox_run_command(
     return command, container_env
 
 
-def _sandbox_workspace_mount(workspace: Path, *, read_only: bool) -> str:
-    mount = f"type=bind,source={workspace},target={SANDBOX_WORKSPACE}"
+def _sandbox_workspace_id(workspace: Path) -> str:
+    return hashlib.sha256(str(workspace).encode("utf-8")).hexdigest()[:16]
+
+
+def _sandbox_container_workspace(workspace: Path) -> str:
+    return f"{SANDBOX_WORKSPACE}/{_sandbox_workspace_id(workspace)}"
+
+
+def _sandbox_config_volume(workspace: Path) -> str:
+    return f"{SANDBOX_CONFIG_VOLUME_PREFIX}-{_sandbox_workspace_id(workspace)}"
+
+
+def _sandbox_host_config_dir() -> Path:
+    return Path.home() / ".pbi-agent"
+
+
+def _sandbox_config_mount(workspace: Path) -> str:
+    host_config_dir = _sandbox_host_config_dir()
+    if host_config_dir.is_dir():
+        return f"type=bind,source={host_config_dir},target={SANDBOX_HOME}/.pbi-agent"
+    return (
+        f"type=volume,source={_sandbox_config_volume(workspace)},"
+        f"target={SANDBOX_HOME}/.pbi-agent"
+    )
+
+
+def _sandbox_workspace_mount(
+    workspace: Path,
+    *,
+    target: str,
+    read_only: bool,
+) -> str:
+    mount = f"type=bind,source={workspace},target={target}"
     if read_only:
         mount += ",readonly"
     return mount
@@ -2119,7 +2184,8 @@ def _handle_web_command(
 
     browser_url = _browser_target_url(args)
     print(f"Serving web UI on {browser_url}")
-    _start_browser_open_thread(args.host, args.port, browser_url)
+    if not getattr(args, "no_open", False):
+        _start_browser_open_thread(args.host, args.port, browser_url)
 
     server = _create_web_server(
         args,

@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-05-03
+- Last compacted: 2026-05-07
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -36,9 +36,8 @@
 - UserQuestionsPanel UX: one question at a time with shadcn Card, selected filled Button state, keyboard nav, auto-focus active option, Prev/Next + dots, and custom textarea retained in fieldset.
 - Ask-user notifications: frontend-only localStorage prefs for desktop/sound; AppShell effect fires hidden/unfocused browser notifications/sound, deduped by live/session + prompt id, click focuses/navigates to waiting session.
 - 2026-05-03 web session durability cleanup: legacy live-session API/UI references removed; saved-session status, timeline hydration, continuation, websocket replay, run history, lazy titles, composer readiness, and duplicate input-state events normalized. Keep validating similar changes with focused web API pytest plus `bun run test:web -- SessionPage store BoardPage RunHistory RunDetailModal` as touched.
+- Sandbox: `pbi-agent sandbox [web|run]` builds a bundled package Dockerfile from `src/pbi_agent/sandbox/Dockerfile.sandbox`, installs matching `pbi-agent==${PBI_AGENT_VERSION}` from PyPI, ignores workspace Dockerfiles, uses versioned default image tags, per-workspace hashed mount paths/config volumes, host-side browser open for web, host `~/.pbi-agent` bind mount when present, and an Alpine runtime image with minimal `apk` packages plus site-packages cleanup. Validate with `uv run pytest -q --tb=short -x tests/test_cli.py -k sandbox`, Ruff, docs build, `uv build`, and Docker build/smoke when available.
 
 ## Detailed Task Events
-## 2026-05-04
-- Added whole-agent Docker Desktop sandbox: `pbi-agent sandbox [web|run]`, hardened `docker run` wrapper, single bundled Dockerfile, and docs. Public-user path uses bundled package Dockerfile that installs matching `pbi-agent==${PBI_AGENT_VERSION}` from PyPI and ignores Dockerfiles in target repos. Validation: focused `tests/test_cli.py`, Ruff check/format-check, `uv build`, wheel/sdist asset inspection, and `git diff --check` passed. Docker smoke skipped because `docker` CLI is unavailable. `bun run docs:build` is blocked by a Windows/esbuild access-denied config load error before docs load. Full pytest currently stops on unrelated `tests/test_input_mentions.py::test_expand_file_mentions_warns_for_overlong_unresolved_path`.
-- Optimized bundled sandbox Dockerfile: versioned `python:3.12.12-slim-bookworm`, no `uv` in final image, reduced apt package set, consolidated setup, BuildKit pip cache mount, binary-wheel PyPI install, and matching docs snippet. Validation: focused `tests/test_cli.py`, Ruff check/format-check, `uv build`, wheel Dockerfile inspection, and `git diff --check` passed. Docker smoke skipped because `docker` CLI is unavailable; docs build remains blocked by the same Windows/esbuild access-denied config-load error.
-- Removed optional `ripgrep` from sandbox image package list; standard `grep` remains available from the base image. Validation: focused `tests/test_cli.py`, Ruff check, and Ruff format-check passed.
+## 2026-05-07
+- Optimized sandbox image: switched bundled Dockerfile to `python:3.12.12-alpine3.22`, minimal `apk` packages, dynamic site-packages cleanup, and PyArrow dev artifact removal; benchmark kept best option at 560 MB vs 887 MB baseline (Debian cleanup was 735 MB, Alpine untrimmed 567 MB). Validation: Docker build/import/CLI smoke, focused sandbox pytest, Ruff check/format-check, docs build, `uv build`, and wheel/sdist Dockerfile inspection passed.

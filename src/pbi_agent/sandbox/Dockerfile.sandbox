@@ -1,37 +1,37 @@
 # syntax=docker/dockerfile:1.7
 
 ARG PYTHON_VERSION=3.12.12
-FROM python:${PYTHON_VERSION}-slim-bookworm
+FROM python:${PYTHON_VERSION}-alpine3.22
 
 ARG PBI_AGENT_VERSION
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 SHELL ["/bin/sh", "-euxc"]
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        bash \
-        ca-certificates \
-        curl \
-        git \
-        patch \
-        procps \
-        ripgrep \
-        unzip \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --home-dir /home/pbi --shell /bin/bash pbi \
+RUN apk add --no-cache bash ca-certificates git patch \
+    && adduser -D -h /home/pbi -s /bin/bash pbi \
     && mkdir -p /workspace /home/pbi/.pbi-agent /home/pbi/.cache \
     && chown -R pbi:pbi /workspace /home/pbi
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     test -n "${PBI_AGENT_VERSION}" \
     && python -m pip install \
-        --only-binary=:all: \
-        "pbi-agent==${PBI_AGENT_VERSION}"
+        --prefer-binary \
+        "pbi-agent==${PBI_AGENT_VERSION}" \
+    && site_packages="$(python -c 'import site; print(site.getsitepackages()[0])')" \
+    && find "${site_packages}" \
+        \( -type d -a \( -name tests -o -name test -o -name __pycache__ \) \) \
+        -prune -exec rm -rf '{}' + \
+    && find "${site_packages}" \
+        \( -type f -a \( -name '*.pyc' -o -name '*.pyo' \) \) \
+        -delete \
+    && rm -rf \
+        "${site_packages}/pyarrow/include" \
+        "${site_packages}/pyarrow/includes" \
+        "${site_packages}/pyarrow/src"
 
 USER pbi
 WORKDIR /workspace
