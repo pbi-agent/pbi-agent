@@ -486,6 +486,53 @@ describe("SessionPage", () => {
     });
   });
 
+  it("does not show an empty working block after a running sub-agent has produced its final response", async () => {
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessionIndex: { "session-1": getSavedSessionKey("session-1") },
+      sessionsByKey: {
+        [getSavedSessionKey("session-1")]: {
+          ...createEmptySessionState(),
+          key: getSavedSessionKey("session-1"),
+          sessionId: "session-1",
+          connection: "connected",
+          waitMessage: "Parent is still working",
+          processing: { active: true, phase: "tool_execution", message: "Working" },
+          items: [
+            {
+              kind: "message",
+              itemId: "sub-user-msg",
+              role: "user",
+              content: "Delegated task",
+              markdown: true,
+              subAgentId: "sub-1",
+            },
+            {
+              kind: "message",
+              itemId: "sub-final-msg",
+              role: "assistant",
+              content: "Sub-agent done",
+              markdown: true,
+              subAgentId: "sub-1",
+            },
+          ],
+          subAgents: { "sub-1": { title: "Researcher", status: "running" } },
+          itemsVersion: 1,
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await screen.findByText("Timeline 2");
+    await waitFor(() => {
+      expect(sessionTimelineMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        processing: null,
+        waitMessage: null,
+      }));
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     sessionTimelineMock.mockClear();

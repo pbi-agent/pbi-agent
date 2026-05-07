@@ -610,12 +610,17 @@ export function SessionPage({
       : sessionState?.subAgents ?? {},
     [isSubAgentRoute, routeSubAgentId, selectedSubAgent, sessionState?.subAgents],
   );
+  const latestDisplayedItem = displayedItems.at(-1);
+  const selectedSubAgentHasFinalResponse =
+    latestDisplayedItem?.kind === "message" && latestDisplayedItem.role === "assistant";
+  const showSelectedSubAgentProcessing =
+    selectedSubAgentIsRunning && !selectedSubAgentHasFinalResponse;
   const displayedProcessing: ProcessingState | null = isSubAgentRoute
-    ? selectedSubAgentIsRunning
+    ? showSelectedSubAgentProcessing
       ? sessionState?.processing ?? null
       : null
     : sessionState?.processing ?? null;
-  const displayedWaitMessage = isSubAgentRoute && !selectedSubAgentIsRunning
+  const displayedWaitMessage = isSubAgentRoute && !showSelectedSubAgentProcessing
     ? null
     : sessionState?.waitMessage ?? null;
 
