@@ -1,5 +1,5 @@
-[X] Locate sandbox image package list
-[X] Add GitHub CLI to sandbox image
-[X] Update tests/docs if needed
-[X] Run focused validation
-[X] Update memory
+# TODO
+
+[X] Inspect task-scoped changes
+[X] Run validation excluding basedpyright per request
+[X] Prepare branch for shipping

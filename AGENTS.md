@@ -26,6 +26,7 @@ bun run test:web
 bun run test:web:watch
 uv run ruff check .
 uv run ruff format .
+uv run basedpyright
 bun run lint
 bun run lint:fix
 bun run typecheck
@@ -106,8 +107,8 @@ uv tool install --reinstall .
 - Workspace confinement: `shell` tool rejects path traversal; all file tools validate paths against workspace boundaries.
 - Keep the web implementation aligned with the current FastAPI backend plus Vite/React frontend; do not introduce a parallel web framework or client stack.
 - Validation by touched surface:
-  - Python changes: `uv run ruff check .`, `uv run ruff format --check .`, and the relevant `uv run pytest -q --tb=short -x ...` scope.
+  - Python changes: `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, and the relevant `uv run pytest -q --tb=short -x ...` scope.
   - Frontend changes: `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build`.
   - Docs changes: `bun run docs:build`.
-- Before handoff on broad changes, the repo-level checks are `uv run ruff check .`, `uv run ruff format --check .`, `bun run lint`, `bun run typecheck`, and `uv run pytest -q --tb=short -x`.
+- Before handoff on broad changes, the repo-level checks are `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, `bun run lint`, `bun run typecheck`, and `uv run pytest -q --tb=short -x`.
 - **No migration or backward-compatibility logic.** The project is in early development — do not add schema migrations, version checks, deprecation shims, or any other backward-compatibility code. When something changes, just change it directly.

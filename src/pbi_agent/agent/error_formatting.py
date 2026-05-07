@@ -241,15 +241,6 @@ def _extract_structured_error(message: str) -> _StructuredErrorInfo:
     )
 
 
-def _extract_error_detail(message: str) -> str:
-    payload = _parse_embedded_json(message)
-    if payload is None:
-        return message
-
-    extracted = _extract_from_payload(payload)
-    return extracted or message
-
-
 def _parse_embedded_json(message: str) -> dict[str, Any] | None:
     start = message.find("{")
     if start < 0:

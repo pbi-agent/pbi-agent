@@ -176,15 +176,6 @@ class WorkersMixin:
         is_initial_worker_turn = initial_user_message_id is not None
         task_result_finalization_failed = False
 
-        def publish_summary(summary: str) -> None:
-            with SessionStore() as store:
-                updated = store.update_kanban_task(
-                    task_id,
-                    last_result_summary=summary,
-                )
-            if updated is not None:
-                self._publish_task_updated(updated)
-
         try:
             if live_session is not None:
                 live_session.status = "running"

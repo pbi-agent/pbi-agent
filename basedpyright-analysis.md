@@ -1,0 +1,355 @@
+# BasedPyright diagnostics analysis
+
+Total: 315 errors; files analyzed: 122
+
+## By rule
+
+- 288: `reportAttributeAccessIssue`
+- 17: `reportArgumentType`
+- 3: `reportOptionalMemberAccess`
+- 2: `reportAbstractUsage`
+- 2: `reportCallIssue`
+- 1: `reportOperatorIssue`
+- 1: `reportReturnType`
+- 1: `reportRedeclaration`
+
+## By file
+
+- 81: `src/pbi_agent/web/session/tasks.py`
+- 64: `src/pbi_agent/web/session/workers.py`
+- 43: `src/pbi_agent/web/session/live_sessions.py`
+- 39: `src/pbi_agent/web/session/provider_auth.py`
+- 24: `src/pbi_agent/web/session/saved_sessions.py`
+- 15: `src/pbi_agent/web/session/catalogs.py`
+- 13: `src/pbi_agent/web/session/events.py`
+- 11: `src/pbi_agent/web/session/configuration.py`
+- 4: `src/pbi_agent/tools/sub_agent.py`
+- 3: `src/pbi_agent/cli.py`
+- 3: `src/pbi_agent/project_sources.py`
+- 3: `src/pbi_agent/providers/xai_provider.py`
+- 3: `src/pbi_agent/session_store.py`
+- 2: `src/pbi_agent/agent/error_formatting.py`
+- 2: `src/pbi_agent/providers/openai_provider.py`
+- 1: `src/pbi_agent/auth/usage_limits.py`
+- 1: `src/pbi_agent/config.py`
+- 1: `src/pbi_agent/display/console_display.py`
+- 1: `src/pbi_agent/tools/read_file.py`
+- 1: `src/pbi_agent/web/server_runtime.py`
+
+## All diagnostics
+
+- `src/pbi_agent/agent/error_formatting.py:223:43` `reportOptionalMemberAccess` "strip" is not a known attribute of "None"
+- `src/pbi_agent/agent/error_formatting.py:225:52` `reportOptionalMemberAccess` "strip" is not a known attribute of "None"
+- `src/pbi_agent/auth/usage_limits.py:340:34` `reportOperatorIssue` Operator "-" not supported for types "Literal[100]" and "float | None"   Operator "-" not supported for types "Literal[100]" and "None" when expected type is "float | None"
+- `src/pbi_agent/cli.py:2531:15` `reportAbstractUsage` Cannot instantiate abstract class "ConsoleDisplay"   "DisplayProtocol.request_interrupt" is not implemented   "DisplayProtocol.clear_interrupt" is not implemented   and 2 more...
+- `src/pbi_agent/cli.py:2596:16` `reportAttributeAccessIssue` Cannot access attribute "serve" for class "object"   Attribute "serve" is unknown
+- `src/pbi_agent/cli.py:2906:18` `reportArgumentType` Argument of type "ResolvedRuntime" cannot be assigned to parameter "settings" of type "Settings" in function "__init__"   "ResolvedRuntime" is not assignable to "Settings"
+- `src/pbi_agent/config.py:1416:25` `reportArgumentType` Argument of type "str | None" cannot be assigned to parameter "provider_id" of type "str" in function "_concrete_profile_for_settings"   Type "str | None" is not assignable to type "str"     "None" is not assignable to "str"
+- `src/pbi_agent/display/console_display.py:132:16` `reportAbstractUsage` Cannot instantiate abstract class "ConsoleSubAgentDisplay"   "DisplayProtocol.request_interrupt" is not implemented   "DisplayProtocol.clear_interrupt" is not implemented   and 2 more...
+- `src/pbi_agent/project_sources.py:198:16` `reportReturnType` Type "str | None" is not assignable to return type "str"   Type "str | None" is not assignable to type "str"     "None" is not assignable to "str"
+- `src/pbi_agent/project_sources.py:263:12` `reportCallIssue` No overloads for "quote" match the provided arguments
+- `src/pbi_agent/project_sources.py:263:31` `reportArgumentType` Argument of type "str | None" cannot be assigned to parameter "string" of type "bytes | bytearray" in function "quote"   Type "str | None" is not assignable to type "bytes | bytearray"     Type "str" is not assignable to type "bytes | bytearray"       "str" is not assignable to "bytes"       "str" is not assignable to "bytearray"
+- `src/pbi_agent/providers/openai_provider.py:1570:13` `reportArgumentType` Argument of type "list[Any]" cannot be assigned to parameter "value" of type "str" in function "__setitem__"   "list[Any]" is not assignable to "str"
+- `src/pbi_agent/providers/openai_provider.py:1572:13` `reportArgumentType` Argument of type "list[Any]" cannot be assigned to parameter "value" of type "str" in function "__setitem__"   "list[Any]" is not assignable to "str"
+- `src/pbi_agent/providers/xai_provider.py:703:41` `reportAttributeAccessIssue` Cannot access attribute "title" for class "dict[str, str]"   Attribute "title" is unknown
+- `src/pbi_agent/providers/xai_provider.py:704:39` `reportAttributeAccessIssue` Cannot access attribute "url" for class "dict[str, str]"   Attribute "url" is unknown
+- `src/pbi_agent/providers/xai_provider.py:705:43` `reportAttributeAccessIssue` Cannot access attribute "snippet" for class "dict[str, str]"   Attribute "snippet" is unknown
+- `src/pbi_agent/session_store.py:527:27` `reportArgumentType` Argument of type "Unknown | None" cannot be assigned to parameter "upload_id" of type "str" in function "__init__"   Type "Unknown | None" is not assignable to type "str"     "None" is not assignable to "str"
+- `src/pbi_agent/session_store.py:528:22` `reportArgumentType` Argument of type "Unknown | None" cannot be assigned to parameter "name" of type "str" in function "__init__"   Type "Unknown | None" is not assignable to type "str"     "None" is not assignable to "str"
+- `src/pbi_agent/session_store.py:529:27` `reportArgumentType` Argument of type "Unknown | None" cannot be assigned to parameter "mime_type" of type "str" in function "__init__"   Type "Unknown | None" is not assignable to type "str"     "None" is not assignable to "str"
+- `src/pbi_agent/tools/read_file.py:193:9` `reportRedeclaration` Declaration "sheets" is obscured by a declaration of the same name
+- `src/pbi_agent/tools/sub_agent.py:115:9` `reportArgumentType` Argument of type "Settings | None" cannot be assigned to parameter "settings" of type "Settings" in function "run_sub_agent_task"   Type "Settings | None" is not assignable to type "Settings"     "None" is not assignable to "Settings"
+- `src/pbi_agent/tools/sub_agent.py:116:9` `reportArgumentType` Argument of type "DisplayProtocol | None" cannot be assigned to parameter "display" of type "DisplayProtocol" in function "run_sub_agent_task"   Type "DisplayProtocol | None" is not assignable to type "DisplayProtocol"     "None" is incompatible with protocol "DisplayProtocol"       "verbose" is not present       "bind_session" is not present       "request_shutdown" is not present       "request_interrupt" is not present       "clear_interrupt" is not present       "interrupt_requested" is not present   ...
+- `src/pbi_agent/tools/sub_agent.py:117:30` `reportArgumentType` Argument of type "TokenUsage | None" cannot be assigned to parameter "parent_session_usage" of type "TokenUsage" in function "run_sub_agent_task"   Type "TokenUsage | None" is not assignable to type "TokenUsage"     "None" is not assignable to "TokenUsage"
+- `src/pbi_agent/tools/sub_agent.py:118:27` `reportArgumentType` Argument of type "TokenUsage | None" cannot be assigned to parameter "parent_turn_usage" of type "TokenUsage" in function "run_sub_agent_task"   Type "TokenUsage | None" is not assignable to type "TokenUsage"     "None" is not assignable to "TokenUsage"
+- `src/pbi_agent/web/server_runtime.py:195:18` `reportArgumentType` Argument of type "ResolvedRuntime | Settings" cannot be assigned to parameter "settings" of type "Settings" in function "__init__"   Type "ResolvedRuntime | Settings" is not assignable to type "Settings"     "ResolvedRuntime" is not assignable to "Settings"
+- `src/pbi_agent/web/session/catalogs.py:15:14` `reportAttributeAccessIssue` Cannot access attribute "_mention_index" for class "CatalogsMixin*"   Attribute "_mention_index" is unknown
+- `src/pbi_agent/web/session/catalogs.py:18:14` `reportAttributeAccessIssue` Cannot access attribute "_mention_index" for class "CatalogsMixin*"   Attribute "_mention_index" is unknown
+- `src/pbi_agent/web/session/catalogs.py:19:14` `reportAttributeAccessIssue` Cannot access attribute "_mention_index" for class "CatalogsMixin*"   Attribute "_mention_index" is unknown
+- `src/pbi_agent/web/session/catalogs.py:27:21` `reportAttributeAccessIssue` Cannot access attribute "_mention_index" for class "CatalogsMixin*"   Attribute "_mention_index" is unknown
+- `src/pbi_agent/web/session/catalogs.py:30:32` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime_optional" for class "CatalogsMixin*"   Attribute "_resolve_runtime_optional" is unknown
+- `src/pbi_agent/web/session/catalogs.py:32:40` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "CatalogsMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/catalogs.py:33:35` `reportAttributeAccessIssue` Cannot access attribute "_workspace_context" for class "CatalogsMixin*"   Attribute "_workspace_context" is unknown
+- `src/pbi_agent/web/session/catalogs.py:34:44` `reportAttributeAccessIssue` Cannot access attribute "_workspace_context" for class "CatalogsMixin*"   Attribute "_workspace_context" is unknown
+- `src/pbi_agent/web/session/catalogs.py:35:32` `reportAttributeAccessIssue` Cannot access attribute "_workspace_context" for class "CatalogsMixin*"   Attribute "_workspace_context" is unknown
+- `src/pbi_agent/web/session/catalogs.py:50:30` `reportAttributeAccessIssue` Cannot access attribute "list_sessions" for class "CatalogsMixin*"   Attribute "list_sessions" is unknown
+- `src/pbi_agent/web/session/catalogs.py:51:27` `reportAttributeAccessIssue` Cannot access attribute "list_tasks" for class "CatalogsMixin*"   Attribute "list_tasks" is unknown
+- `src/pbi_agent/web/session/catalogs.py:53:22` `reportAttributeAccessIssue` Cannot access attribute "_serialize_live_session" for class "CatalogsMixin*"   Attribute "_serialize_live_session" is unknown
+- `src/pbi_agent/web/session/catalogs.py:54:34` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "CatalogsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/catalogs.py:56:34` `reportAttributeAccessIssue` Cannot access attribute "list_board_stages" for class "CatalogsMixin*"   Attribute "list_board_stages" is unknown
+- `src/pbi_agent/web/session/catalogs.py:74:50` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "CatalogsMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/configuration.py:77:47` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "ConfigurationMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/configuration.py:212:26` `reportAttributeAccessIssue` Cannot access attribute "_default_runtime" for class "ConfigurationMixin*"   Attribute "_default_runtime" is unknown
+- `src/pbi_agent/web/session/configuration.py:423:21` `reportAttributeAccessIssue` Cannot access attribute "_runtime_args" for class "ConfigurationMixin*"   Attribute "_runtime_args" is unknown
+- `src/pbi_agent/web/session/configuration.py:424:29` `reportAttributeAccessIssue` Cannot access attribute "_default_runtime" for class "ConfigurationMixin*"   Attribute "_default_runtime" is unknown
+- `src/pbi_agent/web/session/configuration.py:425:53` `reportAttributeAccessIssue` Cannot access attribute "_default_runtime" for class "ConfigurationMixin*"   Attribute "_default_runtime" is unknown
+- `src/pbi_agent/web/session/configuration.py:428:26` `reportAttributeAccessIssue` Cannot access attribute "_default_runtime" for class "ConfigurationMixin*"   Attribute "_default_runtime" is unknown
+- `src/pbi_agent/web/session/configuration.py:447:21` `reportAttributeAccessIssue` Cannot access attribute "_default_runtime" for class "ConfigurationMixin*"   Attribute "_default_runtime" is unknown
+- `src/pbi_agent/web/session/configuration.py:460:55` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "ConfigurationMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/configuration.py:482:59` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "ConfigurationMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/configuration.py:495:14` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "ConfigurationMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/configuration.py:617:54` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "ConfigurationMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/events.py:25:25` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "EventsMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/events.py:26:29` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "EventsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/events.py:42:34` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "EventsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/events.py:47:14` `reportAttributeAccessIssue` Cannot access attribute "_require_saved_session" for class "EventsMixin*"   Attribute "_require_saved_session" is unknown
+- `src/pbi_agent/web/session/events.py:48:29` `reportAttributeAccessIssue` Cannot access attribute "_find_stream_live_session_for_saved_session" for class "EventsMixin*"   Attribute "_find_stream_live_session_for_saved_session" is unknown
+- `src/pbi_agent/web/session/events.py:69:14` `reportAttributeAccessIssue` Cannot access attribute "_require_saved_session" for class "EventsMixin*"   Attribute "_require_saved_session" is unknown
+- `src/pbi_agent/web/session/events.py:70:29` `reportAttributeAccessIssue` Cannot access attribute "_find_stream_live_session_for_saved_session" for class "EventsMixin*"   Attribute "_find_stream_live_session_for_saved_session" is unknown
+- `src/pbi_agent/web/session/events.py:95:14` `reportAttributeAccessIssue` Cannot access attribute "_require_saved_session" for class "EventsMixin*"   Attribute "_require_saved_session" is unknown
+- `src/pbi_agent/web/session/events.py:96:29` `reportAttributeAccessIssue` Cannot access attribute "_find_stream_live_session_for_saved_session" for class "EventsMixin*"   Attribute "_find_stream_live_session_for_saved_session" is unknown
+- `src/pbi_agent/web/session/events.py:143:65` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "EventsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/events.py:149:54` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "EventsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/events.py:194:31` `reportAttributeAccessIssue` Cannot access attribute "_serialize_live_snapshot" for class "EventsMixin*"   Attribute "_serialize_live_snapshot" is unknown
+- `src/pbi_agent/web/session/events.py:207:29` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "EventsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:49:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "LiveSessionsMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:50:34` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "LiveSessionsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:68:24` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "LiveSessionsMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:70:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "LiveSessionsMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:72:22` `reportAttributeAccessIssue` Cannot access attribute "_require_saved_session" for class "LiveSessionsMixin*"   Attribute "_require_saved_session" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:74:36` `reportAttributeAccessIssue` Cannot access attribute "_resolve_saved_session_runtime" for class "LiveSessionsMixin*"   Attribute "_resolve_saved_session_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:79:26` `reportAttributeAccessIssue` Cannot access attribute "_update_saved_session_runtime" for class "LiveSessionsMixin*"   Attribute "_update_saved_session_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:86:60` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "LiveSessionsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:88:26` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "LiveSessionsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:90:18` `reportAttributeAccessIssue` Cannot access attribute "_ensure_worker_creation_allowed_locked" for class "LiveSessionsMixin*"   Attribute "_ensure_worker_creation_allowed_locked" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:100:26` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "LiveSessionsMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:117:29` `reportAttributeAccessIssue` Cannot access attribute "_run_session_worker" for class "LiveSessionsMixin*"   Attribute "_run_session_worker" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:132:18` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "LiveSessionsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:135:18` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "LiveSessionsMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:145:18` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "LiveSessionsMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:155:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "LiveSessionsMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:165:22` `reportAttributeAccessIssue` Cannot access attribute "_finalize_live_session_locked" for class "LiveSessionsMixin*"   Attribute "_finalize_live_session_locked" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:209:14` `reportAttributeAccessIssue` Cannot access attribute "_require_saved_session" for class "LiveSessionsMixin*"   Attribute "_require_saved_session" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:244:34` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "LiveSessionsMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:251:47` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "LiveSessionsMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:266:18` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "LiveSessionsMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:343:59` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "LiveSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:350:18` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "LiveSessionsMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:481:14` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "LiveSessionsMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:517:14` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "LiveSessionsMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:554:61` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "LiveSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:574:34` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "LiveSessionsMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:606:34` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "LiveSessionsMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:617:34` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "LiveSessionsMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:620:25` `reportAttributeAccessIssue` Cannot access attribute "_update_saved_session_runtime" for class "LiveSessionsMixin*"   Attribute "_update_saved_session_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:630:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "LiveSessionsMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:638:34` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "LiveSessionsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:660:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "LiveSessionsMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:666:47` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "LiveSessionsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:676:29` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "LiveSessionsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:751:39` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "LiveSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:752:48` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "LiveSessionsMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:753:52` `reportAttributeAccessIssue` Cannot access attribute "_workspace_context" for class "LiveSessionsMixin*"   Attribute "_workspace_context" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:777:29` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "LiveSessionsMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:787:24` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "LiveSessionsMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:794:18` `reportAttributeAccessIssue` Cannot access attribute "_update_saved_session_runtime" for class "LiveSessionsMixin*"   Attribute "_update_saved_session_runtime" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:799:14` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "LiveSessionsMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/live_sessions.py:849:14` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "LiveSessionsMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:39:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:46:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_view" for class "ProviderAuthMixin*"   Attribute "_provider_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:47:33` `reportAttributeAccessIssue` Cannot access attribute "_auth_status_view" for class "ProviderAuthMixin*"   Attribute "_auth_status_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:63:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:84:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_view" for class "ProviderAuthMixin*"   Attribute "_provider_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:85:33` `reportAttributeAccessIssue` Cannot access attribute "_auth_status_view" for class "ProviderAuthMixin*"   Attribute "_auth_status_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:86:29` `reportAttributeAccessIssue` Cannot access attribute "_auth_session_view" for class "ProviderAuthMixin*"   Attribute "_auth_session_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:91:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:103:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_view" for class "ProviderAuthMixin*"   Attribute "_provider_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:104:33` `reportAttributeAccessIssue` Cannot access attribute "_auth_status_view" for class "ProviderAuthMixin*"   Attribute "_auth_status_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:105:29` `reportAttributeAccessIssue` Cannot access attribute "_auth_session_view" for class "ProviderAuthMixin*"   Attribute "_auth_session_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:110:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:118:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_view" for class "ProviderAuthMixin*"   Attribute "_provider_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:119:33` `reportAttributeAccessIssue` Cannot access attribute "_auth_status_view" for class "ProviderAuthMixin*"   Attribute "_auth_status_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:125:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:137:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:187:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "ProviderAuthMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:188:26` `reportAttributeAccessIssue` Cannot access attribute "_provider_auth_flows" for class "ProviderAuthMixin*"   Attribute "_provider_auth_flows" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:196:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "ProviderAuthMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:197:37` `reportAttributeAccessIssue` Cannot access attribute "_provider_auth_flows" for class "ProviderAuthMixin*"   Attribute "_provider_auth_flows" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:199:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_auth_flows" for class "ProviderAuthMixin*"   Attribute "_provider_auth_flows" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:224:23` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "ProviderAuthMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:225:22` `reportAttributeAccessIssue` Cannot access attribute "_provider_auth_flows" for class "ProviderAuthMixin*"   Attribute "_provider_auth_flows" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:227:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_view" for class "ProviderAuthMixin*"   Attribute "_provider_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:228:33` `reportAttributeAccessIssue` Cannot access attribute "_auth_status_view" for class "ProviderAuthMixin*"   Attribute "_auth_status_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:234:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:242:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_view" for class "ProviderAuthMixin*"   Attribute "_provider_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:243:33` `reportAttributeAccessIssue` Cannot access attribute "_auth_status_view" for class "ProviderAuthMixin*"   Attribute "_auth_status_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:245:29` `reportAttributeAccessIssue` Cannot access attribute "_auth_session_view" for class "ProviderAuthMixin*"   Attribute "_auth_session_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:250:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:279:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_view" for class "ProviderAuthMixin*"   Attribute "_provider_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:280:33` `reportAttributeAccessIssue` Cannot access attribute "_auth_status_view" for class "ProviderAuthMixin*"   Attribute "_auth_status_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:282:29` `reportAttributeAccessIssue` Cannot access attribute "_auth_session_view" for class "ProviderAuthMixin*"   Attribute "_auth_session_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:296:25` `reportAttributeAccessIssue` Cannot access attribute "_require_provider" for class "ProviderAuthMixin*"   Attribute "_require_provider" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:334:30` `reportAttributeAccessIssue` Cannot access attribute "_provider_view" for class "ProviderAuthMixin*"   Attribute "_provider_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:335:33` `reportAttributeAccessIssue` Cannot access attribute "_auth_status_view" for class "ProviderAuthMixin*"   Attribute "_auth_status_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:337:29` `reportAttributeAccessIssue` Cannot access attribute "_auth_session_view" for class "ProviderAuthMixin*"   Attribute "_auth_session_view" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:360:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "ProviderAuthMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/provider_auth.py:361:25` `reportAttributeAccessIssue` Cannot access attribute "_provider_auth_flows" for class "ProviderAuthMixin*"   Attribute "_provider_auth_flows" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:24:22` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:48:42` `reportAttributeAccessIssue` Cannot access attribute "_find_live_session_for_saved_session" for class "SavedSessionsMixin*"   Attribute "_find_live_session_for_saved_session" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:64:24` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "SavedSessionsMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:67:22` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:78:14` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "SavedSessionsMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:84:59` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:91:29` `reportAttributeAccessIssue` Cannot access attribute "_find_live_session_for_saved_session" for class "SavedSessionsMixin*"   Attribute "_find_live_session_for_saved_session" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:93:18` `reportAttributeAccessIssue` Cannot access attribute "_serialize_live_session" for class "SavedSessionsMixin*"   Attribute "_serialize_live_session" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:103:18` `reportAttributeAccessIssue` Cannot access attribute "_serialize_live_snapshot" for class "SavedSessionsMixin*"   Attribute "_serialize_live_snapshot" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:136:59` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:143:14` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "SavedSessionsMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:149:61` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:163:65` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:182:52` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:204:52` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:226:60` `reportArgumentType` Argument of type "object" cannot be assigned to parameter "raw_value" of type "str | None" in function "_deserialize_json_field"   Type "object" is not assignable to type "str | None"     "object" is not assignable to "str"     "object" is not assignable to "None"
+- `src/pbi_agent/web/session/saved_sessions.py:238:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "SavedSessionsMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:239:21` `reportAttributeAccessIssue` Cannot access attribute "_find_live_session_for_saved_session_locked" for class "SavedSessionsMixin*"   Attribute "_find_live_session_for_saved_session_locked" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:248:45` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:253:62` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:257:42` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "SavedSessionsMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:272:62` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:290:18` `reportAttributeAccessIssue` Cannot access attribute "_publish_task_updated" for class "SavedSessionsMixin*"   Attribute "_publish_task_updated" is unknown
+- `src/pbi_agent/web/session/saved_sessions.py:295:55` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "SavedSessionsMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:41:52` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:44:66` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:49:30` `reportAttributeAccessIssue` Cannot access attribute "_resolve_task_runtime" for class "TasksMixin*"   Attribute "_resolve_task_runtime" is unknown
+- `src/pbi_agent/web/session/tasks.py:59:60` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:68:25` `reportAttributeAccessIssue` Cannot access attribute "_profile_map" for class "TasksMixin*"   Attribute "_profile_map" is unknown
+- `src/pbi_agent/web/session/tasks.py:69:25` `reportAttributeAccessIssue` Cannot access attribute "_command_map" for class "TasksMixin*"   Attribute "_command_map" is unknown
+- `src/pbi_agent/web/session/tasks.py:112:22` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:116:14` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "TasksMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/tasks.py:132:18` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "TasksMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/tasks.py:138:34` `reportAttributeAccessIssue` Cannot access attribute "_message_attachments_for_upload_ids" for class "TasksMixin*"   Attribute "_message_attachments_for_upload_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:143:32` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:144:23` `reportArgumentType` Argument of type "str | None" cannot be assigned to parameter "title" of type "str" in function "create_kanban_task"   Type "str | None" is not assignable to type "str"     "None" is not assignable to "str"
+- `src/pbi_agent/web/session/tasks.py:145:24` `reportArgumentType` Argument of type "str | None" cannot be assigned to parameter "prompt" of type "str" in function "create_kanban_task"   Type "str | None" is not assignable to type "str"     "None" is not assignable to "str"
+- `src/pbi_agent/web/session/tasks.py:171:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:172:32` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:174:18` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:180:22` `reportAttributeAccessIssue` Cannot access attribute "_resolve_runtime" for class "TasksMixin*"   Attribute "_resolve_runtime" is unknown
+- `src/pbi_agent/web/session/tasks.py:182:22` `reportAttributeAccessIssue` Cannot access attribute "_message_attachments_for_upload_ids" for class "TasksMixin*"   Attribute "_message_attachments_for_upload_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:188:65` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:235:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:236:26` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:239:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:240:32` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:242:18` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:246:63` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:251:18` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "TasksMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/tasks.py:253:23` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:254:22` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:265:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:266:18` `reportAttributeAccessIssue` Cannot access attribute "_ensure_worker_creation_allowed_locked" for class "TasksMixin*"   Attribute "_ensure_worker_creation_allowed_locked" is unknown
+- `src/pbi_agent/web/session/tasks.py:267:62` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:269:18` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:279:63` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:280:31` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:281:30` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:285:35` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:286:34` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:296:35` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:297:34` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:303:35` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:304:34` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:313:26` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:316:32` `reportAttributeAccessIssue` Cannot access attribute "_resolve_task_runtime" for class "TasksMixin*"   Attribute "_resolve_task_runtime" is unknown
+- `src/pbi_agent/web/session/tasks.py:354:40` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:366:35` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:367:34` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:395:72` `reportOptionalMemberAccess` "id" is not a known attribute of "None"
+- `src/pbi_agent/web/session/tasks.py:398:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:399:26` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:416:29` `reportAttributeAccessIssue` Cannot access attribute "_run_task_worker" for class "TasksMixin*"   Attribute "_run_task_worker" is unknown
+- `src/pbi_agent/web/session/tasks.py:421:23` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:422:22` `reportAttributeAccessIssue` Cannot access attribute "_ensure_worker_creation_allowed_locked" for class "TasksMixin*"   Attribute "_ensure_worker_creation_allowed_locked" is unknown
+- `src/pbi_agent/web/session/tasks.py:424:22` `reportAttributeAccessIssue` Cannot access attribute "_task_workers" for class "TasksMixin*"   Attribute "_task_workers" is unknown
+- `src/pbi_agent/web/session/tasks.py:432:31` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:433:30` `reportAttributeAccessIssue` Cannot access attribute "_task_workers" for class "TasksMixin*"   Attribute "_task_workers" is unknown
+- `src/pbi_agent/web/session/tasks.py:436:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:437:26` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "TasksMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/tasks.py:451:35` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:454:55` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "TasksMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/tasks.py:462:35` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:463:34` `reportAttributeAccessIssue` Cannot access attribute "_finalize_live_session_locked" for class "TasksMixin*"   Attribute "_finalize_live_session_locked" is unknown
+- `src/pbi_agent/web/session/tasks.py:466:22` `reportAttributeAccessIssue` Cannot access attribute "_finalize_shutdown_if_idle" for class "TasksMixin*"   Attribute "_finalize_shutdown_if_idle" is unknown
+- `src/pbi_agent/web/session/tasks.py:482:27` `reportArgumentType` Argument of type "(event_type: str, payload: dict[str, Any], current: str = new_live_session_id) -> (dict[str, Any] | None)" cannot be assigned to parameter "publish_event" of type "EventPublisher" in function "__init__"   Type "(event_type: str, payload: dict[str, Any], current: str = new_live_session_id) -> (dict[str, Any] | None)" is not assignable to type "EventPublisher"     Function return type "dict[str, Any] | None" is incompatible with type "None"       Type "dict[str, Any] | None" is not assignable to type "None"         "dict[str, Any]" is not assignable to "None"
+- `src/pbi_agent/web/session/tasks.py:494:22` `reportAttributeAccessIssue` Cannot access attribute "_bind_live_session" for class "TasksMixin*"   Attribute "_bind_live_session" is unknown
+- `src/pbi_agent/web/session/tasks.py:511:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "TasksMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/tasks.py:512:18` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "TasksMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/tasks.py:513:14` `reportAttributeAccessIssue` Cannot access attribute "_create_live_run_projection" for class "TasksMixin*"   Attribute "_create_live_run_projection" is unknown
+- `src/pbi_agent/web/session/tasks.py:514:14` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_session_runtime" for class "TasksMixin*"   Attribute "_publish_live_session_runtime" is unknown
+- `src/pbi_agent/web/session/tasks.py:515:14` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "TasksMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/tasks.py:525:14` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "TasksMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/tasks.py:527:35` `reportAttributeAccessIssue` Cannot access attribute "_serialize_live_session" for class "TasksMixin*"   Attribute "_serialize_live_session" is unknown
+- `src/pbi_agent/web/session/tasks.py:585:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "TasksMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/tasks.py:629:14` `reportAttributeAccessIssue` Cannot access attribute "_app_stream" for class "TasksMixin*"   Attribute "_app_stream" is unknown
+- `src/pbi_agent/web/session/tasks.py:636:26` `reportAttributeAccessIssue` Cannot access attribute "_resolve_task_runtime" for class "TasksMixin*"   Attribute "_resolve_task_runtime" is unknown
+- `src/pbi_agent/web/session/tasks.py:644:55` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:648:59` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:662:55` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:692:55` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "TasksMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/tasks.py:721:24` `reportAttributeAccessIssue` Cannot access attribute "_command_map" for class "TasksMixin*"   Attribute "_command_map" is unknown
+- `src/pbi_agent/web/session/tasks.py:770:24` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "TasksMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/tasks.py:771:33` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "TasksMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/workers.py:47:18` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "WorkersMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/workers.py:67:14` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_session_lifecycle" for class "WorkersMixin*"   Attribute "_publish_live_session_lifecycle" is unknown
+- `src/pbi_agent/web/session/workers.py:90:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:92:30` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "WorkersMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/workers.py:98:34` `reportAttributeAccessIssue` Cannot access attribute "_task_workers" for class "WorkersMixin*"   Attribute "_task_workers" is unknown
+- `src/pbi_agent/web/session/workers.py:102:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:103:45` `reportAttributeAccessIssue` Cannot access attribute "_provider_auth_flows" for class "WorkersMixin*"   Attribute "_provider_auth_flows" is unknown
+- `src/pbi_agent/web/session/workers.py:104:18` `reportAttributeAccessIssue` Cannot access attribute "_provider_auth_flows" for class "WorkersMixin*"   Attribute "_provider_auth_flows" is unknown
+- `src/pbi_agent/web/session/workers.py:106:18` `reportAttributeAccessIssue` Cannot access attribute "_cancel_provider_auth_flow_browser_timeout" for class "WorkersMixin*"   Attribute "_cancel_provider_auth_flow_browser_timeout" is unknown
+- `src/pbi_agent/web/session/workers.py:107:18` `reportAttributeAccessIssue` Cannot access attribute "_shutdown_provider_auth_flow_browser_listener" for class "WorkersMixin*"   Attribute "_shutdown_provider_auth_flow_browser_listener" is unknown
+- `src/pbi_agent/web/session/workers.py:111:29` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "WorkersMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/workers.py:113:14` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "WorkersMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/workers.py:123:14` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_session_lifecycle" for class "WorkersMixin*"   Attribute "_publish_live_session_lifecycle" is unknown
+- `src/pbi_agent/web/session/workers.py:129:32` `reportAttributeAccessIssue` Cannot access attribute "refresh_file_mentions_cache" for class "WorkersMixin*"   Attribute "refresh_file_mentions_cache" is unknown
+- `src/pbi_agent/web/session/workers.py:137:18` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "WorkersMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/workers.py:150:18` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "WorkersMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/workers.py:161:18` `reportAttributeAccessIssue` Cannot access attribute "refresh_file_mentions_cache" for class "WorkersMixin*"   Attribute "refresh_file_mentions_cache" is unknown
+- `src/pbi_agent/web/session/workers.py:162:23` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:173:18` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "WorkersMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/workers.py:182:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "WorkersMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/workers.py:192:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_session_lifecycle" for class "WorkersMixin*"   Attribute "_publish_live_session_lifecycle" is unknown
+- `src/pbi_agent/web/session/workers.py:199:30` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "WorkersMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/workers.py:205:32` `reportAttributeAccessIssue` Cannot access attribute "_resolve_task_runtime" for class "WorkersMixin*"   Attribute "_resolve_task_runtime" is unknown
+- `src/pbi_agent/web/session/workers.py:210:31` `reportAttributeAccessIssue` Cannot access attribute "_task_prompt_for_run" for class "WorkersMixin*"   Attribute "_task_prompt_for_run" is unknown
+- `src/pbi_agent/web/session/workers.py:224:56` `reportAttributeAccessIssue` Cannot access attribute "_persist_task_user_prompt" for class "WorkersMixin*"   Attribute "_persist_task_user_prompt" is unknown
+- `src/pbi_agent/web/session/workers.py:232:30` `reportAttributeAccessIssue` Cannot access attribute "_publish_persisted_user_message" for class "WorkersMixin*"   Attribute "_publish_persisted_user_message" is unknown
+- `src/pbi_agent/web/session/workers.py:250:41` `reportAttributeAccessIssue` Cannot access attribute "_workspace_root" for class "WorkersMixin*"   Attribute "_workspace_root" is unknown
+- `src/pbi_agent/web/session/workers.py:256:36` `reportAttributeAccessIssue` Cannot access attribute "_shutdown_interrupted_task_ids" for class "WorkersMixin*"   Attribute "_shutdown_interrupted_task_ids" is unknown
+- `src/pbi_agent/web/session/workers.py:257:50` `reportCallIssue` Expected 0 positional arguments
+- `src/pbi_agent/web/session/workers.py:261:26` `reportAttributeAccessIssue` Cannot access attribute "_bind_live_session" for class "WorkersMixin*"   Attribute "_bind_live_session" is unknown
+- `src/pbi_agent/web/session/workers.py:288:46` `reportAttributeAccessIssue` Cannot access attribute "_next_board_stage_id" for class "WorkersMixin*"   Attribute "_next_board_stage_id" is unknown
+- `src/pbi_agent/web/session/workers.py:301:37` `reportAttributeAccessIssue` Cannot access attribute "_should_auto_start_stage" for class "WorkersMixin*"   Attribute "_should_auto_start_stage" is unknown
+- `src/pbi_agent/web/session/workers.py:305:35` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:309:35` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:315:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_task_updated" for class "WorkersMixin*"   Attribute "_publish_task_updated" is unknown
+- `src/pbi_agent/web/session/workers.py:318:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:325:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_task_updated" for class "WorkersMixin*"   Attribute "_publish_task_updated" is unknown
+- `src/pbi_agent/web/session/workers.py:338:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "WorkersMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/workers.py:348:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:351:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_task_updated" for class "WorkersMixin*"   Attribute "_publish_task_updated" is unknown
+- `src/pbi_agent/web/session/workers.py:363:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "WorkersMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/workers.py:373:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:376:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_task_updated" for class "WorkersMixin*"   Attribute "_publish_task_updated" is unknown
+- `src/pbi_agent/web/session/workers.py:379:27` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:381:23` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:382:22` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "WorkersMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/workers.py:383:22` `reportAttributeAccessIssue` Cannot access attribute "_task_workers" for class "WorkersMixin*"   Attribute "_task_workers" is unknown
+- `src/pbi_agent/web/session/workers.py:387:24` `reportAttributeAccessIssue` Cannot access attribute "_lease_stop" for class "WorkersMixin*"   Attribute "_lease_stop" is unknown
+- `src/pbi_agent/web/session/workers.py:390:26` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "WorkersMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/workers.py:391:35` `reportAttributeAccessIssue` Cannot access attribute "_manager_owner_id" for class "WorkersMixin*"   Attribute "_manager_owner_id" is unknown
+- `src/pbi_agent/web/session/workers.py:400:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:401:38` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "WorkersMixin*"   Attribute "_live_sessions" is unknown
+- `src/pbi_agent/web/session/workers.py:415:26` `reportAttributeAccessIssue` Cannot access attribute "_shutdown_interrupted_task_ids" for class "WorkersMixin*"   Attribute "_shutdown_interrupted_task_ids" is unknown
+- `src/pbi_agent/web/session/workers.py:418:18` `reportAttributeAccessIssue` Cannot access attribute "_publish_live_event" for class "WorkersMixin*"   Attribute "_publish_live_event" is unknown
+- `src/pbi_agent/web/session/workers.py:428:23` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:442:22` `reportAttributeAccessIssue` Cannot access attribute "_publish_task_updated" for class "WorkersMixin*"   Attribute "_publish_task_updated" is unknown
+- `src/pbi_agent/web/session/workers.py:445:19` `reportAttributeAccessIssue` Cannot access attribute "_lock" for class "WorkersMixin*"   Attribute "_lock" is unknown
+- `src/pbi_agent/web/session/workers.py:448:21` `reportAttributeAccessIssue` Cannot access attribute "_running_task_ids" for class "WorkersMixin*"   Attribute "_running_task_ids" is unknown
+- `src/pbi_agent/web/session/workers.py:448:46` `reportAttributeAccessIssue` Cannot access attribute "_shutdown_interrupted_task_ids" for class "WorkersMixin*"   Attribute "_shutdown_interrupted_task_ids" is unknown
+- `src/pbi_agent/web/session/workers.py:455:18` `reportAttributeAccessIssue` Cannot access attribute "_lease_stop" for class "WorkersMixin*"   Attribute "_lease_stop" is unknown
+- `src/pbi_agent/web/session/workers.py:465:22` `reportAttributeAccessIssue` Cannot access attribute "_directory_key" for class "WorkersMixin*"   Attribute "_directory_key" is unknown
+- `src/pbi_agent/web/session/workers.py:466:31` `reportAttributeAccessIssue` Cannot access attribute "_manager_owner_id" for class "WorkersMixin*"   Attribute "_manager_owner_id" is unknown
+- `src/pbi_agent/web/session/workers.py:472:32` `reportAttributeAccessIssue` Cannot access attribute "_task_workers" for class "WorkersMixin*"   Attribute "_task_workers" is unknown
+- `src/pbi_agent/web/session/workers.py:477:33` `reportAttributeAccessIssue` Cannot access attribute "_live_sessions" for class "WorkersMixin*"   Attribute "_live_sessions" is unknown

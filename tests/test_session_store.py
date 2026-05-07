@@ -926,9 +926,10 @@ def test_list_all_run_sessions_with_filters(tmp_path) -> None:
         assert total == 4
 
         # Filter by status
-        completed, total = store.list_all_run_sessions(
+        completed_runs, total = store.list_all_run_sessions(
             directory="/w", status="completed"
         )
+        assert len(completed_runs) == 2
         assert total == 2
 
         # Filter by provider

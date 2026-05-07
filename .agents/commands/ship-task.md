@@ -48,7 +48,7 @@ Stop without shipping if:
 1. Start with `git status --short --branch` and inspect the diff before making Git changes.
 2. Identify current task scope from diff and available session context. Prefer explicit file paths when staging.
 3. Run focused validation for the touched surfaces before committing, then verify the full Python and web test suites pass before shipping:
-   - Python: `uv run ruff check .`, `uv run ruff format .`, `uv run python scripts/dead_code.py`, and full `uv run pytest -q --tb=short -x`.
+   - Python: `uv run ruff check .`, `uv run ruff format .`, `uv run basedpyright`, `uv run python scripts/dead_code.py`, and full `uv run pytest -q --tb=short -x`.
    - Frontend: `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build`.
    - Docs: `bun run docs:build`.
    - Broad changes: run repo-level checks from project instructions.

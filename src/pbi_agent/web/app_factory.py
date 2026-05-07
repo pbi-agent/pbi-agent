@@ -82,19 +82,19 @@ def create_app(
         app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
     @app.get("/favicon.ico")
-    def favicon_ico() -> FileResponse:
+    def favicon_ico() -> FileResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI route handler
         return FileResponse(LOGO_PATH, media_type="image/jpeg")
 
     @app.get("/favicon.png")
-    def favicon_png() -> FileResponse:
+    def favicon_png() -> FileResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI route handler
         return FileResponse(LOGO_PATH, media_type="image/jpeg")
 
     @app.get("/logo.png")
-    def logo() -> FileResponse:
+    def logo() -> FileResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI route handler
         return FileResponse(LOGO_PATH, media_type="image/jpeg")
 
     @app.get("/logo.jpg")
-    def logo_jpg() -> FileResponse:
+    def logo_jpg() -> FileResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI route handler
         return FileResponse(LOGO_PATH, media_type="image/jpeg")
 
     app.include_router(system_router)
@@ -105,11 +105,11 @@ def create_app(
     app.include_router(events_router)
 
     @app.get("/", response_class=HTMLResponse)
-    def index() -> Response:
+    def index() -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI route handler
         return spa_index_response(title or "pbi-agent")
 
     @app.get("/{full_path:path}", response_class=HTMLResponse)
-    def spa_fallback(full_path: str) -> Response:
+    def spa_fallback(full_path: str) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI route handler
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not found.")
         if full_path == APP_EVENT_STREAM_ID:

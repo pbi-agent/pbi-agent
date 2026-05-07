@@ -4,7 +4,6 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
-import urllib.error
 import urllib.request
 
 import pytest

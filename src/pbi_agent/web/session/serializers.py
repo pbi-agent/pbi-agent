@@ -93,7 +93,9 @@ def _run_status_from_run(record: RunSessionRecord) -> str:
     return "started"
 
 
-def _persisted_web_run_status(live_session: "LiveSessionState") -> str:
+def _persisted_web_run_status(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    live_session: "LiveSessionState",
+) -> str:
     if live_session.terminal_status is not None:
         return live_session.terminal_status
     if live_session.status == "ended":
@@ -105,7 +107,7 @@ def _persisted_web_run_status(live_session: "LiveSessionState") -> str:
     return live_session.status
 
 
-def _serialize_session(
+def _serialize_session(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     record: SessionRecord,
     *,
     active_live_session: "LiveSessionState | None" = None,
@@ -148,7 +150,9 @@ def _serialize_session(
     }
 
 
-def _is_active_live_session(live_session: "LiveSessionState") -> bool:
+def _is_active_live_session(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    live_session: "LiveSessionState",
+) -> bool:
     return (
         live_session.status in _ACTIVE_LIVE_SESSION_STATUSES
         and live_session.ended_at is None
@@ -164,7 +168,9 @@ def _deserialize_json_field(raw_value: str | None) -> Any:
         return raw_value
 
 
-def _web_event_from_record(record: ObservabilityEventRecord) -> dict[str, Any] | None:
+def _web_event_from_record(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    record: ObservabilityEventRecord,
+) -> dict[str, Any] | None:
     if record.event_type != "web_event":
         return None
     metadata = _deserialize_json_field(record.metadata_json)
@@ -226,7 +232,7 @@ def _namespace_run_value(run_session_id: str, value: str) -> str:
     return f"{run_session_id}:{value}"
 
 
-def _combined_timeline_snapshot(
+def _combined_timeline_snapshot(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     records: list[RunSessionRecord],
     current_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
@@ -284,7 +290,9 @@ def _combined_timeline_snapshot(
     return latest
 
 
-def _format_shell_command_output(result: dict[str, Any] | str) -> str:
+def _format_shell_command_output(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    result: dict[str, Any] | str,
+) -> str:
     if not isinstance(result, dict):
         return f"## Shell command output\n\n```text\n{result}\n```"
     exit_code = result.get("exit_code")
@@ -304,11 +312,15 @@ def _format_shell_command_output(result: dict[str, Any] | str) -> str:
     return "\n".join(sections)
 
 
-def _session_title_for_input(text: str) -> str:
+def _session_title_for_input(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    text: str,
+) -> str:
     return text.strip()[:80]
 
 
-def _serialize_run_session(record: RunSessionRecord) -> dict[str, Any]:
+def _serialize_run_session(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    record: RunSessionRecord,
+) -> dict[str, Any]:
     return {
         "run_session_id": record.run_session_id,
         "session_id": record.session_id,
@@ -346,7 +358,9 @@ def _serialize_run_session(record: RunSessionRecord) -> dict[str, Any]:
     }
 
 
-def _serialize_run_as_live_session(record: RunSessionRecord) -> dict[str, Any]:
+def _serialize_run_as_live_session(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    record: RunSessionRecord,
+) -> dict[str, Any]:
     metadata = _deserialize_json_field(record.metadata_json)
     runtime = metadata.get("runtime") if isinstance(metadata, dict) else None
     runtime = runtime if isinstance(runtime, dict) else {}
@@ -373,7 +387,7 @@ def _serialize_run_as_live_session(record: RunSessionRecord) -> dict[str, Any]:
     }
 
 
-def _serialize_saved_session_runtime(
+def _serialize_saved_session_runtime(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     record: SessionRecord,
     runtime: ResolvedRuntime,
 ) -> dict[str, Any]:
@@ -400,7 +414,9 @@ def _serialize_saved_session_runtime(
     }
 
 
-def _serialize_observability_event(record: ObservabilityEventRecord) -> dict[str, Any]:
+def _serialize_observability_event(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    record: ObservabilityEventRecord,
+) -> dict[str, Any]:
     return {
         "run_session_id": record.run_session_id,
         "session_id": record.session_id,
@@ -449,7 +465,9 @@ def _runtime_summary(runtime: ResolvedRuntime | None) -> dict[str, Any]:
     }
 
 
-def _resolved_runtime_view(runtime: ResolvedRuntime) -> dict[str, Any]:
+def _resolved_runtime_view(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    runtime: ResolvedRuntime,
+) -> dict[str, Any]:
     return {
         "provider": runtime.settings.provider,
         "provider_id": runtime.provider_id,
@@ -472,11 +490,13 @@ def _resolved_runtime_view(runtime: ResolvedRuntime) -> dict[str, Any]:
     }
 
 
-def _snapshot_item_id(item: dict[str, Any]) -> str:
+def _snapshot_item_id(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    item: dict[str, Any],
+) -> str:
     return str(item.get("itemId") or item.get("item_id") or "")
 
 
-def _serialize_task(
+def _serialize_task(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     record: KanbanTaskRecord,
     *,
     runtime: ResolvedRuntime | None,
@@ -505,7 +525,9 @@ def _serialize_task(
     }
 
 
-def _serialize_board_stage(record: KanbanStageConfigRecord) -> dict[str, Any]:
+def _serialize_board_stage(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    record: KanbanStageConfigRecord,
+) -> dict[str, Any]:
     return {
         "id": record.stage_id,
         "name": record.name,
@@ -516,7 +538,9 @@ def _serialize_board_stage(record: KanbanStageConfigRecord) -> dict[str, Any]:
     }
 
 
-def _serialize_history_message(message: MessageRecord) -> dict[str, Any]:
+def _serialize_history_message(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    message: MessageRecord,
+) -> dict[str, Any]:
     return persisted_message_payload(message)
 
 
@@ -524,7 +548,9 @@ def _preview_url(upload_id: str) -> str:
     return f"/api/uploads/{upload_id}"
 
 
-def _message_image_attachment(record: StoredImageUpload) -> MessageImageAttachment:
+def _message_image_attachment(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    record: StoredImageUpload,
+) -> MessageImageAttachment:
     return MessageImageAttachment(
         upload_id=record.upload_id,
         name=record.name,
@@ -546,5 +572,7 @@ def _message_image_payload(
     }
 
 
-def _config_sort_key(name: str, item_id: str) -> tuple[str, str]:
+def _config_sort_key(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
+    name: str, item_id: str
+) -> tuple[str, str]:
     return (name.lower(), item_id)

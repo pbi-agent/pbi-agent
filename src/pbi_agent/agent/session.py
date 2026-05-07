@@ -1357,12 +1357,6 @@ def _messages_for_provider_restore(
     return restored
 
 
-def _messages_for_compaction(
-    messages: list[MessageRecord],
-) -> list[MessageRecord]:
-    return _active_context_messages(messages)
-
-
 def _active_context_messages(
     messages: list[MessageRecord] | tuple[MessageRecord, ...],
 ) -> list[MessageRecord]:
@@ -1824,18 +1818,6 @@ def _format_tool_exchanges_for_compaction(
         )
     chunks.append("</current_turn_tool_exchanges>")
     return "\n".join(chunks)
-
-
-def _format_pending_tool_exchange_for_compaction(
-    pending_tool_calls: list[ToolCall] | None,
-    pending_tool_result_items: list[dict[str, Any]] | None,
-) -> str:
-    return _format_tool_exchanges_for_compaction(
-        _normalize_tool_exchanges_for_compaction(
-            pending_tool_calls=pending_tool_calls,
-            pending_tool_result_items=pending_tool_result_items,
-        )
-    )
 
 
 def _format_one_tool_exchange_for_compaction(

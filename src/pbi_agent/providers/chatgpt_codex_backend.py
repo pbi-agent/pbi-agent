@@ -547,16 +547,6 @@ def _read_http_upgrade_response(
     return status, headers, body_bytes
 
 
-def _recv_exact(sock: socket.socket, length: int) -> bytes:
-    data = b""
-    while len(data) < length:
-        chunk = sock.recv(length - len(data))
-        if not chunk:
-            raise ConnectionError("websocket closed")
-        data += chunk
-    return data
-
-
 def _json_object(text: str) -> dict[str, Any] | None:
     try:
         value = json.loads(text)
