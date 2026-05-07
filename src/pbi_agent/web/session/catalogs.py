@@ -1,22 +1,52 @@
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import Any, Protocol, cast
 
-from pbi_agent.config import list_command_configs
+from pbi_agent.config import ResolvedRuntime, list_command_configs
 from pbi_agent.web.command_registry import (
     list_slash_commands,
     search_slash_command_tuples,
 )
-from pbi_agent.web.input_mentions import MentionSearchResult
+from pbi_agent.web.input_mentions import MentionSearchResult, WorkspaceFileIndex
+from pbi_agent.web.session.state import LiveSessionState
+from pbi_agent.workspace_context import WorkspaceContext
+
+
+class _CatalogsManager(Protocol):
+    _live_sessions: dict[str, LiveSessionState]
+    _mention_index: WorkspaceFileIndex
+    _workspace_context: WorkspaceContext
+    _workspace_root: Path
+
+    def _resolve_runtime_optional(
+        self,
+        profile_id: str | None,
+    ) -> ResolvedRuntime | None: ...
+
+    def _serialize_live_session(
+        self,
+        live_session: LiveSessionState,
+    ) -> dict[str, Any]: ...
+
+    def list_board_stages(self) -> list[dict[str, Any]]: ...
+
+    def list_sessions(self) -> list[dict[str, Any]]: ...
+
+    def list_tasks(self) -> list[dict[str, Any]]: ...
 
 
 class CatalogsMixin:
+    def _catalogs_manager(self) -> _CatalogsManager:
+        return cast(_CatalogsManager, self)
+
     def warm_file_mentions_cache(self) -> None:
-        self._mention_index.warm_cache()
+        self._catalogs_manager()._mention_index.warm_cache()
 
     def refresh_file_mentions_cache(self) -> None:
-        self._mention_index.refresh_cache()
-        self._mention_index.warm_cache()
+        manager = self._catalogs_manager()
+        manager._mention_index.refresh_cache()
+        manager._mention_index.warm_cache()
 
     def search_file_mentions(
         self,
@@ -24,15 +54,16 @@ class CatalogsMixin:
         *,
         limit: int = 20,
     ) -> list[MentionSearchResult]:
-        return self._mention_index.search(query, limit=limit)
+        return self._catalogs_manager()._mention_index.search(query, limit=limit)
 
     def bootstrap(self) -> dict[str, Any]:
-        default_runtime = self._resolve_runtime_optional(None)
+        manager = self._catalogs_manager()
+        default_runtime = manager._resolve_runtime_optional(None)
         return {
-            "workspace_root": str(self._workspace_root),
-            "workspace_key": self._workspace_context.key,
-            "workspace_display_path": self._workspace_context.display_path,
-            "is_sandbox": self._workspace_context.is_sandbox,
+            "workspace_root": str(manager._workspace_root),
+            "workspace_key": manager._workspace_context.key,
+            "workspace_display_path": manager._workspace_context.display_path,
+            "is_sandbox": manager._workspace_context.is_sandbox,
             "provider": (
                 default_runtime.settings.provider
                 if default_runtime is not None
@@ -47,13 +78,13 @@ class CatalogsMixin:
                 else None
             ),
             "supports_image_inputs": default_runtime is not None,
-            "sessions": self.list_sessions(),
-            "tasks": self.list_tasks(),
+            "sessions": manager.list_sessions(),
+            "tasks": manager.list_tasks(),
             "live_sessions": [
-                self._serialize_live_session(item)
-                for item in self._live_sessions.values()
+                manager._serialize_live_session(item)
+                for item in manager._live_sessions.values()
             ],
-            "board_stages": self.list_board_stages(),
+            "board_stages": manager.list_board_stages(),
         }
 
     def search_slash_commands(
@@ -71,7 +102,7 @@ class CatalogsMixin:
             )
             for command in list_slash_commands()
         ]
-        for command in list_command_configs(self._workspace_root):
+        for command in list_command_configs(self._catalogs_manager()._workspace_root):
             command_tuples.append(
                 (
                     command.slash_alias,

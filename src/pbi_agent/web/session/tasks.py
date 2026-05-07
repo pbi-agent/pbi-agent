@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import threading
 import uuid
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from pbi_agent.agent.error_formatting import format_user_facing_error
 from pbi_agent.config import ConfigError, ResolvedRuntime, load_internal_config, slugify
@@ -32,10 +33,89 @@ from pbi_agent.web.session.state import (
     _now_iso,
 )
 
+if TYPE_CHECKING:
+    from pbi_agent.config import CommandConfig, InternalConfig, ModelProfileConfig
+
 _NON_RUNNABLE_BOARD_STAGE_IDS = frozenset({KANBAN_STAGE_BACKLOG, KANBAN_STAGE_DONE})
 
 
 class TasksMixin:
+    _app_stream: EventStream
+    _directory_key: str
+    _live_sessions: dict[str, LiveSessionState]
+    _lock: threading.Lock
+    _running_task_ids: set[str]
+    _task_workers: dict[str, threading.Thread]
+    _workspace_root: Path
+
+    if TYPE_CHECKING:
+
+        def _bind_live_session(
+            self,
+            live_session_id: str,
+            next_bound_session_id: str | None,
+        ) -> None: ...
+
+        def _command_map(self) -> dict[str, CommandConfig]: ...
+
+        def _create_live_run_projection(
+            self,
+            live_session: LiveSessionState,
+        ) -> None: ...
+
+        def _ensure_worker_creation_allowed_locked(self) -> None: ...
+
+        def _finalize_live_session_locked(
+            self,
+            live_session: LiveSessionState,
+        ) -> None: ...
+
+        def _finalize_shutdown_if_idle(self) -> None: ...
+
+        def _message_attachments_for_upload_ids(
+            self,
+            upload_ids: list[str],
+        ) -> list[MessageImageAttachment]: ...
+
+        def _profile_map(
+            self,
+            config: InternalConfig,
+        ) -> dict[str, ModelProfileConfig]: ...
+
+        def _publish_live_event(
+            self,
+            live_session_id: str,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> dict[str, Any] | None: ...
+
+        def _publish_live_session_runtime(
+            self,
+            live_session: LiveSessionState,
+        ) -> None: ...
+
+        def _resolve_runtime(self, profile_id: str | None) -> ResolvedRuntime: ...
+
+        def _resolve_task_runtime(
+            self,
+            record: KanbanTaskRecord,
+            *,
+            stage_record: KanbanStageConfigRecord | None = None,
+            allow_fallback: bool = True,
+        ) -> ResolvedRuntime: ...
+
+        def _run_task_worker(
+            self,
+            task_id: str,
+            live_session_id: str,
+            initial_user_message_id: int | None,
+        ) -> None: ...
+
+        def _serialize_live_session(
+            self,
+            live_session: LiveSessionState,
+        ) -> dict[str, Any]: ...
+
     def list_tasks(self) -> list[dict[str, Any]]:
         with SessionStore() as store:
             records = store.list_kanban_tasks(self._directory_key)
@@ -135,6 +215,8 @@ class TasksMixin:
             title=title,
             prompt=prompt,
         )
+        assert normalized_title is not None
+        assert normalized_prompt is not None
         image_attachments = self._message_attachments_for_upload_ids(
             image_upload_ids or []
         )
@@ -392,6 +474,7 @@ class TasksMixin:
                     )
                     initial_user_message_was_persisted = True
                 elif initial_prompt_already_persisted:
+                    assert persisted_initial_prompt is not None
                     initial_user_message_id = persisted_initial_prompt.id
                 running_record = store.set_kanban_task_running(task_id)
             if running_record is None:
@@ -478,15 +561,21 @@ class TasksMixin:
             session_id=bound_session_id,
             runtime=_runtime_summary(runtime),
         )
+
+        def publish_display_event(
+            event_type: str,
+            payload: dict[str, Any],
+            current: str = new_live_session_id,
+        ) -> None:
+            self._publish_task_live_event(
+                current,
+                record.task_id,
+                event_type,
+                payload,
+            )
+
         display = WebDisplay(
-            publish_event=lambda event_type, payload, current=new_live_session_id: (
-                self._publish_task_live_event(
-                    current,
-                    record.task_id,
-                    event_type,
-                    payload,
-                )
-            ),
+            publish_event=publish_display_event,
             verbose=runtime.settings.verbose,
             model=runtime.settings.model,
             reasoning_effort=runtime.settings.reasoning_effort,

@@ -934,7 +934,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _argv_with_default_command(
+def _argv_with_default_command(  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint and exported for compatibility
     parser: argparse.ArgumentParser, raw_argv: list[str]
 ) -> list[str]:
     argv = list(raw_argv)
@@ -993,7 +993,7 @@ def _subcommand_names(parser: argparse.ArgumentParser) -> set[str]:
     return set()
 
 
-def _web_runtime_flags_in_args(raw_argv: list[str]) -> list[str]:
+def _web_runtime_flags_in_args(raw_argv: list[str]) -> list[str]:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint and exported for compatibility
     runtime_flags = {
         "--provider",
         "--responses-url",

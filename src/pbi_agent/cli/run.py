@@ -4,13 +4,15 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 from pbi_agent.config import ResolvedRuntime, Settings
+from pbi_agent.display.protocol import DisplayProtocol
 
 from .shared import _coerce_runtime, _print_error
 
 
-def _handle_run_command(
+def _handle_run_command(  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     args: argparse.Namespace,
     settings: Settings | ResolvedRuntime,
 ) -> int:
@@ -56,7 +58,10 @@ def _run_single_turn_command(
     from pbi_agent.display.console_display import ConsoleDisplay
 
     runtime = _coerce_runtime(settings)
-    display = ConsoleDisplay(verbose=runtime.settings.verbose)
+    display = cast(
+        DisplayProtocol,
+        cast(Any, ConsoleDisplay)(verbose=runtime.settings.verbose),
+    )
 
     try:
         outcome = run_single_turn(

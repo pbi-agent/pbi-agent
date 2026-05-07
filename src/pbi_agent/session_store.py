@@ -514,9 +514,11 @@ def _deserialize_image_attachments(raw_value: object) -> list[MessageImageAttach
         mime_type = item.get("mime_type")
         preview_url = item.get("preview_url")
         byte_count = item.get("byte_count")
-        if not all(
-            isinstance(value, str) and value for value in (upload_id, name, mime_type)
-        ):
+        if not isinstance(upload_id, str) or not upload_id:
+            continue
+        if not isinstance(name, str) or not name:
+            continue
+        if not isinstance(mime_type, str) or not mime_type:
             continue
         if not isinstance(preview_url, str):
             continue

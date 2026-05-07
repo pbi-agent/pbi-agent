@@ -33,7 +33,7 @@ from .web import (
 )
 
 
-def _handle_sandbox_command(args: argparse.Namespace) -> int:
+def _handle_sandbox_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     sandbox_command = args.sandbox_command or "web"
     if sandbox_command == "web" and (args.port < 1 or args.port > 65535):
         print("Error: --port must be between 1 and 65535.", file=sys.stderr)

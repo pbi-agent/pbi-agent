@@ -12,6 +12,7 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
+from typing import Protocol, cast
 from urllib.parse import urlparse
 
 from pbi_agent.config import ResolvedRuntime, Settings
@@ -30,6 +31,10 @@ from .shared import (
 LOGGER = logging.getLogger(__name__)
 
 
+class _WebServer(Protocol):
+    def serve(self, debug: bool = False) -> None: ...
+
+
 @dataclasses.dataclass(frozen=True)
 class WebServerWaitResult:
     ready: bool
@@ -44,7 +49,7 @@ class WebServerWaitResult:
         return self.ready
 
 
-def _handle_web_command(
+def _handle_web_command(  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     args: argparse.Namespace,
     settings: Settings | ResolvedRuntime,
 ) -> int:
@@ -381,13 +386,13 @@ def _powershell_single_quote(value: str) -> str:
 def _create_web_server(
     args: argparse.Namespace,
     settings: Settings | ResolvedRuntime,
-) -> object:
+) -> _WebServer:
     from pbi_agent.web.serve import PBIWebServer
 
     runtime = _coerce_runtime(settings)
 
     return PBIWebServer(
-        settings=runtime,
+        settings=cast(Settings, runtime),
         runtime_args=args,
         host=args.host,
         port=args.port,
@@ -396,7 +401,7 @@ def _create_web_server(
     )
 
 
-def _load_session_record(session_id: str):
+def _load_session_record(session_id: str):  # pyright: ignore[reportUnusedFunction] - exported for compatibility/tests
     from pbi_agent.session_store import SessionStore
 
     try:

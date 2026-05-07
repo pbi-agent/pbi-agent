@@ -14,7 +14,7 @@ from pbi_agent.session_store import (
 from pbi_agent.workspace_context import current_workspace_context
 
 
-def _handle_kanban_command(args: argparse.Namespace) -> int:
+def _handle_kanban_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     if args.kanban_action == "create":
         return _handle_kanban_create_command(args)
     if args.kanban_action == "list":

@@ -44,7 +44,7 @@ from pbi_agent.config import (
 from .web import _open_browser_url
 
 
-def _handle_config_command(args: argparse.Namespace) -> int:
+def _handle_config_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     if args.config_scope == "providers":
         return _handle_config_providers_command(args)
     if args.config_scope == "profiles":

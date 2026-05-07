@@ -44,19 +44,19 @@ SANDBOX_BROWSER_READY_GRACE_SECONDS = 2.0
 WEB_MANAGER_LEASE_STALE_SECONDS = 30.0
 
 
-def _workspace_directory_for_args(args: argparse.Namespace) -> Path:
+def _workspace_directory_for_args(args: argparse.Namespace) -> Path:  # pyright: ignore[reportUnusedFunction] - imported by CLI helper modules
     if getattr(args, "command", None) == "run" and getattr(args, "project_dir", None):
         return (Path.cwd() / args.project_dir).resolve()
     return Path.cwd().resolve()
 
 
-def _coerce_runtime(settings: Settings | ResolvedRuntime) -> ResolvedRuntime:
+def _coerce_runtime(settings: Settings | ResolvedRuntime) -> ResolvedRuntime:  # pyright: ignore[reportUnusedFunction] - imported by CLI helper modules
     if isinstance(settings, ResolvedRuntime):
         return settings
     return ResolvedRuntime(settings=settings, provider_id="", profile_id="")
 
 
-def _print_error(message: str) -> None:
+def _print_error(message: str) -> None:  # pyright: ignore[reportUnusedFunction] - imported by CLI helper modules
     lines = [line for line in message.splitlines() if line.strip()]
     if not lines:
         print("Error.", file=sys.stderr)

@@ -218,11 +218,10 @@ def _extract_structured_error(message: str) -> _StructuredErrorInfo:
         payload_type = error_value.get("type")
         if isinstance(payload_type, str) and payload_type.strip():
             error_type = payload_type.strip()
-        elif (
-            isinstance(error_value.get("status"), str)
-            and error_value.get("status").strip()
-        ):
-            error_type = error_value.get("status").strip().lower()
+        else:
+            payload_status = error_value.get("status")
+            if isinstance(payload_status, str) and payload_status.strip():
+                error_type = payload_status.strip().lower()
         payload_message = error_value.get("message")
         if isinstance(payload_message, str) and payload_message.strip():
             detail = payload_message.strip()

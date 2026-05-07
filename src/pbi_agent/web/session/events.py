@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, Protocol, cast
 
-from pbi_agent.session_store import RunSessionRecord, SessionStore
+from pbi_agent.session_store import RunSessionRecord, SessionRecord, SessionStore
 from pbi_agent.web.session.serializers import (
     _deserialize_json_field,
     _persisted_web_run_status,
@@ -19,7 +19,29 @@ from pbi_agent.web.session.state import (
 TRANSIENT_WEB_EVENT_KEY = "__pbi_transient"
 
 
+class _EventsManagerSurface(Protocol):
+    _app_stream: EventStream
+    _directory_key: str
+    _live_sessions: dict[str, LiveSessionState]
+
+    def _find_stream_live_session_for_saved_session(
+        self,
+        session_id: str,
+    ) -> LiveSessionState | None: ...
+
+    def _require_saved_session(self, session_id: str) -> SessionRecord: ...
+
+    def _serialize_live_snapshot(
+        self,
+        live_session: LiveSessionState,
+    ) -> dict[str, Any]: ...
+
+
 class EventsMixin:
+    _app_stream: EventStream
+    _directory_key: str
+    _live_sessions: dict[str, LiveSessionState]
+
     def get_event_stream(self, stream_id: str) -> EventStream:
         if stream_id == APP_EVENT_STREAM_ID:
             return self._app_stream
@@ -44,8 +66,9 @@ class EventsMixin:
         return self._load_persisted_web_events(stream_id, since=since)
 
     def get_session_event_stream(self, session_id: str) -> EventStream:
-        self._require_saved_session(session_id)
-        live_session = self._find_stream_live_session_for_saved_session(session_id)
+        manager = cast(_EventsManagerSurface, self)
+        manager._require_saved_session(session_id)
+        live_session = manager._find_stream_live_session_for_saved_session(session_id)
         if live_session is None:
             with SessionStore() as store:
                 web_run = store.get_latest_web_session_run(session_id)
@@ -66,8 +89,9 @@ class EventsMixin:
         *,
         since: int = 0,
     ) -> list[dict[str, Any]]:
-        self._require_saved_session(session_id)
-        live_session = self._find_stream_live_session_for_saved_session(session_id)
+        manager = cast(_EventsManagerSurface, self)
+        manager._require_saved_session(session_id)
+        live_session = manager._find_stream_live_session_for_saved_session(session_id)
         if live_session is not None:
             return self._load_persisted_web_events(
                 live_session.live_session_id,
@@ -92,8 +116,9 @@ class EventsMixin:
     ) -> int:
         if since <= 0:
             return since
-        self._require_saved_session(session_id)
-        live_session = self._find_stream_live_session_for_saved_session(session_id)
+        manager = cast(_EventsManagerSurface, self)
+        manager._require_saved_session(session_id)
+        live_session = manager._find_stream_live_session_for_saved_session(session_id)
         if live_session is not None:
             if (
                 live_session_id is not None
@@ -191,7 +216,9 @@ class EventsMixin:
                 status=_persisted_web_run_status(live_session),
                 ended_at=live_session.ended_at,
                 last_event_seq=live_session.snapshot.last_event_seq,
-                snapshot=self._serialize_live_snapshot(live_session),
+                snapshot=cast(_EventsManagerSurface, self)._serialize_live_snapshot(
+                    live_session
+                ),
                 exit_code=live_session.exit_code,
                 fatal_error=live_session.fatal_error,
             )

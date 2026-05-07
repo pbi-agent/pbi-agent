@@ -7,7 +7,7 @@ from pbi_agent.session_store import SessionStore
 from pbi_agent.workspace_context import current_workspace_context
 
 
-def _load_session_record(session_id: str):
+def _load_session_record(session_id: str):  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
 
     try:
         store = SessionStore()
@@ -24,7 +24,7 @@ def _load_session_record(session_id: str):
     return session
 
 
-def _handle_sessions_command(args: argparse.Namespace) -> int:
+def _handle_sessions_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
 
     try:
         store = SessionStore()
