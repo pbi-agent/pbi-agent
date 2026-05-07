@@ -2755,6 +2755,19 @@ if __name__ == "__main__":
 
 
 class KanbanCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._workspace_env_patch = patch.dict(
+            os.environ,
+            {
+                "PBI_AGENT_WORKSPACE_KEY": "",
+                "PBI_AGENT_WORKSPACE_DISPLAY_PATH": "",
+                "PBI_AGENT_SANDBOX": "",
+            },
+            clear=False,
+        )
+        self._workspace_env_patch.start()
+        self.addCleanup(self._workspace_env_patch.stop)
+
     def test_parser_exposes_kanban_create_help(self) -> None:
         parser = cli.build_parser()
         subparsers = next(
@@ -2821,7 +2834,7 @@ class KanbanCommandTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertIn("Created Kanban task", stdout.getvalue())
             with SessionStore() as store:
-                tasks = store.list_kanban_tasks(str(root).lower())
+                tasks = store.list_kanban_tasks(str(root.resolve()).lower())
             self.assertEqual(len(tasks), 1)
             self.assertEqual(tasks[0].title, "Refactor API endpoint")
             self.assertEqual(tasks[0].prompt, "Improve endpoint performance.")
@@ -2854,7 +2867,7 @@ class KanbanCommandTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             with SessionStore() as store:
                 tasks = store.list_kanban_tasks("/host/project")
-                internal_tasks = store.list_kanban_tasks(str(root).lower())
+                internal_tasks = store.list_kanban_tasks(str(root.resolve()).lower())
             self.assertEqual(len(tasks), 1)
             self.assertEqual(tasks[0].title, "Sandbox task")
             self.assertEqual(internal_tasks, [])
@@ -2867,7 +2880,7 @@ class KanbanCommandTests(unittest.TestCase):
                 os.chdir(root)
                 with SessionStore() as store:
                     store.replace_kanban_stage_configs(
-                        str(root).lower(),
+                        str(root.resolve()).lower(),
                         stages=[
                             KanbanStageConfigSpec(stage_id="backlog", name="Backlog"),
                             KanbanStageConfigSpec(
@@ -2893,7 +2906,7 @@ class KanbanCommandTests(unittest.TestCase):
 
             self.assertEqual(rc, 0)
             with SessionStore() as store:
-                tasks = store.list_kanban_tasks(str(root).lower())
+                tasks = store.list_kanban_tasks(str(root.resolve()).lower())
             self.assertEqual(tasks[0].stage, "in-progress")
 
     def test_create_json_output_is_parseable(self) -> None:
@@ -2954,7 +2967,7 @@ class KanbanCommandTests(unittest.TestCase):
             self.assertIn("unknown Kanban lane/stage", stderr.getvalue())
             self.assertIn("Backlog (backlog)", stderr.getvalue())
             with SessionStore() as store:
-                tasks = store.list_kanban_tasks(str(root).lower())
+                tasks = store.list_kanban_tasks(str(root.resolve()).lower())
             self.assertEqual(tasks, [])
 
     def test_create_rejects_empty_title_or_description(self) -> None:
@@ -3022,7 +3035,7 @@ class KanbanCommandTests(unittest.TestCase):
             self.assertEqual(rc, 2)
             self.assertIn("inside the workspace", stderr.getvalue())
             with SessionStore() as store:
-                tasks = store.list_kanban_tasks(str(root).lower())
+                tasks = store.list_kanban_tasks(str(root.resolve()).lower())
             self.assertEqual(tasks, [])
 
     def test_list_outputs_all_relevant_task_fields(self) -> None:
@@ -3034,7 +3047,7 @@ class KanbanCommandTests(unittest.TestCase):
                 os.chdir(root)
                 with SessionStore() as store:
                     store.create_kanban_task(
-                        directory=str(root).lower(),
+                        directory=str(root.resolve()).lower(),
                         title="List task",
                         prompt="Show every useful field.",
                         stage="backlog",
@@ -3077,7 +3090,7 @@ class KanbanCommandTests(unittest.TestCase):
                 os.chdir(root)
                 with SessionStore() as store:
                     store.replace_kanban_stage_configs(
-                        str(root).lower(),
+                        str(root.resolve()).lower(),
                         stages=[
                             KanbanStageConfigSpec(stage_id="backlog", name="Backlog"),
                             KanbanStageConfigSpec(
@@ -3087,13 +3100,13 @@ class KanbanCommandTests(unittest.TestCase):
                         ],
                     )
                     store.create_kanban_task(
-                        directory=str(root).lower(),
+                        directory=str(root.resolve()).lower(),
                         title="Backlog task",
                         prompt="Not listed.",
                         stage="backlog",
                     )
                     store.create_kanban_task(
-                        directory=str(root).lower(),
+                        directory=str(root.resolve()).lower(),
                         title="Progress task",
                         prompt="Listed.",
                         stage="in-progress",
@@ -3118,7 +3131,7 @@ class KanbanCommandTests(unittest.TestCase):
                 os.chdir(root)
                 with SessionStore() as store:
                     record = store.create_kanban_task(
-                        directory=str(root).lower(),
+                        directory=str(root.resolve()).lower(),
                         title="JSON list task",
                         prompt="Show machine-readable fields.",
                         stage="backlog",
@@ -3133,7 +3146,7 @@ class KanbanCommandTests(unittest.TestCase):
             self.assertEqual(len(payload), 1)
             task = payload[0]
             self.assertEqual(task["task_id"], record.task_id)
-            self.assertEqual(task["directory"], str(root).lower())
+            self.assertEqual(task["directory"], str(root.resolve()).lower())
             self.assertEqual(task["title"], "JSON list task")
             self.assertEqual(task["prompt"], "Show machine-readable fields.")
             self.assertEqual(task["stage"], "backlog")

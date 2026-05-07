@@ -1,7 +1,6 @@
 # TODO
 
-[X] Add host Git config mounts to sandbox
-[X] Add regression coverage
-[X] Update docs
-[X] Run validation
-[X] Update memory
+[X] Identify task-scoped branch changes
+[X] Fix Kanban tests to ignore sandbox workspace env during validation
+[X] Run full local validation
+[>] Ship PR and merge
