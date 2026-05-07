@@ -790,13 +790,17 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIsNotNone(dockerfile)
         content = dockerfile.read_text(encoding="utf-8")
         self.assertIn("FROM python:${PYTHON_VERSION}-alpine3.22", content)
-        self.assertIn("apk add --no-cache bash ca-certificates git patch", content)
+        self.assertIn(
+            "apk add --no-cache bash ca-certificates git github-cli patch",
+            content,
+        )
         self.assertIn("site.getsitepackages()[0]", content)
         self.assertIn("-name tests -o -name test -o -name __pycache__", content)
         self.assertIn("-name '*.pyc' -o -name '*.pyo'", content)
         self.assertIn("${site_packages}/pyarrow/include", content)
         self.assertNotIn("slim-bookworm", content)
         self.assertNotIn("apt-get", content)
+        self.assertIn("github-cli", content)
         for removed_package in ("curl", "procps", "ripgrep", "unzip"):
             self.assertNotIn(removed_package, content)
 

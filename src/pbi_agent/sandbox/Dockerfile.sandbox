@@ -11,7 +11,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 SHELL ["/bin/sh", "-euxc"]
 
-RUN apk add --no-cache bash ca-certificates git patch \
+RUN apk add --no-cache bash ca-certificates git github-cli patch \
     && adduser -D -h /home/pbi -s /bin/bash pbi \
     && mkdir -p /workspace /home/pbi/.pbi-agent /home/pbi/.cache \
     && chown -R pbi:pbi /workspace /home/pbi

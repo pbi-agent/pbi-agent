@@ -30,7 +30,7 @@ When installed from PyPI, `pbi-agent sandbox` builds a small sandbox image from 
 python -m pip install --prefer-binary "pbi-agent==${PBI_AGENT_VERSION}"
 ```
 
-The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper and installs PyPI dependencies with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
+The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper, including Git and the GitHub CLI (`gh`), and installs PyPI dependencies with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
 
 The host CLI opens your host browser to:
 
