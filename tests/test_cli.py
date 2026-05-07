@@ -915,12 +915,30 @@ class DefaultWebCommandTests(unittest.TestCase):
             ]
         )
 
-        command, _container_env = cli._build_sandbox_run_command(
-            args,
-            "sandbox:test",
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            project_dir = workspace / "pkg"
+            project_dir.mkdir()
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(workspace)
+                command, container_env = cli._build_sandbox_run_command(
+                    args,
+                    "sandbox:test",
+                )
+            finally:
+                os.chdir(original_cwd)
 
         self.assertNotIn("--publish", command)
+        self.assertEqual(
+            container_env["PBI_AGENT_WORKSPACE_KEY"],
+            str(project_dir.resolve()),
+        )
+        self.assertEqual(
+            container_env["PBI_AGENT_WORKSPACE_DISPLAY_PATH"],
+            str(project_dir.resolve()),
+        )
+        self.assertIn(f"pbi-agent.workspace-key={project_dir.resolve()}", command)
         image_index = command.index("sandbox:test")
         self.assertEqual(
             command[image_index + 1 :],

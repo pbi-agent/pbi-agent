@@ -1598,13 +1598,14 @@ def _build_sandbox_run_command(
 ) -> tuple[list[str], dict[str, str]]:
     workspace = Path.cwd().resolve()
     host_workspace = str(workspace)
+    workspace_identity = str(_sandbox_workspace_identity(args, workspace))
     container_workspace = _sandbox_container_workspace(workspace)
     env_names, env_overrides = _sandbox_environment(args)
     env_overrides.update(
         {
             SANDBOX_ENV: "1",
-            WORKSPACE_KEY_ENV: host_workspace,
-            WORKSPACE_DISPLAY_PATH_ENV: host_workspace,
+            WORKSPACE_KEY_ENV: workspace_identity,
+            WORKSPACE_DISPLAY_PATH_ENV: workspace_identity,
         }
     )
     if getattr(args, "local_source", False):
@@ -1626,7 +1627,7 @@ def _build_sandbox_run_command(
         "--label",
         f"pbi-agent.workspace={host_workspace}",
         "--label",
-        f"pbi-agent.workspace-key={host_workspace}",
+        f"pbi-agent.workspace-key={workspace_identity}",
         "--mount",
         _sandbox_workspace_mount(
             workspace,
@@ -1694,6 +1695,12 @@ def _build_sandbox_run_command(
 
 def _sandbox_workspace_id(workspace: Path) -> str:
     return hashlib.sha256(str(workspace).encode("utf-8")).hexdigest()[:16]
+
+
+def _sandbox_workspace_identity(args: argparse.Namespace, workspace: Path) -> Path:
+    if (args.sandbox_command or "web") == "run":
+        return (workspace / args.project_dir).resolve()
+    return workspace
 
 
 def _sandbox_container_workspace(workspace: Path) -> str:
