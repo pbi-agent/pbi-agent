@@ -1,7 +1,6 @@
 # TODO
 
-- [X] Inspect current Working/Activity grouping implementation
-- [X] Flatten tool rows to same level as Thinking
-- [X] Update tests and styles/static assets
-- [X] Validate frontend checks
-- [X] Update memory
+- [X] Inspect current workspace changes
+- [X] Verify command file scope
+- [X] Run diff hygiene check
+- [X] Stage and commit command file
