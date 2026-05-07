@@ -1,5 +1,6 @@
 # TODO
 
-[X] Inspect branch divergence and choose safe reconciliation
-[X] Reconcile local master with origin/master without losing local-only commit
-[X] Verify status and document next steps
+[X] Inspect default web/sandbox port definitions and tests
+[X] Choose lower-conflict default port and update code/docs/tests
+[X] Run focused validation
+[X] Update memory

@@ -71,6 +71,7 @@ from pbi_agent.session_store import (
     KanbanTaskRecord,
     SessionStore,
 )
+from pbi_agent.web.defaults import DEFAULT_WEB_PORT
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_COMMAND = "web"
@@ -92,8 +93,8 @@ WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS = 20.0
 WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS = 10.0
 WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS = 0.1
 WEB_SERVER_BROWSER_CONNECT_TIMEOUT_SECONDS = 0.2
+SANDBOX_BROWSER_READY_GRACE_SECONDS = 2.0
 WEB_MANAGER_LEASE_STALE_SECONDS = 30.0
-DEFAULT_WEB_PORT = 8000
 
 
 class ExplicitPortAction(argparse.Action):
@@ -361,7 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_WEB_PORT,
         action=ExplicitPortAction,
-        help="Port to bind the web server (default: 8000).",
+        help=f"Port to bind the web server (default: {DEFAULT_WEB_PORT}).",
     )
     web_parser.set_defaults(_explicit_web_port=False)
     web_parser.add_argument(
@@ -441,7 +442,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_WEB_PORT,
         action=ExplicitPortAction,
-        help="Host and container web port (default: 8000).",
+        help=f"Host and container web port (default: {DEFAULT_WEB_PORT}).",
     )
     sandbox_web_parser.set_defaults(_explicit_web_port=False)
     sandbox_web_parser.add_argument(
@@ -1475,7 +1476,13 @@ def _handle_sandbox_command(args: argparse.Namespace) -> int:
 
     run_command, container_env = _build_sandbox_run_command(args, image)
     if sandbox_command == "web":
-        _start_browser_open_thread(args.host, args.port, _browser_target_url(args))
+        _start_browser_open_thread(
+            args.host,
+            args.port,
+            _browser_target_url(args),
+            ready_grace_seconds=SANDBOX_BROWSER_READY_GRACE_SECONDS,
+            status_message="Waiting for sandbox web server before opening browser...",
+        )
     try:
         completed = subprocess.run(run_command, env=container_env)
     except KeyboardInterrupt:
@@ -2595,18 +2602,37 @@ def _wait_for_web_server(
     )
 
 
-def _start_browser_open_thread(host: str, port: int, browser_url: str) -> None:
+def _start_browser_open_thread(
+    host: str,
+    port: int,
+    browser_url: str,
+    *,
+    ready_grace_seconds: float = 0.0,
+    status_message: str | None = None,
+) -> None:
     threading.Thread(
         target=_open_browser_when_ready,
         args=(host, port, browser_url),
+        kwargs={
+            "ready_grace_seconds": ready_grace_seconds,
+            "status_message": status_message,
+        },
         name="pbi-agent-web-browser",
         daemon=True,
     ).start()
 
 
-def _open_browser_when_ready(host: str, port: int, browser_url: str) -> None:
-    result = _wait_for_web_server(host, port)
+def _open_browser_when_ready(
+    host: str,
+    port: int,
+    browser_url: str,
+    *,
+    ready_grace_seconds: float = 0.0,
+    status_message: str | None = None,
+) -> None:
+    result = _wait_for_web_server_with_optional_status(host, port, status_message)
     if result:
+        _sleep_before_browser_open(ready_grace_seconds, status_message)
         if not _open_browser_url(browser_url):
             LOGGER.warning("Failed to open browser for %s", browser_url)
         return
@@ -2626,12 +2652,14 @@ def _open_browser_when_ready(host: str, port: int, browser_url: str) -> None:
         WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS,
     )
 
-    retry_result = _wait_for_web_server(
+    retry_result = _wait_for_web_server_with_optional_status(
         host,
         port,
+        status_message,
         timeout_seconds=WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS,
     )
     if retry_result:
+        _sleep_before_browser_open(ready_grace_seconds, status_message)
         if not _open_browser_url(browser_url):
             LOGGER.warning("Failed to open browser for %s", browser_url)
         return
@@ -2648,6 +2676,41 @@ def _open_browser_when_ready(host: str, port: int, browser_url: str) -> None:
         retry_result.attempts,
         retry_result.last_error or "none",
     )
+
+
+def _wait_for_web_server_with_optional_status(
+    host: str,
+    port: int,
+    status_message: str | None,
+    *,
+    timeout_seconds: float = WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS,
+) -> WebServerWaitResult:
+    if not status_message:
+        return _wait_for_web_server(host, port, timeout_seconds=timeout_seconds)
+
+    from rich.console import Console
+
+    console = Console(file=sys.stderr)
+    with console.status(status_message, spinner="dots"):
+        return _wait_for_web_server(host, port, timeout_seconds=timeout_seconds)
+
+
+def _sleep_before_browser_open(
+    ready_grace_seconds: float,
+    status_message: str | None,
+) -> None:
+    if ready_grace_seconds <= 0:
+        return
+
+    if not status_message:
+        time.sleep(ready_grace_seconds)
+        return
+
+    from rich.console import Console
+
+    console = Console(file=sys.stderr)
+    with console.status(status_message, spinner="dots"):
+        time.sleep(ready_grace_seconds)
 
 
 def _open_browser_url(browser_url: str) -> bool:

@@ -15,6 +15,7 @@ import uvicorn.server
 from pbi_agent.branding import startup_panel
 from pbi_agent.config import ConfigError, ResolvedRuntime, Settings, resolve_web_runtime
 from pbi_agent.web.app_factory import create_app
+from pbi_agent.web.defaults import DEFAULT_WEB_PORT
 from pbi_agent.web.session_manager import WebManagerStartupError
 
 
@@ -25,7 +26,7 @@ class PBIWebServer:
         settings: Settings,
         runtime_args: argparse.Namespace | None = None,
         host: str = "127.0.0.1",
-        port: int = 8000,
+        port: int = DEFAULT_WEB_PORT,
         title: str | None = None,
         public_url: str | None = None,
     ) -> None:
@@ -159,7 +160,7 @@ def _startup_error_message_from_traceback(message: str) -> str | None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="pbi-agent web server")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=DEFAULT_WEB_PORT)
     parser.add_argument("--title", default=None)
     parser.add_argument("--url", default=None, dest="public_url")
     parser.add_argument("--dev", action="store_true", default=False)

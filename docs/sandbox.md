@@ -35,10 +35,10 @@ The image uses an Alpine Python runtime to keep the bundled sandbox image smalle
 The host CLI opens your host browser to:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:7424
 ```
 
-The browser launch happens on the host side, while the web server inside the container is started with its own browser launch disabled. The container binds the web server to `0.0.0.0` internally and publishes it to `127.0.0.1:8000` on the host.
+The browser launch happens on the host side, while the web server inside the container is started with its own browser launch disabled. The container binds the web server to `0.0.0.0` internally and publishes it to `127.0.0.1:7424` on the host.
 
 Use a different host port when needed:
 

@@ -263,13 +263,13 @@ Profile options: `--model`, `--sub-agent-model`, `--reasoning-effort`, `--max-to
 Serve the browser-based UI through the FastAPI web server.
 
 ```bash
-pbi-agent web --host 127.0.0.1 --port 8000
+pbi-agent web --host 127.0.0.1 --port 7424
 ```
 
 | Option | Default | Description |
 | --- | --- | --- |
 | `--host` | `127.0.0.1` | Host interface to bind. |
-| `--port` | `8000` | Port to bind. Valid range: `1-65535`. |
+| `--port` | `7424` | Port to bind. Valid range: `1-65535`. |
 | `--dev` | `false` | Enable web development mode. |
 | `--title` | none | Optional browser title for the served app. |
 | `--url` | none | Optional public URL for reverse-proxy or externally published setups. |
