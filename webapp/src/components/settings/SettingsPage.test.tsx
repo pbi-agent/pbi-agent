@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { SettingsPage } from "./SettingsPage";
 import { renderWithProviders } from "../../test/render";
 import { useSettingsDialog } from "../../hooks/useSettingsDialog";
@@ -326,7 +326,9 @@ async function openSettingsTab(
 
 describe("SettingsPage", () => {
   beforeEach(() => {
-    useSettingsDialog.getState().openSettings();
+    act(() => {
+      useSettingsDialog.getState().openSettings();
+    });
     resetNotificationPreferencesForTests();
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(createProvider).mockResolvedValue({
@@ -485,7 +487,9 @@ describe("SettingsPage", () => {
   });
 
   afterEach(() => {
-    useSettingsDialog.getState().closeSettings();
+    act(() => {
+      useSettingsDialog.getState().closeSettings();
+    });
     restoreNotificationMock();
     vi.clearAllMocks();
     vi.restoreAllMocks();

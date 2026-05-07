@@ -72,6 +72,12 @@ from pbi_agent.session_store import (
     SessionStore,
 )
 from pbi_agent.web.defaults import DEFAULT_WEB_PORT
+from pbi_agent.workspace_context import (
+    SANDBOX_ENV,
+    WORKSPACE_DISPLAY_PATH_ENV,
+    WORKSPACE_KEY_ENV,
+    current_workspace_context,
+)
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_COMMAND = "web"
@@ -89,6 +95,14 @@ DEFAULT_SANDBOX_IMAGE = f"pbi-agent-sandbox:{_docker_tag_safe(__version__)}"
 SANDBOX_WORKSPACE = "/workspace"
 SANDBOX_HOME = "/home/pbi"
 SANDBOX_CONFIG_VOLUME_PREFIX = "pbi-agent-sandbox-config"
+SANDBOX_HOME_VOLUME_PREFIX = "pbi-agent-sandbox-home"
+SANDBOX_HOST_GIT_PATHS = (
+    (Path(".gitconfig"), f"{SANDBOX_HOME}/.gitconfig"),
+    (Path(".git-credentials"), f"{SANDBOX_HOME}/.git-credentials"),
+    (Path(".config/git"), f"{SANDBOX_HOME}/.config/git"),
+    (Path(".config/gh"), f"{SANDBOX_HOME}/.config/gh"),
+    (Path(".ssh"), f"{SANDBOX_HOME}/.ssh"),
+)
 WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS = 20.0
 WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS = 10.0
 WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS = 0.1
@@ -407,9 +421,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Rebuild the local sandbox image before running.",
     )
     sandbox_parser.add_argument(
+        "--local-source",
+        action="store_true",
+        help="Install the mounted checkout in editable mode before running.",
+    )
+    sandbox_parser.add_argument(
         "--read-only-repo",
         action="store_true",
         help="Mount the current repository read-only inside the sandbox.",
+    )
+    sandbox_parser.add_argument(
+        "-d",
+        "--detach",
+        action="store_true",
+        help="Run the sandbox container in the background.",
     )
     sandbox_parser.set_defaults(
         sandbox_command="web",
@@ -1221,8 +1246,9 @@ def _handle_kanban_create_command(args: argparse.Namespace) -> int:
         print("Error: --desc cannot be empty.", file=sys.stderr)
         return 2
 
-    workspace_root = Path.cwd().resolve()
-    directory_key = str(workspace_root).lower()
+    workspace_context = current_workspace_context()
+    workspace_root = workspace_context.execution_root
+    directory_key = workspace_context.directory_key
     project_dir = args.project_dir.strip() or "."
     try:
         _validate_kanban_project_dir(workspace_root, project_dir)
@@ -1260,8 +1286,8 @@ def _handle_kanban_create_command(args: argparse.Namespace) -> int:
 
 
 def _handle_kanban_list_command(args: argparse.Namespace) -> int:
-    workspace_root = Path.cwd().resolve()
-    directory_key = str(workspace_root).lower()
+    workspace_context = current_workspace_context()
+    directory_key = workspace_context.directory_key
     with SessionStore() as store:
         stages = store.list_kanban_stage_configs(directory_key)
         stage_filter = _resolve_kanban_stage_filter(args.stage, stages)
@@ -1475,16 +1501,45 @@ def _handle_sandbox_command(args: argparse.Namespace) -> int:
             return build_result.returncode
 
     run_command, container_env = _build_sandbox_run_command(args, image)
-    if sandbox_command == "web":
+    detached = bool(getattr(args, "detach", False))
+    if sandbox_command == "web" and not detached:
+        print(
+            "Waiting for sandbox web server before opening browser...",
+            file=sys.stderr,
+        )
         _start_browser_open_thread(
             args.host,
             args.port,
             _browser_target_url(args),
             ready_grace_seconds=SANDBOX_BROWSER_READY_GRACE_SECONDS,
-            status_message="Waiting for sandbox web server before opening browser...",
+            status_message=None,
         )
     try:
-        completed = subprocess.run(run_command, env=container_env)
+        if detached:
+            completed = subprocess.run(
+                run_command,
+                env=container_env,
+                capture_output=True,
+                text=True,
+            )
+            if completed.stdout:
+                print(completed.stdout.strip())
+            if completed.stderr:
+                print(completed.stderr.strip(), file=sys.stderr)
+            if completed.returncode == 0 and sandbox_command == "web":
+                print(
+                    "Waiting for detached sandbox web server before opening browser...",
+                    file=sys.stderr,
+                )
+                _open_browser_when_ready(
+                    args.host,
+                    args.port,
+                    _browser_target_url(args),
+                    ready_grace_seconds=SANDBOX_BROWSER_READY_GRACE_SECONDS,
+                    status_message=None,
+                )
+        else:
+            completed = subprocess.run(run_command, env=container_env)
     except KeyboardInterrupt:
         return 130
     return completed.returncode
@@ -1549,8 +1604,20 @@ def _build_sandbox_run_command(
     image: str,
 ) -> tuple[list[str], dict[str, str]]:
     workspace = Path.cwd().resolve()
+    host_workspace = str(workspace)
+    workspace_identity = str(_sandbox_workspace_identity(args, workspace))
     container_workspace = _sandbox_container_workspace(workspace)
     env_names, env_overrides = _sandbox_environment(args)
+    env_overrides.update(
+        {
+            SANDBOX_ENV: "1",
+            WORKSPACE_KEY_ENV: workspace_identity,
+            WORKSPACE_DISPLAY_PATH_ENV: workspace_identity,
+        }
+    )
+    if getattr(args, "local_source", False):
+        env_overrides["PBI_AGENT_LOCAL_SOURCE"] = container_workspace
+    env_names = sorted(set(env_names) | set(env_overrides))
     sandbox_command = args.sandbox_command or "web"
     if sandbox_command == "web":
         env_overrides["BROWSER"] = "/bin/true"
@@ -1562,12 +1629,20 @@ def _build_sandbox_run_command(
         "--init",
         "--workdir",
         container_workspace,
+        "--label",
+        "pbi-agent.sandbox=1",
+        "--label",
+        f"pbi-agent.workspace={host_workspace}",
+        "--label",
+        f"pbi-agent.workspace-key={workspace_identity}",
         "--mount",
         _sandbox_workspace_mount(
             workspace,
             target=container_workspace,
             read_only=bool(args.read_only_repo),
         ),
+        "--mount",
+        _sandbox_home_mount(workspace),
         "--mount",
         _sandbox_config_mount(workspace),
         "--cap-drop",
@@ -1582,9 +1657,13 @@ def _build_sandbox_run_command(
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,size=256m",
         "--tmpfs",
-        f"{SANDBOX_HOME}/.cache:rw,noexec,nosuid,size=512m",
+        f"{SANDBOX_HOME}/.cache:rw,noexec,nosuid,uid=1000,gid=1000,mode=755,size=512m",
     ]
-    if sys.stdin.isatty() and sys.stdout.isatty():
+    for mount in _sandbox_host_git_mounts():
+        command.extend(["--mount", mount])
+    if getattr(args, "detach", False):
+        command.append("--detach")
+    elif sys.stdin.isatty() and sys.stdout.isatty():
         command.append("-it")
     if args.env_file is not None:
         command.extend(["--env-file", str(args.env_file.resolve())])
@@ -1599,8 +1678,24 @@ def _build_sandbox_run_command(
             ]
         )
 
+    inner_command = _sandbox_inner_command(args)
+    if getattr(args, "local_source", False):
+        command.extend(["--entrypoint", "/bin/bash"])
     command.append(image)
-    command.extend(_sandbox_inner_command(args))
+    if getattr(args, "local_source", False):
+        command.extend(
+            [
+                "-lc",
+                (
+                    "python -m pip install --user --prefer-binary -e "
+                    '"$PBI_AGENT_LOCAL_SOURCE" && exec pbi-agent "$@"'
+                ),
+                "pbi-agent",
+                *inner_command,
+            ]
+        )
+    else:
+        command.extend(inner_command)
 
     container_env = os.environ.copy()
     container_env.update(env_overrides)
@@ -1611,6 +1706,12 @@ def _sandbox_workspace_id(workspace: Path) -> str:
     return hashlib.sha256(str(workspace).encode("utf-8")).hexdigest()[:16]
 
 
+def _sandbox_workspace_identity(args: argparse.Namespace, workspace: Path) -> Path:
+    if (args.sandbox_command or "web") == "run":
+        return (workspace / args.project_dir).resolve()
+    return workspace
+
+
 def _sandbox_container_workspace(workspace: Path) -> str:
     return f"{SANDBOX_WORKSPACE}/{_sandbox_workspace_id(workspace)}"
 
@@ -1619,18 +1720,40 @@ def _sandbox_config_volume(workspace: Path) -> str:
     return f"{SANDBOX_CONFIG_VOLUME_PREFIX}-{_sandbox_workspace_id(workspace)}"
 
 
+def _sandbox_home_volume(workspace: Path) -> str:
+    return f"{SANDBOX_HOME_VOLUME_PREFIX}-{_sandbox_workspace_id(workspace)}"
+
+
+def _sandbox_host_home_dir() -> Path:
+    return Path.home()
+
+
 def _sandbox_host_config_dir() -> Path:
-    return Path.home() / ".pbi-agent"
+    return _sandbox_host_home_dir() / ".pbi-agent"
+
+
+def _sandbox_home_mount(workspace: Path) -> str:
+    return f"type=volume,source={_sandbox_home_volume(workspace)},target={SANDBOX_HOME}"
 
 
 def _sandbox_config_mount(workspace: Path) -> str:
+    del workspace
     host_config_dir = _sandbox_host_config_dir()
-    if host_config_dir.is_dir():
-        return f"type=bind,source={host_config_dir},target={SANDBOX_HOME}/.pbi-agent"
-    return (
-        f"type=volume,source={_sandbox_config_volume(workspace)},"
-        f"target={SANDBOX_HOME}/.pbi-agent"
-    )
+    host_config_dir.mkdir(parents=True, exist_ok=True)
+    return f"type=bind,source={host_config_dir},target={SANDBOX_HOME}/.pbi-agent"
+
+
+def _sandbox_host_git_mounts() -> list[str]:
+    host_home = _sandbox_host_home_dir()
+    mounts: list[str] = []
+    for relative_source, container_target in SANDBOX_HOST_GIT_PATHS:
+        host_source = host_home / relative_source
+        if host_source.is_file() or host_source.is_dir():
+            mounts.append(
+                f"type=bind,source={host_source.resolve()},"
+                f"target={container_target},readonly"
+            )
+    return mounts
 
 
 def _sandbox_workspace_mount(
@@ -2482,7 +2605,7 @@ def _handle_web_command(
 def _current_workspace_has_active_web_manager() -> bool:
     from pbi_agent.session_store import SessionStore
 
-    directory = str(Path.cwd().resolve())
+    directory = current_workspace_context().directory_key
     with SessionStore() as store:
         return store.has_active_web_manager_lease(
             directory,
@@ -2820,7 +2943,10 @@ def _handle_sessions_command(args: argparse.Namespace) -> int:
         if args.all_dirs:
             sessions = store.list_all_sessions(limit=args.limit)
         else:
-            sessions = store.list_sessions(os.getcwd(), limit=args.limit)
+            sessions = store.list_sessions(
+                current_workspace_context().directory_key,
+                limit=args.limit,
+            )
 
     if not sessions:
         print("No sessions found.")

@@ -23,6 +23,7 @@ from pbi_agent.web.session.state import (
 )
 from pbi_agent.web.session.tasks import TasksMixin
 from pbi_agent.web.session.workers import WorkersMixin
+from pbi_agent.workspace_context import current_workspace_context
 
 _WEB_MANAGER_LEASE_STALE_SECS = 30.0
 _WEB_MANAGER_LEASE_BUSY_RETRY_SECS = 2.0
@@ -66,9 +67,10 @@ class WebSessionManager(
             else ResolvedRuntime(settings=settings, provider_id=None, profile_id=None)
         )
         self._runtime_args = runtime_args
-        self._workspace_root = Path.cwd().resolve()
+        self._workspace_context = current_workspace_context()
+        self._workspace_root = self._workspace_context.execution_root
         self._mention_index = WorkspaceFileIndex(self._workspace_root)
-        self._directory_key = str(self._workspace_root).lower()
+        self._directory_key = self._workspace_context.directory_key
         self._app_stream = EventStream()
         self._live_sessions: dict[str, LiveSessionState] = {}
         self._provider_auth_flows: dict[str, PendingProviderAuthFlow] = {}
@@ -85,6 +87,18 @@ class WebSessionManager(
     @property
     def workspace_root(self) -> Path:
         return self._workspace_root
+
+    @property
+    def workspace_key(self) -> str:
+        return self._workspace_context.key
+
+    @property
+    def workspace_display_path(self) -> str:
+        return self._workspace_context.display_path
+
+    @property
+    def is_sandbox(self) -> bool:
+        return self._workspace_context.is_sandbox
 
     @property
     def settings(self) -> Settings:

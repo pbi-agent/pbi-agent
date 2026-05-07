@@ -12,6 +12,8 @@ def test_shell_handle_runs_command_with_workspace_defaults(
     monkeypatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv(shell_tool.SHELL_BOOTSTRAP_ENV, raising=False)
+    monkeypatch.delenv(shell_tool.SHELL_EXECUTABLE_ENV, raising=False)
     calls: list[dict[str, object]] = []
 
     def fake_run(
@@ -21,6 +23,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
         capture_output: bool,
         text: bool,
         shell: bool,
+        executable: str | None,
         timeout: float,
     ) -> subprocess.CompletedProcess[bytes]:
         calls.append(
@@ -30,6 +33,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
                 "capture_output": capture_output,
                 "text": text,
                 "shell": shell,
+                "executable": executable,
                 "timeout": timeout,
             }
         )
@@ -56,6 +60,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
             "capture_output": True,
             "text": False,
             "shell": True,
+            "executable": None,
             "timeout": shell_tool.MAX_TIMEOUT_MS / 1000.0,
         }
     ]
@@ -66,6 +71,8 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
     monkeypatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv(shell_tool.SHELL_BOOTSTRAP_ENV, raising=False)
+    monkeypatch.delenv(shell_tool.SHELL_EXECUTABLE_ENV, raising=False)
     workdir = tmp_path / "nested"
     workdir.mkdir()
     seen: dict[str, object] = {}
@@ -77,11 +84,13 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
         capture_output: bool,
         text: bool,
         shell: bool,
+        executable: str | None,
         timeout: float,
     ) -> subprocess.CompletedProcess[bytes]:
         del capture_output, text, shell
         seen["command"] = command
         seen["cwd"] = cwd
+        seen["executable"] = executable
         seen["timeout"] = timeout
         return subprocess.CompletedProcess(
             args=command,
@@ -104,6 +113,7 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
     assert seen == {
         "command": "pwd",
         "cwd": str(workdir.resolve()),
+        "executable": None,
         "timeout": shell_tool.MAX_TIMEOUT_MS / 1000.0,
     }
 

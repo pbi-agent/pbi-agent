@@ -750,6 +750,7 @@ class LiveSessionsMixin:
                     "source": "web",
                     "directory": self._directory_key,
                     "workspace_root": str(self._workspace_root),
+                    "workspace_display_path": self._workspace_context.display_path,
                     "live_session_id": live_session.live_session_id,
                     "runtime": _runtime_summary(live_session.runtime),
                 },

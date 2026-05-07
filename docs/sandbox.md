@@ -7,6 +7,8 @@ description: 'Run pbi-agent inside a Docker Desktop Linux container.'
 
 `pbi-agent sandbox` runs the whole agent process inside a Docker Desktop Linux container. The current repository is mounted under a per-repository directory below `/workspace`, and the agent runs from that mounted repository directory, so model-requested shell commands, file reads, file edits, MCP servers, and sub-agents execute inside the container instead of directly on the host.
 
+The container path is only the execution root. Sessions, Kanban tasks, run history, and the workspace label in the web UI use the real host workspace path, so opening the same folder with or without sandbox shows the same conversation history and board.
+
 This is intended for Docker Desktop on Windows using Linux containers. Docker Desktop provides the VM-backed boundary; the host still sees normal Git diffs because the repository is bind-mounted.
 
 ## Requirements
@@ -24,13 +26,40 @@ From your repository root:
 pbi-agent sandbox web
 ```
 
+Start the sandbox web server in the background with:
+
+```bash
+pbi-agent sandbox -d web
+```
+
+Docker prints the started container id. Stop it later with:
+
+```bash
+docker stop <container-id>
+```
+
 When installed from PyPI, `pbi-agent sandbox` builds a small sandbox image from the Dockerfile bundled inside the installed package. The CLI reads its installed package version and passes it as `PBI_AGENT_VERSION`, so the image installs the matching PyPI package version with:
 
 ```dockerfile
 python -m pip install --prefer-binary "pbi-agent==${PBI_AGENT_VERSION}"
 ```
 
-The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper, including Git and the GitHub CLI (`gh`), and installs PyPI dependencies with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
+The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper, common workspace utilities such as `curl`, `gh` (GitHub CLI), and `rg` (`ripgrep`), and shared runtime libraries commonly required by user-installed tools. PyPI dependencies install with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
+
+When developing pbi-agent itself, use local source mode to test the mounted checkout inside the sandbox instead of the last published PyPI package:
+
+```bash
+uv run pbi-agent sandbox --local-source web
+uv run pbi-agent sandbox --local-source run --prompt "Test this checkout."
+```
+
+Local source mode starts from the normal sandbox image, then installs the mounted repository in editable user mode before launching the requested command:
+
+```bash
+python -m pip install --user --prefer-binary -e "$PBI_AGENT_LOCAL_SOURCE"
+```
+
+That keeps the Docker sandbox behavior close to the released image while loading your current Python files from the host checkout. If package dependencies changed, rebuild the base sandbox image after publishing or expect pip to install any missing dependencies into the project-scoped sandbox home volume.
 
 The host CLI opens your host browser to:
 
@@ -63,6 +92,10 @@ pbi-agent sandbox run --prompt "Inspect this package" --project-dir packages/api
 
 The sandbox wrapper passes through `PBI_AGENT_*` variables and the provider key variables used by pbi-agent, such as `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `ANTHROPIC_API_KEY`.
 
+For Git and GitHub access, the sandbox also reuses standard host account files when they exist by mounting them read-only into the container user's home: `~/.gitconfig`, `~/.config/git`, `~/.git-credentials`, `~/.ssh`, and `~/.config/gh`. That lets commits use the same Git identity and lets common SSH, credential-store, and GitHub CLI auth setups work inside the sandbox without mounting the whole host home directory.
+
+Host-specific credential helpers such as macOS Keychain or Windows Credential Manager only work inside the Linux sandbox if the matching helper is installed there. For portable sandbox auth, use SSH keys, Git's credential-store file, or a GitHub CLI auth config that is available through those mounted paths.
+
 You can also pass an explicit env file:
 
 ```bash
@@ -73,17 +106,30 @@ Do not bake provider keys into the Docker image. Keep secrets in environment var
 
 ## Storage
 
-The repository is mounted under a stable per-repository path below `/workspace`. By default it is writable, so file edits inside the sandbox change the host repository directly.
+The repository is mounted under a stable per-repository path below `/workspace`. By default it is writable, so file edits inside the sandbox change the host repository directly. The web UI still displays the host workspace path instead of the internal `/workspace/<id>` path.
 
-If the host has `~/.pbi-agent`, the sandbox bind-mounts that directory at:
+The sandbox creates `~/.pbi-agent` on the host if needed, then bind-mounts that directory at:
 
 ```text
 /home/pbi/.pbi-agent
 ```
 
-That lets the VM load your existing saved provider config, model profiles, auth state, sessions, and run history.
+That lets the VM load your existing saved provider config, model profiles, auth state, sessions, Kanban tasks, and run history. Sandbox and non-sandbox runs share those records because the sandbox passes the host workspace path into the container as the workspace identity.
 
-If `~/.pbi-agent` does not exist yet, pbi-agent uses a per-repository named Docker volume at the same container path. In both cases, pbi-agent internal state stays out of the repository while persisting across container restarts.
+The image filesystem is read-only, but the sandbox mounts the entire container user home directory at `/home/pbi` from a per-repository named Docker volume. Anything an installer or package manager writes under `/home/pbi` is writable and persistent across sandbox restarts for the same repository; this is a generic home volume, not a folder-by-folder allowlist.
+
+The container process `PATH` includes the standard user-local executable directory, `/home/pbi/.local/bin`. Shell tool commands also run through a sandbox bootstrap that sources readable user profile files under `/home/pbi` and discovers `bin` directories under the persistent home volume. The bootstrap also refreshes discovered `bin` paths when Bash sees a missing command, so install-and-run commands can pick up newly created tool directories. This keeps installer-specific paths out of the image while still making tools installed into locations such as `.bun/bin` or `.cargo/bin` visible to non-login shell commands.
+
+The sandbox still provides temporary storage for `/tmp` and uses temporary `/home/pbi/.cache` storage so caches do not accumulate in the persistent home volume.
+
+For example, inside a sandbox session an agent shell command can install and use uv with:
+
+```bash
+wget -qO- https://astral.sh/uv/install.sh | sh
+uv --version
+```
+
+Those local tools, installer receipts, and package-manager directories stay available when you start `pbi-agent sandbox` again from the same repository. Delete the project-scoped Docker home volume if you want to reset them.
 
 ## Safer Inspection Mode
 
@@ -97,9 +143,9 @@ This mode is useful for inspection, but file-edit tools and commands that write 
 
 ## Security Boundary
 
-The sandbox uses a non-root container user, drops Linux capabilities, sets `no-new-privileges`, limits processes and memory, uses a read-only image filesystem, and provides writable temporary storage through `tmpfs`.
+The sandbox uses a non-root container user, drops Linux capabilities, sets `no-new-privileges`, limits processes and memory, uses a read-only image filesystem, and limits writable home storage to project-scoped Docker volumes plus temporary `tmpfs` paths.
 
-It does not mount the Docker socket, the host home directory, an SSH agent, or broad host filesystem paths.
+It does not mount the Docker socket, the host home directory, an SSH agent, or broad host filesystem paths. When available, only the selected Git and GitHub account paths listed above are mounted from the host home, and they are mounted read-only.
 
 Important limitation: a writable bind mount gives the agent full write access to the mounted repository. Docker Desktop isolates the process from the host OS, but it does not protect files that you intentionally mount writable.
 

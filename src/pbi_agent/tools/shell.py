@@ -7,6 +7,8 @@ through the normal tool registry and execution pipeline.
 
 from __future__ import annotations
 
+import os
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -19,6 +21,8 @@ MAX_TIMEOUT_MS = 120_000
 MAX_STDOUT_CHARS = 12_000
 MAX_STDERR_CHARS = 12_000
 MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
+SHELL_BOOTSTRAP_ENV = "PBI_AGENT_SHELL_BOOTSTRAP"
+SHELL_EXECUTABLE_ENV = "PBI_AGENT_SHELL_EXECUTABLE"
 
 SPEC = ToolSpec(
     name="shell",
@@ -66,14 +70,17 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         root, arguments.get("working_directory")
     )
     timeout_ms = _normalize_timeout_ms(arguments.get("timeout_ms"))
+    effective_command = _bootstrap_command(command)
+    shell_executable = os.environ.get(SHELL_EXECUTABLE_ENV) or None
 
     try:
         completed = subprocess.run(
-            command,
+            effective_command,
             cwd=str(working_directory),
             capture_output=True,
             text=False,
             shell=True,
+            executable=shell_executable,
             timeout=(timeout_ms / 1000.0),
         )
         return {
@@ -102,6 +109,13 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             "error": f"Shell execution failed: {exc}",
             **({"stderr_truncated": True} if stderr_truncated else {}),
         }
+
+
+def _bootstrap_command(command: str) -> str:
+    bootstrap = os.environ.get(SHELL_BOOTSTRAP_ENV)
+    if not bootstrap:
+        return command
+    return f". {shlex.quote(bootstrap)}; {command}"
 
 
 # ---------------------------------------------------------------------------

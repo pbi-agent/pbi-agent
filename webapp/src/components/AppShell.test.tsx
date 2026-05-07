@@ -37,6 +37,9 @@ vi.mock("../api", async (importOriginal) => {
 function makeBootstrap(): BootstrapPayload {
   return {
     workspace_root: "/workspace/demo",
+    workspace_key: "/workspace/demo",
+    workspace_display_path: "/workspace/demo",
+    is_sandbox: false,
     provider: null,
     provider_id: null,
     profile_id: null,
@@ -153,5 +156,22 @@ describe("AppShell", () => {
 
     await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
     expect(screen.queryByText("Setup Required")).not.toBeInTheDocument();
+  });
+
+  it("shows the host workspace path when running in sandbox", async () => {
+    vi.mocked(fetchBootstrap).mockResolvedValue({
+      ...makeBootstrap(),
+      workspace_root: "/workspace/d0918d973e2e241d",
+      workspace_key: "/Users/ada/project",
+      workspace_display_path: "/Users/ada/project",
+      is_sandbox: true,
+    });
+
+    renderWithProviders(<AppShell />);
+
+    const badge = await screen.findByText("Sandbox · ada/project");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("title", "/Users/ada/project");
+    expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
   });
 });
