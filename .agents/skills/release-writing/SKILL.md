@@ -108,15 +108,17 @@ Only after explicit user approval and clean checks:
 1. Confirm release PR status with `gh pr view <pr> --json mergeStateStatus,statusCheckRollup,url`.
 2. Merge release PR into `master` using `gh pr merge` when branch protection permits.
 3. Wait for `.github/workflows/release.yml` or inspect with `gh run list --workflow Release`.
-4. Confirm `gh release view v<version>` exists.
-5. If auto-created GitHub Release body is generic, update from changelog draft with `gh release edit v<version> --notes-file <file>`.
-6. Inspect `.github/workflows/publish.yml` or known workflow triggers, then wait for matching Publish workflow run triggered by Release workflow.
-7. Confirm publish job succeeded, including package upload step when visible in logs/status.
-8. Report separate states:
+4. Confirm `gh release view v<version> --json body,url` exists and inspect the release body formatting before reporting success:
+   - Body must not start with VitePress frontmatter (`---`).
+   - Body should start with `# v<version>` and include the expected release sections.
+   - If malformed or generic, update from a frontmatter-stripped changelog draft with `gh release edit v<version> --notes-file <file>` and re-check the body.
+5. Inspect `.github/workflows/publish.yml` or known workflow triggers, then wait for matching Publish workflow run triggered by Release workflow.
+6. Confirm publish job succeeded, including package upload step when visible in logs/status.
+7. Report separate states:
    - PR merged to `master`.
    - GitHub Release/tag created.
    - package publish workflow completed.
-9. Report version, PR URL, release URL, validation, publish status.
+8. Report version, PR URL, release URL, validation, publish status.
 
 ## Writing Rules
 
