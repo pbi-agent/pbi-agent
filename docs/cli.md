@@ -282,6 +282,31 @@ The browser session UI also supports interactive input shortcuts such as `@file`
 
 See [Session Commands](/session-commands) for the complete interactive command reference.
 
+## `pbi-agent sandbox`
+
+Run the whole agent inside a Docker Desktop Linux container with the current repository mounted under a per-repository path below `/workspace`. If `~/.pbi-agent` exists on the host, it is mounted into the container so saved config and profiles are available in the sandbox.
+
+```bash
+pbi-agent sandbox web
+pbi-agent sandbox run --prompt "Summarize this repository."
+pbi-agent sandbox --env-file .env.sandbox --read-only-repo run --prompt "Review without edits."
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--image` | `pbi-agent-sandbox:<version>` | Sandbox image name. |
+| `--env-file` | none | Env file to pass to Docker for provider credentials and runtime config. |
+| `--rebuild` | `false` | Rebuild the local sandbox image before running. |
+| `--read-only-repo` | `false` | Mount the repository read-only inside the container. |
+
+`sandbox web` accepts the normal web options. The wrapper opens the browser from the host, publishes the container web server to `127.0.0.1:<port>` on the host, and runs the server on `0.0.0.0:<port>` inside the container with container-side browser launch disabled.
+
+`sandbox run` accepts the normal one-shot run options: `--prompt`, `--image`, `--project-dir`, and `--session-id`.
+
+See [Docker Sandbox](/sandbox) for setup, storage, and security details.
+
+When `pbi-agent` is installed from PyPI, the sandbox image is built from a Dockerfile bundled in the installed package. The CLI passes its installed package version into Docker and installs the matching `pbi-agent` PyPI version inside the container. It does not use a Dockerfile from the target repository.
+
 ## `pbi-agent run`
 
 Execute a single prompt turn and exit.
