@@ -14,7 +14,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 SHELL ["/bin/sh", "-euxc"]
 
-RUN apk add --no-cache bash ca-certificates curl git libstdc++ patch ripgrep unzip \
+RUN apk add --no-cache bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip \
     && adduser -D -u 1000 -h /home/pbi -s /bin/bash pbi \
     && mkdir -p /workspace /home/pbi /usr/local/share/pbi-agent \
     && { \

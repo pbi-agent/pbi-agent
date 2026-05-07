@@ -1091,7 +1091,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         content = dockerfile.read_text(encoding="utf-8")
         self.assertIn("FROM python:${PYTHON_VERSION}-alpine3.22", content)
         self.assertIn(
-            "apk add --no-cache bash ca-certificates curl git libstdc++ patch ripgrep unzip",
+            "apk add --no-cache bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip",
             content,
         )
         self.assertIn('PATH="/home/pbi/.local/bin:${PATH}"', content)
@@ -1126,6 +1126,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertNotIn("slim-bookworm", content)
         self.assertNotIn("apt-get", content)
         self.assertIn("curl", content)
+        self.assertIn("github-cli", content)
         self.assertIn("libstdc++", content)
         self.assertIn("ripgrep", content)
         self.assertIn("unzip", content)
