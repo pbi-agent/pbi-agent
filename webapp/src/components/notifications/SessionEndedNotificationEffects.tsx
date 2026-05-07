@@ -6,11 +6,12 @@ import {
   triggerDesktopAndSoundNotification,
 } from "../../lib/notificationEffects";
 import { useNotificationPreferences } from "../../lib/notificationPreferences";
-import type { LiveSession, LiveSessionLifecycleEvent } from "../../types";
+import type { LiveSession, LiveSessionLifecycleEvent, TaskRecord } from "../../types";
 
 type SessionEndedNotificationEffectsProps = {
   liveSessionEvents?: LiveSessionLifecycleEvent[];
   liveSessions: LiveSession[];
+  tasks: TaskRecord[];
 };
 
 function isActiveLiveSession(liveSession: LiveSession): boolean {
@@ -24,13 +25,15 @@ function liveSessionDestination(liveSession: Pick<LiveSession, "live_session_id"
   return "/sessions";
 }
 
-function createSessionEndedNotificationRequest(liveSession: LiveSession) {
+function createSessionEndedNotificationRequest(liveSession: LiveSession, taskTitle?: string) {
   const endedWithError = Boolean(liveSession.fatal_error);
   return {
     title: endedWithError ? "pbi-agent session failed" : "pbi-agent session finished",
     body: endedWithError
       ? "A session ended with an error."
-      : "A session finished while this tab was hidden or unfocused.",
+      : taskTitle
+        ? `“${taskTitle}” finished while this tab was hidden or unfocused.`
+        : "A session finished while this tab was hidden or unfocused.",
     destination: liveSessionDestination(liveSession),
     tag: `session-ended:${liveSession.live_session_id}`,
   };
@@ -39,6 +42,7 @@ function createSessionEndedNotificationRequest(liveSession: LiveSession) {
 export function SessionEndedNotificationEffects({
   liveSessionEvents = [],
   liveSessions,
+  tasks,
 }: SessionEndedNotificationEffectsProps) {
   const navigate = useNavigate();
   const preferences = useNotificationPreferences();
@@ -50,6 +54,7 @@ export function SessionEndedNotificationEffects({
     const observedActiveLiveSessionIds = observedActiveLiveSessionIdsRef.current;
     const handledEndedLiveSessionIds = handledEndedLiveSessionIdsRef.current;
     const handledLifecycleEventSeqs = handledLifecycleEventSeqsRef.current;
+    const taskTitlesById = new Map(tasks.map((task) => [task.task_id, task.title]));
 
     function handleEndedLiveSession(liveSession: LiveSession) {
       const liveSessionId = liveSession.live_session_id;
@@ -72,7 +77,12 @@ export function SessionEndedNotificationEffects({
       }
 
       triggerDesktopAndSoundNotification(
-        createSessionEndedNotificationRequest(liveSession),
+        createSessionEndedNotificationRequest(
+          liveSession,
+          liveSession.kind === "task" && liveSession.task_id
+            ? taskTitlesById.get(liveSession.task_id)
+            : undefined,
+        ),
         preferences,
         navigate,
       );
@@ -106,7 +116,7 @@ export function SessionEndedNotificationEffects({
       }
       handleEndedLiveSession(liveSession);
     }
-  }, [liveSessionEvents, liveSessions, navigate, preferences]);
+  }, [liveSessionEvents, liveSessions, navigate, preferences, tasks]);
 
   return null;
 }
