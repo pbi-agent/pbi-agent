@@ -448,12 +448,13 @@ class DefaultWebCommandTests(unittest.TestCase):
     def test_parser_accepts_sandbox_default_web_command(self) -> None:
         parser = cli.build_parser()
 
-        args = parser.parse_args(["sandbox", "--rebuild", "--read-only-repo"])
+        args = parser.parse_args(["sandbox", "--rebuild", "--read-only-repo", "-d"])
 
         self.assertEqual(args.command, "sandbox")
         self.assertIsNone(args.sandbox_command)
         self.assertTrue(args.rebuild)
         self.assertTrue(args.read_only_repo)
+        self.assertTrue(args.detach)
         self.assertEqual(args.image, cli.DEFAULT_SANDBOX_IMAGE)
         self.assertEqual(args.host, "127.0.0.1")
         self.assertEqual(args.port, cli.DEFAULT_WEB_PORT)
@@ -475,6 +476,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 "custom:dev",
                 "--env-file",
                 ".env.sandbox",
+                "--detach",
                 "web",
                 "--host",
                 "127.0.0.1",
@@ -489,6 +491,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(args.sandbox_command, "web")
         self.assertEqual(args.image, "custom:dev")
         self.assertEqual(args.env_file, Path(".env.sandbox"))
+        self.assertTrue(args.detach)
         self.assertEqual(args.port, 9001)
         self.assertEqual(args.title, "Sandbox")
 
@@ -572,6 +575,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("--rm", command)
         self.assertIn("--init", command)
         self.assertIn("--read-only", command)
+        self.assertNotIn("--detach", command)
         self.assertIn("--cap-drop", command)
         self.assertIn("ALL", command)
         self.assertIn("--security-opt", command)
@@ -583,7 +587,8 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("--tmpfs", command)
         self.assertIn("/tmp:rw,noexec,nosuid,size=256m", command)
         self.assertIn(
-            f"{cli.SANDBOX_HOME}/.cache:rw,noexec,nosuid,size=512m",
+            f"{cli.SANDBOX_HOME}/.cache:rw,noexec,nosuid,"
+            "uid=1000,gid=1000,mode=755,size=512m",
             command,
         )
         self.assertIn("--env-file", command)
@@ -605,10 +610,19 @@ class DefaultWebCommandTests(unittest.TestCase):
             mounts,
         )
         self.assertIn(
+            f"type=volume,source={cli._sandbox_home_volume(workspace)},"
+            f"target={cli.SANDBOX_HOME}",
+            mounts,
+        )
+        self.assertIn(
             f"type=volume,source={cli._sandbox_config_volume(workspace)},"
             f"target={cli.SANDBOX_HOME}/.pbi-agent",
             mounts,
         )
+        self.assertNotIn(f"{cli.SANDBOX_HOME}:rw", command)
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.config:rw", command)
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.local:rw", command)
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.bun:rw", command)
         workdir_index = command.index("--workdir")
         self.assertEqual(command[workdir_index + 1], container_workspace)
         self.assertIn("--env", command)
@@ -625,6 +639,28 @@ class DefaultWebCommandTests(unittest.TestCase):
             command[image_index + 1 :],
             ["web", "--host", "0.0.0.0", "--port", "9001"],
         )
+
+    def test_build_sandbox_run_command_can_detach_without_tty(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["sandbox", "--detach", "web", "--port", "9001"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(tmpdir)
+                with patch(
+                    "pbi_agent.cli._sandbox_host_config_dir",
+                    return_value=Path(tmpdir) / "missing-config",
+                ):
+                    command, _container_env = cli._build_sandbox_run_command(
+                        args,
+                        "sandbox:test",
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+        self.assertIn("--detach", command)
+        self.assertNotIn("-it", command)
 
     def test_build_sandbox_run_command_mounts_existing_host_config(
         self,
@@ -694,7 +730,47 @@ class DefaultWebCommandTests(unittest.TestCase):
             9001,
             "http://127.0.0.1:9001",
             ready_grace_seconds=cli.SANDBOX_BROWSER_READY_GRACE_SECONDS,
-            status_message="Waiting for sandbox web server before opening browser...",
+            status_message=None,
+        )
+
+    def test_handle_sandbox_web_detached_waits_after_container_starts(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["sandbox", "--detach", "web", "--port", "9001"])
+        completed = Mock(returncode=0, stdout="container-id\n", stderr="")
+
+        with (
+            patch("pbi_agent.cli._check_docker_available", return_value=None),
+            patch("pbi_agent.cli._is_web_port_available", return_value=True),
+            patch(
+                "pbi_agent.cli._sandbox_dockerfile_path",
+                return_value=Path("Dockerfile"),
+            ),
+            patch("pbi_agent.cli._docker_image_exists", return_value=True),
+            patch(
+                "pbi_agent.cli._build_sandbox_run_command",
+                return_value=(["docker", "run", "--detach"], {"ENV": "value"}),
+            ) as mock_build_run,
+            patch("pbi_agent.cli.subprocess.run", return_value=completed) as mock_run,
+            patch("pbi_agent.cli._start_browser_open_thread") as mock_browser_thread,
+            patch("pbi_agent.cli._open_browser_when_ready") as mock_open_when_ready,
+        ):
+            rc = cli._handle_sandbox_command(args)
+
+        self.assertEqual(rc, 0)
+        mock_build_run.assert_called_once()
+        mock_run.assert_called_once_with(
+            ["docker", "run", "--detach"],
+            env={"ENV": "value"},
+            capture_output=True,
+            text=True,
+        )
+        mock_browser_thread.assert_not_called()
+        mock_open_when_ready.assert_called_once_with(
+            "127.0.0.1",
+            9001,
+            "http://127.0.0.1:9001",
+            ready_grace_seconds=cli.SANDBOX_BROWSER_READY_GRACE_SECONDS,
+            status_message=None,
         )
 
     def test_handle_sandbox_web_rejects_unavailable_explicit_host_port(self) -> None:
@@ -723,6 +799,10 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertNotEqual(
             cli._sandbox_config_volume(workspace_a),
             cli._sandbox_config_volume(workspace_b),
+        )
+        self.assertNotEqual(
+            cli._sandbox_home_volume(workspace_a),
+            cli._sandbox_home_volume(workspace_b),
         )
 
     def test_build_sandbox_run_command_for_one_shot_run(self) -> None:
@@ -790,14 +870,46 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIsNotNone(dockerfile)
         content = dockerfile.read_text(encoding="utf-8")
         self.assertIn("FROM python:${PYTHON_VERSION}-alpine3.22", content)
-        self.assertIn("apk add --no-cache bash ca-certificates git patch", content)
+        self.assertIn(
+            "apk add --no-cache bash ca-certificates curl git libstdc++ patch ripgrep unzip",
+            content,
+        )
+        self.assertIn('PATH="/home/pbi/.local/bin:${PATH}"', content)
+        self.assertIn('PBI_AGENT_SHELL_EXECUTABLE="/bin/bash"', content)
+        self.assertIn(
+            'PBI_AGENT_SHELL_BOOTSTRAP="/usr/local/share/pbi-agent/sandbox-shell-env"',
+            content,
+        )
+        self.assertIn('find "$HOME" -mindepth 2 -maxdepth 4 -type d -name bin', content)
+        self.assertIn("command_not_found_handle()", content)
+        self.assertIn("pbi_discover_bin_paths", content)
+        self.assertIn("#!/bin/busybox sh", content)
+        self.assertIn("rm /bin/sh", content)
+        self.assertIn(
+            'exec /bin/bash -c ". \\"\\$PBI_AGENT_SHELL_BOOTSTRAP\\"; $command"',
+            content,
+        )
+        self.assertIn('exec /bin/busybox sh "$@"', content)
+        self.assertIn('"$HOME/.profile"', content)
+        self.assertIn('"$HOME/.bashrc"', content)
+        self.assertIn("mkdir -p /workspace /home/pbi", content)
+        self.assertNotIn("mkdir -p /workspace /home/pbi/.pbi-agent", content)
+        self.assertNotIn("/home/pbi/.config", content)
+        self.assertNotIn("/home/pbi/.bun/bin:", content)
+        self.assertNotIn("/home/pbi/.cargo/bin:", content)
+        self.assertNotIn("/home/pbi/.deno/bin:", content)
+        self.assertNotIn("/home/pbi/go/bin:", content)
         self.assertIn("site.getsitepackages()[0]", content)
         self.assertIn("-name tests -o -name test -o -name __pycache__", content)
         self.assertIn("-name '*.pyc' -o -name '*.pyo'", content)
         self.assertIn("${site_packages}/pyarrow/include", content)
         self.assertNotIn("slim-bookworm", content)
         self.assertNotIn("apt-get", content)
-        for removed_package in ("curl", "procps", "ripgrep", "unzip"):
+        self.assertIn("curl", content)
+        self.assertIn("libstdc++", content)
+        self.assertIn("ripgrep", content)
+        self.assertIn("unzip", content)
+        for removed_package in ("procps",):
             self.assertNotIn(removed_package, content)
 
     def test_handle_web_command_serves_in_process(self) -> None:

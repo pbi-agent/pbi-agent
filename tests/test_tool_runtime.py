@@ -268,6 +268,38 @@ def test_execute_tool_calls_serializes_truncated_shell_output(
     assert "chars omitted" in result["stderr"]
 
 
+def test_shell_tool_uses_configured_bootstrap_and_executable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    seen: dict[str, object] = {}
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        seen["args"] = args
+        seen["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout=b"ok\n",
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
+    monkeypatch.setenv(shell_tool.SHELL_BOOTSTRAP_ENV, "/sandbox shell/env")
+    monkeypatch.setenv(shell_tool.SHELL_EXECUTABLE_ENV, "/bin/bash")
+
+    result = shell_tool.handle({"command": "bun --version"}, Mock())
+
+    assert result["exit_code"] == 0
+    assert result["stdout"] == "ok\n"
+    assert seen["args"] == (". '/sandbox shell/env'; bun --version",)
+    kwargs = seen["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs["shell"] is True
+    assert kwargs["executable"] == "/bin/bash"
+
+
 def test_execute_tool_calls_serializes_truncated_apply_patch_error(
     monkeypatch,
 ) -> None:

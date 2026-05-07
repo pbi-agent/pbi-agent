@@ -89,6 +89,7 @@ DEFAULT_SANDBOX_IMAGE = f"pbi-agent-sandbox:{_docker_tag_safe(__version__)}"
 SANDBOX_WORKSPACE = "/workspace"
 SANDBOX_HOME = "/home/pbi"
 SANDBOX_CONFIG_VOLUME_PREFIX = "pbi-agent-sandbox-config"
+SANDBOX_HOME_VOLUME_PREFIX = "pbi-agent-sandbox-home"
 WEB_SERVER_BROWSER_WAIT_TIMEOUT_SECONDS = 20.0
 WEB_SERVER_BROWSER_WAIT_RETRY_SECONDS = 10.0
 WEB_SERVER_BROWSER_POLL_INTERVAL_SECONDS = 0.1
@@ -410,6 +411,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--read-only-repo",
         action="store_true",
         help="Mount the current repository read-only inside the sandbox.",
+    )
+    sandbox_parser.add_argument(
+        "-d",
+        "--detach",
+        action="store_true",
+        help="Run the sandbox container in the background.",
     )
     sandbox_parser.set_defaults(
         sandbox_command="web",
@@ -1475,16 +1482,45 @@ def _handle_sandbox_command(args: argparse.Namespace) -> int:
             return build_result.returncode
 
     run_command, container_env = _build_sandbox_run_command(args, image)
-    if sandbox_command == "web":
+    detached = bool(getattr(args, "detach", False))
+    if sandbox_command == "web" and not detached:
+        print(
+            "Waiting for sandbox web server before opening browser...",
+            file=sys.stderr,
+        )
         _start_browser_open_thread(
             args.host,
             args.port,
             _browser_target_url(args),
             ready_grace_seconds=SANDBOX_BROWSER_READY_GRACE_SECONDS,
-            status_message="Waiting for sandbox web server before opening browser...",
+            status_message=None,
         )
     try:
-        completed = subprocess.run(run_command, env=container_env)
+        if detached:
+            completed = subprocess.run(
+                run_command,
+                env=container_env,
+                capture_output=True,
+                text=True,
+            )
+            if completed.stdout:
+                print(completed.stdout.strip())
+            if completed.stderr:
+                print(completed.stderr.strip(), file=sys.stderr)
+            if completed.returncode == 0 and sandbox_command == "web":
+                print(
+                    "Waiting for detached sandbox web server before opening browser...",
+                    file=sys.stderr,
+                )
+                _open_browser_when_ready(
+                    args.host,
+                    args.port,
+                    _browser_target_url(args),
+                    ready_grace_seconds=SANDBOX_BROWSER_READY_GRACE_SECONDS,
+                    status_message=None,
+                )
+        else:
+            completed = subprocess.run(run_command, env=container_env)
     except KeyboardInterrupt:
         return 130
     return completed.returncode
@@ -1569,6 +1605,8 @@ def _build_sandbox_run_command(
             read_only=bool(args.read_only_repo),
         ),
         "--mount",
+        _sandbox_home_mount(workspace),
+        "--mount",
         _sandbox_config_mount(workspace),
         "--cap-drop",
         "ALL",
@@ -1582,9 +1620,11 @@ def _build_sandbox_run_command(
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,size=256m",
         "--tmpfs",
-        f"{SANDBOX_HOME}/.cache:rw,noexec,nosuid,size=512m",
+        f"{SANDBOX_HOME}/.cache:rw,noexec,nosuid,uid=1000,gid=1000,mode=755,size=512m",
     ]
-    if sys.stdin.isatty() and sys.stdout.isatty():
+    if getattr(args, "detach", False):
+        command.append("--detach")
+    elif sys.stdin.isatty() and sys.stdout.isatty():
         command.append("-it")
     if args.env_file is not None:
         command.extend(["--env-file", str(args.env_file.resolve())])
@@ -1619,8 +1659,16 @@ def _sandbox_config_volume(workspace: Path) -> str:
     return f"{SANDBOX_CONFIG_VOLUME_PREFIX}-{_sandbox_workspace_id(workspace)}"
 
 
+def _sandbox_home_volume(workspace: Path) -> str:
+    return f"{SANDBOX_HOME_VOLUME_PREFIX}-{_sandbox_workspace_id(workspace)}"
+
+
 def _sandbox_host_config_dir() -> Path:
     return Path.home() / ".pbi-agent"
+
+
+def _sandbox_home_mount(workspace: Path) -> str:
+    return f"type=volume,source={_sandbox_home_volume(workspace)},target={SANDBOX_HOME}"
 
 
 def _sandbox_config_mount(workspace: Path) -> str:

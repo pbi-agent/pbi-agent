@@ -24,13 +24,25 @@ From your repository root:
 pbi-agent sandbox web
 ```
 
+Start the sandbox web server in the background with:
+
+```bash
+pbi-agent sandbox -d web
+```
+
+Docker prints the started container id. Stop it later with:
+
+```bash
+docker stop <container-id>
+```
+
 When installed from PyPI, `pbi-agent sandbox` builds a small sandbox image from the Dockerfile bundled inside the installed package. The CLI reads its installed package version and passes it as `PBI_AGENT_VERSION`, so the image installs the matching PyPI package version with:
 
 ```dockerfile
 python -m pip install --prefer-binary "pbi-agent==${PBI_AGENT_VERSION}"
 ```
 
-The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper and installs PyPI dependencies with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
+The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper, common workspace utilities such as `curl` and `rg` (`ripgrep`), and shared runtime libraries commonly required by user-installed tools. PyPI dependencies install with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
 
 The host CLI opens your host browser to:
 
@@ -85,6 +97,21 @@ That lets the VM load your existing saved provider config, model profiles, auth 
 
 If `~/.pbi-agent` does not exist yet, pbi-agent uses a per-repository named Docker volume at the same container path. In both cases, pbi-agent internal state stays out of the repository while persisting across container restarts.
 
+The image filesystem is read-only, but the sandbox mounts the entire container user home directory at `/home/pbi` from a per-repository named Docker volume. Anything an installer or package manager writes under `/home/pbi` is writable and persistent across sandbox restarts for the same repository; this is a generic home volume, not a folder-by-folder allowlist.
+
+The container process `PATH` includes the standard user-local executable directory, `/home/pbi/.local/bin`. Shell tool commands also run through a sandbox bootstrap that sources readable user profile files under `/home/pbi` and discovers `bin` directories under the persistent home volume. The bootstrap also refreshes discovered `bin` paths when Bash sees a missing command, so install-and-run commands can pick up newly created tool directories. This keeps installer-specific paths out of the image while still making tools installed into locations such as `.bun/bin` or `.cargo/bin` visible to non-login shell commands.
+
+The sandbox still provides temporary storage for `/tmp` and uses temporary `/home/pbi/.cache` storage so caches do not accumulate in the persistent home volume.
+
+For example, inside a sandbox session an agent shell command can install and use uv with:
+
+```bash
+wget -qO- https://astral.sh/uv/install.sh | sh
+uv --version
+```
+
+Those local tools, installer receipts, and package-manager directories stay available when you start `pbi-agent sandbox` again from the same repository. Delete the project-scoped Docker home volume if you want to reset them.
+
 ## Safer Inspection Mode
 
 Use `--read-only-repo` to mount the repository read-only:
@@ -97,7 +124,7 @@ This mode is useful for inspection, but file-edit tools and commands that write 
 
 ## Security Boundary
 
-The sandbox uses a non-root container user, drops Linux capabilities, sets `no-new-privileges`, limits processes and memory, uses a read-only image filesystem, and provides writable temporary storage through `tmpfs`.
+The sandbox uses a non-root container user, drops Linux capabilities, sets `no-new-privileges`, limits processes and memory, uses a read-only image filesystem, and limits writable home storage to project-scoped Docker volumes plus temporary `tmpfs` paths.
 
 It does not mount the Docker socket, the host home directory, an SSH agent, or broad host filesystem paths.
 

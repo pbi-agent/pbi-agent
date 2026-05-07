@@ -288,6 +288,7 @@ Run the whole agent inside a Docker Desktop Linux container with the current rep
 
 ```bash
 pbi-agent sandbox web
+pbi-agent sandbox -d web
 pbi-agent sandbox run --prompt "Summarize this repository."
 pbi-agent sandbox --env-file .env.sandbox --read-only-repo run --prompt "Review without edits."
 ```
@@ -298,8 +299,11 @@ pbi-agent sandbox --env-file .env.sandbox --read-only-repo run --prompt "Review 
 | `--env-file` | none | Env file to pass to Docker for provider credentials and runtime config. |
 | `--rebuild` | `false` | Rebuild the local sandbox image before running. |
 | `--read-only-repo` | `false` | Mount the repository read-only inside the container. |
+| `-d`, `--detach` | `false` | Run the sandbox container in the background. |
 
 `sandbox web` accepts the normal web options. The wrapper opens the browser from the host, publishes the container web server to `127.0.0.1:<port>` on the host, and runs the server on `0.0.0.0:<port>` inside the container with container-side browser launch disabled.
+
+With `--detach`, Docker prints the started container id and the CLI returns after the host browser launch check. Stop the detached container with `docker stop <container-id>`.
 
 `sandbox run` accepts the normal one-shot run options: `--prompt`, `--image`, `--project-dir`, and `--session-id`.
 
