@@ -496,6 +496,37 @@ function AnimatedCountSummary({
   );
 }
 
+function TextShimmer({
+  text,
+  active = true,
+  className,
+}: {
+  text: string;
+  active?: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      data-component="text-shimmer"
+      data-active={active ? "true" : "false"}
+      className={className}
+      aria-label={text}
+    >
+      <span data-slot="text-shimmer-char">
+        <span data-slot="text-shimmer-char-base" aria-hidden="true">
+          {text}
+        </span>
+        <span
+          data-slot="text-shimmer-char-shimmer"
+          data-run={active ? "true" : "false"}
+          data-text={text}
+          aria-hidden="true"
+        />
+      </span>
+    </span>
+  );
+}
+
 function SubAgentCard({
   group,
   subAgents,
@@ -832,10 +863,7 @@ function WorkRun({
             aria-label={workRunSummary ? `Working ${workRunSummary}` : "Working"}
           >
             <ChevronRightIcon className="timeline-entry__chevron" />
-            <span>Working</span>
-            {active || unit.running ? (
-              <span className="timeline-entry__running" aria-label="running" />
-            ) : null}
+            <TextShimmer text="Working" active={active || unit.running} className="timeline-entry__working-label" />
             <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
           </Button>
         </CollapsibleTrigger>

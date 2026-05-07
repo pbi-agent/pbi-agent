@@ -1006,7 +1006,7 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     expect(screen.queryByText("Updated")).not.toBeInTheDocument();
   });
 
-  it("keeps the Working badge spinner visible while the session is active", () => {
+  it("animates the Working label while the session is active", () => {
     const { rerender } = render(
       <SessionTimeline
         items={[
@@ -1032,8 +1032,10 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Working/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    const workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toBeInTheDocument();
+    expect(workingButton.querySelector('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
 
     rerender(
       <SessionTimeline
@@ -1255,7 +1257,10 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
 
     const trigger = screen.getByRole("button", { name: /Working/ });
     expect(trigger).toHaveAttribute("data-phase", "tool_execution");
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    const shimmer = trigger.querySelector('[data-component="text-shimmer"]');
+    expect(shimmer).toHaveAttribute("data-active", "true");
+    expect(shimmer?.querySelector('[data-slot="text-shimmer-char-shimmer"]')).toHaveAttribute("data-run", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
   });
 
   it("color-codes the active Working header for model_wait phase", () => {
@@ -1279,10 +1284,13 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
 
     const trigger = screen.getByRole("button", { name: /Working/ });
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    const shimmer = trigger.querySelector('[data-component="text-shimmer"]');
+    expect(shimmer).toHaveAttribute("data-active", "true");
+    expect(shimmer?.querySelector('[data-slot="text-shimmer-char-shimmer"]')).toHaveAttribute("data-run", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
   });
 
-  it("delays active Working phase color changes without replacing the spinner", () => {
+  it("delays active Working phase color changes without replacing the shimmer label", () => {
     vi.useFakeTimers();
     const items = [
       {
@@ -1304,7 +1312,8 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     );
 
     const trigger = screen.getByRole("button", { name: /Working/ });
-    const spinner = screen.getByLabelText("running");
+    const shimmer = trigger.querySelector('[data-component="text-shimmer"]');
+    expect(shimmer).toHaveAttribute("data-active", "true");
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
 
     rerender(
@@ -1319,17 +1328,18 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     );
 
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
-    expect(screen.getByLabelText("running")).toBe(spinner);
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toBe(shimmer);
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(900);
     });
 
     expect(trigger).toHaveAttribute("data-phase", "tool_execution");
-    expect(screen.getByLabelText("running")).toBe(spinner);
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toBe(shimmer);
   });
 
-  it("keeps the active Working spinner stable and delays color changes when the first tool run replaces the placeholder", () => {
+  it("keeps the active Working shimmer stable and delays color changes when the first tool run replaces the placeholder", () => {
     vi.useFakeTimers();
     const initialItems = [
       {
@@ -1370,7 +1380,8 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     );
 
     const trigger = screen.getByRole("button", { name: /Working/ });
-    const spinner = screen.getByLabelText("running");
+    const shimmer = trigger.querySelector('[data-component="text-shimmer"]');
+    expect(shimmer).toHaveAttribute("data-active", "true");
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
 
     rerender(
@@ -1385,14 +1396,15 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     );
 
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
-    expect(screen.getByLabelText("running")).toBe(spinner);
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toBe(shimmer);
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(900);
     });
 
     expect(trigger).toHaveAttribute("data-phase", "tool_execution");
-    expect(screen.getByLabelText("running")).toBe(spinner);
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toBe(shimmer);
   });
 
   it("clears stale queued active Working phases when the current phase returns to the visible color", () => {
@@ -1537,7 +1549,8 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
 
     const trigger = screen.getByRole("button", { name: /Working/ });
     expect(trigger).toHaveAttribute("data-phase", "starting");
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
     // Clicking the synthetic header must not crash even with no body content.
     fireEvent.click(trigger);
     expect(screen.getByRole("button", { name: /Working/ })).toBeInTheDocument();
@@ -1565,7 +1578,8 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
 
     const trigger = screen.getByRole("button", { name: /Working/ });
     expect(trigger).toHaveAttribute("data-phase", "active");
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
   });
 
   it("does not render the legacy bottom processing indicator", () => {

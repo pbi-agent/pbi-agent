@@ -1,4 +1,4 @@
-[X] Reproduce and inspect sub-agent child processing props
-[X] Fix empty parent Working block in finished sub-agent child view
-[X] Add regression test and validate
-[X] Update memory
+[X] Inspect OpenCode thinking animation implementation
+[X] Implement Working label wave animation without spinner
+[X] Add/update tests
+[X] Run frontend validation and update memory
