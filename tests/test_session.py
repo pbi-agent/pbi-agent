@@ -32,6 +32,7 @@ from pbi_agent.config import (
     DEFAULT_GOOGLE_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
+    ResolvedRuntime,
     Settings,
 )
 from pbi_agent.models.messages import (
@@ -47,12 +48,32 @@ from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.session_store import SessionStore
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.display.protocol import QueuedInput
+from pbi_agent.workspace_context import WORKSPACE_KEY_ENV
 
 
 def _write_command(root, name: str, content: str) -> None:
     commands_dir = root / ".agents" / "commands"
     commands_dir.mkdir(parents=True, exist_ok=True)
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
+
+
+def test_create_session_uses_workspace_key_env(monkeypatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(WORKSPACE_KEY_ENV, "/host/Repo")
+    runtime = ResolvedRuntime(
+        settings=Settings(api_key="test-key", provider="openai", model=DEFAULT_MODEL),
+        provider_id=None,
+        profile_id=None,
+    )
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = session_module._create_session(store, runtime, title="hello")
+        host_sessions = store.list_sessions("/host/repo")
+        internal_sessions = store.list_sessions(str(tmp_path))
+
+    assert session_id is not None
+    assert [session.session_id for session in host_sessions] == [session_id]
+    assert internal_sessions == []
 
 
 class _DisplaySpy:

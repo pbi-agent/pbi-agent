@@ -476,6 +476,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 "custom:dev",
                 "--env-file",
                 ".env.sandbox",
+                "--local-source",
                 "--detach",
                 "web",
                 "--host",
@@ -491,6 +492,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(args.sandbox_command, "web")
         self.assertEqual(args.image, "custom:dev")
         self.assertEqual(args.env_file, Path(".env.sandbox"))
+        self.assertTrue(args.local_source)
         self.assertTrue(args.detach)
         self.assertEqual(args.port, 9001)
         self.assertEqual(args.title, "Sandbox")
@@ -558,11 +560,12 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             original_cwd = Path.cwd()
+            host_config_dir = Path(tmpdir) / "missing-config"
             try:
                 os.chdir(tmpdir)
                 with patch(
                     "pbi_agent.cli._sandbox_host_config_dir",
-                    return_value=Path(tmpdir) / "missing-config",
+                    return_value=host_config_dir,
                 ):
                     command, container_env = cli._build_sandbox_run_command(
                         args,
@@ -570,6 +573,8 @@ class DefaultWebCommandTests(unittest.TestCase):
                     )
             finally:
                 os.chdir(original_cwd)
+
+        workspace = Path(tmpdir).resolve()
 
         self.assertEqual(command[:2], ["docker", "run"])
         self.assertIn("--rm", command)
@@ -584,6 +589,10 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("512", command)
         self.assertIn("--memory", command)
         self.assertIn("4g", command)
+        self.assertIn("--label", command)
+        self.assertIn("pbi-agent.sandbox=1", command)
+        self.assertIn(f"pbi-agent.workspace={workspace}", command)
+        self.assertIn(f"pbi-agent.workspace-key={workspace}", command)
         self.assertIn("--tmpfs", command)
         self.assertIn("/tmp:rw,noexec,nosuid,size=256m", command)
         self.assertIn(
@@ -598,7 +607,6 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("sandbox:test", command)
         self.assertNotIn("/var/run/docker.sock", " ".join(command))
 
-        workspace = Path(tmpdir).resolve()
         container_workspace = cli._sandbox_container_workspace(workspace)
         mounts = [
             command[index + 1]
@@ -615,8 +623,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             mounts,
         )
         self.assertIn(
-            f"type=volume,source={cli._sandbox_config_volume(workspace)},"
-            f"target={cli.SANDBOX_HOME}/.pbi-agent",
+            f"type=bind,source={host_config_dir},target={cli.SANDBOX_HOME}/.pbi-agent",
             mounts,
         )
         self.assertNotIn(f"{cli.SANDBOX_HOME}:rw", command)
@@ -627,9 +634,18 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(command[workdir_index + 1], container_workspace)
         self.assertIn("--env", command)
         self.assertIn("BROWSER", command)
+        self.assertIn("PBI_AGENT_SANDBOX", command)
+        self.assertIn("PBI_AGENT_WORKSPACE_KEY", command)
+        self.assertIn("PBI_AGENT_WORKSPACE_DISPLAY_PATH", command)
         self.assertIn("PBI_AGENT_PROVIDER", command)
         self.assertIn("PBI_AGENT_API_KEY", command)
         self.assertEqual(container_env["BROWSER"], "/bin/true")
+        self.assertEqual(container_env["PBI_AGENT_SANDBOX"], "1")
+        self.assertEqual(container_env["PBI_AGENT_WORKSPACE_KEY"], str(workspace))
+        self.assertEqual(
+            container_env["PBI_AGENT_WORKSPACE_DISPLAY_PATH"],
+            str(workspace),
+        )
         self.assertEqual(container_env["PBI_AGENT_PROVIDER"], "openai")
         self.assertEqual(container_env["PBI_AGENT_API_KEY"], "secret-key")
         self.assertNotIn("secret-key", command)
@@ -699,6 +715,42 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertNotIn(
             cli._sandbox_config_volume(workspace.resolve()), " ".join(mounts)
         )
+
+    def test_build_sandbox_run_command_creates_and_mounts_host_config(
+        self,
+    ) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(["sandbox", "run", "--prompt", "hello"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir) / "repo"
+            workspace.mkdir()
+            host_config_dir = Path(tmpdir) / ".pbi-agent"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(workspace)
+                with patch(
+                    "pbi_agent.cli._sandbox_host_config_dir",
+                    return_value=host_config_dir,
+                ):
+                    command, _container_env = cli._build_sandbox_run_command(
+                        args,
+                        "sandbox:test",
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+            mounts = [
+                command[index + 1]
+                for index, value in enumerate(command)
+                if value == "--mount"
+            ]
+            self.assertIn(
+                f"type=bind,source={host_config_dir},"
+                f"target={cli.SANDBOX_HOME}/.pbi-agent",
+                mounts,
+            )
+            self.assertTrue(host_config_dir.is_dir())
 
     def test_handle_sandbox_web_opens_browser_from_host(self) -> None:
         parser = cli.build_parser()
@@ -797,12 +849,55 @@ class DefaultWebCommandTests(unittest.TestCase):
             cli._sandbox_container_workspace(workspace_b),
         )
         self.assertNotEqual(
-            cli._sandbox_config_volume(workspace_a),
-            cli._sandbox_config_volume(workspace_b),
-        )
-        self.assertNotEqual(
             cli._sandbox_home_volume(workspace_a),
             cli._sandbox_home_volume(workspace_b),
+        )
+
+    def test_build_sandbox_run_command_can_install_local_source(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(
+            [
+                "sandbox",
+                "--local-source",
+                "run",
+                "--prompt",
+                "Inspect",
+            ]
+        )
+
+        command, container_env = cli._build_sandbox_run_command(
+            args,
+            "sandbox:test",
+        )
+
+        workspace = Path.cwd().resolve()
+        container_workspace = cli._sandbox_container_workspace(workspace)
+        self.assertIn("--env", command)
+        local_env_index = command.index("PBI_AGENT_LOCAL_SOURCE")
+        self.assertEqual(command[local_env_index - 1], "--env")
+        entrypoint_index = command.index("--entrypoint")
+        image_index = command.index("sandbox:test")
+        self.assertLess(entrypoint_index, image_index)
+        self.assertEqual(command[entrypoint_index + 1], "/bin/bash")
+        self.assertEqual(
+            command[image_index + 1 :],
+            [
+                "-lc",
+                (
+                    "python -m pip install --user --prefer-binary -e "
+                    '"$PBI_AGENT_LOCAL_SOURCE" && exec pbi-agent "$@"'
+                ),
+                "pbi-agent",
+                "run",
+                "--prompt",
+                "Inspect",
+                "--project-dir",
+                ".",
+            ],
+        )
+        self.assertEqual(
+            container_env["PBI_AGENT_LOCAL_SOURCE"],
+            container_workspace,
         )
 
     def test_build_sandbox_run_command_for_one_shot_run(self) -> None:
@@ -2606,6 +2701,38 @@ class KanbanCommandTests(unittest.TestCase):
             self.assertEqual(tasks[0].title, "Refactor API endpoint")
             self.assertEqual(tasks[0].prompt, "Improve endpoint performance.")
             self.assertEqual(tasks[0].stage, "backlog")
+
+    def test_create_uses_workspace_key_env_for_task_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(root)
+                with patch.dict(
+                    os.environ,
+                    {"PBI_AGENT_WORKSPACE_KEY": "/host/Project"},
+                    clear=False,
+                ):
+                    rc = cli.main(
+                        [
+                            "kanban",
+                            "create",
+                            "--title",
+                            "Sandbox task",
+                            "--desc",
+                            "Persist with host workspace identity.",
+                        ]
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(rc, 0)
+            with SessionStore() as store:
+                tasks = store.list_kanban_tasks("/host/project")
+                internal_tasks = store.list_kanban_tasks(str(root).lower())
+            self.assertEqual(len(tasks), 1)
+            self.assertEqual(tasks[0].title, "Sandbox task")
+            self.assertEqual(internal_tasks, [])
 
     def test_create_resolves_lane_by_name_and_slug(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

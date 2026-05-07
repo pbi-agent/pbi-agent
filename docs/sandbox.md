@@ -7,6 +7,8 @@ description: 'Run pbi-agent inside a Docker Desktop Linux container.'
 
 `pbi-agent sandbox` runs the whole agent process inside a Docker Desktop Linux container. The current repository is mounted under a per-repository directory below `/workspace`, and the agent runs from that mounted repository directory, so model-requested shell commands, file reads, file edits, MCP servers, and sub-agents execute inside the container instead of directly on the host.
 
+The container path is only the execution root. Sessions, Kanban tasks, run history, and the workspace label in the web UI use the real host workspace path, so opening the same folder with or without sandbox shows the same conversation history and board.
+
 This is intended for Docker Desktop on Windows using Linux containers. Docker Desktop provides the VM-backed boundary; the host still sees normal Git diffs because the repository is bind-mounted.
 
 ## Requirements
@@ -43,6 +45,21 @@ python -m pip install --prefer-binary "pbi-agent==${PBI_AGENT_VERSION}"
 ```
 
 The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper, common workspace utilities such as `curl` and `rg` (`ripgrep`), and shared runtime libraries commonly required by user-installed tools. PyPI dependencies install with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
+
+When developing pbi-agent itself, use local source mode to test the mounted checkout inside the sandbox instead of the last published PyPI package:
+
+```bash
+uv run pbi-agent sandbox --local-source web
+uv run pbi-agent sandbox --local-source run --prompt "Test this checkout."
+```
+
+Local source mode starts from the normal sandbox image, then installs the mounted repository in editable user mode before launching the requested command:
+
+```bash
+python -m pip install --user --prefer-binary -e "$PBI_AGENT_LOCAL_SOURCE"
+```
+
+That keeps the Docker sandbox behavior close to the released image while loading your current Python files from the host checkout. If package dependencies changed, rebuild the base sandbox image after publishing or expect pip to install any missing dependencies into the project-scoped sandbox home volume.
 
 The host CLI opens your host browser to:
 
@@ -85,17 +102,15 @@ Do not bake provider keys into the Docker image. Keep secrets in environment var
 
 ## Storage
 
-The repository is mounted under a stable per-repository path below `/workspace`. By default it is writable, so file edits inside the sandbox change the host repository directly.
+The repository is mounted under a stable per-repository path below `/workspace`. By default it is writable, so file edits inside the sandbox change the host repository directly. The web UI still displays the host workspace path instead of the internal `/workspace/<id>` path.
 
-If the host has `~/.pbi-agent`, the sandbox bind-mounts that directory at:
+The sandbox creates `~/.pbi-agent` on the host if needed, then bind-mounts that directory at:
 
 ```text
 /home/pbi/.pbi-agent
 ```
 
-That lets the VM load your existing saved provider config, model profiles, auth state, sessions, and run history.
-
-If `~/.pbi-agent` does not exist yet, pbi-agent uses a per-repository named Docker volume at the same container path. In both cases, pbi-agent internal state stays out of the repository while persisting across container restarts.
+That lets the VM load your existing saved provider config, model profiles, auth state, sessions, Kanban tasks, and run history. Sandbox and non-sandbox runs share those records because the sandbox passes the host workspace path into the container as the workspace identity.
 
 The image filesystem is read-only, but the sandbox mounts the entire container user home directory at `/home/pbi` from a per-repository named Docker volume. Anything an installer or package manager writes under `/home/pbi` is writable and persistent across sandbox restarts for the same repository; this is a generic home volume, not a folder-by-folder allowlist.
 

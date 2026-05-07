@@ -23,7 +23,7 @@ export type Body_upload_saved_session_images_api_sessions__session_id__images_po
 
 export type Body_upload_task_images_api_tasks_images_post = { files: string[] };
 
-export type BootstrapResponse = { workspace_root: string; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; supports_image_inputs: boolean; sessions: SessionRecordModel[]; tasks: TaskRecordModel[]; live_sessions: LiveSessionModel[]; board_stages: BoardStageModel[] };
+export type BootstrapResponse = { workspace_root: string; workspace_key: string; workspace_display_path: string; is_sandbox: boolean; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; supports_image_inputs: boolean; sessions: SessionRecordModel[]; tasks: TaskRecordModel[]; live_sessions: LiveSessionModel[]; board_stages: BoardStageModel[] };
 
 export type CommandListResponse = { commands: CommandViewModel[]; config_revision: string };
 

@@ -284,7 +284,9 @@ See [Session Commands](/session-commands) for the complete interactive command r
 
 ## `pbi-agent sandbox`
 
-Run the whole agent inside a Docker Desktop Linux container with the current repository mounted under a per-repository path below `/workspace`. If `~/.pbi-agent` exists on the host, it is mounted into the container so saved config and profiles are available in the sandbox.
+Run the whole agent inside a Docker Desktop Linux container with the current repository mounted under a per-repository path below `/workspace`. The host `~/.pbi-agent` directory is created if needed and mounted into the container so saved config, profiles, sessions, Kanban tasks, and run history are shared with non-sandbox runs.
+
+The internal `/workspace/<id>` path is used only for execution inside the container. Workspace identity and the web UI workspace label use the real host path, so the same folder has the same history and board with or without sandbox.
 
 ```bash
 pbi-agent sandbox web

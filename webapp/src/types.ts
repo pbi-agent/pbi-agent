@@ -205,6 +205,9 @@ export type ExpandedSessionInput = {
 
 export type BootstrapPayload = {
   workspace_root: string;
+  workspace_key: string;
+  workspace_display_path: string;
+  is_sandbox: boolean;
   provider: string | null;
   provider_id: string | null;
   profile_id: string | null;

@@ -98,6 +98,9 @@ class LiveSessionModel(BaseModel):
 
 class BootstrapResponse(BaseModel):
     workspace_root: str
+    workspace_key: str
+    workspace_display_path: str
+    is_sandbox: bool
     provider: str | None
     provider_id: str | None
     profile_id: str | None

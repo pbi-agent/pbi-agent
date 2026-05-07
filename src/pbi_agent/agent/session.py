@@ -4,7 +4,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -45,6 +44,7 @@ from pbi_agent.display.protocol import (
     QueuedInput,
     QueuedRuntimeChange,
 )
+from pbi_agent.workspace_context import current_workspace_context
 
 _log = logging.getLogger(__name__)
 
@@ -1127,7 +1127,7 @@ def _create_session(
     try:
         settings = runtime.settings
         return store.create_session(
-            directory=os.getcwd(),
+            directory=current_workspace_context().directory_key,
             provider=settings.provider,
             provider_id=runtime.provider_id or None,
             model=settings.model,
