@@ -5,9 +5,16 @@ export function StatusPill({
 }: {
   status: string;
 }) {
+  const isRunning = [
+    "running",
+    "started",
+    "starting",
+    "waiting_for_input",
+  ].includes(status);
+  const isComplete = ["completed", "interrupted", "ended"].includes(status);
   const modifier =
-    status === "running" ? "running"
-    : status === "completed" || status === "ended" ? "completed"
+    isRunning ? "running"
+    : isComplete ? "completed"
     : status === "failed" ? "failed"
     : "idle";
 

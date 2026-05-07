@@ -96,8 +96,17 @@ class ConsoleDisplay(DisplayProtocol):
         images=None,
         image_attachments=None,
         interactive_mode: bool = False,
+        item_id: str | None = None,
     ) -> None:
-        del value, file_paths, image_paths, images, image_attachments, interactive_mode
+        del (
+            value,
+            file_paths,
+            image_paths,
+            images,
+            image_attachments,
+            interactive_mode,
+            item_id,
+        )
         return None
 
     def request_new_session(self) -> None:
@@ -208,6 +217,9 @@ class ConsoleDisplay(DisplayProtocol):
 
     def wait_stop(self) -> None:
         self._stop_spinner()
+
+    def render_user_message(self, text: str) -> None:
+        del text
 
     def render_markdown(self, text: str) -> None:
         self._stop_spinner()

@@ -7,7 +7,6 @@
 *work smart.*
 
 [![Tests](https://github.com/pbi-agent/pbi-agent/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/pbi-agent/pbi-agent/actions/workflows/tests.yml)
-[![Publish](https://github.com/pbi-agent/pbi-agent/actions/workflows/publish.yml/badge.svg)](https://github.com/pbi-agent/pbi-agent/actions/workflows/publish.yml)
 [![Release](https://github.com/pbi-agent/pbi-agent/actions/workflows/release.yml/badge.svg)](https://github.com/pbi-agent/pbi-agent/actions/workflows/release.yml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-gold)](LICENSE)
@@ -54,11 +53,11 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 
 ## Docs
 
-- [Installation](https://pbi-agent.github.io/pbi-agent/guide/installation)
-- [Provider Setup](https://pbi-agent.github.io/pbi-agent/guide/providers)
-- [CLI Reference](https://pbi-agent.github.io/pbi-agent/reference/cli)
-- [Environment Variables](https://pbi-agent.github.io/pbi-agent/reference/environment)
-- [Customization](https://pbi-agent.github.io/pbi-agent/guide/customization)
+- [Installation](https://pbi-agent.github.io/pbi-agent/installation)
+- [Provider Setup](https://pbi-agent.github.io/pbi-agent/providers)
+- [CLI Reference](https://pbi-agent.github.io/pbi-agent/cli)
+- [Environment Variables](https://pbi-agent.github.io/pbi-agent/environment)
+- [Customization](https://pbi-agent.github.io/pbi-agent/customization)
 
 ## Customization
 
@@ -70,7 +69,7 @@ Running `pbi-agent` with no command launches the browser UI on `http://localhost
 - `.agents/agents/<agent-name>.md` adds project-local sub-agents that can be selected through the `sub_agent` tool.
 - `.agents/mcp.json` declares MCP servers whose tools are exposed to the model at startup.
 
-See the full [Customization guide](https://pbi-agent.github.io/pbi-agent/guide/customization) for examples and behavior details.
+See the full [Customization guide](https://pbi-agent.github.io/pbi-agent/customization) for examples and behavior details.
 
 ## Common Commands
 

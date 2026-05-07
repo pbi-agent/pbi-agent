@@ -1,4 +1,19 @@
 import type {
+  ApiJsonBody,
+  ApiJsonRequestBodies,
+  ApiOperation,
+  ApiOperationPathParams,
+  ApiOperationQueryParams,
+  ApiPathParams,
+  ApiQueryParams,
+  ApiResponse,
+  CreateSessionRequest,
+  LiveSessionInputRequest,
+  LiveSessionShellCommandRequest,
+  SubmitQuestionResponseRequest,
+  UpdateSessionRequest,
+} from "./api-types.generated";
+import type {
   AllRunsPayload,
   BoardStage,
   BootstrapPayload,
@@ -22,8 +37,37 @@ import type {
   SessionRecord,
   SlashCommandItem,
   TaskRecord,
-  UpdateSessionPayload,
 } from "./types";
+
+type SessionListResponsePayload = { sessions: SessionRecord[] };
+type SessionResponsePayload = { session: SessionRecord };
+type LiveSessionResponsePayload = { session: LiveSession };
+type FileMentionSearchResponsePayload = { items: FileMentionItem[] };
+type SlashCommandSearchResponsePayload = { items: SlashCommandItem[] };
+type ImageUploadResponsePayload = { uploads: ImageAttachment[] };
+type BoardStagesResponsePayload = { board_stages: BoardStage[] };
+type TaskListResponsePayload = { tasks: TaskRecord[] };
+type TaskResponsePayload = { task: TaskRecord };
+type ProviderResponsePayload = { provider: ProviderView; config_revision: string };
+type ModelProfileResponsePayload = {
+  model_profile: ModelProfileView;
+  config_revision: string;
+};
+type ActiveModelProfileResponsePayload = {
+  active_profile_id: string | null;
+  config_revision: string;
+};
+type SessionRunsResponsePayload = { runs: RunSession[] };
+type RunDetailResponsePayload = {
+  run: RunSession;
+  events: ObservabilityEvent[];
+};
+type DashboardStatsQuery = ApiQueryParams<"GET /api/dashboard/stats"> & {
+  scope?: "workspace" | "global";
+};
+type AllRunsQuery = ApiQueryParams<"GET /api/runs"> & {
+  scope?: "workspace" | "global";
+};
 
 export class ApiError extends Error {
   constructor(
@@ -59,56 +103,125 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function websocketUrl(path: string): string {
-  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${protocol}://${window.location.host}${path}`;
+async function apiRequest<
+  Operation extends ApiOperation,
+  Result extends ApiResponse<Operation> = ApiResponse<Operation>,
+>(operation: Operation, path: string, init?: RequestInit): Promise<Result> {
+  void operation;
+  return requestJson<Result>(path, init);
+}
+
+function jsonBody<Operation extends keyof ApiJsonRequestBodies>(
+  operation: Operation,
+  payload: ApiJsonBody<Operation>,
+): string {
+  void operation;
+  return JSON.stringify(payload);
+}
+
+function queryString<Operation extends keyof ApiOperationQueryParams>(
+  operation: Operation,
+  params: ApiQueryParams<Operation>,
+): string {
+  void operation;
+  const query = new URLSearchParams();
+  for (const [name, value] of Object.entries(params)) {
+    if (value == null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) query.append(name, String(item));
+    } else {
+      query.set(name, String(value));
+    }
+  }
+  const encoded = query.toString();
+  return encoded ? `?${encoded}` : "";
+}
+
+function pathFor<Operation extends keyof ApiOperationPathParams>(
+  operation: Operation,
+  params: ApiPathParams<Operation>,
+): string {
+  const separator = operation.indexOf(" ");
+  let path = operation.slice(separator + 1);
+  for (const [name, value] of Object.entries(params)) {
+    path = path.split(`{${name}}`).join(encodeURIComponent(String(value)));
+  }
+  return path;
+}
+
+export function eventStreamUrl(path: string): string {
+  return `${window.location.origin}${path}`;
 }
 
 export async function fetchBootstrap(): Promise<BootstrapPayload> {
-  return requestJson<BootstrapPayload>("/api/bootstrap");
+  return apiRequest<"GET /api/bootstrap", BootstrapPayload>(
+    "GET /api/bootstrap",
+    "/api/bootstrap",
+  );
 }
 
 export async function fetchConfigBootstrap(): Promise<ConfigBootstrapPayload> {
-  return requestJson<ConfigBootstrapPayload>("/api/config/bootstrap");
+  return apiRequest<"GET /api/config/bootstrap", ConfigBootstrapPayload>(
+    "GET /api/config/bootstrap",
+    "/api/config/bootstrap",
+  );
 }
 
 export async function fetchSessions(): Promise<SessionRecord[]> {
-  const result = await requestJson<{ sessions: SessionRecord[] }>("/api/sessions");
+  const result = await apiRequest<
+    "GET /api/sessions",
+    SessionListResponsePayload
+  >("GET /api/sessions", "/api/sessions");
   return result.sessions;
 }
 
 export async function updateSession(
   sessionId: string,
-  payload: UpdateSessionPayload,
+  payload: UpdateSessionRequest,
 ): Promise<SessionRecord> {
-  const result = await requestJson<{ session: SessionRecord }>(
-    `/api/sessions/${sessionId}`,
+  const result = await apiRequest<
+    "PATCH /api/sessions/{session_id}",
+    SessionResponsePayload
+  >(
+    "PATCH /api/sessions/{session_id}",
+    pathFor("PATCH /api/sessions/{session_id}", { session_id: sessionId }),
     {
       method: "PATCH",
-      body: JSON.stringify(payload),
+      body: jsonBody("PATCH /api/sessions/{session_id}", payload),
     },
   );
   return result.session;
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  await requestJson<void>(`/api/sessions/${sessionId}`, { method: "DELETE" });
+  await apiRequest<"DELETE /api/sessions/{session_id}">(
+    "DELETE /api/sessions/{session_id}",
+    pathFor("DELETE /api/sessions/{session_id}", { session_id: sessionId }),
+    { method: "DELETE" },
+  );
 }
 
 export async function fetchSessionDetail(sessionId: string): Promise<SessionDetailPayload> {
-  return requestJson<SessionDetailPayload>(`/api/sessions/${sessionId}`);
+  return apiRequest<"GET /api/sessions/{session_id}", SessionDetailPayload>(
+    "GET /api/sessions/{session_id}",
+    pathFor("GET /api/sessions/{session_id}", { session_id: sessionId }),
+  );
 }
 
 export async function searchFileMentions(
   query: string,
   limit = 8,
 ): Promise<FileMentionItem[]> {
-  const params = new URLSearchParams({
+  const params = queryString("GET /api/files/search", {
     q: query,
-    limit: String(limit),
+    limit,
   });
-  const result = await requestJson<{ items: FileMentionItem[] }>(
-    `/api/files/search?${params.toString()}`,
+  const result = await apiRequest<
+    "GET /api/files/search",
+    FileMentionSearchResponsePayload
+  >(
+    "GET /api/files/search",
+    `/api/files/search${params}`,
   );
   return result.items;
 }
@@ -117,12 +230,16 @@ export async function searchSlashCommands(
   query: string,
   limit = 8,
 ): Promise<SlashCommandItem[]> {
-  const params = new URLSearchParams({
+  const params = queryString("GET /api/slash-commands/search", {
     q: query,
-    limit: String(limit),
+    limit,
   });
-  const result = await requestJson<{ items: SlashCommandItem[] }>(
-    `/api/slash-commands/search?${params.toString()}`,
+  const result = await apiRequest<
+    "GET /api/slash-commands/search",
+    SlashCommandSearchResponsePayload
+  >(
+    "GET /api/slash-commands/search",
+    `/api/slash-commands/search${params}`,
   );
   return result.items;
 }
@@ -138,36 +255,54 @@ export async function createLiveSession(
   const created = await createSession({
     profile_id: payload.profile_id ?? null,
   });
-  const result = await requestJson<{ session: LiveSession }>(`/api/sessions/${created.session_id}/runs`, {
-    method: "POST",
-    body: JSON.stringify({ text: "" }),
-  });
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/runs",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/runs",
+    pathFor("POST /api/sessions/{session_id}/runs", {
+      session_id: created.session_id,
+    }),
+    {
+      method: "POST",
+      body: jsonBody("POST /api/sessions/{session_id}/runs", { text: "" }),
+    },
+  );
   return result.session;
 }
 
-export async function createSession(payload: {
-  title?: string;
-  profile_id?: string | null;
-} = {}): Promise<SessionRecord> {
-  const result = await requestJson<{ session: SessionRecord }>("/api/sessions", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+export async function createSession(
+  payload: CreateSessionRequest = {},
+): Promise<SessionRecord> {
+  const result = await apiRequest<"POST /api/sessions", SessionResponsePayload>(
+    "POST /api/sessions",
+    "/api/sessions",
+    {
+      method: "POST",
+      body: jsonBody("POST /api/sessions", payload),
+    },
+  );
   return result.session;
 }
 
 export async function submitQuestionResponse(
   sessionId: string,
-  payload: {
-    prompt_id: string;
-    answers: UserQuestionAnswer[];
-  },
+  payload: SubmitQuestionResponseRequest & { answers: UserQuestionAnswer[] },
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/question-response`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/question-response",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/question-response",
+    pathFor("POST /api/sessions/{session_id}/question-response", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: jsonBody(
+        "POST /api/sessions/{session_id}/question-response",
+        payload,
+      ),
     },
   );
   return result.session;
@@ -175,22 +310,28 @@ export async function submitQuestionResponse(
 
 export async function submitSessionQuestionResponse(
   sessionId: string,
-  payload: {
-    prompt_id: string;
-    answers: UserQuestionAnswer[];
-  },
+  payload: SubmitQuestionResponseRequest & { answers: UserQuestionAnswer[] },
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/question-response`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/question-response",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/question-response",
+    pathFor("POST /api/sessions/{session_id}/question-response", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: jsonBody(
+        "POST /api/sessions/{session_id}/question-response",
+        payload,
+      ),
     },
   );
   return result.session;
 }
 
-export type SessionInputPayload = {
+export type SessionInputPayload = LiveSessionInputRequest & {
   text: string;
   file_paths: string[];
   image_paths: string[];
@@ -203,11 +344,17 @@ export async function submitSessionInput(
   sessionId: string,
   payload: SessionInputPayload,
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/messages`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/messages",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/messages",
+    pathFor("POST /api/sessions/{session_id}/messages", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: jsonBody("POST /api/sessions/{session_id}/messages", payload),
     },
   );
   return result.session;
@@ -217,11 +364,17 @@ export async function sendSessionMessage(
   sessionId: string,
   payload: SessionInputPayload,
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/messages`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/messages",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/messages",
+    pathFor("POST /api/sessions/{session_id}/messages", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: jsonBody("POST /api/sessions/{session_id}/messages", payload),
     },
   );
   return result.session;
@@ -229,13 +382,19 @@ export async function sendSessionMessage(
 
 export async function runShellCommand(
   sessionId: string,
-  payload: { command: string },
+  payload: LiveSessionShellCommandRequest & { command: string },
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/shell-command`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/shell-command",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/shell-command",
+    pathFor("POST /api/sessions/{session_id}/shell-command", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: jsonBody("POST /api/sessions/{session_id}/shell-command", payload),
     },
   );
   return result.session;
@@ -243,13 +402,19 @@ export async function runShellCommand(
 
 export async function runSessionShellCommand(
   sessionId: string,
-  payload: { command: string },
+  payload: LiveSessionShellCommandRequest & { command: string },
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/shell-command`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/shell-command",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/shell-command",
+    pathFor("POST /api/sessions/{session_id}/shell-command", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: jsonBody("POST /api/sessions/{session_id}/shell-command", payload),
     },
   );
   return result.session;
@@ -258,16 +423,28 @@ export async function runSessionShellCommand(
 export async function interruptLiveSession(
   sessionId: string,
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/interrupt`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/interrupt",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/interrupt",
+    pathFor("POST /api/sessions/{session_id}/interrupt", {
+      session_id: sessionId,
+    }),
     { method: "POST" },
   );
   return result.session;
 }
 
 export async function interruptSession(sessionId: string): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/interrupt`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/interrupt",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/interrupt",
+    pathFor("POST /api/sessions/{session_id}/interrupt", {
+      session_id: sessionId,
+    }),
     { method: "POST" },
   );
   return result.session;
@@ -278,7 +455,10 @@ export async function uploadTaskImages(files: File[]): Promise<ImageAttachment[]
   for (const file of files) {
     formData.append("files", file);
   }
-  const result = await requestJson<{ uploads: ImageAttachment[] }>("/api/tasks/images", {
+  const result = await apiRequest<
+    "POST /api/tasks/images",
+    ImageUploadResponsePayload
+  >("POST /api/tasks/images", "/api/tasks/images", {
     method: "POST",
     body: formData,
   });
@@ -293,8 +473,14 @@ export async function uploadSessionImages(
   for (const file of files) {
     formData.append("files", file);
   }
-  const result = await requestJson<{ uploads: ImageAttachment[] }>(
-    `/api/sessions/${sessionId}/images`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/images",
+    ImageUploadResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/images",
+    pathFor("POST /api/sessions/{session_id}/images", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: formData,
@@ -311,8 +497,14 @@ export async function uploadSavedSessionImages(
   for (const file of files) {
     formData.append("files", file);
   }
-  const result = await requestJson<{ uploads: ImageAttachment[] }>(
-    `/api/sessions/${sessionId}/images`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/images",
+    ImageUploadResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/images",
+    pathFor("POST /api/sessions/{session_id}/images", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
       body: formData,
@@ -322,21 +514,33 @@ export async function uploadSavedSessionImages(
 }
 
 export async function expandSessionInput(text: string): Promise<ExpandedSessionInput> {
-  return requestJson<ExpandedSessionInput>("/api/sessions/expand-input", {
-    method: "POST",
-    body: JSON.stringify({ text }),
-  });
+  return apiRequest<"POST /api/sessions/expand-input", ExpandedSessionInput>(
+    "POST /api/sessions/expand-input",
+    "/api/sessions/expand-input",
+    {
+      method: "POST",
+      body: jsonBody("POST /api/sessions/expand-input", { text }),
+    },
+  );
 }
 
 export async function requestNewSession(
   sessionId: string,
   profileId: string | null = null,
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/new-session`,
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/new-session",
+    LiveSessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/new-session",
+    pathFor("POST /api/sessions/{session_id}/new-session", {
+      session_id: sessionId,
+    }),
     {
       method: "POST",
-      body: JSON.stringify({ profile_id: profileId }),
+      body: jsonBody("POST /api/sessions/{session_id}/new-session", {
+        profile_id: profileId,
+      }),
     },
   );
   return result.session;
@@ -346,11 +550,19 @@ export async function setLiveSessionProfile(
   sessionId: string,
   profileId: string | null,
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/profile`,
+  const result = await apiRequest<
+    "PUT /api/sessions/{session_id}/profile",
+    LiveSessionResponsePayload
+  >(
+    "PUT /api/sessions/{session_id}/profile",
+    pathFor("PUT /api/sessions/{session_id}/profile", {
+      session_id: sessionId,
+    }),
     {
       method: "PUT",
-      body: JSON.stringify({ profile_id: profileId }),
+      body: jsonBody("PUT /api/sessions/{session_id}/profile", {
+        profile_id: profileId,
+      }),
     },
   );
   return result.session;
@@ -360,23 +572,37 @@ export async function setSessionProfile(
   sessionId: string,
   profileId: string | null,
 ): Promise<LiveSession> {
-  const result = await requestJson<{ session: LiveSession }>(
-    `/api/sessions/${sessionId}/profile`,
+  const result = await apiRequest<
+    "PUT /api/sessions/{session_id}/profile",
+    LiveSessionResponsePayload
+  >(
+    "PUT /api/sessions/{session_id}/profile",
+    pathFor("PUT /api/sessions/{session_id}/profile", {
+      session_id: sessionId,
+    }),
     {
       method: "PUT",
-      body: JSON.stringify({ profile_id: profileId }),
+      body: jsonBody("PUT /api/sessions/{session_id}/profile", {
+        profile_id: profileId,
+      }),
     },
   );
   return result.session;
 }
 
 export async function fetchTasks(): Promise<TaskRecord[]> {
-  const result = await requestJson<{ tasks: TaskRecord[] }>("/api/tasks");
+  const result = await apiRequest<"GET /api/tasks", TaskListResponsePayload>(
+    "GET /api/tasks",
+    "/api/tasks",
+  );
   return result.tasks;
 }
 
 export async function fetchBoardStages(): Promise<BoardStage[]> {
-  const result = await requestJson<{ board_stages: BoardStage[] }>("/api/board/stages");
+  const result = await apiRequest<
+    "GET /api/board/stages",
+    BoardStagesResponsePayload
+  >("GET /api/board/stages", "/api/board/stages");
   return result.board_stages;
 }
 
@@ -391,9 +617,12 @@ export async function updateBoardStages(
     }>;
   },
 ): Promise<BoardStage[]> {
-  const result = await requestJson<{ board_stages: BoardStage[] }>("/api/board/stages", {
+  const result = await apiRequest<
+    "PUT /api/board/stages",
+    BoardStagesResponsePayload
+  >("PUT /api/board/stages", "/api/board/stages", {
     method: "PUT",
-    body: JSON.stringify(payload),
+    body: jsonBody("PUT /api/board/stages", payload),
   });
   return result.board_stages;
 }
@@ -411,10 +640,14 @@ export async function createTask(
     prompt: string;
   },
 ): Promise<TaskRecord> {
-  const result = await requestJson<{ task: TaskRecord }>("/api/tasks", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const result = await apiRequest<"POST /api/tasks", TaskResponsePayload>(
+    "POST /api/tasks",
+    "/api/tasks",
+    {
+      method: "POST",
+      body: jsonBody("POST /api/tasks", payload),
+    },
+  );
   return result.task;
 }
 
@@ -422,21 +655,37 @@ export async function updateTask(
   taskId: string,
   payload: TaskWritePayload,
 ): Promise<TaskRecord> {
-  const result = await requestJson<{ task: TaskRecord }>(`/api/tasks/${taskId}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+  const result = await apiRequest<
+    "PATCH /api/tasks/{task_id}",
+    TaskResponsePayload
+  >(
+    "PATCH /api/tasks/{task_id}",
+    pathFor("PATCH /api/tasks/{task_id}", { task_id: taskId }),
+    {
+      method: "PATCH",
+      body: jsonBody("PATCH /api/tasks/{task_id}", payload),
+    },
+  );
   return result.task;
 }
 
 export async function deleteTask(taskId: string): Promise<void> {
-  await requestJson<void>(`/api/tasks/${taskId}`, { method: "DELETE" });
+  await apiRequest<"DELETE /api/tasks/{task_id}">(
+    "DELETE /api/tasks/{task_id}",
+    pathFor("DELETE /api/tasks/{task_id}", { task_id: taskId }),
+    { method: "DELETE" },
+  );
 }
 
 export async function runTask(taskId: string): Promise<TaskRecord> {
-  const result = await requestJson<{ task: TaskRecord }>(`/api/tasks/${taskId}/run`, {
-    method: "POST",
-  });
+  const result = await apiRequest<
+    "POST /api/tasks/{task_id}/run",
+    TaskResponsePayload
+  >(
+    "POST /api/tasks/{task_id}/run",
+    pathFor("POST /api/tasks/{task_id}/run", { task_id: taskId }),
+    { method: "POST" },
+  );
   return result.task;
 }
 
@@ -453,11 +702,18 @@ export async function createProvider(
   },
   configRevision: string,
 ): Promise<{ provider: ProviderView; config_revision: string }> {
-  return requestJson("/api/config/providers", {
-    method: "POST",
-    headers: { "If-Match": configRevision },
-    body: JSON.stringify(payload),
-  });
+  return apiRequest<
+    "POST /api/config/providers",
+    ProviderResponsePayload
+  >(
+    "POST /api/config/providers",
+    "/api/config/providers",
+    {
+      method: "POST",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("POST /api/config/providers", payload),
+    },
+  );
 }
 
 export async function updateProvider(
@@ -473,81 +729,160 @@ export async function updateProvider(
   }>,
   configRevision: string,
 ): Promise<{ provider: ProviderView; config_revision: string }> {
-  return requestJson(`/api/config/providers/${providerId}`, {
-    method: "PATCH",
-    headers: { "If-Match": configRevision },
-    body: JSON.stringify(payload),
-  });
+  return apiRequest<
+    "PATCH /api/config/providers/{provider_id}",
+    ProviderResponsePayload
+  >(
+    "PATCH /api/config/providers/{provider_id}",
+    pathFor("PATCH /api/config/providers/{provider_id}", {
+      provider_id: providerId,
+    }),
+    {
+      method: "PATCH",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("PATCH /api/config/providers/{provider_id}", payload),
+    },
+  );
 }
 
 export async function deleteProvider(
   providerId: string,
   configRevision: string,
 ): Promise<void> {
-  await requestJson(`/api/config/providers/${providerId}`, {
-    method: "DELETE",
-    headers: { "If-Match": configRevision },
-  });
+  await apiRequest<"DELETE /api/config/providers/{provider_id}">(
+    "DELETE /api/config/providers/{provider_id}",
+    pathFor("DELETE /api/config/providers/{provider_id}", {
+      provider_id: providerId,
+    }),
+    {
+      method: "DELETE",
+      headers: { "If-Match": configRevision },
+    },
+  );
 }
 
 export async function fetchProviderModels(
   providerId: string,
 ): Promise<ProviderModelListPayload> {
-  return requestJson(`/api/config/providers/${providerId}/models`);
+  return apiRequest<
+    "GET /api/config/providers/{provider_id}/models",
+    ProviderModelListPayload
+  >(
+    "GET /api/config/providers/{provider_id}/models",
+    pathFor("GET /api/config/providers/{provider_id}/models", {
+      provider_id: providerId,
+    }),
+  );
 }
 
 export async function fetchProviderAuthStatus(
   providerId: string,
 ): Promise<ProviderAuthResponse> {
-  return requestJson(`/api/provider-auth/${providerId}`);
+  return apiRequest<
+    "GET /api/provider-auth/{provider_id}",
+    ProviderAuthResponse
+  >(
+    "GET /api/provider-auth/{provider_id}",
+    pathFor("GET /api/provider-auth/{provider_id}", {
+      provider_id: providerId,
+    }),
+  );
 }
 
 export async function startProviderAuthFlow(
   providerId: string,
   method: "browser" | "device",
 ): Promise<ProviderAuthFlowResponse> {
-  return requestJson(`/api/provider-auth/${providerId}/flows`, {
-    method: "POST",
-    body: JSON.stringify({ method }),
-  });
+  return apiRequest<
+    "POST /api/provider-auth/{provider_id}/flows",
+    ProviderAuthFlowResponse
+  >(
+    "POST /api/provider-auth/{provider_id}/flows",
+    pathFor("POST /api/provider-auth/{provider_id}/flows", {
+      provider_id: providerId,
+    }),
+    {
+      method: "POST",
+      body: jsonBody("POST /api/provider-auth/{provider_id}/flows", { method }),
+    },
+  );
 }
 
 export async function fetchProviderAuthFlow(
   providerId: string,
   flowId: string,
 ): Promise<ProviderAuthFlowResponse> {
-  return requestJson(`/api/provider-auth/${providerId}/flows/${flowId}`);
+  return apiRequest<
+    "GET /api/provider-auth/{provider_id}/flows/{flow_id}",
+    ProviderAuthFlowResponse
+  >(
+    "GET /api/provider-auth/{provider_id}/flows/{flow_id}",
+    pathFor("GET /api/provider-auth/{provider_id}/flows/{flow_id}", {
+      provider_id: providerId,
+      flow_id: flowId,
+    }),
+  );
 }
 
 export async function pollProviderAuthFlow(
   providerId: string,
   flowId: string,
 ): Promise<ProviderAuthFlowResponse> {
-  return requestJson(`/api/provider-auth/${providerId}/flows/${flowId}/poll`, {
-    method: "POST",
-  });
+  return apiRequest<
+    "POST /api/provider-auth/{provider_id}/flows/{flow_id}/poll",
+    ProviderAuthFlowResponse
+  >(
+    "POST /api/provider-auth/{provider_id}/flows/{flow_id}/poll",
+    pathFor("POST /api/provider-auth/{provider_id}/flows/{flow_id}/poll", {
+      provider_id: providerId,
+      flow_id: flowId,
+    }),
+    { method: "POST" },
+  );
 }
 
 export async function refreshProviderAuth(
   providerId: string,
 ): Promise<ProviderAuthResponse> {
-  return requestJson(`/api/provider-auth/${providerId}/refresh`, {
-    method: "POST",
-  });
+  return apiRequest<
+    "POST /api/provider-auth/{provider_id}/refresh",
+    ProviderAuthResponse
+  >(
+    "POST /api/provider-auth/{provider_id}/refresh",
+    pathFor("POST /api/provider-auth/{provider_id}/refresh", {
+      provider_id: providerId,
+    }),
+    { method: "POST" },
+  );
 }
 
 export async function logoutProviderAuth(
   providerId: string,
 ): Promise<ProviderAuthLogoutResponse> {
-  return requestJson(`/api/provider-auth/${providerId}`, {
-    method: "DELETE",
-  });
+  return apiRequest<
+    "DELETE /api/provider-auth/{provider_id}",
+    ProviderAuthLogoutResponse
+  >(
+    "DELETE /api/provider-auth/{provider_id}",
+    pathFor("DELETE /api/provider-auth/{provider_id}", {
+      provider_id: providerId,
+    }),
+    { method: "DELETE" },
+  );
 }
 
 export async function fetchProviderUsageLimits(
   providerId: string,
 ): Promise<ProviderUsageLimitsResponse> {
-  return requestJson(`/api/provider-auth/${providerId}/usage-limits`);
+  return apiRequest<
+    "GET /api/provider-auth/{provider_id}/usage-limits",
+    ProviderUsageLimitsResponse
+  >(
+    "GET /api/provider-auth/{provider_id}/usage-limits",
+    pathFor("GET /api/provider-auth/{provider_id}/usage-limits", {
+      provider_id: providerId,
+    }),
+  );
 }
 
 export async function createModelProfile(
@@ -570,11 +905,18 @@ export async function createModelProfile(
   },
   configRevision: string,
 ): Promise<{ model_profile: ModelProfileView; config_revision: string }> {
-  return requestJson("/api/config/model-profiles", {
-    method: "POST",
-    headers: { "If-Match": configRevision },
-    body: JSON.stringify(payload),
-  });
+  return apiRequest<
+    "POST /api/config/model-profiles",
+    ModelProfileResponsePayload
+  >(
+    "POST /api/config/model-profiles",
+    "/api/config/model-profiles",
+    {
+      method: "POST",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("POST /api/config/model-profiles", payload),
+    },
+  );
 }
 
 export async function updateModelProfile(
@@ -597,37 +939,70 @@ export async function updateModelProfile(
   }>,
   configRevision: string,
 ): Promise<{ model_profile: ModelProfileView; config_revision: string }> {
-  return requestJson(`/api/config/model-profiles/${modelProfileId}`, {
-    method: "PATCH",
-    headers: { "If-Match": configRevision },
-    body: JSON.stringify(payload),
-  });
+  return apiRequest<
+    "PATCH /api/config/model-profiles/{profile_id}",
+    ModelProfileResponsePayload
+  >(
+    "PATCH /api/config/model-profiles/{profile_id}",
+    pathFor("PATCH /api/config/model-profiles/{profile_id}", {
+      profile_id: modelProfileId,
+    }),
+    {
+      method: "PATCH",
+      headers: { "If-Match": configRevision },
+      body: jsonBody(
+        "PATCH /api/config/model-profiles/{profile_id}",
+        payload,
+      ),
+    },
+  );
 }
 
 export async function deleteModelProfile(
   modelProfileId: string,
   configRevision: string,
 ): Promise<void> {
-  await requestJson(`/api/config/model-profiles/${modelProfileId}`, {
-    method: "DELETE",
-    headers: { "If-Match": configRevision },
-  });
+  await apiRequest<"DELETE /api/config/model-profiles/{profile_id}">(
+    "DELETE /api/config/model-profiles/{profile_id}",
+    pathFor("DELETE /api/config/model-profiles/{profile_id}", {
+      profile_id: modelProfileId,
+    }),
+    {
+      method: "DELETE",
+      headers: { "If-Match": configRevision },
+    },
+  );
 }
 
 export async function setActiveModelProfile(
   modelProfileId: string | null,
   configRevision: string,
 ): Promise<{ active_profile_id: string | null; config_revision: string }> {
-  return requestJson("/api/config/active-model-profile", {
-    method: "PUT",
-    headers: { "If-Match": configRevision },
-    body: JSON.stringify({ profile_id: modelProfileId }),
-  });
+  return apiRequest<
+    "PUT /api/config/active-model-profile",
+    ActiveModelProfileResponsePayload
+  >(
+    "PUT /api/config/active-model-profile",
+    "/api/config/active-model-profile",
+    {
+      method: "PUT",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("PUT /api/config/active-model-profile", {
+        profile_id: modelProfileId,
+      }),
+    },
+  );
 }
 
 export async function fetchSessionRuns(sessionId: string): Promise<RunSession[]> {
-  const result = await requestJson<{ runs: RunSession[] }>(
-    `/api/sessions/${sessionId}/runs`,
+  const result = await apiRequest<
+    "GET /api/sessions/{session_id}/runs",
+    SessionRunsResponsePayload
+  >(
+    "GET /api/sessions/{session_id}/runs",
+    pathFor("GET /api/sessions/{session_id}/runs", {
+      session_id: sessionId,
+    }),
   );
   return result.runs;
 }
@@ -636,46 +1011,32 @@ export async function fetchRunDetail(
   runSessionId: string,
   scope?: "workspace" | "global",
 ): Promise<{ run: RunSession; events: ObservabilityEvent[] }> {
-  const qs = scope === "global" ? "?scope=global" : "";
-  return requestJson(`/api/runs/${runSessionId}${qs}`);
+  const qs = queryString("GET /api/runs/{run_session_id}", { scope });
+  return apiRequest<
+    "GET /api/runs/{run_session_id}",
+    RunDetailResponsePayload
+  >(
+    "GET /api/runs/{run_session_id}",
+    `${pathFor("GET /api/runs/{run_session_id}", {
+      run_session_id: runSessionId,
+    })}${qs}`,
+  );
 }
 
-export async function fetchDashboardStats(params: {
-  start_date?: string;
-  end_date?: string;
-  scope?: "workspace" | "global";
-}): Promise<DashboardStatsPayload> {
-  const qs = new URLSearchParams();
-  if (params.start_date) qs.set("start_date", params.start_date);
-  if (params.end_date) qs.set("end_date", params.end_date);
-  if (params.scope) qs.set("scope", params.scope);
-  const query = qs.toString();
-  return requestJson(`/api/dashboard/stats${query ? `?${query}` : ""}`);
+export async function fetchDashboardStats(
+  params: DashboardStatsQuery,
+): Promise<DashboardStatsPayload> {
+  const qs = queryString("GET /api/dashboard/stats", params);
+  return apiRequest<"GET /api/dashboard/stats", DashboardStatsPayload>(
+    "GET /api/dashboard/stats",
+    `/api/dashboard/stats${qs}`,
+  );
 }
 
-export async function fetchAllRuns(params: {
-  limit?: number;
-  offset?: number;
-  status?: string;
-  provider?: string;
-  model?: string;
-  start_date?: string;
-  end_date?: string;
-  sort_by?: string;
-  sort_dir?: string;
-  scope?: "workspace" | "global";
-}): Promise<AllRunsPayload> {
-  const qs = new URLSearchParams();
-  if (params.limit != null) qs.set("limit", String(params.limit));
-  if (params.offset != null) qs.set("offset", String(params.offset));
-  if (params.status) qs.set("status", params.status);
-  if (params.provider) qs.set("provider", params.provider);
-  if (params.model) qs.set("model", params.model);
-  if (params.start_date) qs.set("start_date", params.start_date);
-  if (params.end_date) qs.set("end_date", params.end_date);
-  if (params.sort_by) qs.set("sort_by", params.sort_by);
-  if (params.sort_dir) qs.set("sort_dir", params.sort_dir);
-  if (params.scope) qs.set("scope", params.scope);
-  const query = qs.toString();
-  return requestJson(`/api/runs${query ? `?${query}` : ""}`);
+export async function fetchAllRuns(params: AllRunsQuery): Promise<AllRunsPayload> {
+  const qs = queryString("GET /api/runs", params);
+  return apiRequest<"GET /api/runs", AllRunsPayload>(
+    "GET /api/runs",
+    `/api/runs${qs}`,
+  );
 }

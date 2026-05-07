@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import { Alert, AlertDescription } from "../ui/alert";
 
 export function RunDetailModal({
   runSessionId,
@@ -93,14 +94,14 @@ export function RunDetailModal({
 }
 
 function isRunActive(status: string): boolean {
-  return !["ended", "failed", "stale"].includes(status);
+  return !["completed", "interrupted", "ended", "failed", "stale"].includes(status);
 }
 
 function RunSummary({ run }: { run: RunSession }) {
   const statusModifier =
-    run.status === "ended" ? "completed"
+    isRunComplete(run.status) ? "completed"
     : run.status === "failed" ? "failed"
-    : run.status === "running" ? "running"
+    : isRunActive(run.status) ? "running"
     : "idle";
 
   const durationLabel = run.total_duration_ms != null
@@ -124,6 +125,13 @@ function RunSummary({ run }: { run: RunSession }) {
           <span className="run-kpi__hero-value">{run.estimated_cost_usd > 0 ? `$${run.estimated_cost_usd.toFixed(4)}` : "--"}</span>
         </div>
       </div>
+
+      {run.fatal_error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <TriangleAlertIcon />
+          <AlertDescription>{run.fatal_error}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Counters row */}
       <div className="run-kpi__counters">
@@ -154,6 +162,10 @@ function RunSummary({ run }: { run: RunSession }) {
       </div>
     </div>
   );
+}
+
+function isRunComplete(status: string): boolean {
+  return ["completed", "interrupted", "ended"].includes(status);
 }
 
 function KpiCounter({ icon: Icon, label, value, variant }: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; label: string; value: number; variant?: "danger" }) {

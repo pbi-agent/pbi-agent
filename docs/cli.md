@@ -163,6 +163,51 @@ Installs an agent definition from the official catalog, a local path, or a GitHu
 
 Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
 
+## `pbi-agent kanban`
+
+Create and manage Kanban board tasks for the current workspace.
+
+### `pbi-agent kanban create`
+
+Create a task card from a terminal or automation script:
+
+```bash
+pbi-agent kanban create \
+  --title "Refactor API endpoint" \
+  --desc "Improve and optimize the main API endpoint for faster response time." \
+  --lane "In Progress"
+```
+
+`kanban create` writes a task card to the same local board used by the web UI. It does not start the task automatically; open the web UI or use future Kanban commands to run or move tasks.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--title TITLE` | required | Task title shown on the card. |
+| `--desc DESC` | required | Task description/prompt stored on the card. `--description` and `--prompt` are aliases. |
+| `--lane LANE` | first board stage | Existing board stage by ID, name, or slugified name. `--stage` and `--state` are aliases. |
+| `--project-dir DIR` | `.` | Workspace-relative project directory for future task runs. The directory must exist and stay inside the current workspace. |
+| `--session-id ID` | none | Optional existing session ID to associate with the task. |
+| `--json` | `false` | Print a machine-readable created-task payload for scripts. |
+
+`--lane` must refer to an existing board stage. Configure custom stages in the web UI before targeting them from the CLI.
+
+### `pbi-agent kanban list`
+
+List task cards for the current workspace:
+
+```bash
+pbi-agent kanban list
+pbi-agent kanban list --stage "In Progress"
+pbi-agent kanban list --json
+```
+
+By default, `kanban list` shows tasks from every stage. Use `--stage` to filter by an existing board stage ID, name, or slugified name; `--lane` and `--state` are aliases. The human-readable output prints task details without truncating the prompt, including ID, title, prompt, stage, position, project directory, associated session/profile IDs, run status, timestamps, last result summary, and image attachment count. Use `--json` for a machine-readable array with the same task fields plus serialized image attachment metadata.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--stage STAGE` | all stages | Only show tasks in an existing board stage by ID, name, or slugified name. `--lane` and `--state` are aliases. |
+| `--json` | `false` | Print a machine-readable task array for scripts. |
+
 ## `pbi-agent config`
 
 Manage the saved internal config file under `~/.pbi-agent/config.json` (or `PBI_AGENT_INTERNAL_CONFIG_PATH` in tests and custom setups).

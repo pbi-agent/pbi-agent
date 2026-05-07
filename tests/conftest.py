@@ -10,6 +10,7 @@ from typing import Any, Callable
 import pytest
 
 from pbi_agent.models.messages import TokenUsage, WebSearchSource
+from pbi_agent.web import uploads
 
 
 class DisplaySpy:
@@ -23,6 +24,7 @@ class DisplaySpy:
         self.thinking_calls: list[dict[str, object | None]] = []
         self.redacted_thinking_calls = 0
         self.markdown_calls: list[str] = []
+        self.user_message_calls: list[str] = []
         self.function_counts: list[int] = []
         self.function_results: list[dict[str, object]] = []
         self.tool_execution_starts: list[list[object]] = []
@@ -93,6 +95,9 @@ class DisplaySpy:
 
     def render_redacted_thinking(self) -> None:
         self.redacted_thinking_calls += 1
+
+    def render_user_message(self, text: str) -> None:
+        self.user_message_calls.append(text)
 
     def render_markdown(self, text: str) -> None:
         self.markdown_calls.append(text)
@@ -194,6 +199,11 @@ def isolate_internal_config_path(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
 @pytest.fixture(autouse=True)
 def isolate_session_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+
+
+@pytest.fixture(autouse=True)
+def isolate_web_uploads(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path / "web_uploads")
 
 
 @pytest.fixture

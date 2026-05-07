@@ -1,12 +1,20 @@
+import type { ConnectionState } from "../../store";
+
+type BadgeConnectionState = ConnectionState | "ready";
+
 export function ConnectionBadge({
   connection,
 }: {
-  connection: "disconnected" | "connecting" | "connected" | "ready";
+  connection: BadgeConnectionState;
 }) {
   const label =
     connection === "connected" ? "Connected"
     : connection === "ready" ? "Ready"
     : connection === "connecting" ? "Connecting..."
+    : connection === "reconnecting" ? "Reconnecting..."
+    : connection === "recovering" ? "Recovering..."
+    : connection === "recovered" ? "Recovered"
+    : connection === "recovery_failed" ? "Recovery failed"
     : "Disconnected";
 
   return (

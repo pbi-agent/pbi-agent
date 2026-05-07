@@ -381,7 +381,13 @@ class ResponsesWebSocket:
             )
         self._sock.settimeout(timeout)
         request_payload = {"type": "response.create", **request_body}
-        self._send_text(json.dumps(request_payload, separators=(",", ":")))
+        try:
+            self._send_text(json.dumps(request_payload, separators=(",", ":")))
+        except (OSError, TimeoutError, socket.timeout) as exc:
+            self.close()
+            raise ChatGPTCodexWebSocketError(
+                f"WebSocket send failed: {exc}", retryable=True
+            ) from exc
         events: list[dict[str, Any]] = []
         while True:
             try:
@@ -398,7 +404,13 @@ class ResponsesWebSocket:
                     retryable=True,
                 )
             if opcode == _WS_OPCODE_PING:
-                self._send_frame(_WS_OPCODE_PONG, payload)
+                try:
+                    self._send_frame(_WS_OPCODE_PONG, payload)
+                except (OSError, TimeoutError, socket.timeout) as exc:
+                    self.close()
+                    raise ChatGPTCodexWebSocketError(
+                        f"WebSocket send failed: {exc}", retryable=True
+                    ) from exc
                 continue
             if opcode == _WS_OPCODE_PONG:
                 continue

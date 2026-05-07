@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangleIcon,
+  ArrowLeftIcon,
   CheckIcon,
   ChevronDownIcon,
   CpuIcon,
@@ -32,6 +33,8 @@ import type {
   SessionDetailPayload,
   SessionRecord,
   TimelineItem,
+  LiveSessionSnapshot,
+  ProcessingState,
   UserQuestionAnswer,
 } from "../../types";
 import {
@@ -68,7 +71,11 @@ export function SessionPage({
 }) {
   const client = useQueryClient();
   const navigate = useNavigate();
-  const { sessionId: routeSessionId } = useParams<{ sessionId?: string }>();
+  const { sessionId: routeSessionId, subAgentId: routeSubAgentId } = useParams<{
+    sessionId?: string;
+    subAgentId?: string;
+  }>();
+  const isSubAgentRoute = Boolean(routeSessionId && routeSubAgentId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
@@ -276,17 +283,21 @@ export function SessionPage({
 
   // Hydrate saved session items when session detail data arrives.
   // Skip hydration when a live session is already attached and has
-  // items — even if the WebSocket is reconnecting.  Re-hydrating
-  // during reconnection replaces WS-sourced items (item IDs like
-  // "message-N") with API history items ("history-N"), then the WS
-  // snapshot replay adds them again with their original IDs,
-  // producing duplicates and flickering.
+  // items — even if the event stream is reconnecting. Re-hydrating
+  // during reconnection can briefly replace live items before replay
+  // catches up, producing duplicates and flickering.
   useEffect(() => {
     if (!routeSessionId || !sessionDetailQuery.isSuccess) return;
     const sessionKey = getSavedSessionKey(routeSessionId);
     const existing = useSessionStore.getState().sessionsByKey[sessionKey];
+    const hasServerLiveSource = Boolean(
+      sessionDetailQuery.data.active_live_session
+      || sessionDetailQuery.data.active_run
+      || sessionDetailQuery.data.timeline,
+    );
     const skipHydration =
-      existing?.liveSessionId
+      hasServerLiveSource
+      && existing?.liveSessionId
       && !existing.sessionEnded
       && existing.items.length > 0;
     if (!skipHydration) {
@@ -303,11 +314,19 @@ export function SessionPage({
       ?? sessionDetailQuery.data.active_run
       ?? timelineSessionFromDetail(sessionDetailQuery.data);
     if (snapshotSession) {
-      if (sessionDetailQuery.data.timeline) {
+      const timeline = sessionDetailQuery.data.timeline;
+      if (timeline) {
+        const hasActiveTimelineSource = Boolean(
+          sessionDetailQuery.data.active_live_session
+          || sessionDetailQuery.data.active_run,
+        );
+        const displayTimeline = timelineForDisplay(sessionDetailQuery.data, timeline);
         hydrateLiveSnapshot(
           sessionKey,
           snapshotSession,
-          sessionDetailQuery.data.timeline,
+          hasActiveTimelineSource
+            ? displayTimeline
+            : { ...displayTimeline, session_ended: true },
         );
       } else {
         attachLiveSession(sessionKey, snapshotSession, {
@@ -324,15 +343,24 @@ export function SessionPage({
     sessionDetailQuery.data,
   ]);
 
-  const composerInputEnabled = Boolean(
+  const composerInputEnabled = !isSubAgentRoute && Boolean(
     (!routeSessionId && !sessionState)
     || (routeSessionId && !sessionState?.liveSessionId && !sessionState?.pendingUserQuestions)
     || (sessionState?.inputEnabled && !sessionState.pendingUserQuestions),
   );
   const composerCanStartRun = Boolean(!routeSessionId || (routeSessionId && !sessionState?.liveSessionId));
-  const topbarConnection = composerInputEnabled && sessionState?.connection !== "connected"
+  const rawConnection = sessionState?.connection ?? "disconnected";
+  const topbarConnection = composerInputEnabled && (rawConnection === "disconnected" || rawConnection === "connecting")
     ? "ready"
-    : sessionState?.connection ?? "disconnected";
+    : rawConnection;
+  const recoveryNotice = rawConnection === "reconnecting"
+    ? "Connection lost. Reconnecting to the live stream..."
+    : rawConnection === "recovering"
+      ? "Recovering the session from the latest snapshot..."
+      : null;
+  const recoveryFailed = rawConnection === "recovery_failed"
+    ? "Unable to recover the live stream. Refresh the session to reload the latest snapshot."
+    : null;
 
   useEffect(() => {
     if (composerInputEnabled && !sessionState?.sessionEnded) {
@@ -398,8 +426,9 @@ export function SessionPage({
         )
       : supportsImageInputs;
   const profileSelectorDisabled =
-    modelProfiles.length === 0
-    || Boolean(sessionState && (!sessionState.inputEnabled || sessionState.sessionEnded))
+    isSubAgentRoute
+    || modelProfiles.length === 0
+    || Boolean(sessionState && !composerInputEnabled)
     || createSessionMutation.isPending
     || setSessionProfileMutation.isPending
     || setActiveProfileMutation.isPending;
@@ -497,6 +526,14 @@ export function SessionPage({
   const handleProfileChange = async (nextProfileId: string) => {
     setPendingProfileId(nextProfileId);
     try {
+      const sessionId = routeSessionId ?? sessionState?.sessionId ?? null;
+      if (sessionId) {
+        await setSessionProfileMutation.mutateAsync({
+          sessionId,
+          profileId: nextProfileId,
+        });
+        return;
+      }
       const nextConfigRevision = configQuery.data?.config_revision;
       if (!nextConfigRevision) {
         throw new Error("Settings are not loaded yet.");
@@ -505,12 +542,6 @@ export function SessionPage({
         profileId: nextProfileId,
         configRevision: nextConfigRevision,
       });
-      if (routeSessionId || sessionState?.sessionId) {
-        await setSessionProfileMutation.mutateAsync({
-          sessionId: routeSessionId ?? sessionState?.sessionId ?? null,
-          profileId: nextProfileId,
-        });
-      }
     } finally {
       setPendingProfileId(null);
     }
@@ -542,9 +573,10 @@ export function SessionPage({
     }
   };
 
-  const canDeleteActiveSession = Boolean(routeSessionId && activeSessionRecord);
+  const canDeleteActiveSession = Boolean(routeSessionId && activeSessionRecord && !isSubAgentRoute);
   const canInterruptActiveTurn = Boolean(
-    sessionState?.liveSessionId
+    !isSubAgentRoute
+    && sessionState?.liveSessionId
     && !sessionState.sessionEnded
     && sessionState.processing?.active
     && !sessionState.inputEnabled,
@@ -557,9 +589,50 @@ export function SessionPage({
     routeSessionId && sessionDetailError && !sessionNotFound
       ? "Unable to load this session right now."
       : null;
+  const selectedSubAgent = isSubAgentRoute && routeSubAgentId
+    ? sessionState?.subAgents[routeSubAgentId] ?? null
+    : null;
+  const selectedSubAgentIsRunning = selectedSubAgent?.status === "running";
+  const displayedItems = useMemo(
+    () => isSubAgentRoute && routeSubAgentId
+      ? (sessionState?.items ?? []).filter((item) => item.subAgentId === routeSubAgentId)
+      : sessionState?.items ?? [],
+    [isSubAgentRoute, routeSubAgentId, sessionState?.items],
+  );
+  const displayedSubAgents = useMemo(
+    () => isSubAgentRoute && routeSubAgentId
+      ? {
+          [routeSubAgentId]: selectedSubAgent ?? {
+            title: routeSubAgentId,
+            status: "completed",
+          },
+        }
+      : sessionState?.subAgents ?? {},
+    [isSubAgentRoute, routeSubAgentId, selectedSubAgent, sessionState?.subAgents],
+  );
+  const latestDisplayedItem = displayedItems.at(-1);
+  const selectedSubAgentHasFinalResponse =
+    latestDisplayedItem?.kind === "message" && latestDisplayedItem.role === "assistant";
+  const showSelectedSubAgentProcessing =
+    selectedSubAgentIsRunning && !selectedSubAgentHasFinalResponse;
+  const displayedProcessing: ProcessingState | null = isSubAgentRoute
+    ? showSelectedSubAgentProcessing
+      ? sessionState?.processing ?? null
+      : null
+    : sessionState?.processing ?? null;
+  const displayedWaitMessage = isSubAgentRoute && !showSelectedSubAgentProcessing
+    ? null
+    : sessionState?.waitMessage ?? null;
 
   return (
-    <section className={`session-layout ${sidebarOpen ? "session-layout--sidebar-open" : ""}`}>
+    <section
+      className={`session-layout ${sidebarOpen ? "session-layout--sidebar-open" : ""}`}
+      data-debug-session-key={selectedRouteSessionKey ?? undefined}
+      data-debug-session-id={sessionState?.sessionId ?? undefined}
+      data-debug-live-session-id={sessionState?.liveSessionId ?? undefined}
+      data-debug-event-cursor={sessionState?.lastEventSeq ?? undefined}
+      data-debug-connection={sessionState?.connection ?? undefined}
+    >
       <div className={`sidebar ${sidebarOpen ? "sidebar--open" : ""}`}>
         <SessionSidebar
           sessions={sessionsQuery.data ?? []}
@@ -595,19 +668,21 @@ export function SessionPage({
             />
           </div>
           <div className="session-topbar__actions">
-            <Toggle
-              type="button"
-              variant="outline"
-              size="sm"
-              className="interactive-mode-toggle"
-              pressed={interactiveMode}
-              aria-label="Toggle interactive mode for assistant questions"
-              title="Allow the assistant to pause and ask questions for each message while this is on."
-              onPressedChange={setInteractiveMode}
-            >
-              Interactive
-            </Toggle>
-            {routeSessionId ? (
+            {!isSubAgentRoute ? (
+              <Toggle
+                type="button"
+                variant="outline"
+                size="sm"
+                className="interactive-mode-toggle"
+                pressed={interactiveMode}
+                aria-label="Toggle interactive mode for assistant questions"
+                title="Allow the assistant to pause and ask questions for each message while this is on."
+                onPressedChange={setInteractiveMode}
+              >
+                Interactive
+              </Toggle>
+            ) : null}
+            {routeSessionId && !isSubAgentRoute ? (
               <RunHistory sessionId={routeSessionId} />
             ) : null}
             <UsageBar
@@ -641,6 +716,18 @@ export function SessionPage({
             <AlertDescription>{inputWarnings.join(" ")}</AlertDescription>
           </Alert>
         ) : null}
+        {recoveryNotice ? (
+          <Alert className="banner banner--notice">
+            <AlertTriangleIcon />
+            <AlertDescription>{recoveryNotice}</AlertDescription>
+          </Alert>
+        ) : null}
+        {recoveryFailed ? (
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{recoveryFailed}</AlertDescription>
+          </Alert>
+        ) : null}
         {sessionState?.fatalError ? (
           <Alert variant="destructive" className="banner banner--error">
             <AlertTriangleIcon />
@@ -665,7 +752,7 @@ export function SessionPage({
             <AlertDescription>{setActiveProfileMutation.error.message}</AlertDescription>
           </Alert>
         ) : null}
-        {interruptMutation.error ? (
+        {!isSubAgentRoute && interruptMutation.error ? (
           <Alert variant="destructive" className="banner banner--error">
             <AlertTriangleIcon />
             <AlertDescription>{interruptMutation.error.message}</AlertDescription>
@@ -695,14 +782,16 @@ export function SessionPage({
         ) : (
           <>
             <SessionTimeline
-              items={sessionState?.items ?? []}
+              items={displayedItems}
               itemsVersion={sessionState?.itemsVersion ?? 0}
-              subAgents={sessionState?.subAgents ?? {}}
+              subAgents={displayedSubAgents}
               connection={sessionState?.connection ?? "disconnected"}
-              waitMessage={sessionState?.waitMessage ?? null}
-              processing={sessionState?.processing ?? null}
+              waitMessage={displayedWaitMessage}
+              processing={displayedProcessing}
+              parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
+              showSubAgentCards={!isSubAgentRoute}
             />
-            {sessionState?.pendingUserQuestions ? (
+            {!isSubAgentRoute && sessionState?.pendingUserQuestions ? (
               <UserQuestionsPanel
                 prompt={sessionState.pendingUserQuestions}
                 isSubmitting={questionResponseMutation.isPending}
@@ -712,28 +801,44 @@ export function SessionPage({
                 }}
               />
             ) : null}
-            <Composer
-              ref={composerRef}
-              inputEnabled={composerInputEnabled}
-              sessionEnded={sessionState?.sessionEnded ?? false}
-              liveSessionId={sessionState?.liveSessionId ?? null}
-              canCreateSession={composerCanStartRun}
-              supportsImageInputs={providerSupportsImages}
-              isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
-              onSubmit={handleSubmit}
-              isProcessing={Boolean(sessionState?.processing?.active)}
-              canInterrupt={canInterruptActiveTurn}
-              isInterrupting={interruptMutation.isPending}
-              restoredInput={sessionState?.restoredInput ?? null}
-              onRestoredInputConsumed={() => {
-                if (selectedRouteSessionKey) {
-                  consumeRestoredInput(selectedRouteSessionKey);
-                }
-              }}
-              onInterrupt={() => {
-                interruptMutation.mutate();
-              }}
-            />
+            {isSubAgentRoute && routeSessionId ? (
+              <div className="session-readonly-footer">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="session-readonly-footer__button"
+                  asChild
+                >
+                  <Link to={`/sessions/${encodeURIComponent(routeSessionId)}`}>
+                    <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
+                    Back to main session
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <Composer
+                ref={composerRef}
+                inputEnabled={composerInputEnabled}
+                sessionEnded={sessionState?.sessionEnded ?? false}
+                liveSessionId={sessionState?.liveSessionId ?? null}
+                canCreateSession={composerCanStartRun}
+                supportsImageInputs={providerSupportsImages}
+                isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
+                onSubmit={handleSubmit}
+                isProcessing={Boolean(sessionState?.processing?.active)}
+                canInterrupt={canInterruptActiveTurn}
+                isInterrupting={interruptMutation.isPending}
+                restoredInput={sessionState?.restoredInput ?? null}
+                onRestoredInputConsumed={() => {
+                  if (selectedRouteSessionKey) {
+                    consumeRestoredInput(selectedRouteSessionKey);
+                  }
+                }}
+                onInterrupt={() => {
+                  interruptMutation.mutate();
+                }}
+              />
+            )}
           </>
         )}
       </div>
@@ -762,11 +867,222 @@ function mapHistoryItem(item: HistoryItem): TimelineItem {
   return {
     kind: "message",
     itemId: item.item_id,
+    messageId: item.message_id,
+    partIds: item.part_ids,
     role: item.role,
     content: item.content,
     filePaths: item.file_paths,
     imageAttachments: item.image_attachments,
     markdown: item.markdown,
+  };
+}
+
+function historyItemToSnapshotItem(item: HistoryItem): Record<string, unknown> {
+  return {
+    kind: "message",
+    itemId: item.item_id,
+    message_id: item.message_id,
+    part_ids: item.part_ids,
+    role: item.role,
+    content: item.content,
+    file_paths: item.file_paths,
+    image_attachments: item.image_attachments,
+    markdown: item.markdown,
+  };
+}
+
+function messageSignature(item: Record<string, unknown>): string | null {
+  if (item.kind !== "message") return null;
+  const role = typeof item.role === "string" ? item.role : "";
+  const content = typeof item.content === "string" ? item.content : "";
+  const filePaths = Array.isArray(item.file_paths) ? item.file_paths : [];
+  const imageAttachments = Array.isArray(item.image_attachments) ? item.image_attachments : [];
+  return JSON.stringify([role, content, filePaths, imageAttachments]);
+}
+
+function persistedMessageId(item: Record<string, unknown>): string | null {
+  if (item.kind !== "message") return null;
+  return typeof item.message_id === "string"
+    ? item.message_id
+    : typeof item.messageId === "string"
+      ? item.messageId
+      : null;
+}
+
+function snapshotItemId(item: Record<string, unknown>): string {
+  return typeof item.itemId === "string"
+    ? item.itemId
+    : typeof item.item_id === "string"
+      ? item.item_id
+      : "";
+}
+
+function isHistoricalSnapshotMessage(item: Record<string, unknown>): boolean {
+  return item.kind === "message"
+    && (item.historical === true || snapshotItemId(item).startsWith("history-"));
+}
+
+function timelineForDisplay(
+  detail: SessionDetailPayload,
+  timeline: LiveSessionSnapshot,
+): LiveSessionSnapshot {
+  const activeTimeline = Boolean(
+    !timeline.session_ended && (detail.active_live_session || detail.active_run),
+  );
+  const dormantTimeline = !activeTimeline;
+  if ((!activeTimeline && !dormantTimeline) || detail.history_items.length === 0) {
+    return timeline;
+  }
+
+  const historyItems = detail.history_items.map(historyItemToSnapshotItem);
+  const historySignatureCounts = new Map<string, number>();
+  for (const item of historyItems) {
+    const signature = messageSignature(item);
+    if (signature) {
+      historySignatureCounts.set(signature, (historySignatureCounts.get(signature) ?? 0) + 1);
+    }
+  }
+  const snapshotSignatureCounts = new Map<string, number>();
+  for (const item of timeline.items) {
+    if (persistedMessageId(item)) continue;
+    const signature = messageSignature(item);
+    if (signature) {
+      snapshotSignatureCounts.set(signature, (snapshotSignatureCounts.get(signature) ?? 0) + 1);
+    }
+  }
+  const historyMessageIds = new Set(
+    historyItems.flatMap((item) => {
+      const messageId = persistedMessageId(item);
+      return messageId ? [messageId] : [];
+    }),
+  );
+  const mergedItems: Record<string, unknown>[] = [];
+  const pendingUnanchoredItems: Record<string, unknown>[] = [];
+  let pendingHistoryBoundaryIndex: number | null = null;
+  const consumedHistoryIndexes = new Set<number>();
+  const appendHistoryRange = (endIndex: number, includeEnd: boolean) => {
+    const upperBound = includeEnd ? endIndex : endIndex - 1;
+    for (let index = 0; index <= upperBound; index += 1) {
+      if (consumedHistoryIndexes.has(index)) continue;
+      mergedItems.push(historyItems[index]);
+      consumedHistoryIndexes.add(index);
+    }
+  };
+  const appendRemainingHistory = () => {
+    for (let index = 0; index < historyItems.length; index += 1) {
+      if (consumedHistoryIndexes.has(index)) continue;
+      mergedItems.push(historyItems[index]);
+      consumedHistoryIndexes.add(index);
+    }
+  };
+  const matchingHistoryIndex = (item: Record<string, unknown>): number => {
+    const messageId = persistedMessageId(item);
+    if (messageId) {
+      const index = historyItems.findIndex((historyItem, candidateIndex) => (
+        !consumedHistoryIndexes.has(candidateIndex)
+        && persistedMessageId(historyItem) === messageId
+      ));
+      if (index >= 0) return index;
+      return -1;
+    }
+    if (activeTimeline && !isHistoricalSnapshotMessage(item)) return -1;
+    const signature = messageSignature(item);
+    if (!signature) return -1;
+    if (historySignatureCounts.get(signature) !== 1 || snapshotSignatureCounts.get(signature) !== 1) {
+      return -1;
+    }
+    return historyItems.findIndex((historyItem, candidateIndex) => (
+      !consumedHistoryIndexes.has(candidateIndex)
+      && messageSignature(historyItem) === signature
+    ));
+  };
+  const skippedHistoryBoundaryIndex = (item: Record<string, unknown>): number => {
+    const messageId = persistedMessageId(item);
+    if (messageId) {
+      return historyItems.findIndex((historyItem, candidateIndex) => (
+        !consumedHistoryIndexes.has(candidateIndex)
+        && persistedMessageId(historyItem) === messageId
+      ));
+    }
+    if (!isHistoricalSnapshotMessage(item)) return -1;
+    const signature = messageSignature(item);
+    if (!signature) return -1;
+    return historyItems.findIndex((historyItem, candidateIndex) => (
+      !consumedHistoryIndexes.has(candidateIndex)
+      && messageSignature(historyItem) === signature
+    ));
+  };
+  const rememberPendingHistoryBoundary = (item: Record<string, unknown>) => {
+    if (consumedHistoryIndexes.size > 0) return;
+    const boundaryIndex = skippedHistoryBoundaryIndex(item);
+    if (boundaryIndex < 0) return;
+    pendingHistoryBoundaryIndex = pendingHistoryBoundaryIndex === null
+      ? boundaryIndex
+      : Math.min(pendingHistoryBoundaryIndex, boundaryIndex);
+  };
+  const flushPendingAtHistoryBoundary = (): boolean => {
+    if (pendingHistoryBoundaryIndex === null || pendingUnanchoredItems.length === 0) {
+      return false;
+    }
+    appendHistoryRange(pendingHistoryBoundaryIndex, true);
+    mergedItems.push(...pendingUnanchoredItems);
+    pendingUnanchoredItems.length = 0;
+    pendingHistoryBoundaryIndex = null;
+    return true;
+  };
+
+  for (const item of timeline.items) {
+    if (consumedHistoryIndexes.size === 0 && item.kind !== "message") {
+      if (flushPendingAtHistoryBoundary()) {
+        mergedItems.push(item);
+        continue;
+      }
+      pendingUnanchoredItems.push(item);
+      continue;
+    }
+    if (item.kind !== "message") {
+      mergedItems.push(item);
+      continue;
+    }
+    const historyIndex = matchingHistoryIndex(item);
+    if (historyIndex >= 0) {
+      appendHistoryRange(historyIndex, pendingUnanchoredItems.length === 0);
+      mergedItems.push(...pendingUnanchoredItems);
+      pendingUnanchoredItems.length = 0;
+      pendingHistoryBoundaryIndex = null;
+      appendHistoryRange(historyIndex, true);
+      continue;
+    }
+    const messageId = persistedMessageId(item);
+    if (messageId && historyMessageIds.has(messageId)) {
+      rememberPendingHistoryBoundary(item);
+      continue;
+    }
+    if (isHistoricalSnapshotMessage(item)) {
+      rememberPendingHistoryBoundary(item);
+      continue;
+    }
+    if (activeTimeline && consumedHistoryIndexes.size === 0) {
+      appendRemainingHistory();
+      mergedItems.push(...pendingUnanchoredItems);
+      pendingUnanchoredItems.length = 0;
+      pendingHistoryBoundaryIndex = null;
+      mergedItems.push(item);
+      continue;
+    }
+    if (consumedHistoryIndexes.size === 0) {
+      pendingUnanchoredItems.push(item);
+      continue;
+    }
+    mergedItems.push(item);
+  }
+  flushPendingAtHistoryBoundary();
+  appendRemainingHistory();
+  mergedItems.push(...pendingUnanchoredItems);
+
+  return {
+    ...timeline,
+    items: mergedItems,
   };
 }
 

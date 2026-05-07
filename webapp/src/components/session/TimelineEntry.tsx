@@ -1,7 +1,5 @@
 import { useState, type JSX, type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { ImageAttachment, TimelineItem } from "../../types";
 import { Button } from "../ui/button";
 import {
@@ -9,12 +7,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
+import { MarkdownContent } from "../shared/MarkdownContent";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
 import { ToolResult } from "./ToolResult";
-
-function MarkdownContent({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
-}
 
 function renderUserContent(
   content: string,
@@ -106,6 +101,10 @@ function toolItemStatus(toolItem: { metadata?: { status?: string; success?: bool
   return null;
 }
 
+function subAgentHeaderName(title: string | undefined): string | undefined {
+  return title?.split("·", 1)[0]?.trim() || title;
+}
+
 export function TimelineEntry({
   item,
   subAgentTitle,
@@ -146,11 +145,12 @@ export function TimelineEntry({
       ? toolGroupOpenState.open
       : false;
 
+  const subAgentName = subAgentHeaderName(subAgentTitle);
   const subAgentBanner =
-    subAgentTitle || subAgentStatus ? (
+    subAgentName || subAgentStatus ? (
       <div className="timeline-entry__subagent">
         <span className={`indicator-dot indicator-dot--${subAgentStatus === "running" ? "connecting" : "connected"}`} />
-        <span>{subAgentTitle ?? "sub_agent"} &middot; {subAgentStatus ?? "running"}</span>
+        <span>{subAgentName ?? "sub_agent"}</span>
       </div>
     ) : null;
 

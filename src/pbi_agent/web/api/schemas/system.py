@@ -8,8 +8,19 @@ from pbi_agent.web.api.deps import NonEmptyString
 from pbi_agent.web.api.schemas.common import ImageAttachmentModel, RuntimeSummaryModel
 from pbi_agent.web.api.schemas.tasks import BoardStageModel, TaskRecordModel
 
-SessionStatus = Literal[
+SessionLifecycleStatus = Literal[
     "idle", "starting", "running", "waiting_for_input", "ended", "failed", "stale"
+]
+RunSessionStatus = Literal[
+    "started",
+    "completed",
+    "interrupted",
+    "failed",
+    "starting",
+    "running",
+    "waiting_for_input",
+    "ended",
+    "stale",
 ]
 
 
@@ -58,7 +69,7 @@ class SessionRecordModel(BaseModel):
     cost_usd: float
     created_at: str
     updated_at: str
-    status: SessionStatus = "idle"
+    status: SessionLifecycleStatus = "idle"
     active_run_id: str | None = None
     active_live_session_id: str | None = None
     task_id: str | None = None
@@ -78,7 +89,7 @@ class LiveSessionModel(BaseModel):
     reasoning_effort: str
     compact_threshold: int
     created_at: str
-    status: SessionStatus
+    status: SessionLifecycleStatus
     exit_code: int | None
     fatal_error: str | None
     ended_at: str | None
@@ -99,17 +110,47 @@ class BootstrapResponse(BaseModel):
     board_stages: list[BoardStageModel]
 
 
+ProcessingPhase = Literal[
+    "starting",
+    "model_wait",
+    "tool_execution",
+    "finalizing",
+    "interrupting",
+    "retry_wait",
+]
+
+
+class ProcessingStateModel(BaseModel):
+    active: bool
+    phase: ProcessingPhase | None = None
+    message: str | None = None
+    active_tool_count: int | None = None
+
+
+class PendingUserQuestionModel(BaseModel):
+    question_id: str
+    question: str
+    suggestions: list[str]
+    recommended_suggestion_index: Literal[0] = 0
+
+
+class PendingUserQuestionsModel(BaseModel):
+    prompt_id: str
+    questions: list[PendingUserQuestionModel]
+
+
 class LiveSessionSnapshotModel(BaseModel):
     live_session_id: str
     session_id: str | None
     runtime: RuntimeSummaryModel | None
     input_enabled: bool
     wait_message: str | None
+    processing: ProcessingStateModel | None
     session_usage: dict[str, Any] | None
     turn_usage: dict[str, Any] | None
     session_ended: bool
     fatal_error: str | None
-    pending_user_questions: dict[str, Any] | None = None
+    pending_user_questions: PendingUserQuestionsModel | None
     items: list[dict[str, Any]]
     sub_agents: dict[str, dict[str, str]]
     last_event_seq: int
@@ -165,8 +206,20 @@ class SessionResponse(BaseModel):
     session: SessionRecordModel
 
 
+class SessionImageUploadResponse(BaseModel):
+    uploads: list[ImageAttachmentModel]
+
+
+class MessagePartIdsModel(BaseModel):
+    content: str
+    file_paths: list[str] = Field(default_factory=list)
+    image_attachments: list[str] = Field(default_factory=list)
+
+
 class HistoryItemModel(BaseModel):
     item_id: str
+    message_id: str
+    part_ids: MessagePartIdsModel
     role: str
     content: str
     file_paths: list[str] = Field(default_factory=list)
@@ -178,7 +231,7 @@ class HistoryItemModel(BaseModel):
 
 class SessionDetailResponse(BaseModel):
     session: SessionRecordModel
-    status: SessionStatus = "idle"
+    status: SessionLifecycleStatus = "idle"
     history_items: list[HistoryItemModel]
     timeline: LiveSessionSnapshotModel | None = None
     live_session: LiveSessionModel | None = None
@@ -196,7 +249,7 @@ class RunSessionModel(BaseModel):
     provider_id: str | None
     profile_id: str | None
     model: str | None
-    status: SessionStatus
+    status: RunSessionStatus
     started_at: str
     ended_at: str | None
     total_duration_ms: int | None

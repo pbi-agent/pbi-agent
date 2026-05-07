@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { websocketUrl } from "../api";
+import { eventStreamUrl } from "../api";
+import { parseSseEvent } from "../events";
 import type {
   LiveSession,
   LiveSessionLifecycleEvent,
@@ -35,6 +36,9 @@ function lifecycleEventFromWebEvent(event: WebEvent): LiveSessionLifecycleEvent 
   if (!isLiveSessionLifecycleType(event.type)) {
     return null;
   }
+  if (!("live_session" in event.payload)) {
+    return null;
+  }
   const liveSession = event.payload.live_session;
   if (!isLiveSession(liveSession)) {
     return null;
@@ -52,6 +56,15 @@ function eventCreatedAtOrAfter(event: WebEvent, timestampMs: number): boolean {
   return Number.isFinite(eventCreatedAtMs) && eventCreatedAtMs >= timestampMs;
 }
 
+function invalidateAppSnapshotQueries(client: ReturnType<typeof useQueryClient>) {
+  void client.invalidateQueries({ queryKey: ["sessions"] });
+  void client.invalidateQueries({ queryKey: ["tasks"] });
+  void client.invalidateQueries({ queryKey: ["board-stages"] });
+  void client.invalidateQueries({ queryKey: ["bootstrap"] });
+  void client.invalidateQueries({ queryKey: ["dashboard-stats"] });
+  void client.invalidateQueries({ queryKey: ["dashboard-runs"] });
+}
+
 export function useTaskEvents(): LiveSessionLifecycleEvent[] {
   const client = useQueryClient();
   const retryDelay = useRef(INITIAL_DELAY);
@@ -64,23 +77,66 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
       startedAtMs.current = Date.now();
     }
     const hookStartedAtMs = startedAtMs.current;
-    let socket: WebSocket | null = null;
+    let source: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
 
+    function scheduleReconnect(currentSource: EventSource) {
+      if (disposed || source !== currentSource || retryTimer) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
+        connect();
+      }, retryDelay.current);
+    }
+
+    function recoverAppSnapshot(currentSource: EventSource) {
+      latestHandledSeq.current = 0;
+      invalidateAppSnapshotQueries(client);
+      currentSource.close();
+      scheduleReconnect(currentSource);
+    }
+
     function connect() {
       if (disposed) return;
-      socket = new WebSocket(websocketUrl("/api/events/app"));
+      const since = latestHandledSeq.current;
+      const cursor = since > 0 ? `?since=${since}` : "";
+      const currentSource = new EventSource(eventStreamUrl(`/api/events/app${cursor}`));
+      source = currentSource;
 
-      socket.onopen = () => {
+      currentSource.onopen = () => {
         retryDelay.current = INITIAL_DELAY;
       };
 
-      socket.onmessage = (message) => {
+      currentSource.onmessage = (message) => {
         if (typeof message.data !== "string") {
           return;
         }
-        const event = JSON.parse(message.data) as WebEvent;
+        const event = parseSseEvent(message.data);
+        if (!event) {
+          return;
+        }
+        if (
+          event.type === "server.replay_incomplete"
+          && event.payload.snapshot_required === true
+        ) {
+          recoverAppSnapshot(currentSource);
+          return;
+        }
+        if (event.type === "server.connected" || event.type === "server.heartbeat") {
+          if (event.seq > 0) {
+            latestHandledSeq.current = Math.max(latestHandledSeq.current, event.seq);
+          }
+          return;
+        }
+        const latestSeq = latestHandledSeq.current;
+        if (event.seq > latestSeq + 1) {
+          recoverAppSnapshot(currentSource);
+          return;
+        }
+        if (event.seq > 0) {
+          latestHandledSeq.current = Math.max(latestSeq, event.seq);
+        }
         if (event.type === "task_updated" || event.type === "task_deleted") {
           void client.invalidateQueries({ queryKey: ["tasks"] });
           return;
@@ -91,7 +147,7 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
           return;
         }
-        if (event.type === "session_updated") {
+        if (event.type === "session_created" || event.type === "session_updated") {
           void client.invalidateQueries({ queryKey: ["sessions"] });
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
           const session = event.payload.session as { session_id?: unknown } | undefined;
@@ -109,8 +165,6 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
           void client.invalidateQueries({ queryKey: ["sessions"] });
           void client.invalidateQueries({ queryKey: ["bootstrap"] });
           void client.invalidateQueries({ queryKey: ["sessions"] });
-          const latestSeq = latestHandledSeq.current;
-          latestHandledSeq.current = Math.max(latestSeq, event.seq);
           if (
             event.seq <= latestSeq
             || !eventCreatedAtOrAfter(event, hookStartedAtMs)
@@ -127,16 +181,10 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
         }
       };
 
-      socket.onclose = () => {
-        if (disposed) return;
-        retryTimer = setTimeout(() => {
-          retryDelay.current = Math.min(retryDelay.current * 2, MAX_DELAY);
-          connect();
-        }, retryDelay.current);
-      };
-
-      socket.onerror = () => {
-        socket?.close();
+      currentSource.onerror = () => {
+        if (disposed || source !== currentSource || retryTimer) return;
+        currentSource.close();
+        scheduleReconnect(currentSource);
       };
     }
 
@@ -145,7 +193,7 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
     return () => {
       disposed = true;
       if (retryTimer) clearTimeout(retryTimer);
-      socket?.close();
+      source?.close();
     };
   }, [client]);
 

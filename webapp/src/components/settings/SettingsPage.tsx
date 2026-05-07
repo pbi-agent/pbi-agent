@@ -1,18 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangleIcon,
-  BellIcon,
-  CheckCircle2Icon,
-  EditIcon,
-  GaugeIcon,
-  PlayIcon,
-  PlugZapIcon,
-  PlusIcon,
-  Trash2Icon,
-  UnplugIcon,
-  Volume2Icon,
-} from "lucide-react";
+import { Dialog as DialogPrimitive } from "radix-ui";
+import { AlertTriangleIcon, XIcon } from "lucide-react";
 import {
   createModelProfile,
   createProvider,
@@ -26,469 +15,32 @@ import {
   updateProvider,
 } from "../../api";
 import { ApiError } from "../../api";
-import {
-  NOTIFICATION_SOUND_OPTIONS,
-  getBrowserNotificationPermission,
-  isNotificationSoundId,
-  playNotificationSound,
-  requestDesktopNotificationPermission,
-  setDesktopNotificationsEnabled,
-  setNotificationSoundId,
-  setSoundNotificationsEnabled,
-  useNotificationPreferences,
-  type BrowserNotificationPermission,
-} from "../../lib/notificationPreferences";
 import type {
-  CommandView,
   ConfigBootstrapPayload,
-  ConfigOptions,
   ModelProfileView,
-  ProviderAuthStatus,
   ProviderView,
 } from "../../types";
+import { useSettingsDialog } from "../../hooks/useSettingsDialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+} from "../ui/dialog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { CommandsSettingsSection } from "./CommandsSettingsSection";
+import { ModelProfilesSettingsSection } from "./ModelProfilesSettingsSection";
 import type { ProfilePayload } from "./ModelProfileModal";
 import { ModelProfileModal } from "./ModelProfileModal";
+import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
 import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
 import { ProviderUsageLimitsDialog } from "./ProviderUsageLimitsDialog";
+import { ProvidersSettingsSection } from "./ProvidersSettingsSection";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
-import { Alert, AlertDescription } from "../ui/alert";
-import { Badge } from "../ui/badge";
-import { Button } from "../ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
-import { Checkbox } from "../ui/checkbox";
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "../ui/field";
-import { EmptyState } from "../shared/EmptyState";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
-
-function authModeLabel(provider: ProviderView, options: ConfigOptions): string {
-  return (
-    options.provider_metadata[provider.kind]?.auth_mode_metadata[provider.auth_mode]
-      ?.label ?? provider.auth_mode
-  );
-}
-
-function providerKindLabel(providerKind: string, options: ConfigOptions): string {
-  return options.provider_metadata[providerKind]?.label ?? providerKind;
-}
-
-function authStatusLabel(status: ProviderAuthStatus): string {
-  if (status.auth_mode === "api_key") {
-    return "API key";
-  }
-  switch (status.session_status) {
-    case "connected":
-      return "connected";
-    case "expired":
-      return "expired";
-    default:
-      return "not connected";
-  }
-}
-
-function formatAuthExpiry(expiresAt: number | null): string | null {
-  if (!expiresAt) {
-    return null;
-  }
-  return new Date(expiresAt * 1000).toLocaleString();
-}
-
-function supportsUsageLimits(provider: ProviderView): boolean {
-  return (
-    provider.auth_mode !== "api_key" &&
-    provider.auth_status.session_status === "connected"
-  );
-}
-
-function ProviderCard({
-  provider,
-  options,
-  isBusy,
-  onEdit,
-  onDelete,
-  onConnect,
-  onRefresh,
-  onDisconnect,
-  onShowUsage,
-}: {
-  provider: ProviderView;
-  options: ConfigOptions;
-  isBusy: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
-  onConnect: () => void;
-  onRefresh: () => void;
-  onDisconnect: () => void;
-  onShowUsage: () => void;
-}) {
-  const authStatus = provider.auth_status;
-  const authExpires = formatAuthExpiry(authStatus.expires_at);
-  const showAuthActions = provider.auth_mode !== "api_key";
-  const showUsageAction = supportsUsageLimits(provider);
-
-  return (
-    <Card className="settings-item settings-item--provider">
-      <div className="settings-item__info">
-        <div className="settings-item__name">{provider.name}</div>
-        <div className="settings-item__id">{provider.id}</div>
-        <div className="settings-item__meta">
-          <Badge variant="secondary" className="settings-item__tag">{providerKindLabel(provider.kind, options)}</Badge>
-          <Badge variant="outline" className="settings-item__tag settings-item__tag--accent">
-            {authModeLabel(provider, options)}
-          </Badge>
-          <Badge
-            variant="secondary"
-            className={`settings-item__tag ${authStatus.session_status === "connected"
-                ? "settings-item__tag--success"
-                : authStatus.session_status === "expired"
-                  ? "settings-item__tag--warning"
-                  : ""
-              }`}
-          >
-            {authStatusLabel(authStatus)}
-          </Badge>
-          {provider.auth_mode === "api_key" && provider.has_secret && (
-            <Badge variant="secondary" className="settings-item__tag settings-item__tag--success">
-              {provider.secret_source === "env_var"
-                ? (provider.secret_env_var ?? "env var")
-                : "key: set"}
-            </Badge>
-          )}
-          {authStatus.plan_type && (
-            <Badge variant="outline" className="settings-item__tag">{authStatus.plan_type}</Badge>
-          )}
-          {provider.responses_url && (
-            <Badge variant="outline" className="settings-item__tag" title={provider.responses_url}>
-              custom responses URL
-            </Badge>
-          )}
-          {provider.generic_api_url && (
-            <Badge variant="outline" className="settings-item__tag" title={provider.generic_api_url}>
-              custom API URL
-            </Badge>
-          )}
-        </div>
-        {(authStatus.email || authExpires || authStatus.backend) && (
-          <div className="settings-item__summary">
-            {authStatus.email && <div>{authStatus.email}</div>}
-            {authStatus.backend && <div>Backend: {authStatus.backend}</div>}
-            {authExpires && <div>Expires: {authExpires}</div>}
-          </div>
-        )}
-      </div>
-      <div className="app-action-row app-action-row--compact app-action-row--nowrap app-action-row--end settings-item__actions settings-item__actions--provider">
-        {showAuthActions && (
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="task-card__action-button"
-              onClick={onConnect}
-              disabled={isBusy}
-            >
-              <PlugZapIcon data-icon="inline-start" />
-              {authStatus.has_session ? "Reconnect" : "Connect"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="task-card__action-button"
-              onClick={onRefresh}
-              disabled={isBusy || !authStatus.can_refresh}
-            >
-              <CheckCircle2Icon data-icon="inline-start" />
-              Refresh
-            </Button>
-            {showUsageAction && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="task-card__action-button"
-                onClick={onShowUsage}
-              >
-                <GaugeIcon data-icon="inline-start" />
-                Usage
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="task-card__action-button"
-              onClick={onDisconnect}
-              disabled={isBusy || !authStatus.has_session}
-            >
-              <UnplugIcon data-icon="inline-start" />
-              Disconnect
-            </Button>
-          </>
-        )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="task-card__action-button"
-          onClick={onEdit}
-        >
-          <EditIcon data-icon="inline-start" />
-          Edit
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="task-card__action-button"
-          onClick={onDelete}
-          disabled={isBusy}
-        >
-          <Trash2Icon data-icon="inline-start" />
-          Delete
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-function ProfileCard({
-  profile,
-  options,
-  onEdit,
-  onDelete,
-}: {
-  profile: ModelProfileView;
-  options: ConfigOptions;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const r = profile.resolved_runtime;
-  const runtimeParts: string[] = [r.model];
-  if (r.reasoning_effort && r.reasoning_effort !== "none") {
-    runtimeParts.push(r.reasoning_effort);
-  }
-  if (r.service_tier) {
-    runtimeParts.push(r.service_tier);
-  }
-
-  return (
-    <Card className="settings-item">
-      <div className="settings-item__info">
-        <div className="settings-item__name">
-          {profile.name}
-          {profile.is_active_default && (
-            <Badge variant="outline" className="settings-item__tag settings-item__tag--accent">
-              default
-            </Badge>
-          )}
-        </div>
-        <div className="settings-item__id">{profile.id}</div>
-        <div className="settings-item__meta">
-          <Badge variant="outline" className="settings-item__tag">{profile.provider.name}</Badge>
-          <Badge variant="outline" className="settings-item__tag">
-            {providerKindLabel(profile.provider.kind, options)}
-          </Badge>
-        </div>
-        <div className="runtime-summary">{runtimeParts.join(" · ")}</div>
-      </div>
-      <div className="app-action-row app-action-row--compact app-action-row--nowrap app-action-row--end settings-item__actions">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="task-card__action-button"
-          onClick={onEdit}
-        >
-          <EditIcon data-icon="inline-start" />
-          Edit
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="task-card__action-button"
-          onClick={onDelete}
-        >
-          <Trash2Icon data-icon="inline-start" />
-          Delete
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-function CommandCard({ command }: { command: CommandView }) {
-  return (
-    <Card className="settings-item settings-item--command">
-      <div className="settings-item__info">
-        <div className="settings-item__name">{command.name}</div>
-        <div className="settings-item__id">{command.id}</div>
-        <div className="settings-item__meta">
-          <Badge variant="outline" className="settings-item__tag settings-item__tag--accent">
-            {command.slash_alias}
-          </Badge>
-          <Badge variant="secondary" className="settings-item__tag">{command.path}</Badge>
-        </div>
-        {command.description && (
-          <div className="settings-item__summary">{command.description}</div>
-        )}
-        <pre className="settings-item__instructions">{command.instructions}</pre>
-      </div>
-    </Card>
-  );
-}
-
-function notificationPermissionLabel(
-  permission: BrowserNotificationPermission,
-  desktopEnabled: boolean,
-): string {
-  switch (permission) {
-    case "unsupported":
-      return "Browser notifications are not supported here.";
-    case "denied":
-      return "Notifications are blocked in this browser.";
-    case "granted":
-      return desktopEnabled
-        ? "Desktop notifications are enabled."
-        : "Desktop permission is granted, but notifications are disabled.";
-    default:
-      return "Desktop notifications have not been enabled.";
-  }
-}
-
-function NotificationSettingsCard() {
-  const preferences = useNotificationPreferences();
-  const permission = getBrowserNotificationPermission();
-  const desktopChecked = preferences.desktopEnabled && permission === "granted";
-  const desktopUnavailable =
-    permission === "unsupported" || (permission === "denied" && !preferences.desktopEnabled);
-
-  async function handleDesktopCheckedChange(checked: boolean | "indeterminate") {
-    if (checked === true) {
-      await requestDesktopNotificationPermission();
-      return;
-    }
-    setDesktopNotificationsEnabled(false);
-  }
-
-  return (
-    <Card className="settings-panel">
-      <CardHeader className="settings-panel__header">
-        <div>
-          <CardTitle className="settings-panel__title">Notifications</CardTitle>
-          <CardDescription className="settings-panel__subtitle">
-            Alerts for interactive questions and finished sessions
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent className="settings-panel__body settings-notifications">
-        <FieldGroup>
-          <Field orientation="horizontal" className="settings-notifications__field">
-            <Checkbox
-              id="desktop-notifications"
-              className="settings-notifications__checkbox"
-              checked={desktopChecked}
-              disabled={desktopUnavailable}
-              onCheckedChange={(checked) => {
-                void handleDesktopCheckedChange(checked);
-              }}
-            />
-            <FieldContent>
-              <FieldLabel htmlFor="desktop-notifications">
-                <BellIcon data-icon="inline-start" />
-                Desktop notifications
-              </FieldLabel>
-              <FieldDescription>
-                Show a browser notification when an ask_user question arrives or a session
-                finishes while this tab is hidden or unfocused. {notificationPermissionLabel(permission, desktopChecked)}
-              </FieldDescription>
-            </FieldContent>
-          </Field>
-
-          <Field orientation="horizontal" className="settings-notifications__field">
-            <Checkbox
-              id="sound-notifications"
-              className="settings-notifications__checkbox"
-              checked={preferences.soundEnabled}
-              onCheckedChange={(checked) => {
-                setSoundNotificationsEnabled(checked === true);
-              }}
-            />
-            <FieldContent>
-              <FieldLabel htmlFor="sound-notifications">
-                <Volume2Icon data-icon="inline-start" />
-                Sound notifications
-              </FieldLabel>
-              <FieldDescription>
-                Play the selected sound for the same hidden or unfocused alerts.
-              </FieldDescription>
-              {preferences.soundEnabled && (
-                <>
-                  <div className="settings-notifications__sound-row">
-                    <FieldLabel
-                      htmlFor="notification-sound"
-                      className="settings-notifications__sound-label"
-                    >
-                      Notification sound
-                    </FieldLabel>
-                    <NativeSelect
-                      id="notification-sound"
-                      size="sm"
-                      className="settings-notifications__sound-select"
-                      value={preferences.soundId}
-                      onChange={(event) => {
-                        const nextSoundId = event.target.value;
-                        if (isNotificationSoundId(nextSoundId)) {
-                          setNotificationSoundId(nextSoundId);
-                        }
-                      }}
-                      aria-describedby="notification-sound-description"
-                    >
-                      {NOTIFICATION_SOUND_OPTIONS.map((option) => (
-                        <NativeSelectOption key={option.id} value={option.id}>
-                          {option.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon-sm"
-                      className="settings-notifications__sound-preview"
-                      aria-label="Preview notification sound"
-                      title="Preview notification sound"
-                      onClick={() => {
-                        void playNotificationSound(preferences.soundId);
-                      }}
-                    >
-                      <PlayIcon aria-hidden="true" />
-                    </Button>
-                  </div>
-                  <FieldDescription id="notification-sound-description">
-                    {
-                      NOTIFICATION_SOUND_OPTIONS.find(
-                        (option) => option.id === preferences.soundId,
-                      )?.description
-                    }
-                  </FieldDescription>
-                </>
-              )}
-            </FieldContent>
-          </Field>
-        </FieldGroup>
-      </CardContent>
-    </Card>
-  );
-}
 
 type ModalState =
   | { type: "none" }
@@ -504,12 +56,52 @@ type ModalState =
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
 
+type SettingsTabId = "notifications" | "providers" | "model-profiles" | "commands";
+
+const SETTINGS_NAV_GROUPS: Array<{
+  label: string;
+  items: Array<{ id: SettingsTabId; label: string; description: string }>;
+}> = [
+  {
+    label: "Desktop",
+    items: [
+      {
+        id: "notifications",
+        label: "Notifications",
+        description: "Desktop and sound alerts",
+      },
+    ],
+  },
+  {
+    label: "Server",
+    items: [
+      {
+        id: "providers",
+        label: "Providers",
+        description: "Connections and credentials",
+      },
+      {
+        id: "model-profiles",
+        label: "Model Profiles",
+        description: "Runtime defaults",
+      },
+      {
+        id: "commands",
+        label: "Commands",
+        description: "Prompt presets",
+      },
+    ],
+  },
+];
+
 function shouldPromptProviderAuth(provider: ProviderView): boolean {
   return provider.auth_mode !== "api_key";
 }
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
+  const { open, closeSettings } = useSettingsDialog();
+  const [activeTab, setActiveTab] = useState<SettingsTabId>("notifications");
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [pageError, setPageError] = useState<string | null>(null);
   const [busyProviderId, setBusyProviderId] = useState<string | null>(null);
@@ -654,24 +246,56 @@ export function SettingsPage() {
 
   if (configQuery.isLoading) {
     return (
-      <div className="center-spinner">
-        <LoadingSpinner size="lg" />
-      </div>
+      <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
+        <DialogPortal>
+          <DialogOverlay className="settings-dialog__overlay" />
+          <div className="settings-dialog">
+            <DialogPrimitive.Content asChild aria-describedby={undefined}>
+              <div className="settings-dialog__panel">
+                <DialogTitle className="sr-only">Settings</DialogTitle>
+                <div className="center-spinner">
+                  <LoadingSpinner size="lg" />
+                </div>
+              </div>
+            </DialogPrimitive.Content>
+          </div>
+        </DialogPortal>
+      </Dialog>
     );
   }
 
   if (configQuery.isError || !configQuery.data) {
     return (
-      <div className="settings-page">
-        <div className="settings-page__inner">
-          <Alert variant="destructive" className="settings-error-banner">
-            <AlertTriangleIcon />
-            <AlertDescription>
-              Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
-            </AlertDescription>
-          </Alert>
-        </div>
-      </div>
+      <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
+        <DialogPortal>
+          <DialogOverlay className="settings-dialog__overlay" />
+          <div className="settings-dialog">
+            <DialogPrimitive.Content asChild aria-describedby={undefined}>
+              <div className="settings-dialog__panel settings-dialog__panel--error">
+                <DialogTitle className="sr-only">Settings</DialogTitle>
+                <div className="settings-error-layout">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+className="settings-nav__header-close app-close-icon-button"
+                  onClick={closeSettings}
+                >
+                  <XIcon />
+                  <span className="sr-only">Close</span>
+                </Button>
+                <Alert variant="destructive" className="settings-error-banner">
+                  <AlertTriangleIcon />
+                  <AlertDescription>
+                    Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
+                  </AlertDescription>
+                </Alert>
+                </div>
+              </div>
+            </DialogPrimitive.Content>
+          </div>
+        </DialogPortal>
+      </Dialog>
     );
   }
 
@@ -679,168 +303,118 @@ export function SettingsPage() {
     configQuery.data;
 
   return (
-    <div className="settings-page">
-      <div className="settings-page__inner">
-        {model_profiles.length === 0 && (
-          <Alert className="settings-inline-note settings-onboarding-guide">
-            <AlertDescription>
-              <strong>First-time setup:</strong> To start using the app, complete these
-              steps:
-              <ol>
-                <li>Add a provider and finish any sign-in step</li>
-                <li>Create a model profile that uses that provider</li>
-              </ol>
-            </AlertDescription>
-          </Alert>
-        )}
+    <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
+      <DialogPortal>
+        <DialogOverlay className="settings-dialog__overlay" />
+        <div className="settings-dialog">
+          <DialogPrimitive.Content asChild aria-describedby={undefined}>
+            <div className="settings-dialog__panel">
+              <DialogTitle className="sr-only">Settings</DialogTitle>
+              <div className="settings-page__inner">
+              <div className="settings-shell">
+                <aside className="settings-nav" aria-label="Settings sections">
+                  <div className="settings-nav__header">
+                    <div className="settings-nav__eyebrow">Settings</div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+className="settings-nav__header-close app-close-icon-button"
+                      onClick={closeSettings}
+                    >
+                      <XIcon />
+                      <span className="sr-only">Close</span>
+                    </Button>
+                  </div>
+                  {SETTINGS_NAV_GROUPS.map((group) => (
+                    <div className="settings-nav__group" key={group.label}>
+                      <div className="settings-nav__group-label">{group.label}</div>
+                      <div className="settings-nav__items">
+                        {group.items.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`settings-nav__item ${activeTab === item.id ? "settings-nav__item--active" : ""}`}
+                            aria-pressed={activeTab === item.id}
+                            onClick={() => setActiveTab(item.id)}
+                          >
+                            <span className="settings-nav__item-label">{item.label}</span>
+                            <span className="settings-nav__item-description">{item.description}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </aside>
 
-        {pageError && (
-          <Alert variant="destructive" className="settings-error-banner">
-            <AlertTriangleIcon />
-            <AlertDescription>{pageError}</AlertDescription>
-          </Alert>
-        )}
+                <div className="settings-tab-content">
+                  {(model_profiles.length === 0 || pageError) && (
+                    <div className="settings-global-alerts">
+                      {model_profiles.length === 0 && (
+                        <Alert className="settings-inline-note settings-onboarding-guide">
+                          <AlertDescription>
+                            <strong>First-time setup:</strong> To start using the app, complete these
+                            steps:
+                            <ol>
+                              <li>Add a provider and finish any sign-in step</li>
+                              <li>Create a model profile that uses that provider</li>
+                            </ol>
+                          </AlertDescription>
+                        </Alert>
+                      )}
 
-        <NotificationSettingsCard />
+                      {pageError && (
+                        <Alert variant="destructive" className="settings-error-banner">
+                          <AlertTriangleIcon />
+                          <AlertDescription>{pageError}</AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  )}
 
-        <Card className="settings-panel">
-          <CardHeader className="settings-panel__header">
-            <div>
-              <CardTitle className="settings-panel__title">Providers</CardTitle>
-              <div className="settings-panel__subtitle">
-                LLM provider connections and credentials
+                  {activeTab === "notifications" && <NotificationsSettingsSection />}
+
+                  {activeTab === "providers" && (
+                    <ProvidersSettingsSection
+                      providers={providers}
+                      options={options}
+                      busyProviderId={busyProviderId}
+                      onCreate={() => setModal({ type: "create-provider" })}
+                      onEdit={(provider) => setModal({ type: "edit-provider", provider })}
+                      onDelete={(provider) => setModal({ type: "delete-provider", provider })}
+                      onConnect={(provider) => setModal({ type: "provider-auth", provider })}
+                      onRefresh={(providerId) => {
+                        void handleRefreshProviderAuth(providerId);
+                      }}
+                      onDisconnect={(providerId) => {
+                        void handleDisconnectProviderAuth(providerId);
+                      }}
+                      onShowUsage={(provider) => setModal({ type: "provider-usage", provider })}
+                    />
+                  )}
+
+                  {activeTab === "model-profiles" && (
+                    <ModelProfilesSettingsSection
+                      profiles={model_profiles}
+                      providers={providers}
+                      activeProfileId={active_profile_id}
+                      onSetActiveProfile={(profileId) => {
+                        void handleSetActiveProfile(profileId);
+                      }}
+                      onCreate={() => setModal({ type: "create-profile" })}
+                      onEdit={(profile) => setModal({ type: "edit-profile", profile })}
+                      onDelete={(profile) => setModal({ type: "delete-profile", profile })}
+                    />
+                  )}
+
+                  {activeTab === "commands" && <CommandsSettingsSection commands={commands} />}
+                </div>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="task-card__action-button"
-              onClick={() => setModal({ type: "create-provider" })}
-            >
-              <PlusIcon data-icon="inline-start" />
-              Add Provider
-            </Button>
-          </CardHeader>
-          <CardContent className="settings-panel__body">
-            {providers.length === 0 ? (
-              <EmptyState
-                title="No providers configured"
-                description="Add a provider to start using model profiles."
-              />
-            ) : (
-              providers.map((provider) => (
-                <ProviderCard
-                  key={provider.id}
-                  provider={provider}
-                  options={options}
-                  isBusy={busyProviderId === provider.id}
-                  onEdit={() => setModal({ type: "edit-provider", provider })}
-                  onDelete={() => setModal({ type: "delete-provider", provider })}
-                  onConnect={() => setModal({ type: "provider-auth", provider })}
-                  onRefresh={() => {
-                    void handleRefreshProviderAuth(provider.id);
-                  }}
-                  onDisconnect={() => {
-                    void handleDisconnectProviderAuth(provider.id);
-                  }}
-                  onShowUsage={() =>
-                    setModal({ type: "provider-usage", provider })
-                  }
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="settings-panel">
-          <CardHeader className="settings-panel__header">
-            <div>
-              <CardTitle className="settings-panel__title">Model Profiles</CardTitle>
-              <div className="settings-panel__subtitle">
-                Runtime configuration combining a provider with model settings
-              </div>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="task-card__action-button"
-              onClick={() => setModal({ type: "create-profile" })}
-              disabled={providers.length === 0}
-              title={providers.length === 0 ? "Add a provider first" : undefined}
-            >
-              <PlusIcon data-icon="inline-start" />
-              Add Profile
-            </Button>
-          </CardHeader>
-          <CardContent className="settings-panel__body">
-            <div className="active-profile-control">
-              <span className="active-profile-control__label">Active default</span>
-              <NativeSelect
-                name="active-profile"
-                className="active-profile-control__select"
-                value={active_profile_id ?? ""}
-                onChange={(e) => {
-                  void handleSetActiveProfile(e.target.value || null);
-                }}
-              >
-                <NativeSelectOption value="">No default</NativeSelectOption>
-                {model_profiles.map((profile) => (
-                  <NativeSelectOption key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </div>
-
-            {model_profiles.length === 0 ? (
-              <EmptyState
-                title="No profiles configured"
-                description="Add a model profile to configure runtime settings."
-              />
-            ) : (
-              model_profiles.map((profile) => (
-                <ProfileCard
-                  key={profile.id}
-                  profile={profile}
-                  options={options}
-                  onEdit={() => setModal({ type: "edit-profile", profile })}
-                  onDelete={() => setModal({ type: "delete-profile", profile })}
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="settings-panel">
-          <CardHeader className="settings-panel__header">
-            <div>
-              <CardTitle className="settings-panel__title">Commands</CardTitle>
-              <div className="settings-panel__subtitle">
-                Project command files for single-turn prompt presets
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="settings-panel__body">
-            <Alert className="settings-inline-note">
-              <AlertDescription>
-                Add Markdown files under <code>.agents/commands/</code>; a file like
-                <code>.agents/commands/review.md</code> becomes <code>/review</code>.
-              </AlertDescription>
-            </Alert>
-
-            {commands.length === 0 ? (
-              <EmptyState
-                title="No commands found"
-                description="Add project command files under .agents/commands/."
-              />
-            ) : (
-              commands.map((command) => <CommandCard key={command.id} command={command} />)
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          </DialogPrimitive.Content>
+        </div>
+      </DialogPortal>
 
       {modal.type === "create-provider" && (
         <ProviderModal
@@ -914,6 +488,6 @@ export function SettingsPage() {
           onClose={() => setModal({ type: "none" })}
         />
       )}
-    </div>
+    </Dialog>
   );
 }

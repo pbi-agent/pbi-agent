@@ -119,6 +119,54 @@ def history_message_content(message: MessageRecord) -> str:
     return content
 
 
+def canonical_message_id(message_id: int) -> str:
+    return f"msg-{message_id}"
+
+
+def persisted_message_part_ids(message: MessageRecord) -> dict[str, Any]:
+    message_id = canonical_message_id(message.id)
+    return {
+        "content": f"{message_id}:content",
+        "file_paths": [
+            f"{message_id}:file-path:{index}"
+            for index, _path in enumerate(message.file_paths)
+        ],
+        "image_attachments": [
+            f"{message_id}:image:{attachment.upload_id}"
+            for attachment in message.image_attachments
+        ],
+    }
+
+
+def persisted_message_payload(
+    message: MessageRecord,
+    *,
+    historical: bool = True,
+) -> dict[str, Any]:
+    message_id = canonical_message_id(message.id)
+    return {
+        "item_id": message_id,
+        "message_id": message_id,
+        "part_ids": persisted_message_part_ids(message),
+        "role": message.role,
+        "content": history_message_content(message),
+        "file_paths": list(message.file_paths),
+        "image_attachments": [
+            {
+                "upload_id": attachment.upload_id,
+                "name": attachment.name,
+                "mime_type": attachment.mime_type,
+                "byte_count": attachment.byte_count,
+                "preview_url": attachment.preview_url,
+            }
+            for attachment in message.image_attachments
+        ],
+        "markdown": message.role == "assistant",
+        "historical": historical,
+        "created_at": message.created_at,
+    }
+
+
 @dataclass(slots=True)
 class _SubAgentContext:
     sub_agent_id: str
@@ -163,6 +211,7 @@ class _EventDisplayBase(DisplayProtocol):
         self._assistant_active = False
         self._processing_phase: str | None = None
         self._active_tool_group_item_id: str | None = None
+        self._message_item_ids_by_signature: dict[tuple[str, str], list[str]] = {}
 
     def _next_id(self, prefix: str) -> str:
         self._counter += 1
@@ -175,6 +224,48 @@ class _EventDisplayBase(DisplayProtocol):
         if self._sub_agent is not None:
             payload = {**payload, "sub_agent_id": self._sub_agent.sub_agent_id}
         self._publish_event(event_type, payload)
+
+    def _remember_message_item_id(
+        self,
+        *,
+        item_id: str,
+        role: str,
+        content: str,
+    ) -> None:
+        if self._sub_agent is not None:
+            return
+        self._message_item_ids_by_signature.setdefault((role, content), []).append(
+            item_id
+        )
+
+    def _pop_message_item_id(self, *, role: str, content: str) -> str | None:
+        item_ids = self._message_item_ids_by_signature.get((role, content))
+        if not item_ids:
+            return None
+        item_id = item_ids.pop()
+        if not item_ids:
+            self._message_item_ids_by_signature.pop((role, content), None)
+        return item_id
+
+    def persisted_message(
+        self,
+        message: MessageRecord,
+        *,
+        previous_item_id: str | None = None,
+    ) -> None:
+        payload = persisted_message_payload(message)
+        next_item_id = str(payload["item_id"])
+        old_item_id = previous_item_id or self._pop_message_item_id(
+            role=message.role,
+            content=str(payload["content"]),
+        )
+        if old_item_id and old_item_id != next_item_id:
+            self._publish(
+                "message_rekeyed",
+                {"old_item_id": old_item_id, "item": payload},
+            )
+            return
+        self._publish("message_added", payload)
 
     def _status_text(self, *, success: bool | None = None) -> str:
         return "ok" if success or success is None else "failed"
@@ -206,8 +297,17 @@ class _EventDisplayBase(DisplayProtocol):
         images=None,
         image_attachments=None,
         interactive_mode: bool = False,
+        item_id: str | None = None,
     ) -> None:
-        del value, file_paths, image_paths, images, image_attachments, interactive_mode
+        del (
+            value,
+            file_paths,
+            image_paths,
+            images,
+            image_attachments,
+            interactive_mode,
+            item_id,
+        )
         return None
 
     def request_new_session(self) -> None:
@@ -374,16 +474,39 @@ class _EventDisplayBase(DisplayProtocol):
                 {"active": False, "phase": None, "message": None},
             )
 
-    def render_markdown(self, text: str) -> None:
+    def render_user_message(self, text: str) -> None:
+        content = text.strip()
+        if not content:
+            return
         self._publish(
             "message_added",
             {
                 "item_id": self._next_id("message"),
+                "role": "user",
+                "content": content,
+                "markdown": False,
+            },
+        )
+
+    def render_markdown(self, text: str) -> None:
+        item_id = self._next_id("message")
+        self._remember_message_item_id(
+            item_id=item_id,
+            role="assistant",
+            content=text,
+        )
+        self._publish(
+            "message_added",
+            {
+                "item_id": item_id,
                 "role": "assistant",
                 "content": text,
                 "markdown": True,
             },
         )
+
+    def render_transient_markdown(self, text: str) -> None:
+        self.render_markdown(text)
 
     def render_thinking(
         self,
@@ -732,27 +855,7 @@ class _EventDisplayBase(DisplayProtocol):
 
     def replay_history(self, messages: list[MessageRecord]) -> None:
         for message in messages:
-            self._publish(
-                "message_added",
-                {
-                    "item_id": f"history-{message.id}",
-                    "role": message.role,
-                    "content": history_message_content(message),
-                    "file_paths": list(message.file_paths),
-                    "image_attachments": [
-                        {
-                            "upload_id": attachment.upload_id,
-                            "name": attachment.name,
-                            "mime_type": attachment.mime_type,
-                            "byte_count": attachment.byte_count,
-                            "preview_url": attachment.preview_url,
-                        }
-                        for attachment in message.image_attachments
-                    ],
-                    "markdown": message.role == "assistant",
-                    "historical": True,
-                },
-            )
+            self._publish("message_added", persisted_message_payload(message))
 
 
 class WebDisplay(_EventDisplayBase):
@@ -788,6 +891,20 @@ class WebDisplay(_EventDisplayBase):
             return
         self._input_enabled_state = enabled
         self._publish("input_state", {"enabled": enabled})
+
+    def render_transient_markdown(self, text: str) -> None:
+        from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
+
+        self._publish(
+            "message_added",
+            {
+                TRANSIENT_WEB_EVENT_KEY: True,
+                "item_id": self._next_id("message"),
+                "role": "assistant",
+                "content": text,
+                "markdown": True,
+            },
+        )
 
     def request_shutdown(self) -> None:
         self._shutdown.set()
@@ -839,6 +956,7 @@ class WebDisplay(_EventDisplayBase):
         images=None,
         image_attachments=None,
         interactive_mode: bool = False,
+        item_id: str | None = None,
     ) -> None:
         self.clear_interrupt()
         queued = QueuedInput(
@@ -848,6 +966,7 @@ class WebDisplay(_EventDisplayBase):
             images=list(images or []),
             image_attachments=list(image_attachments or []),
             interactive_mode=interactive_mode,
+            item_id=item_id,
         )
         self._input_queue.put(queued)
         self._input_event.set()

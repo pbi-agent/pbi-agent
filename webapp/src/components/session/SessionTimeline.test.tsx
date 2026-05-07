@@ -4,9 +4,29 @@ import { SessionTimeline } from "./SessionTimeline";
 
 const EMPTY_DIFF_TEXT = "No diff content was provided for this operation.";
 
-function openWorking(index = 0) {
+const navigateMock = vi.hoisted(() => vi.fn());
+
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
+function openWorking(index = 0, expandInner = true) {
   const workingButton = screen.getAllByRole("button", { name: /Working/ })[index];
   fireEvent.click(workingButton);
+  if (expandInner) {
+    for (const groupButton of screen.queryAllByRole("button", { name: /^Thinking$/i })) {
+      fireEvent.click(groupButton);
+    }
+    for (const toolButton of screen.queryAllByRole("button").filter((button) =>
+      button.classList.contains("working-items__tool-trigger"),
+    )) {
+      fireEvent.click(toolButton);
+    }
+  }
   return workingButton;
 }
 
@@ -14,6 +34,7 @@ describe("SessionTimeline", () => {
   beforeEach(() => {
     vi.useRealTimers();
     HTMLElement.prototype.scrollTo = vi.fn();
+    navigateMock.mockReset();
   });
 
   it("shows the welcome screen for connected live sessions with no events yet", () => {
@@ -30,6 +51,599 @@ describe("SessionTimeline", () => {
 
     expect(screen.getByText(/work smart/i)).toBeInTheDocument();
     expect(screen.getByText("Send any prompt to begin")).toBeInTheDocument();
+  });
+
+  it("hides generic retry notice and error messages while preserving other timeline messages", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "retry-notice",
+            role: "notice",
+            content: "Retrying... (1/3)",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "retry-error",
+            role: "error",
+            content: "  Retrying... (2/3)  ",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "rate-limit",
+            role: "notice",
+            content: "Rate limit reached. Retrying in 5s...",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "overloaded",
+            role: "notice",
+            content: "Provider overloaded. Retrying in 10s...",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "real-error",
+            role: "error",
+            content: "Request failed after retries",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "assistant-retry-text",
+            role: "assistant",
+            content: "Retrying... (3/3)",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={6}
+      />,
+    );
+
+    expect(screen.queryByText("Retrying... (1/3)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Retrying... (2/3)")).not.toBeInTheDocument();
+    expect(screen.getByText("Rate limit reached. Retrying in 5s...")).toBeInTheDocument();
+    expect(screen.getByText("Provider overloaded. Retrying in 10s...")).toBeInTheDocument();
+    expect(screen.getByText("Request failed after retries")).toBeInTheDocument();
+    expect(screen.getByText("Retrying... (3/3)")).toBeInTheDocument();
+  });
+
+  it("keeps active Working anchored after the latest visible message when a hidden retry arrives", () => {
+    const { rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: "Working" });
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "retry-1",
+            role: "error",
+            content: "Retrying... (1/3)",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={2}
+      />,
+    );
+
+    expect(screen.queryByText("Retrying... (1/3)")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Working" })).toBe(workingButton);
+  });
+
+  it("renders a stable startup Working placeholder before first activity", () => {
+    render(
+      <SessionTimeline
+        items={[]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={0}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Working" });
+    expect(trigger).toHaveAttribute("data-phase", "starting");
+    expect(trigger).toHaveTextContent("WorkingPreparing…");
+    expect(screen.queryByText(/work smart/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Thinking$/i })).not.toBeInTheDocument();
+  });
+
+  it("reuses the startup Working block when slow first unanchored activity arrives", () => {
+    const { rerender } = render(
+      <SessionTimeline
+        items={[]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Thinking..." }}
+        itemsVersion={0}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Working" });
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group" as const,
+            itemId: "tool-1",
+            label: "shell",
+            status: "running" as const,
+            items: [
+              {
+                text: "pwd",
+                metadata: {
+                  tool_name: "shell",
+                  status: "running" as const,
+                  command: "pwd",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const updatedTrigger = screen.getByRole("button", { name: "Working 1 shell" });
+    expect(updatedTrigger).toBe(trigger);
+    expect(updatedTrigger).toHaveTextContent("Working1 shell");
+    expect(screen.queryByText("Preparing…")).not.toBeInTheDocument();
+  });
+
+  it("renders first fast activity with counts instead of the startup placeholder", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group" as const,
+            itemId: "tool-1",
+            label: "shell",
+            status: "running" as const,
+            items: [
+              {
+                text: "pwd",
+                metadata: {
+                  tool_name: "shell",
+                  status: "running" as const,
+                  command: "pwd",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Working 1 shell" });
+    expect(trigger).toHaveTextContent("Working1 shell");
+    expect(screen.queryByText("Preparing…")).not.toBeInTheDocument();
+  });
+
+  it("reuses the user-anchored Working block when slow first activity arrives", () => {
+    const { rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run it",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Working" });
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run it",
+            markdown: false,
+          },
+          {
+            kind: "tool_group" as const,
+            itemId: "tool-1",
+            label: "shell",
+            status: "running" as const,
+            items: [
+              {
+                text: "pwd",
+                metadata: {
+                  tool_name: "shell",
+                  status: "running" as const,
+                  command: "pwd",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={2}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Working 1 shell" })).toBe(trigger);
+  });
+
+  it("coalesces interleaved sub-agent work into one turn-level Working block", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Research this",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "think-a",
+            title: "Thinking",
+            content: "Researcher plan",
+            subAgentId: "subagent-a",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-b",
+            label: "read_file",
+            status: "completed",
+            subAgentId: "subagent-b",
+            items: [{ text: "Designer inspected layout" }],
+          },
+          {
+            kind: "thinking",
+            itemId: "think-a-2",
+            title: "Thinking",
+            content: "Researcher synthesis",
+            subAgentId: "subagent-a",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-c",
+            label: "shell",
+            status: "completed",
+            subAgentId: "subagent-c",
+            items: [{ text: "Tester verified behavior" }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Done",
+            markdown: true,
+          },
+        ]}
+        subAgents={{
+          "subagent-a": { title: "Researcher", status: "completed" },
+          "subagent-b": { title: "Designer", status: "completed" },
+          "subagent-c": { title: "Tester", status: "completed" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButtons = screen.getAllByRole("button", { name: /Working/ });
+    expect(workingButtons).toHaveLength(1);
+    expect(workingButtons[0]).toHaveAccessibleName("Working 3 agents");
+    expect(workingButtons[0]).toHaveTextContent(/^Working3 agents$/);
+
+    openWorking(0, false);
+
+    expect(screen.getAllByText("Researcher")).toHaveLength(1);
+    expect(screen.getByText("Designer")).toBeInTheDocument();
+    expect(screen.getByText("Tester")).toBeInTheDocument();
+    expect(screen.queryByText("Researcher plan")).not.toBeInTheDocument();
+    expect(screen.queryByText("Designer inspected layout")).not.toBeInTheDocument();
+
+    const first = screen.getByText("Researcher");
+    const second = screen.getByText("Designer");
+    const third = screen.getByText("Tester");
+    expect(first.compareDocumentPosition(second)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(second.compareDocumentPosition(third)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("renders thinking and tool rows directly inside an expanded Working group", () => {
+    const { container } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "thinking",
+            itemId: "think-1",
+            title: "Thinking",
+            content: "Planning the next steps",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tools",
+            status: "completed",
+            items: [
+              {
+                text: "file contents",
+                metadata: { tool_name: "read_file", arguments: { path: "README.md" }, result: { path: "README.md", content: "file contents" } },
+              },
+              {
+                text: "command output",
+                metadata: { tool_name: "shell", command: "bun run typecheck", result: { stdout: "ok", stderr: "", exit_code: 0 } },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Working.*1 thought, 1 read, 1 shell/i })).toBeInTheDocument();
+    const workingSummary = container.querySelector(".timeline-entry__header--work-run .working-items__summary");
+    expect(workingSummary).toHaveTextContent("1 thought, 1 read, 1 shell");
+    expect(workingSummary?.querySelectorAll('[data-component="animated-number"]')).toHaveLength(3);
+    expect(workingSummary?.querySelector('[data-slot="animated-number-strip"]')).toBeInTheDocument();
+
+    openWorking(0, false);
+    expect(screen.getByRole("button", { name: /^Thinking$/i })).toBeInTheDocument();
+    expect(screen.queryByText(/thinking block/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Read.*README.md/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Command.*bun run typecheck/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Activity/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /In motion/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /shell.*bun run typecheck/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("file contents")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Read.*README.md/i }));
+    expect(screen.getByText("file contents")).toBeInTheDocument();
+    expect(screen.queryByText("ok")).not.toBeInTheDocument();
+  });
+
+  it("summarizes thoughts and sub-agent calls in the collapsed Working header without showing sub-agent names", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "thinking",
+            itemId: "think-1",
+            title: "Thinking",
+            content: "Planning",
+            subAgentId: "subagent-researcher",
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "read_file",
+            status: "completed",
+            subAgentId: "subagent-researcher",
+            items: [{ text: "Read notes" }],
+          },
+        ]}
+        subAgents={{
+          "subagent-researcher": {
+            title: "Researcher",
+            status: "completed",
+          },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toHaveAccessibleName("Working 1 agent");
+    expect(workingButton).toHaveTextContent(/^Working1 agent$/);
+    expect(screen.queryByText("Researcher")).not.toBeInTheDocument();
+  });
+
+  it("renders animated odometer counts when working summaries update", () => {
+    const baseItems = [
+      {
+        kind: "tool_group" as const,
+        itemId: "tools-1",
+        label: "Tools",
+        status: "running" as const,
+        items: [
+          {
+            text: "first read",
+            metadata: { tool_name: "read_file", arguments: { path: "README.md" } },
+          },
+        ],
+      },
+    ];
+    const { container, rerender } = render(
+      <SessionTimeline
+        items={baseItems}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: /Working 1 read/i });
+    expect(workingButton).toHaveTextContent(/^Working1 read$/);
+    expect(
+      workingButton.querySelectorAll('[data-component="animated-number"]'),
+    ).toHaveLength(1);
+    expect(
+      workingButton.querySelector('[data-slot="animated-number-strip"]'),
+    ).toBeInTheDocument();
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            ...baseItems[0],
+            items: [
+              ...baseItems[0].items,
+              {
+                text: "second read",
+                metadata: { tool_name: "read_file", arguments: { path: "package.json" } },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={2}
+      />,
+    );
+
+    const updatedWorkingButton = screen.getByRole("button", { name: /Working 2 reads/i });
+    expect(updatedWorkingButton).toHaveTextContent(/^Working2 reads$/);
+    expect(
+      updatedWorkingButton.querySelector('[data-slot="animated-number-strip"]'),
+    ).toHaveAttribute("data-animating", "true");
+    expect(container.querySelector('[data-slot="animated-number-cell"]')).toBeInTheDocument();
+  });
+
+  it("shows only the sub-agent name in per-turn metadata headers", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "sub-message-1",
+            role: "assistant",
+            content: "Sub-agent answer",
+            markdown: true,
+            subAgentId: "subagent-dionysus",
+          },
+        ]}
+        subAgents={{
+          "subagent-dionysus": {
+            title: "Dionysus · Read the workspace LICENSE file and summarize its license terms. · low",
+            status: "completed",
+          },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        showSubAgentCards={false}
+      />,
+    );
+
+    expect(screen.getByText("Dionysus")).toBeInTheDocument();
+    expect(screen.queryByText(/Read the workspace LICENSE file/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/low/)).not.toBeInTheDocument();
+  });
+
+  it("opens a read-only child route from a simplified sub-agent card", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "sub-message-1",
+            role: "assistant",
+            content: "Hidden sub-agent transcript",
+            markdown: true,
+            subAgentId: "subagent-researcher",
+          },
+        ]}
+        subAgents={{
+          "subagent-researcher": {
+            title: "Researcher · Read the workspace LICENSE file and summarize its license terms. · low",
+            status: "completed",
+          },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        parentSessionId="parent-session"
+      />,
+    );
+
+    openWorking(0, false);
+    expect(screen.queryByText("Hidden sub-agent transcript")).not.toBeInTheDocument();
+    expect(screen.getByText("Researcher")).toBeInTheDocument();
+    expect(screen.queryByText(/Read the workspace LICENSE file/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/low/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open Researcher agent session/i }));
+    expect(navigateMock).toHaveBeenCalledWith(
+      "/sessions/parent-session/sub-agents/subagent-researcher",
+    );
   });
 
   it("preserves user-authored line breaks in message text", () => {
@@ -180,7 +794,7 @@ describe("SessionTimeline", () => {
 
     openWorking();
 
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
     expect(screen.getByText("Updated")).toBeInTheDocument();
     expect(screen.getByText(/Old/).closest("code")?.textContent).toBe("[ ] Old");
     expect(screen.getByText(/New/).closest("code")?.textContent).toBe("[X] New");
@@ -271,8 +885,11 @@ describe("SessionTimeline", () => {
 
     openWorking();
 
-    const title = screen.getByText("TODO.md");
-    const card = title.closest(".git-diff-result");
+    const title = screen.getAllByText("TODO.md").find((element) =>
+      element.classList.contains("git-diff-result__title--deleted"),
+    );
+    expect(title).toBeDefined();
+    const card = title?.closest(".git-diff-result");
 
     expect(title).toHaveClass("git-diff-result__title--deleted");
     expect(card).toHaveAttribute("data-operation", "delete_file");
@@ -357,9 +974,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+    openWorking();
 
-    expect(screen.getByText("echo hello")).toBeInTheDocument();
+expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     expect(screen.getByText("Stdout")).toBeInTheDocument();
     expect(screen.getByText("hello")).toBeInTheDocument();
     expect(screen.getByText("call_shell_1")).toBeInTheDocument();
@@ -401,9 +1018,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+    openWorking();
 
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
     expect(screen.getByText("lines 1-2 of 2")).toBeInTheDocument();
     expect(screen.getByText(/\[X\] Done/)).toBeInTheDocument();
   });
@@ -478,11 +1095,11 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Working/ }));
+    openWorking();
 
-    expect(screen.getByText("logo.jpg")).toBeInTheDocument();
+expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     expect(screen.getByText(/2.0 KB/)).toBeInTheDocument();
-    expect(screen.getByText("https://example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("https://example.com")[0]).toBeInTheDocument();
     expect(screen.getByText("# Example")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://example.com/docs");
     expect(screen.getByText("Review tests")).toBeInTheDocument();
@@ -659,7 +1276,7 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("Updated")).not.toBeInTheDocument();
   });
 
-  it("keeps the Working badge spinner visible while the session is active", () => {
+  it("animates the Working label while the session is active", () => {
     const { rerender } = render(
       <SessionTimeline
         items={[
@@ -685,8 +1302,10 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Working/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    const workingButton = screen.getByRole("button", { name: /Working/ });
+    expect(workingButton).toBeInTheDocument();
+    expect(workingButton.querySelector('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
 
     rerender(
       <SessionTimeline
@@ -756,13 +1375,13 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    const workingButton = screen.getByRole("button", { name: /Working/ });
+    let workingButton = screen.getByRole("button", { name: /Working/ });
     expect(workingButton).toHaveAttribute("aria-expanded", "false");
 
-    fireEvent.click(workingButton);
+    workingButton = openWorking();
 
     expect(workingButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
 
     rerender(
       <SessionTimeline
@@ -859,7 +1478,7 @@ describe("SessionTimeline", () => {
 
     openWorking();
 
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
 
     fireEvent.scroll(scrollArea!);
 
@@ -886,6 +1505,223 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("New messages below")).not.toBeInTheDocument();
   });
 
+  it("top-aligns newly sent text-only user messages", async () => {
+    const { container, rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Ready.",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    expect(scrollArea).not.toBeNull();
+    Object.defineProperties(scrollArea!, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1200 },
+      scrollTop: { configurable: true, writable: true, value: 500 },
+    });
+    const scrollSpy = vi.spyOn(scrollArea!, "scrollTo");
+    scrollSpy.mockClear();
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Ready.",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the task",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={2}
+      />,
+    );
+
+    const userEntry = container.querySelector<HTMLElement>('[data-timeline-item-id="user-1"]');
+    expect(userEntry).not.toBeNull();
+    Object.defineProperty(userEntry!, "offsetTop", {
+      configurable: true,
+      value: 650,
+    });
+
+    await waitFor(() => {
+      expect(scrollSpy).toHaveBeenCalledWith({
+        top: 642,
+        behavior: "instant",
+      });
+    });
+  });
+
+  it("keeps the bottom of newly sent image user messages visible without jumping upward", async () => {
+    const originalImageComplete = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype,
+      "complete",
+    );
+    let rectSpy: ReturnType<typeof vi.spyOn> | undefined;
+    Object.defineProperty(HTMLImageElement.prototype, "complete", {
+      configurable: true,
+      get: () => false,
+    });
+
+    const { container, rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Ready.",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    expect(scrollArea).not.toBeNull();
+    Object.defineProperties(scrollArea!, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1400 },
+      scrollTop: { configurable: true, writable: true, value: 600 },
+    });
+    const scrollSpy = vi.spyOn(scrollArea!, "scrollTo");
+    scrollSpy.mockClear();
+
+    try {
+      rerender(
+        <SessionTimeline
+          items={[
+            {
+              kind: "message",
+              itemId: "assistant-1",
+              role: "assistant",
+              content: "Ready.",
+              markdown: false,
+            },
+            {
+              kind: "message",
+              itemId: "user-1",
+              role: "user",
+              content: "Describe this image",
+              markdown: false,
+              imageAttachments: [
+                {
+                  upload_id: "upload-1",
+                  name: "tall.png",
+                  mime_type: "image/png",
+                  byte_count: 1234,
+                  preview_url: "/uploads/upload-1/preview",
+                },
+              ],
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={null}
+          itemsVersion={2}
+        />,
+      );
+
+      const userEntry = container.querySelector<HTMLElement>('[data-timeline-item-id="user-1"]');
+      const image = screen.getByRole("img", { name: "tall.png" });
+      expect(userEntry).not.toBeNull();
+      Object.defineProperty(userEntry!, "offsetTop", {
+        configurable: true,
+        value: 200,
+      });
+      rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+      rectSpy.mockImplementation(function getMockRect(this: HTMLElement) {
+        if (this === scrollArea) {
+          return {
+            x: 0,
+            y: 0,
+            top: 0,
+            right: 400,
+            bottom: 400,
+            left: 0,
+            width: 400,
+            height: 400,
+            toJSON: () => ({}),
+          };
+        }
+        if (this === userEntry) {
+          return {
+            x: 0,
+            y: 0,
+            top: 0,
+            right: 400,
+            bottom: 700,
+            left: 0,
+            width: 400,
+            height: 700,
+            toJSON: () => ({}),
+          };
+        }
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          width: 0,
+          height: 0,
+          toJSON: () => ({}),
+        };
+      });
+
+      fireEvent.load(image);
+
+      await waitFor(() => {
+        expect(scrollSpy).toHaveBeenCalledWith({
+          top: 900,
+          behavior: "instant",
+        });
+      });
+      expect(scrollSpy).not.toHaveBeenCalledWith({
+        top: 192,
+        behavior: "instant",
+      });
+    } finally {
+      rectSpy?.mockRestore();
+      if (originalImageComplete) {
+        Object.defineProperty(HTMLImageElement.prototype, "complete", originalImageComplete);
+      } else {
+        delete (HTMLImageElement.prototype as { complete?: boolean }).complete;
+      }
+    }
+  });
+
   it("color-codes the active Working header for tool_execution phase", () => {
     render(
       <SessionTimeline
@@ -908,7 +1744,10 @@ describe("SessionTimeline", () => {
 
     const trigger = screen.getByRole("button", { name: /Working/ });
     expect(trigger).toHaveAttribute("data-phase", "tool_execution");
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    const shimmer = trigger.querySelector('[data-component="text-shimmer"]');
+    expect(shimmer).toHaveAttribute("data-active", "true");
+    expect(shimmer?.querySelector('[data-slot="text-shimmer-char-shimmer"]')).toHaveAttribute("data-run", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
   });
 
   it("color-codes the active Working header for model_wait phase", () => {
@@ -932,10 +1771,13 @@ describe("SessionTimeline", () => {
 
     const trigger = screen.getByRole("button", { name: /Working/ });
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    const shimmer = trigger.querySelector('[data-component="text-shimmer"]');
+    expect(shimmer).toHaveAttribute("data-active", "true");
+    expect(shimmer?.querySelector('[data-slot="text-shimmer-char-shimmer"]')).toHaveAttribute("data-run", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
   });
 
-  it("delays active Working phase color changes without replacing the spinner", () => {
+  it("delays active Working phase color changes without replacing the shimmer label", () => {
     vi.useFakeTimers();
     const items = [
       {
@@ -957,7 +1799,8 @@ describe("SessionTimeline", () => {
     );
 
     const trigger = screen.getByRole("button", { name: /Working/ });
-    const spinner = screen.getByLabelText("running");
+    const shimmer = trigger.querySelector('[data-component="text-shimmer"]');
+    expect(shimmer).toHaveAttribute("data-active", "true");
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
 
     rerender(
@@ -972,17 +1815,18 @@ describe("SessionTimeline", () => {
     );
 
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
-    expect(screen.getByLabelText("running")).toBe(spinner);
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toBe(shimmer);
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(900);
     });
 
     expect(trigger).toHaveAttribute("data-phase", "tool_execution");
-    expect(screen.getByLabelText("running")).toBe(spinner);
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toBe(shimmer);
   });
 
-  it("keeps the active Working spinner stable and delays color changes when the first tool run replaces the placeholder", () => {
+  it("keeps the active Working shimmer stable and delays color changes when the first tool run replaces the placeholder", () => {
     vi.useFakeTimers();
     const initialItems = [
       {
@@ -1023,7 +1867,8 @@ describe("SessionTimeline", () => {
     );
 
     const trigger = screen.getByRole("button", { name: /Working/ });
-    const spinner = screen.getByLabelText("running");
+    const shimmer = trigger.querySelector('[data-component="text-shimmer"]');
+    expect(shimmer).toHaveAttribute("data-active", "true");
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
 
     rerender(
@@ -1038,14 +1883,15 @@ describe("SessionTimeline", () => {
     );
 
     expect(trigger).toHaveAttribute("data-phase", "model_wait");
-    expect(screen.getByLabelText("running")).toBe(spinner);
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toBe(shimmer);
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(900);
     });
 
     expect(trigger).toHaveAttribute("data-phase", "tool_execution");
-    expect(screen.getByLabelText("running")).toBe(spinner);
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toBe(shimmer);
   });
 
   it("clears stale queued active Working phases when the current phase returns to the visible color", () => {
@@ -1190,7 +2036,8 @@ describe("SessionTimeline", () => {
 
     const trigger = screen.getByRole("button", { name: /Working/ });
     expect(trigger).toHaveAttribute("data-phase", "starting");
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
     // Clicking the synthetic header must not crash even with no body content.
     fireEvent.click(trigger);
     expect(screen.getByRole("button", { name: /Working/ })).toBeInTheDocument();
@@ -1218,7 +2065,8 @@ describe("SessionTimeline", () => {
 
     const trigger = screen.getByRole("button", { name: /Working/ });
     expect(trigger).toHaveAttribute("data-phase", "active");
-    expect(screen.getByLabelText("running")).toBeInTheDocument();
+    expect(trigger.querySelector('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true");
+    expect(screen.queryByLabelText("running")).not.toBeInTheDocument();
   });
 
   it("does not render the legacy bottom processing indicator", () => {
@@ -1517,10 +2365,10 @@ describe("SessionTimeline", () => {
     expect(workingButton).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("TODO.md")).not.toBeInTheDocument();
 
-    fireEvent.click(workingButton);
+    workingButton = openWorking();
 
     expect(workingButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("TODO.md")).toBeInTheDocument();
+    expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
     expect(screen.getByText("Updated")).toBeInTheDocument();
   });
 
@@ -1667,10 +2515,9 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    const firstWorkingButton = screen.getByRole("button", { name: /Working/ });
-    fireEvent.click(firstWorkingButton);
+    const firstWorkingButton = openWorking();
     expect(firstWorkingButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("first output")).toBeInTheDocument();
+expect(screen.getAllByText("first output")[0]).toBeInTheDocument();
 
     rerender(
       <SessionTimeline

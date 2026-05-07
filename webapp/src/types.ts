@@ -1,15 +1,20 @@
-export type UpdateSessionPayload = {
-  title: string;
-};
+import type {
+  AppSseEventModel,
+  LiveSessionSnapshotModel,
+  ProcessingStateModel,
+  RunSessionModel,
+  SessionRecordModel,
+  SessionSseEventModel,
+  SseControlEventModel,
+  SseEventModel,
+  TokenUsagePayloadModel,
+} from "./api-types.generated";
 
-export type SessionStatus =
-  | "idle"
-  | "starting"
-  | "running"
-  | "waiting_for_input"
-  | "ended"
-  | "failed"
-  | "stale";
+export type SessionLifecycleStatus = NonNullable<SessionRecordModel["status"]>;
+
+export type SessionStatus = SessionLifecycleStatus;
+
+export type RunSessionStatus = RunSessionModel["status"];
 
 export type SessionRecord = {
   session_id: string;
@@ -70,29 +75,7 @@ export type BoardStage = {
   auto_start: boolean;
 };
 
-export type UsagePayload = {
-  input_tokens: number;
-  cached_input_tokens: number;
-  cache_write_tokens: number;
-  cache_write_1h_tokens: number;
-  output_tokens: number;
-  reasoning_tokens: number;
-  tool_use_tokens: number;
-  provider_total_tokens: number;
-  sub_agent_input_tokens: number;
-  sub_agent_output_tokens: number;
-  sub_agent_reasoning_tokens: number;
-  sub_agent_tool_use_tokens: number;
-  sub_agent_provider_total_tokens: number;
-  sub_agent_cost_usd: number;
-  context_tokens: number;
-  total_tokens: number;
-  estimated_cost_usd: number;
-  main_agent_total_tokens: number;
-  sub_agent_total_tokens: number;
-  model: string;
-  service_tier: string;
-};
+export type UsagePayload = TokenUsagePayloadModel;
 
 export type LiveSessionRuntime = {
   provider_id: string | null;
@@ -136,8 +119,16 @@ export type UserQuestionAnswer = {
   custom: boolean;
 };
 
+export type MessagePartIds = {
+  content: string;
+  file_paths: string[];
+  image_attachments: string[];
+};
+
 export type HistoryItem = {
   item_id: string;
+  message_id: string;
+  part_ids: MessagePartIds;
   role: "user" | "assistant" | "notice" | "error" | "debug";
   content: string;
   file_paths: string[];
@@ -156,35 +147,31 @@ export type SessionDetailPayload = {
   active_run?: LiveSession | null;
 };
 
-export type LiveSessionSnapshot = {
-  live_session_id: string;
-  session_id: string | null;
+export type LiveSessionSnapshot = Omit<
+  LiveSessionSnapshotModel,
+  | "runtime"
+  | "processing"
+  | "session_usage"
+  | "turn_usage"
+  | "pending_user_questions"
+  | "sub_agents"
+> & {
   runtime: RuntimeSummary | null;
-  input_enabled: boolean;
-  wait_message: string | null;
   processing: ProcessingState | null;
   session_usage: UsagePayload | null;
   turn_usage:
     | { usage: UsagePayload | null; elapsed_seconds?: number | null }
     | null;
-  session_ended: boolean;
-  fatal_error: string | null;
-  pending_user_questions?: PendingUserQuestions | null;
-  items: Record<string, unknown>[];
+  pending_user_questions: PendingUserQuestions | null;
   sub_agents: Record<string, { title: string; status: string }>;
-  last_event_seq: number;
 };
 
-export type ProcessingPhase =
-  | "starting"
-  | "model_wait"
-  | "tool_execution"
-  | "finalizing"
-  | "interrupting"
-  | "retry_wait";
+export type ProcessingPhase = NonNullable<ProcessingStateModel["phase"]>;
 
-export type ProcessingState = {
-  active: boolean;
+export type ProcessingState = Omit<
+  ProcessingStateModel,
+  "phase" | "message" | "active_tool_count"
+> & {
   phase: ProcessingPhase | null;
   message: string | null;
   active_tool_count?: number;
@@ -456,6 +443,8 @@ export type ConfigBootstrapPayload = {
 export type TimelineMessageItem = {
   kind: "message";
   itemId: string;
+  messageId?: string;
+  partIds?: MessagePartIds;
   role: "user" | "assistant" | "notice" | "error" | "debug";
   content: string;
   filePaths?: string[];
@@ -521,12 +510,13 @@ export type TimelineItem =
   | TimelineThinkingItem
   | TimelineToolGroupItem;
 
-export type WebEvent = {
-  seq: number;
-  type: string;
-  created_at: string;
-  payload: Record<string, unknown>;
-};
+export type WebEvent = SseEventModel;
+export type WebEventType = WebEvent["type"];
+export type WebEventOf<T extends WebEventType> = Extract<WebEvent, { type: T }>;
+export type WebEventPayload<T extends WebEventType> = WebEventOf<T>["payload"];
+export type SessionWebEvent = SessionSseEventModel;
+export type AppWebEvent = AppSseEventModel;
+export type ControlWebEvent = SseControlEventModel;
 
 export type LiveSessionLifecycleEventType =
   | "live_session_started"
@@ -551,7 +541,7 @@ export type RunSession = {
   provider_id: string | null;
   profile_id: string | null;
   model: string | null;
-  status: SessionStatus;
+  status: RunSessionStatus;
   started_at: string;
   ended_at: string | null;
   total_duration_ms: number | null;

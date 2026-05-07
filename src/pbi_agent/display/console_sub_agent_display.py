@@ -88,8 +88,17 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         images=None,
         image_attachments=None,
         interactive_mode: bool = False,
+        item_id: str | None = None,
     ) -> None:
-        del value, file_paths, image_paths, images, image_attachments, interactive_mode
+        del (
+            value,
+            file_paths,
+            image_paths,
+            images,
+            image_attachments,
+            interactive_mode,
+            item_id,
+        )
 
     def request_new_session(self) -> None:
         raise RuntimeError("Sub-agent display does not support interactive session.")
@@ -152,6 +161,9 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
 
     def wait_stop(self) -> None:
         return None
+
+    def render_user_message(self, text: str) -> None:
+        del text
 
     def render_markdown(self, text: str) -> None:
         self.parent._console.print(Markdown(text))

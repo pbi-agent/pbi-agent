@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import dataclasses
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -65,6 +66,11 @@ from pbi_agent.config import (
     update_provider_config,
 )
 from pbi_agent.log_config import configure_logging
+from pbi_agent.session_store import (
+    KanbanStageConfigRecord,
+    KanbanTaskRecord,
+    SessionStore,
+)
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_COMMAND = "web"
@@ -492,6 +498,81 @@ def build_parser() -> argparse.ArgumentParser:
         "--all-dirs",
         action="store_true",
         help="Show sessions from all directories, not just the current one.",
+    )
+
+    kanban_parser = add_command_parser(
+        "kanban", "Manage Kanban board tasks for the current workspace."
+    )
+    kanban_subparsers = kanban_parser.add_subparsers(
+        dest="kanban_action",
+        required=True,
+        metavar="<action>",
+    )
+    kanban_create_parser = kanban_subparsers.add_parser(
+        "create",
+        prog="pbi-agent kanban create",
+        description="Create a Kanban task in the current workspace board.",
+        help="Create a Kanban task.",
+        formatter_class=CleanHelpFormatter,
+    )
+    kanban_create_parser.add_argument(
+        "--title",
+        required=True,
+        help="Task title shown on the Kanban card.",
+    )
+    kanban_create_parser.add_argument(
+        "--desc",
+        "--description",
+        "--prompt",
+        dest="desc",
+        required=True,
+        help="Task description/prompt to store on the card.",
+    )
+    kanban_create_parser.add_argument(
+        "--lane",
+        "--stage",
+        "--state",
+        dest="lane",
+        default=None,
+        help="Existing board stage by ID, name, or slugified name (default: first stage).",
+    )
+    kanban_create_parser.add_argument(
+        "--project-dir",
+        default=".",
+        help="Workspace-relative project directory for future task runs (default: current directory).",
+    )
+    kanban_create_parser.add_argument(
+        "--session-id",
+        default=None,
+        help="Optional existing session ID to associate with the task.",
+    )
+    kanban_create_parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Print machine-readable JSON instead of a summary line.",
+    )
+
+    kanban_list_parser = kanban_subparsers.add_parser(
+        "list",
+        prog="pbi-agent kanban list",
+        description="List Kanban tasks in the current workspace board.",
+        help="List Kanban tasks.",
+        formatter_class=CleanHelpFormatter,
+    )
+    kanban_list_parser.add_argument(
+        "--stage",
+        "--lane",
+        "--state",
+        dest="stage",
+        default=None,
+        help="Only show tasks in an existing board stage by ID, name, or slugified name (default: all stages).",
+    )
+    kanban_list_parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Print machine-readable JSON instead of task detail blocks.",
     )
 
     skills_parser = add_command_parser(
@@ -1050,6 +1131,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sessions":
         return _handle_sessions_command(args)
 
+    if args.command == "kanban":
+        return _handle_kanban_command(args)
+
     if args.command == "config":
         try:
             return _handle_config_command(args)
@@ -1115,6 +1199,233 @@ def main(argv: list[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
+
+
+def _handle_kanban_command(args: argparse.Namespace) -> int:
+    if args.kanban_action == "create":
+        return _handle_kanban_create_command(args)
+    if args.kanban_action == "list":
+        return _handle_kanban_list_command(args)
+    print(f"Error: unknown kanban action {args.kanban_action!r}", file=sys.stderr)
+    return 2
+
+
+def _handle_kanban_create_command(args: argparse.Namespace) -> int:
+    title = args.title.strip()
+    prompt = args.desc.strip()
+    if not title:
+        print("Error: --title cannot be empty.", file=sys.stderr)
+        return 2
+    if not prompt:
+        print("Error: --desc cannot be empty.", file=sys.stderr)
+        return 2
+
+    workspace_root = Path.cwd().resolve()
+    directory_key = str(workspace_root).lower()
+    project_dir = args.project_dir.strip() or "."
+    try:
+        _validate_kanban_project_dir(workspace_root, project_dir)
+    except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    with SessionStore() as store:
+        stages = store.list_kanban_stage_configs(directory_key)
+        stage = _resolve_kanban_stage(args.lane, stages)
+        if stage is None:
+            available = ", ".join(f"{item.name} ({item.stage_id})" for item in stages)
+            print(
+                f"Error: unknown Kanban lane/stage {args.lane!r}. "
+                f"Available stages: {available}",
+                file=sys.stderr,
+            )
+            return 2
+        record = store.create_kanban_task(
+            directory=directory_key,
+            title=title,
+            prompt=prompt,
+            stage=stage.stage_id,
+            project_dir=project_dir,
+            session_id=args.session_id,
+        )
+
+    if args.json_output:
+        payload = _kanban_task_payload(record, stage_name=stage.name)
+        print(json.dumps(payload, sort_keys=True))
+        return 0
+
+    print(f"Created Kanban task {record.task_id} in {stage.name}: {record.title}")
+    return 0
+
+
+def _handle_kanban_list_command(args: argparse.Namespace) -> int:
+    workspace_root = Path.cwd().resolve()
+    directory_key = str(workspace_root).lower()
+    with SessionStore() as store:
+        stages = store.list_kanban_stage_configs(directory_key)
+        stage_filter = _resolve_kanban_stage_filter(args.stage, stages)
+        if args.stage is not None and args.stage.strip() and stage_filter is None:
+            available = ", ".join(f"{item.name} ({item.stage_id})" for item in stages)
+            print(
+                f"Error: unknown Kanban lane/stage {args.stage!r}. "
+                f"Available stages: {available}",
+                file=sys.stderr,
+            )
+            return 2
+        tasks = store.list_kanban_tasks(directory_key)
+
+    stage_names = {stage.stage_id: stage.name for stage in stages}
+    if stage_filter is not None:
+        tasks = [task for task in tasks if task.stage == stage_filter.stage_id]
+
+    if args.json_output:
+        payload = [
+            _kanban_task_payload(
+                task,
+                stage_name=stage_names.get(task.stage, task.stage),
+            )
+            for task in tasks
+        ]
+        print(json.dumps(payload, sort_keys=True))
+        return 0
+
+    if not tasks:
+        if stage_filter is None:
+            print("No Kanban tasks found.")
+        else:
+            print(
+                f"No Kanban tasks found in {stage_filter.name} ({stage_filter.stage_id})."
+            )
+        return 0
+
+    for index, task in enumerate(tasks):
+        if index:
+            print()
+        _print_kanban_task_detail(
+            task, stage_name=stage_names.get(task.stage, task.stage)
+        )
+    return 0
+
+
+def _resolve_kanban_stage(
+    lane: str | None,
+    stages: list[KanbanStageConfigRecord],
+) -> KanbanStageConfigRecord | None:
+    if not stages:
+        return None
+    if lane is None or not lane.strip():
+        return stages[0]
+    return _match_kanban_stage(lane, stages)
+
+
+def _resolve_kanban_stage_filter(
+    stage_filter: str | None,
+    stages: list[KanbanStageConfigRecord],
+) -> KanbanStageConfigRecord | None:
+    if stage_filter is None or not stage_filter.strip():
+        return None
+    return _match_kanban_stage(stage_filter, stages)
+
+
+def _match_kanban_stage(
+    requested_value: str,
+    stages: list[KanbanStageConfigRecord],
+) -> KanbanStageConfigRecord | None:
+    requested = requested_value.strip()
+    requested_slug = _kanban_slug_or_none(requested)
+    for stage in stages:
+        candidates = {
+            stage.stage_id,
+            stage.name,
+        }
+        for value in (stage.stage_id, stage.name):
+            value_slug = _kanban_slug_or_none(value)
+            if value_slug is not None:
+                candidates.add(value_slug)
+        if requested in candidates or (
+            requested_slug is not None and requested_slug in candidates
+        ):
+            return stage
+        lower_candidates = {candidate.lower() for candidate in candidates}
+        if requested.lower() in lower_candidates or (
+            requested_slug is not None and requested_slug.lower() in lower_candidates
+        ):
+            return stage
+    return None
+
+
+def _kanban_task_payload(
+    record: KanbanTaskRecord,
+    *,
+    stage_name: str,
+) -> dict[str, object]:
+    return {
+        "task_id": record.task_id,
+        "directory": record.directory,
+        "title": record.title,
+        "prompt": record.prompt,
+        "stage": record.stage,
+        "stage_name": stage_name,
+        "position": record.position,
+        "project_dir": record.project_dir,
+        "session_id": record.session_id,
+        "model_profile_id": record.model_profile_id,
+        "run_status": record.run_status,
+        "last_result_summary": record.last_result_summary,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+        "last_run_started_at": record.last_run_started_at,
+        "last_run_finished_at": record.last_run_finished_at,
+        "image_attachments": [
+            {
+                "upload_id": attachment.upload_id,
+                "name": attachment.name,
+                "mime_type": attachment.mime_type,
+                "byte_count": attachment.byte_count,
+                "preview_url": attachment.preview_url,
+            }
+            for attachment in record.image_attachments
+        ],
+    }
+
+
+def _print_kanban_task_detail(record: KanbanTaskRecord, *, stage_name: str) -> None:
+    print(f"Task ID: {record.task_id}")
+    print(f"Title: {record.title}")
+    print(f"Prompt: {record.prompt}")
+    print(f"Stage: {stage_name} ({record.stage})")
+    print(f"Position: {record.position}")
+    print(f"Project dir: {record.project_dir}")
+    print(f"Session ID: {record.session_id or '-'}")
+    print(f"Model profile ID: {record.model_profile_id or '-'}")
+    print(f"Run status: {record.run_status}")
+    print(f"Last result summary: {record.last_result_summary or '-'}")
+    print(f"Created at: {record.created_at}")
+    print(f"Updated at: {record.updated_at}")
+    print(f"Last run started at: {record.last_run_started_at or '-'}")
+    print(f"Last run finished at: {record.last_run_finished_at or '-'}")
+    print(f"Image attachments: {len(record.image_attachments)}")
+
+
+def _kanban_slug_or_none(value: str) -> str | None:
+    try:
+        return slugify(value)
+    except ConfigError:
+        return None
+
+
+def _validate_kanban_project_dir(workspace_root: Path, project_dir: str) -> None:
+    target = (workspace_root / project_dir).resolve()
+    try:
+        target.relative_to(workspace_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"Project directory must be inside the workspace: {target}"
+        ) from exc
+    if not target.exists():
+        raise FileNotFoundError(f"Project directory does not exist: {target}")
+    if not target.is_dir():
+        raise NotADirectoryError(f"Project path is not a directory: {target}")
 
 
 def _handle_config_command(args: argparse.Namespace) -> int:
@@ -2119,46 +2430,6 @@ def _print_error(message: str) -> None:
         print(line, file=sys.stderr)
 
 
-def _settings_env(settings: Settings) -> dict[str, str]:
-    env: dict[str, str] = {
-        "PBI_AGENT_PROVIDER": settings.provider,
-        "PBI_AGENT_API_KEY": settings.api_key,
-        "PBI_AGENT_RESPONSES_URL": settings.responses_url,
-        "PBI_AGENT_GENERIC_API_URL": settings.generic_api_url,
-        "PBI_AGENT_MODEL": settings.model,
-        "PBI_AGENT_SUB_AGENT_MODEL": settings.sub_agent_model or "",
-        "PBI_AGENT_REASONING_EFFORT": settings.reasoning_effort,
-        "PBI_AGENT_MAX_TOOL_WORKERS": str(settings.max_tool_workers),
-        "PBI_AGENT_MAX_RETRIES": str(settings.max_retries),
-        "PBI_AGENT_COMPACT_THRESHOLD": str(settings.compact_threshold),
-        "PBI_AGENT_COMPACT_TAIL_TURNS": str(settings.compact_tail_turns),
-        "PBI_AGENT_COMPACT_PRESERVE_RECENT_TOKENS": str(
-            settings.compact_preserve_recent_tokens
-        ),
-        "PBI_AGENT_COMPACT_TOOL_OUTPUT_MAX_CHARS": str(
-            settings.compact_tool_output_max_chars
-        ),
-        "PBI_AGENT_MAX_TOKENS": str(settings.max_tokens),
-    }
-    if settings.service_tier:
-        env["PBI_AGENT_SERVICE_TIER"] = settings.service_tier
-    return env
-
-
-@contextlib.contextmanager
-def _temporary_env_overrides(env_updates: dict[str, str]):
-    previous = {key: os.environ.get(key) for key in env_updates}
-    os.environ.update(env_updates)
-    try:
-        yield
-    finally:
-        for key, old_value in previous.items():
-            if old_value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = old_value
-
-
 def _handle_web_command(
     args: argparse.Namespace,
     settings: Settings | ResolvedRuntime,
@@ -2192,9 +2463,8 @@ def _handle_web_command(
         runtime,
     )
     try:
-        with _temporary_env_overrides(_settings_env(runtime.settings)):
-            server.serve(debug=args.dev)
-            return 0
+        server.serve(debug=args.dev)
+        return 0
     except KeyboardInterrupt:
         return 130
     except OSError as exc:

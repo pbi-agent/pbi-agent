@@ -50,7 +50,7 @@ _log = logging.getLogger(__name__)
 
 NEW_SESSION_SENTINEL = "__new_session__"
 RESUME_SESSION_PREFIX = "__resume_session__:"
-SUB_AGENT_MAX_REQUESTS = 100
+SUB_AGENT_MAX_REQUESTS = 200
 SUB_AGENT_MAX_ELAPSED_SECONDS = 1200.0
 INTERACTIVE_ONLY_TOOLS = {"ask_user"}
 SUB_AGENT_DISABLED_TOOLS = {"sub_agent"} | INTERACTIVE_ONLY_TOOLS
@@ -59,6 +59,9 @@ MCP_COMMAND = "/mcp"
 AGENTS_COMMAND = "/agents"
 COMPACT_COMMAND = "/compact"
 RELOAD_COMMAND = "/reload"
+TEMPORARY_LOCAL_COMMANDS = frozenset(
+    {SKILLS_COMMAND, MCP_COMMAND, AGENTS_COMMAND, RELOAD_COMMAND}
+)
 COMPACTION_MARKER = "[compacted context]"
 COMPACTION_SUMMARY_PREFIX = (
     "[compacted context — reference only] "
@@ -233,13 +236,14 @@ def run_single_turn(
                 replay_history=replay_history,
             )
             if persisted_user_message_id is None:
-                _add_message(
+                user_message_id = _add_message(
                     store,
                     session_id,
                     runtime,
                     "user",
                     user_turn_history_text,
                 )
+                _publish_persisted_message(display, store, user_message_id)
             tracer.log_event(
                 "agent_step_start",
                 metadata={"step": "initial_model_request"},
@@ -272,7 +276,14 @@ def run_single_turn(
                 tracer=tracer,
                 current_turn_tool_exchanges=[],
             )
-            _add_message(store, session_id, runtime, "assistant", response.text)
+            assistant_message_id = _add_message(
+                store,
+                session_id,
+                runtime,
+                "assistant",
+                response.text,
+            )
+            _publish_persisted_message(display, store, assistant_message_id)
             _update_session_after_turn(
                 store,
                 session_id,
@@ -330,6 +341,13 @@ def run_session_loop(
     replay_history_on_restore = resume_session_id is not None
     should_exit = False
     base_excluded_tools = set(excluded_tools) if excluded_tools is not None else set()
+
+    def _render_temporary_command_markdown(text: str) -> None:
+        render_transient = getattr(display, "render_transient_markdown", None)
+        if callable(render_transient):
+            render_transient(text)
+        else:
+            display.render_markdown(text)
 
     def _turn_excluded_tools(*, interactive_mode: bool = False) -> set[str]:
         return base_excluded_tools | (
@@ -402,9 +420,11 @@ def run_session_loop(
                     queued_images = queued_input.images
                     message_image_attachments = queued_input.image_attachments
                     turn_interactive_mode = queued_input.interactive_mode
+                    queued_item_id = queued_input.item_id
                 else:
                     user_input = queued_input.strip()
                     turn_interactive_mode = False
+                    queued_item_id = None
                 if user_input == NEW_SESSION_SENTINEL:
                     provider.reset_conversation()
                     session_usage = _reset_session(
@@ -441,19 +461,23 @@ def run_session_loop(
                     break
                 normalized_command = _normalize_user_command(user_input)
                 if normalized_command == SKILLS_COMMAND:
-                    display.render_markdown(format_project_skills_markdown())
+                    _render_temporary_command_markdown(format_project_skills_markdown())
                     continue
                 if normalized_command == MCP_COMMAND:
-                    display.render_markdown(format_project_mcp_servers_markdown())
+                    _render_temporary_command_markdown(
+                        format_project_mcp_servers_markdown()
+                    )
                     continue
                 if normalized_command == AGENTS_COMMAND:
-                    display.render_markdown(format_project_sub_agents_markdown())
+                    _render_temporary_command_markdown(
+                        format_project_sub_agents_markdown()
+                    )
                     continue
                 if normalized_command == RELOAD_COMMAND:
                     _reload_provider_initialization(provider)
                     if on_reload is not None:
                         on_reload()
-                    display.render_markdown(
+                    _render_temporary_command_markdown(
                         "Reloaded workspace instructions, project rules, skills, "
                         "sub-agents, tool definitions, and file mention cache. "
                         "MCP servers are not reloaded; restart the session after "
@@ -546,6 +570,12 @@ def run_session_loop(
                         file_paths=file_paths,
                         image_attachments=message_image_attachments,
                     )
+                    _publish_persisted_message(
+                        display,
+                        store,
+                        user_message_id,
+                        previous_item_id=queued_item_id,
+                    )
                     turn_tracer.log_event(
                         "agent_step_start",
                         metadata={"step": "initial_model_request"},
@@ -581,12 +611,17 @@ def run_session_loop(
                     )
                     _raise_if_interrupted(display)
 
-                    _add_message(
+                    assistant_message_id = _add_message(
                         store,
                         session_id,
                         current_runtime,
                         "assistant",
                         response.text,
+                    )
+                    _publish_persisted_message(
+                        display,
+                        store,
+                        assistant_message_id,
                     )
                     _update_session_after_turn(
                         store,
@@ -747,6 +782,7 @@ def run_sub_agent_task(
                 include_context=include_context,
                 parent_context=parent_context,
             )
+            child_display.render_user_message(child_user_message)
             _raise_if_sub_agent_timed_out(started_at)
             response = provider.request_turn(
                 user_message=child_user_message,
@@ -1215,6 +1251,29 @@ def _add_message(
     except Exception:
         _log.warning("Failed to add message to session store", exc_info=True)
         return None
+
+
+def _publish_persisted_message(
+    display: DisplayProtocol,
+    store: SessionStore | None,
+    message_id: int | None,
+    *,
+    previous_item_id: str | None = None,
+) -> None:
+    handler = getattr(display, "persisted_message", None)
+    if store is None or message_id is None or not callable(handler):
+        return
+    try:
+        message = store.get_message(message_id)
+    except Exception:
+        _log.warning("Failed to load persisted message for display", exc_info=True)
+        return
+    if message is None:
+        return
+    try:
+        handler(message, previous_item_id=previous_item_id)
+    except Exception:
+        _log.warning("Failed to publish persisted message to display", exc_info=True)
 
 
 def _delete_message(store: SessionStore | None, message_id: int | None) -> None:

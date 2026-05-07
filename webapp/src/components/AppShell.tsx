@@ -1,5 +1,5 @@
-import { lazy, Suspense, useState } from "react";
-import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3Icon,
@@ -8,10 +8,10 @@ import {
   MessageSquareTextIcon,
   MoonStarIcon,
   PaletteIcon,
-  SettingsIcon,
   SunIcon,
 } from "lucide-react";
 import { fetchBootstrap, fetchConfigBootstrap } from "../api";
+import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useTaskEvents } from "../hooks/useTaskEvents";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -45,7 +45,6 @@ const navItems = [
   { to: "/sessions", label: "Sessions", icon: MessageSquareTextIcon },
   { to: "/board", label: "Kanban", icon: KanbanSquareIcon },
   { to: "/dashboard", label: "Dashboard", icon: BarChart3Icon },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 const themeIcons: Record<AppTheme, typeof SunIcon> = {
@@ -57,7 +56,6 @@ const themeIcons: Record<AppTheme, typeof SunIcon> = {
 export function AppShell() {
   const liveSessionEvents = useTaskEvents();
   const { theme, setTheme } = useTheme();
-  const location = useLocation();
 
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap"],
@@ -79,10 +77,17 @@ export function AppShell() {
     : false;
 
   const [dismissedOnboardingOnSettings, setDismissedOnboardingOnSettings] = useState(false);
-  const isSettingsRoute = location.pathname === "/settings";
+  const { open: settingsOpen, openSettings } = useSettingsDialog();
+
+  // Auto-open settings when onboarding is required
+  useEffect(() => {
+    if (requiresOnboarding && !settingsOpen) {
+      openSettings();
+    }
+  }, [requiresOnboarding]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showOnboardingModal = requiresOnboarding && !(
-    isSettingsRoute && dismissedOnboardingOnSettings
+    settingsOpen && dismissedOnboardingOnSettings
   );
 
   const folderLabel = bootstrap?.workspace_root
@@ -97,6 +102,7 @@ export function AppShell() {
       <SessionEndedNotificationEffects
         liveSessionEvents={liveSessionEvents}
         liveSessions={bootstrap?.live_sessions ?? []}
+        tasks={bootstrap?.tasks ?? []}
       />
       <header className="header">
         <div className="header__left">
@@ -155,39 +161,48 @@ export function AppShell() {
       <main className="app-main">
         <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
           <Routes>
-            <Route path="/" element={<Navigate to={requiresOnboarding ? "/settings" : "/sessions"} replace />} />
+            <Route path="/" element={<Navigate to="/sessions" replace />} />
             <Route
               path="/sessions"
               element={
-                requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                  <SessionPage
-                    workspaceRoot={bootstrap?.workspace_root}
-                    supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                  />
-                )
+                <SessionPage
+                  workspaceRoot={bootstrap?.workspace_root}
+                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                />
+              }
+            />
+            <Route
+              path="/sessions/:sessionId/sub-agents/:subAgentId"
+              element={
+                <SessionPage
+                  workspaceRoot={bootstrap?.workspace_root}
+                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                />
               }
             />
             <Route
               path="/sessions/:sessionId"
               element={
-                requiresOnboarding ? <Navigate to="/settings" replace /> : (
-                  <SessionPage
-                    workspaceRoot={bootstrap?.workspace_root}
-                    supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                  />
-                )
+                <SessionPage
+                  workspaceRoot={bootstrap?.workspace_root}
+                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                />
               }
             />
-            <Route path="/board" element={requiresOnboarding ? <Navigate to="/settings" replace /> : <BoardPage />} />
-            <Route path="/dashboard" element={requiresOnboarding ? <Navigate to="/settings" replace /> : <DashboardPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/board" element={<BoardPage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/settings" element={<Navigate to="/sessions" replace />} />
           </Routes>
         </Suspense>
       </main>
 
+      <Suspense>
+        <SettingsPage />
+      </Suspense>
+
       {showOnboardingModal && (
         <OnboardingModal
-          isOnSettingsPage={isSettingsRoute}
+          isOnSettingsPage={settingsOpen}
           onDismissOnSettings={() => {
             setDismissedOnboardingOnSettings(true);
           }}

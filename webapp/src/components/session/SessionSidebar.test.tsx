@@ -1,5 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { SessionSidebar } from "./SessionSidebar";
 import type { SessionRecord } from "../../types";
 
@@ -36,7 +37,7 @@ function renderSidebar(overrides: Partial<Parameters<typeof SessionSidebar>[0]> 
     isOpen: true,
     ...overrides,
   };
-  render(<SessionSidebar {...props} />);
+  render(<MemoryRouter><SessionSidebar {...props} /></MemoryRouter>);
   return props;
 }
 

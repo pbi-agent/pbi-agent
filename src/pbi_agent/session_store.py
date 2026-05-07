@@ -434,11 +434,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _storage_statuses_for_api_status(status: str) -> tuple[str, ...]:
-    if status == "ended":
-        return ("ended", "completed", "interrupted")
-    if status == "running":
-        return ("running", "started")
+def _storage_statuses_for_run_status(status: str) -> tuple[str, ...]:
     return (status,)
 
 
@@ -536,6 +532,23 @@ def _deserialize_image_attachments(raw_value: object) -> list[MessageImageAttach
             )
         )
     return attachments
+
+
+def _message_record_from_row(row: sqlite3.Row) -> MessageRecord:
+    data = dict(row)
+    return MessageRecord(
+        id=data["id"],
+        session_id=data["session_id"],
+        role=data["role"],
+        content=data["content"],
+        provider_id=data.get("provider_id"),
+        profile_id=data.get("profile_id"),
+        file_paths=_deserialize_file_paths(data.get("file_paths_json")),
+        image_attachments=_deserialize_image_attachments(
+            data.get("image_attachments_json")
+        ),
+        created_at=data["created_at"],
+    )
 
 
 def _kanban_task_record(row: sqlite3.Row) -> KanbanTaskRecord:
@@ -988,31 +1001,21 @@ class SessionStore:
             self._conn.commit()
         return cursor.rowcount > 0
 
+    def get_message(self, message_id: int) -> MessageRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM messages WHERE id = ?",
+                (message_id,),
+            ).fetchone()
+        return _message_record_from_row(row) if row is not None else None
+
     def list_messages(self, session_id: str) -> list[MessageRecord]:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM messages WHERE session_id = ? ORDER BY id ASC",
                 (session_id,),
             ).fetchall()
-        messages: list[MessageRecord] = []
-        for row in rows:
-            data = dict(row)
-            messages.append(
-                MessageRecord(
-                    id=data["id"],
-                    session_id=data["session_id"],
-                    role=data["role"],
-                    content=data["content"],
-                    provider_id=data.get("provider_id"),
-                    profile_id=data.get("profile_id"),
-                    file_paths=_deserialize_file_paths(data.get("file_paths_json")),
-                    image_attachments=_deserialize_image_attachments(
-                        data.get("image_attachments_json")
-                    ),
-                    created_at=data["created_at"],
-                )
-            )
-        return messages
+        return [_message_record_from_row(row) for row in rows]
 
     def create_run_session(
         self,
@@ -1099,9 +1102,12 @@ class SessionStore:
         exit_code: int | None = None,
         fatal_error: str | None = None,
         metadata: dict[str, object] | None = None,
+        clear_session_id: bool = False,
     ) -> None:
         clauses: list[str] = []
         params: list[object] = []
+        if clear_session_id:
+            clauses.append("session_id = NULL")
         scalar_values = {
             "session_id": session_id,
             "status": status,
@@ -1127,6 +1133,8 @@ class SessionStore:
             "fatal_error": fatal_error,
         }
         for key, value in scalar_values.items():
+            if clear_session_id and key == "session_id":
+                continue
             if value is None:
                 continue
             clauses.append(f"{key} = ?")
@@ -1147,6 +1155,59 @@ class SessionStore:
                 params,
             )
             self._conn.commit()
+
+    def add_web_observability_event_and_update_run_session(
+        self,
+        *,
+        run_session_id: str,
+        session_id: str | None,
+        step_index: int,
+        metadata: dict[str, object],
+        status: str,
+        ended_at: str | None,
+        last_event_seq: int,
+        snapshot: dict[str, object],
+        exit_code: int | None,
+        fatal_error: str | None,
+    ) -> int:
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                cursor = self._conn.execute(
+                    "INSERT INTO observability_events "
+                    "(run_session_id, session_id, step_index, event_type, "
+                    "timestamp, metadata_json) VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        run_session_id,
+                        session_id,
+                        step_index,
+                        "web_event",
+                        _now_iso(),
+                        _serialize_json(metadata, default="{}"),
+                    ),
+                )
+                update_cursor = self._conn.execute(
+                    "UPDATE run_sessions SET session_id = ?, status = ?, "
+                    "ended_at = ?, last_event_seq = ?, snapshot_json = ?, "
+                    "exit_code = ?, fatal_error = ? WHERE run_session_id = ?",
+                    (
+                        session_id,
+                        status,
+                        ended_at,
+                        last_event_seq,
+                        _serialize_json(snapshot, default="{}"),
+                        exit_code,
+                        fatal_error,
+                        run_session_id,
+                    ),
+                )
+                if update_cursor.rowcount != 1:
+                    raise KeyError(run_session_id)
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+        return cursor.lastrowid  # type: ignore[return-value]
 
     def get_run_session(self, run_session_id: str) -> RunSessionRecord | None:
         with self._lock:
@@ -1213,6 +1274,16 @@ class SessionStore:
             ).fetchone()
         return RunSessionRecord(**dict(row)) if row is not None else None
 
+    def list_web_session_runs(self, session_id: str) -> list[RunSessionRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM run_sessions WHERE session_id = ? "
+                "AND agent_type = 'web_session' "
+                "ORDER BY started_at ASC, id ASC",
+                (session_id,),
+            ).fetchall()
+        return [RunSessionRecord(**dict(row)) for row in rows]
+
     def mark_web_runs_stale(self, directory: str) -> int:
         normalized_directory = _normalize_directory_key(directory)
         now = _now_iso()
@@ -1220,12 +1291,61 @@ class SessionStore:
             cursor = self._conn.execute(
                 "UPDATE run_sessions SET status = 'stale', ended_at = ? "
                 "WHERE kind IN ('session', 'task') "
+                "AND agent_type = 'web_session' "
                 "AND status IN ('starting', 'running', 'waiting_for_input') "
                 "AND session_id IN (SELECT session_id FROM sessions WHERE directory = ?)",
                 (now, normalized_directory),
             )
+            stale_count = cursor.rowcount
+            rows = self._conn.execute(
+                "SELECT id, project_dir, metadata_json FROM run_sessions "
+                "WHERE kind IN ('session', 'task') "
+                "AND agent_type = 'web_session' "
+                "AND session_id IS NULL "
+                "AND status IN ('starting', 'running', 'waiting_for_input')"
+            ).fetchall()
+            unbound_ids: list[int] = []
+            for row in rows:
+                should_fallback_to_project_dir = False
+                try:
+                    metadata = json.loads(row["metadata_json"])
+                except json.JSONDecodeError:
+                    should_fallback_to_project_dir = True
+                else:
+                    if not isinstance(metadata, dict):
+                        should_fallback_to_project_dir = True
+                    else:
+                        metadata_source = metadata.get("source")
+                        metadata_directory = metadata.get("directory")
+                        if metadata_source == "web" and isinstance(
+                            metadata_directory, str
+                        ):
+                            if (
+                                _normalize_directory_key(metadata_directory)
+                                == normalized_directory
+                            ):
+                                unbound_ids.append(int(row["id"]))
+                            continue
+                        should_fallback_to_project_dir = (
+                            metadata_source is None and metadata_directory is None
+                        )
+                if (
+                    should_fallback_to_project_dir
+                    and isinstance(row["project_dir"], str)
+                    and _normalize_directory_key(row["project_dir"])
+                    == normalized_directory
+                ):
+                    unbound_ids.append(int(row["id"]))
+            if unbound_ids:
+                placeholders = ", ".join("?" for _ in unbound_ids)
+                cursor = self._conn.execute(
+                    f"UPDATE run_sessions SET status = 'stale', ended_at = ? "
+                    f"WHERE id IN ({placeholders})",
+                    (now, *unbound_ids),
+                )
+                stale_count += cursor.rowcount
             self._conn.commit()
-        return cursor.rowcount
+        return stale_count
 
     def add_observability_event(
         self,
@@ -1460,7 +1580,7 @@ class SessionStore:
             where_clauses.append("s.directory = ?")
             params.append(normalized_dir)
         if status is not None:
-            statuses = _storage_statuses_for_api_status(status)
+            statuses = _storage_statuses_for_run_status(status)
             placeholders = ", ".join("?" for _ in statuses)
             where_clauses.append(f"rs.status IN ({placeholders})")
             params.extend(statuses)

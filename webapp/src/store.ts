@@ -5,9 +5,11 @@ import type {
   LiveSession,
   LiveSessionRuntime,
   LiveSessionSnapshot,
+  MessagePartIds,
   PendingUserQuestions,
   ProcessingPhase,
   ProcessingState,
+  SessionWebEvent,
   TimelineItem,
   TimelineToolGroupEntry,
   ToolCallMetadata,
@@ -17,7 +19,14 @@ import type {
   WebEvent,
 } from "./types";
 
-export type ConnectionState = "disconnected" | "connecting" | "connected";
+export type ConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "recovering"
+  | "recovered"
+  | "recovery_failed";
 
 export type SubAgentState = {
   title: string;
@@ -63,11 +72,19 @@ type SessionStore = {
   ) => string;
   updateRuntimeFromSession: (sessionKey: string, session: LiveSession) => void;
   setConnection: (sessionKey: string, connection: ConnectionState) => void;
-  applyEvent: (sessionKey: string, event: WebEvent, liveSessionId?: string | null) => string;
+  resetStreamState: (sessionKey: string, options?: {
+    preserveItems?: boolean;
+    preserveLiveSession?: boolean;
+  }) => void;
+  applyEvent: (
+    sessionKey: string,
+    event: WebEvent,
+    liveSessionId?: string | null,
+  ) => ApplySessionEventResult;
   consumeRestoredInput: (sessionKey: string) => void;
 };
 
-function createEmptySessionState(sessionId: string | null = null): SessionRuntimeState {
+export function createEmptySessionState(sessionId: string | null = null): SessionRuntimeState {
   return {
     liveSessionId: null,
     sessionId,
@@ -118,6 +135,17 @@ function upsertItem(items: TimelineItem[], nextItem: TimelineItem): TimelineItem
   return updated;
 }
 
+function rekeyItem(
+  items: TimelineItem[],
+  oldItemId: string,
+  nextItem: TimelineItem,
+): TimelineItem[] {
+  const withoutOld = oldItemId && oldItemId !== nextItem.itemId
+    ? items.filter((item) => item.itemId !== oldItemId)
+    : items;
+  return upsertItem(withoutOld, nextItem);
+}
+
 function readString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
@@ -149,6 +177,24 @@ function readPendingUserQuestions(value: unknown): PendingUserQuestions | null {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function readStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function readMessagePartIds(value: unknown): MessagePartIds | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const content = readString(record.content);
+  if (!content) return undefined;
+  return {
+    content,
+    file_paths: readStringList(record.file_paths),
+    image_attachments: readStringList(record.image_attachments),
+  };
 }
 
 function readTimelineRole(
@@ -302,12 +348,18 @@ function readToolGroupItems(value: unknown): TimelineToolGroupEntry[] {
 
 function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
   const kind = raw.kind;
-  const itemId = typeof raw.itemId === "string" ? raw.itemId : null;
+  const itemId = typeof raw.itemId === "string"
+    ? raw.itemId
+    : typeof raw.item_id === "string"
+      ? raw.item_id
+      : null;
   if (!itemId || typeof kind !== "string") return null;
   if (kind === "message") {
     return {
       kind: "message",
       itemId,
+      messageId: readOptionalString(raw.message_id),
+      partIds: readMessagePartIds(raw.part_ids),
       role: readTimelineRole(raw.role),
       content: readString(raw.content),
       filePaths: Array.isArray(raw.file_paths)
@@ -371,6 +423,302 @@ function moveSessionState(
   };
 }
 
+export type SessionEventRoutingState = Pick<
+  SessionStore,
+  "sessionsByKey" | "liveSessionIndex" | "sessionIndex"
+>;
+
+export type SessionEventTarget = {
+  sessionKey: string;
+  liveSessionId: string | null;
+  sessionId: string | null;
+};
+
+export type ReduceSessionEventResult = {
+  state: SessionRuntimeState;
+  applied: boolean;
+  reason?: "stale-live-session" | "duplicate-or-old" | "sequence-gap";
+  reloadRequired?: true;
+};
+
+export type ApplySessionEventResult = {
+  sessionKey: string;
+  applied: boolean;
+  reason?: ReduceSessionEventResult["reason"];
+  reloadRequired?: true;
+};
+
+function eventSessionId(event: WebEvent): string | null {
+  return "session_id" in event.payload && typeof event.payload.session_id === "string"
+    ? event.payload.session_id
+    : null;
+}
+
+function eventLiveSessionId(event: WebEvent): string | null {
+  return "live_session_id" in event.payload && typeof event.payload.live_session_id === "string"
+    ? event.payload.live_session_id
+    : null;
+}
+
+function findSessionKeyByLiveSessionId(
+  sessionsByKey: Record<string, SessionRuntimeState>,
+  liveSessionId: string,
+): string | null {
+  return Object.entries(sessionsByKey).find(([, session]) => (
+    session.liveSessionId === liveSessionId
+  ))?.[0] ?? null;
+}
+
+export function resolveSessionEventTarget(
+  state: SessionEventRoutingState,
+  fallbackSessionKey: string,
+  event: WebEvent,
+  fallbackLiveSessionId: string | null = null,
+): SessionEventTarget {
+  const sessionId = eventSessionId(event);
+  const liveSessionId = eventLiveSessionId(event) ?? fallbackLiveSessionId;
+  if (sessionId) {
+    return {
+      sessionKey: state.sessionIndex[sessionId] ?? getSavedSessionKey(sessionId),
+      liveSessionId,
+      sessionId,
+    };
+  }
+  if (liveSessionId) {
+    return {
+      sessionKey: state.liveSessionIndex[liveSessionId]
+        ?? findSessionKeyByLiveSessionId(state.sessionsByKey, liveSessionId)
+        ?? fallbackSessionKey,
+      liveSessionId,
+      sessionId: null,
+    };
+  }
+  return { sessionKey: fallbackSessionKey, liveSessionId: null, sessionId: null };
+}
+
+export function reduceSessionEvent(
+  current: SessionRuntimeState,
+  event: SessionWebEvent,
+  options: {
+    eventLiveSessionId?: string | null;
+    allowLiveSessionAdoption?: boolean;
+  } = {},
+): ReduceSessionEventResult {
+  const nextSessionId = eventSessionId(event);
+  const eventLiveId = options.eventLiveSessionId ?? eventLiveSessionId(event);
+  const transient = event.type === "message_added"
+    && (event.payload as Record<string, unknown>).transient === true;
+  if (eventLiveId && current.liveSessionId && current.liveSessionId !== eventLiveId) {
+    return { state: current, applied: false, reason: "stale-live-session" };
+  }
+  if (
+    eventLiveId
+    && !current.liveSessionId
+    && options.allowLiveSessionAdoption === false
+  ) {
+    return { state: current, applied: false, reason: "stale-live-session" };
+  }
+  if (!transient && event.seq <= current.lastEventSeq) {
+    return { state: current, applied: false, reason: "duplicate-or-old" };
+  }
+  if (!transient && event.seq > current.lastEventSeq + 1) {
+    return {
+      state: current,
+      applied: false,
+      reason: "sequence-gap",
+      reloadRequired: true,
+    };
+  }
+
+  const patch: Partial<SessionRuntimeState> = transient ? {} : { lastEventSeq: event.seq };
+  if (eventLiveId && !current.liveSessionId) {
+    patch.liveSessionId = eventLiveId;
+  }
+
+  switch (event.type) {
+    case "session_reset":
+      patch.items = [];
+      patch.itemsVersion = 0;
+      patch.subAgents = {};
+      patch.waitMessage = null;
+      patch.processing = null;
+      patch.restoredInput = null;
+      patch.turnUsage = null;
+      patch.sessionEnded = false;
+      patch.fatalError = null;
+      patch.pendingUserQuestions = null;
+      break;
+    case "session_identity":
+      patch.sessionId = nextSessionId;
+      break;
+    case "input_state":
+      patch.inputEnabled = event.payload.enabled;
+      break;
+    case "wait_state":
+      patch.waitMessage = event.payload.active
+        ? event.payload.message ?? "Working..."
+        : null;
+      break;
+    case "processing_state":
+      patch.processing = readProcessingState(event.payload);
+      if (patch.processing === null && current.restoredInput) {
+        patch.inputEnabled = true;
+      }
+      break;
+    case "user_questions_requested":
+      patch.pendingUserQuestions = readPendingUserQuestions(event.payload);
+      patch.inputEnabled = false;
+      break;
+    case "user_questions_resolved":
+      if (current.pendingUserQuestions?.prompt_id === event.payload.prompt_id) {
+        patch.pendingUserQuestions = null;
+      }
+      break;
+    case "usage_updated":
+      if (event.payload.sub_agent_id) {
+        break;
+      }
+      if (event.payload.scope === "session") {
+        patch.sessionUsage = event.payload.usage;
+      } else {
+        patch.turnUsage = {
+          usage: event.payload.usage,
+          elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
+        };
+      }
+      break;
+    case "message_added": {
+      const payload = event.payload;
+      patch.restoredInput = null;
+      const item: TimelineItem = {
+        kind: "message",
+        itemId: payload.item_id,
+        messageId: payload.message_id ?? undefined,
+        partIds: readMessagePartIds(payload.part_ids),
+        role: payload.role,
+        content: payload.content,
+        filePaths: payload.file_paths,
+        imageAttachments: payload.image_attachments?.filter(isImageAttachment),
+        markdown: payload.markdown ?? false,
+        subAgentId: payload.sub_agent_id ?? undefined,
+      };
+      patch.items = upsertItem(current.items, item);
+      patch.itemsVersion = current.itemsVersion + 1;
+      break;
+    }
+    case "message_rekeyed": {
+      const payload = event.payload;
+      const rawItem = payload.item;
+      if (!rawItem || typeof rawItem !== "object") {
+        break;
+      }
+      const item = mapSnapshotItem({
+        ...(rawItem as Record<string, unknown>),
+        kind: "message",
+      });
+      if (!item) {
+        break;
+      }
+      patch.restoredInput = null;
+      patch.items = rekeyItem(current.items, payload.old_item_id, item);
+      patch.itemsVersion = current.itemsVersion + 1;
+      break;
+    }
+    case "message_removed": {
+      const payload = event.payload;
+      const itemId = payload.item_id;
+      if (itemId) {
+        patch.items = current.items.filter((item) => item.itemId !== itemId);
+        patch.itemsVersion = current.itemsVersion + 1;
+      }
+      const restoredInput = payload.restore_input ?? "";
+      if (restoredInput) {
+        patch.restoredInput = restoredInput;
+      }
+      break;
+    }
+    case "thinking_updated": {
+      const payload = event.payload;
+      const item: TimelineItem = {
+        kind: "thinking",
+        itemId: payload.item_id,
+        title: payload.title,
+        content: payload.content,
+        subAgentId: payload.sub_agent_id ?? undefined,
+      };
+      patch.items = upsertItem(current.items, item);
+      patch.itemsVersion = current.itemsVersion + 1;
+      break;
+    }
+    case "tool_group_added": {
+      const payload = event.payload;
+      const item: TimelineItem = {
+        kind: "tool_group",
+        itemId: payload.item_id,
+        label: payload.label,
+        status: payload.status ?? undefined,
+        items: readToolGroupItems(payload.items),
+        subAgentId: payload.sub_agent_id ?? undefined,
+      };
+      patch.items = upsertItem(current.items, item);
+      patch.itemsVersion = current.itemsVersion + 1;
+      break;
+    }
+    case "sub_agent_state": {
+      const payload = event.payload;
+      const subAgentId = payload.sub_agent_id;
+      patch.subAgents = {
+        ...current.subAgents,
+        [subAgentId]: {
+          title: payload.title,
+          status: payload.status,
+        },
+      };
+      break;
+    }
+    case "session_state":
+      patch.sessionId = nextSessionId;
+      if (event.payload.state === "ended") {
+        if (nextSessionId) {
+          patch.liveSessionId = null;
+          patch.sessionEnded = false;
+        } else {
+          patch.sessionEnded = true;
+        }
+        patch.inputEnabled = false;
+        patch.waitMessage = null;
+        patch.processing = null;
+        patch.fatalError = event.payload.fatal_error ?? null;
+        patch.pendingUserQuestions = null;
+      } else {
+        patch.sessionEnded = false;
+        patch.fatalError = null;
+      }
+      break;
+    case "session_runtime_updated":
+      patch.runtime = {
+        provider_id: event.payload.provider_id ?? null,
+        profile_id: event.payload.profile_id ?? null,
+        provider: event.payload.provider,
+        model: event.payload.model,
+        reasoning_effort: event.payload.reasoning_effort,
+        compact_threshold: event.payload.compact_threshold,
+      };
+      break;
+    default:
+      break;
+  }
+
+  return {
+    state: {
+      ...current,
+      ...patch,
+      sessionId: patch.sessionId ?? current.sessionId,
+    },
+    applied: true,
+  };
+}
+
 export const useSessionStore = create<SessionStore>((set) => ({
   activeSessionKey: null,
   sessionsByKey: {},
@@ -381,6 +729,10 @@ export const useSessionStore = create<SessionStore>((set) => ({
     set((state) => {
       const sessionKey = getSavedSessionKey(sessionId);
       const current = state.sessionsByKey[sessionKey] ?? createEmptySessionState(sessionId);
+      const nextLiveSessionIndex = { ...state.liveSessionIndex };
+      if (current.liveSessionId) {
+        delete nextLiveSessionIndex[current.liveSessionId];
+      }
       return {
         ...state,
         sessionsByKey: {
@@ -399,6 +751,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             inputEnabled: false,
             waitMessage: null,
             processing: null,
+            pendingUserQuestions: null,
             restoredInput: null,
             sessionEnded: false,
             // Set lastEventSeq from the server so the WS snapshot
@@ -411,6 +764,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
               : 0,
           },
         },
+        liveSessionIndex: nextLiveSessionIndex,
         sessionIndex: { ...state.sessionIndex, [sessionId]: sessionKey },
       };
     }),
@@ -425,6 +779,13 @@ export const useSessionStore = create<SessionStore>((set) => ({
       const current =
         nextState.sessionsByKey[resolvedKey]
         ?? createEmptySessionState(session.session_id);
+      const returnedLastEventSeq = typeof session.last_event_seq === "number"
+        ? session.last_event_seq
+        : 0;
+      const sameLiveSession = current.liveSessionId === session.live_session_id;
+      const hasAppliedNewerStreamEvents = sameLiveSession
+        && options.preserveEventCursor
+        && current.lastEventSeq > returnedLastEventSeq;
       return {
         ...nextState,
         sessionsByKey: {
@@ -434,9 +795,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
             liveSessionId: session.live_session_id,
             sessionId: session.session_id,
             runtime: runtimeFromSession(session),
-            inputEnabled: false,
-            waitMessage: null,
-            processing: null,
+            inputEnabled: hasAppliedNewerStreamEvents ? current.inputEnabled : false,
+            waitMessage: hasAppliedNewerStreamEvents ? current.waitMessage : null,
+            processing: hasAppliedNewerStreamEvents ? current.processing : null,
             restoredInput: options.preserveItems ? current.restoredInput : null,
             sessionUsage: options.preserveItems ? current.sessionUsage : null,
             turnUsage: options.preserveItems ? current.turnUsage : null,
@@ -445,22 +806,16 @@ export const useSessionStore = create<SessionStore>((set) => ({
             items: options.preserveItems ? current.items : [],
             itemsVersion: options.preserveItems ? current.itemsVersion : 0,
             subAgents: options.preserveItems ? current.subAgents : {},
-            // When attaching the freshly returned run after a saved-session
-            // message submit, keep the current high-water mark so the WS
-            // snapshot can still replay the just-submitted turn. Otherwise,
-            // when reattaching the same live session, carry forward the
-            // high-water mark so the WS snapshot replay skips events already
-            // covered by API history. When attaching a *new* live session
-            // (seq restarts from 1), reset to the server's value so we don't
-            // suppress the new session's events.
-            lastEventSeq: options.preserveEventCursor
-              ? current.lastEventSeq
-              : current.liveSessionId === session.live_session_id
-                ? Math.max(
-                    current.lastEventSeq,
-                    typeof session.last_event_seq === "number" ? session.last_event_seq : 0,
-                  )
-                : (typeof session.last_event_seq === "number" ? session.last_event_seq : 0),
+            // Event seq is scoped to one live stream. Preserve the cursor only
+            // for the same stream. If saved-session submit returns a new live
+            // run, reset so the new stream can replay the submitted turn.
+            lastEventSeq: sameLiveSession
+              ? options.preserveEventCursor
+                ? current.lastEventSeq
+                : Math.max(current.lastEventSeq, returnedLastEventSeq)
+              : options.preserveEventCursor
+                ? 0
+                : returnedLastEventSeq,
           },
         },
         liveSessionIndex: {
@@ -490,6 +845,13 @@ export const useSessionStore = create<SessionStore>((set) => ({
         .filter((item): item is TimelineItem => item !== null);
       const savedEndedSnapshot = Boolean(snapshot.session_id && snapshot.session_ended);
       const nextLiveSessionId = savedEndedSnapshot ? null : session.live_session_id;
+      const nextLiveSessionIndex = { ...nextState.liveSessionIndex };
+      if (current.liveSessionId && current.liveSessionId !== nextLiveSessionId) {
+        delete nextLiveSessionIndex[current.liveSessionId];
+      }
+      if (nextLiveSessionId) {
+        nextLiveSessionIndex[nextLiveSessionId] = resolvedKey;
+      }
       return {
         ...nextState,
         sessionsByKey: {
@@ -522,12 +884,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             lastEventSeq: snapshot.last_event_seq,
           },
         },
-        liveSessionIndex: nextLiveSessionId
-          ? {
-              ...nextState.liveSessionIndex,
-              [nextLiveSessionId]: resolvedKey,
-            }
-          : nextState.liveSessionIndex,
+        liveSessionIndex: nextLiveSessionIndex,
         sessionIndex: snapshot.session_id
           ? { ...nextState.sessionIndex, [snapshot.session_id]: resolvedKey }
           : nextState.sessionIndex,
@@ -561,6 +918,37 @@ export const useSessionStore = create<SessionStore>((set) => ({
         },
       };
     }),
+  resetStreamState: (sessionKey, options = {}) =>
+    set((state) => {
+      const current = state.sessionsByKey[sessionKey];
+      if (!current) return state;
+      const nextLiveSessionIndex = { ...state.liveSessionIndex };
+      if (current.liveSessionId && !options.preserveLiveSession) {
+        delete nextLiveSessionIndex[current.liveSessionId];
+      }
+      if (current.liveSessionId && options.preserveLiveSession) {
+        nextLiveSessionIndex[current.liveSessionId] = sessionKey;
+      }
+      return {
+        ...state,
+        sessionsByKey: {
+          ...state.sessionsByKey,
+          [sessionKey]: {
+            ...createEmptySessionState(current.sessionId),
+            sessionId: current.sessionId,
+            liveSessionId: options.preserveLiveSession ? current.liveSessionId : null,
+            items: options.preserveItems ? current.items : [],
+            itemsVersion: options.preserveItems ? current.itemsVersion : 0,
+            subAgents: options.preserveItems ? current.subAgents : {},
+            connection: "disconnected",
+          },
+        },
+        liveSessionIndex: nextLiveSessionIndex,
+        sessionIndex: current.sessionId
+          ? { ...state.sessionIndex, [current.sessionId]: sessionKey }
+          : state.sessionIndex,
+      };
+    }),
   consumeRestoredInput: (sessionKey) =>
     set((state) => {
       const current = state.sessionsByKey[sessionKey];
@@ -574,210 +962,51 @@ export const useSessionStore = create<SessionStore>((set) => ({
       };
     }),
   applyEvent: (sessionKey, event, eventLiveSessionId = null) => {
-    let resolvedKey = sessionKey;
+    let result: ApplySessionEventResult = { sessionKey, applied: false };
     set((state) => {
-      const payload = event.payload;
-      const nextSessionId =
-        typeof payload.session_id === "string" ? payload.session_id : null;
-      resolvedKey = nextSessionId ? getSavedSessionKey(nextSessionId) : sessionKey;
+      const target = resolveSessionEventTarget(
+        state,
+        sessionKey,
+        event,
+        eventLiveSessionId,
+      );
+      const resolvedKey = target.sessionKey;
+      result = { sessionKey: resolvedKey, applied: false };
       let nextState = state;
-      if (sessionKey !== resolvedKey) {
-        nextState = moveSessionState(state, sessionKey, resolvedKey);
+      if (sessionKey !== resolvedKey && !(resolvedKey in state.sessionsByKey)) {
+        const fallbackSession = state.sessionsByKey[sessionKey];
+        if (
+          fallbackSession
+          && target.liveSessionId
+          && fallbackSession.liveSessionId === target.liveSessionId
+        ) {
+          nextState = moveSessionState(state, sessionKey, resolvedKey);
+        }
       }
       const existingSession = nextState.sessionsByKey[resolvedKey];
       const current =
         existingSession
-        ?? createEmptySessionState(nextSessionId);
-      if (
-        existingSession
-        && eventLiveSessionId
-        && current.liveSessionId
-        && current.liveSessionId !== eventLiveSessionId
-      ) {
+        ?? createEmptySessionState(target.sessionId);
+      const allowLiveSessionAdoption = !(
+        target.liveSessionId
+        && current.sessionId
+        && !current.liveSessionId
+      );
+      const reduced = reduceSessionEvent(current, event as SessionWebEvent, {
+        eventLiveSessionId: target.liveSessionId,
+        allowLiveSessionAdoption,
+      });
+      if (!reduced.applied) {
+        result = {
+          sessionKey: resolvedKey,
+          applied: false,
+          reason: reduced.reason,
+          reloadRequired: reduced.reloadRequired,
+        };
         return nextState;
       }
-      // Skip events already processed — prevents duplicates when the
-      // WebSocket reconnects and replays its snapshot over items that
-      // were already hydrated from the API (which use different itemIds).
-      if (event.seq <= current.lastEventSeq) {
-        return nextState;
-      }
-      const patch: Partial<SessionRuntimeState> = { lastEventSeq: event.seq };
-      if (eventLiveSessionId && !current.liveSessionId) {
-        patch.liveSessionId = eventLiveSessionId;
-      }
-
-      switch (event.type) {
-        case "session_reset":
-          patch.items = [];
-          patch.itemsVersion = 0;
-          patch.subAgents = {};
-          patch.waitMessage = null;
-          patch.processing = null;
-          patch.restoredInput = null;
-          patch.turnUsage = null;
-          patch.sessionEnded = false;
-          patch.fatalError = null;
-          patch.pendingUserQuestions = null;
-          break;
-        case "session_identity":
-          patch.sessionId = nextSessionId;
-          break;
-        case "input_state":
-          patch.inputEnabled = Boolean(payload.enabled);
-          break;
-        case "wait_state":
-          patch.waitMessage = payload.active
-            ? readString(payload.message, "Working...")
-            : null;
-          break;
-        case "processing_state":
-          patch.processing = readProcessingState(payload);
-          if (patch.processing === null && current.restoredInput) {
-            patch.inputEnabled = true;
-          }
-          break;
-        case "user_questions_requested":
-          patch.pendingUserQuestions = readPendingUserQuestions(payload);
-          patch.inputEnabled = false;
-          break;
-        case "user_questions_resolved":
-          if (current.pendingUserQuestions?.prompt_id === readString(payload.prompt_id)) {
-            patch.pendingUserQuestions = null;
-          }
-          break;
-        case "usage_updated":
-          if (typeof payload.sub_agent_id === "string") {
-            break;
-          }
-          if (payload.scope === "session") {
-            patch.sessionUsage = payload.usage as UsagePayload;
-          } else {
-            patch.turnUsage = {
-              usage: payload.usage as UsagePayload,
-              elapsedSeconds:
-                typeof payload.elapsed_seconds === "number" ? payload.elapsed_seconds : undefined,
-            };
-          }
-          break;
-        case "message_added": {
-          patch.restoredInput = null;
-          const item: TimelineItem = {
-            kind: "message",
-            itemId: String(payload.item_id),
-            role: readTimelineRole(payload.role),
-            content: readString(payload.content),
-            filePaths: Array.isArray(payload.file_paths)
-              ? payload.file_paths.filter((value): value is string => typeof value === "string")
-              : undefined,
-            imageAttachments: Array.isArray(payload.image_attachments)
-              ? payload.image_attachments.filter(isImageAttachment)
-              : undefined,
-            markdown: Boolean(payload.markdown),
-            subAgentId: readOptionalString(payload.sub_agent_id),
-          };
-          patch.items = upsertItem(current.items, item);
-          patch.itemsVersion = current.itemsVersion + 1;
-          break;
-        }
-        case "message_removed": {
-          const itemId = readString(payload.item_id);
-          if (itemId) {
-            patch.items = current.items.filter((item) => item.itemId !== itemId);
-            patch.itemsVersion = current.itemsVersion + 1;
-          }
-          const restoredInput = readString(payload.restore_input);
-          if (restoredInput) {
-            patch.restoredInput = restoredInput;
-          }
-          break;
-        }
-        case "thinking_updated": {
-          const item: TimelineItem = {
-            kind: "thinking",
-            itemId: String(payload.item_id),
-            title: readString(payload.title, "Thinking"),
-            content: readString(payload.content),
-            subAgentId: readOptionalString(payload.sub_agent_id),
-          };
-          patch.items = upsertItem(current.items, item);
-          patch.itemsVersion = current.itemsVersion + 1;
-          break;
-        }
-        case "tool_group_added": {
-          const item: TimelineItem = {
-            kind: "tool_group",
-            itemId: String(payload.item_id),
-            label: readString(payload.label, "Tool calls"),
-            status: readToolGroupStatus(payload.status),
-            items: readToolGroupItems(payload.items),
-            subAgentId: readOptionalString(payload.sub_agent_id),
-          };
-          patch.items = upsertItem(current.items, item);
-          patch.itemsVersion = current.itemsVersion + 1;
-          break;
-        }
-        case "sub_agent_state": {
-          const subAgentId = readString(payload.sub_agent_id);
-          patch.subAgents = {
-            ...current.subAgents,
-            [subAgentId]: {
-              title: readString(payload.title, "sub_agent"),
-              status: readString(payload.status, "running"),
-            },
-          };
-          break;
-        }
-        case "session_state":
-          patch.sessionId = nextSessionId;
-          if (payload.state === "ended") {
-            if (nextSessionId) {
-              patch.liveSessionId = null;
-              patch.sessionEnded = false;
-            } else {
-              patch.sessionEnded = true;
-            }
-            patch.inputEnabled = false;
-            patch.waitMessage = null;
-            patch.processing = null;
-            patch.fatalError =
-              typeof payload.fatal_error === "string" ? payload.fatal_error : null;
-            patch.pendingUserQuestions = null;
-          } else {
-            patch.sessionEnded = false;
-            patch.fatalError = null;
-          }
-          break;
-        case "session_runtime_updated":
-          if (
-            typeof payload.provider === "string"
-            && typeof payload.model === "string"
-            && typeof payload.reasoning_effort === "string"
-          ) {
-            patch.runtime = {
-              provider_id:
-                typeof payload.provider_id === "string" ? payload.provider_id : null,
-              profile_id:
-                typeof payload.profile_id === "string" ? payload.profile_id : null,
-              provider: payload.provider,
-              model: payload.model,
-              reasoning_effort: payload.reasoning_effort,
-              compact_threshold:
-                typeof payload.compact_threshold === "number"
-                  ? payload.compact_threshold
-                  : current.runtime?.compact_threshold ?? 0,
-            };
-          }
-          break;
-        default:
-          break;
-      }
-
-      const nextSessionState: SessionRuntimeState = {
-        ...current,
-        ...patch,
-        sessionId: patch.sessionId ?? current.sessionId,
-      };
+      const nextSessionState = reduced.state;
+      result = { sessionKey: resolvedKey, applied: true };
 
       const nextLiveSessionIndex = { ...nextState.liveSessionIndex };
       if (current.liveSessionId && current.liveSessionId !== nextSessionState.liveSessionId) {
@@ -800,6 +1029,6 @@ export const useSessionStore = create<SessionStore>((set) => ({
         sessionIndex: nextSessionIndex,
       };
     });
-    return resolvedKey;
+    return result;
   },
 }));
