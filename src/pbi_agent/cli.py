@@ -2021,46 +2021,6 @@ def _print_error(message: str) -> None:
         print(line, file=sys.stderr)
 
 
-def _settings_env(settings: Settings) -> dict[str, str]:
-    env: dict[str, str] = {
-        "PBI_AGENT_PROVIDER": settings.provider,
-        "PBI_AGENT_API_KEY": settings.api_key,
-        "PBI_AGENT_RESPONSES_URL": settings.responses_url,
-        "PBI_AGENT_GENERIC_API_URL": settings.generic_api_url,
-        "PBI_AGENT_MODEL": settings.model,
-        "PBI_AGENT_SUB_AGENT_MODEL": settings.sub_agent_model or "",
-        "PBI_AGENT_REASONING_EFFORT": settings.reasoning_effort,
-        "PBI_AGENT_MAX_TOOL_WORKERS": str(settings.max_tool_workers),
-        "PBI_AGENT_MAX_RETRIES": str(settings.max_retries),
-        "PBI_AGENT_COMPACT_THRESHOLD": str(settings.compact_threshold),
-        "PBI_AGENT_COMPACT_TAIL_TURNS": str(settings.compact_tail_turns),
-        "PBI_AGENT_COMPACT_PRESERVE_RECENT_TOKENS": str(
-            settings.compact_preserve_recent_tokens
-        ),
-        "PBI_AGENT_COMPACT_TOOL_OUTPUT_MAX_CHARS": str(
-            settings.compact_tool_output_max_chars
-        ),
-        "PBI_AGENT_MAX_TOKENS": str(settings.max_tokens),
-    }
-    if settings.service_tier:
-        env["PBI_AGENT_SERVICE_TIER"] = settings.service_tier
-    return env
-
-
-@contextlib.contextmanager
-def _temporary_env_overrides(env_updates: dict[str, str]):
-    previous = {key: os.environ.get(key) for key in env_updates}
-    os.environ.update(env_updates)
-    try:
-        yield
-    finally:
-        for key, old_value in previous.items():
-            if old_value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = old_value
-
-
 def _handle_web_command(
     args: argparse.Namespace,
     settings: Settings | ResolvedRuntime,
@@ -2093,9 +2053,8 @@ def _handle_web_command(
         runtime,
     )
     try:
-        with _temporary_env_overrides(_settings_env(runtime.settings)):
-            server.serve(debug=args.dev)
-            return 0
+        server.serve(debug=args.dev)
+        return 0
     except KeyboardInterrupt:
         return 130
     except OSError as exc:

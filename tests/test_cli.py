@@ -594,7 +594,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         mock_browser_thread.assert_not_called()
         mock_server.assert_not_called()
 
-    def test_handle_web_command_sets_and_restores_settings_env(self) -> None:
+    def test_handle_web_command_does_not_synthesize_settings_env(self) -> None:
         parser = cli.build_parser()
         args = parser.parse_args(["web", "--port", "9001"])
         settings = self._settings()
@@ -602,14 +602,16 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         original_provider = os.environ.get("PBI_AGENT_PROVIDER")
         original_api_key = os.environ.get("PBI_AGENT_API_KEY")
+        original_reasoning_effort = os.environ.get("PBI_AGENT_REASONING_EFFORT")
         os.environ["PBI_AGENT_PROVIDER"] = "original-provider"
         os.environ.pop("PBI_AGENT_API_KEY", None)
+        os.environ.pop("PBI_AGENT_REASONING_EFFORT", None)
 
         def assert_env(*, debug: bool) -> None:
             self.assertFalse(debug)
-            self.assertEqual(os.environ["PBI_AGENT_PROVIDER"], "openai")
-            self.assertEqual(os.environ["PBI_AGENT_API_KEY"], "test-key")
-            self.assertEqual(os.environ["PBI_AGENT_SUB_AGENT_MODEL"], "gpt-5-mini")
+            self.assertEqual(os.environ["PBI_AGENT_PROVIDER"], "original-provider")
+            self.assertNotIn("PBI_AGENT_API_KEY", os.environ)
+            self.assertNotIn("PBI_AGENT_REASONING_EFFORT", os.environ)
 
         server.serve.side_effect = assert_env
 
@@ -620,7 +622,9 @@ class DefaultWebCommandTests(unittest.TestCase):
                     return_value=False,
                 ),
                 patch("pbi_agent.cli._start_browser_open_thread"),
-                patch("pbi_agent.cli._create_web_server", return_value=server),
+                patch(
+                    "pbi_agent.cli._create_web_server", return_value=server
+                ) as mock_server,
             ):
                 rc = cli._handle_web_command(args, settings)
         finally:
@@ -632,10 +636,21 @@ class DefaultWebCommandTests(unittest.TestCase):
                 os.environ.pop("PBI_AGENT_API_KEY", None)
             else:
                 os.environ["PBI_AGENT_API_KEY"] = original_api_key
+            if original_reasoning_effort is None:
+                os.environ.pop("PBI_AGENT_REASONING_EFFORT", None)
+            else:
+                os.environ["PBI_AGENT_REASONING_EFFORT"] = original_reasoning_effort
 
         self.assertEqual(rc, 0)
+        server_args, runtime = mock_server.call_args.args
+        self.assertIs(server_args, args)
+        self.assertEqual(runtime.settings, settings)
         self.assertEqual(os.environ.get("PBI_AGENT_PROVIDER"), original_provider)
         self.assertEqual(os.environ.get("PBI_AGENT_API_KEY"), original_api_key)
+        self.assertEqual(
+            os.environ.get("PBI_AGENT_REASONING_EFFORT"),
+            original_reasoning_effort,
+        )
 
     def test_open_browser_when_ready_opens_browser_by_default(self) -> None:
         with (
