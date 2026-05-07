@@ -1,4 +1,5 @@
 # TODO
 
-[X] Implement Kanban finished browser notification title
-[X] Validate frontend changes and update memory
+[X] Inspect branch divergence and choose safe reconciliation
+[X] Reconcile local master with origin/master without losing local-only commit
+[X] Verify status and document next steps
