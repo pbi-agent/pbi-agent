@@ -53,6 +53,167 @@ describe("SessionTimeline", () => {
     expect(screen.getByText("Send any prompt to begin")).toBeInTheDocument();
   });
 
+  it("renders a stable startup Working placeholder before first activity", () => {
+    render(
+      <SessionTimeline
+        items={[]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={0}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Working" });
+    expect(trigger).toHaveAttribute("data-phase", "starting");
+    expect(trigger).toHaveTextContent("WorkingPreparing…");
+    expect(screen.queryByText(/work smart/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Thinking$/i })).not.toBeInTheDocument();
+  });
+
+  it("reuses the startup Working block when slow first unanchored activity arrives", () => {
+    const { rerender } = render(
+      <SessionTimeline
+        items={[]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Thinking..." }}
+        itemsVersion={0}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Working" });
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group" as const,
+            itemId: "tool-1",
+            label: "shell",
+            status: "running" as const,
+            items: [
+              {
+                text: "pwd",
+                metadata: {
+                  tool_name: "shell",
+                  status: "running" as const,
+                  command: "pwd",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const updatedTrigger = screen.getByRole("button", { name: "Working 1 shell" });
+    expect(updatedTrigger).toBe(trigger);
+    expect(updatedTrigger).toHaveTextContent("Working1 shell");
+    expect(screen.queryByText("Preparing…")).not.toBeInTheDocument();
+  });
+
+  it("renders first fast activity with counts instead of the startup placeholder", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group" as const,
+            itemId: "tool-1",
+            label: "shell",
+            status: "running" as const,
+            items: [
+              {
+                text: "pwd",
+                metadata: {
+                  tool_name: "shell",
+                  status: "running" as const,
+                  command: "pwd",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Working 1 shell" });
+    expect(trigger).toHaveTextContent("Working1 shell");
+    expect(screen.queryByText("Preparing…")).not.toBeInTheDocument();
+  });
+
+  it("reuses the user-anchored Working block when slow first activity arrives", () => {
+    const { rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run it",
+            markdown: false,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "starting", message: "Starting..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Working" });
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Run it",
+            markdown: false,
+          },
+          {
+            kind: "tool_group" as const,
+            itemId: "tool-1",
+            label: "shell",
+            status: "running" as const,
+            items: [
+              {
+                text: "pwd",
+                metadata: {
+                  tool_name: "shell",
+                  status: "running" as const,
+                  command: "pwd",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running shell..." }}
+        itemsVersion={2}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Working 1 shell" })).toBe(trigger);
+  });
+
   it("coalesces interleaved sub-agent work into one turn-level Working block", () => {
     render(
       <SessionTimeline

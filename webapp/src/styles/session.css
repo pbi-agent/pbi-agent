@@ -1147,6 +1147,10 @@
   white-space: nowrap;
 }
 
+.working-items__summary--placeholder {
+  opacity: 0.8;
+}
+
 [data-component="tool-count-summary"] {
   display: inline-flex;
   align-items: baseline;

@@ -56,6 +56,7 @@
 
 ## Detailed Task Events
 ## 2026-05-07
+- Fixed web session startup Working flicker by keeping the active no-anchor WorkRun on a stable placeholder key and showing a muted `Preparing…` summary until counts exist; active empty connected sessions now show Working instead of Welcome. Validation: `bun run test:web -- SessionTimeline`, `bun run lint`, `bun run typecheck`, `bun run web:build`, `bun run test:web` (first full run had a transient `SessionWelcome` timeout, rerun passed), and `git diff --check` passed.
 - Slowed the active web Working `TextShimmer` wave by increasing shimmer duration and rebuilt static web assets. Validation: `bun run test:web -- SessionTimeline`, `bun run lint`, `bun run typecheck`, `bun run web:build`, and `git diff --check` passed.
 - Simplified expanded web Working groups by removing the intermediate Activity/In motion collapsible level; Thinking, tool rows, and sub-agent cards now share the first expanded level while tool rows still expand to detail. Validation: `bun run test:web -- SessionTimeline`, `bun run lint`, `bun run typecheck`, `bun run web:build`, and `git diff --check` passed.
 - Added `.agents/commands/commit.md` to standardize local-only commit workflow with explicit staging, validation freshness, and stop conditions. Validation: `git diff --check` passed.
