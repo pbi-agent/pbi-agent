@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import subprocess
 import threading
+from collections.abc import Callable
+from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -194,6 +196,61 @@ def test_execute_tool_calls_parallel_callback_exceptions_propagate(
         assert str(exc) == "display failed"
     else:  # pragma: no cover - assertion path
         raise AssertionError("callback exception was not propagated")
+
+
+def test_execute_tool_calls_falls_back_to_serial_when_threads_are_exhausted(
+    monkeypatch,
+) -> None:
+    attempted_workers: list[int] = []
+
+    class FailingExecutor:
+        def __init__(self, max_workers: int) -> None:
+            attempted_workers.append(max_workers)
+
+        def __enter__(self) -> "FailingExecutor":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            del args
+
+        def submit(
+            self, func: Callable[..., ToolResult], *args: object
+        ) -> Future[ToolResult]:
+            del func, args
+            raise RuntimeError("can't start new thread")
+
+    def fake_handler(arguments: dict[str, object], context: ToolContext) -> str:
+        del context
+        return str(arguments["value"])
+
+    monkeypatch.setattr(tool_runtime, "ThreadPoolExecutor", FailingExecutor)
+    monkeypatch.setattr(tool_runtime, "get_tool_handler", lambda name: fake_handler)
+    calls = [
+        ToolCall(call_id="call_1", name="shell", arguments={"value": "parallel"}),
+        ToolCall(call_id="call_2", name="shell", arguments={"value": "serial-1"}),
+        ToolCall(call_id="call_3", name="shell", arguments={"value": "serial-2"}),
+    ]
+    streamed: list[str] = []
+
+    batch = tool_runtime.execute_tool_calls(
+        calls,
+        max_workers=3,
+        on_result=lambda call, result: streamed.append(call.call_id),
+    )
+
+    assert batch.had_errors is False
+    assert attempted_workers == [3, 2]
+    assert [result.call_id for result in batch.results] == [
+        "call_1",
+        "call_2",
+        "call_3",
+    ]
+    assert [json.loads(result.output_json)["result"] for result in batch.results] == [
+        "parallel",
+        "serial-1",
+        "serial-2",
+    ]
+    assert streamed == ["call_1", "call_2", "call_3"]
 
 
 def test_execute_tool_calls_wraps_handler_exceptions(monkeypatch) -> None:
