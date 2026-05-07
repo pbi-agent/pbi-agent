@@ -162,6 +162,9 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
     def wait_stop(self) -> None:
         return None
 
+    def render_user_message(self, text: str) -> None:
+        del text
+
     def render_markdown(self, text: str) -> None:
         self.parent._console.print(Markdown(text))
 

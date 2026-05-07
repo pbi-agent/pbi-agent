@@ -42,6 +42,9 @@ class _ChildDisplay:
     def wait_stop(self) -> None:
         self.wait_stopped = True
 
+    def render_user_message(self, text: str) -> None:
+        self.user_message = text
+
     def render_markdown(self, text: str) -> None:
         self.markdown = text
 
@@ -395,6 +398,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
         }
     ]
     assert parent_display.child_display.finished_statuses == ["completed"]
+    assert parent_display.child_display.user_message == "Summarize the repo structure"
     assert parent_session_usage.total_tokens == 6
     assert parent_session_usage.sub_agent_total_tokens == 6
     assert parent_turn_usage.total_tokens == 6

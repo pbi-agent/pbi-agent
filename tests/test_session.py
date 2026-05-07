@@ -62,6 +62,7 @@ class _DisplaySpy:
         self.turn_usage_calls: list[tuple[TokenUsage, float]] = []
         self.debug_messages: list[str] = []
         self.markdown_calls: list[str] = []
+        self.user_message_calls: list[str] = []
         self.reset_session_calls = 0
         self.assistant_start_calls = 0
         self.assistant_stop_calls = 0
@@ -92,6 +93,9 @@ class _DisplaySpy:
 
     def debug(self, message: str) -> None:
         self.debug_messages.append(message)
+
+    def render_user_message(self, text: str) -> None:
+        self.user_message_calls.append(text)
 
     def render_markdown(self, text: str) -> None:
         self.markdown_calls.append(text)

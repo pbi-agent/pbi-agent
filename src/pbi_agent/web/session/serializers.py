@@ -210,12 +210,20 @@ def _copy_timeline_item_for_run(
     if not isinstance(item, dict):
         return item
     copied = dict(item)
+    if namespace_non_messages:
+        sub_agent_id = copied.get("sub_agent_id")
+        if isinstance(sub_agent_id, str):
+            copied["sub_agent_id"] = _namespace_run_value(run_session_id, sub_agent_id)
     if namespace_non_messages and copied.get("kind") != "message":
         for key in ("itemId", "item_id"):
             item_id = copied.get(key)
             if isinstance(item_id, str):
-                copied[key] = f"{run_session_id}:{item_id}"
+                copied[key] = _namespace_run_value(run_session_id, item_id)
     return copied
+
+
+def _namespace_run_value(run_session_id: str, value: str) -> str:
+    return f"{run_session_id}:{value}"
 
 
 def _combined_timeline_snapshot(
@@ -252,7 +260,13 @@ def _combined_timeline_snapshot(
     for run_session_id, snapshot, namespace_non_messages in snapshots:
         raw_sub_agents = snapshot.get("sub_agents")
         if isinstance(raw_sub_agents, dict):
-            sub_agents.update(raw_sub_agents)
+            for sub_agent_id, sub_agent in raw_sub_agents.items():
+                namespaced_id = (
+                    _namespace_run_value(run_session_id, sub_agent_id)
+                    if namespace_non_messages and isinstance(sub_agent_id, str)
+                    else sub_agent_id
+                )
+                sub_agents[namespaced_id] = sub_agent
         raw_items = snapshot.get("items")
         if not isinstance(raw_items, list):
             continue

@@ -27,6 +27,7 @@ import type {
 } from "../../types";
 
 const usageBarMock = vi.hoisted(() => vi.fn());
+const sessionTimelineMock = vi.hoisted(() => vi.fn());
 const composerFocusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../hooks/useLiveSessionEvents", () => ({
@@ -68,7 +69,10 @@ vi.mock("./SessionSidebar", () => ({
 }));
 
 vi.mock("./SessionTimeline", () => ({
-  SessionTimeline: ({ items }: { items: unknown[] }) => <div>Timeline {items.length}</div>,
+  SessionTimeline: (props: { items: unknown[] }) => {
+    sessionTimelineMock(props);
+    return <div>Timeline {props.items.length}</div>;
+  },
 }));
 
 vi.mock("./UsageBar", () => ({
@@ -347,6 +351,10 @@ function renderSessionRoute(route: string) {
         element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
       />
       <Route
+        path="/sessions/:sessionId/sub-agents/:subAgentId"
+        element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
+      />
+      <Route
         path="/sessions/:sessionId"
         element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
       />
@@ -395,8 +403,139 @@ describe("SessionPage", () => {
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
   });
 
+  it("renders sub-agent routes as hidden read-only child sessions", async () => {
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessionIndex: { "session-1": getSavedSessionKey("session-1") },
+      sessionsByKey: {
+        [getSavedSessionKey("session-1")]: {
+          ...createEmptySessionState(),
+          key: getSavedSessionKey("session-1"),
+          sessionId: "session-1",
+          connection: "connected",
+          items: [
+            {
+              kind: "message",
+              itemId: "parent-msg",
+              role: "assistant",
+              content: "Parent only",
+              markdown: true,
+            },
+            {
+              kind: "message",
+              itemId: "sub-msg",
+              role: "assistant",
+              content: "Sub-agent only",
+              markdown: true,
+              subAgentId: "sub-1",
+            },
+          ],
+          subAgents: { "sub-1": { title: "Researcher", status: "completed" } },
+          itemsVersion: 1,
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await screen.findByText("Timeline 1");
+    expect(screen.queryByText("Composer images true")).not.toBeInTheDocument();
+    expect(screen.queryByText("Interactive")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to main session" })).toHaveAttribute(
+      "href",
+      "/sessions/session-1",
+    );
+  });
+
+  it("does not show parent processing as child sub-agent activity", async () => {
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessionIndex: { "session-1": getSavedSessionKey("session-1") },
+      sessionsByKey: {
+        [getSavedSessionKey("session-1")]: {
+          ...createEmptySessionState(),
+          key: getSavedSessionKey("session-1"),
+          sessionId: "session-1",
+          connection: "connected",
+          waitMessage: "Parent is still working",
+          processing: { active: true, phase: "model_wait", message: "Working" },
+          items: [
+            {
+              kind: "message",
+              itemId: "sub-msg",
+              role: "assistant",
+              content: "Sub-agent done",
+              markdown: true,
+              subAgentId: "sub-1",
+            },
+          ],
+          subAgents: { "sub-1": { title: "Researcher", status: "completed" } },
+          itemsVersion: 1,
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await screen.findByText("Timeline 1");
+    await waitFor(() => {
+      expect(sessionTimelineMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        processing: null,
+        waitMessage: null,
+      }));
+    });
+  });
+
+  it("does not show an empty working block after a running sub-agent has produced its final response", async () => {
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessionIndex: { "session-1": getSavedSessionKey("session-1") },
+      sessionsByKey: {
+        [getSavedSessionKey("session-1")]: {
+          ...createEmptySessionState(),
+          key: getSavedSessionKey("session-1"),
+          sessionId: "session-1",
+          connection: "connected",
+          waitMessage: "Parent is still working",
+          processing: { active: true, phase: "tool_execution", message: "Working" },
+          items: [
+            {
+              kind: "message",
+              itemId: "sub-user-msg",
+              role: "user",
+              content: "Delegated task",
+              markdown: true,
+              subAgentId: "sub-1",
+            },
+            {
+              kind: "message",
+              itemId: "sub-final-msg",
+              role: "assistant",
+              content: "Sub-agent done",
+              markdown: true,
+              subAgentId: "sub-1",
+            },
+          ],
+          subAgents: { "sub-1": { title: "Researcher", status: "running" } },
+          itemsVersion: 1,
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await screen.findByText("Timeline 2");
+    await waitFor(() => {
+      expect(sessionTimelineMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        processing: null,
+        waitMessage: null,
+      }));
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
+    sessionTimelineMock.mockClear();
     composerFocusMock.mockClear();
   });
 

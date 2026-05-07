@@ -171,6 +171,15 @@ export function AppShell() {
               }
             />
             <Route
+              path="/sessions/:sessionId/sub-agents/:subAgentId"
+              element={
+                <SessionPage
+                  workspaceRoot={bootstrap?.workspace_root}
+                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+                />
+              }
+            />
+            <Route
               path="/sessions/:sessionId"
               element={
                 <SessionPage
