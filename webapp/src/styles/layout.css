@@ -255,46 +255,9 @@
   }
 
   .app-shell-layout--open {
-    grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr);
-  }
-
-  .app-shell-layout--open .app-sidebar__workspace,
-  .app-shell-layout--open .app-sidebar__brand-name,
-  .app-shell-layout--open .app-sidebar__context {
-    display: none;
-  }
-
-  .app-shell-layout--open .app-sidebar__nav {
-    align-items: center;
-    padding: var(--sp-2) 0;
-  }
-
-  .app-shell-layout--open .app-sidebar__nav-item {
-    width: 36px;
-    height: 36px;
-    min-height: 36px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .app-shell-layout--open .app-sidebar__nav-item span {
-    display: none;
-  }
-
-  .app-shell-layout--open .app-sidebar__footer {
-    flex-direction: column;
-    padding: var(--sp-3) 0;
-  }
-
-  .app-shell-layout--open .app-sidebar__footer-button {
-    flex: 0 0 auto;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .app-shell-layout--open .app-sidebar__footer-button span {
-    display: none;
+    grid-template-columns: min(
+        var(--sidebar-width),
+        calc(100vw - var(--sidebar-width-collapsed))
+      ) minmax(0, 1fr);
   }
 }
