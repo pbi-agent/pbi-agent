@@ -7,6 +7,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CpuIcon,
+  MessageCircleQuestionMark,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
@@ -671,16 +672,20 @@ export function SessionPage({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="interactive-mode-toggle"
+                    className="session-topbar-control session-interactive-toggle"
                     pressed={interactiveMode}
-                    aria-label="Toggle interactive mode for assistant questions"
+                    aria-label={
+                      interactiveMode ? "Disable interactive mode" : "Enable interactive mode"
+                    }
                     onPressedChange={setInteractiveMode}
                   >
-                    Interactive
+                    <MessageCircleQuestionMark aria-hidden="true" />
                   </Toggle>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="end">
-                  Allow the assistant to pause and ask questions for each message while this is on.
+                  {interactiveMode
+                    ? "Interactive mode enabled"
+                    : "Let the agent ask questions and offer choices"}
                 </TooltipContent>
               </Tooltip>
             ) : null}

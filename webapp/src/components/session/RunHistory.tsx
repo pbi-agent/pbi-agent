@@ -42,7 +42,7 @@ export function RunHistory({ sessionId }: { sessionId: string }) {
               type="button"
               variant="outline"
               size="sm"
-              className="run-history__toggle"
+              className="session-topbar-control run-history__toggle"
               disabled={runsQuery.isLoading && !hasRuns}
               aria-label="Toggle run history"
             >

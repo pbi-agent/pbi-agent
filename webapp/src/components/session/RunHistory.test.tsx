@@ -63,6 +63,7 @@ describe("RunHistory", () => {
     const { queryClient } = renderWithProviders(<RunHistory sessionId="session-1" />);
 
     const toggle = await screen.findByRole("button", { name: /toggle run history/i });
+    expect(toggle).toHaveClass("session-topbar-control", "run-history__toggle");
     await waitFor(() => expect(toggle).toHaveTextContent("Runs (1)"));
 
     await queryClient.invalidateQueries({ queryKey: ["session-runs", "session-1"] });
@@ -100,6 +101,7 @@ describe("RunHistory", () => {
 
     const toggle = await screen.findByRole("button", { name: /toggle run history/i });
     await user.click(toggle);
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-expanded", "true"));
 
     await waitFor(() => expect(mockFetchSessionRuns).toHaveBeenCalledTimes(2));
     await screen.findByText("gpt-5.5");
