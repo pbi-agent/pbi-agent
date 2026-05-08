@@ -118,8 +118,9 @@
   --duration-normal: 180ms;
   --duration-slow: 300ms;
 
-  --sidebar-width: 300px;
-  --topbar-height: 64px;
+  --sidebar-width: 280px;
+  --sidebar-width-collapsed: 56px;
+  --topbar-height: 56px;
 }
 
 :root[data-theme='light'] {

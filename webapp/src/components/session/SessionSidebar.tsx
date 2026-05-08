@@ -1,14 +1,11 @@
 import { type FormEvent, useState } from "react";
 import {
   MoreHorizontalIcon,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
 } from "lucide-react";
 import type { SessionRecord } from "../../types";
-import { AppSidebarNav, AppSidebarSettings } from "../AppSidebar";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -37,6 +34,22 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+export type SessionSidebarProps = {
+  sessions: SessionRecord[];
+  isLoading: boolean;
+  activeSessionId: string | null;
+  onNewSession: () => void;
+  onResumeSession: (sessionId: string) => void;
+  onUpdateSession: (session: SessionRecord, title: string) => Promise<void>;
+  onDeleteSession: (session: SessionRecord) => void;
+};
+
+/**
+ * Session list panel rendered inside the unified app sidebar's context slot.
+ * It owns inline edit/delete affordances for each saved session but no longer
+ * renders primary navigation, settings, or its own collapse toggle — those
+ * concerns belong to the shared {@link AppSidebarLayout}.
+ */
 export function SessionSidebar({
   sessions,
   isLoading,
@@ -45,19 +58,7 @@ export function SessionSidebar({
   onResumeSession,
   onUpdateSession,
   onDeleteSession,
-  onToggle,
-  isOpen,
-}: {
-  sessions: SessionRecord[];
-  isLoading: boolean;
-  activeSessionId: string | null;
-  onNewSession: () => void;
-  onResumeSession: (sessionId: string) => void;
-  onUpdateSession: (session: SessionRecord, title: string) => Promise<void>;
-  onDeleteSession: (session: SessionRecord) => void;
-  onToggle: () => void;
-  isOpen: boolean;
-}) {
+}: SessionSidebarProps) {
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -95,69 +96,22 @@ export function SessionSidebar({
     }
   };
 
-  if (!isOpen) {
-    return (
-      <div className="sidebar__collapsed">
-        <AppSidebarNav collapsed showSettings={false} />
-        <div className="sidebar__collapsed-session-actions">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="sidebar__toggle"
-            onClick={onToggle}
-            title="Show sessions"
-            aria-label="Show sessions"
-          >
-            <PanelLeftOpenIcon />
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            onClick={onNewSession}
-            title="New session"
-            aria-label="New session"
-          >
-            <PlusIcon />
-          </Button>
-        </div>
-        <div className="sidebar__collapsed-settings">
-          <AppSidebarSettings collapsed />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <AppSidebarNav showSettings={false} />
-
-      <div className="sidebar__header">
-        <div className="sidebar__header-actions">
-          <Button
-            type="button"
-            size="sm"
-            className="sidebar__new-button"
-            onClick={onNewSession}
-          >
-            <PlusIcon data-icon="inline-start" />
-            New Session
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="sidebar__toggle"
-            onClick={onToggle}
-            title="Hide sessions"
-            aria-label="Hide sessions"
-          >
-            <PanelLeftCloseIcon />
-          </Button>
-        </div>
+    <div className="session-sidebar" aria-label="Session list">
+      <div className="session-sidebar__header">
+        <h2 className="session-sidebar__title">Sessions</h2>
+        <Button
+          type="button"
+          size="sm"
+          className="session-sidebar__new-button"
+          onClick={onNewSession}
+        >
+          <PlusIcon data-icon="inline-start" />
+          New
+        </Button>
       </div>
 
-      <div className="sidebar__list">
+      <div className="session-sidebar__list">
         {isLoading ? (
           <>
             <Skeleton className="skeleton skeleton--card" />
@@ -287,10 +241,6 @@ export function SessionSidebar({
           })
         )}
       </div>
-
-      <div className="sidebar__footer">
-        <AppSidebarSettings />
-      </div>
-    </>
+    </div>
   );
 }

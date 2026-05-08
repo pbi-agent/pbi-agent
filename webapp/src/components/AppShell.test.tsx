@@ -3,6 +3,7 @@ import { act, screen } from "@testing-library/react";
 import { vi } from "vitest";
 import { renderWithProviders } from "../test/render";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
+import { useSidebarStore } from "../hooks/useSidebar";
 import type { BootstrapPayload, ConfigBootstrapPayload } from "../types";
 
 const mocks = vi.hoisted(() => ({
@@ -78,9 +79,30 @@ function makeConfigBootstrap(
 ): ConfigBootstrapPayload {
   return {
     config_revision: "rev-1",
-    active_profile_id: null,
+    active_profile_id: "profile-1",
     providers: [],
-    model_profiles: [],
+    model_profiles: [
+      {
+        id: "profile-1",
+        name: "Default",
+        provider_id: "chatgpt",
+        provider: { id: "chatgpt", name: "ChatGPT", kind: "chatgpt" },
+        model: "gpt-5.4",
+        sub_agent_model: null,
+        reasoning_effort: "medium",
+        max_tokens: null,
+        service_tier: null,
+        web_search: null,
+        max_tool_workers: null,
+        max_retries: null,
+        compact_threshold: null,
+        compact_tail_turns: null,
+        compact_preserve_recent_tokens: null,
+        compact_tool_output_max_chars: null,
+        is_active_default: true,
+        resolved_runtime: {} as ConfigBootstrapPayload["model_profiles"][number]["resolved_runtime"],
+      },
+    ],
     commands: [],
     options: {
       provider_kinds: ["chatgpt"],
@@ -119,6 +141,9 @@ describe("AppShell", () => {
   beforeEach(() => {
     vi.mocked(fetchBootstrap).mockResolvedValue(makeBootstrap());
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
+    act(() => {
+      useSidebarStore.setState({ isOpen: true });
+    });
   });
 
   afterEach(() => {
@@ -128,23 +153,24 @@ describe("AppShell", () => {
     });
   });
 
-  it("moves primary navigation out of the header and into the sidebar", async () => {
+  it("renders the unified sidebar with primary navigation and a settings entry", async () => {
     const user = userEvent.setup();
 
     renderWithProviders(<AppShell />, { route: "/board" });
 
-    expect(await screen.findByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
-    const header = document.querySelector(".header");
-    expect(header).not.toBeNull();
-    expect(header).not.toHaveTextContent("Sessions");
-    expect(header).not.toHaveTextContent("Kanban");
-    expect(header).not.toHaveTextContent("Dashboard");
+    const sidebar = await screen.findByRole("complementary", { name: "Application sidebar" });
+    expect(sidebar).toBeInTheDocument();
 
-    const sidebarNav = screen.getByRole("navigation", { name: "Primary navigation" });
+    const sidebarNav = await screen.findByRole("navigation", { name: "Primary navigation" });
     expect(sidebarNav).toHaveTextContent("Sessions");
     expect(sidebarNav).toHaveTextContent("Kanban");
     expect(sidebarNav).toHaveTextContent("Dashboard");
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+
+    expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
+    expect(screen.getByRole("link", { name: "Kanban" })).toHaveAttribute("href", "/board");
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+
+    expect(screen.queryByRole("banner")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(useSettingsDialog.getState().open).toBe(true);
@@ -155,19 +181,23 @@ describe("AppShell", () => {
 
     expect(await screen.findByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
-    expect(screen.getByRole("link", { name: "Kanban" })).toHaveAttribute("href", "/board");
-    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
   });
 
-  it("keeps rendering when settings is the requested route during setup", async () => {
-    renderWithProviders(<AppShell />, {
-      route: "/settings",
-    });
+  it("renders the theme menu button in the sidebar footer", async () => {
+    renderWithProviders(<AppShell />, { route: "/board" });
 
     expect(await screen.findByRole("button", { name: "Change theme" })).toBeInTheDocument();
   });
 
-  it("shows the host workspace path when running in sandbox", async () => {
+  it("redirects /settings to the sessions route", async () => {
+    renderWithProviders(<AppShell />, {
+      route: "/settings",
+    });
+
+    expect(await screen.findByText("Session Page")).toBeInTheDocument();
+  });
+
+  it("hides the workspace badge prefix when the workspace path is sandboxed", async () => {
     vi.mocked(fetchBootstrap).mockResolvedValue({
       ...makeBootstrap(),
       workspace_root: "/workspace/d0918d973e2e241d",
@@ -176,9 +206,52 @@ describe("AppShell", () => {
       is_sandbox: true,
     });
 
-    renderWithProviders(<AppShell />);
+    renderWithProviders(<AppShell />, { route: "/board" });
 
     expect(await screen.findByRole("button", { name: "Change theme" })).toBeInTheDocument();
     expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
+  });
+
+  it("toggles the sidebar collapse state when Ctrl+B is pressed", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    await screen.findByRole("navigation", { name: "Primary navigation" });
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+
+    await user.keyboard("{Control>}b{/Control}");
+    expect(useSidebarStore.getState().isOpen).toBe(false);
+
+    await user.keyboard("{Control>}b{/Control}");
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+  });
+
+  it("ignores the shortcut when shift or alt modifiers are held", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    await screen.findByRole("navigation", { name: "Primary navigation" });
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+
+    await user.keyboard("{Control>}{Shift>}b{/Shift}{/Control}");
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+
+    await user.keyboard("{Control>}{Alt>}b{/Alt}{/Control}");
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+  });
+
+  it("toggles the sidebar from the head toggle button", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+    await user.click(await screen.findByRole("button", { name: "Collapse sidebar" }));
+    expect(useSidebarStore.getState().isOpen).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    expect(useSidebarStore.getState().isOpen).toBe(true);
   });
 });
