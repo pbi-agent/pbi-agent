@@ -44,8 +44,10 @@
 }
 
 .session-sidebar__new-button {
+  color: var(--muted-foreground);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
+  background: transparent;
   box-shadow: none;
   transition:
     color var(--duration-fast) var(--ease),
@@ -55,20 +57,22 @@
 }
 
 .session-sidebar__new-button svg {
-  transition: transform var(--duration-fast) var(--ease-out);
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .session-sidebar__new-button:not(:disabled):hover,
 .session-sidebar__new-button:not(:disabled):focus-visible {
-  background: color-mix(in srgb, var(--primary) 88%, var(--background));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 20%, transparent),
-    0 8px 18px color-mix(in srgb, var(--primary) 20%, transparent);
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
   transform: translateY(-1px);
 }
 
 .session-sidebar__new-button:not(:disabled):hover svg,
 .session-sidebar__new-button:not(:disabled):focus-visible svg {
-  transform: rotate(90deg) scale(1.04);
+  transform: scale(1.06);
 }
 
 .session-sidebar__list {

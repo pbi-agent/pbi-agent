@@ -1,4 +1,6 @@
-[X] Inspect current collapsed sidebar icon sizing
-[X] Increase collapsed sidebar icon/target size
-[X] Validate frontend build/checks
-[X] Update task memory
+# TODO
+
+[X] Inspect sidebar new-button styles
+[X] Update + New button to match collapse style
+[X] Validate frontend
+[X] Update memory
