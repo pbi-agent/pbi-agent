@@ -9,6 +9,7 @@ import {
 } from "../ui/collapsible";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { Separator } from "../ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
 import { ToolResult } from "./ToolResult";
 
@@ -72,21 +73,24 @@ function renderUserContent(
       {imageAttachments && imageAttachments.length > 0 ? (
         <div className="timeline-entry__attachments">
           {imageAttachments.map((attachment) => (
-            <a
-              key={attachment.upload_id}
-              className="timeline-entry__attachment"
-              href={attachment.preview_url}
-              target="_blank"
-              rel="noreferrer"
-              title={attachment.name}
-            >
-              <img
-                className="timeline-entry__attachment-preview"
-                src={attachment.preview_url}
-                alt={attachment.name}
-              />
-              <span className="timeline-entry__attachment-name">{attachment.name}</span>
-            </a>
+            <Tooltip key={attachment.upload_id}>
+              <TooltipTrigger asChild>
+                <a
+                  className="timeline-entry__attachment"
+                  href={attachment.preview_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img
+                    className="timeline-entry__attachment-preview"
+                    src={attachment.preview_url}
+                    alt={attachment.name}
+                  />
+                  <span className="timeline-entry__attachment-name">{attachment.name}</span>
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>{attachment.name}</TooltipContent>
+            </Tooltip>
           ))}
         </div>
       ) : null}

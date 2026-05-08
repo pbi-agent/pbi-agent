@@ -403,6 +403,24 @@ describe("SessionPage", () => {
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
   });
 
+  it("uses the shared app tooltip for the interactive mode toggle", async () => {
+    const user = userEvent.setup();
+    renderSessionRoute("/sessions/session-1");
+
+    const toggle = await screen.findByRole("button", {
+      name: "Toggle interactive mode for assistant questions",
+    });
+    expect(toggle).not.toHaveAttribute("title");
+
+    await user.hover(toggle);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(
+      "Allow the assistant to pause and ask questions for each message while this is on.",
+    );
+    expect(tooltip.closest("[data-app-tooltip]")).not.toBeNull();
+  });
+
   it("renders sub-agent routes as hidden read-only child sessions", async () => {
     useSessionStore.setState((state) => ({
       ...state,

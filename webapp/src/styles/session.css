@@ -568,6 +568,8 @@
 }
 
 .timeline-entry__attachment-name {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2215,6 +2217,17 @@
   flex-shrink: 0;
 }
 
+.composer__action-tooltip-trigger {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.composer__input-tooltip-trigger {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-inline-end: -0.3rem;
+}
+
 .composer__action-trigger {
   width: 32px;
   height: 32px;
@@ -2301,6 +2314,8 @@
 }
 
 .composer__attachment-name {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

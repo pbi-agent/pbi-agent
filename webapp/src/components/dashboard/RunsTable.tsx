@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { RunDetailModal } from "../session/RunDetailModal";
 
 type RunsTableProps = {
@@ -80,6 +81,19 @@ type SortKey =
   | "input_tokens"
   | "output_tokens"
   | "error_count";
+
+function RunSessionTitle({ title }: { title: string | null }) {
+  if (!title) return "--";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="runs-row__session-label">{title}</span>
+      </TooltipTrigger>
+      <TooltipContent>{title}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
   const [page, setPage] = useState(0);
@@ -292,8 +306,8 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
                       <TableCell>
                         <StatusPill status={run.status} />
                       </TableCell>
-                      <TableCell className="runs-row__session" title={run.session_title ?? undefined}>
-                        {run.session_title || "--"}
+                      <TableCell className="runs-row__session">
+                        <RunSessionTitle title={run.session_title} />
                       </TableCell>
                       <TableCell>{run.agent_name ?? "--"}</TableCell>
                       <TableCell className="mono">{run.model ?? "--"}</TableCell>

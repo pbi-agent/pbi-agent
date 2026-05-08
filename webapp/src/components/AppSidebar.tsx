@@ -152,15 +152,23 @@ function AppSidebarWorkspace() {
 
   if (!workspaceBadgeLabel) return null;
 
+  const workspaceBadge = (
+    <Badge
+      variant="outline"
+      className="app-sidebar__workspace-badge"
+    >
+      {workspaceBadgeLabel}
+    </Badge>
+  );
+
   return (
     <div className="app-sidebar__workspace">
-      <Badge
-        variant="outline"
-        className="app-sidebar__workspace-badge"
-        title={workspaceDisplayPath ?? undefined}
-      >
-        {workspaceBadgeLabel}
-      </Badge>
+      {workspaceDisplayPath ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{workspaceBadge}</TooltipTrigger>
+          <TooltipContent side="right">{workspaceDisplayPath}</TooltipContent>
+        </Tooltip>
+      ) : workspaceBadge}
     </div>
   );
 }

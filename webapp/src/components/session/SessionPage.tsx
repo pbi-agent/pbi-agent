@@ -61,6 +61,7 @@ import {
 } from "../ui/dropdown-menu";
 import { EmptyState } from "../shared/EmptyState";
 import { Toggle } from "../ui/toggle";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export function SessionPage({
   workspaceRoot,
@@ -664,18 +665,24 @@ export function SessionPage({
           </div>
           <div className="session-topbar__actions">
             {!isSubAgentRoute ? (
-              <Toggle
-                type="button"
-                variant="outline"
-                size="sm"
-                className="interactive-mode-toggle"
-                pressed={interactiveMode}
-                aria-label="Toggle interactive mode for assistant questions"
-                title="Allow the assistant to pause and ask questions for each message while this is on."
-                onPressedChange={setInteractiveMode}
-              >
-                Interactive
-              </Toggle>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="interactive-mode-toggle"
+                    pressed={interactiveMode}
+                    aria-label="Toggle interactive mode for assistant questions"
+                    onPressedChange={setInteractiveMode}
+                  >
+                    Interactive
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end">
+                  Allow the assistant to pause and ask questions for each message while this is on.
+                </TooltipContent>
+              </Tooltip>
             ) : null}
             {routeSessionId && !isSubAgentRoute ? (
               <RunHistory sessionId={routeSessionId} />

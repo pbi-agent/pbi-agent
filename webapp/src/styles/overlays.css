@@ -51,6 +51,7 @@
   z-index: 100;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--sp-2);
   min-height: 2rem;
   width: fit-content;
@@ -64,4 +65,9 @@
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
   line-height: var(--leading-normal);
+  text-align: center;
+}
+
+[data-app-tooltip] > * {
+  text-align: inherit;
 }

@@ -173,20 +173,29 @@ describe("Composer", () => {
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "!ls -la");
 
+    function hasAppTooltip(text: string) {
+      return Array.from(document.querySelectorAll("[data-app-tooltip]")).some(
+        (node) => node.textContent?.includes(text),
+      );
+    }
+
     expect(screen.getByLabelText("Shell command mode")).toBeInTheDocument();
     expect(
       screen.getByText("Enter will run this command in the workspace shell."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Actions" })).toHaveAttribute(
-      "title",
-      "Images cannot be attached to shell commands",
-    );
     expect(screen.getByPlaceholderText("Run a shell command...")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run command" })).toHaveAttribute(
-      "title",
-      "Run command (Enter)",
-    );
+    const runButton = screen.getByRole("button", { name: "Run command" });
+    expect(runButton).not.toHaveAttribute("title");
+
+    const actionsButton = screen.getByRole("button", { name: "Actions" });
+    expect(actionsButton).toBeDisabled();
+    expect(actionsButton).not.toHaveAttribute("title");
+    const actionsTooltipTrigger = actionsButton.closest(".composer__action-tooltip-trigger");
+    expect(actionsTooltipTrigger).not.toBeNull();
+    await user.hover(actionsTooltipTrigger!);
+    await waitFor(() => {
+      expect(hasAppTooltip("Images cannot be attached to shell commands")).toBe(true);
+    });
   });
 
   it("shows an empty shell command hint immediately after typing bang", async () => {
