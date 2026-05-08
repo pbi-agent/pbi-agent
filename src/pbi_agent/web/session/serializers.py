@@ -220,6 +220,12 @@ def _copy_timeline_item_for_run(
         sub_agent_id = copied.get("sub_agent_id")
         if isinstance(sub_agent_id, str):
             copied["sub_agent_id"] = _namespace_run_value(run_session_id, sub_agent_id)
+    if namespace_non_messages and copied.get("kind") == "message":
+        copied["historical"] = True
+        for key in ("itemId", "item_id"):
+            item_id = copied.get(key)
+            if isinstance(item_id, str):
+                copied[key] = _namespace_run_value(run_session_id, item_id)
     if namespace_non_messages and copied.get("kind") != "message":
         for key in ("itemId", "item_id"):
             item_id = copied.get(key)

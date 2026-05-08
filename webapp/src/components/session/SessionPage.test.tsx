@@ -1570,6 +1570,168 @@ describe("SessionPage", () => {
     ]);
   });
 
+  it("keeps pre-compaction work traces before later active-run messages", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: "review-run" }),
+      history_items: [
+        {
+          item_id: "compact-system",
+          message_id: "msg-compact-system",
+          part_ids: { content: "msg-compact-system:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "[compacted context]",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T08:57:15Z",
+        },
+        {
+          item_id: "compact-reference",
+          message_id: "msg-compact-reference",
+          part_ids: { content: "msg-compact-reference:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "[compacted context — reference only] summary",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T08:57:15Z",
+        },
+        {
+          item_id: "history-user-original",
+          message_id: "msg-user-after-compact",
+          part_ids: { content: "msg-user-after-compact:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "refactor the navigation",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-08T08:57:15Z",
+        },
+        {
+          item_id: "history-assistant-summary",
+          message_id: "msg-assistant-after-compact",
+          part_ids: { content: "msg-assistant-after-compact:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "refactor complete",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T09:03:13Z",
+        },
+        {
+          item_id: "history-user-review",
+          message_id: "msg-user-review",
+          part_ids: { content: "msg-user-review:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "/review",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-08T09:15:52Z",
+        },
+        {
+          item_id: "history-assistant-review",
+          message_id: "msg-assistant-review",
+          part_ids: { content: "msg-assistant-review:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "review findings",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T09:18:06Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: makeLiveSession({ live_session_id: "review-run", session_id: "session-1" }),
+      timeline: {
+        live_session_id: "review-run",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "completed-run:old-user",
+            message_id: "msg-stale-user-before-compact",
+            role: "user",
+            content: "refactor the navigation",
+            markdown: false,
+            historical: true,
+          },
+          {
+            kind: "tool_group",
+            itemId: "completed-run:tool-group-1",
+            label: "Tool calls",
+            status: "completed",
+            items: [],
+          },
+          {
+            kind: "message",
+            itemId: "completed-run:old-assistant",
+            message_id: "msg-stale-assistant-before-compact",
+            role: "assistant",
+            content: "refactor complete",
+            markdown: true,
+            historical: true,
+          },
+          {
+            kind: "message",
+            itemId: "history-user-review",
+            message_id: "msg-user-review",
+            role: "user",
+            content: "/review",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-group-review",
+            label: "Tool calls",
+            status: "completed",
+            items: [],
+          },
+          {
+            kind: "message",
+            itemId: "history-assistant-review",
+            message_id: "msg-assistant-review",
+            role: "assistant",
+            content: "review findings",
+            markdown: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 100,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 8")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "compact-system",
+      "compact-reference",
+      "history-user-original",
+      "completed-run:tool-group-1",
+      "history-assistant-summary",
+      "history-user-review",
+      "tool-group-review",
+      "history-assistant-review",
+    ]);
+  });
+
   it("keeps Kanban-started continuation history in chronological order", async () => {
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord({ status: "running", active_run_id: "kanban-continuation" }),

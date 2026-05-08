@@ -942,7 +942,7 @@ function timelineForDisplay(
   }
   const snapshotSignatureCounts = new Map<string, number>();
   for (const item of timeline.items) {
-    if (persistedMessageId(item)) continue;
+    if (persistedMessageId(item) && !isHistoricalSnapshotMessage(item)) continue;
     const signature = messageSignature(item);
     if (signature) {
       snapshotSignatureCounts.set(signature, (snapshotSignatureCounts.get(signature) ?? 0) + 1);
@@ -981,9 +981,10 @@ function timelineForDisplay(
         && persistedMessageId(historyItem) === messageId
       ));
       if (index >= 0) return index;
+      if (activeTimeline && !isHistoricalSnapshotMessage(item)) return -1;
+    } else if (activeTimeline && !isHistoricalSnapshotMessage(item)) {
       return -1;
     }
-    if (activeTimeline && !isHistoricalSnapshotMessage(item)) return -1;
     const signature = messageSignature(item);
     if (!signature) return -1;
     if (historySignatureCounts.get(signature) !== 1 || snapshotSignatureCounts.get(signature) !== 1) {
@@ -997,10 +998,11 @@ function timelineForDisplay(
   const skippedHistoryBoundaryIndex = (item: Record<string, unknown>): number => {
     const messageId = persistedMessageId(item);
     if (messageId) {
-      return historyItems.findIndex((historyItem, candidateIndex) => (
+      const index = historyItems.findIndex((historyItem, candidateIndex) => (
         !consumedHistoryIndexes.has(candidateIndex)
         && persistedMessageId(historyItem) === messageId
       ));
+      if (index >= 0) return index;
     }
     if (!isHistoricalSnapshotMessage(item)) return -1;
     const signature = messageSignature(item);
