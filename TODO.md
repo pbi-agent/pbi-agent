@@ -1,4 +1,5 @@
-[X] Inspect current Appearance card layout
-[X] Update cards to horizontal responsive grid
-[X] Validate focused frontend checks
-[X] Update memory and summarize
+# TODO
+
+[X] Inspect target commit and decide safe message update path
+[X] Update commit message for requested commit
+[X] Record task outcome in memory
