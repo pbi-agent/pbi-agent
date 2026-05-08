@@ -106,11 +106,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn(f"pbi-agent.workspace-key={workspace}", command)
         self.assertIn("--tmpfs", command)
         self.assertIn("/tmp:rw,noexec,nosuid,size=256m", command)
-        self.assertIn(
-            f"{cli.SANDBOX_HOME}/.cache:rw,noexec,nosuid,"
-            "uid=1000,gid=1000,mode=755,size=512m",
-            command,
-        )
+        self.assertNotIn(f"{cli.SANDBOX_HOME}/.cache:rw", command)
         self.assertIn("--env-file", command)
         self.assertIn(str((Path(tmpdir) / ".env.sandbox").resolve()), command)
         self.assertIn("--publish", command)
@@ -514,6 +510,8 @@ class DefaultWebCommandTests(unittest.TestCase):
             [
                 "-lc",
                 (
+                    'if [ -r "${PBI_AGENT_SHELL_BOOTSTRAP:-/usr/local/share/pbi-agent/sandbox-shell-env}" ]; '
+                    'then . "${PBI_AGENT_SHELL_BOOTSTRAP:-/usr/local/share/pbi-agent/sandbox-shell-env}"; fi; '
                     "python -m pip install --user --prefer-binary -e "
                     '"$PBI_AGENT_LOCAL_SOURCE" && exec pbi-agent "$@"'
                 ),
@@ -596,6 +594,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 os.chdir(original_cwd)
 
         self.assertIsNotNone(dockerfile)
+        assert dockerfile is not None
         self.assertNotEqual(dockerfile, workspace_dockerfile)
         self.assertEqual(dockerfile.name, "Dockerfile.sandbox")
 
@@ -603,51 +602,106 @@ class DefaultWebCommandTests(unittest.TestCase):
         dockerfile = cli_sandbox._sandbox_dockerfile_path()
 
         self.assertIsNotNone(dockerfile)
+        assert dockerfile is not None
         content = dockerfile.read_text(encoding="utf-8")
         self.assertIn("--prefer-binary", content)
+        self.assertIn("--only-binary=pbi-agent", content)
+        self.assertIn("--no-compile", content)
         self.assertNotIn("--only-binary=:all:", content)
 
     def test_sandbox_dockerfile_uses_alpine_with_minimal_apk_packages(self) -> None:
         dockerfile = cli_sandbox._sandbox_dockerfile_path()
 
         self.assertIsNotNone(dockerfile)
+        assert dockerfile is not None
         content = dockerfile.read_text(encoding="utf-8")
         self.assertIn("FROM python:${PYTHON_VERSION}-alpine3.22", content)
         self.assertIn(
-            "apk add --no-cache bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip",
+            'ARG RUNTIME_APK="bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip"',
             content,
         )
-        self.assertIn('PATH="/home/pbi/.local/bin:${PATH}"', content)
-        self.assertIn('PBI_AGENT_SHELL_EXECUTABLE="/bin/bash"', content)
+        self.assertIn('ARG EXTRA_APK=""', content)
+        self.assertIn("ARG FLEXIBLE_SYSTEM_INSTALL=0", content)
+        self.assertIn('ARG FLEX_APK="doas"', content)
+        self.assertIn("apk add --no-cache ${RUNTIME_APK} ${EXTRA_APK}", content)
+        self.assertIn('if [ "${FLEXIBLE_SYSTEM_INSTALL}" = "1" ]; then', content)
+        self.assertIn("apk add --no-cache ${FLEX_APK}", content)
+        self.assertIn("permit nopass pbi as root", content)
+        self.assertIn(
+            'PATH="/home/pbi/.local/bin:/home/pbi/bin:/home/pbi/.bun/bin:/home/pbi/.cargo/bin:/home/pbi/.local/share/pnpm:${PATH}"',
+            content,
+        )
+        self.assertIn(
+            'PBI_AGENT_SHELL_EXECUTABLE="/usr/local/bin/pbi-agent-shell"',
+            content,
+        )
         self.assertIn(
             'PBI_AGENT_SHELL_BOOTSTRAP="/usr/local/share/pbi-agent/sandbox-shell-env"',
             content,
         )
-        self.assertIn('find "$HOME" -mindepth 2 -maxdepth 4 -type d -name bin', content)
-        self.assertIn("command_not_found_handle()", content)
-        self.assertIn("pbi_discover_bin_paths", content)
-        self.assertIn("#!/bin/busybox sh", content)
-        self.assertIn("rm /bin/sh", content)
+        self.assertIn('HOME="/home/pbi"', content)
+        self.assertIn('XDG_CONFIG_HOME="/home/pbi/.config"', content)
+        self.assertIn('XDG_DATA_HOME="/home/pbi/.local/share"', content)
+        self.assertIn('XDG_STATE_HOME="/home/pbi/.local/state"', content)
+        self.assertIn('XDG_CACHE_HOME="/home/pbi/.cache"', content)
         self.assertIn(
-            'exec /bin/bash -c ". \\"\\$PBI_AGENT_SHELL_BOOTSTRAP\\"; $command"',
-            content,
+            'if [ "${_PBI_AGENT_SHELL_BOOTSTRAPPED:-}" = "1" ]; then', content
         )
-        self.assertIn('exec /bin/busybox sh "$@"', content)
+        self.assertIn("_PBI_AGENT_SHELL_BOOTSTRAPPED=1", content)
+        self.assertIn('[ -n "${BASH_VERSION:-}" ]', content)
+        self.assertIn('pbi_path_prepend "$HOME/.bun/bin"', content)
+        self.assertIn('pbi_path_prepend "$HOME/.cargo/bin"', content)
+        self.assertIn('pbi_path_prepend "$HOME/.local/share/pnpm"', content)
+        self.assertIn('pbi_path_prepend "$PWD/.venv/bin"', content)
+        self.assertIn('pbi_path_prepend "$PWD/node_modules/.bin"', content)
+        self.assertIn('find "$root"', content)
+        self.assertIn('-path "$HOME/.cache"', content)
+        self.assertIn('-o -path "*/.git"', content)
+        self.assertIn('-o -path "*/node_modules"', content)
+        self.assertIn(") -prune", content)
+        self.assertIn("-name bin -o -name .bin", content)
+        self.assertIn("command_not_found_handle()", content)
+        self.assertIn('pbi_discover_bin_paths "$HOME" "$PWD"', content)
         self.assertIn('"$HOME/.profile"', content)
         self.assertIn('"$HOME/.bashrc"', content)
-        self.assertIn("mkdir -p /workspace /home/pbi", content)
+        self.assertIn("pbi-agent-sandbox-entrypoint", content)
+        self.assertIn('exec /usr/local/bin/pbi-agent "$@"', content)
+        self.assertIn("pbi-agent-shell", content)
+        self.assertIn('PBI_AGENT_ORIGINAL_COMMAND="$command"', content)
+        self.assertIn('eval "$PBI_AGENT_ORIGINAL_COMMAND"', content)
+        self.assertIn('\' "$@"', content)
+        self.assertIn('exec /bin/bash "$@"', content)
+        self.assertNotIn("#!/bin/busybox sh", content)
+        self.assertNotIn("rm /bin/sh", content)
+        self.assertNotIn('exec /bin/busybox sh "$@"', content)
+        self.assertIn('"$HOME/.profile"', content)
+        self.assertIn('"$HOME/.bashrc"', content)
+        self.assertIn("install -d -o pbi -g pbi", content)
+        self.assertIn("/workspace", content)
+        self.assertIn("/home/pbi", content)
+        self.assertIn("/home/pbi/.cache", content)
+        self.assertIn("/home/pbi/.config", content)
+        self.assertIn("/home/pbi/.local/bin", content)
+        self.assertIn("/home/pbi/.local/share", content)
+        self.assertIn("/home/pbi/.local/state", content)
+        self.assertIn("/home/pbi/bin", content)
         self.assertNotIn("mkdir -p /workspace /home/pbi/.pbi-agent", content)
-        self.assertNotIn("/home/pbi/.config", content)
-        self.assertNotIn("/home/pbi/.bun/bin:", content)
-        self.assertNotIn("/home/pbi/.cargo/bin:", content)
-        self.assertNotIn("/home/pbi/.deno/bin:", content)
-        self.assertNotIn("/home/pbi/go/bin:", content)
+        self.assertIn('chown -R pbi:pbi /workspace "${HOME}"', content)
+        self.assertIn(
+            "export HOME=/root XDG_CACHE_HOME=/root/.cache PIP_CACHE_DIR=/root/.cache/pip",
+            content,
+        )
+        self.assertIn("/home/pbi/.cache/*", content)
+        self.assertIn("chown -R pbi:pbi /home/pbi /workspace", content)
         self.assertIn("site.getsitepackages()[0]", content)
         self.assertIn("-name tests -o -name test -o -name __pycache__", content)
         self.assertIn("-name '*.pyc' -o -name '*.pyo'", content)
         self.assertIn("${site_packages}/pyarrow/include", content)
         self.assertNotIn("slim-bookworm", content)
         self.assertNotIn("apt-get", content)
+        self.assertIn(
+            'ENTRYPOINT ["/usr/local/bin/pbi-agent-sandbox-entrypoint"]', content
+        )
         self.assertIn("curl", content)
         self.assertIn("github-cli", content)
         self.assertIn("libstdc++", content)

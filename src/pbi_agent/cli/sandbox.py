@@ -226,8 +226,6 @@ def _build_sandbox_run_command(
         "--read-only",
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,size=256m",
-        "--tmpfs",
-        f"{SANDBOX_HOME}/.cache:rw,noexec,nosuid,uid=1000,gid=1000,mode=755,size=512m",
     ]
     for mount in _sandbox_host_git_mounts():
         command.extend(["--mount", mount])
@@ -257,6 +255,8 @@ def _build_sandbox_run_command(
             [
                 "-lc",
                 (
+                    'if [ -r "${PBI_AGENT_SHELL_BOOTSTRAP:-/usr/local/share/pbi-agent/sandbox-shell-env}" ]; '
+                    'then . "${PBI_AGENT_SHELL_BOOTSTRAP:-/usr/local/share/pbi-agent/sandbox-shell-env}"; fi; '
                     "python -m pip install --user --prefer-binary -e "
                     '"$PBI_AGENT_LOCAL_SOURCE" && exec pbi-agent "$@"'
                 ),

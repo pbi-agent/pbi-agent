@@ -1,4 +1,3 @@
-[X] Diagnose SettingsPage timeout
-[X] Implement deterministic test fix
-[X] Run focused/full web validation
+[X] Patch sandbox Dockerfile recommendations
+[X] Run syntax/static validation
 [X] Update memory

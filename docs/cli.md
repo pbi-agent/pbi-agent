@@ -290,6 +290,8 @@ The internal `/workspace/<id>` path is used only for execution inside the contai
 
 When available, standard host Git and GitHub account files are mounted read-only into the sandbox user's home: `~/.gitconfig`, `~/.config/git`, `~/.git-credentials`, `~/.ssh`, and `~/.config/gh`. This lets sandbox Git commands reuse the user's normal identity and common GitHub auth setup without exposing the whole host home directory.
 
+The sandbox home volume backs `/home/pbi` for each repository, aside from the explicit nested host config and Git/GitHub account mounts described above. User-local installers may write under `/home/pbi` and the standard XDG locations such as `/home/pbi/.config`, `/home/pbi/.local`, and `/home/pbi/.cache`; delete the project-scoped sandbox home volume to reset old or broken installed tools. Runtime `apk add` is intentionally unavailable in the default non-root/read-only sandbox; use a custom image via `--image` when extra system packages are required.
+
 ```bash
 pbi-agent sandbox web
 pbi-agent sandbox -d web
