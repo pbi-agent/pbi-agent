@@ -658,6 +658,39 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="<scope>",
     )
 
+    maintenance_parser = config_subparsers.add_parser(
+        "maintenance",
+        prog="pbi-agent config maintenance",
+        description="Manage daily maintenance settings.",
+        help="Manage maintenance settings.",
+        formatter_class=CleanHelpFormatter,
+    )
+    maintenance_actions = maintenance_parser.add_subparsers(
+        dest="config_action",
+        required=True,
+        metavar="<action>",
+    )
+    maintenance_actions.add_parser(
+        "show",
+        prog="pbi-agent config maintenance show",
+        description="Show maintenance settings.",
+        help="Show maintenance settings.",
+        formatter_class=CleanHelpFormatter,
+    )
+    maintenance_set = maintenance_actions.add_parser(
+        "set",
+        prog="pbi-agent config maintenance set",
+        description="Update maintenance settings.",
+        help="Update maintenance settings.",
+        formatter_class=CleanHelpFormatter,
+    )
+    maintenance_set.add_argument(
+        "--retention-days",
+        type=int,
+        required=True,
+        help="Days of log/session/upload data to retain (minimum: 1).",
+    )
+
     providers_parser = config_subparsers.add_parser(
         "providers",
         prog="pbi-agent config providers",

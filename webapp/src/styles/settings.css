@@ -966,6 +966,26 @@
   font-family: var(--font-mono);
 }
 
+.maintenance-settings-panel__body {
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+.maintenance-settings-field {
+  max-width: 24rem;
+}
+
+.maintenance-settings-field__input {
+  width: 6rem;
+  max-width: 100%;
+}
+
+.settings-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+}
+
 .command-hint__path {
   padding: 0.125rem 0.375rem;
   background: var(--color-accent-muted);

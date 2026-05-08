@@ -11,6 +11,7 @@ from pbi_agent.config import (
     resolve_web_runtime,
 )
 from pbi_agent.log_config import configure_logging
+from pbi_agent.maintenance import run_startup_maintenance
 
 from .catalogs import (
     _handle_agents_command,
@@ -34,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(_argv_with_default_command(parser, raw_argv))
+    run_startup_maintenance()
 
     # ---- commands that don't need settings ----
 

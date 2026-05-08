@@ -90,6 +90,67 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("still references it", stderr.getvalue())
 
+    def test_main_config_maintenance_show_and_set(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.json"
+            stdout = io.StringIO()
+            with (
+                patch.dict(
+                    os.environ,
+                    {"PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path)},
+                    clear=False,
+                ),
+                patch("pbi_agent.cli.entrypoint.run_startup_maintenance"),
+                patch("sys.stdout", stdout),
+            ):
+                self.assertEqual(
+                    cli.main(
+                        [
+                            "config",
+                            "maintenance",
+                            "set",
+                            "--retention-days",
+                            "14",
+                        ]
+                    ),
+                    0,
+                )
+                self.assertEqual(cli.main(["config", "maintenance", "show"]), 0)
+
+            output = stdout.getvalue()
+            self.assertIn("Updated maintenance retention to 14 days.", output)
+            self.assertIn("retention_days: 14", output)
+
+    def test_main_config_maintenance_rejects_invalid_retention(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.json"
+            stderr = io.StringIO()
+            with (
+                patch.dict(
+                    os.environ,
+                    {"PBI_AGENT_INTERNAL_CONFIG_PATH": str(config_path)},
+                    clear=False,
+                ),
+                patch("pbi_agent.cli.entrypoint.run_startup_maintenance"),
+                patch("sys.stderr", stderr),
+            ):
+                self.assertEqual(
+                    cli.main(
+                        [
+                            "config",
+                            "maintenance",
+                            "set",
+                            "--retention-days",
+                            "0",
+                        ]
+                    ),
+                    2,
+                )
+
+            self.assertIn(
+                "Maintenance retention days must be at least 1", stderr.getvalue()
+            )
+
     def test_main_config_providers_auth_login_runs_browser_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "config.json"

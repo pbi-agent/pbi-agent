@@ -11,6 +11,7 @@ from pbi_agent.config import (
     CommandConfig,
     ConfigError,
     InternalConfig,
+    MaintenanceConfig,
     ModelProfileConfig,
     OPENAI_SERVICE_TIERS,
     PROVIDER_KINDS,
@@ -33,6 +34,7 @@ from pbi_agent.config import (
     resolve_web_runtime,
     select_active_model_profile,
     slugify,
+    update_maintenance_config as save_maintenance_config,
 )
 from pbi_agent.providers.model_discovery import (
     discover_provider_models,
@@ -88,6 +90,7 @@ class ConfigurationMixin:
                 )
             ],
             "active_profile_id": config.web.active_profile_id,
+            "maintenance": self._maintenance_view(config.maintenance),
             "config_revision": revision,
             "options": {
                 "provider_kinds": list(PROVIDER_KINDS),
@@ -98,6 +101,21 @@ class ConfigurationMixin:
                     for provider_kind in PROVIDER_KINDS
                 },
             },
+        }
+
+    def update_maintenance_config(
+        self,
+        *,
+        retention_days: int,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        config, revision = save_maintenance_config(
+            retention_days=retention_days,
+            expected_revision=expected_revision,
+        )
+        return {
+            "maintenance": self._maintenance_view(config),
+            "config_revision": revision,
         }
 
     def create_provider(
@@ -613,6 +631,9 @@ class ConfigurationMixin:
             "instructions": command.instructions,
             "path": command.path,
         }
+
+    def _maintenance_view(self, config: MaintenanceConfig) -> dict[str, Any]:
+        return {"retention_days": config.retention_days}
 
     def _provider_map(self, config: InternalConfig) -> dict[str, ProviderConfig]:
         return {provider.id: provider for provider in config.providers}

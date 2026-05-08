@@ -4,6 +4,7 @@ import base64
 import json
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from pbi_agent.media import load_image_bytes
@@ -115,3 +116,32 @@ def delete_uploaded_images(upload_ids: list[str]) -> None:
                 target.unlink()
             except FileNotFoundError:
                 continue
+
+
+def purge_old_unreferenced_uploads(
+    *,
+    cutoff: datetime,
+    referenced_upload_ids: set[str],
+    uploads_root: Path | None = None,
+) -> int:
+    root = uploads_root or _UPLOADS_ROOT
+    if not root.exists():
+        return 0
+    deleted = 0
+    cutoff_timestamp = cutoff.timestamp()
+    for path in root.iterdir():
+        if not path.is_file():
+            continue
+        upload_id = path.stem
+        if upload_id in referenced_upload_ids:
+            continue
+        try:
+            if path.stat().st_mtime >= cutoff_timestamp:
+                continue
+            path.unlink()
+            deleted += 1
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
+    return deleted

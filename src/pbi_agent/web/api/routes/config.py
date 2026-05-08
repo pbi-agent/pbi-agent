@@ -14,6 +14,8 @@ from pbi_agent.web.api.schemas.config import (
     CommandListResponse,
     CommandViewModel,
     ConfigBootstrapResponse,
+    MaintenanceConfigModel,
+    MaintenanceConfigResponse,
     ModelProfileListResponse,
     ModelProfileMutationRequest,
     ModelProfileResponse,
@@ -35,6 +37,28 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 @router.get("/bootstrap", response_model=ConfigBootstrapResponse)
 def config_bootstrap(manager: SessionManagerDep) -> ConfigBootstrapResponse:
     return model_from_payload(ConfigBootstrapResponse, manager.config_bootstrap())
+
+
+@router.put("/maintenance", response_model=MaintenanceConfigResponse)
+def update_maintenance_config(
+    request: MaintenanceConfigModel,
+    manager: SessionManagerDep,
+    expected_revision: ConfigRevisionHeader,
+) -> MaintenanceConfigResponse:
+    try:
+        payload = manager.update_maintenance_config(
+            retention_days=request.retention_days,
+            expected_revision=expected_revision,
+        )
+    except Exception as exc:
+        raise config_http_error(exc) from exc
+    return MaintenanceConfigResponse(
+        maintenance=model_from_payload(
+            MaintenanceConfigModel,
+            payload["maintenance"],
+        ),
+        config_revision=str(payload["config_revision"]),
+    )
 
 
 @router.get("/providers", response_model=ProviderListResponse)

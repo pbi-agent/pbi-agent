@@ -574,9 +574,19 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             "plan",
             "review",
         ]
+        assert bootstrap_payload["maintenance"] == {"retention_days": 30}
         assert bootstrap_payload["commands"][1]["path"] == ".agents/commands/plan.md"
         assert "config_revision" in bootstrap_payload
         revision = bootstrap_payload["config_revision"]
+
+        maintenance_response = client.put(
+            "/api/config/maintenance",
+            headers={"If-Match": revision},
+            json={"retention_days": 14},
+        )
+        assert maintenance_response.status_code == 200
+        assert maintenance_response.json()["maintenance"] == {"retention_days": 14}
+        revision = maintenance_response.json()["config_revision"]
 
         create_provider_response = client.post(
             "/api/config/providers",
@@ -637,6 +647,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert refreshed.status_code == 200
         refreshed_payload = refreshed.json()
         assert refreshed_payload["active_profile_id"] == "analysis"
+        assert refreshed_payload["maintenance"] == {"retention_days": 14}
         assert {item["id"] for item in refreshed_payload["providers"]} == {
             "openai-main"
         }

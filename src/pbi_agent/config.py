@@ -326,11 +326,21 @@ class InternalConfig:
     model_profiles: list[ModelProfileConfig] = field(default_factory=list)
     commands: list[CommandConfig] = field(default_factory=list)
     web: WebConfig = field(default_factory=lambda: WebConfig())
+    maintenance: MaintenanceConfig = field(default_factory=lambda: MaintenanceConfig())
 
 
 @dataclass(slots=True)
 class WebConfig:
     active_profile_id: str | None = None
+
+
+@dataclass(slots=True)
+class MaintenanceConfig:
+    retention_days: int = 30
+
+    def validate(self) -> None:
+        if self.retention_days < 1:
+            raise ConfigError("Maintenance retention days must be at least 1.")
 
 
 @dataclass(slots=True)
@@ -654,6 +664,7 @@ def load_internal_config() -> InternalConfig:
     providers_payload = payload.get("providers")
     profiles_payload = payload.get("model_profiles")
     web_payload = payload.get("web")
+    maintenance_payload = payload.get("maintenance")
 
     if providers_payload is None:
         providers_payload = []
@@ -680,10 +691,12 @@ def load_internal_config() -> InternalConfig:
             profiles.append(profile)
 
     web = _web_config_from_payload(web_payload)
+    maintenance = _maintenance_config_from_payload(maintenance_payload)
     return InternalConfig(
         providers=providers,
         model_profiles=profiles,
         web=web,
+        maintenance=maintenance,
     )
 
 
@@ -990,6 +1003,22 @@ def select_active_model_profile(
         config, expected_revision=expected_revision
     )
     return config.web.active_profile_id, revision
+
+
+def update_maintenance_config(
+    *,
+    retention_days: int,
+    expected_revision: str | None = None,
+) -> tuple[MaintenanceConfig, str]:
+    updated = MaintenanceConfig(retention_days=retention_days)
+    updated.validate()
+    config = load_internal_config()
+    config.maintenance = updated
+    revision = save_internal_config_with_revision(
+        config,
+        expected_revision=expected_revision,
+    )
+    return updated, revision
 
 
 def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
@@ -1591,6 +1620,20 @@ def _web_config_from_payload(payload: object) -> WebConfig:
     return WebConfig(active_profile_id=active_profile_id)
 
 
+def _maintenance_config_from_payload(payload: object) -> MaintenanceConfig:
+    if not isinstance(payload, dict):
+        return MaintenanceConfig()
+    retention_days = payload.get("retention_days")
+    if not isinstance(retention_days, int):
+        return MaintenanceConfig()
+    config = MaintenanceConfig(retention_days=retention_days)
+    try:
+        config.validate()
+    except ConfigError:
+        return MaintenanceConfig()
+    return config
+
+
 def _provider_map(config: InternalConfig) -> dict[str, ProviderConfig]:
     return {provider.id: provider for provider in config.providers}
 
@@ -1651,4 +1694,5 @@ def _internal_config_payload(config: InternalConfig) -> dict[str, Any]:
         "providers": [asdict(provider) for provider in config.providers],
         "model_profiles": [asdict(profile) for profile in config.model_profiles],
         "web": {"active_profile_id": config.web.active_profile_id},
+        "maintenance": {"retention_days": config.maintenance.retention_days},
     }
