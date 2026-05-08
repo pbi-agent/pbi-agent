@@ -142,6 +142,7 @@ After work, summarize:
 - files touched
 - validation run, or why skipped
 - remaining risk
+- next logic steps
 
 Keep summaries short. Do not explain obvious edits.
 
