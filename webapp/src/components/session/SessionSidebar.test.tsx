@@ -58,20 +58,20 @@ describe("SessionSidebar", () => {
     expect(screen.getByRole("link", { name: "Kanban" })).toHaveAttribute("href", "/board");
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
     expect(screen.queryByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(document.querySelector(".sidebar__footer")).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(useSettingsDialog.getState().open).toBe(true);
   });
 
-  it("keeps app shortcuts in the collapsed sidebar without a separate settings footer", () => {
+  it("keeps app shortcuts and settings in the collapsed sidebar", () => {
     renderSidebar({ isOpen: false });
 
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
     expect(screen.getByRole("link", { name: "Kanban" })).toHaveAttribute("href", "/board");
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-    expect(document.querySelector(".sidebar__footer")).toBeNull();
-    expect(document.querySelector(".sidebar__collapsed-settings")).toBeNull();
+    expect(document.querySelector(".sidebar__collapsed-settings")).not.toBeNull();
   });
 
   it("opens the edit action and saves a changed title", async () => {

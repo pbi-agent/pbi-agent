@@ -11,9 +11,32 @@ const appNavItems = [
   { to: "/dashboard", label: "Dashboard", icon: BarChart3Icon },
 ];
 
-export function AppSidebarNav({ collapsed = false }: { collapsed?: boolean }) {
+export function AppSidebarSettings({ collapsed = false }: { collapsed?: boolean }) {
   const { openSettings } = useSettingsDialog();
 
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size={collapsed ? "icon-sm" : "sm"}
+      className="app-sidebar-nav__item app-sidebar-nav__settings"
+      onClick={openSettings}
+      title={collapsed ? "Settings" : undefined}
+      aria-label={collapsed ? "Settings" : undefined}
+    >
+      <SettingsIcon data-icon="inline-start" />
+      {!collapsed && <span>Settings</span>}
+    </Button>
+  );
+}
+
+export function AppSidebarNav({
+  collapsed = false,
+  showSettings = true,
+}: {
+  collapsed?: boolean;
+  showSettings?: boolean;
+}) {
   return (
     <nav
       className={cn("app-sidebar-nav", collapsed && "app-sidebar-nav--collapsed")}
@@ -38,18 +61,7 @@ export function AppSidebarNav({ collapsed = false }: { collapsed?: boolean }) {
           </NavLink>
         ))}
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size={collapsed ? "icon-sm" : "sm"}
-        className="app-sidebar-nav__item app-sidebar-nav__settings"
-        onClick={openSettings}
-        title={collapsed ? "Settings" : undefined}
-        aria-label={collapsed ? "Settings" : undefined}
-      >
-        <SettingsIcon data-icon="inline-start" />
-        {!collapsed && <span>Settings</span>}
-      </Button>
+      {showSettings ? <AppSidebarSettings collapsed={collapsed} /> : null}
     </nav>
   );
 }

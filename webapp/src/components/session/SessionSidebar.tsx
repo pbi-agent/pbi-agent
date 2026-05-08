@@ -8,7 +8,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import type { SessionRecord } from "../../types";
-import { AppSidebarNav } from "../AppSidebar";
+import { AppSidebarNav, AppSidebarSettings } from "../AppSidebar";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -98,7 +98,7 @@ export function SessionSidebar({
   if (!isOpen) {
     return (
       <div className="sidebar__collapsed">
-        <AppSidebarNav collapsed />
+        <AppSidebarNav collapsed showSettings={false} />
         <div className="sidebar__collapsed-session-actions">
           <Button
             type="button"
@@ -121,13 +121,16 @@ export function SessionSidebar({
             <PlusIcon />
           </Button>
         </div>
+        <div className="sidebar__collapsed-settings">
+          <AppSidebarSettings collapsed />
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <AppSidebarNav />
+      <AppSidebarNav showSettings={false} />
 
       <div className="sidebar__header">
         <div className="sidebar__header-actions">
@@ -285,6 +288,9 @@ export function SessionSidebar({
         )}
       </div>
 
+      <div className="sidebar__footer">
+        <AppSidebarSettings />
+      </div>
     </>
   );
 }
