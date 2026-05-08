@@ -289,7 +289,6 @@
   justify-content: space-between;
   gap: var(--sp-3);
   padding: var(--sp-1) var(--sp-4) var(--sp-1) var(--sp-5);
-  border-bottom: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
 }
 
@@ -1277,8 +1276,6 @@
   justify-content: center;
   margin-top: var(--sp-4);
   padding: var(--sp-4) var(--sp-3) var(--sp-5);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-background);
 }
 
 .session-readonly-footer__button {
@@ -1984,8 +1981,6 @@
 /* ── Composer ── */
 .composer {
   padding: var(--sp-2) var(--sp-3);
-  background: var(--color-surface-0);
-  border-top: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 

@@ -1,5 +1,6 @@
 # TODO
 
-[X] Inspect target commit and decide safe message update path
-[X] Update commit message for requested commit
-[X] Record task outcome in memory
+[X] Find remaining footer background source
+[X] Remove footer wrapper background/border only
+[X] Validate focused frontend checks
+[X] Record task outcome
