@@ -1,1 +1,4 @@
-[X] Fix PR #275 description typo
+# TODO
+
+[X] Implement sidebar navigation refactor
+[X] Validate frontend changes and update memory

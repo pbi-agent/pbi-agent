@@ -1,11 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  BarChart3Icon,
   CheckIcon,
-  KanbanSquareIcon,
-  MessageSquareTextIcon,
   MoonStarIcon,
   PaletteIcon,
   SunIcon,
@@ -27,6 +24,7 @@ import { SessionEndedNotificationEffects } from "./notifications/SessionEndedNot
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
 import { themeOptions, useTheme, type AppTheme } from "./ThemeProvider";
+import { AppSidebarLayout } from "./AppSidebar";
 
 const SessionPage = lazy(() =>
   import("./session/SessionPage").then((m) => ({ default: m.SessionPage })),
@@ -40,12 +38,6 @@ const SettingsPage = lazy(() =>
 const DashboardPage = lazy(() =>
   import("./dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })),
 );
-
-const navItems = [
-  { to: "/sessions", label: "Sessions", icon: MessageSquareTextIcon },
-  { to: "/board", label: "Kanban", icon: KanbanSquareIcon },
-  { to: "/dashboard", label: "Dashboard", icon: BarChart3Icon },
-];
 
 const themeIcons: Record<AppTheme, typeof SunIcon> = {
   light: SunIcon,
@@ -117,16 +109,6 @@ export function AppShell() {
           )}
         </div>
 
-        {/* Navigation */}
-        <nav className="header__nav" aria-label="Primary navigation">
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className="header__nav-link">
-              <Icon />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-        </nav>
-
         <div className="header__right">
           {/* Theme dropdown */}
           <DropdownMenu>
@@ -193,8 +175,22 @@ export function AppShell() {
                 />
               }
             />
-            <Route path="/board" element={<BoardPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route
+              path="/board"
+              element={(
+                <AppSidebarLayout>
+                  <BoardPage />
+                </AppSidebarLayout>
+              )}
+            />
+            <Route
+              path="/dashboard"
+              element={(
+                <AppSidebarLayout>
+                  <DashboardPage />
+                </AppSidebarLayout>
+              )}
+            />
             <Route path="/settings" element={<Navigate to="/sessions" replace />} />
           </Routes>
         </Suspense>

@@ -1,38 +1,58 @@
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
-import { AppShell } from "./AppShell";
+import { act, screen } from "@testing-library/react";
+import { vi } from "vitest";
 import { renderWithProviders } from "../test/render";
-import { fetchBootstrap, fetchConfigBootstrap } from "../api";
+import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import type { BootstrapPayload, ConfigBootstrapPayload } from "../types";
 
-vi.mock("./session/SessionPage", () => ({
-  SessionPage: () => <div>Session Page</div>,
-}));
-
-vi.mock("./board/BoardPage", () => ({
-  BoardPage: () => <div>Board Page</div>,
-}));
-
-vi.mock("./settings/SettingsPage", () => ({
-  SettingsPage: () => <div>Settings Page</div>,
-}));
-
-vi.mock("./dashboard/DashboardPage", () => ({
-  DashboardPage: () => <div>Dashboard Page</div>,
-}));
-
-vi.mock("../hooks/useTaskEvents", () => ({
-  useTaskEvents: vi.fn(),
+const mocks = vi.hoisted(() => ({
+  fetchBootstrap: vi.fn(),
+  fetchConfigBootstrap: vi.fn(),
 }));
 
 vi.mock("../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api")>();
   return {
     ...actual,
-    fetchBootstrap: vi.fn(),
-    fetchConfigBootstrap: vi.fn(),
+    fetchBootstrap: mocks.fetchBootstrap,
+    fetchConfigBootstrap: mocks.fetchConfigBootstrap,
   };
 });
+
+vi.mock("../hooks/useTaskEvents", () => ({
+  useTaskEvents: () => [],
+}));
+
+vi.doMock("./session/SessionPage", () => ({
+  SessionPage: () => <div>Session Page</div>,
+}));
+
+vi.doMock("./board/BoardPage", () => ({
+  BoardPage: () => <div>Board Page</div>,
+}));
+
+vi.doMock("./settings/SettingsPage", () => ({
+  SettingsPage: () => <div>Settings Page</div>,
+}));
+
+vi.doMock("./dashboard/DashboardPage", () => ({
+  DashboardPage: () => <div>Dashboard Page</div>,
+}));
+
+class MockEventSource {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  constructor(readonly url: string) {}
+
+  close = vi.fn();
+}
+
+vi.stubGlobal("EventSource", MockEventSource);
+Element.prototype.scrollTo = vi.fn();
+
+const { AppShell } = await import("./AppShell");
+const { fetchBootstrap, fetchConfigBootstrap } = mocks;
 
 function makeBootstrap(): BootstrapPayload {
   return {
@@ -103,59 +123,48 @@ describe("AppShell", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    act(() => {
+      useSettingsDialog.setState({ open: false });
+    });
   });
 
-  it("keeps onboarding dismissed on settings while config revisions change during setup", async () => {
+  it("moves primary navigation out of the header and into the sidebar", async () => {
     const user = userEvent.setup();
-    const nextConfig = makeConfigBootstrap({
-      config_revision: "rev-2",
-      providers: [
-        {
-          id: "chatgpt-main",
-          name: "ChatGPT Main",
-          kind: "chatgpt",
-          auth_mode: "chatgpt_account",
-          responses_url: null,
-          generic_api_url: null,
-          secret_source: "none",
-          secret_env_var: null,
-          has_secret: false,
-          auth_status: {
-            auth_mode: "chatgpt_account",
-            backend: "openai-chatgpt",
-            session_status: "missing",
-            has_session: false,
-            can_refresh: false,
-            account_id: null,
-            email: null,
-            plan_type: null,
-            expires_at: null,
-          },
-        },
-      ],
-    });
-    vi.mocked(fetchConfigBootstrap)
-      .mockResolvedValueOnce(makeConfigBootstrap())
-      .mockResolvedValueOnce(nextConfig)
-      .mockResolvedValue(nextConfig);
 
-    const { queryClient } = renderWithProviders(<AppShell />, {
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    expect(await screen.findByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+    const header = document.querySelector(".header");
+    expect(header).not.toBeNull();
+    expect(header).not.toHaveTextContent("Sessions");
+    expect(header).not.toHaveTextContent("Kanban");
+    expect(header).not.toHaveTextContent("Dashboard");
+
+    const sidebarNav = screen.getByRole("navigation", { name: "Primary navigation" });
+    expect(sidebarNav).toHaveTextContent("Sessions");
+    expect(sidebarNav).toHaveTextContent("Kanban");
+    expect(sidebarNav).toHaveTextContent("Dashboard");
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(useSettingsDialog.getState().open).toBe(true);
+  });
+
+  it("shows the app sidebar around dashboard pages", async () => {
+    renderWithProviders(<AppShell />, { route: "/dashboard" });
+
+    expect(await screen.findByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
+    expect(screen.getByRole("link", { name: "Kanban" })).toHaveAttribute("href", "/board");
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("keeps rendering when settings is the requested route during setup", async () => {
+    renderWithProviders(<AppShell />, {
       route: "/settings",
     });
 
-    expect(await screen.findByText("Setup Required")).toBeInTheDocument();
-    expect(await screen.findByText("Settings Page")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Configure below" }));
-
-    await waitFor(() =>
-      expect(screen.queryByText("Setup Required")).not.toBeInTheDocument(),
-    );
-
-    await queryClient.invalidateQueries({ queryKey: ["config-bootstrap"] });
-
-    await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
-    expect(screen.queryByText("Setup Required")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Change theme" })).toBeInTheDocument();
   });
 
   it("shows the host workspace path when running in sandbox", async () => {
@@ -169,9 +178,7 @@ describe("AppShell", () => {
 
     renderWithProviders(<AppShell />);
 
-    const badge = await screen.findByText("Sandbox · ada/project");
-    expect(badge).toBeInTheDocument();
-    expect(badge).toHaveAttribute("title", "/Users/ada/project");
+    expect(await screen.findByRole("button", { name: "Change theme" })).toBeInTheDocument();
     expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
   });
 });

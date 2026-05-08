@@ -1,7 +1,8 @@
 import userEvent from "@testing-library/user-event";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { SessionSidebar } from "./SessionSidebar";
+import { useSettingsDialog } from "../../hooks/useSettingsDialog";
 import type { SessionRecord } from "../../types";
 
 function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
@@ -42,6 +43,37 @@ function renderSidebar(overrides: Partial<Parameters<typeof SessionSidebar>[0]> 
 }
 
 describe("SessionSidebar", () => {
+  afterEach(() => {
+    act(() => {
+      useSettingsDialog.setState({ open: false });
+    });
+  });
+
+  it("renders app navigation and opens settings from the combined sidebar", async () => {
+    const user = userEvent.setup();
+
+    renderSidebar();
+
+    expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
+    expect(screen.getByRole("link", { name: "Kanban" })).toHaveAttribute("href", "/board");
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(useSettingsDialog.getState().open).toBe(true);
+  });
+
+  it("keeps app shortcuts in the collapsed sidebar without a separate settings footer", () => {
+    renderSidebar({ isOpen: false });
+
+    expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
+    expect(screen.getByRole("link", { name: "Kanban" })).toHaveAttribute("href", "/board");
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(document.querySelector(".sidebar__footer")).toBeNull();
+    expect(document.querySelector(".sidebar__collapsed-settings")).toBeNull();
+  });
+
   it("opens the edit action and saves a changed title", async () => {
     const user = userEvent.setup();
     const props = renderSidebar();

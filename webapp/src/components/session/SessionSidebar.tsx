@@ -5,11 +5,10 @@ import {
   PanelLeftOpenIcon,
   PencilIcon,
   PlusIcon,
-  SettingsIcon,
   Trash2Icon,
 } from "lucide-react";
 import type { SessionRecord } from "../../types";
-import { useSettingsDialog } from "../../hooks/useSettingsDialog";
+import { AppSidebarNav } from "../AppSidebar";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -64,7 +63,6 @@ export function SessionSidebar({
   const [draftTitle, setDraftTitle] = useState("");
   const [savingSessionId, setSavingSessionId] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
-  const { openSettings } = useSettingsDialog();
 
   const beginEdit = (session: SessionRecord) => {
     setOpenMenuSessionId(null);
@@ -100,41 +98,37 @@ export function SessionSidebar({
   if (!isOpen) {
     return (
       <div className="sidebar__collapsed">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="sidebar__toggle"
-          onClick={onToggle}
-          title="Show sessions"
-          aria-label="Show sessions"
-        >
-          <PanelLeftOpenIcon />
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          onClick={onNewSession}
-          title="New session"
-          aria-label="New session"
-        >
-          <PlusIcon />
-        </Button>
-        <button
-          type="button"
-          className="sidebar__collapsed-settings"
-          title="Settings"
-          aria-label="Settings"
-          onClick={openSettings}
-        >
-          <SettingsIcon />
-        </button>
+        <AppSidebarNav collapsed />
+        <div className="sidebar__collapsed-session-actions">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="sidebar__toggle"
+            onClick={onToggle}
+            title="Show sessions"
+            aria-label="Show sessions"
+          >
+            <PanelLeftOpenIcon />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            onClick={onNewSession}
+            title="New session"
+            aria-label="New session"
+          >
+            <PlusIcon />
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <>
+      <AppSidebarNav />
+
       <div className="sidebar__header">
         <div className="sidebar__header-actions">
           <Button
@@ -291,12 +285,6 @@ export function SessionSidebar({
         )}
       </div>
 
-      <div className="sidebar__footer">
-        <button type="button" className="sidebar__footer-link" onClick={openSettings}>
-          <SettingsIcon />
-          <span>Settings</span>
-        </button>
-      </div>
     </>
   );
 }
