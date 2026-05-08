@@ -1,4 +1,3 @@
-[X] Add common persisted user bin dirs to sandbox ENV PATH
-[X] Add/update tests for image PATH
-[X] Run focused validation
+[X] Patch sandbox Dockerfile recommendations
+[X] Run syntax/static validation
 [X] Update memory

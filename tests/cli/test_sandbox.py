@@ -621,7 +621,12 @@ class DefaultWebCommandTests(unittest.TestCase):
             content,
         )
         self.assertIn('ARG EXTRA_APK=""', content)
+        self.assertIn("ARG FLEXIBLE_SYSTEM_INSTALL=0", content)
+        self.assertIn('ARG FLEX_APK="doas"', content)
         self.assertIn("apk add --no-cache ${RUNTIME_APK} ${EXTRA_APK}", content)
+        self.assertIn('if [ "${FLEXIBLE_SYSTEM_INSTALL}" = "1" ]; then', content)
+        self.assertIn("apk add --no-cache ${FLEX_APK}", content)
+        self.assertIn("permit nopass pbi as root", content)
         self.assertIn(
             'PATH="/home/pbi/.local/bin:/home/pbi/bin:/home/pbi/.bun/bin:/home/pbi/.cargo/bin:/home/pbi/.local/share/pnpm:${PATH}"',
             content,
@@ -650,15 +655,21 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn('pbi_path_prepend "$PWD/.venv/bin"', content)
         self.assertIn('pbi_path_prepend "$PWD/node_modules/.bin"', content)
         self.assertIn('find "$root"', content)
+        self.assertIn('-path "$HOME/.cache"', content)
+        self.assertIn('-o -path "*/.git"', content)
+        self.assertIn('-o -path "*/node_modules"', content)
+        self.assertIn(") -prune", content)
         self.assertIn("-name bin -o -name .bin", content)
         self.assertIn("command_not_found_handle()", content)
-        self.assertIn('pbi_discover_bin_paths "$HOME" /workspace', content)
+        self.assertIn('pbi_discover_bin_paths "$HOME" "$PWD"', content)
         self.assertIn('"$HOME/.profile"', content)
         self.assertIn('"$HOME/.bashrc"', content)
         self.assertIn("pbi-agent-sandbox-entrypoint", content)
         self.assertIn('exec /usr/local/bin/pbi-agent "$@"', content)
         self.assertIn("pbi-agent-shell", content)
-        self.assertIn('exec /bin/bash -c ". \\"$bootstrap\\"; $command"', content)
+        self.assertIn('PBI_AGENT_ORIGINAL_COMMAND="$command"', content)
+        self.assertIn('eval "$PBI_AGENT_ORIGINAL_COMMAND"', content)
+        self.assertIn('\' "$@"', content)
         self.assertIn('exec /bin/bash "$@"', content)
         self.assertNotIn("#!/bin/busybox sh", content)
         self.assertNotIn("rm /bin/sh", content)
@@ -676,6 +687,12 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("/home/pbi/bin", content)
         self.assertNotIn("mkdir -p /workspace /home/pbi/.pbi-agent", content)
         self.assertIn('chown -R pbi:pbi /workspace "${HOME}"', content)
+        self.assertIn(
+            "export HOME=/root XDG_CACHE_HOME=/root/.cache PIP_CACHE_DIR=/root/.cache/pip",
+            content,
+        )
+        self.assertIn("/home/pbi/.cache/*", content)
+        self.assertIn("chown -R pbi:pbi /home/pbi /workspace", content)
         self.assertIn("site.getsitepackages()[0]", content)
         self.assertIn("-name tests -o -name test -o -name __pycache__", content)
         self.assertIn("-name '*.pyc' -o -name '*.pyo'", content)
