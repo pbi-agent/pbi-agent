@@ -301,6 +301,7 @@ def _wait_for_session_detail_detached(
     session_id: str,
     *,
     status: str | None = None,
+    require_fatal_error: bool = False,
 ) -> dict:
     deadline = time.monotonic() + 2
     while True:
@@ -311,7 +312,10 @@ def _wait_for_session_detail_detached(
             and detail["active_run"] is None
         )
         status_matches = status is None or detail["status"] == status
-        if is_detached and status_matches:
+        fatal_error_matches = (
+            not require_fatal_error or detail["timeline"]["fatal_error"]
+        )
+        if is_detached and status_matches and fatal_error_matches:
             return detail
         if time.monotonic() > deadline:
             raise AssertionError("session detail did not detach in time")
@@ -3511,7 +3515,11 @@ def test_interrupted_task_run_session_can_be_manually_continued(
             interrupted_task = _wait_for_first_task_status(client, "failed")
             assert interrupted_task["session_id"] == session_id
 
-            interrupted_detail = _wait_for_session_detail_detached(client, session_id)
+            interrupted_detail = _wait_for_session_detail_detached(
+                client,
+                session_id,
+                require_fatal_error=True,
+            )
             assert interrupted_detail["live_session"] is None
             assert interrupted_detail["active_live_session"] is None
             assert interrupted_detail["active_run"] is None

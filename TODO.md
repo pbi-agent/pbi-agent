@@ -1,6 +1,4 @@
-# TODO
-
-[X] Inspect sidebar new-button styles
-[X] Update + New button to match collapse style
-[X] Validate frontend
+[X] Diagnose SettingsPage timeout
+[X] Implement deterministic test fix
+[X] Run focused/full web validation
 [X] Update memory
