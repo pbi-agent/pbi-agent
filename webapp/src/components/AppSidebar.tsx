@@ -48,6 +48,12 @@ export type AppSidebarLayoutProps = {
  */
 export function AppSidebarLayout({ children, contextPanel }: AppSidebarLayoutProps) {
   const isOpen = useSidebarStore((state) => state.isOpen);
+  const close = useSidebarStore((state) => state.close);
+
+  function handleMainClick() {
+    if (isOpen) close();
+  }
+
   return (
     <div
       className={cn(
@@ -57,7 +63,9 @@ export function AppSidebarLayout({ children, contextPanel }: AppSidebarLayoutPro
       data-sidebar-state={isOpen ? "open" : "collapsed"}
     >
       <AppSidebar contextPanel={contextPanel} />
-      <div className="app-shell-layout__main">{children}</div>
+      <div className="app-shell-layout__main" onClick={handleMainClick}>
+        {children}
+      </div>
     </div>
   );
 }

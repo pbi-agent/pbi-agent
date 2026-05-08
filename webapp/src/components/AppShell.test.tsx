@@ -243,6 +243,28 @@ describe("AppShell", () => {
     expect(useSidebarStore.getState().isOpen).toBe(true);
   });
 
+  it("collapses the sidebar when clicking main content", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+    await user.click(await screen.findByText("Board Page"));
+    expect(useSidebarStore.getState().isOpen).toBe(false);
+  });
+
+  it("keeps the sidebar open when clicking inside the sidebar", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    const sidebar = await screen.findByRole("complementary", { name: "Application sidebar" });
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+
+    await user.click(sidebar);
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+  });
+
   it("toggles the sidebar from the head toggle button", async () => {
     const user = userEvent.setup();
 

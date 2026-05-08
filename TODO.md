@@ -1,6 +1,5 @@
 # TODO
 
-[X] Find session trash icon/button
-[X] Remove it and clean imports
-[X] Run focused checks
-[X] Record task outcome
+[X] Implement sidebar outside-click collapse
+[X] Review diff and run focused frontend validation
+[X] Record memory and handoff
