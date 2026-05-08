@@ -411,17 +411,32 @@ describe("SessionPage", () => {
     renderSessionRoute("/sessions/session-1");
 
     const toggle = await screen.findByRole("button", {
-      name: "Toggle interactive mode for assistant questions",
+      name: "Enable interactive mode",
     });
     expect(toggle).not.toHaveAttribute("title");
+    expect(toggle).toHaveClass("session-topbar-control");
+    expect(toggle).toHaveClass("session-interactive-toggle");
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByText("Interactive")).not.toBeInTheDocument();
 
     await user.hover(toggle);
 
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent(
-      "Allow the assistant to pause and ask questions for each message while this is on.",
+      "Let the agent ask questions and offer choices",
     );
     expect(tooltip.closest("[data-app-tooltip]")).not.toBeNull();
+
+    await user.click(toggle);
+
+    const enabledToggle = await screen.findByRole("button", { name: "Disable interactive mode" });
+    expect(enabledToggle).toHaveAttribute("aria-pressed", "true");
+    expect(enabledToggle).toHaveClass("session-topbar-control");
+    expect(enabledToggle).toHaveClass("session-interactive-toggle");
+
+    await user.unhover(toggle);
+    await user.hover(enabledToggle);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Interactive mode enabled");
   });
 
   it("renders sub-agent routes as hidden read-only child sessions", async () => {
@@ -461,7 +476,7 @@ describe("SessionPage", () => {
 
     await screen.findByText("Timeline 1");
     expect(screen.queryByText("Composer images true")).not.toBeInTheDocument();
-    expect(screen.queryByText("Interactive")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /interactive mode/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to main session" })).toHaveAttribute(
       "href",
       "/sessions/session-1",
@@ -567,6 +582,12 @@ describe("SessionPage", () => {
 
     expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Enable interactive mode" }));
+    expect(screen.getByRole("button", { name: "Disable interactive mode" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
     await user.click(screen.getByRole("button", { name: "Submit Expanded" }));
 
     await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
@@ -580,7 +601,7 @@ describe("SessionPage", () => {
       image_paths: ["images/diagram.png"],
       image_upload_ids: ["saved-upload-1"],
       profile_id: "analysis",
-      interactive_mode: false,
+      interactive_mode: true,
     });
     await waitFor(() => {
       const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
