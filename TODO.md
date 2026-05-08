@@ -1,6 +1,5 @@
 # TODO
 
-[X] Inspect current Runs trigger and interactive toggle styling
-[X] Align Runs trigger dimensions, icon sizing, and hover/open states to interactive toggle
-[X] Update focused tests
-[X] Run validation and update memory
+[X] Implement Shift+Tab interactive-mode shortcut and composer border
+[X] Review diff and run focused validation
+[X] Final validation, memory, and handoff

@@ -282,6 +282,31 @@ export function SessionPage({
     window.localStorage.setItem("pbi-agent.interactive-mode", String(interactiveMode));
   }, [interactiveMode]);
 
+  useEffect(() => {
+    if (isSubAgentRoute) return undefined;
+
+    const handleInteractiveShortcut = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Tab"
+        || !event.shiftKey
+        || event.repeat
+        || event.ctrlKey
+        || event.metaKey
+        || event.altKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      setInteractiveMode((current) => !current);
+    };
+
+    window.addEventListener("keydown", handleInteractiveShortcut, true);
+    return () => {
+      window.removeEventListener("keydown", handleInteractiveShortcut, true);
+    };
+  }, [isSubAgentRoute]);
+
   // Hydrate saved session items when session detail data arrives.
   // Skip hydration when a live session is already attached and has
   // items — even if the event stream is reconnecting. Re-hydrating
@@ -684,8 +709,8 @@ export function SessionPage({
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="end">
                   {interactiveMode
-                    ? "Interactive mode enabled"
-                    : "Let the agent ask questions and offer choices"}
+                    ? "Interactive mode enabled. Press Maj+Tab / Shift+Tab to disable."
+                    : "Let the agent ask questions and offer choices. Press Maj+Tab / Shift+Tab to enable."}
                 </TooltipContent>
               </Tooltip>
             ) : null}
@@ -812,6 +837,7 @@ export function SessionPage({
                 liveSessionId={sessionState?.liveSessionId ?? null}
                 canCreateSession={composerCanStartRun}
                 supportsImageInputs={providerSupportsImages}
+                interactiveMode={interactiveMode}
                 isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
                 onSubmit={handleSubmit}
                 isProcessing={Boolean(sessionState?.processing?.active)}
