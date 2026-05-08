@@ -41,10 +41,10 @@ docker stop <container-id>
 When installed from PyPI, `pbi-agent sandbox` builds a small sandbox image from the Dockerfile bundled inside the installed package. The CLI reads its installed package version and passes it as `PBI_AGENT_VERSION`, so the image installs the matching PyPI package version with:
 
 ```dockerfile
-python -m pip install --prefer-binary "pbi-agent==${PBI_AGENT_VERSION}"
+python -m pip install --prefer-binary --only-binary=pbi-agent --no-compile "pbi-agent==${PBI_AGENT_VERSION}"
 ```
 
-The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper, common workspace utilities such as `curl`, `gh` (GitHub CLI), and `rg` (`ripgrep`), and shared runtime libraries commonly required by user-installed tools. PyPI dependencies install with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
+The image uses an Alpine Python runtime to keep the bundled sandbox image smaller. It keeps only the runtime packages needed by the sandbox wrapper, common workspace utilities such as `curl`, `gh` (GitHub CLI), and `rg` (`ripgrep`), and shared runtime libraries commonly required by user-installed tools. The bundled `pbi-agent` package is installed from its wheel with `--only-binary=pbi-agent` and `--no-compile`; dependencies still install with `--prefer-binary` so native wheels are used when available while pure-Python source distributions can still install.
 
 When developing pbi-agent itself, use local source mode to test the mounted checkout inside the sandbox instead of the last published PyPI package:
 
@@ -116,11 +116,11 @@ The sandbox creates `~/.pbi-agent` on the host if needed, then bind-mounts that 
 
 That lets the VM load your existing saved provider config, model profiles, auth state, sessions, Kanban tasks, and run history. Sandbox and non-sandbox runs share those records because the sandbox passes the host workspace path into the container as the workspace identity.
 
-The image filesystem is read-only, but the sandbox mounts the entire container user home directory at `/home/pbi` from a per-repository named Docker volume. Anything an installer or package manager writes under `/home/pbi` is writable and persistent across sandbox restarts for the same repository; this is a generic home volume, not a folder-by-folder allowlist.
+The image filesystem is read-only, but the sandbox backs the container user home at `/home/pbi` with a per-repository named Docker volume, aside from the explicit nested host config and Git/GitHub account mounts described above. Anything an installer or package manager writes under `/home/pbi` is writable and persistent across sandbox restarts for the same repository; this is a generic home volume, not a folder-by-folder allowlist. Fresh sandbox homes include standard writable XDG locations such as `/home/pbi/.config`, `/home/pbi/.local/share`, `/home/pbi/.local/state`, `/home/pbi/.local/bin`, and `/home/pbi/.cache`, so user-local installers can store config, caches, receipts, and executables there.
 
-The container process `PATH` includes the standard user-local executable directory, `/home/pbi/.local/bin`. Shell tool commands also run through a sandbox bootstrap that sources readable user profile files under `/home/pbi` and discovers `bin` directories under the persistent home volume. The bootstrap also refreshes discovered `bin` paths when Bash sees a missing command, so install-and-run commands can pick up newly created tool directories. This keeps installer-specific paths out of the image while still making tools installed into locations such as `.bun/bin` or `.cargo/bin` visible to non-login shell commands.
+The container process `PATH` includes the standard user-local executable directories, `/home/pbi/.local/bin` and `/home/pbi/bin`. Before `pbi-agent` starts, the sandbox entrypoint sources a generic bootstrap that reads user profile files under `/home/pbi`, adds common user-tool locations, and discovers `bin` or `.bin` directories under the persistent home volume. Shell tool commands use a dedicated Bash wrapper for the same bootstrap without replacing Alpine's normal `/bin/sh`, and fresh interactive Bash shells source it through the default profile files. The bootstrap also refreshes discovered paths when Bash sees a missing command, so install-and-run commands can pick up newly created tool directories. This makes tools installed into locations such as `.bun/bin`, `.cargo/bin`, or workspace `node_modules/.bin` visible to the agent and to non-login shell commands.
 
-The sandbox still provides temporary storage for `/tmp` and uses temporary `/home/pbi/.cache` storage so caches do not accumulate in the persistent home volume.
+The sandbox still provides temporary storage for `/tmp`. Home-directory caches remain in the project-scoped `/home/pbi` volume so package managers and installers can reuse them across sandbox restarts.
 
 For example, inside a sandbox session an agent shell command can install and use uv with:
 
@@ -129,7 +129,9 @@ wget -qO- https://astral.sh/uv/install.sh | sh
 uv --version
 ```
 
-Those local tools, installer receipts, and package-manager directories stay available when you start `pbi-agent sandbox` again from the same repository. Delete the project-scoped Docker home volume if you want to reset them.
+Those local tools, installer receipts, and package-manager directories stay available when you start `pbi-agent sandbox` again from the same repository. Delete the project-scoped Docker home volume if you want to reset them, or if an older sandbox home volume contains root-owned user-local directories from before this behavior.
+
+The default sandbox does not allow runtime system package installation with `apk add`: it runs as the non-root `pbi` user with a read-only image filesystem, dropped capabilities, and `no-new-privileges`. If a project needs extra Alpine packages, build a custom sandbox image with those packages baked in and pass it with `pbi-agent sandbox --image ...` rather than enabling runtime root escalation in the default sandbox. The bundled Dockerfile exposes an `EXTRA_APK` build arg for this kind of custom image.
 
 ## Safer Inspection Mode
 
@@ -143,7 +145,7 @@ This mode is useful for inspection, but file-edit tools and commands that write 
 
 ## Security Boundary
 
-The sandbox uses a non-root container user, drops Linux capabilities, sets `no-new-privileges`, limits processes and memory, uses a read-only image filesystem, and limits writable home storage to project-scoped Docker volumes plus temporary `tmpfs` paths.
+The sandbox uses a non-root container user, drops Linux capabilities, sets `no-new-privileges`, limits processes and memory, uses a read-only image filesystem, and limits writable storage to the mounted repository, project-scoped Docker volumes, and temporary `tmpfs` paths.
 
 It does not mount the Docker socket, the host home directory, an SSH agent, or broad host filesystem paths. When available, only the selected Git and GitHub account paths listed above are mounted from the host home, and they are mounted read-only.
 

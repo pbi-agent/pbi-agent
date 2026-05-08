@@ -4,49 +4,160 @@ ARG PYTHON_VERSION=3.12.12
 FROM python:${PYTHON_VERSION}-alpine3.22
 
 ARG PBI_AGENT_VERSION
+ARG RUNTIME_APK="bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip"
+ARG EXTRA_APK=""
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    HOME="/home/pbi" \
+    XDG_CONFIG_HOME="/home/pbi/.config" \
+    XDG_DATA_HOME="/home/pbi/.local/share" \
+    XDG_STATE_HOME="/home/pbi/.local/state" \
+    XDG_CACHE_HOME="/home/pbi/.cache" \
     PBI_AGENT_SHELL_BOOTSTRAP="/usr/local/share/pbi-agent/sandbox-shell-env" \
-    PBI_AGENT_SHELL_EXECUTABLE="/bin/bash" \
-    PATH="/home/pbi/.local/bin:${PATH}"
+    PBI_AGENT_SHELL_EXECUTABLE="/usr/local/bin/pbi-agent-shell" \
+    PATH="/home/pbi/.local/bin:/home/pbi/bin:/home/pbi/.bun/bin:/home/pbi/.cargo/bin:/home/pbi/.local/share/pnpm:${PATH}"
 
 SHELL ["/bin/sh", "-euxc"]
 
-RUN apk add --no-cache bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip \
-    && adduser -D -u 1000 -h /home/pbi -s /bin/bash pbi \
-    && mkdir -p /workspace /home/pbi /usr/local/share/pbi-agent \
-    && { \
-        printf '%s\n' 'for profile in "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.bashrc"; do'; \
-        printf '%s\n' '    [ -r "$profile" ] && . "$profile"'; \
-        printf '%s\n' 'done'; \
-        printf '%s\n' 'pbi_path_prepend() {'; \
-        printf '%s\n' '    [ -d "$1" ] || return 0'; \
-        printf '%s\n' '    case ":$PATH:" in *":$1:"*) ;; *) PATH="$1:$PATH" ;; esac'; \
-        printf '%s\n' '}'; \
-        printf '%s\n' 'pbi_path_prepend "$HOME/.local/bin"'; \
-        printf '%s\n' 'pbi_path_prepend "$HOME/bin"'; \
-        printf '%s\n' 'pbi_discover_bin_paths() {'; \
-        printf '%s\n' 'while IFS= read -r dir; do'; \
-        printf '%s\n' '    pbi_path_prepend "$dir"'; \
-        printf '%s\n' 'done < <(find "$HOME" -mindepth 2 -maxdepth 4 -type d -name bin -not -path "$HOME/.cache/*" 2>/dev/null)'; \
-        printf '%s\n' '}'; \
-        printf '%s\n' 'pbi_discover_bin_paths'; \
-        printf '%s\n' 'command_not_found_handle() {'; \
-        printf '%s\n' '    pbi_discover_bin_paths'; \
-        printf '%s\n' '    if command -v "$1" >/dev/null 2>&1; then "$@"; return $?; fi'; \
-        printf '%s\n' '    printf "%s: command not found\n" "$1" >&2'; \
-        printf '%s\n' '    return 127'; \
-        printf '%s\n' '}'; \
-        printf '%s\n' 'export PATH'; \
-      } > /usr/local/share/pbi-agent/sandbox-shell-env \
-    && chown -R pbi:pbi /workspace /home/pbi
+RUN <<'EOF'
+apk add --no-cache ${RUNTIME_APK} ${EXTRA_APK}
+
+adduser -D -u 1000 -h "${HOME}" -s /bin/bash pbi
+
+install -d -o pbi -g pbi \
+    /workspace \
+    "${HOME}" \
+    "${HOME}/.cache" \
+    "${HOME}/.config" \
+    "${HOME}/.local/bin" \
+    "${HOME}/.local/share" \
+    "${HOME}/.local/state" \
+    "${HOME}/bin"
+install -d -m 0755 /usr/local/share/pbi-agent
+
+cat > /usr/local/share/pbi-agent/sandbox-shell-env <<'BOOTSTRAP'
+# shellcheck shell=bash
+
+if [ "${_PBI_AGENT_SHELL_BOOTSTRAPPED:-}" = "1" ]; then
+    return 0 2>/dev/null || exit 0
+fi
+_PBI_AGENT_SHELL_BOOTSTRAPPED=1
+
+for profile in "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.bashrc"; do
+    [ -r "$profile" ] && . "$profile"
+done
+
+pbi_path_prepend() {
+    [ -d "$1" ] || return 0
+    case ":$PATH:" in
+        *":$1:"*) ;;
+        *) PATH="$1:$PATH" ;;
+    esac
+}
+
+pbi_path_prepend "$HOME/.local/bin"
+pbi_path_prepend "$HOME/bin"
+pbi_path_prepend "$HOME/.bun/bin"
+pbi_path_prepend "$HOME/.cargo/bin"
+pbi_path_prepend "$HOME/.local/share/pnpm"
+pbi_path_prepend "$PWD/.venv/bin"
+pbi_path_prepend "$PWD/node_modules/.bin"
+
+pbi_discover_bin_paths() {
+    local roots=("$@")
+    local root dir
+
+    [ "${#roots[@]}" -gt 0 ] || roots=("$HOME")
+
+    for root in "${roots[@]}"; do
+        [ -d "$root" ] || continue
+
+        while IFS= read -r dir; do
+            pbi_path_prepend "$dir"
+        done < <(
+            find "$root" \
+                -mindepth 2 \
+                -maxdepth 4 \
+                -type d \( -name bin -o -name .bin \) \
+                -not -path "$HOME/.cache/*" \
+                -not -path "*/.git/*" \
+                -not -path "*/node_modules/*" \
+                2>/dev/null
+        )
+    done
+}
+
+# Keep startup cheap: scan persistent home, but avoid walking large mounted repos.
+pbi_discover_bin_paths "$HOME"
+
+command_not_found_handle() {
+    pbi_discover_bin_paths "$HOME" /workspace
+
+    if command -v "$1" >/dev/null 2>&1; then
+        "$@"
+        return $?
+    fi
+
+    printf "%s: command not found\n" "$1" >&2
+    return 127
+}
+
+export PATH
+BOOTSTRAP
+
+cat > "${HOME}/.profile" <<'PROFILE'
+pbi_bootstrap="${PBI_AGENT_SHELL_BOOTSTRAP:-/usr/local/share/pbi-agent/sandbox-shell-env}"
+if [ -n "${BASH_VERSION:-}" ] && [ "${_PBI_AGENT_SHELL_BOOTSTRAPPED:-}" != "1" ] && [ -r "$pbi_bootstrap" ]; then
+    . "$pbi_bootstrap"
+fi
+unset pbi_bootstrap
+PROFILE
+cp "${HOME}/.profile" "${HOME}/.bashrc"
+
+cat > /usr/local/bin/pbi-agent-sandbox-entrypoint <<'ENTRYPOINT'
+#!/bin/bash
+set -euo pipefail
+
+bootstrap="${PBI_AGENT_SHELL_BOOTSTRAP:-/usr/local/share/pbi-agent/sandbox-shell-env}"
+if [ -r "$bootstrap" ]; then
+    . "$bootstrap"
+fi
+exec /usr/local/bin/pbi-agent "$@"
+ENTRYPOINT
+
+cat > /usr/local/bin/pbi-agent-shell <<'WRAPPER'
+#!/bin/bash
+set -euo pipefail
+
+if [ "${1:-}" = "-c" ] && [ -n "${2:-}" ]; then
+    command="$2"
+    shift 2
+
+    bootstrap="${PBI_AGENT_SHELL_BOOTSTRAP:-/usr/local/share/pbi-agent/sandbox-shell-env}"
+    if [ -r "$bootstrap" ]; then
+        exec /bin/bash -c ". \"$bootstrap\"; $command" pbi-agent-shell "$@"
+    fi
+
+    exec /bin/bash -c "$command" pbi-agent-shell "$@"
+fi
+
+exec /bin/bash "$@"
+WRAPPER
+
+chmod 0644 /usr/local/share/pbi-agent/sandbox-shell-env
+chmod 0755 /usr/local/bin/pbi-agent-sandbox-entrypoint /usr/local/bin/pbi-agent-shell
+chown -R pbi:pbi /workspace "${HOME}"
+EOF
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    test -n "${PBI_AGENT_VERSION}" \
-    && python -m pip install \
+    : "${PBI_AGENT_VERSION:?PBI_AGENT_VERSION build arg is required}" \
+    && PIP_CACHE_DIR=/root/.cache/pip python -m pip install \
         --prefer-binary \
+        --only-binary=pbi-agent \
+        --no-compile \
         "pbi-agent==${PBI_AGENT_VERSION}" \
     && site_packages="$(python -c 'import site; print(site.getsitepackages()[0])')" \
     && find "${site_packages}" \
@@ -59,21 +170,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         "${site_packages}/pyarrow/include" \
         "${site_packages}/pyarrow/includes" \
         "${site_packages}/pyarrow/src" \
-    && rm /bin/sh \
-    && { \
-        printf '%s\n' '#!/bin/busybox sh'; \
-        printf '%s\n' 'if [ "$1" = "-c" ] && [ -n "${PBI_AGENT_SHELL_BOOTSTRAP:-}" ] && [ -r "$PBI_AGENT_SHELL_BOOTSTRAP" ]; then'; \
-        printf '%s\n' '    command="$2"'; \
-        printf '%s\n' '    shift 2'; \
-        printf '%s\n' '    exec /bin/bash -c ". \"\$PBI_AGENT_SHELL_BOOTSTRAP\"; $command" "$@"'; \
-        printf '%s\n' 'fi'; \
-        printf '%s\n' 'exec /bin/busybox sh "$@"'; \
-      } > /bin/sh \
-    && chmod 755 /bin/sh
+        /tmp/* \
+        /var/tmp/*
 
 USER pbi
 WORKDIR /workspace
 
 EXPOSE 7424
 
-ENTRYPOINT ["pbi-agent"]
+ENTRYPOINT ["/usr/local/bin/pbi-agent-sandbox-entrypoint"]
