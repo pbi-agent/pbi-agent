@@ -2,15 +2,11 @@ import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart3Icon,
-  CheckIcon,
   KanbanSquareIcon,
   MessageSquareTextIcon,
-  MoonStarIcon,
-  PaletteIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   SettingsIcon,
-  SunIcon,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { fetchBootstrap } from "../api";
@@ -18,15 +14,7 @@ import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useSidebarStore } from "../hooks/useSidebar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { themeOptions, useTheme, type AppTheme } from "./ThemeProvider";
 import { cn } from "../lib/utils";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
@@ -42,12 +30,6 @@ const appNavItems: NavItem[] = [
   { to: "/board", label: "Kanban", icon: KanbanSquareIcon },
   { to: "/dashboard", label: "Dashboard", icon: BarChart3Icon },
 ];
-
-const themeIcons: Record<AppTheme, IconType> = {
-  light: SunIcon,
-  dark: MoonStarIcon,
-  prism: PaletteIcon,
-};
 
 const TOGGLE_SHORTCUT_HINT =
   typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/.test(navigator.platform)
@@ -225,56 +207,8 @@ function AppSidebarFooter({ collapsed }: { collapsed: boolean }) {
         collapsed && "app-sidebar__footer--collapsed",
       )}
     >
-      <ThemeMenu collapsed={collapsed} />
       <SettingsButton collapsed={collapsed} />
     </div>
-  );
-}
-
-function ThemeMenu({ collapsed }: { collapsed: boolean }) {
-  const { theme, setTheme } = useTheme();
-  const ThemeIcon = themeIcons[theme];
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size={collapsed ? "icon-sm" : "sm"}
-          className="app-sidebar__footer-button"
-          aria-label="Change theme"
-          title={collapsed ? "Change theme" : undefined}
-        >
-          <ThemeIcon
-            data-icon={collapsed ? undefined : "inline-start"}
-            aria-hidden="true"
-          />
-          {!collapsed && <span>Theme</span>}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align={collapsed ? "start" : "end"}
-        side={collapsed ? "right" : "top"}
-      >
-        <DropdownMenuGroup>
-          {themeOptions.map((option) => {
-            const OptionIcon = themeIcons[option.value];
-            return (
-              <DropdownMenuItem
-                key={option.value}
-                onSelect={() => setTheme(option.value)}
-              >
-                <OptionIcon />
-                {option.label}
-                {theme === option.value && (
-                  <CheckIcon className="ml-auto text-primary" />
-                )}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 

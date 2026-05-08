@@ -265,6 +265,116 @@
   gap: 0;
 }
 
+.settings-appearance__theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--sp-3);
+}
+
+.settings-appearance__theme-option {
+  --settings-theme-option-bg: var(--color-surface-1);
+  --settings-theme-option-bg-strong: var(--color-surface-2);
+  --settings-theme-option-border: var(--color-border);
+  --settings-theme-option-fg: var(--color-text);
+  --settings-theme-option-muted: var(--color-text-secondary);
+  --settings-theme-option-accent: var(--color-accent);
+
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--sp-2);
+  min-width: 0;
+  height: auto;
+  padding: var(--sp-3);
+  white-space: normal;
+  color: var(--settings-theme-option-fg);
+  background: linear-gradient(
+    135deg,
+    var(--settings-theme-option-bg),
+    var(--settings-theme-option-bg-strong)
+  );
+  border: 1px solid var(--settings-theme-option-border);
+  border-radius: var(--radius-md);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    filter var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.settings-appearance__theme-option[data-theme-option="prism"] {
+  --settings-theme-option-bg: #171f33;
+  --settings-theme-option-bg-strong: #222a3d;
+  --settings-theme-option-border: #424754;
+  --settings-theme-option-fg: #dae2fd;
+  --settings-theme-option-muted: #c2c6d6;
+  --settings-theme-option-accent: #adc6ff;
+}
+
+.settings-appearance__theme-option[data-theme-option="light"] {
+  --settings-theme-option-bg: #ffffff;
+  --settings-theme-option-bg-strong: #f8fafc;
+  --settings-theme-option-border: #d7dee8;
+  --settings-theme-option-fg: #0f172a;
+  --settings-theme-option-muted: #64748b;
+  --settings-theme-option-accent: #2563eb;
+}
+
+.settings-appearance__theme-option[data-theme-option="dark"] {
+  --settings-theme-option-bg: #18181b;
+  --settings-theme-option-bg-strong: #09090b;
+  --settings-theme-option-border: color-mix(in srgb, #ffffff 16%, transparent);
+  --settings-theme-option-fg: #fafafa;
+  --settings-theme-option-muted: #a1a1aa;
+  --settings-theme-option-accent: #fafafa;
+}
+
+.settings-appearance__theme-option:hover,
+.settings-appearance__theme-option:focus-visible,
+.settings-appearance__theme-option[data-state="on"] {
+  color: var(--settings-theme-option-fg);
+  border-color: var(--settings-theme-option-accent);
+  filter: brightness(1.06);
+}
+
+.settings-appearance__theme-option[data-state="on"] {
+  box-shadow:
+    inset 0 0 0 1px var(--settings-theme-option-accent),
+    0 0 0 1px color-mix(in srgb, var(--settings-theme-option-accent) 22%, transparent);
+}
+
+.settings-appearance__theme-option-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.settings-appearance__theme-option-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.settings-appearance__theme-option-head > svg {
+  color: var(--settings-theme-option-accent);
+}
+
+.settings-appearance__theme-option-check {
+  flex: 0 0 auto;
+  color: var(--settings-theme-option-accent);
+}
+
+.settings-appearance__theme-option-description {
+  color: var(--settings-theme-option-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
 .settings-notifications [data-slot="field-group"] {
   gap: var(--sp-4);
 }

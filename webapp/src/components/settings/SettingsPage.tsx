@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
+import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
 import { CommandsSettingsSection } from "./CommandsSettingsSection";
 import { ModelProfilesSettingsSection } from "./ModelProfilesSettingsSection";
 import type { ProfilePayload } from "./ModelProfileModal";
@@ -56,7 +57,7 @@ type ModalState =
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
 
-type SettingsTabId = "notifications" | "providers" | "model-profiles" | "commands";
+type SettingsTabId = "appearance" | "notifications" | "providers" | "model-profiles" | "commands";
 
 const SETTINGS_NAV_GROUPS: Array<{
   label: string;
@@ -65,6 +66,11 @@ const SETTINGS_NAV_GROUPS: Array<{
   {
     label: "Desktop",
     items: [
+      {
+        id: "appearance",
+        label: "Appearance",
+        description: "Theme and display",
+      },
       {
         id: "notifications",
         label: "Notifications",
@@ -371,6 +377,8 @@ className="settings-nav__header-close app-close-icon-button"
                       )}
                     </div>
                   )}
+
+                  {activeTab === "appearance" && <AppearanceSettingsSection />}
 
                   {activeTab === "notifications" && <NotificationsSettingsSection />}
 

@@ -183,10 +183,11 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
   });
 
-  it("renders the theme menu button in the sidebar footer", async () => {
+  it("does not render the theme menu button in the sidebar footer", async () => {
     renderWithProviders(<AppShell />, { route: "/board" });
 
-    expect(await screen.findByRole("button", { name: "Change theme" })).toBeInTheDocument();
+    await screen.findByRole("button", { name: "Settings" });
+    expect(screen.queryByRole("button", { name: "Change theme" })).not.toBeInTheDocument();
   });
 
   it("redirects /settings to the sessions route", async () => {
@@ -208,7 +209,7 @@ describe("AppShell", () => {
 
     renderWithProviders(<AppShell />, { route: "/board" });
 
-    expect(await screen.findByRole("button", { name: "Change theme" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
   });
 
