@@ -886,6 +886,7 @@ function historyItemToSnapshotItem(item: HistoryItem): Record<string, unknown> {
     file_paths: item.file_paths,
     image_attachments: item.image_attachments,
     markdown: item.markdown,
+    created_at: item.created_at,
   };
 }
 
@@ -973,7 +974,70 @@ function timelineForDisplay(
       consumedHistoryIndexes.add(index);
     }
   };
-  const matchingHistoryIndex = (item: Record<string, unknown>): number => {
+  const compactionMarkerIndex = historyItems.findIndex((historyItem) => (
+    historyItem.role === "assistant"
+    && typeof historyItem.content === "string"
+    && historyItem.content.trim() === "[compacted context]"
+  ));
+  const hasCompactionMarkerBefore = (index: number): boolean => (
+    compactionMarkerIndex >= 0 && compactionMarkerIndex < index
+  );
+  const createdAtTime = (item: Record<string, unknown>): number | null => {
+    const createdAt = item.created_at;
+    if (typeof createdAt !== "string") return null;
+    const time = Date.parse(createdAt);
+    return Number.isNaN(time) ? null : time;
+  };
+  const hasWorkBeforeNextMessage = (itemIndex: number): boolean => {
+    for (let index = itemIndex + 1; index < timeline.items.length; index += 1) {
+      const candidate = timeline.items[index];
+      if (candidate.kind === "message") return false;
+      return true;
+    }
+    return false;
+  };
+  const isPreCompactionStaleSnapshot = (
+    item: Record<string, unknown>,
+    itemIndex: number,
+    historyIndex: number,
+  ): boolean => {
+    if (consumedHistoryIndexes.size > 0 || !isHistoricalSnapshotMessage(item)) return false;
+    if (!hasCompactionMarkerBefore(historyIndex)) return false;
+    const compactionMarker = historyItems[compactionMarkerIndex];
+    const itemCreatedAt = createdAtTime(item);
+    const compactionCreatedAt = compactionMarker ? createdAtTime(compactionMarker) : null;
+    if (itemCreatedAt !== null && compactionCreatedAt !== null) {
+      return itemCreatedAt < compactionCreatedAt;
+    }
+    return hasWorkBeforeNextMessage(itemIndex);
+  };
+  const matchingUniqueHistorySignatureIndex = (
+    item: Record<string, unknown>,
+    options?: { requireUniqueSnapshotSignature?: boolean },
+  ): number => {
+    const signature = messageSignature(item);
+    if (!signature) return -1;
+    if (historySignatureCounts.get(signature) !== 1) {
+      return -1;
+    }
+    if (options?.requireUniqueSnapshotSignature !== false && snapshotSignatureCounts.get(signature) !== 1) {
+      return -1;
+    }
+    return historyItems.findIndex((historyItem, candidateIndex) => (
+      !consumedHistoryIndexes.has(candidateIndex)
+      && messageSignature(historyItem) === signature
+    ));
+  };
+  const preCompactionDuplicateHistoryIndex = (item: Record<string, unknown>, itemIndex: number): number => {
+    if (!persistedMessageId(item)) return -1;
+    const signatureIndex = matchingUniqueHistorySignatureIndex(
+      item,
+      { requireUniqueSnapshotSignature: false },
+    );
+    if (signatureIndex < 0) return -1;
+    return isPreCompactionStaleSnapshot(item, itemIndex, signatureIndex) ? signatureIndex : -1;
+  };
+  const matchingHistoryIndex = (item: Record<string, unknown>, itemIndex: number): number => {
     const messageId = persistedMessageId(item);
     if (messageId) {
       const index = historyItems.findIndex((historyItem, candidateIndex) => (
@@ -985,15 +1049,11 @@ function timelineForDisplay(
     } else if (activeTimeline && !isHistoricalSnapshotMessage(item)) {
       return -1;
     }
-    const signature = messageSignature(item);
-    if (!signature) return -1;
-    if (historySignatureCounts.get(signature) !== 1 || snapshotSignatureCounts.get(signature) !== 1) {
+    const signatureIndex = matchingUniqueHistorySignatureIndex(item);
+    if (messageId && signatureIndex >= 0 && isPreCompactionStaleSnapshot(item, itemIndex, signatureIndex)) {
       return -1;
     }
-    return historyItems.findIndex((historyItem, candidateIndex) => (
-      !consumedHistoryIndexes.has(candidateIndex)
-      && messageSignature(historyItem) === signature
-    ));
+    return signatureIndex;
   };
   const skippedHistoryBoundaryIndex = (item: Record<string, unknown>): number => {
     const messageId = persistedMessageId(item);
@@ -1031,8 +1091,13 @@ function timelineForDisplay(
     return true;
   };
 
-  for (const item of timeline.items) {
+  for (let itemIndex = 0; itemIndex < timeline.items.length; itemIndex += 1) {
+    const item = timeline.items[itemIndex];
     if (consumedHistoryIndexes.size === 0 && item.kind !== "message") {
+      if (mergedItems.length > 0) {
+        mergedItems.push(item);
+        continue;
+      }
       if (flushPendingAtHistoryBoundary()) {
         mergedItems.push(item);
         continue;
@@ -1044,7 +1109,7 @@ function timelineForDisplay(
       mergedItems.push(item);
       continue;
     }
-    const historyIndex = matchingHistoryIndex(item);
+    const historyIndex = matchingHistoryIndex(item, itemIndex);
     if (historyIndex >= 0) {
       appendHistoryRange(historyIndex, pendingUnanchoredItems.length === 0);
       mergedItems.push(...pendingUnanchoredItems);
@@ -1056,6 +1121,17 @@ function timelineForDisplay(
     const messageId = persistedMessageId(item);
     if (messageId && historyMessageIds.has(messageId)) {
       rememberPendingHistoryBoundary(item);
+      continue;
+    }
+    if (messageId && isHistoricalSnapshotMessage(item)) {
+      const duplicateHistoryIndex = preCompactionDuplicateHistoryIndex(item, itemIndex);
+      if (duplicateHistoryIndex >= 0) {
+        consumedHistoryIndexes.add(duplicateHistoryIndex);
+      }
+      mergedItems.push(...pendingUnanchoredItems);
+      pendingUnanchoredItems.length = 0;
+      pendingHistoryBoundaryIndex = null;
+      mergedItems.push(item);
       continue;
     }
     if (isHistoricalSnapshotMessage(item)) {

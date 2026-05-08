@@ -1681,7 +1681,7 @@ describe("SessionPage", () => {
           {
             kind: "message",
             itemId: "completed-run:old-assistant",
-            message_id: "msg-stale-assistant-before-compact",
+            message_id: "msg-assistant-after-compact",
             role: "assistant",
             content: "refactor complete",
             markdown: true,
@@ -1721,14 +1721,230 @@ describe("SessionPage", () => {
     expect(await screen.findByText("Timeline 8")).toBeInTheDocument();
     const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
     expect(state?.items.map((item) => item.itemId)).toEqual([
+      "completed-run:old-user",
+      "completed-run:tool-group-1",
       "compact-system",
       "compact-reference",
-      "history-user-original",
-      "completed-run:tool-group-1",
       "history-assistant-summary",
       "history-user-review",
       "tool-group-review",
       "history-assistant-review",
+    ]);
+  });
+
+  it("preserves pre-compaction messages whose rewritten tail has the same content", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended" }),
+      history_items: [
+        {
+          item_id: "compact-system",
+          message_id: "msg-compact-system",
+          part_ids: { content: "msg-compact-system:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "[compacted context]",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T08:57:15Z",
+        },
+        {
+          item_id: "compact-reference",
+          message_id: "msg-compact-reference",
+          part_ids: { content: "msg-compact-reference:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "[compacted context — reference only] summary",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T08:57:15Z",
+        },
+        {
+          item_id: "history-user-rewritten-tail",
+          message_id: "msg-rewritten-tail",
+          part_ids: { content: "msg-rewritten-tail:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "analyse the current branch edit",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-08T08:57:15Z",
+        },
+        {
+          item_id: "history-assistant-after-compact",
+          message_id: "msg-assistant-after-compact",
+          part_ids: { content: "msg-assistant-after-compact:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "final answer after compaction",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T09:03:13Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "combined-history",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "completed-run:old-user-before-compact",
+            message_id: "msg-deleted-before-compact",
+            role: "user",
+            content: "analyse the current branch edit",
+            markdown: false,
+            historical: true,
+            created_at: "2026-05-08T08:47:17Z",
+          },
+          {
+            kind: "tool_group",
+            itemId: "completed-run:tool-group-before-compact",
+            label: "Tool calls",
+            status: "completed",
+            items: [],
+          },
+          {
+            kind: "message",
+            itemId: "later-run:history-user-rewritten-tail",
+            message_id: "msg-rewritten-tail",
+            role: "user",
+            content: "analyse the current branch edit",
+            markdown: false,
+            historical: true,
+            created_at: "2026-05-08T08:57:15Z",
+          },
+          {
+            kind: "message",
+            itemId: "history-assistant-after-compact",
+            message_id: "msg-assistant-after-compact",
+            role: "assistant",
+            content: "final answer after compaction",
+            markdown: true,
+            historical: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 100,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 5")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "completed-run:old-user-before-compact",
+      "completed-run:tool-group-before-compact",
+      "compact-system",
+      "compact-reference",
+      "history-assistant-after-compact",
+    ]);
+  });
+
+  it("anchors post-compaction stale snapshot messages by signature", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended" }),
+      history_items: [
+        {
+          item_id: "compact-system",
+          message_id: "msg-compact-system",
+          part_ids: { content: "msg-compact-system:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "[compacted context]",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T08:57:15Z",
+        },
+        {
+          item_id: "history-user-after-compact",
+          message_id: "msg-user-after-compact-rewritten",
+          part_ids: { content: "msg-user-after-compact-rewritten:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "fix the compacted session display",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-08T09:00:00Z",
+        },
+        {
+          item_id: "history-assistant-after-compact",
+          message_id: "msg-assistant-after-compact-rewritten",
+          part_ids: { content: "msg-assistant-after-compact-rewritten:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "display fixed",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-08T09:03:13Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "combined-history",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "completed-run:stale-user-after-compact",
+            message_id: "msg-stale-user-after-compact",
+            role: "user",
+            content: "fix the compacted session display",
+            markdown: false,
+            historical: true,
+            created_at: "2026-05-08T09:00:00Z",
+          },
+          {
+            kind: "message",
+            itemId: "history-assistant-after-compact",
+            message_id: "msg-assistant-after-compact-rewritten",
+            role: "assistant",
+            content: "display fixed",
+            markdown: true,
+            historical: true,
+            created_at: "2026-05-08T09:03:13Z",
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 100,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 3")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "compact-system",
+      "history-user-after-compact",
+      "history-assistant-after-compact",
     ]);
   });
 

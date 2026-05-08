@@ -464,6 +464,24 @@
   animation: fade-in var(--duration-slow) var(--ease-out);
 }
 
+.timeline-entry--compaction,
+.timeline-entry--compaction-summary-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.timeline-entry--compaction {
+  gap: var(--sp-1);
+}
+
+.timeline-entry__compaction-label {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
 /* Sub-agent banner */
 .timeline-entry__subagent {
   display: flex;
