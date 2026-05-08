@@ -63,3 +63,4 @@
 - Styled the Maintenance settings panel with a header, visible bordered retention-days input, and the same accent save button treatment used by settings save forms; rebuilt web static assets. Validation: `bun run test:web -- webapp/src/components/settings/SettingsPage.test.tsx`, `bun run lint`, `bun run typecheck`, and `bun run web:build` passed.
 - Renamed Maintenance settings save button to `Save Changes` and rebuilt static web assets. Validation: `bun run test:web -- webapp/src/components/settings/SettingsPage.test.tsx` and `bun run web:build` passed.
 - Reduced Maintenance retention-days input width to a compact 6rem and rebuilt static web assets. Validation: `bun run web:build` passed.
+- Replaced AppSidebar custom SVG icons with requested lucide icons for Sessions, Kanban, Dashboard, Settings, Expand, and Collapse. Validation: `bun run typecheck` and `bun run lint` passed.
