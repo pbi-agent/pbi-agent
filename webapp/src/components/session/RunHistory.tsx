@@ -48,7 +48,7 @@ export function RunHistory({ sessionId }: { sessionId: string }) {
             >
               <Clock3Icon data-icon="inline-start" />
               <span className="run-history__label">
-                Runs{hasRuns ? ` (${runs.length})` : ""}
+                {hasRuns ? `${runs.length}` : ""}
               </span>
               <ChevronDownIcon data-icon="inline-end" />
             </Button>
