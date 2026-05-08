@@ -29,7 +29,7 @@ export type CommandListResponse = { commands: CommandViewModel[]; config_revisio
 
 export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string };
 
-export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; active_profile_id: string | null; config_revision: string; options: ConfigOptionsModel };
+export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; active_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 
 export type ConfigOptionsModel = { provider_kinds: string[]; reasoning_efforts: string[]; openai_service_tiers: string[]; provider_metadata: Record<string, ProviderKindMetadataModel> };
 
@@ -84,6 +84,10 @@ export type LiveSessionSnapshotModel = { live_session_id: string; session_id: st
 export type LiveSessionStartedSseEventModel = { seq: number; created_at: string; type: "live_session_started"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
 export type LiveSessionUpdatedSseEventModel = { seq: number; created_at: string; type: "live_session_updated"; payload: LiveSessionLifecycleSseEventPayloadModel };
+
+export type MaintenanceConfigModel = { retention_days: number };
+
+export type MaintenanceConfigResponse = { maintenance: MaintenanceConfigModel; config_revision: string };
 
 export type MessageAddedSseEventModel = { seq: number; created_at: string; type: "message_added"; payload: MessageAddedSseEventPayloadModel };
 
@@ -302,6 +306,7 @@ export type ApiOperationResponses = {
   "PUT /api/config/active-model-profile": ActiveProfileResponse;
   "GET /api/config/bootstrap": ConfigBootstrapResponse;
   "GET /api/config/commands": CommandListResponse;
+  "PUT /api/config/maintenance": MaintenanceConfigResponse;
   "GET /api/config/model-profiles": ModelProfileListResponse;
   "POST /api/config/model-profiles": ModelProfileResponse;
   "DELETE /api/config/model-profiles/{profile_id}": void;
@@ -353,6 +358,7 @@ export type ApiOperationResponses = {
 export type ApiJsonRequestBodies = {
   "PUT /api/board/stages": UpdateBoardStagesRequest;
   "PUT /api/config/active-model-profile": ActiveProfileRequest;
+  "PUT /api/config/maintenance": MaintenanceConfigModel;
   "POST /api/config/model-profiles": ModelProfileMutationRequest;
   "PATCH /api/config/model-profiles/{profile_id}": ModelProfileUpdateRequest;
   "POST /api/config/providers": ProviderMutationRequest;

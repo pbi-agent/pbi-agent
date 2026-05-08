@@ -19,6 +19,7 @@ from pbi_agent.config import (
     ConfigConflictError,
     ConfigError,
     InternalConfig,
+    MaintenanceConfig,
     ModelProfileConfig,
     ProviderConfig,
     WebConfig,
@@ -36,6 +37,7 @@ from pbi_agent.config import (
     save_internal_config,
     save_internal_config_with_revision,
     select_active_model_profile,
+    update_maintenance_config,
 )
 
 
@@ -76,6 +78,28 @@ def _jwt(payload: dict[str, object]) -> str:
         return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
     return f"{encode({'alg': 'none', 'typ': 'JWT'})}.{encode(payload)}."
+
+
+def test_internal_config_maintenance_defaults_and_save(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(path))
+
+    assert load_internal_config().maintenance == MaintenanceConfig(retention_days=30)
+
+    updated, _ = update_maintenance_config(retention_days=14)
+
+    assert updated.retention_days == 14
+    assert load_internal_config().maintenance.retention_days == 14
+
+
+def test_internal_config_rejects_invalid_maintenance_days(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "config.json"
+    monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(path))
+
+    with pytest.raises(ConfigError):
+        update_maintenance_config(retention_days=0)
 
 
 def _write_command(root: Path, name: str, content: str) -> Path:

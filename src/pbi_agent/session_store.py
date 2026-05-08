@@ -196,6 +196,14 @@ CREATE TABLE IF NOT EXISTS web_manager_leases (
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS maintenance_state (
+    name             TEXT PRIMARY KEY,
+    last_run_date    TEXT NOT NULL,
+    last_started_at  TEXT NOT NULL,
+    last_finished_at TEXT,
+    status           TEXT NOT NULL DEFAULT 'started'
+);
 """
 
 
@@ -536,6 +544,22 @@ def _deserialize_image_attachments(raw_value: object) -> list[MessageImageAttach
     return attachments
 
 
+def _upload_ids_from_attachments_json(raw_value: object) -> set[str]:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return set()
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return set()
+    if not isinstance(payload, list):
+        return set()
+    upload_ids: set[str] = set()
+    for item in payload:
+        if isinstance(item, dict) and isinstance(item.get("upload_id"), str):
+            upload_ids.add(item["upload_id"])
+    return upload_ids
+
+
 def _message_record_from_row(row: sqlite3.Row) -> MessageRecord:
     data = dict(row)
     return MessageRecord(
@@ -696,6 +720,145 @@ class SessionStore:
             "WHERE directory != LOWER(directory)"
         )
         self._conn.commit()
+
+    def claim_daily_maintenance(self, run_date: str) -> bool:
+        now = _now_iso()
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                row = self._conn.execute(
+                    "SELECT last_run_date FROM maintenance_state WHERE name = ?",
+                    ("daily",),
+                ).fetchone()
+                if row is not None and row["last_run_date"] == run_date:
+                    self._conn.rollback()
+                    return False
+                self._conn.execute(
+                    "INSERT INTO maintenance_state "
+                    "(name, last_run_date, last_started_at, last_finished_at, status) "
+                    "VALUES (?, ?, ?, NULL, 'started') "
+                    "ON CONFLICT(name) DO UPDATE SET "
+                    "last_run_date = excluded.last_run_date, "
+                    "last_started_at = excluded.last_started_at, "
+                    "last_finished_at = NULL, status = 'started'",
+                    ("daily", run_date, now),
+                )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+        return True
+
+    def finish_daily_maintenance(self, *, success: bool) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE maintenance_state SET last_finished_at = ?, status = ? "
+                "WHERE name = ?",
+                (_now_iso(), "completed" if success else "failed", "daily"),
+            )
+            self._conn.commit()
+
+    def purge_old_data(self, cutoff_iso: str) -> dict[str, int]:
+        with self._lock:
+            old_session_ids = [
+                str(row["session_id"])
+                for row in self._conn.execute(
+                    "SELECT session_id FROM sessions WHERE updated_at < ?",
+                    (cutoff_iso,),
+                ).fetchall()
+            ]
+            old_run_ids = [
+                str(row["run_session_id"])
+                for row in self._conn.execute(
+                    "SELECT rs.run_session_id FROM run_sessions rs "
+                    "LEFT JOIN sessions s ON rs.session_id = s.session_id "
+                    "WHERE rs.started_at < ? "
+                    "OR (rs.session_id IS NOT NULL AND s.session_id IS NULL) "
+                    "OR rs.session_id IN "
+                    "(SELECT session_id FROM sessions WHERE updated_at < ?)",
+                    (cutoff_iso, cutoff_iso),
+                ).fetchall()
+            ]
+            old_event_ids = [
+                int(row["id"])
+                for row in self._conn.execute(
+                    "SELECT id FROM observability_events WHERE timestamp < ?",
+                    (cutoff_iso,),
+                ).fetchall()
+            ]
+
+            deleted_messages = self._delete_where_in(
+                "messages", "session_id", old_session_ids
+            )
+            deleted_events = self._delete_where_in(
+                "observability_events", "session_id", old_session_ids
+            )
+            deleted_events += self._delete_where_in(
+                "observability_events", "run_session_id", old_run_ids
+            )
+            deleted_events += self._delete_where_in(
+                "observability_events", "id", old_event_ids
+            )
+            deleted_runs = self._delete_where_in(
+                "run_sessions", "run_session_id", old_run_ids
+            )
+            self._clear_where_in("kanban_tasks", "session_id", old_session_ids)
+            deleted_sessions = self._delete_where_in(
+                "sessions", "session_id", old_session_ids
+            )
+            deleted_leases = self._conn.execute(
+                "DELETE FROM web_manager_leases WHERE heartbeat_at < ?",
+                (cutoff_iso,),
+            ).rowcount
+            self._conn.commit()
+        return {
+            "sessions": deleted_sessions,
+            "messages": deleted_messages,
+            "run_sessions": deleted_runs,
+            "observability_events": deleted_events,
+            "web_manager_leases": deleted_leases,
+        }
+
+    def referenced_upload_ids(self) -> set[str]:
+        upload_ids: set[str] = set()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT image_attachments_json FROM messages "
+                "UNION ALL SELECT image_attachments_json FROM kanban_tasks"
+            ).fetchall()
+        for row in rows:
+            upload_ids.update(_upload_ids_from_attachments_json(row[0]))
+        return upload_ids
+
+    def _delete_where_in(
+        self,
+        table: str,
+        column: str,
+        values: list[str] | list[int],
+    ) -> int:
+        if not values:
+            return 0
+        placeholders = ",".join("?" for _ in values)
+        cursor = self._conn.execute(
+            f"DELETE FROM {table} WHERE {column} IN ({placeholders})",
+            values,
+        )
+        return cursor.rowcount
+
+    def _clear_where_in(
+        self,
+        table: str,
+        column: str,
+        values: list[str] | list[int],
+    ) -> int:
+        if not values:
+            return 0
+        placeholders = ",".join("?" for _ in values)
+        cursor = self._conn.execute(
+            f"UPDATE {table} SET {column} = NULL WHERE {column} IN ({placeholders})",
+            values,
+        )
+        return cursor.rowcount
 
     def acquire_web_manager_lease(
         self,

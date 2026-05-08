@@ -80,6 +80,7 @@ function makeConfigBootstrap(
   return {
     config_revision: "rev-1",
     active_profile_id: "profile-1",
+    maintenance: { retention_days: 30 },
     providers: [],
     model_profiles: [
       {

@@ -439,8 +439,13 @@ export type ConfigBootstrapPayload = {
   model_profiles: ModelProfileView[];
   commands: CommandView[];
   active_profile_id: string | null;
+  maintenance: MaintenanceConfig;
   config_revision: string;
   options: ConfigOptions;
+};
+
+export type MaintenanceConfig = {
+  retention_days: number;
 };
 
 export type TimelineMessageItem = {

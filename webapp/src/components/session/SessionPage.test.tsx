@@ -202,6 +202,7 @@ function makeConfigBootstrap(
   return {
     config_revision: "rev-1",
     active_profile_id: "analysis",
+    maintenance: { retention_days: 30 },
     providers: [
       {
         id: "openai-main",

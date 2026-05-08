@@ -11,6 +11,7 @@ import {
   logoutProviderAuth,
   refreshProviderAuth,
   setActiveModelProfile,
+  updateMaintenanceConfig,
   updateModelProfile,
   updateProvider,
 } from "../../api";
@@ -36,6 +37,7 @@ import { CommandsSettingsSection } from "./CommandsSettingsSection";
 import { ModelProfilesSettingsSection } from "./ModelProfilesSettingsSection";
 import type { ProfilePayload } from "./ModelProfileModal";
 import { ModelProfileModal } from "./ModelProfileModal";
+import { MaintenanceSettingsSection } from "./MaintenanceSettingsSection";
 import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
 import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
 import { ProviderUsageLimitsDialog } from "./ProviderUsageLimitsDialog";
@@ -57,7 +59,7 @@ type ModalState =
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
 
-type SettingsTabId = "appearance" | "notifications" | "providers" | "model-profiles" | "commands";
+type SettingsTabId = "appearance" | "notifications" | "providers" | "model-profiles" | "commands" | "maintenance";
 
 const SETTINGS_NAV_GROUPS: Array<{
   label: string;
@@ -95,6 +97,11 @@ const SETTINGS_NAV_GROUPS: Array<{
         id: "commands",
         label: "Commands",
         description: "Prompt presets",
+      },
+      {
+        id: "maintenance",
+        label: "Maintenance",
+        description: "Retention and cleanup",
       },
     ],
   },
@@ -250,6 +257,15 @@ export function SettingsPage() {
     }
   }
 
+  async function handleSaveMaintenance(retentionDays: number): Promise<void> {
+    try {
+      await updateMaintenanceConfig(retentionDays, getRevision());
+      await invalidateBoth();
+    } catch (err) {
+      wrapStale(err);
+    }
+  }
+
   if (configQuery.isLoading) {
     return (
       <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
@@ -305,7 +321,7 @@ className="settings-nav__header-close app-close-icon-button"
     );
   }
 
-  const { providers, model_profiles, commands, active_profile_id, options } =
+  const { providers, model_profiles, commands, active_profile_id, maintenance, options } =
     configQuery.data;
 
   return (
@@ -416,6 +432,13 @@ className="settings-nav__header-close app-close-icon-button"
                   )}
 
                   {activeTab === "commands" && <CommandsSettingsSection commands={commands} />}
+
+                  {activeTab === "maintenance" && (
+                    <MaintenanceSettingsSection
+                      maintenance={maintenance}
+                      onSave={handleSaveMaintenance}
+                    />
+                  )}
                 </div>
               </div>
             </div>

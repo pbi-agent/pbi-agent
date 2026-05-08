@@ -16,6 +16,7 @@ import {
   refreshProviderAuth,
   setActiveModelProfile,
   startProviderAuthFlow,
+  updateMaintenanceConfig,
 } from "../../api";
 import type { ConfigBootstrapPayload } from "../../types";
 import {
@@ -77,6 +78,7 @@ vi.mock("../../api", async (importOriginal) => {
     fetchProviderUsageLimits: vi.fn(),
     refreshProviderAuth: vi.fn(),
     logoutProviderAuth: vi.fn(),
+    updateMaintenanceConfig: vi.fn(),
   };
 });
 
@@ -86,6 +88,7 @@ function makeConfigBootstrap(
   return {
     config_revision: "rev-1",
     active_profile_id: "analysis",
+    maintenance: { retention_days: 30 },
     providers: [
       {
         id: "openai-main",
@@ -458,6 +461,10 @@ describe("SettingsPage", () => {
       fetched_at: "2026-05-01T00:00:00Z",
       buckets: [],
     });
+    vi.mocked(updateMaintenanceConfig).mockResolvedValue({
+      maintenance: { retention_days: 14 },
+      config_revision: "rev-2",
+    });
     vi.mocked(fetchProviderModels).mockResolvedValue({
       provider_id: "openai-main",
       provider_kind: "openai",
@@ -720,6 +727,38 @@ describe("SettingsPage", () => {
     expect(within(dialog).getByRole("heading", { name: "Review Mode" })).toBeInTheDocument();
     expect(within(dialog).getByText("Review proposed code changes.")).toBeInTheDocument();
     expect(within(dialog).getByText("Bugs")).toBeInTheDocument();
+  });
+
+  it("saves maintenance retention days", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Maintenance");
+
+    const input = await screen.findByLabelText("Retention days");
+    expect(input).toHaveValue(30);
+    await user.clear(input);
+    await user.type(input, "14");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(updateMaintenanceConfig).toHaveBeenCalledWith(14, "rev-1");
+    });
+  });
+
+  it("rejects fractional maintenance retention days", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Maintenance");
+
+    const input = await screen.findByLabelText("Retention days");
+    await user.clear(input);
+    await user.type(input, "1.5");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(await screen.findByText("Retention days must be a whole number of at least 1.")).toBeInTheDocument();
+    expect(updateMaintenanceConfig).not.toHaveBeenCalled();
   });
 
   it("renders the onboarding and empty-provider states when config is blank", async () => {

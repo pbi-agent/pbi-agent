@@ -318,6 +318,15 @@ class ActiveProfileResponse(BaseModel):
     config_revision: str
 
 
+class MaintenanceConfigModel(BaseModel):
+    retention_days: int = Field(ge=1)
+
+
+class MaintenanceConfigResponse(BaseModel):
+    maintenance: MaintenanceConfigModel
+    config_revision: str
+
+
 class CommandViewModel(BaseModel):
     id: str
     name: str
@@ -337,5 +346,6 @@ class ConfigBootstrapResponse(BaseModel):
     model_profiles: list[ModelProfileViewModel]
     commands: list[CommandViewModel]
     active_profile_id: str | None
+    maintenance: MaintenanceConfigModel
     config_revision: str
     options: ConfigOptionsModel

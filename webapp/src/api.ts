@@ -24,6 +24,7 @@ import type {
   ImageAttachment,
   LiveSession,
   UserQuestionAnswer,
+  MaintenanceConfig,
   ModelProfileView,
   ObservabilityEvent,
   ProviderAuthFlowResponse,
@@ -55,6 +56,10 @@ type ModelProfileResponsePayload = {
 };
 type ActiveModelProfileResponsePayload = {
   active_profile_id: string | null;
+  config_revision: string;
+};
+type MaintenanceConfigResponsePayload = {
+  maintenance: MaintenanceConfig;
   config_revision: string;
 };
 type SessionRunsResponsePayload = { runs: RunSession[] };
@@ -989,6 +994,26 @@ export async function setActiveModelProfile(
       headers: { "If-Match": configRevision },
       body: jsonBody("PUT /api/config/active-model-profile", {
         profile_id: modelProfileId,
+      }),
+    },
+  );
+}
+
+export async function updateMaintenanceConfig(
+  retentionDays: number,
+  configRevision: string,
+): Promise<{ maintenance: MaintenanceConfig; config_revision: string }> {
+  return apiRequest<
+    "PUT /api/config/maintenance",
+    MaintenanceConfigResponsePayload
+  >(
+    "PUT /api/config/maintenance",
+    "/api/config/maintenance",
+    {
+      method: "PUT",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("PUT /api/config/maintenance", {
+        retention_days: retentionDays,
       }),
     },
   );

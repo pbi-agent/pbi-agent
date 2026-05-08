@@ -34,9 +34,11 @@ from pbi_agent.config import (
     delete_model_profile_config,
     delete_provider_config,
     list_model_profile_configs,
+    load_internal_config,
     list_provider_configs,
     select_active_model_profile,
     slugify,
+    update_maintenance_config,
     update_model_profile_config,
     update_provider_config,
 )
@@ -49,7 +51,21 @@ def _handle_config_command(args: argparse.Namespace) -> int:  # pyright: ignore[
         return _handle_config_providers_command(args)
     if args.config_scope == "profiles":
         return _handle_config_profiles_command(args)
+    if args.config_scope == "maintenance":
+        return _handle_config_maintenance_command(args)
     raise ConfigError(f"Unknown config scope '{args.config_scope}'.")
+
+
+def _handle_config_maintenance_command(args: argparse.Namespace) -> int:
+    if args.config_action == "show":
+        config = load_internal_config().maintenance
+        print(f"retention_days: {config.retention_days}")
+        return 0
+    if args.config_action == "set":
+        config, _ = update_maintenance_config(retention_days=args.retention_days)
+        print(f"Updated maintenance retention to {config.retention_days} days.")
+        return 0
+    raise ConfigError(f"Unknown maintenance config action '{args.config_action}'.")
 
 
 def _handle_config_providers_command(args: argparse.Namespace) -> int:

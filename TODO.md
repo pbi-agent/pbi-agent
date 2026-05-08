@@ -1,3 +1,5 @@
-[X] Patch sandbox Dockerfile recommendations
-[X] Run syntax/static validation
-[X] Update memory
+# TODO
+
+[X] Narrow maintenance retention-days input
+[X] Run focused validation/build
+[X] Update memory and summarize
