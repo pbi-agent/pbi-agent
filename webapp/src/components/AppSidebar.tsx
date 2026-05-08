@@ -1,14 +1,6 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart3Icon,
-  KanbanSquareIcon,
-  MessageSquareTextIcon,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
-  SettingsIcon,
-} from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { fetchBootstrap } from "../api";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useSidebarStore } from "../hooks/useSidebar";
@@ -19,6 +11,102 @@ import { cn } from "../lib/utils";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
+type SidebarIconBaseProps = SVGProps<SVGSVGElement> & {
+  children: ReactNode;
+};
+
+function SidebarIconBase({ children, className, ...props }: SidebarIconBaseProps) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      {...props}
+      className={cn("app-sidebar__icon", className)}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function SidebarIconTile() {
+  return <rect x="3.25" y="3.25" width="13.5" height="13.5" rx="2.75" />;
+}
+
+function SidebarSessionsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M6.4 7.25h7.2" />
+      <path d="M6.4 10h6" />
+      <path d="M6.4 12.75h4.1" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarKanbanIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M6.6 6.75v6.5" />
+      <path d="M10 6.75v6.5" />
+      <path d="M13.4 6.75v6.5" />
+      <path d="M5.9 8.85h8.2" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarDashboardIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M6.45 13.25v-3" />
+      <path d="M10 13.25v-6.5" />
+      <path d="M13.55 13.25v-4.6" />
+      <path d="M5.9 13.25h8.2" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarSettingsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M6.2 7.15h7.6" />
+      <path d="M8.35 6.25v1.8" />
+      <path d="M6.2 10h7.6" />
+      <path d="M11.65 9.1v1.8" />
+      <path d="M6.2 12.85h7.6" />
+      <path d="M9.55 11.95v1.8" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarCollapseIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M7.45 4.05v11.9" />
+      <path d="M13 7.4 10.4 10 13 12.6" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarExpandIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M7.45 4.05v11.9" />
+      <path d="M10.4 7.4 13 10l-2.6 2.6" />
+    </SidebarIconBase>
+  );
+}
+
 type NavItem = {
   to: string;
   label: string;
@@ -26,15 +114,22 @@ type NavItem = {
 };
 
 const appNavItems: NavItem[] = [
-  { to: "/sessions", label: "Sessions", icon: MessageSquareTextIcon },
-  { to: "/board", label: "Kanban", icon: KanbanSquareIcon },
-  { to: "/dashboard", label: "Dashboard", icon: BarChart3Icon },
+  { to: "/sessions", label: "Sessions", icon: SidebarSessionsIcon },
+  { to: "/board", label: "Kanban", icon: SidebarKanbanIcon },
+  { to: "/dashboard", label: "Dashboard", icon: SidebarDashboardIcon },
 ];
 
 const TOGGLE_SHORTCUT_HINT =
   typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/.test(navigator.platform)
     ? "⌘B"
     : "Ctrl+B";
+
+function isNavItemActive(pathname: string, itemPath: string) {
+  if (itemPath === "/sessions") {
+    return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
+  }
+  return pathname === itemPath;
+}
 
 export type AppSidebarLayoutProps = {
   children: ReactNode;
@@ -119,7 +214,11 @@ function AppSidebarHead() {
             aria-expanded={isOpen}
             aria-controls="app-sidebar"
           >
-            {isOpen ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
+            {isOpen ? (
+              <SidebarCollapseIcon aria-hidden="true" />
+            ) : (
+              <SidebarExpandIcon aria-hidden="true" />
+            )}
           </Button>
         </TooltipTrigger>
         <TooltipContent side="right">
@@ -188,16 +287,16 @@ function AppSidebarNav({ collapsed }: { collapsed: boolean }) {
 
 function SidebarNavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const Icon = item.icon;
+  const { pathname } = useLocation();
+  const isActive = isNavItemActive(pathname, item.to);
   const link = (
     <NavLink
       to={item.to}
-      className={({ isActive }) =>
-        cn(
-          "app-sidebar__nav-item",
-          collapsed && "app-sidebar__nav-item--collapsed",
-          isActive && "app-sidebar__nav-item--active",
-        )
-      }
+      className={cn(
+        "app-sidebar__nav-item",
+        collapsed && "app-sidebar__nav-item--collapsed",
+        isActive && "app-sidebar__nav-item--active",
+      )}
       aria-label={collapsed ? item.label : undefined}
     >
       <Icon aria-hidden="true" />
@@ -240,7 +339,7 @@ function SettingsButton({ collapsed }: { collapsed: boolean }) {
       onClick={openSettings}
       aria-label="Settings"
     >
-      <SettingsIcon aria-hidden="true" />
+      <SidebarSettingsIcon aria-hidden="true" />
       {!collapsed && <span>Settings</span>}
     </button>
   );

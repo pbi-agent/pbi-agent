@@ -17,6 +17,7 @@ import {
   updateSession,
   uploadSavedSessionImages,
 } from "../../api";
+import { useSidebarStore } from "../../hooks/useSidebar";
 import { createEmptySessionState, getSavedSessionKey, useSessionStore } from "../../store";
 import type {
   ConfigBootstrapPayload,
@@ -366,6 +367,7 @@ function renderSessionRoute(route: string) {
 describe("SessionPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    useSidebarStore.setState({ isOpen: true });
     useSessionStore.setState({
       activeSessionKey: null,
       sessionsByKey: {},

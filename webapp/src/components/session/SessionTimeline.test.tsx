@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "../ui/tooltip";
 import { SessionTimeline } from "./SessionTimeline";
 
 const EMPTY_DIFF_TEXT = "No diff content was provided for this operation.";
@@ -1604,6 +1605,7 @@ expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
         processing={null}
         itemsVersion={1}
       />,
+      { wrapper: TooltipProvider },
     );
 
     const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");

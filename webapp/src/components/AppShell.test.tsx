@@ -198,7 +198,10 @@ describe("AppShell", () => {
 
     renderWithProviders(<AppShell />, { route: "/board" });
 
-    await user.hover(await screen.findByRole("link", { name: "Kanban" }));
+    const kanbanLink = await screen.findByRole("link", { name: "Kanban" });
+    expect(kanbanLink).toHaveClass("app-sidebar__nav-item--collapsed");
+
+    await user.hover(kanbanLink);
     const tooltip = await screen.findByRole("tooltip");
     const tooltipSurface = tooltip.closest('[data-slot="tooltip-content"]');
     expect(tooltipSurface).toHaveAttribute("data-app-tooltip");
