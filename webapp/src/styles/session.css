@@ -307,26 +307,6 @@
   min-width: 0;
 }
 
-.session-topbar__delete-button {
-  color: var(--color-text-secondary);
-  transition:
-    background var(--duration-fast),
-    color var(--duration-fast),
-    border-color var(--duration-fast),
-    box-shadow var(--duration-fast);
-}
-
-.session-topbar__delete-button:hover:not(:disabled),
-.session-topbar__delete-button:focus-visible {
-  background: var(--color-error-muted);
-  color: var(--color-error);
-}
-
-.session-topbar__delete-button:focus-visible {
-  border-color: color-mix(in srgb, var(--color-error) 40%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 18%, transparent);
-}
-
 .connection-badge {
   display: flex;
   align-items: center;

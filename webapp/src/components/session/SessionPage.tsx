@@ -7,7 +7,6 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CpuIcon,
-  Trash2Icon,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
@@ -572,7 +571,6 @@ export function SessionPage({
     }
   };
 
-  const canDeleteActiveSession = Boolean(routeSessionId && activeSessionRecord && !isSubAgentRoute);
   const canInterruptActiveTurn = Boolean(
     !isSubAgentRoute
     && sessionState?.liveSessionId
@@ -686,24 +684,6 @@ export function SessionPage({
               compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
               usage={sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null}
             />
-            {canDeleteActiveSession ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="session-topbar__delete-button"
-                title="Delete session"
-                aria-label="Delete session"
-                onClick={() => {
-                  if (activeSessionRecord) {
-                    deleteSessionMutation.reset();
-                    setPendingDeleteSession(activeSessionRecord);
-                  }
-                }}
-              >
-                <Trash2Icon />
-              </Button>
-            ) : null}
           </div>
         </div>
 

@@ -2750,14 +2750,12 @@ describe("SessionPage", () => {
     });
   });
 
-  it("renders the saved-session delete icon as a neutral toolbar action with destructive hover styling", async () => {
+  it("does not render a saved-session delete action in the top toolbar", async () => {
     renderSessionRoute("/sessions/session-1");
 
-    const deleteButton = await screen.findByRole("button", { name: "Delete session" });
+    await screen.findByText("Run History session-1");
 
-    expect(deleteButton).toHaveAttribute("data-variant", "ghost");
-    expect(deleteButton).toHaveAttribute("data-size", "icon-sm");
-    expect(deleteButton).toHaveClass("session-topbar__delete-button");
+    expect(screen.queryByRole("button", { name: "Delete session" })).not.toBeInTheDocument();
   });
 
   it("updates saved session titles from the sidebar", async () => {
