@@ -122,7 +122,7 @@ function AppSidebarHead() {
             {isOpen ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right" className="app-sidebar__toggle-tooltip">
+        <TooltipContent side="right">
           <span>{toggleLabel}</span>
           <kbd className="app-sidebar__toggle-shortcut">{TOGGLE_SHORTCUT_HINT}</kbd>
         </TooltipContent>

@@ -133,12 +133,6 @@
   transform: scale(1.08);
 }
 
-.app-sidebar__toggle-tooltip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
 .app-sidebar__toggle-shortcut {
   display: inline-flex;
   align-items: center;

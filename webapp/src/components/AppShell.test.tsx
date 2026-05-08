@@ -190,6 +190,21 @@ describe("AppShell", () => {
     expect(screen.queryByRole("button", { name: "Change theme" })).not.toBeInTheDocument();
   });
 
+  it("uses the shared app tooltip surface for collapsed sidebar items", async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    await user.hover(await screen.findByRole("link", { name: "Kanban" }));
+    const tooltip = await screen.findByRole("tooltip");
+    const tooltipSurface = tooltip.closest('[data-slot="tooltip-content"]');
+    expect(tooltipSurface).toHaveAttribute("data-app-tooltip");
+    expect(tooltipSurface).toHaveAttribute("data-slot", "tooltip-content");
+  });
+
   it("redirects /settings to the sessions route", async () => {
     renderWithProviders(<AppShell />, {
       route: "/settings",

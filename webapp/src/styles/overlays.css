@@ -40,3 +40,28 @@
 [data-slot="dropdown-menu-separator"] {
   margin-block: var(--sp-2);
 }
+
+/*
+ * One app-wide tooltip surface. Every tooltip, including custom fixed-position
+ * tooltips, opts into this with `data-app-tooltip` so padding/color/border stay
+ * coherent and no local arrow element can overlap the text.
+ */
+[data-app-tooltip] {
+  box-sizing: border-box;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 2rem;
+  width: fit-content;
+  max-width: min(20rem, calc(100vw - 2rem));
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-normal);
+}
