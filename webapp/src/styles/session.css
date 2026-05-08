@@ -401,19 +401,21 @@
 
 /* ── Profile Selector ── */
 .profile-selector__trigger {
-  min-width: 160px;
+  min-width: 0;
   max-width: min(40vw, 300px);
+  flex-shrink: 1;
   justify-content: flex-start;
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
 }
 
 .profile-selector__name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: left;
+  white-space: nowrap;
 }
 
 .profile-selector__dropdown {
@@ -2977,8 +2979,7 @@
   }
 
   .profile-selector__trigger {
-    width: 100%;
-    max-width: none;
+    max-width: 100%;
     min-width: 0;
   }
 

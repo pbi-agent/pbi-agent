@@ -1,6 +1,4 @@
 # TODO
 
-[X] Inspect current sidebar header layout
-[X] Center workspace badge in sidebar header
-[X] Run focused validation
-[X] Update memory
+[X] Implement responsive model profile dropdown chevron spacing
+[X] Run focused validation, update memory, and hand off
