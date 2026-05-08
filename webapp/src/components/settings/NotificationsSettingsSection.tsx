@@ -22,6 +22,7 @@ import {
   FieldLabel,
 } from "../ui/field";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 function notificationPermissionLabel(
   permission: BrowserNotificationPermission,
@@ -136,19 +137,23 @@ export function NotificationsSettingsSection() {
                           </NativeSelectOption>
                         ))}
                       </NativeSelect>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon-sm"
-                        className="settings-notifications__sound-preview"
-                        aria-label="Preview notification sound"
-                        title="Preview notification sound"
-                        onClick={() => {
-                          void playNotificationSound(preferences.soundId);
-                        }}
-                      >
-                        <PlayIcon aria-hidden="true" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            className="settings-notifications__sound-preview"
+                            aria-label="Preview notification sound"
+                            onClick={() => {
+                              void playNotificationSound(preferences.soundId);
+                            }}
+                          >
+                            <PlayIcon aria-hidden="true" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Preview notification sound</TooltipContent>
+                      </Tooltip>
                     </div>
                     <FieldDescription id="notification-sound-description">
                       {

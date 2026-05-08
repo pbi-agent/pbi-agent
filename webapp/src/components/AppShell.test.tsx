@@ -183,10 +183,29 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
   });
 
-  it("renders the theme menu button in the sidebar footer", async () => {
+  it("does not render the theme menu button in the sidebar footer", async () => {
     renderWithProviders(<AppShell />, { route: "/board" });
 
-    expect(await screen.findByRole("button", { name: "Change theme" })).toBeInTheDocument();
+    await screen.findByRole("button", { name: "Settings" });
+    expect(screen.queryByRole("button", { name: "Change theme" })).not.toBeInTheDocument();
+  });
+
+  it("uses the shared app tooltip surface for collapsed sidebar items", async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    const kanbanLink = await screen.findByRole("link", { name: "Kanban" });
+    expect(kanbanLink).toHaveClass("app-sidebar__nav-item--collapsed");
+
+    await user.hover(kanbanLink);
+    const tooltip = await screen.findByRole("tooltip");
+    const tooltipSurface = tooltip.closest('[data-slot="tooltip-content"]');
+    expect(tooltipSurface).toHaveAttribute("data-app-tooltip");
+    expect(tooltipSurface).toHaveAttribute("data-slot", "tooltip-content");
   });
 
   it("redirects /settings to the sessions route", async () => {
@@ -208,7 +227,7 @@ describe("AppShell", () => {
 
     renderWithProviders(<AppShell />, { route: "/board" });
 
-    expect(await screen.findByRole("button", { name: "Change theme" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Settings" })).toBeInTheDocument();
     expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
   });
 
@@ -239,6 +258,28 @@ describe("AppShell", () => {
     expect(useSidebarStore.getState().isOpen).toBe(true);
 
     await user.keyboard("{Control>}{Alt>}b{/Alt}{/Control}");
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+  });
+
+  it("collapses the sidebar when clicking main content", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+    await user.click(await screen.findByText("Board Page"));
+    expect(useSidebarStore.getState().isOpen).toBe(false);
+  });
+
+  it("keeps the sidebar open when clicking inside the sidebar", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    const sidebar = await screen.findByRole("complementary", { name: "Application sidebar" });
+    expect(useSidebarStore.getState().isOpen).toBe(true);
+
+    await user.click(sidebar);
     expect(useSidebarStore.getState().isOpen).toBe(true);
   });
 

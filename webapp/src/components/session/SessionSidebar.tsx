@@ -102,6 +102,7 @@ export function SessionSidebar({
         <h2 className="session-sidebar__title">Sessions</h2>
         <Button
           type="button"
+          variant="ghost"
           size="sm"
           className="session-sidebar__new-button"
           onClick={onNewSession}

@@ -1,35 +1,111 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart3Icon,
-  CheckIcon,
-  KanbanSquareIcon,
-  MessageSquareTextIcon,
-  MoonStarIcon,
-  PaletteIcon,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
-  SettingsIcon,
-  SunIcon,
-} from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { fetchBootstrap } from "../api";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useSidebarStore } from "../hooks/useSidebar";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { themeOptions, useTheme, type AppTheme } from "./ThemeProvider";
 import { cn } from "../lib/utils";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
+
+type SidebarIconBaseProps = SVGProps<SVGSVGElement> & {
+  children: ReactNode;
+};
+
+function SidebarIconBase({ children, className, ...props }: SidebarIconBaseProps) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      {...props}
+      className={cn("app-sidebar__icon", className)}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function SidebarIconTile() {
+  return <rect x="3.25" y="3.25" width="13.5" height="13.5" rx="2.75" />;
+}
+
+function SidebarSessionsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M6.4 7.25h7.2" />
+      <path d="M6.4 10h6" />
+      <path d="M6.4 12.75h4.1" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarKanbanIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M6.6 6.75v6.5" />
+      <path d="M10 6.75v6.5" />
+      <path d="M13.4 6.75v6.5" />
+      <path d="M5.9 8.85h8.2" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarDashboardIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M6.45 13.25v-3" />
+      <path d="M10 13.25v-6.5" />
+      <path d="M13.55 13.25v-4.6" />
+      <path d="M5.9 13.25h8.2" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarSettingsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M6.2 7.15h7.6" />
+      <path d="M8.35 6.25v1.8" />
+      <path d="M6.2 10h7.6" />
+      <path d="M11.65 9.1v1.8" />
+      <path d="M6.2 12.85h7.6" />
+      <path d="M9.55 11.95v1.8" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarCollapseIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M7.45 4.05v11.9" />
+      <path d="M13 7.4 10.4 10 13 12.6" />
+    </SidebarIconBase>
+  );
+}
+
+function SidebarExpandIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <SidebarIconBase {...props}>
+      <SidebarIconTile />
+      <path d="M7.45 4.05v11.9" />
+      <path d="M10.4 7.4 13 10l-2.6 2.6" />
+    </SidebarIconBase>
+  );
+}
 
 type NavItem = {
   to: string;
@@ -38,21 +114,22 @@ type NavItem = {
 };
 
 const appNavItems: NavItem[] = [
-  { to: "/sessions", label: "Sessions", icon: MessageSquareTextIcon },
-  { to: "/board", label: "Kanban", icon: KanbanSquareIcon },
-  { to: "/dashboard", label: "Dashboard", icon: BarChart3Icon },
+  { to: "/sessions", label: "Sessions", icon: SidebarSessionsIcon },
+  { to: "/board", label: "Kanban", icon: SidebarKanbanIcon },
+  { to: "/dashboard", label: "Dashboard", icon: SidebarDashboardIcon },
 ];
-
-const themeIcons: Record<AppTheme, IconType> = {
-  light: SunIcon,
-  dark: MoonStarIcon,
-  prism: PaletteIcon,
-};
 
 const TOGGLE_SHORTCUT_HINT =
   typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/.test(navigator.platform)
     ? "⌘B"
     : "Ctrl+B";
+
+function isNavItemActive(pathname: string, itemPath: string) {
+  if (itemPath === "/sessions") {
+    return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
+  }
+  return pathname === itemPath;
+}
 
 export type AppSidebarLayoutProps = {
   children: ReactNode;
@@ -66,6 +143,12 @@ export type AppSidebarLayoutProps = {
  */
 export function AppSidebarLayout({ children, contextPanel }: AppSidebarLayoutProps) {
   const isOpen = useSidebarStore((state) => state.isOpen);
+  const close = useSidebarStore((state) => state.close);
+
+  function handleMainClick() {
+    if (isOpen) close();
+  }
+
   return (
     <div
       className={cn(
@@ -75,7 +158,9 @@ export function AppSidebarLayout({ children, contextPanel }: AppSidebarLayoutPro
       data-sidebar-state={isOpen ? "open" : "collapsed"}
     >
       <AppSidebar contextPanel={contextPanel} />
-      <div className="app-shell-layout__main">{children}</div>
+      <div className="app-shell-layout__main" onClick={handleMainClick}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -129,10 +214,14 @@ function AppSidebarHead() {
             aria-expanded={isOpen}
             aria-controls="app-sidebar"
           >
-            {isOpen ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
+            {isOpen ? (
+              <SidebarCollapseIcon aria-hidden="true" />
+            ) : (
+              <SidebarExpandIcon aria-hidden="true" />
+            )}
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right" className="app-sidebar__toggle-tooltip">
+        <TooltipContent side="right">
           <span>{toggleLabel}</span>
           <kbd className="app-sidebar__toggle-shortcut">{TOGGLE_SHORTCUT_HINT}</kbd>
         </TooltipContent>
@@ -162,15 +251,23 @@ function AppSidebarWorkspace() {
 
   if (!workspaceBadgeLabel) return null;
 
+  const workspaceBadge = (
+    <Badge
+      variant="outline"
+      className="app-sidebar__workspace-badge"
+    >
+      {workspaceBadgeLabel}
+    </Badge>
+  );
+
   return (
     <div className="app-sidebar__workspace">
-      <Badge
-        variant="outline"
-        className="app-sidebar__workspace-badge"
-        title={workspaceDisplayPath ?? undefined}
-      >
-        {workspaceBadgeLabel}
-      </Badge>
+      {workspaceDisplayPath ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{workspaceBadge}</TooltipTrigger>
+          <TooltipContent side="right">{workspaceDisplayPath}</TooltipContent>
+        </Tooltip>
+      ) : workspaceBadge}
     </div>
   );
 }
@@ -190,16 +287,16 @@ function AppSidebarNav({ collapsed }: { collapsed: boolean }) {
 
 function SidebarNavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const Icon = item.icon;
+  const { pathname } = useLocation();
+  const isActive = isNavItemActive(pathname, item.to);
   const link = (
     <NavLink
       to={item.to}
-      className={({ isActive }) =>
-        cn(
-          "app-sidebar__nav-item",
-          collapsed && "app-sidebar__nav-item--collapsed",
-          isActive && "app-sidebar__nav-item--active",
-        )
-      }
+      className={cn(
+        "app-sidebar__nav-item",
+        collapsed && "app-sidebar__nav-item--collapsed",
+        isActive && "app-sidebar__nav-item--active",
+      )}
       aria-label={collapsed ? item.label : undefined}
     >
       <Icon aria-hidden="true" />
@@ -225,76 +322,34 @@ function AppSidebarFooter({ collapsed }: { collapsed: boolean }) {
         collapsed && "app-sidebar__footer--collapsed",
       )}
     >
-      <ThemeMenu collapsed={collapsed} />
       <SettingsButton collapsed={collapsed} />
     </div>
   );
 }
 
-function ThemeMenu({ collapsed }: { collapsed: boolean }) {
-  const { theme, setTheme } = useTheme();
-  const ThemeIcon = themeIcons[theme];
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size={collapsed ? "icon-sm" : "sm"}
-          className="app-sidebar__footer-button"
-          aria-label="Change theme"
-          title={collapsed ? "Change theme" : undefined}
-        >
-          <ThemeIcon
-            data-icon={collapsed ? undefined : "inline-start"}
-            aria-hidden="true"
-          />
-          {!collapsed && <span>Theme</span>}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align={collapsed ? "start" : "end"}
-        side={collapsed ? "right" : "top"}
-      >
-        <DropdownMenuGroup>
-          {themeOptions.map((option) => {
-            const OptionIcon = themeIcons[option.value];
-            return (
-              <DropdownMenuItem
-                key={option.value}
-                onSelect={() => setTheme(option.value)}
-              >
-                <OptionIcon />
-                {option.label}
-                {theme === option.value && (
-                  <CheckIcon className="ml-auto text-primary" />
-                )}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 function SettingsButton({ collapsed }: { collapsed: boolean }) {
   const { openSettings } = useSettingsDialog();
-  return (
-    <Button
+  const button = (
+    <button
       type="button"
-      variant="ghost"
-      size={collapsed ? "icon-sm" : "sm"}
-      className="app-sidebar__footer-button"
+      className={cn(
+        "app-sidebar__nav-item app-sidebar__footer-button",
+        collapsed && "app-sidebar__nav-item--collapsed",
+      )}
       onClick={openSettings}
       aria-label="Settings"
-      title={collapsed ? "Settings" : undefined}
     >
-      <SettingsIcon
-        data-icon={collapsed ? undefined : "inline-start"}
-        aria-hidden="true"
-      />
+      <SidebarSettingsIcon aria-hidden="true" />
       {!collapsed && <span>Settings</span>}
-    </Button>
+    </button>
+  );
+
+  if (!collapsed) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="right">Settings</TooltipContent>
+    </Tooltip>
   );
 }

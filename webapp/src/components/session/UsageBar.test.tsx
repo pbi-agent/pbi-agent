@@ -129,6 +129,7 @@ describe("UsageBar", () => {
     });
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveClass("context-gauge__tooltip-content");
+    expect(tooltip).toHaveAttribute("data-app-tooltip");
     expect(tooltip).toHaveAttribute("data-placement", "bottom");
     expect(screen.getAllByText("200,000").length).toBeGreaterThan(0);
     const metaNodes = screen.getAllByText(

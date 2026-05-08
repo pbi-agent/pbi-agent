@@ -1,4 +1,4 @@
-import { afterEach, expect } from "vitest";
+import { afterEach, expect, vi } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { cleanup } from "@testing-library/react";
 import { resetSessionStore } from "./store";
@@ -16,4 +16,6 @@ globalThis.ResizeObserver ??= ResizeObserverMock;
 afterEach(() => {
   cleanup();
   resetSessionStore();
+  vi.clearAllTimers();
+  vi.useRealTimers();
 });

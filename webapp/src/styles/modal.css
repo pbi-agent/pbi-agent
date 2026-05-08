@@ -411,6 +411,8 @@
 }
 
 .task-form__attachment-name {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

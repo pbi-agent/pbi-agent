@@ -1,6 +1,5 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { CSSProperties } from "react";
 import type { UsagePayload } from "../../types";
 
 const SIZE = 22;
@@ -9,13 +8,10 @@ const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const TOOLTIP_GUTTER = 16;
 const TOOLTIP_OFFSET = 12;
-const TOOLTIP_ARROW_SIZE = 10;
-const TOOLTIP_ARROW_GUTTER = 12;
 
 type TooltipPlacement = "top" | "bottom";
 
 type TooltipPosition = {
-  arrowLeft: number;
   left: number;
   placement: TooltipPlacement;
   top: number;
@@ -94,13 +90,7 @@ export function UsageBar({
       TOOLTIP_GUTTER,
       viewportWidth - tooltipRect.width - TOOLTIP_GUTTER,
     );
-    const arrowLeft = clamp(
-      triggerCenterX - left - TOOLTIP_ARROW_SIZE / 2,
-      TOOLTIP_ARROW_GUTTER,
-      tooltipRect.width - TOOLTIP_ARROW_SIZE - TOOLTIP_ARROW_GUTTER,
-    );
-
-    setTooltipPosition({ arrowLeft, left, placement, top });
+    setTooltipPosition({ left, placement, top });
   }, []);
 
   useLayoutEffect(() => {
@@ -124,16 +114,16 @@ export function UsageBar({
           ref={tooltipRef}
           id={tooltipId}
           role="tooltip"
+          data-app-tooltip=""
           data-placement={tooltipPosition?.placement ?? "bottom"}
           className="context-gauge__tooltip-content"
           style={
             tooltipPosition
               ? {
-                  "--context-gauge-arrow-left": `${tooltipPosition.arrowLeft}px`,
                   left: `${tooltipPosition.left}px`,
                   top: `${tooltipPosition.top}px`,
                   visibility: "visible",
-                } as CSSProperties
+                }
               : undefined
           }
         >
@@ -156,7 +146,6 @@ export function UsageBar({
               </div>
             )}
           </div>
-          <span className="context-gauge__tooltip-arrow" aria-hidden="true" />
         </div>,
         document.body,
       )

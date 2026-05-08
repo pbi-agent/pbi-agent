@@ -1,6 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { SettingsPage } from "./SettingsPage";
+import { ThemeProvider } from "../ThemeProvider";
 import { renderWithProviders } from "../../test/render";
 import { useSettingsDialog } from "../../hooks/useSettingsDialog";
 import {
@@ -330,6 +331,9 @@ describe("SettingsPage", () => {
       useSettingsDialog.getState().openSettings();
     });
     resetNotificationPreferencesForTests();
+    window.localStorage.removeItem("pbi-agent-theme");
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.classList.remove("dark");
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(createProvider).mockResolvedValue({
       provider: {
@@ -491,6 +495,9 @@ describe("SettingsPage", () => {
       useSettingsDialog.getState().closeSettings();
     });
     restoreNotificationMock();
+    window.localStorage.removeItem("pbi-agent-theme");
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.classList.remove("dark");
     vi.clearAllMocks();
     vi.restoreAllMocks();
   });
@@ -508,6 +515,47 @@ describe("SettingsPage", () => {
     expect(desktopCheckbox).not.toBeChecked();
     expect(soundCheckbox).not.toBeChecked();
     expect(screen.getByText(/session\s+finishes/i)).toBeInTheDocument();
+  });
+
+  it("renders theme choices in the appearance tab", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Appearance");
+
+    expect(screen.getByRole("radio", { name: "Prism theme" })).toHaveAttribute(
+      "data-theme-option",
+      "prism",
+    );
+    expect(screen.getByRole("radio", { name: "Light theme" })).toHaveAttribute(
+      "data-theme-option",
+      "light",
+    );
+    expect(screen.getByRole("radio", { name: "Dark theme" })).toHaveAttribute(
+      "data-theme-option",
+      "dark",
+    );
+  });
+
+  it("changes and persists the selected theme from the appearance tab", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
+
+    await openSettingsTab(user, "Appearance");
+    const lightThemeOption = screen.getByRole("radio", { name: "Light theme" });
+
+    await user.click(lightThemeOption);
+
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("light"));
+    expect(window.localStorage.getItem("pbi-agent-theme")).toBe("light");
+    expect(lightThemeOption).toHaveAttribute("data-state", "on");
+    expect(lightThemeOption).toHaveAttribute("aria-checked", "true");
   });
 
   it("requests browser permission from the desktop notification control", async () => {

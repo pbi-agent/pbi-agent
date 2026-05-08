@@ -46,6 +46,7 @@ from pbi_agent.display.protocol import PendingUserQuestion
 from pbi_agent.session_store import (
     MessageImageAttachment,
     MessageRecord,
+    RunSessionRecord,
     SESSION_DB_PATH_ENV,
     SessionStore,
     WebManagerLeaseBusyError,
@@ -56,6 +57,7 @@ from pbi_agent.web.server_runtime import (
     _ExpectedStartupFailureFilter,
     _startup_error_message_from_traceback,
 )
+from pbi_agent.web.session.serializers import _combined_timeline_snapshot
 from pbi_agent.web.session_manager import (
     WebManagerStartupError,
     WebSessionManager,
@@ -77,10 +79,130 @@ def _runtime_args(*argv: str):
     return build_parser().parse_args(list(argv))
 
 
+def _run_record(
+    run_session_id: str,
+    *,
+    snapshot: dict[str, object],
+    status: str = "completed",
+) -> RunSessionRecord:
+    return RunSessionRecord(
+        id=1,
+        run_session_id=run_session_id,
+        session_id="session-1",
+        parent_run_session_id=None,
+        agent_name=None,
+        agent_type=None,
+        provider="openai",
+        provider_id="openai-main",
+        profile_id="analysis",
+        model="gpt-5.4",
+        status=status,
+        started_at="2026-05-08T08:47:16Z",
+        ended_at="2026-05-08T09:12:14Z" if status != "running" else None,
+        total_duration_ms=None,
+        input_tokens=0,
+        cached_input_tokens=0,
+        cache_write_tokens=0,
+        cache_write_1h_tokens=0,
+        output_tokens=0,
+        reasoning_tokens=0,
+        tool_use_tokens=0,
+        provider_total_tokens=0,
+        estimated_cost_usd=0.0,
+        total_tool_calls=0,
+        total_api_calls=0,
+        error_count=0,
+        kind="session",
+        task_id=None,
+        project_dir="/workspace",
+        last_event_seq=1,
+        snapshot_json=json.dumps(snapshot),
+        exit_code=0,
+        fatal_error=None,
+        metadata_json="{}",
+    )
+
+
 def _write_command(root: Path, name: str, content: str) -> None:
     commands_dir = root / ".agents" / "commands"
     commands_dir.mkdir(parents=True, exist_ok=True)
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
+
+
+def test_combined_timeline_marks_previous_run_messages_historical() -> None:
+    snapshot = _combined_timeline_snapshot(
+        [
+            _run_record(
+                "completed-run",
+                snapshot={
+                    "live_session_id": "completed-run",
+                    "session_id": "session-1",
+                    "session_ended": True,
+                    "items": [
+                        {
+                            "kind": "message",
+                            "itemId": "message-1",
+                            "message_id": "stale-message-id",
+                            "role": "user",
+                            "content": "original request",
+                        },
+                        {
+                            "kind": "tool_group",
+                            "itemId": "tool-group-1",
+                            "label": "Tool calls",
+                            "items": [],
+                        },
+                    ],
+                    "sub_agents": {},
+                },
+            ),
+            _run_record(
+                "active-run",
+                status="running",
+                snapshot={
+                    "live_session_id": "active-run",
+                    "session_id": "session-1",
+                    "session_ended": False,
+                    "items": [
+                        {
+                            "kind": "message",
+                            "itemId": "message-1",
+                            "message_id": "current-message-id",
+                            "role": "user",
+                            "content": "/review",
+                        },
+                    ],
+                    "sub_agents": {},
+                },
+            ),
+        ],
+    )
+
+    assert snapshot is not None
+    assert snapshot["items"] == [
+        {
+            "kind": "message",
+            "itemId": "completed-run:message-1",
+            "message_id": "stale-message-id",
+            "role": "user",
+            "content": "original request",
+            "historical": True,
+        },
+        {
+            "kind": "tool_group",
+            "itemId": "completed-run:tool-group-1",
+            "label": "Tool calls",
+            "items": [],
+        },
+        {
+            "kind": "message",
+            "itemId": "active-run:message-1",
+            "message_id": "current-message-id",
+            "role": "user",
+            "content": "/review",
+            "historical": True,
+        },
+    ]
 
 
 def test_web_manager_uses_host_workspace_key_in_sandbox(monkeypatch, tmp_path) -> None:
@@ -179,6 +301,7 @@ def _wait_for_session_detail_detached(
     session_id: str,
     *,
     status: str | None = None,
+    require_fatal_error: bool = False,
 ) -> dict:
     deadline = time.monotonic() + 2
     while True:
@@ -189,7 +312,10 @@ def _wait_for_session_detail_detached(
             and detail["active_run"] is None
         )
         status_matches = status is None or detail["status"] == status
-        if is_detached and status_matches:
+        fatal_error_matches = (
+            not require_fatal_error or detail["timeline"]["fatal_error"]
+        )
+        if is_detached and status_matches and fatal_error_matches:
             return detail
         if time.monotonic() > deadline:
             raise AssertionError("session detail did not detach in time")
@@ -3389,7 +3515,11 @@ def test_interrupted_task_run_session_can_be_manually_continued(
             interrupted_task = _wait_for_first_task_status(client, "failed")
             assert interrupted_task["session_id"] == session_id
 
-            interrupted_detail = _wait_for_session_detail_detached(client, session_id)
+            interrupted_detail = _wait_for_session_detail_detached(
+                client,
+                session_id,
+                require_fatal_error=True,
+            )
             assert interrupted_detail["live_session"] is None
             assert interrupted_detail["active_live_session"] is None
             assert interrupted_detail["active_run"] is None

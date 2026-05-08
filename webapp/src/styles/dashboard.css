@@ -435,6 +435,13 @@
   text-overflow: ellipsis;
 }
 
+.runs-row__session-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .runs-row__time {
   color: var(--color-text-secondary);
 }

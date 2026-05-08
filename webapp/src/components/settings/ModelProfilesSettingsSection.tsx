@@ -4,6 +4,7 @@ import { EmptyState } from "../shared/EmptyState";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 function ProfileCard({
   profile,
@@ -62,6 +63,20 @@ export function ModelProfilesSettingsSection({
   onEdit: (profile: ModelProfileView) => void;
   onDelete: (profile: ModelProfileView) => void;
 }) {
+  const addProfileButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="task-card__action-button"
+      onClick={onCreate}
+      disabled={providers.length === 0}
+    >
+      <PlusIcon data-icon="inline-start" />
+      Add Profile
+    </Button>
+  );
+
   return (
     <section className="settings-section settings-section--active">
       <Card className="settings-panel">
@@ -72,18 +87,14 @@ export function ModelProfilesSettingsSection({
               Runtime configuration combining a provider with model settings
             </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="task-card__action-button"
-            onClick={onCreate}
-            disabled={providers.length === 0}
-            title={providers.length === 0 ? "Add a provider first" : undefined}
-          >
-            <PlusIcon data-icon="inline-start" />
-            Add Profile
-          </Button>
+          {providers.length === 0 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">{addProfileButton}</span>
+              </TooltipTrigger>
+              <TooltipContent>Add a provider first</TooltipContent>
+            </Tooltip>
+          ) : addProfileButton}
         </CardHeader>
         <CardContent className="settings-panel__body">
           <div className="active-profile-control">

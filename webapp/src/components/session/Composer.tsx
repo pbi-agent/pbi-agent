@@ -34,6 +34,7 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "../ui/input-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export interface ComposerHandle {
   focus: () => void;
@@ -720,19 +721,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           onOpenChange={(open) => setActionMenuOpen(canSend && !isShellMode && open)}
         >
           <div className="composer__action-menu">
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon-sm"
-                className="composer__action-trigger"
-                disabled={!canSend || isShellMode}
-                aria-label="Actions"
-                title={isShellMode ? "Images cannot be attached to shell commands" : "Actions"}
-              >
-                <PlusIcon />
-              </Button>
-            </DropdownMenuTrigger>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="composer__action-tooltip-trigger">
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      className="composer__action-trigger"
+                      disabled={!canSend || isShellMode}
+                      aria-label="Actions"
+                    >
+                      <PlusIcon />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {isShellMode ? "Images cannot be attached to shell commands" : "Actions"}
+              </TooltipContent>
+            </Tooltip>
           </div>
           <DropdownMenuContent className="composer__action-popover" align="start">
             <DropdownMenuGroup>
@@ -787,33 +796,49 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         <InputGroup className="composer__send-group">
           <InputGroupAddon align="inline-end">
             {showStopButton ? (
-              <InputGroupButton
-                type="button"
-                aria-label="Interrupt assistant turn"
-                title={isInterrupting ? "Interrupting current turn\u2026" : "Stop the assistant"}
-                className="composer__stop"
-                disabled={isInterrupting}
-                onClick={onInterrupt}
-                size="icon-sm"
-              >
-                <SquareIcon
-                  aria-hidden="true"
-                  className="composer__stop-icon"
-                  fill="currentColor"
-                  strokeWidth={0}
-                />
-              </InputGroupButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="composer__input-tooltip-trigger">
+                    <InputGroupButton
+                      type="button"
+                      aria-label="Interrupt assistant turn"
+                      className="composer__stop"
+                      disabled={isInterrupting}
+                      onClick={onInterrupt}
+                      size="icon-sm"
+                    >
+                      <SquareIcon
+                        aria-hidden="true"
+                        className="composer__stop-icon"
+                        fill="currentColor"
+                        strokeWidth={0}
+                      />
+                    </InputGroupButton>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {isInterrupting ? "Interrupting current turn…" : "Stop the assistant"}
+                </TooltipContent>
+              </Tooltip>
             ) : (
-              <InputGroupButton
-                type="submit"
-                aria-label={isShellMode ? "Run command" : "Send message"}
-                className="composer__send"
-                disabled={!canSend}
-                title={isShellMode ? "Run command (Enter)" : "Send (Enter)"}
-                size="icon-sm"
-              >
-                {isShellMode ? <BadgeDollarSignIcon /> : <ArrowUpIcon />}
-              </InputGroupButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="composer__input-tooltip-trigger">
+                    <InputGroupButton
+                      type="submit"
+                      aria-label={isShellMode ? "Run command" : "Send message"}
+                      className="composer__send"
+                      disabled={!canSend}
+                      size="icon-sm"
+                    >
+                      {isShellMode ? <BadgeDollarSignIcon /> : <ArrowUpIcon />}
+                    </InputGroupButton>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {isShellMode ? "Run command (Enter)" : "Send (Enter)"}
+                </TooltipContent>
+              </Tooltip>
             )}
           </InputGroupAddon>
         </InputGroup>
@@ -881,9 +906,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 className="composer__attachment-preview"
               />
               <div className="composer__attachment-copy">
-                <span className="composer__attachment-name" title={image.file.name}>
-                  {image.file.name}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="composer__attachment-name">
+                      {image.file.name}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{image.file.name}</TooltipContent>
+                </Tooltip>
                 <span className="composer__attachment-meta">
                   {Math.max(1, Math.round(image.file.size / 1024))} KB
                 </span>

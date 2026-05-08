@@ -1,6 +1,6 @@
 import { useState, type JSX, type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
-import type { ImageAttachment, TimelineItem } from "../../types";
+import type { ImageAttachment, TimelineItem, TimelineMessageItem } from "../../types";
 import { Button } from "../ui/button";
 import {
   Collapsible,
@@ -8,6 +8,8 @@ import {
   CollapsibleTrigger,
 } from "../ui/collapsible";
 import { MarkdownContent } from "../shared/MarkdownContent";
+import { Separator } from "../ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
 import { ToolResult } from "./ToolResult";
 
@@ -71,21 +73,24 @@ function renderUserContent(
       {imageAttachments && imageAttachments.length > 0 ? (
         <div className="timeline-entry__attachments">
           {imageAttachments.map((attachment) => (
-            <a
-              key={attachment.upload_id}
-              className="timeline-entry__attachment"
-              href={attachment.preview_url}
-              target="_blank"
-              rel="noreferrer"
-              title={attachment.name}
-            >
-              <img
-                className="timeline-entry__attachment-preview"
-                src={attachment.preview_url}
-                alt={attachment.name}
-              />
-              <span className="timeline-entry__attachment-name">{attachment.name}</span>
-            </a>
+            <Tooltip key={attachment.upload_id}>
+              <TooltipTrigger asChild>
+                <a
+                  className="timeline-entry__attachment"
+                  href={attachment.preview_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img
+                    className="timeline-entry__attachment-preview"
+                    src={attachment.preview_url}
+                    alt={attachment.name}
+                  />
+                  <span className="timeline-entry__attachment-name">{attachment.name}</span>
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>{attachment.name}</TooltipContent>
+            </Tooltip>
           ))}
         </div>
       ) : null}
@@ -103,6 +108,11 @@ function toolItemStatus(toolItem: { metadata?: { status?: string; success?: bool
 
 function subAgentHeaderName(title: string | undefined): string | undefined {
   return title?.split("·", 1)[0]?.trim() || title;
+}
+
+function isCompactionSummaryMessage(item: TimelineMessageItem): boolean {
+  return item.role === "assistant"
+    && item.content.trimStart().startsWith("[compacted context — reference only]");
 }
 
 export function TimelineEntry({
@@ -155,6 +165,18 @@ export function TimelineEntry({
     ) : null;
 
   if (item.kind === "message") {
+    if (item.role === "assistant" && item.content.trim() === "[compacted context]") {
+      return (
+        <div
+          className="timeline-entry timeline-entry--compaction"
+          data-timeline-item-id={item.itemId}
+        >
+          <Separator />
+          <span className="timeline-entry__compaction-label">compacted context</span>
+        </div>
+      );
+    }
+
     const roleClass =
       item.role === "user" ? "user"
       : item.role === "error" ? "error"
@@ -162,7 +184,7 @@ export function TimelineEntry({
       : item.role === "debug" ? "debug"
       : "assistant";
 
-    return (
+    const entry = (
       <div
         className={`timeline-entry timeline-entry--${roleClass}`}
         data-timeline-item-id={item.itemId}
@@ -185,6 +207,19 @@ export function TimelineEntry({
         </div>
       </div>
     );
+
+    if (isCompactionSummaryMessage(item)) {
+      return (
+        <>
+          {entry}
+          <div className="timeline-entry timeline-entry--compaction-summary-end">
+            <Separator />
+          </div>
+        </>
+      );
+    }
+
+    return entry;
   }
 
   if (item.kind === "thinking") {

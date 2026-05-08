@@ -25,6 +25,7 @@ import {
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { Textarea } from "../ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export type PendingTaskImage = {
   id: string;
@@ -258,9 +259,14 @@ export function TaskModal({
                           className="task-form__attachment-preview"
                         />
                         <div className="task-form__attachment-copy">
-                          <span className="task-form__attachment-name" title={attachment.name}>
-                            {attachment.name}
-                          </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="task-form__attachment-name">
+                                {attachment.name}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>{attachment.name}</TooltipContent>
+                          </Tooltip>
                           <span className="task-form__attachment-meta">
                             {formatBytes(attachment.byte_count)}
                           </span>
@@ -285,9 +291,14 @@ export function TaskModal({
                           className="task-form__attachment-preview"
                         />
                         <div className="task-form__attachment-copy">
-                          <span className="task-form__attachment-name" title={image.file.name}>
-                            {image.file.name}
-                          </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="task-form__attachment-name">
+                                {image.file.name}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>{image.file.name}</TooltipContent>
+                          </Tooltip>
                           <span className="task-form__attachment-meta">
                             {formatBytes(image.file.size)} pending
                           </span>

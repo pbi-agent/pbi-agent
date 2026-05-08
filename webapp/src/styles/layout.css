@@ -31,6 +31,9 @@
 
 /* ── App Sidebar ────────────────────────────────────────────────────────── */
 .app-sidebar {
+  --app-sidebar-action-size: 40px;
+  --app-sidebar-icon-size: 1.375rem;
+
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -104,12 +107,47 @@
 
 .app-sidebar__toggle {
   flex-shrink: 0;
+  width: var(--app-sidebar-action-size);
+  height: var(--app-sidebar-action-size);
+  min-height: var(--app-sidebar-action-size);
+  padding: 0;
+  color: var(--muted-foreground);
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
 }
 
-.app-sidebar__toggle-tooltip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
+.app-sidebar__icon {
+  display: block;
+  flex-shrink: 0;
+  opacity: 0.78;
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.app-sidebar__toggle svg.app-sidebar__icon,
+.app-sidebar__nav-item svg.app-sidebar__icon {
+  width: var(--app-sidebar-icon-size);
+  height: var(--app-sidebar-icon-size);
+}
+
+.app-sidebar__toggle:hover,
+.app-sidebar__toggle:focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.app-sidebar__toggle:hover .app-sidebar__icon,
+.app-sidebar__toggle:focus-visible .app-sidebar__icon,
+.app-sidebar__nav-item:hover .app-sidebar__icon,
+.app-sidebar__nav-item:focus-visible .app-sidebar__icon {
+  opacity: 1;
+  transform: scale(1.06);
 }
 
 .app-sidebar__toggle-shortcut {
@@ -159,6 +197,9 @@
 }
 
 .app-sidebar__nav-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -168,27 +209,28 @@
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius-md);
   color: var(--muted-foreground);
+  font-family: inherit;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   line-height: var(--leading-normal);
   text-decoration: none;
+  cursor: pointer;
   transition:
     color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease);
 }
 
 .app-sidebar__nav-item--collapsed {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
+  width: var(--app-sidebar-action-size);
+  height: var(--app-sidebar-action-size);
+  min-height: var(--app-sidebar-action-size);
   padding: 0;
   justify-content: center;
-}
-
-.app-sidebar__nav-item svg {
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .app-sidebar__nav-item:hover {
@@ -196,9 +238,20 @@
   color: var(--foreground);
 }
 
+.app-sidebar__nav-item--collapsed:hover,
+.app-sidebar__nav-item--collapsed:focus-visible {
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
 .app-sidebar__nav-item--active {
   background: color-mix(in srgb, var(--primary) 10%, transparent);
   color: var(--primary);
+}
+
+.app-sidebar__nav-item--active .app-sidebar__icon {
+  opacity: 1;
 }
 
 .app-sidebar__nav-item--active:hover {
@@ -212,7 +265,6 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-top: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -226,7 +278,7 @@
   align-items: center;
   gap: var(--sp-2);
   padding: var(--sp-3);
-  border-top: 1px solid var(--border);
+  background: transparent;
   flex-shrink: 0;
 }
 
@@ -236,16 +288,11 @@
 }
 
 .app-sidebar__footer-button {
-  flex: 1;
-  justify-content: flex-start;
+  flex: 0 0 auto;
 }
 
 .app-sidebar__footer--collapsed .app-sidebar__footer-button {
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  justify-content: center;
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
