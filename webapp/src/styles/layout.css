@@ -47,65 +47,47 @@
   align-items: stretch;
 }
 
-/* Header — brand + collapse toggle */
+/* Header — logo + centered workspace + collapse toggle */
 .app-sidebar__head {
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--app-sidebar-action-size) minmax(0, 1fr) var(--app-sidebar-action-size);
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
+  column-gap: var(--sp-2);
   min-height: var(--topbar-height);
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--border);
 }
 
 .app-sidebar--collapsed .app-sidebar__head {
+  display: flex;
   justify-content: center;
   padding-inline: 0;
+}
+
+.app-sidebar--collapsed .app-sidebar__toggle {
+  margin-left: 0;
 }
 
 .app-sidebar__brand {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--sp-2);
+  width: var(--app-sidebar-action-size);
   min-width: 0;
 }
 
-.app-sidebar__brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.app-sidebar__brand-logo {
+  display: block;
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 0.5rem;
-  color: var(--primary-foreground);
-  background: linear-gradient(
-    135deg,
-    var(--primary),
-    color-mix(in srgb, var(--primary) 50%, var(--background))
-  );
-  font-size: 0.75rem;
-  font-weight: var(--weight-bold);
-  letter-spacing: -0.02em;
+  object-fit: cover;
   flex-shrink: 0;
 }
 
-.app-sidebar__brand-name {
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  color: var(--muted-foreground);
-  font-weight: var(--weight-medium);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.app-sidebar__brand-name strong {
-  color: var(--foreground);
-  font-weight: var(--weight-semibold);
-}
-
 .app-sidebar__toggle {
+  margin-left: 0;
   flex-shrink: 0;
   width: var(--app-sidebar-action-size);
   height: var(--app-sidebar-action-size);
@@ -164,22 +146,37 @@
 }
 
 /* Workspace badge */
-.app-sidebar__workspace {
+.app-sidebar__workspace-slot {
   display: flex;
-  flex-shrink: 0;
-  padding: var(--sp-2) var(--sp-3) 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .app-sidebar__workspace-badge {
-  width: 100%;
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
   justify-content: flex-start;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
   padding: var(--sp-2);
   overflow: hidden;
+}
+
+.app-sidebar__workspace-badge-text {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  unicode-bidi: isolate;
 }
 
 /* Primary navigation */

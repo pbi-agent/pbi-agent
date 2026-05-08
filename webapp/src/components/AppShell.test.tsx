@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 import { renderWithProviders } from "../test/render";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
@@ -184,6 +184,49 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
   });
 
+  it("places the workspace badge in the sidebar header", async () => {
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    const sidebar = await screen.findByRole("complementary", { name: "Application sidebar" });
+    const collapseButton = await screen.findByRole("button", { name: "Collapse sidebar" });
+    const headerElement = collapseButton.closest(".app-sidebar__head");
+    if (!(headerElement instanceof HTMLElement)) {
+      throw new Error("Expected sidebar header to contain the collapse button.");
+    }
+
+    const workspaceLabel = await within(headerElement).findByText("workspace/demo");
+    expect(within(headerElement).queryByText("pbi-agent")).not.toBeInTheDocument();
+    expect(headerElement).toContainElement(workspaceLabel);
+
+    const headerChildren = Array.from(headerElement.children);
+    expect(headerChildren[0]).toHaveClass("app-sidebar__brand");
+    expect(headerChildren[0].querySelector(".app-sidebar__brand-logo")).toHaveAttribute(
+      "src",
+      "/logo.jpg",
+    );
+    expect(headerChildren[1]).toHaveClass("app-sidebar__workspace-slot");
+    expect(headerChildren[2]).toBe(collapseButton);
+
+    expect(workspaceLabel.closest(".app-sidebar__workspace-badge")).toBeInTheDocument();
+    expect(sidebar.querySelector(".app-sidebar__workspace")).toBeNull();
+    expect(screen.getByRole("navigation", { name: "Primary navigation" }).previousElementSibling).toBe(
+      headerElement,
+    );
+  });
+
+  it("does not render the workspace badge when the sidebar is collapsed", async () => {
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    const sidebar = await screen.findByRole("complementary", { name: "Application sidebar" });
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+    expect(screen.queryByText("workspace/demo")).not.toBeInTheDocument();
+    expect(sidebar.querySelector(".app-sidebar__workspace-slot")).toBeNull();
+  });
+
   it("does not render the theme menu button in the sidebar footer", async () => {
     renderWithProviders(<AppShell />, { route: "/board" });
 
@@ -217,7 +260,9 @@ describe("AppShell", () => {
     expect(await screen.findByText("Session Page")).toBeInTheDocument();
   });
 
-  it("hides the workspace badge prefix when the workspace path is sandboxed", async () => {
+  it("uses the sandbox display path in the sidebar header workspace badge", async () => {
+    const user = userEvent.setup();
+
     vi.mocked(fetchBootstrap).mockResolvedValue({
       ...makeBootstrap(),
       workspace_root: "/workspace/d0918d973e2e241d",
@@ -228,8 +273,15 @@ describe("AppShell", () => {
 
     renderWithProviders(<AppShell />, { route: "/board" });
 
-    expect(await screen.findByRole("button", { name: "Settings" })).toBeInTheDocument();
+    const workspaceLabel = await screen.findByText("Sandbox · ada/project");
+    const collapseButton = screen.getByRole("button", { name: "Collapse sidebar" });
+    const header = collapseButton.closest(".app-sidebar__head") as HTMLElement;
+    expect(header).toContainElement(workspaceLabel);
     expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
+
+    const workspaceBadge = workspaceLabel.closest(".app-sidebar__workspace-badge") as HTMLElement;
+    await user.hover(workspaceBadge);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("/Users/ada/project");
   });
 
   it("toggles the sidebar collapse state when Ctrl+B is pressed", async () => {
