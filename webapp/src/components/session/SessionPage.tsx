@@ -307,6 +307,29 @@ export function SessionPage({
     };
   }, [isSubAgentRoute]);
 
+  useEffect(() => {
+    const handleNewSessionShortcut = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() !== "o"
+        || !event.ctrlKey
+        || !event.shiftKey
+        || event.repeat
+        || event.metaKey
+        || event.altKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      void navigate("/sessions");
+    };
+
+    window.addEventListener("keydown", handleNewSessionShortcut, true);
+    return () => {
+      window.removeEventListener("keydown", handleNewSessionShortcut, true);
+    };
+  }, [navigate]);
+
   // Hydrate saved session items when session detail data arrives.
   // Skip hydration when a live session is already attached and has
   // items — even if the event stream is reconnecting. Re-hydrating

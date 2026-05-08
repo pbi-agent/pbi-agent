@@ -64,12 +64,14 @@ describe("RunHistory", () => {
 
     const toggle = await screen.findByRole("button", { name: /toggle run history/i });
     expect(toggle).toHaveClass("session-topbar-control", "run-history__toggle");
-    await waitFor(() => expect(toggle).toHaveTextContent("Runs (1)"));
+    await waitFor(() => expect(toggle.querySelector(".run-history__label")).toHaveTextContent("1"));
 
     await queryClient.invalidateQueries({ queryKey: ["session-runs", "session-1"] });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /toggle run history/i })).toHaveTextContent("Runs (2)");
+      expect(
+        screen.getByRole("button", { name: /toggle run history/i }).querySelector(".run-history__label"),
+      ).toHaveTextContent("2");
     });
   });
 

@@ -2827,7 +2827,28 @@ describe("SessionPage", () => {
     expect(vi.mocked(useLiveSessionEvents)).toHaveBeenLastCalledWith(null, null, null);
   });
 
-  it("clears the selected saved session when using the new-session shortcut", async () => {
+  it("clears the selected saved session with Ctrl+Shift+O", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+
+    const { event, dispatchResult } = dispatchWindowKeydown({
+      key: "O",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(dispatchResult).toBe(false);
+
+    await waitFor(() => {
+      expect(screen.getByText("Composer can create true")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Connection ready")).toBeInTheDocument();
+    expect(vi.mocked(useLiveSessionEvents)).toHaveBeenLastCalledWith(null, null, null);
+  });
+
+  it("clears the selected saved session when using the sidebar new-session action", async () => {
     const user = userEvent.setup();
 
     renderSessionRoute("/sessions/session-1");
@@ -2841,6 +2862,29 @@ describe("SessionPage", () => {
     });
     expect(screen.getByText("Connection ready")).toBeInTheDocument();
     expect(vi.mocked(useLiveSessionEvents)).toHaveBeenLastCalledWith(null, null, null);
+  });
+
+  it("ignores non-matching new-session shortcut variants", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Run History session-1")).toBeInTheDocument();
+
+    const ignoredShortcuts: KeyboardEventInit[] = [
+      { key: "o" },
+      { key: "o", ctrlKey: true },
+      { key: "O", shiftKey: true },
+      { key: "O", ctrlKey: true, shiftKey: true, repeat: true },
+      { key: "O", ctrlKey: true, shiftKey: true, altKey: true },
+      { key: "O", ctrlKey: true, shiftKey: true, metaKey: true },
+    ];
+
+    for (const shortcut of ignoredShortcuts) {
+      const { event, dispatchResult } = dispatchWindowKeydown(shortcut);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(dispatchResult).toBe(true);
+      expect(screen.getByText("Run History session-1")).toBeInTheDocument();
+    }
   });
 
   it("marks direct sends pending and ignores duplicate submits", async () => {
