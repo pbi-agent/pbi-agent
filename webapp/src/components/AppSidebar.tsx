@@ -222,21 +222,27 @@ function AppSidebarFooter({ collapsed }: { collapsed: boolean }) {
 
 function SettingsButton({ collapsed }: { collapsed: boolean }) {
   const { openSettings } = useSettingsDialog();
-  return (
-    <Button
+  const button = (
+    <button
       type="button"
-      variant="ghost"
-      size={collapsed ? "icon-sm" : "sm"}
-      className="app-sidebar__footer-button"
+      className={cn(
+        "app-sidebar__nav-item app-sidebar__footer-button",
+        collapsed && "app-sidebar__nav-item--collapsed",
+      )}
       onClick={openSettings}
       aria-label="Settings"
-      title={collapsed ? "Settings" : undefined}
     >
-      <SettingsIcon
-        data-icon={collapsed ? undefined : "inline-start"}
-        aria-hidden="true"
-      />
+      <SettingsIcon aria-hidden="true" />
       {!collapsed && <span>Settings</span>}
-    </Button>
+    </button>
+  );
+
+  if (!collapsed) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="right">Settings</TooltipContent>
+    </Tooltip>
   );
 }

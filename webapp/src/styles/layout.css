@@ -159,6 +159,9 @@
 }
 
 .app-sidebar__nav-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -168,10 +171,12 @@
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--radius-md);
   color: var(--muted-foreground);
+  font-family: inherit;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   line-height: var(--leading-normal);
   text-decoration: none;
+  cursor: pointer;
   transition:
     color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease);
@@ -235,16 +240,11 @@
 }
 
 .app-sidebar__footer-button {
-  flex: 1;
-  justify-content: flex-start;
+  flex: 0 0 auto;
 }
 
 .app-sidebar__footer--collapsed .app-sidebar__footer-button {
   flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  justify-content: center;
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
