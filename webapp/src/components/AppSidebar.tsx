@@ -1,4 +1,12 @@
 import type { ComponentType, ReactNode, SVGProps } from "react";
+import {
+  ChartNoAxesCombinedIcon,
+  MessageSquareDotIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+  SettingsIcon,
+  SquareKanbanIcon,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import { fetchBootstrap } from "../api";
@@ -11,100 +19,32 @@ import { cn } from "../lib/utils";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
-type SidebarIconBaseProps = SVGProps<SVGSVGElement> & {
-  children: ReactNode;
-};
-
-function SidebarIconBase({ children, className, ...props }: SidebarIconBaseProps) {
-  return (
-    <svg
-      width="24"
-      height="24"
-      {...props}
-      className={cn("app-sidebar__icon", className)}
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {children}
-    </svg>
-  );
+function sidebarIconClassName(className?: string) {
+  return cn("app-sidebar__icon", className);
 }
 
-function SidebarIconTile() {
-  return <rect x="3.25" y="3.25" width="13.5" height="13.5" rx="2.75" />;
+function SidebarSessionsIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return <MessageSquareDotIcon {...props} className={sidebarIconClassName(className)} />;
 }
 
-function SidebarSessionsIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <SidebarIconBase {...props}>
-      <SidebarIconTile />
-      <path d="M6.4 7.25h7.2" />
-      <path d="M6.4 10h6" />
-      <path d="M6.4 12.75h4.1" />
-    </SidebarIconBase>
-  );
+function SidebarKanbanIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return <SquareKanbanIcon {...props} className={sidebarIconClassName(className)} />;
 }
 
-function SidebarKanbanIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <SidebarIconBase {...props}>
-      <SidebarIconTile />
-      <path d="M6.6 6.75v6.5" />
-      <path d="M10 6.75v6.5" />
-      <path d="M13.4 6.75v6.5" />
-      <path d="M5.9 8.85h8.2" />
-    </SidebarIconBase>
-  );
+function SidebarDashboardIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return <ChartNoAxesCombinedIcon {...props} className={sidebarIconClassName(className)} />;
 }
 
-function SidebarDashboardIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <SidebarIconBase {...props}>
-      <SidebarIconTile />
-      <path d="M6.45 13.25v-3" />
-      <path d="M10 13.25v-6.5" />
-      <path d="M13.55 13.25v-4.6" />
-      <path d="M5.9 13.25h8.2" />
-    </SidebarIconBase>
-  );
+function SidebarSettingsIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return <SettingsIcon {...props} className={sidebarIconClassName(className)} />;
 }
 
-function SidebarSettingsIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <SidebarIconBase {...props}>
-      <SidebarIconTile />
-      <path d="M6.2 7.15h7.6" />
-      <path d="M8.35 6.25v1.8" />
-      <path d="M6.2 10h7.6" />
-      <path d="M11.65 9.1v1.8" />
-      <path d="M6.2 12.85h7.6" />
-      <path d="M9.55 11.95v1.8" />
-    </SidebarIconBase>
-  );
+function SidebarCollapseIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return <PanelLeftCloseIcon {...props} className={sidebarIconClassName(className)} />;
 }
 
-function SidebarCollapseIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <SidebarIconBase {...props}>
-      <SidebarIconTile />
-      <path d="M7.45 4.05v11.9" />
-      <path d="M13 7.4 10.4 10 13 12.6" />
-    </SidebarIconBase>
-  );
-}
-
-function SidebarExpandIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <SidebarIconBase {...props}>
-      <SidebarIconTile />
-      <path d="M7.45 4.05v11.9" />
-      <path d="M10.4 7.4 13 10l-2.6 2.6" />
-    </SidebarIconBase>
-  );
+function SidebarExpandIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return <PanelLeftOpenIcon {...props} className={sidebarIconClassName(className)} />;
 }
 
 type NavItem = {
