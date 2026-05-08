@@ -104,6 +104,33 @@
 
 .app-sidebar__toggle {
   flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.app-sidebar__toggle svg {
+  opacity: 0.72;
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.app-sidebar__toggle:hover,
+.app-sidebar__toggle:focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.app-sidebar__toggle:hover svg,
+.app-sidebar__toggle:focus-visible svg {
+  opacity: 1;
+  transform: scale(1.08);
 }
 
 .app-sidebar__toggle-tooltip {
@@ -245,6 +272,31 @@
 
 .app-sidebar__footer--collapsed .app-sidebar__footer-button {
   flex: 0 0 auto;
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.app-sidebar__footer--collapsed .app-sidebar__footer-button svg {
+  opacity: 0.72;
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.app-sidebar__footer--collapsed .app-sidebar__footer-button:hover,
+.app-sidebar__footer--collapsed .app-sidebar__footer-button:focus-visible {
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.app-sidebar__footer--collapsed .app-sidebar__footer-button:hover svg,
+.app-sidebar__footer--collapsed .app-sidebar__footer-button:focus-visible svg {
+  opacity: 1;
+  transform: scale(1.08);
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
