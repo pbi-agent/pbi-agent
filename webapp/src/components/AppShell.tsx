@@ -1,32 +1,15 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BarChart3Icon,
-  CheckIcon,
-  KanbanSquareIcon,
-  MessageSquareTextIcon,
-  MoonStarIcon,
-  PaletteIcon,
-  SunIcon,
-} from "lucide-react";
 import { fetchBootstrap, fetchConfigBootstrap } from "../api";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
+import { useSidebarShortcut } from "../hooks/useSidebar";
 import { useTaskEvents } from "../hooks/useTaskEvents";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 import { AskUserNotificationEffects } from "./notifications/AskUserNotificationEffects";
 import { SessionEndedNotificationEffects } from "./notifications/SessionEndedNotificationEffects";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
-import { themeOptions, useTheme, type AppTheme } from "./ThemeProvider";
+import { AppSidebarLayout } from "./AppSidebar";
 
 const SessionPage = lazy(() =>
   import("./session/SessionPage").then((m) => ({ default: m.SessionPage })),
@@ -41,21 +24,11 @@ const DashboardPage = lazy(() =>
   import("./dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })),
 );
 
-const navItems = [
-  { to: "/sessions", label: "Sessions", icon: MessageSquareTextIcon },
-  { to: "/board", label: "Kanban", icon: KanbanSquareIcon },
-  { to: "/dashboard", label: "Dashboard", icon: BarChart3Icon },
-];
-
-const themeIcons: Record<AppTheme, typeof SunIcon> = {
-  light: SunIcon,
-  dark: MoonStarIcon,
-  prism: PaletteIcon,
-};
-
 export function AppShell() {
+  // Global Cmd/Ctrl+B sidebar toggle, available on every route.
+  useSidebarShortcut();
+
   const liveSessionEvents = useTaskEvents();
-  const { theme, setTheme } = useTheme();
 
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap"],
@@ -90,16 +63,6 @@ export function AppShell() {
     settingsOpen && dismissedOnboardingOnSettings
   );
 
-  const workspaceDisplayPath = bootstrap?.workspace_display_path;
-  const folderLabel = workspaceDisplayPath
-    ? workspaceDisplayPath.split(/[/\\]/).filter(Boolean).slice(-2).join("/")
-    : null;
-  const workspaceBadgeLabel = bootstrap?.is_sandbox && folderLabel
-    ? `Sandbox · ${folderLabel}`
-    : folderLabel;
-
-  const ThemeIcon = themeIcons[theme];
-
   return (
     <div className="app-shell bg-background text-foreground">
       <AskUserNotificationEffects />
@@ -108,97 +71,56 @@ export function AppShell() {
         liveSessions={bootstrap?.live_sessions ?? []}
         tasks={bootstrap?.tasks ?? []}
       />
-      <header className="header">
-        <div className="header__left">
-          {workspaceBadgeLabel && (
-            <Badge variant="outline" className="header__workspace overflow-visible" title={workspaceDisplayPath}>
-              {workspaceBadgeLabel}
-            </Badge>
-          )}
-        </div>
 
-        {/* Navigation */}
-        <nav className="header__nav" aria-label="Primary navigation">
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className="header__nav-link">
-              <Icon />
-              <span>{label}</span>
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="header__right">
-          {/* Theme dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                title="Change theme"
-                aria-label="Change theme"
-              >
-                <ThemeIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuGroup>
-                {themeOptions.map((option) => {
-                  const OptionIcon = themeIcons[option.value];
-                  return (
-                    <DropdownMenuItem
-                      key={option.value}
-                      onSelect={() => setTheme(option.value)}
-                    >
-                      <OptionIcon />
-                      {option.label}
-                      {theme === option.value && <CheckIcon className="ml-auto text-primary" />}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
-
-      <main className="app-main">
-        <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/sessions" replace />} />
-            <Route
-              path="/sessions"
-              element={
-                <SessionPage
-                  workspaceRoot={bootstrap?.workspace_root}
-                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                />
-              }
-            />
-            <Route
-              path="/sessions/:sessionId/sub-agents/:subAgentId"
-              element={
-                <SessionPage
-                  workspaceRoot={bootstrap?.workspace_root}
-                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                />
-              }
-            />
-            <Route
-              path="/sessions/:sessionId"
-              element={
-                <SessionPage
-                  workspaceRoot={bootstrap?.workspace_root}
-                  supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
-                />
-              }
-            />
-            <Route path="/board" element={<BoardPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/settings" element={<Navigate to="/sessions" replace />} />
-          </Routes>
-        </Suspense>
-      </main>
+      <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/sessions" replace />} />
+          <Route
+            path="/sessions"
+            element={
+              <SessionPage
+                workspaceRoot={bootstrap?.workspace_root}
+                supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+              />
+            }
+          />
+          <Route
+            path="/sessions/:sessionId/sub-agents/:subAgentId"
+            element={
+              <SessionPage
+                workspaceRoot={bootstrap?.workspace_root}
+                supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+              />
+            }
+          />
+          <Route
+            path="/sessions/:sessionId"
+            element={
+              <SessionPage
+                workspaceRoot={bootstrap?.workspace_root}
+                supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
+              />
+            }
+          />
+          <Route
+            path="/board"
+            element={(
+              <AppSidebarLayout>
+                <BoardPage />
+              </AppSidebarLayout>
+            )}
+          />
+          <Route
+            path="/dashboard"
+            element={(
+              <AppSidebarLayout>
+                <DashboardPage />
+              </AppSidebarLayout>
+            )}
+          />
+          <Route path="/settings" element={<Navigate to="/sessions" replace />} />
+        </Routes>
+      </Suspense>
 
       <Suspense>
         <SettingsPage />

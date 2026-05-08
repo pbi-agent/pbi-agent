@@ -1,6 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { TooltipProvider } from "../ui/tooltip";
 import { SessionSidebar } from "./SessionSidebar";
 import type { SessionRecord } from "../../types";
 
@@ -33,15 +34,44 @@ function renderSidebar(overrides: Partial<Parameters<typeof SessionSidebar>[0]> 
     onResumeSession: vi.fn(),
     onUpdateSession: vi.fn().mockResolvedValue(undefined),
     onDeleteSession: vi.fn(),
-    onToggle: vi.fn(),
-    isOpen: true,
     ...overrides,
   };
-  render(<MemoryRouter><SessionSidebar {...props} /></MemoryRouter>);
+  render(
+    <MemoryRouter>
+      <TooltipProvider>
+        <SessionSidebar {...props} />
+      </TooltipProvider>
+    </MemoryRouter>,
+  );
   return props;
 }
 
 describe("SessionSidebar", () => {
+  it("renders the session list header with a New Session action", async () => {
+    const user = userEvent.setup();
+    const props = renderSidebar();
+
+    expect(screen.getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    const newButton = screen.getByRole("button", { name: /new/i });
+    await user.click(newButton);
+    expect(props.onNewSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not render primary navigation links (those live in the shared app sidebar)", () => {
+    renderSidebar();
+
+    expect(screen.queryByRole("link", { name: "Kanban" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Dashboard" })).toBeNull();
+  });
+
+  it("resumes the matching session when its card is clicked", async () => {
+    const user = userEvent.setup();
+    const props = renderSidebar();
+
+    await user.click(screen.getByText("Planning session"));
+    expect(props.onResumeSession).toHaveBeenCalledWith("session-1");
+  });
+
   it("opens the edit action and saves a changed title", async () => {
     const user = userEvent.setup();
     const props = renderSidebar();

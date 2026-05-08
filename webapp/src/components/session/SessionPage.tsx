@@ -9,6 +9,7 @@ import {
   CpuIcon,
   Trash2Icon,
 } from "lucide-react";
+import { AppSidebarLayout } from "../AppSidebar";
 import {
   ApiError,
   createSession,
@@ -76,7 +77,6 @@ export function SessionPage({
     subAgentId?: string;
   }>();
   const isSubAgentRoute = Boolean(routeSessionId && routeSubAgentId);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
   const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
@@ -548,7 +548,6 @@ export function SessionPage({
   };
 
   const handleNewSession = () => {
-    setSidebarOpen(false);
     void navigate("/sessions");
   };
 
@@ -624,36 +623,34 @@ export function SessionPage({
     ? null
     : sessionState?.waitMessage ?? null;
 
-  return (
-    <section
-      className={`session-layout ${sidebarOpen ? "session-layout--sidebar-open" : ""}`}
-      data-debug-session-key={selectedRouteSessionKey ?? undefined}
-      data-debug-session-id={sessionState?.sessionId ?? undefined}
-      data-debug-live-session-id={sessionState?.liveSessionId ?? undefined}
-      data-debug-event-cursor={sessionState?.lastEventSeq ?? undefined}
-      data-debug-connection={sessionState?.connection ?? undefined}
-    >
-      <div className={`sidebar ${sidebarOpen ? "sidebar--open" : ""}`}>
-        <SessionSidebar
-          sessions={sessionsQuery.data ?? []}
-          isLoading={sessionsQuery.isLoading}
-          activeSessionId={routeSessionId ?? sessionState?.sessionId ?? null}
-          onNewSession={handleNewSession}
-          onResumeSession={(sessionId) => {
-            void navigate(`/sessions/${encodeURIComponent(sessionId)}`);
-            setSidebarOpen(false);
-          }}
-          onUpdateSession={handleUpdateSessionTitle}
-          onDeleteSession={(session) => {
-            deleteSessionMutation.reset();
-            setPendingDeleteSession(session);
-          }}
-          onToggle={() => setSidebarOpen((prev) => !prev)}
-          isOpen={sidebarOpen}
-        />
-      </div>
+  const sessionListPanel = (
+    <SessionSidebar
+      sessions={sessionsQuery.data ?? []}
+      isLoading={sessionsQuery.isLoading}
+      activeSessionId={routeSessionId ?? sessionState?.sessionId ?? null}
+      onNewSession={handleNewSession}
+      onResumeSession={(sessionId) => {
+        void navigate(`/sessions/${encodeURIComponent(sessionId)}`);
+      }}
+      onUpdateSession={handleUpdateSessionTitle}
+      onDeleteSession={(session) => {
+        deleteSessionMutation.reset();
+        setPendingDeleteSession(session);
+      }}
+    />
+  );
 
-      <div className="session-panel">
+  return (
+    <AppSidebarLayout contextPanel={sessionListPanel}>
+      <section
+        className="session-panel-wrapper"
+        data-debug-session-key={selectedRouteSessionKey ?? undefined}
+        data-debug-session-id={sessionState?.sessionId ?? undefined}
+        data-debug-live-session-id={sessionState?.liveSessionId ?? undefined}
+        data-debug-event-cursor={sessionState?.lastEventSeq ?? undefined}
+        data-debug-connection={sessionState?.connection ?? undefined}
+      >
+        <div className="session-panel">
         <div className="session-topbar">
           <div className="session-topbar__leading">
             <ConnectionBadge connection={topbarConnection} />
@@ -859,7 +856,8 @@ export function SessionPage({
           }}
         />
       ) : null}
-    </section>
+      </section>
+    </AppSidebarLayout>
   );
 }
 

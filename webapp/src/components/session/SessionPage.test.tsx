@@ -608,7 +608,7 @@ describe("SessionPage", () => {
     renderSessionRoute("/sessions/session-1");
 
     expect(await screen.findByText("Composer live session live-recovery")).toBeInTheDocument();
-    const layout = document.querySelector(".session-layout");
+    const layout = document.querySelector(".session-panel-wrapper");
     expect(layout).toHaveAttribute("data-debug-session-key", sessionKey);
     expect(layout).toHaveAttribute("data-debug-session-id", "session-1");
     expect(layout).toHaveAttribute("data-debug-live-session-id", "live-recovery");

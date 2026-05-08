@@ -1,140 +1,69 @@
 /* ── Session Page Layout ─────────────────────────────────────────────── */
 
-.session-layout {
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  height: calc(100vh - var(--topbar-height));
-  overflow: hidden;
-  transition: grid-template-columns var(--duration-slow) var(--ease-out);
-}
-
-.session-layout--sidebar-open {
-  grid-template-columns: var(--sidebar-width) 1fr;
-}
-
-/* ── Session Sidebar ── */
-.sidebar {
+.session-panel-wrapper {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--color-border);
-  background: var(--color-surface-0);
-  overflow: hidden;
   min-height: 0;
-  max-height: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
-/* Collapsed sidebar strip */
-.sidebar__collapsed {
+.session-panel {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.sidebar__toggle {
+/* ── Session Context Sidebar (sessions list, rendered inside AppSidebar context slot) ── */
+.session-sidebar {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  color: var(--color-text-tertiary);
-  background: transparent;
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast), color var(--duration-fast);
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: var(--sp-2);
 }
 
-.sidebar__toggle:hover {
-  background: var(--color-surface-2);
-  color: var(--color-text);
-}
-
-.sidebar__header {
+.session-sidebar__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
-  padding: var(--sp-4) var(--sp-3) var(--sp-3);
+  padding: 0 var(--sp-1);
   flex-shrink: 0;
 }
 
-.sidebar__new-button {
-  max-width: 9rem;
+.session-sidebar__title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+  margin: 0;
+}
+
+.session-sidebar__new-button {
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
 }
 
-.sidebar__header .sidebar__toggle {
-  margin-left: auto;
-}
-
-.sidebar__list {
+.session-sidebar__list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-1) var(--sp-2);
+  padding: var(--sp-1) 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-height: 0;
 }
 
-/* Sidebar footer */
-.sidebar__footer {
-  flex-shrink: 0;
-  padding: var(--sp-2) var(--sp-3);
-  border-top: 1px solid var(--color-border);
-}
-
-.sidebar__footer-link {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  font-size: var(--text-sm);
+.session-sidebar__empty {
+  padding: var(--sp-3) var(--sp-2);
+  font-size: var(--text-xs);
   color: var(--color-text-tertiary);
-  border-radius: var(--radius-md);
-  text-decoration: none;
-  transition: background var(--duration-fast), color var(--duration-fast);
 }
 
-.sidebar__footer-link:hover {
-  background: var(--color-surface-2);
-  color: var(--color-text);
-}
-
-.sidebar__footer-link.active {
-  color: var(--color-text);
-}
-
-.sidebar__footer-link svg {
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-}
-
-/* Collapsed sidebar settings link */
-.sidebar__collapsed-settings {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast), color var(--duration-fast);
-  margin-top: auto;
-}
-
-.sidebar__collapsed-settings svg {
-  width: 1rem;
-  height: 1rem;
-}
-
-.sidebar__collapsed-settings:hover {
-  background: var(--color-surface-2);
-  color: var(--color-text);
-}
 
 /* Session cards */
 .session-card {
@@ -2990,14 +2919,6 @@
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  .session-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    display: none;
-  }
-
   .timeline {
     padding: var(--sp-4) var(--sp-4);
   }
