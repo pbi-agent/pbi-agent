@@ -921,7 +921,7 @@ describe("SettingsPage", () => {
       within(dialog).getByLabelText("Custom source"),
       "owner/private-repo",
     );
-    await user.click(within(dialog).getByRole("button", { name: "Browse Source" }));
+    await user.click(within(dialog).getByRole("button", { name: "Browse" }));
 
     await waitFor(() =>
       expect(fetchSkillCandidates).toHaveBeenLastCalledWith("owner/private-repo"),

@@ -28,9 +28,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "../ui/card";
@@ -72,15 +70,14 @@ function SkillCard({ skill }: { skill: SkillView }) {
 
 function CandidateSkeleton() {
   return (
-    <Card size="sm" className="skill-candidate-card">
-      <CardHeader>
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-4 w-full" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className="h-4 w-28" />
-      </CardContent>
-    </Card>
+    <div className="skill-candidate">
+      <div className="skill-candidate__main">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-24" />
+      </div>
+      <Skeleton className="h-8 w-20 shrink-0" />
+    </div>
   );
 }
 
@@ -96,35 +93,34 @@ function CandidateCard({
   onInstall: () => void;
 }) {
   return (
-    <Card size="sm" className="skill-candidate-card">
-      <CardHeader>
-        <CardTitle>{candidate.name}</CardTitle>
-        <CardDescription>
+    <div className="skill-candidate">
+      <div className="skill-candidate__main">
+        <div className="skill-candidate__name">{candidate.name}</div>
+        <p className="skill-candidate__description">
           {candidate.description || "No description provided."}
-        </CardDescription>
-        <CardAction>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={onInstall}
-            disabled={disabled}
-          >
-            {isInstalling ? (
-              <LoadingSpinner size="sm" />
-            ) : (
-              <DownloadIcon data-icon="inline-start" />
-            )}
-            Install
-          </Button>
-        </CardAction>
-      </CardHeader>
-      {candidate.subpath ? (
-        <CardContent className="skill-candidate-card__meta">
-          <Badge variant="secondary">{candidate.subpath}</Badge>
-        </CardContent>
-      ) : null}
-    </Card>
+        </p>
+        {candidate.subpath ? (
+          <Badge variant="secondary" className="skill-candidate__subpath">
+            {candidate.subpath}
+          </Badge>
+        ) : null}
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={onInstall}
+        disabled={disabled}
+        className="skill-candidate__action"
+      >
+        {isInstalling ? (
+          <LoadingSpinner size="sm" />
+        ) : (
+          <DownloadIcon data-icon="inline-start" />
+        )}
+        Install
+      </Button>
+    </div>
   );
 }
 
@@ -298,131 +294,153 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
         </CardContent>
       </Card>
 
-      <Dialog open={addOpen} onOpenChange={(nextOpen) => {
-        if (!nextOpen) closeAddDialog();
-      }}>
-        <DialogContent className="skill-add-dialog">
+      <Dialog
+        open={addOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) closeAddDialog();
+        }}
+      >
+        <DialogContent className="task-form-dialog skill-add-dialog">
           <DialogHeader>
             <DialogTitle>Add Project Skill</DialogTitle>
             <DialogDescription>
-              Browse the official catalog or provide a GitHub source, tree URL, or server-side local path.
+              Browse the official catalog or provide a GitHub source, tree URL,
+              or server-side local path.
             </DialogDescription>
           </DialogHeader>
 
-          <form className="skill-source-form" onSubmit={handleBrowseCustomSource}>
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="skill-source">Custom source</FieldLabel>
-                <FieldDescription>
-                  Use owner/repo, a GitHub URL, a tree URL, or a path available to the web server.
-                </FieldDescription>
-                <div className="skill-source-form__row">
-                  <Input
-                    id="skill-source"
-                    value={customSource}
-                    onChange={(event) => setCustomSource(event.target.value)}
-                    placeholder="owner/repo or /path/to/skills"
-                    disabled={isBusy}
-                  />
-                  <Button type="submit" variant="outline" disabled={isBusy}>
-                    {loadingCandidates ? (
-                      <LoadingSpinner size="sm" />
-                    ) : (
-                      <SearchIcon data-icon="inline-start" />
-                    )}
-                    Browse Source
-                  </Button>
+          <div className="task-form skill-add-dialog__form">
+            <div className="task-form__body skill-add-dialog__body">
+              <form
+                className="skill-source-form"
+                onSubmit={handleBrowseCustomSource}
+              >
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="skill-source">Custom source</FieldLabel>
+                    <div className="skill-source-form__row">
+                      <Input
+                        id="skill-source"
+                        className="task-form__input"
+                        value={customSource}
+                        onChange={(event) => setCustomSource(event.target.value)}
+                        placeholder="owner/repo or /path/to/skills"
+                        disabled={isBusy}
+                      />
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        className="skill-source-form__submit"
+                        disabled={isBusy}
+                      >
+                        {loadingCandidates ? (
+                          <LoadingSpinner size="sm" />
+                        ) : (
+                          <SearchIcon data-icon="inline-start" />
+                        )}
+                        Browse
+                      </Button>
+                    </div>
+                    <FieldDescription>
+                      Use owner/repo, a GitHub URL, a tree URL, or a path
+                      available to the web server.
+                    </FieldDescription>
+                  </Field>
+                </FieldGroup>
+              </form>
+
+              <Separator className="skill-add-dialog__divider" />
+
+              <section className="skill-add-dialog__listing">
+                <header className="skill-add-dialog__listing-header">
+                  <div className="skill-add-dialog__listing-meta">
+                    <div className="skill-add-dialog__listing-title">
+                      Available skills
+                    </div>
+                    <div className="skill-add-dialog__source">
+                      <FolderGit2Icon aria-hidden="true" />
+                      <span className="skill-add-dialog__source-text">
+                        {sourceLabel}
+                      </span>
+                      {listing?.ref ? (
+                        <Badge
+                          variant="outline"
+                          className="skill-add-dialog__source-ref"
+                        >
+                          {listing.ref}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                </header>
+
+                {candidatesError ? (
+                  <Alert variant="destructive" className="task-form__error">
+                    <AlertCircleIcon />
+                    <AlertTitle>Could not load skills</AlertTitle>
+                    <AlertDescription>{candidatesError}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {installError ? (
+                  <Alert variant="destructive" className="task-form__error">
+                    <AlertCircleIcon />
+                    <AlertTitle>Could not install skill</AlertTitle>
+                    <AlertDescription>
+                      <div className="skill-install-error__content">
+                        <span>{installError}</span>
+                        {conflictRetry ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() =>
+                              void handleInstall(
+                                {
+                                  name: conflictRetry.skillName,
+                                  description: "",
+                                  subpath: null,
+                                },
+                                true,
+                                conflictRetry.source,
+                              )
+                            }
+                            disabled={installingSkill !== null}
+                          >
+                            Replace existing
+                          </Button>
+                        ) : null}
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                <div className="skill-candidate-list" aria-live="polite">
+                  {loadingCandidates ? (
+                    <>
+                      <CandidateSkeleton />
+                      <CandidateSkeleton />
+                      <CandidateSkeleton />
+                    </>
+                  ) : candidates.length === 0 && !candidatesError ? (
+                    <EmptyState
+                      title="No skills found"
+                      description="Try another source or browse the official catalog."
+                    />
+                  ) : (
+                    candidates.map((candidate) => (
+                      <CandidateCard
+                        key={`${sourceLabel}:${candidate.name}`}
+                        candidate={candidate}
+                        isInstalling={installingSkill === candidate.name}
+                        disabled={isBusy}
+                        onInstall={() => void handleInstall(candidate)}
+                      />
+                    ))
+                  )}
                 </div>
-              </Field>
-            </FieldGroup>
-          </form>
-
-          <Separator />
-
-          <div className="skill-add-dialog__listing-header">
-            <div>
-              <div className="skill-add-dialog__listing-title">Available skills</div>
-              <div className="skill-add-dialog__source">
-                <FolderGit2Icon aria-hidden="true" />
-                <span>{sourceLabel}</span>
-                {listing?.ref ? <Badge variant="outline">{listing.ref}</Badge> : null}
-              </div>
+              </section>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => void loadCandidates(null)}
-              disabled={isBusy}
-            >
-              Official catalog
-            </Button>
-          </div>
-
-          {candidatesError ? (
-            <Alert variant="destructive">
-              <AlertCircleIcon />
-              <AlertTitle>Could not load skills</AlertTitle>
-              <AlertDescription>{candidatesError}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {installError ? (
-            <Alert variant="destructive">
-              <AlertCircleIcon />
-              <AlertTitle>Could not install skill</AlertTitle>
-              <AlertDescription>
-                <div className="skill-install-error__content">
-                  <span>{installError}</span>
-                  {conflictRetry ? (
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() =>
-                        void handleInstall(
-                          {
-                            name: conflictRetry.skillName,
-                            description: "",
-                            subpath: null,
-                          },
-                          true,
-                          conflictRetry.source,
-                        )
-                      }
-                      disabled={installingSkill !== null}
-                    >
-                      Replace existing
-                    </Button>
-                  ) : null}
-                </div>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          <div className="skill-candidate-list" aria-live="polite">
-            {loadingCandidates ? (
-              <>
-                <CandidateSkeleton />
-                <CandidateSkeleton />
-                <CandidateSkeleton />
-              </>
-            ) : candidates.length === 0 && !candidatesError ? (
-              <EmptyState
-                title="No skills found"
-                description="Try another source or browse the official catalog."
-              />
-            ) : (
-              candidates.map((candidate) => (
-                <CandidateCard
-                  key={`${sourceLabel}:${candidate.name}`}
-                  candidate={candidate}
-                  isInstalling={installingSkill === candidate.name}
-                  disabled={isBusy}
-                  onInstall={() => void handleInstall(candidate)}
-                />
-              ))
-            )}
           </div>
         </DialogContent>
       </Dialog>

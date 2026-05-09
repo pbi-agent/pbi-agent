@@ -1,5 +1,5 @@
 # TODO
 
-[X] Backend skill API, schemas, bootstrap data, and focused tests
-[X] Frontend settings skills workflow, docs update, and focused tests
-[X] Final validation, memory update, and handoff
+[X] Restyle Add Project Skill dialog to match ProviderModal pattern (no nested card wrappers, FieldGroup/Field, plain candidate rows)
+[X] Validate lint/typecheck/test and rebuild static assets
+[X] Update memory and handoff
