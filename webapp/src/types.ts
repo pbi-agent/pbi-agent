@@ -92,6 +92,14 @@ export type BoardStage = {
 
 export type UsagePayload = TokenUsagePayloadModel;
 
+export type SubAgentSnapshot = {
+  title: string;
+  status: string;
+  waitMessage?: string | null;
+  wait_message?: string | null;
+  processing?: ProcessingState | null;
+};
+
 export type LiveSessionRuntime = {
   provider_id: string | null;
   profile_id: string | null;
@@ -178,7 +186,7 @@ export type LiveSessionSnapshot = Omit<
     | { usage: UsagePayload | null; elapsed_seconds?: number | null }
     | null;
   pending_user_questions: PendingUserQuestions | null;
-  sub_agents: Record<string, { title: string; status: string }>;
+  sub_agents: Record<string, SubAgentSnapshot>;
 };
 
 export type ProcessingPhase = NonNullable<ProcessingStateModel["phase"]>;

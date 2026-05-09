@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { BotIcon, ChevronRightIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
@@ -854,7 +854,16 @@ function WorkRun({
     () => workRunCountItems(unit.items, showSubAgentCards ?? true),
     [showSubAgentCards, unit.items],
   );
+  const hasRunningSubAgent = useMemo(
+    () => unit.items.some((item) => {
+      if (!item.subAgentId) return false;
+      const status = subAgents[item.subAgentId]?.status;
+      return status === "running" || status === "starting";
+    }),
+    [subAgents, unit.items],
+  );
   const hasVisibleSummary = workRunSummaryItems.some((item) => item.count > 0);
+  const isVisiblyActive = active || unit.running || hasRunningSubAgent;
   const showPlaceholderSummary = active && !hasVisibleSummary;
 
   return (
@@ -881,7 +890,7 @@ function WorkRun({
             aria-label={workRunSummary ? `Working ${workRunSummary}` : "Working"}
           >
             <ChevronRightIcon className="timeline-entry__chevron" />
-            <TextShimmer text="Working" active={active || unit.running} className="timeline-entry__working-label" />
+            <TextShimmer text="Working" active={isVisiblyActive} className="timeline-entry__working-label" />
             {showPlaceholderSummary ? (
               <span className="working-items__summary working-items__summary--placeholder" aria-hidden="true">
                 Preparing…
@@ -909,7 +918,58 @@ function WorkRun({
   );
 }
 
-export function SessionTimeline({
+type SessionTimelineProps = {
+  items: TimelineItem[];
+  subAgents: Record<string, { title: string; status: string }>;
+  connection: ConnectionState;
+  waitMessage: string | null;
+  processing: ProcessingState | null;
+  itemsVersion: number | string;
+  parentSessionId?: string;
+  showSubAgentCards?: boolean;
+};
+
+function processingStatesEqual(
+  left: ProcessingState | null,
+  right: ProcessingState | null,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.active === right.active
+    && left.phase === right.phase
+    && left.message === right.message
+    && left.active_tool_count === right.active_tool_count;
+}
+
+function subAgentSummariesEqual(
+  left: Record<string, { title: string; status: string }>,
+  right: Record<string, { title: string; status: string }>,
+): boolean {
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) return false;
+  return leftEntries.every(([subAgentId, leftSubAgent]) => {
+    const rightSubAgent = right[subAgentId];
+    return rightSubAgent !== undefined
+      && leftSubAgent.title === rightSubAgent.title
+      && leftSubAgent.status === rightSubAgent.status;
+  });
+}
+
+function areSessionTimelinePropsEqual(
+  previous: SessionTimelineProps,
+  next: SessionTimelineProps,
+): boolean {
+  return previous.itemsVersion === next.itemsVersion
+    && previous.connection === next.connection
+    && previous.waitMessage === next.waitMessage
+    && processingStatesEqual(previous.processing, next.processing)
+    && previous.parentSessionId === next.parentSessionId
+    && previous.showSubAgentCards === next.showSubAgentCards
+    && subAgentSummariesEqual(previous.subAgents, next.subAgents);
+}
+
+export const SessionTimeline = memo(function SessionTimeline({
   items,
   subAgents,
   connection,
@@ -918,17 +978,9 @@ export function SessionTimeline({
   itemsVersion,
   parentSessionId,
   showSubAgentCards = true,
-}: {
-  items: TimelineItem[];
-  subAgents: Record<string, { title: string; status: string }>;
-  connection: ConnectionState;
-  waitMessage: string | null;
-  processing: ProcessingState | null;
-  itemsVersion: number;
-  parentSessionId?: string;
-  showSubAgentCards?: boolean;
-}) {
+}: SessionTimelineProps) {
   const previousLengthRef = useRef<number | undefined>(undefined);
+  const previousItemsVersionRef = useRef<number | string | undefined>(undefined);
   const previousVisibleItemsChangeKeyRef = useRef<string | undefined>(undefined);
   const latestRawItem = items.at(-1);
   const visibleItems = useMemo(
@@ -1072,9 +1124,19 @@ export function SessionTimeline({
 
   useEffect(() => {
     const previousLength = previousLengthRef.current;
+    const previousItemsVersion = previousItemsVersionRef.current;
     const previousVisibleItemsChangeKey = previousVisibleItemsChangeKeyRef.current;
     previousLengthRef.current = visibleItems.length;
+    previousItemsVersionRef.current = itemsVersion;
     previousVisibleItemsChangeKeyRef.current = visibleItemsChangeKey;
+
+    if (
+      previousVisibleItemsChangeKey !== undefined
+      && previousVisibleItemsChangeKey === visibleItemsChangeKey
+      && previousItemsVersion === itemsVersion
+    ) {
+      return;
+    }
 
     if (
       previousVisibleItemsChangeKey !== undefined
@@ -1205,4 +1267,4 @@ export function SessionTimeline({
       </div>
     </div>
   );
-}
+}, areSessionTimelinePropsEqual);

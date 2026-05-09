@@ -15,6 +15,7 @@ from pbi_agent.web.session.serializers import (
     _serialize_run_session,
     _serialize_session,
     _session_status_from_run,
+    _web_event_from_record,
 )
 from pbi_agent.web.uploads import delete_uploaded_images
 
@@ -124,6 +125,16 @@ class SavedSessionsMixin:
             active_run = store.get_latest_session_run(session_id, include_ended=False)
             latest_web_run = store.get_latest_web_session_run(session_id)
             web_runs = store.list_web_session_runs(session_id)
+            web_events_by_run_session_id = {
+                run.run_session_id: [
+                    event
+                    for record in store.list_observability_events(
+                        run_session_id=run.run_session_id
+                    )
+                    if (event := _web_event_from_record(record)) is not None
+                ]
+                for run in web_runs
+            }
         live_session = self._find_live_session_for_saved_session(session_id)
         serialized_active_live_session = (
             self._serialize_live_session(live_session)
@@ -140,7 +151,11 @@ class SavedSessionsMixin:
             if live_session is not None
             else None
         )
-        timeline = _combined_timeline_snapshot(web_runs, live_snapshot)
+        timeline = _combined_timeline_snapshot(
+            web_runs,
+            live_snapshot,
+            persisted_events_by_run_session_id=web_events_by_run_session_id,
+        )
         return {
             "session": _serialize_session(
                 record,

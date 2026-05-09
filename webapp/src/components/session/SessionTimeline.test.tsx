@@ -415,6 +415,42 @@ describe("SessionTimeline", () => {
     );
   });
 
+  it("keeps the main Working label shimmering while a collapsed sub-agent is running", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Research this",
+            markdown: false,
+          },
+          {
+            kind: "thinking",
+            itemId: "subagent-a-card",
+            title: "Sub-agent",
+            content: "",
+            subAgentId: "subagent-a",
+          },
+        ]}
+        subAgents={{
+          "subagent-a": { title: "Researcher", status: "running" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: "Working 1 agent" });
+    expect(workingButton.querySelector('[data-component="text-shimmer"]')).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+  });
+
   it("renders thinking and tool rows directly inside an expanded Working group", () => {
     const { container } = render(
       <SessionTimeline

@@ -40,8 +40,14 @@ import type {
 } from "../../types";
 import {
   getSavedSessionKey,
+  type SubAgentState,
   useSessionStore,
 } from "../../store";
+import {
+  projectMainTimelineItems,
+  projectSubAgentTimelineItems,
+  type TimelineProjection,
+} from "../../sessionTimelineProjection";
 import { useSessionEvents } from "../../hooks/useSessionEvents";
 import { ConnectionBadge } from "./ConnectionBadge";
 import { DeleteSessionModal } from "./DeleteSessionModal";
@@ -63,6 +69,51 @@ import {
 import { EmptyState } from "../shared/EmptyState";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+
+type SubAgentDisplayMap = Record<string, { title: string; status: string }>;
+
+function useTimelineDisplayProjection(
+  items: TimelineItem[],
+  routeSubAgentId: string | null,
+): { items: TimelineItem[]; itemsVersion: string } {
+  const routeKey = routeSubAgentId ? `sub-agent:${routeSubAgentId}` : "main";
+  const projection: TimelineProjection = useMemo(
+    () => routeSubAgentId
+      ? projectSubAgentTimelineItems(items, routeSubAgentId)
+      : projectMainTimelineItems(items),
+    [items, routeSubAgentId],
+  );
+  return {
+    items: projection.items,
+    itemsVersion: JSON.stringify([routeKey, projection.signature]),
+  };
+}
+
+function useSubAgentDisplayMap(
+  subAgents: Record<string, SubAgentState>,
+  routeSubAgentId: string | null,
+): SubAgentDisplayMap {
+  return useMemo(() => {
+    if (routeSubAgentId) {
+      const selected = subAgents[routeSubAgentId] ?? {
+        title: routeSubAgentId,
+        status: "completed",
+      };
+      return {
+        [routeSubAgentId]: {
+          title: selected.title,
+          status: selected.status,
+        },
+      };
+    }
+    return Object.fromEntries(
+      Object.entries(subAgents).map(([subAgentId, subAgent]) => [
+        subAgentId,
+        { title: subAgent.title, status: subAgent.status },
+      ]),
+    );
+  }, [routeSubAgentId, subAgents]);
+}
 
 export function SessionPage({
   workspaceRoot,
@@ -625,7 +676,6 @@ export function SessionPage({
     !isSubAgentRoute
     && sessionState?.liveSessionId
     && !sessionState.sessionEnded
-    && sessionState.processing?.active
     && !sessionState.inputEnabled,
   );
   const isDeleteBusy = deleteSessionMutation.isPending || createSessionMutation.isPending;
@@ -640,22 +690,16 @@ export function SessionPage({
     ? sessionState?.subAgents[routeSubAgentId] ?? null
     : null;
   const selectedSubAgentIsRunning = selectedSubAgent?.status === "running";
-  const displayedItems = useMemo(
-    () => isSubAgentRoute && routeSubAgentId
-      ? (sessionState?.items ?? []).filter((item) => item.subAgentId === routeSubAgentId)
-      : sessionState?.items ?? [],
-    [isSubAgentRoute, routeSubAgentId, sessionState?.items],
+  const {
+    items: displayedItems,
+    itemsVersion: displayedItemsVersion,
+  } = useTimelineDisplayProjection(
+    sessionState?.items ?? [],
+    isSubAgentRoute ? routeSubAgentId ?? null : null,
   );
-  const displayedSubAgents = useMemo(
-    () => isSubAgentRoute && routeSubAgentId
-      ? {
-          [routeSubAgentId]: selectedSubAgent ?? {
-            title: routeSubAgentId,
-            status: "completed",
-          },
-        }
-      : sessionState?.subAgents ?? {},
-    [isSubAgentRoute, routeSubAgentId, selectedSubAgent, sessionState?.subAgents],
+  const displayedSubAgents = useSubAgentDisplayMap(
+    sessionState?.subAgents ?? {},
+    isSubAgentRoute ? routeSubAgentId ?? null : null,
   );
   const latestDisplayedItem = displayedItems.at(-1);
   const selectedSubAgentHasFinalResponse =
@@ -664,11 +708,13 @@ export function SessionPage({
     selectedSubAgentIsRunning && !selectedSubAgentHasFinalResponse;
   const displayedProcessing: ProcessingState | null = isSubAgentRoute
     ? showSelectedSubAgentProcessing
-      ? sessionState?.processing ?? null
+      ? selectedSubAgent?.processing ?? null
       : null
     : sessionState?.processing ?? null;
-  const displayedWaitMessage = isSubAgentRoute && !showSelectedSubAgentProcessing
-    ? null
+  const displayedWaitMessage = isSubAgentRoute
+    ? showSelectedSubAgentProcessing
+      ? selectedSubAgent?.waitMessage ?? null
+      : null
     : sessionState?.waitMessage ?? null;
 
   const sessionListPanel = (
@@ -820,7 +866,7 @@ export function SessionPage({
           <>
             <SessionTimeline
               items={displayedItems}
-              itemsVersion={sessionState?.itemsVersion ?? 0}
+              itemsVersion={displayedItemsVersion}
               subAgents={displayedSubAgents}
               connection={sessionState?.connection ?? "disconnected"}
               waitMessage={displayedWaitMessage}
@@ -863,7 +909,6 @@ export function SessionPage({
                 interactiveMode={interactiveMode}
                 isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
                 onSubmit={handleSubmit}
-                isProcessing={Boolean(sessionState?.processing?.active)}
                 canInterrupt={canInterruptActiveTurn}
                 isInterrupting={interruptMutation.isPending}
                 restoredInput={sessionState?.restoredInput ?? null}
@@ -957,8 +1002,17 @@ function snapshotItemId(item: Record<string, unknown>): string {
       : "";
 }
 
+function snapshotSubAgentId(item: Record<string, unknown>): string | null {
+  return typeof item.sub_agent_id === "string"
+    ? item.sub_agent_id
+    : typeof item.subAgentId === "string"
+      ? item.subAgentId
+      : null;
+}
+
 function isHistoricalSnapshotMessage(item: Record<string, unknown>): boolean {
   return item.kind === "message"
+    && !snapshotSubAgentId(item)
     && (item.historical === true || snapshotItemId(item).startsWith("history-"));
 }
 

@@ -458,7 +458,9 @@ class LiveSessionsMixin:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
             raise RuntimeError("Live session has already ended.")
-        if not (live_session.snapshot.processing or {}).get("active"):
+        processing_active = bool((live_session.snapshot.processing or {}).get("active"))
+        input_disabled = not live_session.snapshot.input_enabled
+        if not (processing_active or input_disabled):
             raise RuntimeError("Live session is not currently processing a turn.")
         item = self._latest_live_user_item(live_session)
         item_id = _snapshot_item_id(item) if item is not None else None

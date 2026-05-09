@@ -155,7 +155,7 @@ class LiveSessionSnapshotModel(BaseModel):
     fatal_error: str | None
     pending_user_questions: PendingUserQuestionsModel | None
     items: list[dict[str, Any]]
-    sub_agents: dict[str, dict[str, str]]
+    sub_agents: dict[str, dict[str, Any]]
     last_event_seq: int
 
 

@@ -91,7 +91,7 @@ export type ImageAttachmentModel = { upload_id: string; name: string; mime_type:
 
 export type InputStateSseEventModel = { seq: number; created_at: string; type: "input_state"; payload: InputStateSseEventPayloadModel };
 
-export type InputStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; enabled: boolean };
+export type InputStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; enabled: boolean; sub_agent_id?: string | null };
 
 export type LiveSessionBoundSseEventModel = { seq: number; created_at: string; type: "live_session_bound"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
@@ -107,7 +107,7 @@ export type LiveSessionResponse = { session: LiveSessionModel };
 
 export type LiveSessionShellCommandRequest = { command?: string };
 
-export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; items: Record<string, unknown>[]; sub_agents: Record<string, Record<string, string>>; last_event_seq: number };
+export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; items: Record<string, unknown>[]; sub_agents: Record<string, Record<string, unknown>>; last_event_seq: number };
 
 export type LiveSessionStartedSseEventModel = { seq: number; created_at: string; type: "live_session_started"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
@@ -125,11 +125,11 @@ export type MessagePartIdsModel = { content: string; file_paths?: string[]; imag
 
 export type MessageRekeyedSseEventModel = { seq: number; created_at: string; type: "message_rekeyed"; payload: MessageRekeyedSseEventPayloadModel };
 
-export type MessageRekeyedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; old_item_id: string; item: MessageAddedSseEventPayloadModel };
+export type MessageRekeyedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; old_item_id: string; item: MessageAddedSseEventPayloadModel; sub_agent_id?: string | null };
 
 export type MessageRemovedSseEventModel = { seq: number; created_at: string; type: "message_removed"; payload: MessageRemovedSseEventPayloadModel };
 
-export type MessageRemovedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; restore_input?: string | null };
+export type MessageRemovedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; restore_input?: string | null; sub_agent_id?: string | null };
 
 export type ModelProfileListResponse = { model_profiles: ModelProfileViewModel[]; active_profile_id: string | null; config_revision: string };
 
@@ -153,7 +153,9 @@ export type PendingUserQuestionsModel = { prompt_id: string; questions: PendingU
 
 export type ProcessingStateModel = { active: boolean; phase?: "starting" | "model_wait" | "tool_execution" | "finalizing" | "interrupting" | "retry_wait" | null; message?: string | null; active_tool_count?: number | null };
 
-export type ProcessingStateSseEventModel = { seq: number; created_at: string; type: "processing_state"; payload: ProcessingStateModel };
+export type ProcessingStateSseEventModel = { seq: number; created_at: string; type: "processing_state"; payload: ProcessingStateSseEventPayloadModel };
+
+export type ProcessingStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; active: boolean; phase?: "starting" | "model_wait" | "tool_execution" | "finalizing" | "interrupting" | "retry_wait" | null; message?: string | null; active_tool_count?: number | null; sub_agent_id?: string | null };
 
 export type ProviderAuthFlowResponse = { provider: ProviderViewModel; auth_status: ProviderAuthStatusModel; flow: ProviderAuthFlowViewModel; session?: ProviderAuthSessionModel | null };
 
@@ -329,7 +331,7 @@ export type ValidationError = { loc: (string | number)[]; msg: string; type: str
 
 export type WaitStateSseEventModel = { seq: number; created_at: string; type: "wait_state"; payload: WaitStateSseEventPayloadModel };
 
-export type WaitStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; active: boolean; message?: string | null };
+export type WaitStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; active: boolean; message?: string | null; sub_agent_id?: string | null };
 
 export type WelcomeSseEventModel = { seq: number; created_at: string; type: "welcome"; payload: WelcomeSseEventPayloadModel };
 

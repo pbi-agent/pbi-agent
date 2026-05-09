@@ -503,6 +503,44 @@ describe("session store", () => {
     expect(removed.state.itemsVersion).toBe(3);
   });
 
+  it("preserves child identity when rekeying sub-agent messages", () => {
+    const added = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
+      seq: 1,
+      payload: {
+        item_id: "subagent-1-message-1",
+        role: "assistant",
+        content: "child draft",
+        sub_agent_id: "subagent-1",
+      },
+    }));
+    const rekeyed = reduceSessionEvent(
+      { ...added.state, restoredInput: "parent draft" },
+      makeEvent({
+        seq: 2,
+        type: "message_rekeyed",
+        payload: {
+          old_item_id: "subagent-1-message-1",
+          sub_agent_id: "subagent-1",
+          item: {
+            item_id: "msg-7",
+            role: "assistant",
+            content: "child draft",
+            markdown: true,
+          },
+        },
+      }),
+    );
+
+    expect(rekeyed.state.items).toEqual([
+      expect.objectContaining({
+        itemId: "msg-7",
+        content: "child draft",
+        subAgentId: "subagent-1",
+      }),
+    ]);
+    expect(rekeyed.state.restoredInput).toBe("parent draft");
+  });
+
   it("reduces runtime updates without mutating timeline items", () => {
     const current: SessionRuntimeState = {
       ...createEmptySessionState("session-1"),
@@ -711,6 +749,43 @@ describe("session store", () => {
       payload: { sub_agent_id: "sub-1", title: "Review", status: "completed" },
     }));
     expect(subAgent.state.subAgents["sub-1"]).toEqual({
+      title: "Review",
+      status: "completed",
+    });
+
+    const childWait = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
+      seq: 1,
+      type: "wait_state",
+      payload: {
+        active: true,
+        message: "Child model wait",
+        sub_agent_id: "sub-1",
+      },
+    }));
+    const childProcessing = reduceSessionEvent(childWait.state, makeEvent({
+      seq: 2,
+      type: "processing_state",
+      payload: {
+        active: true,
+        phase: "model_wait",
+        message: "Child model wait",
+        sub_agent_id: "sub-1",
+      },
+    }));
+    const childCompleted = reduceSessionEvent(childProcessing.state, makeEvent({
+      seq: 3,
+      type: "sub_agent_state",
+      payload: { sub_agent_id: "sub-1", title: "Review", status: "completed" },
+    }));
+    expect(childWait.state.waitMessage).toBeNull();
+    expect(childWait.state.subAgents["sub-1"]?.waitMessage).toBe("Child model wait");
+    expect(childProcessing.state.processing).toBeNull();
+    expect(childProcessing.state.subAgents["sub-1"]?.processing).toEqual({
+      active: true,
+      phase: "model_wait",
+      message: "Child model wait",
+    });
+    expect(childCompleted.state.subAgents["sub-1"]).toEqual({
       title: "Review",
       status: "completed",
     });

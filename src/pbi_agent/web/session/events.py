@@ -13,6 +13,7 @@ from pbi_agent.web.session.serializers import (
 from pbi_agent.web.session.state import (
     APP_EVENT_STREAM_ID,
     EventStream,
+    LiveSessionSnapshot,
     LiveSessionState,
 )
 
@@ -223,6 +224,45 @@ class EventsMixin:
                 fatal_error=live_session.fatal_error,
             )
 
+    def _sub_agent_snapshot(
+        self,
+        live_session: LiveSessionState,
+        sub_agent_id: str,
+    ) -> dict[str, Any]:
+        current = live_session.snapshot.sub_agents.get(sub_agent_id)
+        snapshot = dict(current) if isinstance(current, dict) else {}
+        snapshot.setdefault("title", sub_agent_id or "sub_agent")
+        snapshot.setdefault("status", "running")
+        return snapshot
+
+    def _has_active_sub_agent_processing(
+        self,
+        snapshot: LiveSessionSnapshot,
+    ) -> bool:
+        return any(
+            isinstance((processing := sub_agent.get("processing")), dict)
+            and processing.get("active") is True
+            for sub_agent in snapshot.sub_agents.values()
+        )
+
+    def _sub_agent_aggregate_processing_state(self) -> dict[str, Any]:
+        return {
+            "active": True,
+            "phase": "tool_execution",
+            "message": "running sub-agent...",
+        }
+
+    def _is_sub_agent_aggregate_processing_state(
+        self,
+        processing: object,
+    ) -> bool:
+        return (
+            isinstance(processing, dict)
+            and processing.get("active") is True
+            and processing.get("phase") == "tool_execution"
+            and processing.get("message") == "running sub-agent..."
+        )
+
     def _publish_live_event(
         self,
         live_session_id: str,
@@ -271,6 +311,8 @@ class EventsMixin:
         snapshot.last_event_seq = int(event["seq"])
         payload = event["payload"]
         event_type = event["type"]
+        raw_sub_agent_id = payload.get("sub_agent_id")
+        sub_agent_id = raw_sub_agent_id if isinstance(raw_sub_agent_id, str) else None
 
         if event_type == "session_reset":
             snapshot.items = []
@@ -290,9 +332,21 @@ class EventsMixin:
             )
             return
         if event_type == "input_state":
+            if sub_agent_id:
+                return
             snapshot.input_enabled = bool(payload.get("enabled"))
             return
         if event_type == "wait_state":
+            if sub_agent_id:
+                sub_agent = self._sub_agent_snapshot(live_session, sub_agent_id)
+                if payload.get("active"):
+                    sub_agent["wait_message"] = str(
+                        payload.get("message") or "Working..."
+                    )
+                else:
+                    sub_agent.pop("wait_message", None)
+                snapshot.sub_agents[sub_agent_id] = sub_agent
+                return
             snapshot.wait_message = (
                 str(payload.get("message") or "Working...")
                 if payload.get("active")
@@ -300,7 +354,38 @@ class EventsMixin:
             )
             return
         if event_type == "processing_state":
-            snapshot.processing = dict(payload) if payload.get("active") else None
+            if sub_agent_id:
+                sub_agent = self._sub_agent_snapshot(live_session, sub_agent_id)
+                if payload.get("active"):
+                    sub_agent["processing"] = {
+                        "active": bool(payload.get("active")),
+                        "phase": payload.get("phase"),
+                        "message": payload.get("message"),
+                        **(
+                            {"active_tool_count": payload.get("active_tool_count")}
+                            if "active_tool_count" in payload
+                            else {}
+                        ),
+                    }
+                    if not (snapshot.processing or {}).get("active"):
+                        snapshot.processing = (
+                            self._sub_agent_aggregate_processing_state()
+                        )
+                else:
+                    sub_agent.pop("processing", None)
+                snapshot.sub_agents[sub_agent_id] = sub_agent
+                if self._is_sub_agent_aggregate_processing_state(
+                    snapshot.processing
+                ) and not self._has_active_sub_agent_processing(snapshot):
+                    snapshot.processing = None
+                return
+            snapshot.processing = (
+                dict(payload)
+                if payload.get("active")
+                else self._sub_agent_aggregate_processing_state()
+                if self._has_active_sub_agent_processing(snapshot)
+                else None
+            )
             return
         if event_type == "user_questions_requested":
             snapshot.pending_user_questions = dict(payload)
@@ -341,6 +426,8 @@ class EventsMixin:
                 return
             old_item_id = str(payload.get("old_item_id") or "")
             item = dict(raw_item)
+            if sub_agent_id and not isinstance(item.get("sub_agent_id"), str):
+                item["sub_agent_id"] = sub_agent_id
             item["kind"] = "message"
             item["itemId"] = str(item.get("item_id") or item.get("itemId") or "")
             if old_item_id and old_item_id != item["itemId"]:
@@ -362,10 +449,17 @@ class EventsMixin:
             return
         if event_type == "sub_agent_state":
             sub_agent_id = str(payload.get("sub_agent_id") or "")
-            snapshot.sub_agents[sub_agent_id] = {
-                "title": str(payload.get("title") or "sub_agent"),
-                "status": str(payload.get("status") or "running"),
-            }
+            sub_agent = self._sub_agent_snapshot(live_session, sub_agent_id)
+            sub_agent.update(
+                {
+                    "title": str(payload.get("title") or "sub_agent"),
+                    "status": str(payload.get("status") or "running"),
+                }
+            )
+            if sub_agent["status"] not in {"running", "starting"}:
+                sub_agent.pop("wait_message", None)
+                sub_agent.pop("processing", None)
+            snapshot.sub_agents[sub_agent_id] = sub_agent
             return
         if event_type == "session_state":
             if "session_id" in payload:

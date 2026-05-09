@@ -207,6 +207,89 @@ def _timeline_snapshot_from_run(
     return snapshot
 
 
+def _upsert_timeline_item(
+    items: list[dict[str, Any]],
+    next_item: dict[str, Any],
+) -> list[dict[str, Any]]:
+    item_id = _snapshot_item_id(next_item)
+    if not item_id:
+        return items
+    for index, item in enumerate(items):
+        if _snapshot_item_id(item) != item_id:
+            continue
+        updated = list(items)
+        updated[index] = next_item
+        return updated
+    return [*items, next_item]
+
+
+def _timeline_items_from_web_events(
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for event in sorted(events, key=lambda event: int(event.get("seq") or 0)):
+        event_type = event.get("type")
+        payload = event.get("payload")
+        if not isinstance(event_type, str) or not isinstance(payload, dict):
+            continue
+        raw_sub_agent_id = payload.get("sub_agent_id")
+        sub_agent_id = raw_sub_agent_id if isinstance(raw_sub_agent_id, str) else None
+        if event_type in {"message_added", "thinking_updated", "tool_group_added"}:
+            item = dict(payload)
+            item["kind"] = (
+                "message"
+                if event_type == "message_added"
+                else "thinking"
+                if event_type == "thinking_updated"
+                else "tool_group"
+            )
+            item["itemId"] = str(payload.get("item_id") or "")
+            items = _upsert_timeline_item(items, item)
+            continue
+        if event_type == "message_rekeyed":
+            raw_item = payload.get("item")
+            if not isinstance(raw_item, dict):
+                continue
+            item = dict(raw_item)
+            if sub_agent_id and not isinstance(item.get("sub_agent_id"), str):
+                item["sub_agent_id"] = sub_agent_id
+            item["kind"] = "message"
+            item["itemId"] = str(item.get("item_id") or item.get("itemId") or "")
+            old_item_id = str(payload.get("old_item_id") or "")
+            if old_item_id and old_item_id != item["itemId"]:
+                items = [
+                    existing
+                    for existing in items
+                    if _snapshot_item_id(existing) != old_item_id
+                ]
+            items = _upsert_timeline_item(items, item)
+            continue
+        if event_type == "message_removed":
+            item_id = str(payload.get("item_id") or "")
+            if item_id:
+                items = [item for item in items if _snapshot_item_id(item) != item_id]
+    return items
+
+
+def _snapshot_with_event_timeline_items(
+    snapshot: dict[str, Any],
+    events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    event_items = _timeline_items_from_web_events(events)
+    if not event_items:
+        return snapshot
+    event_item_ids = {_snapshot_item_id(item) for item in event_items}
+    snapshot_items = snapshot.get("items")
+    merged_items = [*event_items]
+    if isinstance(snapshot_items, list):
+        merged_items.extend(
+            item
+            for item in snapshot_items
+            if _snapshot_item_id(item) not in event_item_ids
+        )
+    return {**snapshot, "items": merged_items}
+
+
 def _copy_timeline_item_for_run(
     item: Any,
     run_session_id: str,
@@ -241,6 +324,7 @@ def _namespace_run_value(run_session_id: str, value: str) -> str:
 def _combined_timeline_snapshot(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     records: list[RunSessionRecord],
     current_snapshot: dict[str, Any] | None = None,
+    persisted_events_by_run_session_id: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any] | None:
     snapshots: list[tuple[str, dict[str, Any], bool]] = []
     current_live_session_id = (
@@ -254,6 +338,11 @@ def _combined_timeline_snapshot(  # pyright: ignore[reportUnusedFunction] - impo
         snapshot = _timeline_snapshot_from_run(record)
         if snapshot is None:
             continue
+        if persisted_events_by_run_session_id is not None:
+            snapshot = _snapshot_with_event_timeline_items(
+                snapshot,
+                persisted_events_by_run_session_id.get(record.run_session_id, []),
+            )
         snapshots.append((record.run_session_id, snapshot, True))
     if current_snapshot is not None:
         snapshots.append(

@@ -237,6 +237,115 @@ def test_combined_timeline_marks_previous_run_messages_historical() -> None:
     ]
 
 
+def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -> None:
+    snapshot = _combined_timeline_snapshot(
+        [
+            _run_record(
+                "completed-run",
+                snapshot={
+                    "live_session_id": "completed-run",
+                    "session_id": "session-1",
+                    "session_ended": True,
+                    "items": [
+                        {
+                            "kind": "tool_group",
+                            "itemId": "subagent-1-tool-group-2",
+                            "label": "read_file",
+                            "items": [],
+                            "sub_agent_id": "subagent-1",
+                        },
+                    ],
+                    "sub_agents": {
+                        "subagent-1": {
+                            "title": "worker",
+                            "status": "completed",
+                        }
+                    },
+                },
+            ),
+        ],
+        persisted_events_by_run_session_id={
+            "completed-run": [
+                {
+                    "seq": 1,
+                    "type": "message_added",
+                    "payload": {
+                        "item_id": "subagent-1-message-1",
+                        "role": "user",
+                        "content": "Delegated task",
+                        "markdown": False,
+                        "sub_agent_id": "subagent-1",
+                    },
+                    "created_at": "2026-05-08T08:47:16Z",
+                },
+                {
+                    "seq": 2,
+                    "type": "tool_group_added",
+                    "payload": {
+                        "item_id": "subagent-1-tool-group-2",
+                        "label": "read_file",
+                        "items": [{"text": "read_file"}],
+                        "status": "completed",
+                        "sub_agent_id": "subagent-1",
+                    },
+                    "created_at": "2026-05-08T08:47:17Z",
+                },
+                {
+                    "seq": 3,
+                    "type": "message_added",
+                    "payload": {
+                        "item_id": "subagent-1-message-3",
+                        "role": "assistant",
+                        "content": "Delegated answer",
+                        "markdown": True,
+                        "sub_agent_id": "subagent-1",
+                    },
+                    "created_at": "2026-05-08T08:47:18Z",
+                },
+            ]
+        },
+    )
+
+    assert snapshot is not None
+    assert snapshot["sub_agents"] == {
+        "completed-run:subagent-1": {
+            "title": "worker",
+            "status": "completed",
+        }
+    }
+    assert snapshot["items"] == [
+        {
+            "item_id": "completed-run:subagent-1-message-1",
+            "role": "user",
+            "content": "Delegated task",
+            "markdown": False,
+            "sub_agent_id": "completed-run:subagent-1",
+            "kind": "message",
+            "itemId": "completed-run:subagent-1-message-1",
+            "historical": True,
+        },
+        {
+            "item_id": "completed-run:subagent-1-tool-group-2",
+            "label": "read_file",
+            "items": [{"text": "read_file"}],
+            "status": "completed",
+            "sub_agent_id": "completed-run:subagent-1",
+            "kind": "tool_group",
+            "itemId": "completed-run:subagent-1-tool-group-2",
+        },
+        {
+            "item_id": "completed-run:subagent-1-message-3",
+            "role": "assistant",
+            "content": "Delegated answer",
+            "markdown": True,
+            "sub_agent_id": "completed-run:subagent-1",
+            "kind": "message",
+            "itemId": "completed-run:subagent-1-message-3",
+            "historical": True,
+        },
+    ]
+
+
 def test_web_manager_uses_host_workspace_key_in_sandbox(monkeypatch, tmp_path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -2454,6 +2563,164 @@ def test_live_events_include_canonical_identity_in_stream_and_persistence(
     assert run_metadata["directory"] == str(tmp_path).lower()
     assert run_metadata["workspace_root"] == str(tmp_path)
     assert run_metadata["live_session_id"] == live_session_id
+
+
+def test_sub_agent_processing_isolated_from_parent_live_snapshot(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    with TestClient(app):
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = app.state.manager.create_live_session()
+        live_session_id = created["live_session_id"]
+        live_session = app.state.manager._live_sessions[live_session_id]
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "input_state",
+            {
+                "enabled": True,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "wait_state",
+            {
+                "active": True,
+                "message": "Child model wait",
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "processing_state",
+            {
+                "active": True,
+                "phase": "model_wait",
+                "message": "Child model wait",
+                "sub_agent_id": "subagent-1",
+            },
+        )
+
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+
+        assert snapshot["input_enabled"] is False
+        assert snapshot["wait_message"] is None
+        assert snapshot["processing"] == {
+            "active": True,
+            "phase": "tool_execution",
+            "message": "running sub-agent...",
+        }
+        assert snapshot["sub_agents"]["subagent-1"] == {
+            "title": "subagent-1",
+            "status": "running",
+            "wait_message": "Child model wait",
+            "processing": {
+                "active": True,
+                "phase": "model_wait",
+                "message": "Child model wait",
+            },
+        }
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "processing_state",
+            {
+                "active": False,
+                "phase": None,
+                "message": None,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["processing"] is None
+        assert "processing" not in snapshot["sub_agents"]["subagent-1"]
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "processing_state",
+            {
+                "active": True,
+                "phase": "model_wait",
+                "message": "Child model wait",
+                "sub_agent_id": "subagent-1",
+            },
+        )
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "message_added",
+            {
+                "item_id": "subagent-1-message-1",
+                "role": "assistant",
+                "content": "child draft",
+                "markdown": True,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "message_rekeyed",
+            {
+                "old_item_id": "subagent-1-message-1",
+                "sub_agent_id": "subagent-1",
+                "item": {
+                    "item_id": "msg-7",
+                    "role": "assistant",
+                    "content": "child draft",
+                    "markdown": True,
+                },
+            },
+        )
+
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["items"] == [
+            {
+                "item_id": "msg-7",
+                "role": "assistant",
+                "content": "child draft",
+                "markdown": True,
+                "sub_agent_id": "subagent-1",
+                "kind": "message",
+                "itemId": "msg-7",
+            }
+        ]
+
+        interrupted = app.state.manager.interrupt_live_session(live_session_id)
+        assert interrupted["live_session_id"] == live_session_id
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "sub_agent_state",
+            {
+                "sub_agent_id": "subagent-1",
+                "title": "Researcher",
+                "status": "completed",
+            },
+        )
+
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["sub_agents"]["subagent-1"] == {
+            "title": "Researcher",
+            "status": "completed",
+        }
 
 
 def test_live_session_creation_rechecks_saved_session_under_registration_lock(

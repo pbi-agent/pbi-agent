@@ -240,7 +240,7 @@ class LiveSessionSnapshot:
     fatal_error: str | None = None
     pending_user_questions: dict[str, Any] | None = None
     items: list[dict[str, Any]] = None  # type: ignore[assignment]
-    sub_agents: dict[str, dict[str, str]] = None  # type: ignore[assignment]
+    sub_agents: dict[str, dict[str, Any]] = None  # type: ignore[assignment]
     last_event_seq: int = 0
 
     def __post_init__(self) -> None:

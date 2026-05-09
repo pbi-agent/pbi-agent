@@ -10,6 +10,7 @@ import {
   fetchConfigBootstrap,
   fetchSessionDetail,
   fetchSessions,
+  interruptSession,
   runSessionShellCommand,
   sendSessionMessage,
   setActiveModelProfile,
@@ -28,8 +29,14 @@ import type {
   SessionRecord,
 } from "../../types";
 
+type SessionTimelineMockProps = {
+  items: unknown[];
+  itemsVersion: unknown;
+  [key: string]: unknown;
+};
+
 const usageBarMock = vi.hoisted(() => vi.fn());
-const sessionTimelineMock = vi.hoisted(() => vi.fn());
+const sessionTimelineMock = vi.hoisted(() => vi.fn<(props: SessionTimelineMockProps) => void>());
 const composerFocusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../hooks/useLiveSessionEvents", () => ({
@@ -71,7 +78,7 @@ vi.mock("./SessionSidebar", () => ({
 }));
 
 vi.mock("./SessionTimeline", () => ({
-  SessionTimeline: (props: { items: unknown[] }) => {
+  SessionTimeline: (props: SessionTimelineMockProps) => {
     sessionTimelineMock(props);
     return <div>Timeline {props.items.length}</div>;
   },
@@ -88,6 +95,14 @@ vi.mock("./DeleteSessionModal", () => ({
   DeleteSessionModal: () => <div>Delete Session Modal</div>,
 }));
 
+function latestSessionTimelineProps(): SessionTimelineMockProps {
+  const props: unknown = sessionTimelineMock.mock.calls.at(-1)?.[0];
+  if (!props || typeof props !== "object") {
+    throw new Error("Expected timeline props to be captured");
+  }
+  return props as SessionTimelineMockProps;
+}
+
 vi.mock("./Composer", async () => {
   const React = await import("react");
 
@@ -101,7 +116,6 @@ vi.mock("./Composer", async () => {
         liveSessionId,
         interactiveMode,
         onSubmit,
-        isProcessing,
         canInterrupt,
         isInterrupting,
         onInterrupt,
@@ -114,7 +128,6 @@ vi.mock("./Composer", async () => {
         liveSessionId?: string | null;
         interactiveMode: boolean;
         onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
-        isProcessing?: boolean;
         canInterrupt?: boolean;
         isInterrupting?: boolean;
         onInterrupt?: () => void;
@@ -135,7 +148,7 @@ vi.mock("./Composer", async () => {
           <div>Composer live session {liveSessionId ?? ""}</div>
           <div>Composer interactive {String(interactiveMode)}</div>
           <div>Composer restored {restoredInput ?? ""}</div>
-          {isProcessing && canInterrupt ? (
+          {canInterrupt ? (
             <button
               type="button"
               aria-label="Interrupt assistant turn"
@@ -190,6 +203,7 @@ vi.mock("../../api", async (importOriginal) => {
     fetchConfigBootstrap: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
+    interruptSession: vi.fn(),
     runSessionShellCommand: vi.fn(),
     sendSessionMessage: vi.fn(),
     setActiveModelProfile: vi.fn(),
@@ -425,6 +439,9 @@ describe("SessionPage", () => {
     vi.mocked(runSessionShellCommand).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-new", session_id: "session-1", last_event_seq: 3 }),
     );
+    vi.mocked(interruptSession).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-processing", session_id: "session-1" }),
+    );
     vi.mocked(submitSessionQuestionResponse).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-question", session_id: "session-1" }),
     );
@@ -656,6 +673,185 @@ describe("SessionPage", () => {
         waitMessage: null,
       }));
     });
+  });
+
+  it("hydrates reopened sub-agent routes with persisted user and assistant messages", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord(),
+      status: "ended",
+      history_items: [
+        {
+          item_id: "msg-parent-user",
+          message_id: "msg-parent-user",
+          role: "user",
+          content: "Parent task",
+          markdown: true,
+          part_ids: { content: "part-parent-user", file_paths: [], image_attachments: [] },
+          file_paths: [],
+          image_attachments: [],
+          historical: true,
+          created_at: "2026-05-09T00:00:00Z",
+        },
+        {
+          item_id: "msg-parent-assistant",
+          message_id: "msg-parent-assistant",
+          role: "assistant",
+          content: "Parent answer",
+          markdown: true,
+          part_ids: { content: "part-parent-assistant", file_paths: [], image_attachments: [] },
+          file_paths: [],
+          image_attachments: [],
+          historical: true,
+          created_at: "2026-05-09T00:00:03Z",
+        },
+      ],
+      active_live_session: null,
+      timeline: {
+        live_session_id: "run-1",
+        session_id: "session-1",
+        runtime: {
+          provider: "openai",
+          provider_id: "openai-main",
+          profile_id: "analysis",
+          model: "gpt-5.4",
+          reasoning_effort: "high",
+          compact_threshold: 200000,
+        },
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "run-1:subagent-25-message-1",
+            role: "user",
+            content: "Delegated task",
+            markdown: false,
+            historical: true,
+            sub_agent_id: "run-1:subagent-25",
+          },
+          {
+            kind: "tool_group",
+            itemId: "run-1:subagent-25-tool-group-2",
+            label: "read_file",
+            items: [{ text: "read_file" }],
+            status: "completed",
+            sub_agent_id: "run-1:subagent-25",
+          },
+          {
+            kind: "message",
+            itemId: "run-1:subagent-25-message-3",
+            role: "assistant",
+            content: "Delegated answer",
+            markdown: true,
+            historical: true,
+            sub_agent_id: "run-1:subagent-25",
+          },
+        ],
+        sub_agents: {
+          "run-1:subagent-25": { title: "worker", status: "completed" },
+        },
+        last_event_seq: 3,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1/sub-agents/run-1%3Asubagent-25");
+
+    await waitFor(() => {
+      const props = latestSessionTimelineProps();
+      expect(props.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: "message",
+          itemId: "run-1:subagent-25-message-1",
+          content: "Delegated task",
+        }),
+        expect.objectContaining({
+          kind: "tool_group",
+          itemId: "run-1:subagent-25-tool-group-2",
+        }),
+        expect.objectContaining({
+          kind: "message",
+          itemId: "run-1:subagent-25-message-3",
+          content: "Delegated answer",
+        }),
+      ]));
+    });
+  });
+
+  it("passes collision-free timeline signatures to timeline rendering", async () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    vi.mocked(fetchSessionDetail).mockReturnValue(new Promise<SessionDetailPayload>(() => {}));
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessionIndex: { "session-1": sessionKey },
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: {
+          ...createEmptySessionState(),
+          key: sessionKey,
+          sessionId: "session-1",
+          connection: "connected",
+          items: [
+            {
+              kind: "message",
+              itemId: "assistant-msg",
+              role: "assistant",
+              content: "FB",
+              markdown: true,
+            },
+          ],
+          itemsVersion: 1,
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1");
+
+    await waitFor(() => {
+      const props = latestSessionTimelineProps();
+      expect(props.items).toEqual([expect.objectContaining({ content: "FB" })]);
+      expect(props.itemsVersion).toEqual(expect.stringContaining("FB"));
+    });
+    const firstProps = latestSessionTimelineProps();
+
+    act(() => {
+      useSessionStore.setState((state) => {
+        const current = state.sessionsByKey[sessionKey];
+        if (!current) return state;
+        return {
+          ...state,
+          sessionsByKey: {
+            ...state.sessionsByKey,
+            [sessionKey]: {
+              ...current,
+              items: [
+                {
+                  kind: "message",
+                  itemId: "assistant-msg",
+                  role: "assistant",
+                  content: "Ea",
+                  markdown: true,
+                },
+              ],
+              itemsVersion: current.itemsVersion + 1,
+            },
+          },
+        };
+      });
+    });
+
+    await waitFor(() => {
+      const props = latestSessionTimelineProps();
+      expect(props.items).toEqual([expect.objectContaining({ content: "Ea" })]);
+      expect(props.itemsVersion).toEqual(expect.stringContaining("Ea"));
+    });
+    const secondProps = latestSessionTimelineProps();
+    expect(secondProps.itemsVersion).not.toBe(firstProps.itemsVersion);
   });
 
   afterEach(() => {
@@ -2750,7 +2946,31 @@ describe("SessionPage", () => {
 
     expect(await screen.findByText("Composer live session live-processing")).toBeInTheDocument();
     expect(screen.getByText("Composer input enabled false")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Interrupt assistant turn" })).toBeEnabled();
     expect(screen.getByText("Connection disconnected")).toBeInTheDocument();
+
+    act(() => {
+      useSessionStore.setState((state) => {
+        const sessionKey = getSavedSessionKey("session-1");
+        const current = state.sessionsByKey[sessionKey];
+        if (!current) return state;
+        return {
+          ...state,
+          sessionsByKey: {
+            ...state.sessionsByKey,
+            [sessionKey]: {
+              ...current,
+              inputEnabled: true,
+            },
+          },
+        };
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Interrupt assistant turn" })).not.toBeInTheDocument();
+    });
   });
 
   it("submits hydrated pending questions through the saved-session endpoint", async () => {
