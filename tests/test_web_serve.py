@@ -123,8 +123,14 @@ def _run_record(
     )
 
 
-def _write_command(root: Path, name: str, content: str) -> None:
-    commands_dir = root / ".agents" / "commands"
+def _write_command(
+    root: Path,
+    name: str,
+    content: str,
+    *,
+    relative_dir: str = ".agents/commands",
+) -> None:
+    commands_dir = root / relative_dir
     commands_dir.mkdir(parents=True, exist_ok=True)
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
 
@@ -785,6 +791,155 @@ def test_command_list_endpoint_returns_command_files(
             },
         )
         assert create_response.status_code == 405
+
+
+def test_command_candidates_endpoint_uses_local_and_default_sources(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    explicit_source = tmp_path / "explicit-source"
+    default_source = tmp_path / "default-source"
+    _write_command(
+        explicit_source,
+        "review",
+        "# Review code changes\n\nReview the current diff.",
+        relative_dir="commands",
+    )
+    _write_command(
+        default_source,
+        "plan",
+        "# Plan the work\n\nCreate an implementation plan.",
+        relative_dir="commands",
+    )
+    monkeypatch.setattr(
+        "pbi_agent.web.session.configuration.resolve_default_commands_source",
+        lambda: str(default_source),
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        explicit_response = client.post(
+            "/api/config/commands/candidates",
+            json={"source": str(explicit_source)},
+        )
+        assert explicit_response.status_code == 200
+        assert explicit_response.json() == {
+            "source": str(explicit_source),
+            "ref": None,
+            "candidates": [
+                {
+                    "command_id": "review",
+                    "slash_alias": "/review",
+                    "description": "Review code changes",
+                    "subpath": "commands/review.md",
+                }
+            ],
+        }
+
+        default_payload = {
+            "source": str(default_source),
+            "ref": None,
+            "candidates": [
+                {
+                    "command_id": "plan",
+                    "slash_alias": "/plan",
+                    "description": "Plan the work",
+                    "subpath": "commands/plan.md",
+                }
+            ],
+        }
+
+        omitted_response = client.post("/api/config/commands/candidates", json={})
+        assert omitted_response.status_code == 200
+        assert omitted_response.json() == default_payload
+
+        blank_response = client.post(
+            "/api/config/commands/candidates",
+            json={"source": "   "},
+        )
+        assert blank_response.status_code == 200
+        assert blank_response.json() == default_payload
+
+        missing_response = client.post(
+            "/api/config/commands/candidates",
+            json={"source": str(tmp_path / "missing-source")},
+        )
+        assert missing_response.status_code == 400
+        assert "missing-source" in missing_response.json()["detail"]
+
+
+def test_command_install_endpoint_installs_conflicts_and_forces_replacement(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source_root = tmp_path / "command-source"
+    _write_command(
+        source_root,
+        "ship",
+        "# Ship the change\n\nShip the current implementation.",
+        relative_dir="commands",
+    )
+    monkeypatch.setattr(
+        "pbi_agent.web.session.configuration.resolve_default_commands_source",
+        lambda: str(source_root),
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        install_response = client.post(
+            "/api/config/commands/install",
+            json={"source": None, "command_name": "ship"},
+        )
+        assert install_response.status_code == 200
+        install_payload = install_response.json()
+        assert install_payload["installed"] == {
+            "command_id": "ship",
+            "slash_alias": "/ship",
+            "install_path": ".agents/commands/ship.md",
+            "source": str(source_root),
+            "ref": None,
+            "subpath": "commands/ship.md",
+        }
+        assert install_payload["commands"] == [
+            {
+                "id": "ship",
+                "name": "Ship",
+                "slash_alias": "/ship",
+                "description": "Ship the change",
+                "instructions": "# Ship the change\n\nShip the current implementation.",
+                "path": ".agents/commands/ship.md",
+            }
+        ]
+        assert (tmp_path / ".agents" / "commands" / "ship.md").is_file()
+
+        conflict_response = client.post(
+            "/api/config/commands/install",
+            json={"command_name": "ship"},
+        )
+        assert conflict_response.status_code == 409
+        assert "already installed" in conflict_response.json()["detail"]
+
+        _write_command(
+            source_root,
+            "ship",
+            "# Ship the update\n\nShip the updated implementation.",
+            relative_dir="commands",
+        )
+        force_response = client.post(
+            "/api/config/commands/install",
+            json={"source": "   ", "command_name": "ship", "force": True},
+        )
+        assert force_response.status_code == 200
+        assert force_response.json()["commands"] == [
+            {
+                "id": "ship",
+                "name": "Ship",
+                "slash_alias": "/ship",
+                "description": "Ship the update",
+                "instructions": "# Ship the update\n\nShip the updated implementation.",
+                "path": ".agents/commands/ship.md",
+            }
+        ]
 
 
 def test_skill_bootstrap_and_list_endpoint_return_installed_project_skills(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Response
 
+from pbi_agent.commands.project_installer import ProjectCommandInstallError
 from pbi_agent.skills.project_installer import ProjectSkillInstallError
 
 from pbi_agent.web.api.deps import (
@@ -13,6 +14,10 @@ from pbi_agent.web.api.errors import config_http_error
 from pbi_agent.web.api.schemas.config import (
     ActiveProfileRequest,
     ActiveProfileResponse,
+    CommandCandidateRequest,
+    CommandCandidatesResponse,
+    CommandInstallRequest,
+    CommandInstallResponse,
     CommandListResponse,
     CommandViewModel,
     ConfigBootstrapResponse,
@@ -43,6 +48,12 @@ router = APIRouter(prefix="/api/config", tags=["config"])
 
 
 def _skill_http_error(exc: ProjectSkillInstallError) -> HTTPException:
+    detail = str(exc)
+    status_code = 409 if "already installed" in detail.casefold() else 400
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+def _command_http_error(exc: ProjectCommandInstallError) -> HTTPException:
     detail = str(exc)
     status_code = 409 if "already installed" in detail.casefold() else 400
     return HTTPException(status_code=status_code, detail=detail)
@@ -307,13 +318,41 @@ def set_active_model_profile(
 
 @router.get("/commands", response_model=CommandListResponse)
 def list_commands(manager: SessionManagerDep) -> CommandListResponse:
-    payload = manager.config_bootstrap()
+    payload = manager.list_project_commands()
     return CommandListResponse(
         commands=[
             model_from_payload(CommandViewModel, item) for item in payload["commands"]
         ],
         config_revision=str(payload["config_revision"]),
     )
+
+
+@router.post("/commands/candidates", response_model=CommandCandidatesResponse)
+def list_command_candidates(
+    request: CommandCandidateRequest,
+    manager: SessionManagerDep,
+) -> CommandCandidatesResponse:
+    try:
+        payload = manager.list_project_command_candidates(source=request.source)
+    except ProjectCommandInstallError as exc:
+        raise _command_http_error(exc) from exc
+    return model_from_payload(CommandCandidatesResponse, payload)
+
+
+@router.post("/commands/install", response_model=CommandInstallResponse)
+def install_command(
+    request: CommandInstallRequest,
+    manager: SessionManagerDep,
+) -> CommandInstallResponse:
+    try:
+        payload = manager.install_project_command_from_source(
+            source=request.source,
+            command_name=request.command_name,
+            force=request.force,
+        )
+    except ProjectCommandInstallError as exc:
+        raise _command_http_error(exc) from exc
+    return model_from_payload(CommandInstallResponse, payload)
 
 
 @router.get("/skills", response_model=SkillListResponse)

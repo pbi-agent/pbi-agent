@@ -1,5 +1,10 @@
 import type {
   AppSseEventModel,
+  CommandCandidateViewModel,
+  CommandCandidatesResponse,
+  CommandInstallResponse,
+  CommandListResponse,
+  CommandViewModel,
   LiveSessionSnapshotModel,
   ProcessingStateModel,
   RunSessionModel,
@@ -430,14 +435,15 @@ export type ModelProfileView = {
   resolved_runtime: ResolvedRuntimeView;
 };
 
-export type CommandView = {
-  id: string;
-  name: string;
-  slash_alias: string;
-  description: string;
-  instructions: string;
-  path: string;
-};
+export type CommandView = CommandViewModel;
+
+export type CommandCandidateView = CommandCandidateViewModel;
+
+export type CommandListPayload = CommandListResponse;
+
+export type CommandCandidatesPayload = CommandCandidatesResponse;
+
+export type CommandInstallPayload = CommandInstallResponse;
 
 export type SkillView = SkillViewModel;
 

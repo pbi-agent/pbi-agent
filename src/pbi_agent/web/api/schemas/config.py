@@ -341,6 +341,44 @@ class CommandListResponse(BaseModel):
     config_revision: str
 
 
+class CommandCandidateRequest(BaseModel):
+    source: str | None = None
+
+
+class CommandCandidateViewModel(BaseModel):
+    command_id: str
+    slash_alias: str
+    description: str
+    subpath: str | None
+
+
+class CommandCandidatesResponse(BaseModel):
+    source: str
+    ref: str | None
+    candidates: list[CommandCandidateViewModel]
+
+
+class CommandInstallRequest(BaseModel):
+    source: str | None = None
+    command_name: NonEmptyString
+    force: bool = False
+
+
+class CommandInstallResultViewModel(BaseModel):
+    command_id: str
+    slash_alias: str
+    install_path: str
+    source: str
+    ref: str | None
+    subpath: str | None
+
+
+class CommandInstallResponse(BaseModel):
+    installed: CommandInstallResultViewModel
+    commands: list[CommandViewModel]
+    config_revision: str
+
+
 class SkillViewModel(BaseModel):
     id: str
     name: str

@@ -97,12 +97,9 @@ def render_remote_command_listing(
 def list_remote_project_commands(source: str) -> RemoteCommandListing:
     parsed_source = parse_project_command_source(source)
     with TemporaryDirectory(prefix="pbi-agent-command-") as temp_dir:
-        materialized = materialize_project_source(
+        materialized = _materialize_command_source(
             parsed_source,
             temp_root=Path(temp_dir),
-            source_label="command",
-            user_agent="pbi-agent-commands",
-            allow_local_file=True,
         )
         candidates = _discover_remote_command_candidates(
             repo_root=materialized.repo_root,
@@ -146,12 +143,9 @@ def install_project_command(
     install_root = (install_workspace / _INSTALL_ROOT).resolve()
 
     with TemporaryDirectory(prefix="pbi-agent-command-") as temp_dir:
-        materialized = materialize_project_source(
+        materialized = _materialize_command_source(
             parsed_source,
             temp_root=Path(temp_dir),
-            source_label="command",
-            user_agent="pbi-agent-commands",
-            allow_local_file=True,
         )
         candidates = _discover_remote_command_candidates(
             repo_root=materialized.repo_root,
@@ -195,6 +189,23 @@ def parse_project_command_source(
 def parse_github_command_source(source: str) -> GitHubCommandSource:
     try:
         return parse_github_project_source(source, source_label="command")
+    except ProjectSourceError as exc:
+        raise ProjectCommandInstallError(str(exc)) from exc
+
+
+def _materialize_command_source(
+    source: GitHubCommandSource | LocalCommandSource,
+    *,
+    temp_root: Path,
+):
+    try:
+        return materialize_project_source(
+            source,
+            temp_root=temp_root,
+            source_label="command",
+            user_agent="pbi-agent-commands",
+            allow_local_file=True,
+        )
     except ProjectSourceError as exc:
         raise ProjectCommandInstallError(str(exc)) from exc
 

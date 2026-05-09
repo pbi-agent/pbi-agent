@@ -7,6 +7,7 @@ import type {
   ApiPathParams,
   ApiQueryParams,
   ApiResponse,
+  CommandInstallRequest,
   CreateSessionRequest,
   LiveSessionInputRequest,
   LiveSessionShellCommandRequest,
@@ -18,6 +19,9 @@ import type {
   AllRunsPayload,
   BoardStage,
   BootstrapPayload,
+  CommandCandidatesPayload,
+  CommandInstallPayload,
+  CommandListPayload,
   ConfigBootstrapPayload,
   DashboardStatsPayload,
   ExpandedSessionInput,
@@ -174,6 +178,40 @@ export async function fetchConfigBootstrap(): Promise<ConfigBootstrapPayload> {
     "GET /api/config/bootstrap",
     "/api/config/bootstrap",
   );
+}
+
+export async function fetchCommands(): Promise<CommandListPayload> {
+  return apiRequest<"GET /api/config/commands", CommandListPayload>(
+    "GET /api/config/commands",
+    "/api/config/commands",
+  );
+}
+
+export async function fetchCommandCandidates(
+  source?: string | null,
+): Promise<CommandCandidatesPayload> {
+  return apiRequest<
+    "POST /api/config/commands/candidates",
+    CommandCandidatesPayload
+  >("POST /api/config/commands/candidates", "/api/config/commands/candidates", {
+    method: "POST",
+    body: jsonBody(
+      "POST /api/config/commands/candidates",
+      source === undefined ? {} : { source },
+    ),
+  });
+}
+
+export async function installCommand(
+  payload: CommandInstallRequest,
+): Promise<CommandInstallPayload> {
+  return apiRequest<
+    "POST /api/config/commands/install",
+    CommandInstallPayload
+  >("POST /api/config/commands/install", "/api/config/commands/install", {
+    method: "POST",
+    body: jsonBody("POST /api/config/commands/install", payload),
+  });
 }
 
 export async function fetchSkills(): Promise<SkillListPayload> {

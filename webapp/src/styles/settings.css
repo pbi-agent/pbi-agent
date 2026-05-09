@@ -997,7 +997,12 @@
 }
 
 .commands-hint {
-  margin-bottom: var(--sp-4);
+  margin-bottom: 0;
+  border-left: 2px solid var(--color-accent);
+}
+
+.commands-success-note {
+  border-left: 2px solid var(--color-success);
 }
 
 .skill-card__description {

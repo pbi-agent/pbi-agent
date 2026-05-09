@@ -114,6 +114,8 @@ This v1 implementation is project-only. User-level skill directories are intenti
 
 `pbi-agent` also supports project-local command presets. These are single-turn prompt instructions loaded from Markdown files under `.agents/commands/`, with each filename becoming a slash command such as `/review`.
 
+You can manage project-local command installs from the web UI under **Settings → Project → Commands**. The add dialog matches the skill workflow: browse the official catalog, or install from a GitHub owner/repo, GitHub URL/tree URL, or server-side local path. Installed commands are available from the composer command menu immediately.
+
 You can manage project-local installs directly from the CLI:
 
 ```bash

@@ -1,5 +1,7 @@
 # TODO
 
-[X] Restyle Add Project Skill dialog to match ProviderModal pattern (no nested card wrappers, FieldGroup/Field, plain candidate rows)
-[X] Validate lint/typecheck/test and rebuild static assets
-[X] Update memory and handoff
+[X] Inspect current skills/commands backend and settings UI
+[X] Add command candidate/install backend APIs and bootstrap data
+[X] Add Commands settings install dialog matching Skills design
+[X] Update tests, generated API types, and static assets
+[X] Validate and update memory

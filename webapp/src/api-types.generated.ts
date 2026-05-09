@@ -25,6 +25,18 @@ export type Body_upload_task_images_api_tasks_images_post = { files: string[] };
 
 export type BootstrapResponse = { workspace_root: string; workspace_key: string; workspace_display_path: string; is_sandbox: boolean; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; supports_image_inputs: boolean; sessions: SessionRecordModel[]; tasks: TaskRecordModel[]; live_sessions: LiveSessionModel[]; board_stages: BoardStageModel[] };
 
+export type CommandCandidateRequest = { source?: string | null };
+
+export type CommandCandidateViewModel = { command_id: string; slash_alias: string; description: string; subpath: string | null };
+
+export type CommandCandidatesResponse = { source: string; ref: string | null; candidates: CommandCandidateViewModel[] };
+
+export type CommandInstallRequest = { source?: string | null; command_name: string; force?: boolean };
+
+export type CommandInstallResponse = { installed: CommandInstallResultViewModel; commands: CommandViewModel[]; config_revision: string };
+
+export type CommandInstallResultViewModel = { command_id: string; slash_alias: string; install_path: string; source: string; ref: string | null; subpath: string | null };
+
 export type CommandListResponse = { commands: CommandViewModel[]; config_revision: string };
 
 export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string };
@@ -322,6 +334,8 @@ export type ApiOperationResponses = {
   "PUT /api/config/active-model-profile": ActiveProfileResponse;
   "GET /api/config/bootstrap": ConfigBootstrapResponse;
   "GET /api/config/commands": CommandListResponse;
+  "POST /api/config/commands/candidates": CommandCandidatesResponse;
+  "POST /api/config/commands/install": CommandInstallResponse;
   "PUT /api/config/maintenance": MaintenanceConfigResponse;
   "GET /api/config/model-profiles": ModelProfileListResponse;
   "POST /api/config/model-profiles": ModelProfileResponse;
@@ -377,6 +391,8 @@ export type ApiOperationResponses = {
 export type ApiJsonRequestBodies = {
   "PUT /api/board/stages": UpdateBoardStagesRequest;
   "PUT /api/config/active-model-profile": ActiveProfileRequest;
+  "POST /api/config/commands/candidates": CommandCandidateRequest;
+  "POST /api/config/commands/install": CommandInstallRequest;
   "PUT /api/config/maintenance": MaintenanceConfigModel;
   "POST /api/config/model-profiles": ModelProfileMutationRequest;
   "PATCH /api/config/model-profiles/{profile_id}": ModelProfileUpdateRequest;

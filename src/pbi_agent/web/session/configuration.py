@@ -36,6 +36,14 @@ from pbi_agent.config import (
     slugify,
     update_maintenance_config as save_maintenance_config,
 )
+from pbi_agent.commands.project_catalog import discover_installed_project_commands
+from pbi_agent.commands.project_installer import (
+    ProjectCommandInstallResult,
+    RemoteCommandCandidateSummary,
+    install_project_command,
+    list_remote_project_commands,
+    resolve_default_commands_source,
+)
 from pbi_agent.providers.model_discovery import (
     discover_provider_models,
     manual_entry_reason,
@@ -93,13 +101,7 @@ class ConfigurationMixin:
                     key=lambda item: _config_sort_key(item.name, item.id),
                 )
             ],
-            "commands": [
-                self._command_view(command)
-                for command in sorted(
-                    list_command_configs(self._workspace_root),
-                    key=lambda item: _config_sort_key(item.name, item.id),
-                )
-            ],
+            "commands": self._installed_command_views(),
             "skills": self._installed_skill_views(),
             "active_profile_id": config.web.active_profile_id,
             "maintenance": self._maintenance_view(config.maintenance),
@@ -443,6 +445,48 @@ class ConfigurationMixin:
             "config_revision": revision,
         }
 
+    def list_project_commands(self) -> dict[str, Any]:
+        _, revision = load_internal_config_snapshot()
+        return {
+            "commands": self._installed_command_views(),
+            "config_revision": revision,
+        }
+
+    def list_project_command_candidates(
+        self,
+        *,
+        source: str | None,
+    ) -> dict[str, Any]:
+        listing = list_remote_project_commands(self._effective_command_source(source))
+        return {
+            "source": listing.source,
+            "ref": listing.ref,
+            "candidates": [
+                self._command_candidate_view(candidate)
+                for candidate in listing.candidates
+            ],
+        }
+
+    def install_project_command_from_source(
+        self,
+        *,
+        source: str | None,
+        command_name: str,
+        force: bool,
+    ) -> dict[str, Any]:
+        result = install_project_command(
+            self._effective_command_source(source),
+            command_name=command_name,
+            force=force,
+            workspace=self._workspace_root,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "installed": self._command_install_result_view(result),
+            "commands": self._installed_command_views(),
+            "config_revision": revision,
+        }
+
     def list_project_skills(self) -> dict[str, Any]:
         _, revision = load_internal_config_snapshot()
         return {
@@ -686,6 +730,37 @@ class ConfigurationMixin:
             "path": command.path,
         }
 
+    def _installed_command_views(self) -> list[dict[str, Any]]:
+        return [
+            self._command_view(command)
+            for command in sorted(
+                discover_installed_project_commands(workspace=self._workspace_root),
+                key=lambda item: _config_sort_key(item.name, item.id),
+            )
+        ]
+
+    def _command_candidate_view(
+        self, candidate: RemoteCommandCandidateSummary
+    ) -> dict[str, Any]:
+        return {
+            "command_id": candidate.command_id,
+            "slash_alias": candidate.slash_alias,
+            "description": candidate.description,
+            "subpath": candidate.subpath,
+        }
+
+    def _command_install_result_view(
+        self, result: ProjectCommandInstallResult
+    ) -> dict[str, Any]:
+        return {
+            "command_id": result.command_id,
+            "slash_alias": result.slash_alias,
+            "install_path": self._relative_workspace_path(result.install_path),
+            "source": result.source,
+            "ref": result.ref,
+            "subpath": result.subpath,
+        }
+
     def _installed_skill_views(self) -> list[dict[str, Any]]:
         return [
             self._skill_view(skill)
@@ -736,6 +811,14 @@ class ConfigurationMixin:
         stripped = source.strip()
         if not stripped:
             return resolve_default_skills_source()
+        return stripped
+
+    def _effective_command_source(self, source: str | None) -> str:
+        if source is None:
+            return resolve_default_commands_source()
+        stripped = source.strip()
+        if not stripped:
+            return resolve_default_commands_source()
         return stripped
 
     def _maintenance_view(self, config: MaintenanceConfig) -> dict[str, Any]:
