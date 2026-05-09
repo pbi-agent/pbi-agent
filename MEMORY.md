@@ -40,6 +40,7 @@
 
 ## Detailed Task Events
 ## 2026-05-09
+- Created Kanban task `aa496f6bec93490c80933afbce499314` in Backlog for Web UI session turn/snippet copy shortcuts. Validation: confirmed via `pbi-agent kanban list --json` filtered by title.
 - Created Kanban task `3f62865220e44e9eb778e2a5dc4c69f9` in Backlog for Web UI session conversation forking feature. Validation: confirmed via `pbi-agent kanban list --json` filtered by title.
 - Fixed Add Project Skill candidate-card cropping by removing the nested candidate-list scroll container, adding safe gutters around cards, allowing custom source controls to shrink/wrap, and rebuilding web static assets. Validation: focused SettingsPage test, `bun run test:web`, `bun run lint`, `bun run typecheck`, `bun run web:build`, and `git diff --check` passed.
 - Restyled Add Project Skill dialog to match ProviderModal: removed nested card-on-card wrappers around the source form and listing header, replaced shadcn Card-based candidate items with flat `.skill-candidate` rows (border, hover, install button), used `task-form`/`task-form__body` + `FieldGroup`/`Field` layout, dropped overflow:hidden on `.skill-add-dialog` so the parent body owns scroll/gutters. Validation: `bun run lint`, `bun run typecheck`, `bun run test:web` (392 passed), `bun run web:build`.
