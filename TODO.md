@@ -1,5 +1,4 @@
 # TODO
 
-[X] Create Kanban task via pbi-agent CLI
-[X] Verify task exists
-[X] Update memory
+[X] Add Kanban task shortcut command
+[X] Validate command discovery and update memory
