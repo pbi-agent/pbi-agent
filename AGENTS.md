@@ -188,6 +188,7 @@ Oververbosity:low
 - For icons, use `lucide-react`; icons inside `Button` should use `data-icon="inline-start"` or `data-icon="inline-end"` and avoid manual sizing classes when the component styles them.
 - Dialog, Sheet, and Drawer content must include an accessible title; use a visually hidden title only when the visible design already provides equivalent context.
 - For floating UI near viewport edges (tooltips, popovers, badges in topbars), do not assume Radix/shadcn `sideOffset` or `collisionPadding` creates visible page-edge margin. Radix Popper may not shift on the cross axis, so content can still touch/crop against the viewport. Verify edge placement manually; when a tooltip must keep a guaranteed gutter from every viewport edge, use positioning that clamps both axes (for example a fixed-position portal tooltip) or a primitive/configuration that explicitly supports cross-axis shifting.
+- Settings modal forms should follow the existing `ProviderModal` pattern: `DialogContent.task-form-dialog`, `DialogHeader`, `task-form`, `task-form__body`, `FieldGroup`/`Field` controls, and `Separator` between form/list sections. Inside add dialogs, prefer flat list rows with safe gutters over nested `Card` wrappers or nested scroll containers; let the parent task-form body own scrolling unless an existing reference uses another pattern.
 
 ## Key Constraints
 
