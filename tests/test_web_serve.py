@@ -42,7 +42,7 @@ from pbi_agent.config import (
     create_provider_config,
     delete_model_profile_config,
 )
-from pbi_agent.display.protocol import PendingUserQuestion
+from pbi_agent.display.protocol import PendingToolCall, PendingUserQuestion
 from pbi_agent.session_store import (
     MessageImageAttachment,
     MessageRecord,
@@ -6303,6 +6303,90 @@ def test_web_display_wait_stop_clears_model_wait_processing() -> None:
         ("wait_state", {"active": False}),
         ("processing_state", {"active": False, "phase": None, "message": None}),
     ]
+
+
+def test_web_display_wait_stop_keeps_assistant_turn_processing_active() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+
+    display.assistant_start()
+    display.wait_start("analyzing your request...")
+    display.wait_stop()
+
+    assert published[-1] == ("wait_state", {"active": False})
+    processing_payloads = [
+        payload for event_type, payload in published if event_type == "processing_state"
+    ]
+    assert processing_payloads == [
+        {
+            "active": True,
+            "phase": "starting",
+            "message": "starting assistant turn...",
+        },
+        {
+            "active": True,
+            "phase": "model_wait",
+            "message": "analyzing your request...",
+        },
+    ]
+
+    display.assistant_stop()
+
+    assert published[-1] == (
+        "processing_state",
+        {"active": False, "phase": None, "message": None},
+    )
+
+
+def test_web_display_processing_state_has_no_intermediate_inactive_tool_flow() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+
+    display.assistant_start()
+    display.wait_start("analyzing your request...")
+    display.wait_stop()
+    display.tool_execution_start(
+        [PendingToolCall(call_id="call-1", name="shell", arguments={"command": "pwd"})]
+    )
+    display.tool_execution_stop()
+    display.assistant_stop()
+
+    processing_payloads = [
+        payload for event_type, payload in published if event_type == "processing_state"
+    ]
+    assert processing_payloads == [
+        {
+            "active": True,
+            "phase": "starting",
+            "message": "starting assistant turn...",
+        },
+        {
+            "active": True,
+            "phase": "model_wait",
+            "message": "analyzing your request...",
+        },
+        {
+            "active": True,
+            "phase": "tool_execution",
+            "message": "Running 1 local tool",
+            "active_tool_count": 1,
+        },
+        {
+            "active": True,
+            "phase": "finalizing",
+            "message": "sending tool results to model...",
+        },
+        {"active": False, "phase": None, "message": None},
+    ]
+    assert all(payload["active"] for payload in processing_payloads[:-1])
 
 
 def test_web_sub_agent_display_publishes_initial_user_message() -> None:

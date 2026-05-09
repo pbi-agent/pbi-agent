@@ -467,7 +467,7 @@ class _EventDisplayBase(DisplayProtocol):
             return
         self._waiting_message = None
         self._publish("wait_state", {"active": False})
-        if self._processing_phase == "model_wait":
+        if not self._assistant_active and self._processing_phase == "model_wait":
             self._processing_phase = None
             self._publish(
                 "processing_state",
