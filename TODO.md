@@ -1,7 +1,4 @@
-# TODO
-
-[X] Inspect current command/skill install pipeline and agent backend
-[X] Add agent candidate/install backend APIs and bootstrap data
-[X] Add dedicated Agents settings module and install dialog matching Skills/Commands
-[X] Update tests, generated API types, docs, and static assets
-[X] Validate and update memory
+[X] Inspect duplicate web startup messages
+[X] Remove redundant message or adjust output source
+[X] Add/adjust tests
+[X] Run focused validation

@@ -59,8 +59,10 @@ class DefaultWebCommandTests(unittest.TestCase):
         args = parser.parse_args(["web", "--port", "9001"])
         settings = self._settings()
         server = Mock()
+        stdout = io.StringIO()
 
         with (
+            patch("sys.stdout", stdout),
             patch(
                 "pbi_agent.cli.web._current_workspace_has_active_web_manager",
                 return_value=False,
@@ -75,6 +77,7 @@ class DefaultWebCommandTests(unittest.TestCase):
             rc = cli_web._handle_web_command(args, settings)
 
         self.assertEqual(rc, 0)
+        self.assertNotIn("Serving web UI", stdout.getvalue())
         mock_browser_thread.assert_called_once_with(
             "127.0.0.1",
             9001,
@@ -314,6 +317,45 @@ class DefaultWebCommandTests(unittest.TestCase):
             cli_web._open_browser_when_ready("127.0.0.1", 9001, "http://127.0.0.1:9001")
 
         mock_open.assert_called_once_with("http://127.0.0.1:9001")
+
+    def test_open_browser_url_removes_legacy_atk_bridge_gtk_module(self) -> None:
+        with (
+            patch("pbi_agent.cli.web.sys.platform", "linux"),
+            patch.dict(
+                os.environ,
+                {"GTK_MODULES": "gail:atk-bridge:canberra"},
+                clear=True,
+            ),
+            patch("pbi_agent.cli.web._is_wsl_environment", return_value=False),
+            patch("pbi_agent.cli.web.webbrowser.open", return_value=True) as mock_open,
+        ):
+            opened = cli_web._open_browser_url("http://127.0.0.1:9001")
+
+            self.assertTrue(opened)
+            self.assertEqual(os.environ["GTK_MODULES"], "gail:canberra")
+            mock_open.assert_called_once_with("http://127.0.0.1:9001")
+
+    def test_open_browser_url_unsets_gtk_modules_when_only_atk_bridge(self) -> None:
+        with (
+            patch("pbi_agent.cli.web.sys.platform", "linux"),
+            patch.dict(os.environ, {"GTK_MODULES": "atk-bridge"}, clear=True),
+            patch("pbi_agent.cli.web._is_wsl_environment", return_value=False),
+            patch("pbi_agent.cli.web.webbrowser.open", return_value=True),
+        ):
+            cli_web._open_browser_url("http://127.0.0.1:9001")
+
+            self.assertNotIn("GTK_MODULES", os.environ)
+
+    def test_open_browser_url_preserves_gtk_modules_on_non_linux(self) -> None:
+        with (
+            patch("pbi_agent.cli.web.sys.platform", "darwin"),
+            patch.dict(os.environ, {"GTK_MODULES": "atk-bridge"}, clear=True),
+            patch("pbi_agent.cli.web._is_wsl_environment", return_value=False),
+            patch("pbi_agent.cli.web.webbrowser.open", return_value=True),
+        ):
+            cli_web._open_browser_url("http://127.0.0.1:9001")
+
+            self.assertEqual(os.environ["GTK_MODULES"], "atk-bridge")
 
     def test_open_browser_when_ready_continues_when_browser_open_fails(self) -> None:
         with (

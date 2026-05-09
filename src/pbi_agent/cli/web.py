@@ -73,7 +73,6 @@ def _handle_web_command(  # pyright: ignore[reportUnusedFunction] - imported by 
         return 1
 
     browser_url = _browser_target_url(args)
-    print(f"Serving web UI on {browser_url}")
     if not getattr(args, "no_open", False):
         _start_browser_open_thread(args.host, args.port, browser_url)
 
@@ -326,6 +325,8 @@ def _sleep_before_browser_open(
 
 
 def _open_browser_url(browser_url: str) -> bool:
+    _remove_legacy_atk_bridge_gtk_module()
+
     if os.environ.get("BROWSER"):
         return webbrowser.open(browser_url)
 
@@ -333,6 +334,25 @@ def _open_browser_url(browser_url: str) -> bool:
         return True
 
     return webbrowser.open(browser_url)
+
+
+def _remove_legacy_atk_bridge_gtk_module() -> None:
+    if not sys.platform.startswith("linux"):
+        return
+
+    gtk_modules = os.environ.get("GTK_MODULES")
+    if not gtk_modules:
+        return
+
+    modules = [module for module in gtk_modules.split(":") if module]
+    filtered_modules = [module for module in modules if module != "atk-bridge"]
+    if filtered_modules == modules:
+        return
+
+    if filtered_modules:
+        os.environ["GTK_MODULES"] = ":".join(filtered_modules)
+    else:
+        os.environ.pop("GTK_MODULES", None)
 
 
 def _is_wsl_environment() -> bool:
