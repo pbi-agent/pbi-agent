@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "node:path";
@@ -6,9 +6,24 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
 
+function stripBundleBlankLineWhitespace(): PluginOption {
+  return {
+    name: "strip-bundle-blank-line-whitespace",
+    generateBundle(_options, bundle) {
+      for (const chunkOrAsset of Object.values(bundle)) {
+        if (chunkOrAsset.type === "chunk") {
+          chunkOrAsset.code = chunkOrAsset.code.replace(/^[\t ]+$/gm, "");
+        } else if (typeof chunkOrAsset.source === "string") {
+          chunkOrAsset.source = chunkOrAsset.source.replace(/^[\t ]+$/gm, "");
+        }
+      }
+    },
+  };
+}
+
 export default defineConfig({
   root: resolve(rootDir),
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), stripBundleBlankLineWhitespace()],
   resolve: {
     alias: {
       "@": resolve(rootDir, "./src"),
