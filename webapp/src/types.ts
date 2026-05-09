@@ -98,6 +98,11 @@ export type SubAgentSnapshot = {
   waitMessage?: string | null;
   wait_message?: string | null;
   processing?: ProcessingState | null;
+  session_usage?: UsagePayload | null;
+  turn_usage?: {
+    usage: UsagePayload | null;
+    elapsed_seconds?: number | null;
+  } | null;
 };
 
 export type LiveSessionRuntime = {

@@ -107,7 +107,7 @@ export type LiveSessionResponse = { session: LiveSessionModel };
 
 export type LiveSessionShellCommandRequest = { command?: string };
 
-export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; items: Record<string, unknown>[]; sub_agents: Record<string, Record<string, unknown>>; last_event_seq: number };
+export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; items: Record<string, unknown>[]; sub_agents: Record<string, SubAgentSnapshotModel>; last_event_seq: number };
 
 export type LiveSessionStartedSseEventModel = { seq: number; created_at: string; type: "live_session_started"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
@@ -269,6 +269,8 @@ export type SlashCommandItemModel = { name: string; description: string; kind: "
 
 export type SlashCommandSearchResponse = { items: SlashCommandItemModel[] };
 
+export type SubAgentSnapshotModel = { title: string; status: string; wait_message?: string | null; processing?: ProcessingStateModel | null; session_usage?: Record<string, unknown> | null; turn_usage?: UsageSnapshotModel | null };
+
 export type SubAgentStateSseEventModel = { seq: number; created_at: string; type: "sub_agent_state"; payload: SubAgentStateSseEventPayloadModel };
 
 export type SubAgentStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; sub_agent_id: string; title: string; status: string };
@@ -316,6 +318,8 @@ export type UsageLimitBucketModel = { id: string; label: string; unlimited: bool
 export type UsageLimitCreditsModel = { has_credits?: boolean | null; unlimited?: boolean | null; balance?: string | null };
 
 export type UsageLimitWindowModel = { name: string; used_percent?: number | null; remaining_percent?: number | null; window_minutes?: number | null; resets_at?: number | null; reset_at_iso?: string | null; used_requests?: number | null; total_requests?: number | null; remaining_requests?: number | null };
+
+export type UsageSnapshotModel = { usage: Record<string, unknown> | null; elapsed_seconds?: number | null };
 
 export type UsageUpdatedSseEventModel = { seq: number; created_at: string; type: "usage_updated"; payload: UsageUpdatedSseEventPayloadModel };
 

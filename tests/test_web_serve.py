@@ -2639,6 +2639,47 @@ def test_sub_agent_processing_isolated_from_parent_live_snapshot(
             },
         }
 
+        parent_usage = {"context_tokens": 120000, "total_tokens": 120000}
+        child_session_usage = {"context_tokens": 5000, "total_tokens": 5000}
+        child_turn_usage = {"context_tokens": 4200, "total_tokens": 4200}
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "session",
+                "usage": parent_usage,
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "session",
+                "usage": child_session_usage,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "turn",
+                "usage": child_turn_usage,
+                "elapsed_seconds": 2.5,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["session_usage"] == parent_usage
+        assert snapshot["turn_usage"] is None
+        assert snapshot["sub_agents"]["subagent-1"]["session_usage"] == (
+            child_session_usage
+        )
+        assert snapshot["sub_agents"]["subagent-1"]["turn_usage"] == {
+            "usage": child_turn_usage,
+            "elapsed_seconds": 2.5,
+        }
+
         app.state.manager._publish_live_event(
             live_session_id,
             "processing_state",
@@ -2652,6 +2693,9 @@ def test_sub_agent_processing_isolated_from_parent_live_snapshot(
         snapshot = app.state.manager._serialize_live_snapshot(live_session)
         assert snapshot["processing"] is None
         assert "processing" not in snapshot["sub_agents"]["subagent-1"]
+        assert snapshot["sub_agents"]["subagent-1"]["session_usage"] == (
+            child_session_usage
+        )
 
         app.state.manager._publish_live_event(
             live_session_id,
@@ -2720,6 +2764,11 @@ def test_sub_agent_processing_isolated_from_parent_live_snapshot(
         assert snapshot["sub_agents"]["subagent-1"] == {
             "title": "Researcher",
             "status": "completed",
+            "session_usage": child_session_usage,
+            "turn_usage": {
+                "usage": child_turn_usage,
+                "elapsed_seconds": 2.5,
+            },
         }
 
 

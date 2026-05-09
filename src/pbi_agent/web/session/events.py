@@ -398,7 +398,16 @@ class EventsMixin:
                 snapshot.pending_user_questions = None
             return
         if event_type == "usage_updated":
-            if isinstance(payload.get("sub_agent_id"), str):
+            if sub_agent_id:
+                sub_agent = self._sub_agent_snapshot(live_session, sub_agent_id)
+                if payload.get("scope") == "session":
+                    sub_agent["session_usage"] = payload.get("usage")
+                else:
+                    sub_agent["turn_usage"] = {
+                        "usage": payload.get("usage"),
+                        "elapsed_seconds": payload.get("elapsed_seconds"),
+                    }
+                snapshot.sub_agents[sub_agent_id] = sub_agent
                 return
             if payload.get("scope") == "session":
                 snapshot.session_usage = payload.get("usage")

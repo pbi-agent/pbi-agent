@@ -33,6 +33,8 @@ export type SubAgentState = {
   status: string;
   waitMessage?: string | null;
   processing?: ProcessingState | null;
+  sessionUsage?: UsagePayload | null;
+  turnUsage?: { usage: UsagePayload | null; elapsedSeconds?: number } | null;
 };
 
 export type SessionRuntimeState = {
@@ -331,6 +333,26 @@ function readProcessingState(value: unknown): ProcessingState | null {
   };
 }
 
+function readUsagePayload(value: unknown): UsagePayload | null {
+  return value !== null && typeof value === "object"
+    ? value as UsagePayload
+    : null;
+}
+
+function readTurnUsage(
+  value: unknown,
+): { usage: UsagePayload | null; elapsedSeconds?: number } | null {
+  if (value === null || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    usage: readUsagePayload(record.usage),
+    elapsedSeconds:
+      typeof record.elapsed_seconds === "number" ? record.elapsed_seconds : undefined,
+  };
+}
+
 function readToolGroupItems(value: unknown): TimelineToolGroupEntry[] {
   if (!Array.isArray(value)) {
     return [];
@@ -499,6 +521,8 @@ function normalizeSnapshotSubAgents(
         : typeof record.wait_message === "string"
           ? record.wait_message
           : null;
+      const sessionUsage = readUsagePayload(record.session_usage);
+      const turnUsage = readTurnUsage(record.turn_usage);
       return [
         subAgentId,
         {
@@ -506,6 +530,8 @@ function normalizeSnapshotSubAgents(
           status: readString(record.status, "completed"),
           ...(waitMessage ? { waitMessage } : {}),
           ...(record.processing ? { processing: readProcessingState(record.processing) } : {}),
+          ...(sessionUsage ? { sessionUsage } : {}),
+          ...(turnUsage ? { turnUsage } : {}),
         },
       ];
     }),
@@ -647,8 +673,21 @@ export function reduceSessionEvent(
         patch.pendingUserQuestions = null;
       }
       break;
-    case "usage_updated":
-      if (event.payload.sub_agent_id) {
+    case "usage_updated": {
+      const subAgentId = eventSubAgentId(event);
+      if (subAgentId) {
+        patch.subAgents = updateSubAgentState(
+          current.subAgents,
+          subAgentId,
+          event.payload.scope === "session"
+            ? { sessionUsage: event.payload.usage }
+            : {
+                turnUsage: {
+                  usage: event.payload.usage,
+                  elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
+                },
+              },
+        );
         break;
       }
       if (event.payload.scope === "session") {
@@ -660,6 +699,7 @@ export function reduceSessionEvent(
         };
       }
       break;
+    }
     case "message_added": {
       const payload = event.payload;
       if (!payload.sub_agent_id) {

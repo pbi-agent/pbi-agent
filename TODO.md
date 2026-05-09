@@ -1,4 +1,4 @@
 # TODO
 
-[X] Add Kanban task shortcut command
-[X] Validate command discovery and update memory
+[X] Fix sub-agent session context usage indicator
+[X] Validate changes and update memory

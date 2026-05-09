@@ -720,6 +720,9 @@ export function SessionPage({
       ? selectedSubAgent?.waitMessage ?? null
       : null
     : sessionState?.waitMessage ?? null;
+  const displayedUsage = isSubAgentRoute
+    ? selectedSubAgent?.sessionUsage ?? selectedSubAgent?.turnUsage?.usage ?? null
+    : sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null;
 
   const sessionListPanel = (
     <SessionSidebar
@@ -802,7 +805,7 @@ export function SessionPage({
             ) : null}
             <UsageBar
               compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
-              usage={sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null}
+              usage={displayedUsage}
             />
           </div>
         </div>

@@ -7,7 +7,13 @@ import {
   type SessionRuntimeState,
   useSessionStore,
 } from "./store";
-import type { LiveSession, SessionWebEvent, UsagePayload, WebEvent } from "./types";
+import type {
+  LiveSession,
+  LiveSessionSnapshot,
+  SessionWebEvent,
+  UsagePayload,
+  WebEvent,
+} from "./types";
 
 function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
   return {
@@ -714,6 +720,9 @@ describe("session store", () => {
       elapsedSeconds: 1.5,
     });
     expect(subAgentUsage.state.sessionUsage).toEqual({ total_tokens: 10 });
+    expect(subAgentUsage.state.subAgents["sub-1"]?.sessionUsage).toEqual({
+      total_tokens: 99,
+    });
     expect(subAgentUsage.state.lastEventSeq).toBe(3);
 
     const thinking = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
@@ -1392,7 +1401,53 @@ describe("session store", () => {
     }));
   });
 
-  it("ignores sub-agent usage updates for the top-level context gauge", () => {
+  it("hydrates sub-agent usage from live snapshots", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().hydrateLiveSnapshot(
+      sessionKey,
+      makeLiveSession(),
+      {
+        live_session_id: "live-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: makeUsage({ context_tokens: 120000 }),
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [],
+        sub_agents: {
+          "subagent-1": {
+            title: "Researcher",
+            status: "completed",
+            session_usage: makeUsage({ context_tokens: 5000 }),
+            turn_usage: {
+              usage: makeUsage({ context_tokens: 4200 }),
+              elapsed_seconds: 2.5,
+            },
+          },
+        },
+        last_event_seq: 7,
+      } satisfies LiveSessionSnapshot,
+    );
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.sessionUsage).toEqual(makeUsage({ context_tokens: 120000 }));
+    expect(state.subAgents["subagent-1"]).toEqual({
+      title: "Researcher",
+      status: "completed",
+      sessionUsage: makeUsage({ context_tokens: 5000 }),
+      turnUsage: {
+        usage: makeUsage({ context_tokens: 4200 }),
+        elapsedSeconds: 2.5,
+      },
+    });
+  });
+
+  it("stores sub-agent usage updates separately from the top-level context gauge", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
 
@@ -1415,9 +1470,27 @@ describe("session store", () => {
         usage: makeUsage({ context_tokens: 5000 }),
       },
     });
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 7,
+      type: "usage_updated",
+      created_at: "2026-04-16T12:00:05Z",
+      payload: {
+        scope: "turn",
+        elapsed_seconds: 1.8,
+        sub_agent_id: "subagent-1",
+        usage: makeUsage({ context_tokens: 4200 }),
+      },
+    });
 
     const state = useSessionStore.getState().sessionsByKey[sessionKey];
     expect(state.sessionUsage).toEqual(makeUsage({ context_tokens: 120000 }));
+    expect(state.subAgents["subagent-1"]?.sessionUsage).toEqual(
+      makeUsage({ context_tokens: 5000 }),
+    );
+    expect(state.subAgents["subagent-1"]?.turnUsage).toEqual({
+      usage: makeUsage({ context_tokens: 4200 }),
+      elapsedSeconds: 1.8,
+    });
   });
 
   it("stores compact threshold from live sessions and runtime updates", () => {

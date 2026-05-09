@@ -29,6 +29,7 @@ import type {
   LiveSession,
   SessionDetailPayload,
   SessionRecord,
+  UsagePayload,
 } from "../../types";
 
 type SessionTimelineMockProps = {
@@ -103,6 +104,14 @@ function latestSessionTimelineProps(): SessionTimelineMockProps {
     throw new Error("Expected timeline props to be captured");
   }
   return props as SessionTimelineMockProps;
+}
+
+function latestUsageBarProps(): { compactThreshold: number | null; usage: UsagePayload | null } {
+  const props: unknown = usageBarMock.mock.calls.at(-1)?.[0];
+  if (!props || typeof props !== "object") {
+    throw new Error("Expected usage props to be captured");
+  }
+  return props as { compactThreshold: number | null; usage: UsagePayload | null };
 }
 
 function getSessionTopbar(): HTMLElement {
@@ -377,6 +386,33 @@ function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
   };
 }
 
+function makeUsage(overrides: Partial<UsagePayload> = {}): UsagePayload {
+  return {
+    input_tokens: 0,
+    cached_input_tokens: 0,
+    cache_write_tokens: 0,
+    cache_write_1h_tokens: 0,
+    output_tokens: 0,
+    reasoning_tokens: 0,
+    tool_use_tokens: 0,
+    provider_total_tokens: 0,
+    sub_agent_input_tokens: 0,
+    sub_agent_output_tokens: 0,
+    sub_agent_reasoning_tokens: 0,
+    sub_agent_tool_use_tokens: 0,
+    sub_agent_provider_total_tokens: 0,
+    sub_agent_cost_usd: 0,
+    context_tokens: 0,
+    total_tokens: 0,
+    estimated_cost_usd: 0,
+    main_agent_total_tokens: 0,
+    sub_agent_total_tokens: 0,
+    model: "gpt-5.4",
+    service_tier: "default",
+    ...overrides,
+  };
+}
+
 function makeSessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     session_id: "session-1",
@@ -395,6 +431,51 @@ function makeSessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecor
     updated_at: "2026-04-16T10:00:00Z",
     ...overrides,
   };
+}
+
+function mockSessionDetailWithUsage({
+  parentUsage,
+  subAgentUsage,
+}: {
+  parentUsage: UsagePayload;
+  subAgentUsage?: UsagePayload | null;
+}) {
+  vi.mocked(fetchSessionDetail).mockResolvedValue({
+    session: makeSessionRecord({ status: "ended", active_run_id: null }),
+    status: "ended",
+    history_items: [],
+    active_live_session: null,
+    active_run: null,
+    timeline: {
+      live_session_id: "live-1",
+      session_id: "session-1",
+      runtime: {
+        provider: "openai",
+        provider_id: "openai-main",
+        profile_id: "analysis",
+        model: "gpt-5.4",
+        reasoning_effort: "high",
+        compact_threshold: 200000,
+      },
+      input_enabled: false,
+      wait_message: null,
+      processing: null,
+      session_usage: parentUsage,
+      turn_usage: null,
+      session_ended: true,
+      fatal_error: null,
+      pending_user_questions: null,
+      items: [],
+      sub_agents: {
+        "sub-1": {
+          title: "Researcher",
+          status: "completed",
+          ...(subAgentUsage ? { session_usage: subAgentUsage } : {}),
+        },
+      },
+      last_event_seq: 4,
+    },
+  } satisfies SessionDetailPayload);
 }
 
 function renderSessionRoute(route: string) {
@@ -672,6 +753,44 @@ describe("SessionPage", () => {
       "href",
       "/sessions/session-1",
     );
+  });
+
+  it("shows parent context usage on the main session route", async () => {
+    const parentUsage = makeUsage({ context_tokens: 120000 });
+    const subAgentUsage = makeUsage({ context_tokens: 5000 });
+    mockSessionDetailWithUsage({ parentUsage, subAgentUsage });
+
+    renderSessionRoute("/sessions/session-1");
+
+    await waitFor(() => {
+      expect(latestUsageBarProps().usage).toEqual(parentUsage);
+    });
+  });
+
+  it("shows selected sub-agent context usage on sub-agent routes", async () => {
+    const parentUsage = makeUsage({ context_tokens: 120000 });
+    const subAgentUsage = makeUsage({ context_tokens: 5000 });
+    mockSessionDetailWithUsage({ parentUsage, subAgentUsage });
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await waitFor(() => {
+      expect(latestUsageBarProps().usage).toEqual(subAgentUsage);
+    });
+  });
+
+  it("does not fall back to parent context usage on sub-agent routes", async () => {
+    const parentUsage = makeUsage({ context_tokens: 120000 });
+    mockSessionDetailWithUsage({ parentUsage, subAgentUsage: null });
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await waitFor(() => {
+      expect(latestUsageBarProps()).toEqual(expect.objectContaining({
+        compactThreshold: 200000,
+        usage: null,
+      }));
+    });
   });
 
   it("does not show parent processing as child sub-agent activity", async () => {
