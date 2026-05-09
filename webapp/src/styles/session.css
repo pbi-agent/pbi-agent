@@ -335,6 +335,34 @@
   min-width: 0;
 }
 
+.session-topbar--with-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+}
+
+.session-topbar--with-workspace .session-topbar__leading {
+  justify-self: start;
+}
+
+.session-topbar--with-workspace .session-topbar__actions {
+  justify-self: end;
+}
+
+.session-topbar__workspace {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  min-width: 0;
+  max-width: min(28rem, 100%);
+  overflow: hidden;
+}
+
+.session-topbar__workspace .app-sidebar__workspace-badge {
+  max-width: min(24rem, 100%);
+}
+
 .session-topbar-control {
   block-size: 2rem;
   min-block-size: 2rem;
@@ -2974,6 +3002,21 @@
     flex-wrap: wrap;
     gap: var(--sp-2);
     margin-block-start: 0;
+  }
+
+  .session-topbar--with-workspace {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .session-topbar__workspace {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .session-topbar__workspace .app-sidebar__workspace-badge {
+    max-width: 100%;
   }
 
   .profile-selector {

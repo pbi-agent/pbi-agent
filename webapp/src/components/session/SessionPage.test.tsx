@@ -1,12 +1,13 @@
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { SessionPage } from "./SessionPage";
 import { renderWithProviders } from "../../test/render";
 import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
 import {
   ApiError,
   expandSessionInput,
+  fetchBootstrap,
   fetchConfigBootstrap,
   fetchSessionDetail,
   fetchSessions,
@@ -22,6 +23,7 @@ import {
 import { useSidebarStore } from "../../hooks/useSidebar";
 import { createEmptySessionState, getSavedSessionKey, useSessionStore } from "../../store";
 import type {
+  BootstrapPayload,
   ConfigBootstrapPayload,
   ExpandedSessionInput,
   LiveSession,
@@ -101,6 +103,14 @@ function latestSessionTimelineProps(): SessionTimelineMockProps {
     throw new Error("Expected timeline props to be captured");
   }
   return props as SessionTimelineMockProps;
+}
+
+function getSessionTopbar(): HTMLElement {
+  const topbar = document.querySelector(".session-topbar");
+  if (!(topbar instanceof HTMLElement)) {
+    throw new Error("Expected session topbar to be rendered");
+  }
+  return topbar;
 }
 
 vi.mock("./Composer", async () => {
@@ -200,6 +210,7 @@ vi.mock("../../api", async (importOriginal) => {
     ...actual,
     deleteSession: vi.fn(),
     expandSessionInput: vi.fn(),
+    fetchBootstrap: vi.fn(),
     fetchConfigBootstrap: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
@@ -214,6 +225,26 @@ vi.mock("../../api", async (importOriginal) => {
     uploadSavedSessionImages: vi.fn(),
   };
 });
+
+function makeBootstrap(overrides: Partial<BootstrapPayload> = {}): BootstrapPayload {
+  return {
+    workspace_root: "/workspace/demo",
+    workspace_key: "/workspace/demo",
+    workspace_display_path: "/workspace/demo",
+    is_sandbox: false,
+    provider: null,
+    provider_id: null,
+    profile_id: null,
+    model: null,
+    reasoning_effort: null,
+    supports_image_inputs: true,
+    sessions: [],
+    tasks: [],
+    live_sessions: [],
+    board_stages: [],
+    ...overrides,
+  };
+}
 
 function makeConfigBootstrap(
   overrides: Partial<ConfigBootstrapPayload> = {},
@@ -411,6 +442,7 @@ describe("SessionPage", () => {
       liveSessionIndex: {},
       sessionIndex: {},
     });
+    vi.mocked(fetchBootstrap).mockResolvedValue(makeBootstrap());
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(fetchSessions).mockResolvedValue([makeSessionRecord()]);
     vi.mocked(fetchSessionDetail).mockResolvedValue({
@@ -446,6 +478,59 @@ describe("SessionPage", () => {
       makeLiveSession({ live_session_id: "live-question", session_id: "session-1" }),
     );
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
+  });
+
+  it("shows the workspace badge in the session topbar when the sidebar is collapsed", async () => {
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    const workspaceLabel = await within(topbar).findByText("workspace/demo");
+    const sidebar = screen.getByRole("complementary", { name: "Application sidebar" });
+
+    expect(workspaceLabel.closest(".session-topbar__workspace")).toBeInTheDocument();
+    expect(workspaceLabel.closest(".app-sidebar__workspace-badge")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+    expect(within(sidebar).queryByText("workspace/demo")).not.toBeInTheDocument();
+  });
+
+  it("does not duplicate the workspace badge in the session topbar when the sidebar is open", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    const workspaceLabels = await screen.findAllByText("workspace/demo");
+    const sidebar = screen.getByRole("complementary", { name: "Application sidebar" });
+
+    expect(workspaceLabels).toHaveLength(1);
+    expect(within(sidebar).getByText("workspace/demo")).toBeInTheDocument();
+    expect(within(topbar).queryByText("workspace/demo")).not.toBeInTheDocument();
+  });
+
+  it("uses the sandbox workspace label in the collapsed session topbar badge", async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+    vi.mocked(fetchBootstrap).mockResolvedValue({
+      ...makeBootstrap(),
+      workspace_root: "/workspace/d0918d973e2e241d",
+      workspace_key: "/Users/ada/project",
+      workspace_display_path: "/Users/ada/project",
+      is_sandbox: true,
+    });
+
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    const workspaceLabel = await within(topbar).findByText("Sandbox · ada/project");
+    expect(within(topbar).queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
+
+    const workspaceBadge = workspaceLabel.closest(".app-sidebar__workspace-badge") as HTMLElement;
+    await user.hover(workspaceBadge);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("/Users/ada/project");
   });
 
   it("uses the shared app tooltip for the interactive mode toggle", async () => {

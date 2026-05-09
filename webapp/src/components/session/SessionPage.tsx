@@ -43,6 +43,8 @@ import {
   type SubAgentState,
   useSessionStore,
 } from "../../store";
+import { useSidebarStore } from "../../hooks/useSidebar";
+import { cn } from "../../lib/utils";
 import {
   projectMainTimelineItems,
   projectSubAgentTimelineItems,
@@ -57,6 +59,7 @@ import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
 import { UserQuestionsPanel } from "./UserQuestionsPanel";
 import { Composer, type ComposerHandle } from "./Composer";
+import { WorkspaceBadge } from "../WorkspaceBadge";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import {
@@ -138,6 +141,7 @@ export function SessionPage({
   const composerRef = useRef<ComposerHandle>(null);
   const submitInFlightRef = useRef(false);
   const [directSubmitPending, setDirectSubmitPending] = useState(false);
+  const isSidebarOpen = useSidebarStore((state) => state.isOpen);
 
   const routeSessionKey = routeSessionId
     ? getSavedSessionKey(routeSessionId)
@@ -745,7 +749,12 @@ export function SessionPage({
         data-debug-connection={sessionState?.connection ?? undefined}
       >
         <div className="session-panel">
-        <div className="session-topbar">
+        <div
+          className={cn(
+            "session-topbar",
+            !isSidebarOpen && "session-topbar--with-workspace",
+          )}
+        >
           <div className="session-topbar__leading">
             <ConnectionBadge connection={topbarConnection} />
             <ProfileSelector
@@ -758,6 +767,11 @@ export function SessionPage({
               }}
             />
           </div>
+          {!isSidebarOpen ? (
+            <div className="session-topbar__workspace" aria-label="Current workspace">
+              <WorkspaceBadge tooltipSide="bottom" />
+            </div>
+          ) : null}
           <div className="session-topbar__actions">
             {!isSubAgentRoute ? (
               <Tooltip>

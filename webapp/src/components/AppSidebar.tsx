@@ -7,12 +7,10 @@ import {
   SettingsIcon,
   SquareKanbanIcon,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
-import { fetchBootstrap } from "../api";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useSidebarStore } from "../hooks/useSidebar";
-import { Badge } from "./ui/badge";
+import { WorkspaceBadge } from "./WorkspaceBadge";
 import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "../lib/utils";
@@ -144,7 +142,7 @@ function AppSidebarHead() {
             />
           </div>
           <div className="app-sidebar__workspace-slot">
-            <AppSidebarWorkspaceBadge />
+            <WorkspaceBadge tooltipSide="right" />
           </div>
         </>
       ) : null}
@@ -173,43 +171,6 @@ function AppSidebarHead() {
         </TooltipContent>
       </Tooltip>
     </div>
-  );
-}
-
-function AppSidebarWorkspaceBadge() {
-  const bootstrapQuery = useQuery({
-    queryKey: ["bootstrap"],
-    queryFn: fetchBootstrap,
-    staleTime: 30_000,
-  });
-
-  const bootstrap = bootstrapQuery.data;
-  const workspaceDisplayPath = bootstrap?.workspace_display_path;
-  const folderLabel = workspaceDisplayPath
-    ? workspaceDisplayPath.split(/[/\\]/).filter(Boolean).slice(-2).join("/")
-    : null;
-  const workspaceBadgeLabel = bootstrap?.is_sandbox && folderLabel
-    ? `Sandbox · ${folderLabel}`
-    : folderLabel;
-
-  if (!workspaceBadgeLabel) return null;
-
-  const workspaceBadge = (
-    <Badge
-      variant="outline"
-      className="app-sidebar__workspace-badge"
-    >
-      <span className="app-sidebar__workspace-badge-text">{workspaceBadgeLabel}</span>
-    </Badge>
-  );
-
-  return (
-    workspaceDisplayPath ? (
-      <Tooltip>
-        <TooltipTrigger asChild>{workspaceBadge}</TooltipTrigger>
-        <TooltipContent side="right">{workspaceDisplayPath}</TooltipContent>
-      </Tooltip>
-    ) : workspaceBadge
   );
 }
 
