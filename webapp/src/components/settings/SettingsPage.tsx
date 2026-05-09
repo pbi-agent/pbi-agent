@@ -33,6 +33,7 @@ import {
 } from "../ui/dialog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
+import { AgentsSettingsSection } from "./AgentsSettingsSection";
 import { CommandsSettingsSection } from "./CommandsSettingsSection";
 import { ModelProfilesSettingsSection } from "./ModelProfilesSettingsSection";
 import type { ProfilePayload } from "./ModelProfileModal";
@@ -44,6 +45,7 @@ import { ProviderUsageLimitsDialog } from "./ProviderUsageLimitsDialog";
 import { ProvidersSettingsSection } from "./ProvidersSettingsSection";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
+import { SkillsSettingsSection } from "./SkillsSettingsSection";
 
 type ModalState =
   | { type: "none" }
@@ -59,7 +61,15 @@ type ModalState =
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
 
-type SettingsTabId = "appearance" | "notifications" | "providers" | "model-profiles" | "commands" | "maintenance";
+type SettingsTabId =
+  | "appearance"
+  | "notifications"
+  | "providers"
+  | "model-profiles"
+  | "skills"
+  | "commands"
+  | "agents"
+  | "maintenance";
 
 const SETTINGS_NAV_GROUPS: Array<{
   label: string;
@@ -81,6 +91,26 @@ const SETTINGS_NAV_GROUPS: Array<{
     ],
   },
   {
+    label: "Project",
+    items: [
+      {
+        id: "skills",
+        label: "Skills",
+        description: "Agent capabilities",
+      },
+      {
+        id: "commands",
+        label: "Commands",
+        description: "Prompt presets",
+      },
+      {
+        id: "agents",
+        label: "Agents",
+        description: "Delegated workers",
+      },
+    ],
+  },
+  {
     label: "Server",
     items: [
       {
@@ -92,11 +122,6 @@ const SETTINGS_NAV_GROUPS: Array<{
         id: "model-profiles",
         label: "Model Profiles",
         description: "Runtime defaults",
-      },
-      {
-        id: "commands",
-        label: "Commands",
-        description: "Prompt presets",
       },
       {
         id: "maintenance",
@@ -321,8 +346,16 @@ className="settings-nav__header-close app-close-icon-button"
     );
   }
 
-  const { providers, model_profiles, commands, active_profile_id, maintenance, options } =
-    configQuery.data;
+  const {
+    providers,
+    model_profiles,
+    commands,
+    skills,
+    agents,
+    active_profile_id,
+    maintenance,
+    options,
+  } = configQuery.data;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
@@ -431,7 +464,11 @@ className="settings-nav__header-close app-close-icon-button"
                     />
                   )}
 
+                  {activeTab === "skills" && <SkillsSettingsSection skills={skills} />}
+
                   {activeTab === "commands" && <CommandsSettingsSection commands={commands} />}
+
+                  {activeTab === "agents" && <AgentsSettingsSection agents={agents} />}
 
                   {activeTab === "maintenance" && (
                     <MaintenanceSettingsSection

@@ -1,34 +1,37 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
   CheckCircle2Icon,
   DownloadIcon,
-  EyeIcon,
-  FileTextIcon,
   FolderGit2Icon,
   PlusIcon,
   SearchIcon,
+  SparklesIcon,
 } from "lucide-react";
 import {
   ApiError,
-  fetchCommandCandidates,
-  installCommand,
+  fetchAgentCandidates,
+  installAgent,
 } from "../../api";
 import type {
-  CommandCandidateView,
-  CommandCandidatesPayload,
-  CommandInstallPayload,
-  CommandView,
+  AgentCandidateView,
+  AgentCandidatesPayload,
+  AgentInstallPayload,
+  AgentView,
   ConfigBootstrapPayload,
 } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
-import { MarkdownContent } from "../shared/MarkdownContent";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
 import {
   Dialog,
   DialogContent,
@@ -46,75 +49,22 @@ import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
 
-function CommandCard({
-  command,
-  onPreview,
-}: {
-  command: CommandView;
-  onPreview: () => void;
-}) {
-  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onPreview();
-    }
-  }
-
+function AgentCard({ agent }: { agent: AgentView }) {
   return (
-    <Card
-      className="settings-item settings-item--provider provider-card"
-      role="button"
-      tabIndex={0}
-      onClick={onPreview}
-      onKeyDown={handleKeyDown}
-    >
+    <Card className="settings-item settings-item--provider skill-card">
       <div className="provider-card__info">
-        <span className="settings-item__name">{command.name}</span>
-        <div className="provider-card__subtitle">
-          {command.slash_alias} · {command.description || command.path}
-        </div>
-        <div className="provider-card__subtitle">{command.path}</div>
+        <span className="settings-item__name">{agent.name}</span>
+        {agent.description ? (
+          <div className="settings-item__summary skill-card__description">
+            {agent.description}
+          </div>
+        ) : null}
+        <div className="provider-card__subtitle">{agent.path}</div>
       </div>
-      <EyeIcon className="command-card__view-icon" />
+      <Badge variant="outline" className="settings-item__tag">
+        Project agent
+      </Badge>
     </Card>
-  );
-}
-
-function CommandPreviewDialog({
-  command,
-  onClose,
-}: {
-  command: CommandView;
-  onClose: () => void;
-}) {
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent className="command-preview-dialog" aria-describedby={undefined}>
-        <DialogHeader className="command-preview-dialog__header">
-          <div className="command-preview-dialog__title-row">
-            <div
-              className="settings-command-icon settings-command-icon--dialog"
-              aria-hidden="true"
-            >
-              <FileTextIcon />
-            </div>
-            <DialogTitle>{command.name}</DialogTitle>
-            <span className="flex-1" />
-            <span className="provider-card__subtitle">{command.path}</span>
-          </div>
-        </DialogHeader>
-        <div className="command-preview-dialog__scroll timeline-entry timeline-entry--assistant">
-          <div className="timeline-entry__content command-preview-dialog__markdown">
-            <MarkdownContent content={command.instructions} />
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -137,7 +87,7 @@ function CandidateCard({
   disabled,
   onInstall,
 }: {
-  candidate: CommandCandidateView;
+  candidate: AgentCandidateView;
   isInstalling: boolean;
   disabled: boolean;
   onInstall: () => void;
@@ -145,9 +95,9 @@ function CandidateCard({
   return (
     <div className="skill-candidate">
       <div className="skill-candidate__main">
-        <div className="skill-candidate__name">{candidate.slash_alias}</div>
+        <div className="skill-candidate__name">{candidate.agent_name}</div>
         <p className="skill-candidate__description">
-          {candidate.description || `Install ${candidate.slash_alias}.`}
+          {candidate.description || "No description provided."}
         </p>
         {candidate.subpath ? (
           <Badge variant="secondary" className="skill-candidate__subpath">
@@ -175,25 +125,23 @@ function CandidateCard({
 }
 
 function candidateInstallSource(
-  listing: CommandCandidatesPayload | null,
+  listing: AgentCandidatesPayload | null,
 ): string | null {
   return listing?.source ?? null;
 }
 
-export function CommandsSettingsSection({ commands }: { commands: CommandView[] }) {
+export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
   const queryClient = useQueryClient();
-  const [previewCommand, setPreviewCommand] = useState<CommandView | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [customSource, setCustomSource] = useState("");
-  const [listing, setListing] = useState<CommandCandidatesPayload | null>(null);
+  const [listing, setListing] = useState<AgentCandidatesPayload | null>(null);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
-  const [installingCommand, setInstallingCommand] = useState<string | null>(null);
+  const [installingAgent, setInstallingAgent] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [conflictRetry, setConflictRetry] = useState<{
     source: string | null;
-    commandName: string;
-    slashAlias: string;
+    agentName: string;
   } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -202,7 +150,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
     setListing(null);
     setLoadingCandidates(false);
     setCandidatesError(null);
-    setInstallingCommand(null);
+    setInstallingAgent(null);
     setInstallError(null);
     setConflictRetry(null);
   }
@@ -213,7 +161,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
     setInstallError(null);
     setConflictRetry(null);
     try {
-      const response = await fetchCommandCandidates(source);
+      const response = await fetchAgentCandidates(source);
       setListing(response);
     } catch (err) {
       setListing(null);
@@ -235,8 +183,8 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
   }
 
   async function applyInstallResponse(
-    response: CommandInstallPayload,
-    commandLabel: string,
+    response: AgentInstallPayload,
+    agentName: string,
   ) {
     queryClient.setQueryData<ConfigBootstrapPayload>(
       ["config-bootstrap"],
@@ -244,13 +192,13 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
         current
           ? {
               ...current,
-              commands: response.commands,
+              agents: response.agents,
               config_revision: response.config_revision,
             }
           : current,
     );
     setSuccessMessage(
-      `Installed ${commandLabel}. It is available from the composer command menu immediately.`,
+      `Installed ${agentName}. New sessions can delegate to it immediately; active sessions can run /reload.`,
     );
     closeAddDialog();
     await Promise.all([
@@ -260,35 +208,31 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
   }
 
   async function handleInstall(
-    candidate: CommandCandidateView,
+    candidate: AgentCandidateView,
     force = false,
     overrideSource?: string | null,
   ) {
     const source = overrideSource ?? candidateInstallSource(listing);
-    setInstallingCommand(candidate.command_id);
+    setInstallingAgent(candidate.agent_name);
     setInstallError(null);
     if (!force) setConflictRetry(null);
     try {
-      const response = await installCommand({
+      const response = await installAgent({
         source,
-        command_name: candidate.command_id,
+        agent_name: candidate.agent_name,
         ...(force ? { force: true } : {}),
       });
-      await applyInstallResponse(response, candidate.slash_alias);
+      await applyInstallResponse(response, candidate.agent_name);
     } catch (err) {
       const message = (err as Error).message;
       setInstallError(message);
       if (err instanceof ApiError && err.status === 409) {
-        setConflictRetry({
-          source,
-          commandName: candidate.command_id,
-          slashAlias: candidate.slash_alias,
-        });
+        setConflictRetry({ source, agentName: candidate.agent_name });
       } else {
         setConflictRetry(null);
       }
     } finally {
-      setInstallingCommand(null);
+      setInstallingAgent(null);
     }
   }
 
@@ -300,33 +244,31 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
 
   const candidates = listing?.candidates ?? [];
   const sourceLabel = listing?.source ?? "Official catalog";
-  const isBusy = loadingCandidates || installingCommand !== null;
+  const isBusy = loadingCandidates || installingAgent !== null;
 
   return (
     <section className="settings-section settings-section--active">
       {successMessage ? (
-        <Alert className="settings-inline-note commands-success-note">
+        <Alert className="settings-inline-note skills-success-note">
           <CheckCircle2Icon />
           <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       ) : null}
 
-      <Alert className="settings-inline-note commands-hint">
+      <Alert className="settings-inline-note skills-reload-note">
+        <SparklesIcon />
         <AlertDescription>
-          Add Markdown files under{" "}
-          <code className="command-hint__path">.agents/commands/</code> — a
-          file like{" "}
-          <code className="command-hint__path">.agents/commands/review.md</code>{" "}
-          becomes <code className="command-hint__path">/review</code>.
+          New sessions see installed agents immediately. Active sessions can run{" "}
+          <code className="command-hint__path">/reload</code> before the next model request.
         </AlertDescription>
       </Alert>
 
       <Card className="settings-panel">
         <CardHeader className="settings-panel__header">
           <div>
-            <CardTitle className="settings-panel__title">Project Commands</CardTitle>
+            <CardTitle className="settings-panel__title">Project Agents</CardTitle>
             <div className="settings-panel__subtitle">
-              Installed slash commands from .agents/commands
+              Installed sub-agents from .agents/agents
             </div>
           </div>
           <Button
@@ -337,23 +279,17 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
             onClick={openAddDialog}
           >
             <PlusIcon data-icon="inline-start" />
-            Add Command
+            Add Agent
           </Button>
         </CardHeader>
         <CardContent className="settings-panel__body">
-          {commands.length === 0 ? (
+          {agents.length === 0 ? (
             <EmptyState
-              title="No commands found"
-              description="Add commands from the official catalog, GitHub, or a server-side local path."
+              title="No project agents installed"
+              description="Add agents from the official catalog, GitHub, or a server-side local path."
             />
           ) : (
-            commands.map((command) => (
-              <CommandCard
-                key={command.id}
-                command={command}
-                onPreview={() => setPreviewCommand(command)}
-              />
-            ))
+            agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)
           )}
         </CardContent>
       </Card>
@@ -364,9 +300,9 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
           if (!nextOpen) closeAddDialog();
         }}
       >
-        <DialogContent className="task-form-dialog skill-add-dialog command-add-dialog">
+        <DialogContent className="task-form-dialog skill-add-dialog">
           <DialogHeader>
-            <DialogTitle>Add Project Command</DialogTitle>
+            <DialogTitle>Add Project Agent</DialogTitle>
             <DialogDescription>
               Browse the official catalog or provide a GitHub source, tree URL,
               or server-side local path.
@@ -376,19 +312,19 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
           <div className="task-form skill-add-dialog__form">
             <div className="task-form__body skill-add-dialog__body">
               <form
-                className="skill-source-form command-source-form"
+                className="skill-source-form"
                 onSubmit={handleBrowseCustomSource}
               >
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="command-source">Custom source</FieldLabel>
+                    <FieldLabel htmlFor="agent-source">Custom source</FieldLabel>
                     <div className="skill-source-form__row">
                       <Input
-                        id="command-source"
+                        id="agent-source"
                         className="task-form__input"
                         value={customSource}
                         onChange={(event) => setCustomSource(event.target.value)}
-                        placeholder="owner/repo or /path/to/commands"
+                        placeholder="owner/repo or /path/to/agents"
                         disabled={isBusy}
                       />
                       <Button
@@ -419,7 +355,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                 <header className="skill-add-dialog__listing-header">
                   <div className="skill-add-dialog__listing-meta">
                     <div className="skill-add-dialog__listing-title">
-                      Available commands
+                      Available agents
                     </div>
                     <div className="skill-add-dialog__source">
                       <FolderGit2Icon aria-hidden="true" />
@@ -441,7 +377,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                 {candidatesError ? (
                   <Alert variant="destructive" className="task-form__error">
                     <AlertCircleIcon />
-                    <AlertTitle>Could not load commands</AlertTitle>
+                    <AlertTitle>Could not load agents</AlertTitle>
                     <AlertDescription>{candidatesError}</AlertDescription>
                   </Alert>
                 ) : null}
@@ -449,7 +385,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                 {installError ? (
                   <Alert variant="destructive" className="task-form__error">
                     <AlertCircleIcon />
-                    <AlertTitle>Could not install command</AlertTitle>
+                    <AlertTitle>Could not install agent</AlertTitle>
                     <AlertDescription>
                       <div className="skill-install-error__content">
                         <span>{installError}</span>
@@ -461,8 +397,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                             onClick={() =>
                               void handleInstall(
                                 {
-                                  command_id: conflictRetry.commandName,
-                                  slash_alias: conflictRetry.slashAlias,
+                                  agent_name: conflictRetry.agentName,
                                   description: "",
                                   subpath: null,
                                 },
@@ -470,7 +405,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                                 conflictRetry.source,
                               )
                             }
-                            disabled={installingCommand !== null}
+                            disabled={installingAgent !== null}
                           >
                             Replace existing
                           </Button>
@@ -489,15 +424,15 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                     </>
                   ) : candidates.length === 0 && !candidatesError ? (
                     <EmptyState
-                      title="No commands found"
+                      title="No agents found"
                       description="Try another source or browse the official catalog."
                     />
                   ) : (
                     candidates.map((candidate) => (
                       <CandidateCard
-                        key={`${sourceLabel}:${candidate.command_id}`}
+                        key={`${sourceLabel}:${candidate.agent_name}`}
                         candidate={candidate}
-                        isInstalling={installingCommand === candidate.command_id}
+                        isInstalling={installingAgent === candidate.agent_name}
                         disabled={isBusy}
                         onInstall={() => void handleInstall(candidate)}
                       />
@@ -509,13 +444,6 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
           </div>
         </DialogContent>
       </Dialog>
-
-      {previewCommand ? (
-        <CommandPreviewDialog
-          command={previewCommand}
-          onClose={() => setPreviewCommand(null)}
-        />
-      ) : null}
     </section>
   );
 }

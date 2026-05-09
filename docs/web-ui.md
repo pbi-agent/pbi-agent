@@ -20,7 +20,7 @@ The web UI is the default interactive workspace. It combines live chat sessions,
 | Sessions | Start or resume agent conversations, use `@file` mentions, upload images, run shell commands, and inspect run history. |
 | Kanban | Manage task cards across configurable workflow stages and start automated task runs. |
 | Dashboard | Review run observability, cost/token totals, duration, errors, and provider/model breakdowns. |
-| Settings | Configure providers, model profiles, ChatGPT and GitHub Copilot account auth, and project command discovery. |
+| Settings | Configure providers, model profiles, ChatGPT and GitHub Copilot account auth, and project skill/command installs. |
 
 If provider setup is incomplete, the app sends you to **Settings** first so you can create a provider and model profile.
 
@@ -54,7 +54,7 @@ The Settings page manages persistent local configuration under `~/.pbi-agent/`:
 - Providers hold connection settings such as provider kind, API key, auth mode, and endpoint URLs.
 - Model profiles hold runnable model/runtime settings tied to one saved provider.
 - The active default profile is used when a session or run does not specify another profile.
-- Project commands are discovered from `.agents/commands/*.md` and listed for visibility.
+- Project skills, commands, and agents can be installed from official catalogs, GitHub sources, or server-side local paths.
 
 See [Providers](/providers) and [Model Profiles](/model-profiles) for setup details.
 

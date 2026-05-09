@@ -24,6 +24,7 @@ function renderComposer(
       sessionEnded={false}
       liveSessionId="live-1"
       supportsImageInputs
+      interactiveMode={false}
       isSubmitting={false}
       onSubmit={onSubmit}
       {...overrides}
@@ -50,6 +51,7 @@ function renderSubmittingComposer() {
         sessionEnded={false}
         liveSessionId="live-1"
         supportsImageInputs
+        interactiveMode={false}
         isSubmitting={isSubmitting}
         onSubmit={async (payload) => {
           setIsSubmitting(true);
@@ -125,6 +127,13 @@ describe("Composer", () => {
     expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Actions" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+  });
+
+  it("marks the input row while interactive mode is enabled", () => {
+    renderComposer({ interactiveMode: true });
+
+    const inputRow = screen.getByRole("textbox", { name: "Message" }).closest(".composer__input-row");
+    expect(inputRow).toHaveClass("composer__input-row--interactive");
   });
 
   it("does not open the image picker when image inputs are unsupported", async () => {

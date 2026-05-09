@@ -80,7 +80,9 @@ The file contents are wrapped in `<project_rules>` tags and appended to the syst
 
 `pbi-agent` also discovers project-local Agent Skills and advertises them to the model through the system prompt.
 
-You can manage project-local installs directly from the CLI:
+You can manage project-local installs from the web UI under **Settings → Project → Skills**. The add dialog can browse the official catalog or install from a GitHub owner/repo, GitHub URL/tree URL, or server-side local path. New sessions see installed skills immediately; active sessions can run `/reload` before the next model request.
+
+You can also manage project-local installs directly from the CLI:
 
 ```bash
 pbi-agent skills add
@@ -112,6 +114,8 @@ This v1 implementation is project-only. User-level skill directories are intenti
 
 `pbi-agent` also supports project-local command presets. These are single-turn prompt instructions loaded from Markdown files under `.agents/commands/`, with each filename becoming a slash command such as `/review`.
 
+You can manage project-local command installs from the web UI under **Settings → Project → Commands**. The add dialog matches the skill workflow: browse the official catalog, or install from a GitHub owner/repo, GitHub URL/tree URL, or server-side local path. Installed commands are available from the composer command menu immediately.
+
 You can manage project-local installs directly from the CLI:
 
 ```bash
@@ -138,6 +142,8 @@ At runtime, project commands are discovered from `.agents/commands/*.md`. The no
 ## Project sub-agent files
 
 `pbi-agent` can also discover project-local sub-agent definitions and advertise them to the main agent as specialized delegated worker choices for the `sub_agent` tool.
+
+You can manage project-local agent installs from the web UI under **Settings → Project → Agents**. The add dialog follows the same workflow as skills and commands: browse the official catalog, or install from a GitHub owner/repo, GitHub URL/tree URL, or server-side local path. New sessions see installed agents immediately; active sessions can run `/reload` before the next model request.
 
 You can manage project-local installs directly from the CLI:
 

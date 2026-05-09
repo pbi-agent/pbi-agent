@@ -114,7 +114,6 @@ function AppSidebar({ contextPanel }: { contextPanel?: ReactNode }) {
       aria-label="Application sidebar"
     >
       <AppSidebarHead />
-      <AppSidebarWorkspace />
       <AppSidebarNav collapsed={!isOpen} />
       {isOpen ? (
         <div className="app-sidebar__context">
@@ -135,12 +134,19 @@ function AppSidebarHead() {
   return (
     <div className="app-sidebar__head">
       {isOpen ? (
-        <div className="app-sidebar__brand" aria-hidden="true">
-          <span className="app-sidebar__brand-mark">PA</span>
-          <span className="app-sidebar__brand-name">
-            <strong>pbi</strong>-agent
-          </span>
-        </div>
+        <>
+          <div className="app-sidebar__brand" aria-hidden="true">
+            <img
+              className="app-sidebar__brand-logo"
+              src="/logo.jpg"
+              alt=""
+              draggable={false}
+            />
+          </div>
+          <div className="app-sidebar__workspace-slot">
+            <AppSidebarWorkspaceBadge />
+          </div>
+        </>
       ) : null}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -170,15 +176,12 @@ function AppSidebarHead() {
   );
 }
 
-function AppSidebarWorkspace() {
-  const isOpen = useSidebarStore((state) => state.isOpen);
+function AppSidebarWorkspaceBadge() {
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap"],
     queryFn: fetchBootstrap,
     staleTime: 30_000,
   });
-
-  if (!isOpen) return null;
 
   const bootstrap = bootstrapQuery.data;
   const workspaceDisplayPath = bootstrap?.workspace_display_path;
@@ -196,19 +199,17 @@ function AppSidebarWorkspace() {
       variant="outline"
       className="app-sidebar__workspace-badge"
     >
-      {workspaceBadgeLabel}
+      <span className="app-sidebar__workspace-badge-text">{workspaceBadgeLabel}</span>
     </Badge>
   );
 
   return (
-    <div className="app-sidebar__workspace">
-      {workspaceDisplayPath ? (
-        <Tooltip>
-          <TooltipTrigger asChild>{workspaceBadge}</TooltipTrigger>
-          <TooltipContent side="right">{workspaceDisplayPath}</TooltipContent>
-        </Tooltip>
-      ) : workspaceBadge}
-    </div>
+    workspaceDisplayPath ? (
+      <Tooltip>
+        <TooltipTrigger asChild>{workspaceBadge}</TooltipTrigger>
+        <TooltipContent side="right">{workspaceDisplayPath}</TooltipContent>
+      </Tooltip>
+    ) : workspaceBadge
   );
 }
 

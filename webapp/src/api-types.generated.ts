@@ -5,6 +5,22 @@ export type ActiveProfileRequest = { profile_id?: string | null };
 
 export type ActiveProfileResponse = { active_profile_id: string | null; config_revision: string };
 
+export type AgentCandidateRequest = { source?: string | null };
+
+export type AgentCandidateViewModel = { agent_name: string; description: string; subpath: string | null };
+
+export type AgentCandidatesResponse = { source: string; ref: string | null; candidates: AgentCandidateViewModel[] };
+
+export type AgentInstallRequest = { source?: string | null; agent_name: string; force?: boolean };
+
+export type AgentInstallResponse = { installed: AgentInstallResultViewModel; agents: AgentViewModel[]; config_revision: string };
+
+export type AgentInstallResultViewModel = { agent_name: string; install_path: string; source: string; ref: string | null; subpath: string | null };
+
+export type AgentListResponse = { agents: AgentViewModel[]; config_revision: string };
+
+export type AgentViewModel = { id: string; name: string; description: string; path: string };
+
 export type AllRunsResponse = { runs: AllRunsRunModel[]; total_count: number };
 
 export type AllRunsRunModel = { run_session_id: string; session_id: string | null; parent_run_session_id: string | null; agent_name: string | null; agent_type: string | null; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; status: "started" | "completed" | "interrupted" | "failed" | "starting" | "running" | "waiting_for_input" | "ended" | "stale"; started_at: string; ended_at: string | null; total_duration_ms: number | null; input_tokens: number; cached_input_tokens: number; cache_write_tokens: number; cache_write_1h_tokens: number; output_tokens: number; reasoning_tokens: number; tool_use_tokens: number; provider_total_tokens: number; estimated_cost_usd: number; total_tool_calls: number; total_api_calls: number; error_count: number; kind?: string; task_id?: string | null; project_dir?: string | null; last_event_seq?: number; snapshot?: unknown | null; exit_code?: number | null; fatal_error?: string | null; metadata: unknown | null; session_title?: string | null };
@@ -25,11 +41,23 @@ export type Body_upload_task_images_api_tasks_images_post = { files: string[] };
 
 export type BootstrapResponse = { workspace_root: string; workspace_key: string; workspace_display_path: string; is_sandbox: boolean; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; supports_image_inputs: boolean; sessions: SessionRecordModel[]; tasks: TaskRecordModel[]; live_sessions: LiveSessionModel[]; board_stages: BoardStageModel[] };
 
+export type CommandCandidateRequest = { source?: string | null };
+
+export type CommandCandidateViewModel = { command_id: string; slash_alias: string; description: string; subpath: string | null };
+
+export type CommandCandidatesResponse = { source: string; ref: string | null; candidates: CommandCandidateViewModel[] };
+
+export type CommandInstallRequest = { source?: string | null; command_name: string; force?: boolean };
+
+export type CommandInstallResponse = { installed: CommandInstallResultViewModel; commands: CommandViewModel[]; config_revision: string };
+
+export type CommandInstallResultViewModel = { command_id: string; slash_alias: string; install_path: string; source: string; ref: string | null; subpath: string | null };
+
 export type CommandListResponse = { commands: CommandViewModel[]; config_revision: string };
 
 export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string };
 
-export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; active_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
+export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; active_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 
 export type ConfigOptionsModel = { provider_kinds: string[]; reasoning_efforts: string[]; openai_service_tiers: string[]; provider_metadata: Record<string, ProviderKindMetadataModel> };
 
@@ -219,6 +247,22 @@ export type SessionUpdatedSseEventPayloadModel = { session: SessionRecordModel }
 
 export type SessionsResponse = { sessions: SessionRecordModel[] };
 
+export type SkillCandidateRequest = { source?: string | null };
+
+export type SkillCandidateViewModel = { name: string; description: string; subpath: string | null };
+
+export type SkillCandidatesResponse = { source: string; ref: string | null; candidates: SkillCandidateViewModel[] };
+
+export type SkillInstallRequest = { source?: string | null; skill_name: string; force?: boolean };
+
+export type SkillInstallResponse = { installed: SkillInstallResultViewModel; skills: SkillViewModel[]; config_revision: string };
+
+export type SkillInstallResultViewModel = { name: string; install_path: string; source: string; ref: string | null; subpath: string | null };
+
+export type SkillListResponse = { skills: SkillViewModel[]; config_revision: string };
+
+export type SkillViewModel = { id: string; name: string; description: string; path: string };
+
 export type SlashCommandItemModel = { name: string; description: string; kind: "local_command" | "command" };
 
 export type SlashCommandSearchResponse = { items: SlashCommandItemModel[] };
@@ -304,8 +348,13 @@ export type ApiOperationResponses = {
   "PUT /api/board/stages": BoardStagesResponse;
   "GET /api/bootstrap": BootstrapResponse;
   "PUT /api/config/active-model-profile": ActiveProfileResponse;
+  "GET /api/config/agents": AgentListResponse;
+  "POST /api/config/agents/candidates": AgentCandidatesResponse;
+  "POST /api/config/agents/install": AgentInstallResponse;
   "GET /api/config/bootstrap": ConfigBootstrapResponse;
   "GET /api/config/commands": CommandListResponse;
+  "POST /api/config/commands/candidates": CommandCandidatesResponse;
+  "POST /api/config/commands/install": CommandInstallResponse;
   "PUT /api/config/maintenance": MaintenanceConfigResponse;
   "GET /api/config/model-profiles": ModelProfileListResponse;
   "POST /api/config/model-profiles": ModelProfileResponse;
@@ -316,6 +365,9 @@ export type ApiOperationResponses = {
   "DELETE /api/config/providers/{provider_id}": void;
   "PATCH /api/config/providers/{provider_id}": ProviderResponse;
   "GET /api/config/providers/{provider_id}/models": ProviderModelListResponse;
+  "GET /api/config/skills": SkillListResponse;
+  "POST /api/config/skills/candidates": SkillCandidatesResponse;
+  "POST /api/config/skills/install": SkillInstallResponse;
   "GET /api/dashboard/stats": DashboardStatsResponse;
   "GET /api/events/sessions/{session_id}": unknown;
   "GET /api/events/{stream_id}": unknown;
@@ -358,11 +410,17 @@ export type ApiOperationResponses = {
 export type ApiJsonRequestBodies = {
   "PUT /api/board/stages": UpdateBoardStagesRequest;
   "PUT /api/config/active-model-profile": ActiveProfileRequest;
+  "POST /api/config/agents/candidates": AgentCandidateRequest;
+  "POST /api/config/agents/install": AgentInstallRequest;
+  "POST /api/config/commands/candidates": CommandCandidateRequest;
+  "POST /api/config/commands/install": CommandInstallRequest;
   "PUT /api/config/maintenance": MaintenanceConfigModel;
   "POST /api/config/model-profiles": ModelProfileMutationRequest;
   "PATCH /api/config/model-profiles/{profile_id}": ModelProfileUpdateRequest;
   "POST /api/config/providers": ProviderMutationRequest;
   "PATCH /api/config/providers/{provider_id}": ProviderUpdateRequest;
+  "POST /api/config/skills/candidates": SkillCandidateRequest;
+  "POST /api/config/skills/install": SkillInstallRequest;
   "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowStartRequest;
   "POST /api/provider-auth/{provider_id}/import": ProviderAuthImportRequest;
   "POST /api/sessions": CreateSessionRequest;

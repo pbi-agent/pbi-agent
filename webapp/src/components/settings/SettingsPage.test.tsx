@@ -8,10 +8,16 @@ import {
   ApiError,
   createProvider,
   createModelProfile,
+  fetchAgentCandidates,
+  fetchCommandCandidates,
   fetchConfigBootstrap,
   fetchProviderModels,
   fetchProviderAuthFlow,
   fetchProviderUsageLimits,
+  fetchSkillCandidates,
+  installAgent,
+  installCommand,
+  installSkill,
   logoutProviderAuth,
   refreshProviderAuth,
   setActiveModelProfile,
@@ -76,6 +82,12 @@ vi.mock("../../api", async (importOriginal) => {
     startProviderAuthFlow: vi.fn(),
     fetchProviderAuthFlow: vi.fn(),
     fetchProviderUsageLimits: vi.fn(),
+    fetchAgentCandidates: vi.fn(),
+    installAgent: vi.fn(),
+    fetchCommandCandidates: vi.fn(),
+    installCommand: vi.fn(),
+    fetchSkillCandidates: vi.fn(),
+    installSkill: vi.fn(),
     refreshProviderAuth: vi.fn(),
     logoutProviderAuth: vi.fn(),
     updateMaintenanceConfig: vi.fn(),
@@ -216,6 +228,8 @@ function makeConfigBootstrap(
       },
     ],
     commands: [],
+    skills: [],
+    agents: [],
     options: {
       provider_kinds: ["openai", "chatgpt", "github_copilot"],
       reasoning_efforts: ["high", "medium"],
@@ -460,6 +474,97 @@ describe("SettingsPage", () => {
       plan_type: "Plus",
       fetched_at: "2026-05-01T00:00:00Z",
       buckets: [],
+    });
+    vi.mocked(fetchCommandCandidates).mockResolvedValue({
+      source: "https://github.com/pbi-agent/commands",
+      ref: null,
+      candidates: [
+        {
+          command_id: "repo-review",
+          slash_alias: "/repo-review",
+          description: "Review repository changes",
+          subpath: null,
+        },
+      ],
+    });
+    vi.mocked(installCommand).mockResolvedValue({
+      installed: {
+        command_id: "repo-review",
+        slash_alias: "/repo-review",
+        install_path: ".agents/commands/repo-review.md",
+        source: "https://github.com/pbi-agent/commands",
+        ref: null,
+        subpath: null,
+      },
+      commands: [
+        {
+          id: "repo-review",
+          name: "Repo Review",
+          slash_alias: "/repo-review",
+          description: "Review repository changes",
+          instructions: "# Repo Review\n\nReview repository changes.",
+          path: ".agents/commands/repo-review.md",
+        },
+      ],
+      config_revision: "rev-2",
+    });
+    vi.mocked(fetchSkillCandidates).mockResolvedValue({
+      source: "https://github.com/pbi-agent/skills",
+      ref: null,
+      candidates: [
+        {
+          name: "repo-review",
+          description: "Review repository changes",
+          subpath: null,
+        },
+      ],
+    });
+    vi.mocked(installSkill).mockResolvedValue({
+      installed: {
+        name: "repo-review",
+        install_path: ".agents/skills/repo-review",
+        source: "https://github.com/pbi-agent/skills",
+        ref: null,
+        subpath: null,
+      },
+      skills: [
+        {
+          id: "repo-review",
+          name: "repo-review",
+          description: "Review repository changes",
+          path: ".agents/skills/repo-review/SKILL.md",
+        },
+      ],
+      config_revision: "rev-2",
+    });
+    vi.mocked(fetchAgentCandidates).mockResolvedValue({
+      source: "https://github.com/pbi-agent/agents",
+      ref: null,
+      candidates: [
+        {
+          agent_name: "repo-reviewer",
+          description: "Review repository changes",
+          subpath: null,
+        },
+      ],
+    });
+    vi.mocked(installAgent).mockResolvedValue({
+      installed: {
+        agent_name: "repo-reviewer",
+        install_path: ".agents/agents/repo-reviewer.md",
+        source: "https://github.com/pbi-agent/agents",
+        ref: null,
+        subpath: null,
+      },
+      agents: [
+        {
+          id: "repo-reviewer",
+          name: "repo-reviewer",
+          description: "Review repository changes",
+          path: ".agents/agents/repo-reviewer.md",
+        },
+      ],
+      config_revision: "rev-2",
     });
     vi.mocked(updateMaintenanceConfig).mockResolvedValue({
       maintenance: { retention_days: 14 },
@@ -727,6 +832,491 @@ describe("SettingsPage", () => {
     expect(within(dialog).getByRole("heading", { name: "Review Mode" })).toBeInTheDocument();
     expect(within(dialog).getByText("Review proposed code changes.")).toBeInTheDocument();
     expect(within(dialog).getByText("Bugs")).toBeInTheDocument();
+  });
+
+  it("does not fetch command candidates until the add command dialog opens", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Commands");
+
+    expect(await screen.findByText("Project Commands")).toBeInTheDocument();
+    expect(fetchCommandCandidates).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Add Command" }));
+
+    await waitFor(() => expect(fetchCommandCandidates).toHaveBeenCalledWith(null));
+  });
+
+  it("loads default command candidates when opening Add Command", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Commands");
+    await user.click(await screen.findByRole("button", { name: "Add Command" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Add Project Command",
+    });
+    expect(await within(dialog).findByText("/repo-review")).toBeInTheDocument();
+    expect(fetchCommandCandidates).toHaveBeenCalledWith(null);
+  });
+
+  it("installs a selected command, refetches settings, and shows success", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap)
+      .mockResolvedValueOnce(makeConfigBootstrap())
+      .mockResolvedValue(
+        makeConfigBootstrap({
+          config_revision: "rev-2",
+          commands: [
+            {
+              id: "repo-review",
+              name: "Repo Review",
+              slash_alias: "/repo-review",
+              description: "Review repository changes",
+              instructions: "# Repo Review\n\nReview repository changes.",
+              path: ".agents/commands/repo-review.md",
+            },
+          ],
+        }),
+      );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Commands");
+    await user.click(await screen.findByRole("button", { name: "Add Command" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Add Project Command",
+    });
+    await within(dialog).findByText("/repo-review");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    await waitFor(() =>
+      expect(installCommand).toHaveBeenCalledWith({
+        source: "https://github.com/pbi-agent/commands",
+        command_name: "repo-review",
+      }),
+    );
+    await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Installed \/repo-review/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(".agents/commands/repo-review.md"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Add Project Command" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reveals Replace existing on command install conflict and retries with force", async () => {
+    const user = userEvent.setup();
+    vi.mocked(installCommand)
+      .mockRejectedValueOnce(new ApiError("Command already installed", 409))
+      .mockResolvedValueOnce({
+        installed: {
+          command_id: "repo-review",
+          slash_alias: "/repo-review",
+          install_path: ".agents/commands/repo-review.md",
+          source: "https://github.com/pbi-agent/commands",
+          ref: null,
+          subpath: null,
+        },
+        commands: [
+          {
+            id: "repo-review",
+            name: "Repo Review",
+            slash_alias: "/repo-review",
+            description: "Review repository changes",
+            instructions: "# Repo Review\n\nReview repository changes.",
+            path: ".agents/commands/repo-review.md",
+          },
+        ],
+        config_revision: "rev-2",
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Commands");
+    await user.click(await screen.findByRole("button", { name: "Add Command" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Add Project Command",
+    });
+    await within(dialog).findByText("/repo-review");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    expect(await within(dialog).findByText("Command already installed")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Replace existing" }));
+
+    await waitFor(() =>
+      expect(installCommand).toHaveBeenLastCalledWith({
+        source: "https://github.com/pbi-agent/commands",
+        command_name: "repo-review",
+        force: true,
+      }),
+    );
+  });
+
+  it("browses command candidates from a custom source", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchCommandCandidates)
+      .mockResolvedValueOnce({
+        source: "https://github.com/pbi-agent/commands",
+        ref: null,
+        candidates: [],
+      })
+      .mockResolvedValueOnce({
+        source: "owner/private-repo",
+        ref: "main",
+        candidates: [
+          {
+            command_id: "private-review",
+            slash_alias: "/private-review",
+            description: "Private review workflow",
+            subpath: "commands/private-review.md",
+          },
+        ],
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Commands");
+    await user.click(await screen.findByRole("button", { name: "Add Command" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Add Project Command",
+    });
+    await waitFor(() => expect(fetchCommandCandidates).toHaveBeenCalledWith(null));
+
+    await user.type(
+      within(dialog).getByLabelText("Custom source"),
+      "owner/private-repo",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Browse" }));
+
+    await waitFor(() =>
+      expect(fetchCommandCandidates).toHaveBeenLastCalledWith("owner/private-repo"),
+    );
+    expect(await within(dialog).findByText("/private-review")).toBeInTheDocument();
+  });
+
+  it("shows Project navigation with Skills, Commands, and Agents", async () => {
+    renderWithProviders(<SettingsPage />);
+
+    expect(
+      await screen.findByText("Project", {
+        selector: ".settings-nav__group-label",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Skills", { selector: ".settings-nav__item-label" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Commands", { selector: ".settings-nav__item-label" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Agents", { selector: ".settings-nav__item-label" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not fetch agent candidates until the add agent dialog opens", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+
+    expect(await screen.findByText("Project Agents")).toBeInTheDocument();
+    expect(fetchAgentCandidates).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Add Agent" }));
+
+    await waitFor(() => expect(fetchAgentCandidates).toHaveBeenCalledWith(null));
+  });
+
+  it("loads default agent candidates when opening Add Agent", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("button", { name: "Add Agent" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Agent" });
+    expect(await within(dialog).findByText("repo-reviewer")).toBeInTheDocument();
+    expect(fetchAgentCandidates).toHaveBeenCalledWith(null);
+  });
+
+  it("installs a selected agent, refetches settings, and shows success", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap)
+      .mockResolvedValueOnce(makeConfigBootstrap())
+      .mockResolvedValue(
+        makeConfigBootstrap({
+          config_revision: "rev-2",
+          agents: [
+            {
+              id: "repo-reviewer",
+              name: "repo-reviewer",
+              description: "Review repository changes",
+              path: ".agents/agents/repo-reviewer.md",
+            },
+          ],
+        }),
+      );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("button", { name: "Add Agent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Agent" });
+    await within(dialog).findByText("repo-reviewer");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    await waitFor(() =>
+      expect(installAgent).toHaveBeenCalledWith({
+        source: "https://github.com/pbi-agent/agents",
+        agent_name: "repo-reviewer",
+      }),
+    );
+    await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Installed repo-reviewer/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(".agents/agents/repo-reviewer.md"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Add Project Agent" })).not.toBeInTheDocument();
+  });
+
+  it("reveals Replace existing on agent install conflict and retries with force", async () => {
+    const user = userEvent.setup();
+    vi.mocked(installAgent)
+      .mockRejectedValueOnce(new ApiError("Agent already installed", 409))
+      .mockResolvedValueOnce({
+        installed: {
+          agent_name: "repo-reviewer",
+          install_path: ".agents/agents/repo-reviewer.md",
+          source: "https://github.com/pbi-agent/agents",
+          ref: null,
+          subpath: null,
+        },
+        agents: [
+          {
+            id: "repo-reviewer",
+            name: "repo-reviewer",
+            description: "Review repository changes",
+            path: ".agents/agents/repo-reviewer.md",
+          },
+        ],
+        config_revision: "rev-2",
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("button", { name: "Add Agent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Agent" });
+    await within(dialog).findByText("repo-reviewer");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    expect(await within(dialog).findByText("Agent already installed")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Replace existing" }));
+
+    await waitFor(() =>
+      expect(installAgent).toHaveBeenLastCalledWith({
+        source: "https://github.com/pbi-agent/agents",
+        agent_name: "repo-reviewer",
+        force: true,
+      }),
+    );
+  });
+
+  it("browses agent candidates from a custom source", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAgentCandidates)
+      .mockResolvedValueOnce({
+        source: "https://github.com/pbi-agent/agents",
+        ref: null,
+        candidates: [],
+      })
+      .mockResolvedValueOnce({
+        source: "owner/private-repo",
+        ref: "main",
+        candidates: [
+          {
+            agent_name: "private-reviewer",
+            description: "Private reviewer",
+            subpath: "agents/private-reviewer.md",
+          },
+        ],
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("button", { name: "Add Agent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Agent" });
+    await waitFor(() => expect(fetchAgentCandidates).toHaveBeenCalledWith(null));
+
+    await user.type(
+      within(dialog).getByLabelText("Custom source"),
+      "owner/private-repo",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Browse" }));
+
+    await waitFor(() =>
+      expect(fetchAgentCandidates).toHaveBeenLastCalledWith("owner/private-repo"),
+    );
+    expect(await within(dialog).findByText("private-reviewer")).toBeInTheDocument();
+  });
+
+  it("does not fetch skill candidates until the add skill dialog opens", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+
+    expect(await screen.findByText("Project Skills")).toBeInTheDocument();
+    expect(fetchSkillCandidates).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Add Skill" }));
+
+    await waitFor(() => expect(fetchSkillCandidates).toHaveBeenCalledWith(null));
+  });
+
+  it("loads default skill candidates when opening Add Skill", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("button", { name: "Add Skill" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Skill" });
+    expect(await within(dialog).findByText("repo-review")).toBeInTheDocument();
+    expect(fetchSkillCandidates).toHaveBeenCalledWith(null);
+  });
+
+  it("installs a selected skill, refetches settings, and shows success", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap)
+      .mockResolvedValueOnce(makeConfigBootstrap())
+      .mockResolvedValue(
+        makeConfigBootstrap({
+          config_revision: "rev-2",
+          skills: [
+            {
+              id: "repo-review",
+              name: "repo-review",
+              description: "Review repository changes",
+              path: ".agents/skills/repo-review/SKILL.md",
+            },
+          ],
+        }),
+      );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("button", { name: "Add Skill" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Skill" });
+    await within(dialog).findByText("repo-review");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    await waitFor(() =>
+      expect(installSkill).toHaveBeenCalledWith({
+        source: "https://github.com/pbi-agent/skills",
+        skill_name: "repo-review",
+      }),
+    );
+    await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Installed repo-review/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(".agents/skills/repo-review/SKILL.md"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Add Project Skill" })).not.toBeInTheDocument();
+  });
+
+  it("reveals Replace existing on skill install conflict and retries with force", async () => {
+    const user = userEvent.setup();
+    vi.mocked(installSkill)
+      .mockRejectedValueOnce(new ApiError("Skill already installed", 409))
+      .mockResolvedValueOnce({
+        installed: {
+          name: "repo-review",
+          install_path: ".agents/skills/repo-review",
+          source: "https://github.com/pbi-agent/skills",
+          ref: null,
+          subpath: null,
+        },
+        skills: [
+          {
+            id: "repo-review",
+            name: "repo-review",
+            description: "Review repository changes",
+            path: ".agents/skills/repo-review/SKILL.md",
+          },
+        ],
+        config_revision: "rev-2",
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("button", { name: "Add Skill" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Skill" });
+    await within(dialog).findByText("repo-review");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    expect(await within(dialog).findByText("Skill already installed")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Replace existing" }));
+
+    await waitFor(() =>
+      expect(installSkill).toHaveBeenLastCalledWith({
+        source: "https://github.com/pbi-agent/skills",
+        skill_name: "repo-review",
+        force: true,
+      }),
+    );
+  });
+
+  it("browses skill candidates from a custom source", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchSkillCandidates)
+      .mockResolvedValueOnce({
+        source: "https://github.com/pbi-agent/skills",
+        ref: null,
+        candidates: [],
+      })
+      .mockResolvedValueOnce({
+        source: "owner/private-repo",
+        ref: "main",
+        candidates: [
+          {
+            name: "private-skill",
+            description: "Private workflow",
+            subpath: "skills/private-skill",
+          },
+        ],
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("button", { name: "Add Skill" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Skill" });
+    await waitFor(() => expect(fetchSkillCandidates).toHaveBeenCalledWith(null));
+
+    await user.type(
+      within(dialog).getByLabelText("Custom source"),
+      "owner/private-repo",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Browse" }));
+
+    await waitFor(() =>
+      expect(fetchSkillCandidates).toHaveBeenLastCalledWith("owner/private-repo"),
+    );
+    expect(await within(dialog).findByText("private-skill")).toBeInTheDocument();
   });
 
   it("saves maintenance retention days", async () => {

@@ -2,10 +2,19 @@ import {
   ApiError,
   deleteModelProfile,
   eventStreamUrl,
+  fetchAgentCandidates,
+  fetchAgents,
+  fetchCommandCandidates,
+  fetchCommands,
   fetchProviderAuthFlow,
   fetchProviderAuthStatus,
   fetchProviderUsageLimits,
+  fetchSkillCandidates,
+  fetchSkills,
   fetchSessions,
+  installAgent,
+  installCommand,
+  installSkill,
   logoutProviderAuth,
   pollProviderAuthFlow,
   refreshProviderAuth,
@@ -238,6 +247,274 @@ describe("api helpers", () => {
     }
     const startInit = startCall[1] as RequestInit;
     expect(startInit.body).toBe(JSON.stringify({ method: "browser" }));
+  });
+
+  it("calls skill config endpoints with the expected payloads", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            skills: [
+              {
+                id: "repo-review",
+                name: "repo-review",
+                description: "Review repository changes",
+                path: ".agents/skills/repo-review/SKILL.md",
+              },
+            ],
+            config_revision: "rev-1",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            source: "owner/repo",
+            ref: "main",
+            candidates: [
+              {
+                name: "repo-review",
+                description: "Review repository changes",
+                subpath: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            installed: {
+              name: "repo-review",
+              install_path: ".agents/skills/repo-review",
+              source: "owner/repo",
+              ref: "main",
+              subpath: null,
+            },
+            skills: [],
+            config_revision: "rev-2",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchSkills();
+    await fetchSkillCandidates("owner/repo");
+    await installSkill({
+      source: "owner/repo",
+      skill_name: "repo-review",
+      force: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/config/skills",
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/config/skills/candidates",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ source: "owner/repo" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/config/skills/install",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          source: "owner/repo",
+          skill_name: "repo-review",
+          force: true,
+        }),
+      }),
+    );
+  });
+
+  it("calls command config endpoints with the expected payloads", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            commands: [
+              {
+                id: "repo-review",
+                name: "Repo Review",
+                slash_alias: "/repo-review",
+                description: "Review repository changes",
+                instructions: "# Repo Review\n\nReview repository changes.",
+                path: ".agents/commands/repo-review.md",
+              },
+            ],
+            config_revision: "rev-1",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            source: "owner/repo",
+            ref: "main",
+            candidates: [
+              {
+                command_id: "repo-review",
+                slash_alias: "/repo-review",
+                description: "Review repository changes",
+                subpath: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            installed: {
+              command_id: "repo-review",
+              slash_alias: "/repo-review",
+              install_path: ".agents/commands/repo-review.md",
+              source: "owner/repo",
+              ref: "main",
+              subpath: null,
+            },
+            commands: [],
+            config_revision: "rev-2",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchCommands();
+    await fetchCommandCandidates("owner/repo");
+    await installCommand({
+      source: "owner/repo",
+      command_name: "repo-review",
+      force: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/config/commands",
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/config/commands/candidates",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ source: "owner/repo" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/config/commands/install",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          source: "owner/repo",
+          command_name: "repo-review",
+          force: true,
+        }),
+      }),
+    );
+  });
+
+  it("calls agent config endpoints with the expected payloads", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            agents: [
+              {
+                id: "repo-reviewer",
+                name: "repo-reviewer",
+                description: "Review repository changes",
+                path: ".agents/agents/repo-reviewer.md",
+              },
+            ],
+            config_revision: "rev-1",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            source: "owner/repo",
+            ref: "main",
+            candidates: [
+              {
+                agent_name: "repo-reviewer",
+                description: "Review repository changes",
+                subpath: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            installed: {
+              agent_name: "repo-reviewer",
+              install_path: ".agents/agents/repo-reviewer.md",
+              source: "owner/repo",
+              ref: "main",
+              subpath: null,
+            },
+            agents: [],
+            config_revision: "rev-2",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchAgents();
+    await fetchAgentCandidates("owner/repo");
+    await installAgent({
+      source: "owner/repo",
+      agent_name: "repo-reviewer",
+      force: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/config/agents",
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/config/agents/candidates",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ source: "owner/repo" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/config/agents/install",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          source: "owner/repo",
+          agent_name: "repo-reviewer",
+          force: true,
+        }),
+      }),
+    );
   });
 
   it("derives event stream URLs from the current browser location", () => {

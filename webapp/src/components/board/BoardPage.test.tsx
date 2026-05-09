@@ -235,6 +235,8 @@ function makeConfigBootstrap(
         path: ".agents/commands/plan.md",
       },
     ],
+    skills: [],
+    agents: [],
     options: {
       provider_kinds: ["openai"],
       reasoning_efforts: ["high"],

@@ -36,6 +36,23 @@ from pbi_agent.config import (
     slugify,
     update_maintenance_config as save_maintenance_config,
 )
+from pbi_agent.agent.sub_agent_discovery import ProjectSubAgent
+from pbi_agent.agents.project_catalog import discover_installed_project_agents
+from pbi_agent.agents.project_installer import (
+    ProjectAgentInstallResult,
+    RemoteAgentCandidateSummary,
+    install_project_agent,
+    list_remote_project_agents,
+    resolve_default_agents_source,
+)
+from pbi_agent.commands.project_catalog import discover_installed_project_commands
+from pbi_agent.commands.project_installer import (
+    ProjectCommandInstallResult,
+    RemoteCommandCandidateSummary,
+    install_project_command,
+    list_remote_project_commands,
+    resolve_default_commands_source,
+)
 from pbi_agent.providers.model_discovery import (
     discover_provider_models,
     manual_entry_reason,
@@ -44,6 +61,17 @@ from pbi_agent.session_store import (
     KanbanStageConfigRecord,
     KanbanTaskRecord,
     SessionStore,
+)
+from pbi_agent.skills.project_catalog import (
+    ProjectSkillManifest,
+    discover_installed_project_skills,
+)
+from pbi_agent.skills.project_installer import (
+    ProjectSkillInstallResult,
+    RemoteSkillCandidateSummary,
+    install_project_skill,
+    list_remote_project_skills,
+    resolve_default_skills_source,
 )
 from pbi_agent.web.session.serializers import (
     _config_sort_key,
@@ -82,13 +110,9 @@ class ConfigurationMixin:
                     key=lambda item: _config_sort_key(item.name, item.id),
                 )
             ],
-            "commands": [
-                self._command_view(command)
-                for command in sorted(
-                    list_command_configs(self._workspace_root),
-                    key=lambda item: _config_sort_key(item.name, item.id),
-                )
-            ],
+            "commands": self._installed_command_views(),
+            "skills": self._installed_skill_views(),
+            "agents": self._installed_agent_views(),
             "active_profile_id": config.web.active_profile_id,
             "maintenance": self._maintenance_view(config.maintenance),
             "config_revision": revision,
@@ -431,6 +455,132 @@ class ConfigurationMixin:
             "config_revision": revision,
         }
 
+    def list_project_commands(self) -> dict[str, Any]:
+        _, revision = load_internal_config_snapshot()
+        return {
+            "commands": self._installed_command_views(),
+            "config_revision": revision,
+        }
+
+    def list_project_command_candidates(
+        self,
+        *,
+        source: str | None,
+    ) -> dict[str, Any]:
+        listing = list_remote_project_commands(self._effective_command_source(source))
+        return {
+            "source": listing.source,
+            "ref": listing.ref,
+            "candidates": [
+                self._command_candidate_view(candidate)
+                for candidate in listing.candidates
+            ],
+        }
+
+    def install_project_command_from_source(
+        self,
+        *,
+        source: str | None,
+        command_name: str,
+        force: bool,
+    ) -> dict[str, Any]:
+        result = install_project_command(
+            self._effective_command_source(source),
+            command_name=command_name,
+            force=force,
+            workspace=self._workspace_root,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "installed": self._command_install_result_view(result),
+            "commands": self._installed_command_views(),
+            "config_revision": revision,
+        }
+
+    def list_project_skills(self) -> dict[str, Any]:
+        _, revision = load_internal_config_snapshot()
+        return {
+            "skills": self._installed_skill_views(),
+            "config_revision": revision,
+        }
+
+    def list_project_skill_candidates(
+        self,
+        *,
+        source: str | None,
+    ) -> dict[str, Any]:
+        listing = list_remote_project_skills(self._effective_skill_source(source))
+        return {
+            "source": listing.source,
+            "ref": listing.ref,
+            "candidates": [
+                self._skill_candidate_view(candidate)
+                for candidate in listing.candidates
+            ],
+        }
+
+    def install_project_skill_from_source(
+        self,
+        *,
+        source: str | None,
+        skill_name: str,
+        force: bool,
+    ) -> dict[str, Any]:
+        result = install_project_skill(
+            self._effective_skill_source(source),
+            skill_name=skill_name,
+            force=force,
+            workspace=self._workspace_root,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "installed": self._skill_install_result_view(result),
+            "skills": self._installed_skill_views(),
+            "config_revision": revision,
+        }
+
+    def list_project_agents(self) -> dict[str, Any]:
+        _, revision = load_internal_config_snapshot()
+        return {
+            "agents": self._installed_agent_views(),
+            "config_revision": revision,
+        }
+
+    def list_project_agent_candidates(
+        self,
+        *,
+        source: str | None,
+    ) -> dict[str, Any]:
+        listing = list_remote_project_agents(self._effective_agent_source(source))
+        return {
+            "source": listing.source,
+            "ref": listing.ref,
+            "candidates": [
+                self._agent_candidate_view(candidate)
+                for candidate in listing.candidates
+            ],
+        }
+
+    def install_project_agent_from_source(
+        self,
+        *,
+        source: str | None,
+        agent_name: str,
+        force: bool,
+    ) -> dict[str, Any]:
+        result = install_project_agent(
+            self._effective_agent_source(source),
+            agent_name=agent_name,
+            force=force,
+            workspace=self._workspace_root,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "installed": self._agent_install_result_view(result),
+            "agents": self._installed_agent_views(),
+            "config_revision": revision,
+        }
+
     def _resolve_task_runtime(
         self,
         record: KanbanTaskRecord,
@@ -631,6 +781,142 @@ class ConfigurationMixin:
             "instructions": command.instructions,
             "path": command.path,
         }
+
+    def _installed_command_views(self) -> list[dict[str, Any]]:
+        return [
+            self._command_view(command)
+            for command in sorted(
+                discover_installed_project_commands(workspace=self._workspace_root),
+                key=lambda item: _config_sort_key(item.name, item.id),
+            )
+        ]
+
+    def _command_candidate_view(
+        self, candidate: RemoteCommandCandidateSummary
+    ) -> dict[str, Any]:
+        return {
+            "command_id": candidate.command_id,
+            "slash_alias": candidate.slash_alias,
+            "description": candidate.description,
+            "subpath": candidate.subpath,
+        }
+
+    def _command_install_result_view(
+        self, result: ProjectCommandInstallResult
+    ) -> dict[str, Any]:
+        return {
+            "command_id": result.command_id,
+            "slash_alias": result.slash_alias,
+            "install_path": self._relative_workspace_path(result.install_path),
+            "source": result.source,
+            "ref": result.ref,
+            "subpath": result.subpath,
+        }
+
+    def _installed_skill_views(self) -> list[dict[str, Any]]:
+        return [
+            self._skill_view(skill)
+            for skill in sorted(
+                discover_installed_project_skills(workspace=self._workspace_root),
+                key=lambda item: (item.name.casefold(), item.location.as_posix()),
+            )
+        ]
+
+    def _skill_view(self, skill: ProjectSkillManifest) -> dict[str, Any]:
+        return {
+            "id": skill.name,
+            "name": skill.name,
+            "description": skill.description,
+            "path": self._relative_workspace_path(skill.location),
+        }
+
+    def _skill_candidate_view(
+        self, candidate: RemoteSkillCandidateSummary
+    ) -> dict[str, Any]:
+        return {
+            "name": candidate.name,
+            "description": candidate.description,
+            "subpath": candidate.subpath,
+        }
+
+    def _skill_install_result_view(
+        self, result: ProjectSkillInstallResult
+    ) -> dict[str, Any]:
+        return {
+            "name": result.name,
+            "install_path": self._relative_workspace_path(result.install_path),
+            "source": result.source,
+            "ref": result.ref,
+            "subpath": result.subpath,
+        }
+
+    def _installed_agent_views(self) -> list[dict[str, Any]]:
+        return [
+            self._agent_view(agent)
+            for agent in sorted(
+                discover_installed_project_agents(workspace=self._workspace_root),
+                key=lambda item: (item.name.casefold(), item.location.as_posix()),
+            )
+        ]
+
+    def _agent_view(self, agent: ProjectSubAgent) -> dict[str, Any]:
+        return {
+            "id": agent.name,
+            "name": agent.name,
+            "description": agent.description,
+            "path": self._relative_workspace_path(agent.location),
+        }
+
+    def _agent_candidate_view(
+        self, candidate: RemoteAgentCandidateSummary
+    ) -> dict[str, Any]:
+        return {
+            "agent_name": candidate.agent_name,
+            "description": candidate.description,
+            "subpath": candidate.subpath,
+        }
+
+    def _agent_install_result_view(
+        self, result: ProjectAgentInstallResult
+    ) -> dict[str, Any]:
+        return {
+            "agent_name": result.agent_name,
+            "install_path": self._relative_workspace_path(result.install_path),
+            "source": result.source,
+            "ref": result.ref,
+            "subpath": result.subpath,
+        }
+
+    def _relative_workspace_path(self, path: Path) -> str:
+        resolved_path = path.resolve()
+        try:
+            return resolved_path.relative_to(self._workspace_root.resolve()).as_posix()
+        except ValueError:
+            return resolved_path.as_posix()
+
+    def _effective_skill_source(self, source: str | None) -> str:
+        if source is None:
+            return resolve_default_skills_source()
+        stripped = source.strip()
+        if not stripped:
+            return resolve_default_skills_source()
+        return stripped
+
+    def _effective_command_source(self, source: str | None) -> str:
+        if source is None:
+            return resolve_default_commands_source()
+        stripped = source.strip()
+        if not stripped:
+            return resolve_default_commands_source()
+        return stripped
+
+    def _effective_agent_source(self, source: str | None) -> str:
+        if source is None:
+            return resolve_default_agents_source()
+        stripped = source.strip()
+        if not stripped:
+            return resolve_default_agents_source()
+        return stripped
 
     def _maintenance_view(self, config: MaintenanceConfig) -> dict[str, Any]:
         return {"retention_days": config.retention_days}

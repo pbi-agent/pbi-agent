@@ -1,9 +1,24 @@
 import type {
+  AgentCandidateViewModel,
+  AgentCandidatesResponse,
+  AgentInstallResponse,
+  AgentListResponse,
+  AgentViewModel,
   AppSseEventModel,
+  CommandCandidateViewModel,
+  CommandCandidatesResponse,
+  CommandInstallResponse,
+  CommandListResponse,
+  CommandViewModel,
   LiveSessionSnapshotModel,
   ProcessingStateModel,
   RunSessionModel,
   SessionRecordModel,
+  SkillCandidateViewModel,
+  SkillCandidatesResponse,
+  SkillInstallResponse,
+  SkillListResponse,
+  SkillViewModel,
   SessionSseEventModel,
   SseControlEventModel,
   SseEventModel,
@@ -425,19 +440,42 @@ export type ModelProfileView = {
   resolved_runtime: ResolvedRuntimeView;
 };
 
-export type CommandView = {
-  id: string;
-  name: string;
-  slash_alias: string;
-  description: string;
-  instructions: string;
-  path: string;
-};
+export type CommandView = CommandViewModel;
+
+export type CommandCandidateView = CommandCandidateViewModel;
+
+export type CommandListPayload = CommandListResponse;
+
+export type CommandCandidatesPayload = CommandCandidatesResponse;
+
+export type CommandInstallPayload = CommandInstallResponse;
+
+export type SkillView = SkillViewModel;
+
+export type SkillCandidateView = SkillCandidateViewModel;
+
+export type SkillListPayload = SkillListResponse;
+
+export type SkillCandidatesPayload = SkillCandidatesResponse;
+
+export type SkillInstallPayload = SkillInstallResponse;
+
+export type AgentView = AgentViewModel;
+
+export type AgentCandidateView = AgentCandidateViewModel;
+
+export type AgentListPayload = AgentListResponse;
+
+export type AgentCandidatesPayload = AgentCandidatesResponse;
+
+export type AgentInstallPayload = AgentInstallResponse;
 
 export type ConfigBootstrapPayload = {
   providers: ProviderView[];
   model_profiles: ModelProfileView[];
   commands: CommandView[];
+  skills: SkillView[];
+  agents: AgentView[];
   active_profile_id: string | null;
   maintenance: MaintenanceConfig;
   config_revision: string;

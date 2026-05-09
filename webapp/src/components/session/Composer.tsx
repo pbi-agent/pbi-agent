@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { searchFileMentions, searchSlashCommands } from "../../api";
 import type { FileMentionItem, SlashCommandItem } from "../../types";
+import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -46,6 +47,7 @@ interface ComposerProps {
   liveSessionId: string | null;
   canCreateSession?: boolean;
   supportsImageInputs: boolean;
+  interactiveMode: boolean;
   isSubmitting: boolean;
   onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
   isProcessing?: boolean;
@@ -175,6 +177,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   liveSessionId,
   canCreateSession = false,
   supportsImageInputs,
+  interactiveMode,
   isSubmitting,
   onSubmit,
   isProcessing = false,
@@ -691,6 +694,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     (pendingImages.length > 0
       ? `${pendingImages.length} image${pendingImages.length === 1 ? "" : "s"} attached`
       : null);
+  const inputRowClassName = cn(
+    "composer__input-row",
+    isShellMode && "composer__input-row--shell",
+    interactiveMode && "composer__input-row--interactive",
+  );
 
   return (
     <form
@@ -713,9 +721,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         }}
       />
 
-      <div
-        className={`composer__input-row ${isShellMode ? "composer__input-row--shell" : ""}`}
-      >
+      <div className={inputRowClassName}>
         <DropdownMenu
           open={isActionMenuOpen}
           onOpenChange={(open) => setActionMenuOpen(canSend && !isShellMode && open)}

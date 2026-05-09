@@ -98,6 +98,7 @@ vi.mock("./Composer", async () => {
         inputEnabled,
         canCreateSession,
         liveSessionId,
+        interactiveMode,
         onSubmit,
         isProcessing,
         canInterrupt,
@@ -110,6 +111,7 @@ vi.mock("./Composer", async () => {
         inputEnabled?: boolean;
         canCreateSession?: boolean;
         liveSessionId?: string | null;
+        interactiveMode: boolean;
         onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
         isProcessing?: boolean;
         canInterrupt?: boolean;
@@ -130,6 +132,7 @@ vi.mock("./Composer", async () => {
           <div>Composer input enabled {String(inputEnabled)}</div>
           <div>Composer can create {String(canCreateSession)}</div>
           <div>Composer live session {liveSessionId ?? ""}</div>
+          <div>Composer interactive {String(interactiveMode)}</div>
           <div>Composer restored {restoredInput ?? ""}</div>
           {isProcessing && canInterrupt ? (
             <button
@@ -269,6 +272,8 @@ function makeConfigBootstrap(
       },
     ],
     commands: [],
+    skills: [],
+    agents: [],
     options: {
       provider_kinds: ["openai"],
       reasoning_efforts: ["high"],
@@ -365,6 +370,21 @@ function renderSessionRoute(route: string) {
   );
 }
 
+function dispatchWindowKeydown(init: KeyboardEventInit) {
+  const event = new KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  let dispatchResult = true;
+
+  act(() => {
+    dispatchResult = window.dispatchEvent(event);
+  });
+
+  return { event, dispatchResult };
+}
+
 describe("SessionPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -423,7 +443,7 @@ describe("SessionPage", () => {
 
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent(
-      "Let the agent ask questions and offer choices",
+      "Let the agent ask questions and offer choices. Press Maj+Tab / Shift+Tab to enable.",
     );
     expect(tooltip.closest("[data-app-tooltip]")).not.toBeNull();
 
@@ -436,7 +456,67 @@ describe("SessionPage", () => {
 
     await user.unhover(toggle);
     await user.hover(enabledToggle);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("Interactive mode enabled");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Interactive mode enabled. Press Maj+Tab / Shift+Tab to disable.",
+    );
+  });
+
+  it("toggles interactive mode with Shift+Tab on main session routes", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByRole("button", { name: "Enable interactive mode" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByText("Composer interactive false")).toBeInTheDocument();
+
+    const firstShortcut = dispatchWindowKeydown({ key: "Tab", shiftKey: true });
+
+    expect(firstShortcut.event.defaultPrevented).toBe(true);
+    expect(firstShortcut.dispatchResult).toBe(false);
+    expect(await screen.findByRole("button", { name: "Disable interactive mode" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("Composer interactive true")).toBeInTheDocument();
+
+    const secondShortcut = dispatchWindowKeydown({ key: "Tab", shiftKey: true });
+
+    expect(secondShortcut.event.defaultPrevented).toBe(true);
+    expect(secondShortcut.dispatchResult).toBe(false);
+    expect(await screen.findByRole("button", { name: "Enable interactive mode" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByText("Composer interactive false")).toBeInTheDocument();
+  });
+
+  it("ignores non-matching interactive mode shortcut variants", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByRole("button", { name: "Enable interactive mode" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    const ignoredShortcuts: KeyboardEventInit[] = [
+      { key: "Tab" },
+      { key: "Tab", shiftKey: true, repeat: true },
+      { key: "Tab", shiftKey: true, ctrlKey: true },
+      { key: "Tab", shiftKey: true, altKey: true },
+      { key: "Tab", shiftKey: true, metaKey: true },
+    ];
+
+    for (const shortcut of ignoredShortcuts) {
+      const { event, dispatchResult } = dispatchWindowKeydown(shortcut);
+      expect(event.defaultPrevented).toBe(false);
+      expect(dispatchResult).toBe(true);
+      expect(screen.getByRole("button", { name: "Enable interactive mode" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(screen.getByText("Composer interactive false")).toBeInTheDocument();
+    }
   });
 
   it("renders sub-agent routes as hidden read-only child sessions", async () => {
@@ -476,6 +556,10 @@ describe("SessionPage", () => {
 
     await screen.findByText("Timeline 1");
     expect(screen.queryByText("Composer images true")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /interactive mode/i })).not.toBeInTheDocument();
+    const { event, dispatchResult } = dispatchWindowKeydown({ key: "Tab", shiftKey: true });
+    expect(event.defaultPrevented).toBe(false);
+    expect(dispatchResult).toBe(true);
     expect(screen.queryByRole("button", { name: /interactive mode/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to main session" })).toHaveAttribute(
       "href",
@@ -582,7 +666,8 @@ describe("SessionPage", () => {
 
     expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Enable interactive mode" }));
+    const { event } = dispatchWindowKeydown({ key: "Tab", shiftKey: true });
+    expect(event.defaultPrevented).toBe(true);
     expect(screen.getByRole("button", { name: "Disable interactive mode" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -2744,7 +2829,28 @@ describe("SessionPage", () => {
     expect(vi.mocked(useLiveSessionEvents)).toHaveBeenLastCalledWith(null, null, null);
   });
 
-  it("clears the selected saved session when using the new-session shortcut", async () => {
+  it("clears the selected saved session with Ctrl+Shift+O", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+
+    const { event, dispatchResult } = dispatchWindowKeydown({
+      key: "O",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(dispatchResult).toBe(false);
+
+    await waitFor(() => {
+      expect(screen.getByText("Composer can create true")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Connection ready")).toBeInTheDocument();
+    expect(vi.mocked(useLiveSessionEvents)).toHaveBeenLastCalledWith(null, null, null);
+  });
+
+  it("clears the selected saved session when using the sidebar new-session action", async () => {
     const user = userEvent.setup();
 
     renderSessionRoute("/sessions/session-1");
@@ -2758,6 +2864,29 @@ describe("SessionPage", () => {
     });
     expect(screen.getByText("Connection ready")).toBeInTheDocument();
     expect(vi.mocked(useLiveSessionEvents)).toHaveBeenLastCalledWith(null, null, null);
+  });
+
+  it("ignores non-matching new-session shortcut variants", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Run History session-1")).toBeInTheDocument();
+
+    const ignoredShortcuts: KeyboardEventInit[] = [
+      { key: "o" },
+      { key: "o", ctrlKey: true },
+      { key: "O", shiftKey: true },
+      { key: "O", ctrlKey: true, shiftKey: true, repeat: true },
+      { key: "O", ctrlKey: true, shiftKey: true, altKey: true },
+      { key: "O", ctrlKey: true, shiftKey: true, metaKey: true },
+    ];
+
+    for (const shortcut of ignoredShortcuts) {
+      const { event, dispatchResult } = dispatchWindowKeydown(shortcut);
+
+      expect(event.defaultPrevented).toBe(false);
+      expect(dispatchResult).toBe(true);
+      expect(screen.getByText("Run History session-1")).toBeInTheDocument();
+    }
   });
 
   it("marks direct sends pending and ignores duplicate submits", async () => {

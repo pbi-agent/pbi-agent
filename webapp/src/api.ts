@@ -1,4 +1,5 @@
 import type {
+  AgentInstallRequest,
   ApiJsonBody,
   ApiJsonRequestBodies,
   ApiOperation,
@@ -7,16 +8,24 @@ import type {
   ApiPathParams,
   ApiQueryParams,
   ApiResponse,
+  CommandInstallRequest,
   CreateSessionRequest,
   LiveSessionInputRequest,
   LiveSessionShellCommandRequest,
+  SkillInstallRequest,
   SubmitQuestionResponseRequest,
   UpdateSessionRequest,
 } from "./api-types.generated";
 import type {
   AllRunsPayload,
+  AgentCandidatesPayload,
+  AgentInstallPayload,
+  AgentListPayload,
   BoardStage,
   BootstrapPayload,
+  CommandCandidatesPayload,
+  CommandInstallPayload,
+  CommandListPayload,
   ConfigBootstrapPayload,
   DashboardStatsPayload,
   ExpandedSessionInput,
@@ -36,6 +45,9 @@ import type {
   RunSession,
   SessionDetailPayload,
   SessionRecord,
+  SkillCandidatesPayload,
+  SkillInstallPayload,
+  SkillListPayload,
   SlashCommandItem,
   TaskRecord,
 } from "./types";
@@ -170,6 +182,108 @@ export async function fetchConfigBootstrap(): Promise<ConfigBootstrapPayload> {
     "GET /api/config/bootstrap",
     "/api/config/bootstrap",
   );
+}
+
+export async function fetchCommands(): Promise<CommandListPayload> {
+  return apiRequest<"GET /api/config/commands", CommandListPayload>(
+    "GET /api/config/commands",
+    "/api/config/commands",
+  );
+}
+
+export async function fetchCommandCandidates(
+  source?: string | null,
+): Promise<CommandCandidatesPayload> {
+  return apiRequest<
+    "POST /api/config/commands/candidates",
+    CommandCandidatesPayload
+  >("POST /api/config/commands/candidates", "/api/config/commands/candidates", {
+    method: "POST",
+    body: jsonBody(
+      "POST /api/config/commands/candidates",
+      source === undefined ? {} : { source },
+    ),
+  });
+}
+
+export async function installCommand(
+  payload: CommandInstallRequest,
+): Promise<CommandInstallPayload> {
+  return apiRequest<
+    "POST /api/config/commands/install",
+    CommandInstallPayload
+  >("POST /api/config/commands/install", "/api/config/commands/install", {
+    method: "POST",
+    body: jsonBody("POST /api/config/commands/install", payload),
+  });
+}
+
+export async function fetchSkills(): Promise<SkillListPayload> {
+  return apiRequest<"GET /api/config/skills", SkillListPayload>(
+    "GET /api/config/skills",
+    "/api/config/skills",
+  );
+}
+
+export async function fetchSkillCandidates(
+  source?: string | null,
+): Promise<SkillCandidatesPayload> {
+  return apiRequest<
+    "POST /api/config/skills/candidates",
+    SkillCandidatesPayload
+  >("POST /api/config/skills/candidates", "/api/config/skills/candidates", {
+    method: "POST",
+    body: jsonBody(
+      "POST /api/config/skills/candidates",
+      source === undefined ? {} : { source },
+    ),
+  });
+}
+
+export async function installSkill(
+  payload: SkillInstallRequest,
+): Promise<SkillInstallPayload> {
+  return apiRequest<
+    "POST /api/config/skills/install",
+    SkillInstallPayload
+  >("POST /api/config/skills/install", "/api/config/skills/install", {
+    method: "POST",
+    body: jsonBody("POST /api/config/skills/install", payload),
+  });
+}
+
+export async function fetchAgents(): Promise<AgentListPayload> {
+  return apiRequest<"GET /api/config/agents", AgentListPayload>(
+    "GET /api/config/agents",
+    "/api/config/agents",
+  );
+}
+
+export async function fetchAgentCandidates(
+  source?: string | null,
+): Promise<AgentCandidatesPayload> {
+  return apiRequest<
+    "POST /api/config/agents/candidates",
+    AgentCandidatesPayload
+  >("POST /api/config/agents/candidates", "/api/config/agents/candidates", {
+    method: "POST",
+    body: jsonBody(
+      "POST /api/config/agents/candidates",
+      source === undefined ? {} : { source },
+    ),
+  });
+}
+
+export async function installAgent(
+  payload: AgentInstallRequest,
+): Promise<AgentInstallPayload> {
+  return apiRequest<
+    "POST /api/config/agents/install",
+    AgentInstallPayload
+  >("POST /api/config/agents/install", "/api/config/agents/install", {
+    method: "POST",
+    body: jsonBody("POST /api/config/agents/install", payload),
+  });
 }
 
 export async function fetchSessions(): Promise<SessionRecord[]> {
