@@ -151,6 +151,16 @@ def _write_skill(
     return skill_dir
 
 
+def _write_agent(root: Path, name: str, description: str, prompt: str) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / f"{name}.md"
+    path.write_text(
+        f"---\nname: {name}\ndescription: {description}\n---\n\n{prompt}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_combined_timeline_marks_previous_run_messages_historical() -> None:
     snapshot = _combined_timeline_snapshot(
         [
@@ -1092,6 +1102,181 @@ def test_skill_install_endpoint_installs_conflicts_and_forces_replacement(
                 "name": "ship",
                 "description": "Ship the updated change.",
                 "path": ".agents/skills/ship/SKILL.md",
+            }
+        ]
+
+
+def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_agent(
+        tmp_path / ".agents" / "agents",
+        "code-reviewer",
+        "Review code changes.",
+        "You review code changes.",
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        bootstrap_response = client.get("/api/config/bootstrap")
+        assert bootstrap_response.status_code == 200
+        bootstrap_payload = bootstrap_response.json()
+        assert bootstrap_payload["agents"] == [
+            {
+                "id": "code-reviewer",
+                "name": "code-reviewer",
+                "description": "Review code changes.",
+                "path": ".agents/agents/code-reviewer.md",
+            }
+        ]
+
+        list_response = client.get("/api/config/agents")
+        assert list_response.status_code == 200
+        assert list_response.json() == {
+            "agents": bootstrap_payload["agents"],
+            "config_revision": bootstrap_payload["config_revision"],
+        }
+
+
+def test_agent_candidates_endpoint_uses_local_and_default_sources(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    explicit_source = tmp_path / "explicit-source"
+    default_source = tmp_path / "default-source"
+    _write_agent(
+        explicit_source / "agents",
+        "reviewer",
+        "Review code changes.",
+        "Review the current diff.",
+    )
+    _write_agent(
+        default_source / "agents",
+        "planner",
+        "Plan the work.",
+        "Create an implementation plan.",
+    )
+    monkeypatch.setattr(
+        "pbi_agent.web.session.configuration.resolve_default_agents_source",
+        lambda: str(default_source),
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        explicit_response = client.post(
+            "/api/config/agents/candidates",
+            json={"source": str(explicit_source)},
+        )
+        assert explicit_response.status_code == 200
+        assert explicit_response.json() == {
+            "source": str(explicit_source),
+            "ref": None,
+            "candidates": [
+                {
+                    "agent_name": "reviewer",
+                    "description": "Review code changes.",
+                    "subpath": "agents/reviewer.md",
+                }
+            ],
+        }
+
+        default_payload = {
+            "source": str(default_source),
+            "ref": None,
+            "candidates": [
+                {
+                    "agent_name": "planner",
+                    "description": "Plan the work.",
+                    "subpath": "agents/planner.md",
+                }
+            ],
+        }
+
+        omitted_response = client.post("/api/config/agents/candidates", json={})
+        assert omitted_response.status_code == 200
+        assert omitted_response.json() == default_payload
+
+        blank_response = client.post(
+            "/api/config/agents/candidates",
+            json={"source": "   "},
+        )
+        assert blank_response.status_code == 200
+        assert blank_response.json() == default_payload
+
+        missing_response = client.post(
+            "/api/config/agents/candidates",
+            json={"source": str(tmp_path / "missing-source")},
+        )
+        assert missing_response.status_code == 400
+        assert "missing-source" in missing_response.json()["detail"]
+
+
+def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source_root = tmp_path / "agent-source"
+    _write_agent(
+        source_root / "agents",
+        "shipper",
+        "Ship the change.",
+        "Ship the current implementation.",
+    )
+    monkeypatch.setattr(
+        "pbi_agent.web.session.configuration.resolve_default_agents_source",
+        lambda: str(source_root),
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        install_response = client.post(
+            "/api/config/agents/install",
+            json={"source": None, "agent_name": "shipper"},
+        )
+        assert install_response.status_code == 200
+        install_payload = install_response.json()
+        assert install_payload["installed"] == {
+            "agent_name": "shipper",
+            "install_path": ".agents/agents/shipper.md",
+            "source": str(source_root),
+            "ref": None,
+            "subpath": "agents/shipper.md",
+        }
+        assert install_payload["agents"] == [
+            {
+                "id": "shipper",
+                "name": "shipper",
+                "description": "Ship the change.",
+                "path": ".agents/agents/shipper.md",
+            }
+        ]
+        assert (tmp_path / ".agents" / "agents" / "shipper.md").is_file()
+
+        conflict_response = client.post(
+            "/api/config/agents/install",
+            json={"agent_name": "shipper"},
+        )
+        assert conflict_response.status_code == 409
+        assert "already installed" in conflict_response.json()["detail"]
+
+        _write_agent(
+            source_root / "agents",
+            "shipper",
+            "Ship the updated change.",
+            "Ship the updated implementation.",
+        )
+        force_response = client.post(
+            "/api/config/agents/install",
+            json={"source": "   ", "agent_name": "shipper", "force": True},
+        )
+        assert force_response.status_code == 200
+        assert force_response.json()["agents"] == [
+            {
+                "id": "shipper",
+                "name": "shipper",
+                "description": "Ship the updated change.",
+                "path": ".agents/agents/shipper.md",
             }
         ]
 

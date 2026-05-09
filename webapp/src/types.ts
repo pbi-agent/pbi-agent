@@ -1,4 +1,9 @@
 import type {
+  AgentCandidateViewModel,
+  AgentCandidatesResponse,
+  AgentInstallResponse,
+  AgentListResponse,
+  AgentViewModel,
   AppSseEventModel,
   CommandCandidateViewModel,
   CommandCandidatesResponse,
@@ -455,11 +460,22 @@ export type SkillCandidatesPayload = SkillCandidatesResponse;
 
 export type SkillInstallPayload = SkillInstallResponse;
 
+export type AgentView = AgentViewModel;
+
+export type AgentCandidateView = AgentCandidateViewModel;
+
+export type AgentListPayload = AgentListResponse;
+
+export type AgentCandidatesPayload = AgentCandidatesResponse;
+
+export type AgentInstallPayload = AgentInstallResponse;
+
 export type ConfigBootstrapPayload = {
   providers: ProviderView[];
   model_profiles: ModelProfileView[];
   commands: CommandView[];
   skills: SkillView[];
+  agents: AgentView[];
   active_profile_id: string | null;
   maintenance: MaintenanceConfig;
   config_revision: string;

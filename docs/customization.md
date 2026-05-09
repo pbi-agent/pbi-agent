@@ -143,6 +143,8 @@ At runtime, project commands are discovered from `.agents/commands/*.md`. The no
 
 `pbi-agent` can also discover project-local sub-agent definitions and advertise them to the main agent as specialized delegated worker choices for the `sub_agent` tool.
 
+You can manage project-local agent installs from the web UI under **Settings → Project → Agents**. The add dialog follows the same workflow as skills and commands: browse the official catalog, or install from a GitHub owner/repo, GitHub URL/tree URL, or server-side local path. New sessions see installed agents immediately; active sessions can run `/reload` before the next model request.
+
 You can manage project-local installs directly from the CLI:
 
 ```bash

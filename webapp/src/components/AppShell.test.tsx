@@ -106,6 +106,7 @@ function makeConfigBootstrap(
     ],
     commands: [],
     skills: [],
+    agents: [],
     options: {
       provider_kinds: ["chatgpt"],
       reasoning_efforts: ["medium"],

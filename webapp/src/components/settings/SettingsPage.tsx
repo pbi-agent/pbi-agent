@@ -33,6 +33,7 @@ import {
 } from "../ui/dialog";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
+import { AgentsSettingsSection } from "./AgentsSettingsSection";
 import { CommandsSettingsSection } from "./CommandsSettingsSection";
 import { ModelProfilesSettingsSection } from "./ModelProfilesSettingsSection";
 import type { ProfilePayload } from "./ModelProfileModal";
@@ -67,6 +68,7 @@ type SettingsTabId =
   | "model-profiles"
   | "skills"
   | "commands"
+  | "agents"
   | "maintenance";
 
 const SETTINGS_NAV_GROUPS: Array<{
@@ -100,6 +102,11 @@ const SETTINGS_NAV_GROUPS: Array<{
         id: "commands",
         label: "Commands",
         description: "Prompt presets",
+      },
+      {
+        id: "agents",
+        label: "Agents",
+        description: "Delegated workers",
       },
     ],
   },
@@ -339,8 +346,16 @@ className="settings-nav__header-close app-close-icon-button"
     );
   }
 
-  const { providers, model_profiles, commands, skills, active_profile_id, maintenance, options } =
-    configQuery.data;
+  const {
+    providers,
+    model_profiles,
+    commands,
+    skills,
+    agents,
+    active_profile_id,
+    maintenance,
+    options,
+  } = configQuery.data;
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
@@ -452,6 +467,8 @@ className="settings-nav__header-close app-close-icon-button"
                   {activeTab === "skills" && <SkillsSettingsSection skills={skills} />}
 
                   {activeTab === "commands" && <CommandsSettingsSection commands={commands} />}
+
+                  {activeTab === "agents" && <AgentsSettingsSection agents={agents} />}
 
                   {activeTab === "maintenance" && (
                     <MaintenanceSettingsSection

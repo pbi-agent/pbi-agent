@@ -8,12 +8,14 @@ import {
   ApiError,
   createProvider,
   createModelProfile,
+  fetchAgentCandidates,
   fetchCommandCandidates,
   fetchConfigBootstrap,
   fetchProviderModels,
   fetchProviderAuthFlow,
   fetchProviderUsageLimits,
   fetchSkillCandidates,
+  installAgent,
   installCommand,
   installSkill,
   logoutProviderAuth,
@@ -80,6 +82,8 @@ vi.mock("../../api", async (importOriginal) => {
     startProviderAuthFlow: vi.fn(),
     fetchProviderAuthFlow: vi.fn(),
     fetchProviderUsageLimits: vi.fn(),
+    fetchAgentCandidates: vi.fn(),
+    installAgent: vi.fn(),
     fetchCommandCandidates: vi.fn(),
     installCommand: vi.fn(),
     fetchSkillCandidates: vi.fn(),
@@ -225,6 +229,7 @@ function makeConfigBootstrap(
     ],
     commands: [],
     skills: [],
+    agents: [],
     options: {
       provider_kinds: ["openai", "chatgpt", "github_copilot"],
       reasoning_efforts: ["high", "medium"],
@@ -528,6 +533,35 @@ describe("SettingsPage", () => {
           name: "repo-review",
           description: "Review repository changes",
           path: ".agents/skills/repo-review/SKILL.md",
+        },
+      ],
+      config_revision: "rev-2",
+    });
+    vi.mocked(fetchAgentCandidates).mockResolvedValue({
+      source: "https://github.com/pbi-agent/agents",
+      ref: null,
+      candidates: [
+        {
+          agent_name: "repo-reviewer",
+          description: "Review repository changes",
+          subpath: null,
+        },
+      ],
+    });
+    vi.mocked(installAgent).mockResolvedValue({
+      installed: {
+        agent_name: "repo-reviewer",
+        install_path: ".agents/agents/repo-reviewer.md",
+        source: "https://github.com/pbi-agent/agents",
+        ref: null,
+        subpath: null,
+      },
+      agents: [
+        {
+          id: "repo-reviewer",
+          name: "repo-reviewer",
+          description: "Review repository changes",
+          path: ".agents/agents/repo-reviewer.md",
         },
       ],
       config_revision: "rev-2",
@@ -966,7 +1000,7 @@ describe("SettingsPage", () => {
     expect(await within(dialog).findByText("/private-review")).toBeInTheDocument();
   });
 
-  it("shows Project navigation with Skills and Commands", async () => {
+  it("shows Project navigation with Skills, Commands, and Agents", async () => {
     renderWithProviders(<SettingsPage />);
 
     expect(
@@ -980,6 +1014,159 @@ describe("SettingsPage", () => {
     expect(
       screen.getByText("Commands", { selector: ".settings-nav__item-label" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText("Agents", { selector: ".settings-nav__item-label" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not fetch agent candidates until the add agent dialog opens", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+
+    expect(await screen.findByText("Project Agents")).toBeInTheDocument();
+    expect(fetchAgentCandidates).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Add Agent" }));
+
+    await waitFor(() => expect(fetchAgentCandidates).toHaveBeenCalledWith(null));
+  });
+
+  it("loads default agent candidates when opening Add Agent", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("button", { name: "Add Agent" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Agent" });
+    expect(await within(dialog).findByText("repo-reviewer")).toBeInTheDocument();
+    expect(fetchAgentCandidates).toHaveBeenCalledWith(null);
+  });
+
+  it("installs a selected agent, refetches settings, and shows success", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap)
+      .mockResolvedValueOnce(makeConfigBootstrap())
+      .mockResolvedValue(
+        makeConfigBootstrap({
+          config_revision: "rev-2",
+          agents: [
+            {
+              id: "repo-reviewer",
+              name: "repo-reviewer",
+              description: "Review repository changes",
+              path: ".agents/agents/repo-reviewer.md",
+            },
+          ],
+        }),
+      );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("button", { name: "Add Agent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Agent" });
+    await within(dialog).findByText("repo-reviewer");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    await waitFor(() =>
+      expect(installAgent).toHaveBeenCalledWith({
+        source: "https://github.com/pbi-agent/agents",
+        agent_name: "repo-reviewer",
+      }),
+    );
+    await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Installed repo-reviewer/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(".agents/agents/repo-reviewer.md"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Add Project Agent" })).not.toBeInTheDocument();
+  });
+
+  it("reveals Replace existing on agent install conflict and retries with force", async () => {
+    const user = userEvent.setup();
+    vi.mocked(installAgent)
+      .mockRejectedValueOnce(new ApiError("Agent already installed", 409))
+      .mockResolvedValueOnce({
+        installed: {
+          agent_name: "repo-reviewer",
+          install_path: ".agents/agents/repo-reviewer.md",
+          source: "https://github.com/pbi-agent/agents",
+          ref: null,
+          subpath: null,
+        },
+        agents: [
+          {
+            id: "repo-reviewer",
+            name: "repo-reviewer",
+            description: "Review repository changes",
+            path: ".agents/agents/repo-reviewer.md",
+          },
+        ],
+        config_revision: "rev-2",
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("button", { name: "Add Agent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Agent" });
+    await within(dialog).findByText("repo-reviewer");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    expect(await within(dialog).findByText("Agent already installed")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Replace existing" }));
+
+    await waitFor(() =>
+      expect(installAgent).toHaveBeenLastCalledWith({
+        source: "https://github.com/pbi-agent/agents",
+        agent_name: "repo-reviewer",
+        force: true,
+      }),
+    );
+  });
+
+  it("browses agent candidates from a custom source", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAgentCandidates)
+      .mockResolvedValueOnce({
+        source: "https://github.com/pbi-agent/agents",
+        ref: null,
+        candidates: [],
+      })
+      .mockResolvedValueOnce({
+        source: "owner/private-repo",
+        ref: "main",
+        candidates: [
+          {
+            agent_name: "private-reviewer",
+            description: "Private reviewer",
+            subpath: "agents/private-reviewer.md",
+          },
+        ],
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("button", { name: "Add Agent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Agent" });
+    await waitFor(() => expect(fetchAgentCandidates).toHaveBeenCalledWith(null));
+
+    await user.type(
+      within(dialog).getByLabelText("Custom source"),
+      "owner/private-repo",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Browse" }));
+
+    await waitFor(() =>
+      expect(fetchAgentCandidates).toHaveBeenLastCalledWith("owner/private-repo"),
+    );
+    expect(await within(dialog).findByText("private-reviewer")).toBeInTheDocument();
   });
 
   it("does not fetch skill candidates until the add skill dialog opens", async () => {

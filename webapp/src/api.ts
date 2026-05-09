@@ -1,4 +1,5 @@
 import type {
+  AgentInstallRequest,
   ApiJsonBody,
   ApiJsonRequestBodies,
   ApiOperation,
@@ -17,6 +18,9 @@ import type {
 } from "./api-types.generated";
 import type {
   AllRunsPayload,
+  AgentCandidatesPayload,
+  AgentInstallPayload,
+  AgentListPayload,
   BoardStage,
   BootstrapPayload,
   CommandCandidatesPayload,
@@ -245,6 +249,40 @@ export async function installSkill(
   >("POST /api/config/skills/install", "/api/config/skills/install", {
     method: "POST",
     body: jsonBody("POST /api/config/skills/install", payload),
+  });
+}
+
+export async function fetchAgents(): Promise<AgentListPayload> {
+  return apiRequest<"GET /api/config/agents", AgentListPayload>(
+    "GET /api/config/agents",
+    "/api/config/agents",
+  );
+}
+
+export async function fetchAgentCandidates(
+  source?: string | null,
+): Promise<AgentCandidatesPayload> {
+  return apiRequest<
+    "POST /api/config/agents/candidates",
+    AgentCandidatesPayload
+  >("POST /api/config/agents/candidates", "/api/config/agents/candidates", {
+    method: "POST",
+    body: jsonBody(
+      "POST /api/config/agents/candidates",
+      source === undefined ? {} : { source },
+    ),
+  });
+}
+
+export async function installAgent(
+  payload: AgentInstallRequest,
+): Promise<AgentInstallPayload> {
+  return apiRequest<
+    "POST /api/config/agents/install",
+    AgentInstallPayload
+  >("POST /api/config/agents/install", "/api/config/agents/install", {
+    method: "POST",
+    body: jsonBody("POST /api/config/agents/install", payload),
   });
 }
 

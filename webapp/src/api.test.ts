@@ -2,6 +2,8 @@ import {
   ApiError,
   deleteModelProfile,
   eventStreamUrl,
+  fetchAgentCandidates,
+  fetchAgents,
   fetchCommandCandidates,
   fetchCommands,
   fetchProviderAuthFlow,
@@ -10,6 +12,7 @@ import {
   fetchSkillCandidates,
   fetchSkills,
   fetchSessions,
+  installAgent,
   installCommand,
   installSkill,
   logoutProviderAuth,
@@ -420,6 +423,94 @@ describe("api helpers", () => {
         body: JSON.stringify({
           source: "owner/repo",
           command_name: "repo-review",
+          force: true,
+        }),
+      }),
+    );
+  });
+
+  it("calls agent config endpoints with the expected payloads", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            agents: [
+              {
+                id: "repo-reviewer",
+                name: "repo-reviewer",
+                description: "Review repository changes",
+                path: ".agents/agents/repo-reviewer.md",
+              },
+            ],
+            config_revision: "rev-1",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            source: "owner/repo",
+            ref: "main",
+            candidates: [
+              {
+                agent_name: "repo-reviewer",
+                description: "Review repository changes",
+                subpath: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            installed: {
+              agent_name: "repo-reviewer",
+              install_path: ".agents/agents/repo-reviewer.md",
+              source: "owner/repo",
+              ref: "main",
+              subpath: null,
+            },
+            agents: [],
+            config_revision: "rev-2",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchAgents();
+    await fetchAgentCandidates("owner/repo");
+    await installAgent({
+      source: "owner/repo",
+      agent_name: "repo-reviewer",
+      force: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/config/agents",
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/config/agents/candidates",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ source: "owner/repo" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/config/agents/install",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          source: "owner/repo",
+          agent_name: "repo-reviewer",
           force: true,
         }),
       }),

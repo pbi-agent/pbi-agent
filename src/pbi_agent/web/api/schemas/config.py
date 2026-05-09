@@ -427,11 +427,60 @@ class SkillInstallResponse(BaseModel):
     config_revision: str
 
 
+class AgentViewModel(BaseModel):
+    id: str
+    name: str
+    description: str
+    path: str
+
+
+class AgentListResponse(BaseModel):
+    agents: list[AgentViewModel]
+    config_revision: str
+
+
+class AgentCandidateRequest(BaseModel):
+    source: str | None = None
+
+
+class AgentCandidateViewModel(BaseModel):
+    agent_name: str
+    description: str
+    subpath: str | None
+
+
+class AgentCandidatesResponse(BaseModel):
+    source: str
+    ref: str | None
+    candidates: list[AgentCandidateViewModel]
+
+
+class AgentInstallRequest(BaseModel):
+    source: str | None = None
+    agent_name: NonEmptyString
+    force: bool = False
+
+
+class AgentInstallResultViewModel(BaseModel):
+    agent_name: str
+    install_path: str
+    source: str
+    ref: str | None
+    subpath: str | None
+
+
+class AgentInstallResponse(BaseModel):
+    installed: AgentInstallResultViewModel
+    agents: list[AgentViewModel]
+    config_revision: str
+
+
 class ConfigBootstrapResponse(BaseModel):
     providers: list[ProviderViewModel]
     model_profiles: list[ModelProfileViewModel]
     commands: list[CommandViewModel]
     skills: list[SkillViewModel]
+    agents: list[AgentViewModel]
     active_profile_id: str | None
     maintenance: MaintenanceConfigModel
     config_revision: str

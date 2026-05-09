@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Response
 
+from pbi_agent.agents.project_installer import ProjectAgentInstallError
 from pbi_agent.commands.project_installer import ProjectCommandInstallError
 from pbi_agent.skills.project_installer import ProjectSkillInstallError
 
@@ -14,6 +15,12 @@ from pbi_agent.web.api.errors import config_http_error
 from pbi_agent.web.api.schemas.config import (
     ActiveProfileRequest,
     ActiveProfileResponse,
+    AgentCandidateRequest,
+    AgentCandidatesResponse,
+    AgentInstallRequest,
+    AgentInstallResponse,
+    AgentListResponse,
+    AgentViewModel,
     CommandCandidateRequest,
     CommandCandidatesResponse,
     CommandInstallRequest,
@@ -54,6 +61,12 @@ def _skill_http_error(exc: ProjectSkillInstallError) -> HTTPException:
 
 
 def _command_http_error(exc: ProjectCommandInstallError) -> HTTPException:
+    detail = str(exc)
+    status_code = 409 if "already installed" in detail.casefold() else 400
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+def _agent_http_error(exc: ProjectAgentInstallError) -> HTTPException:
     detail = str(exc)
     status_code = 409 if "already installed" in detail.casefold() else 400
     return HTTPException(status_code=status_code, detail=detail)
@@ -390,3 +403,40 @@ def install_skill(
     except ProjectSkillInstallError as exc:
         raise _skill_http_error(exc) from exc
     return model_from_payload(SkillInstallResponse, payload)
+
+
+@router.get("/agents", response_model=AgentListResponse)
+def list_agents(manager: SessionManagerDep) -> AgentListResponse:
+    payload = manager.list_project_agents()
+    return AgentListResponse(
+        agents=[model_from_payload(AgentViewModel, item) for item in payload["agents"]],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@router.post("/agents/candidates", response_model=AgentCandidatesResponse)
+def list_agent_candidates(
+    request: AgentCandidateRequest,
+    manager: SessionManagerDep,
+) -> AgentCandidatesResponse:
+    try:
+        payload = manager.list_project_agent_candidates(source=request.source)
+    except ProjectAgentInstallError as exc:
+        raise _agent_http_error(exc) from exc
+    return model_from_payload(AgentCandidatesResponse, payload)
+
+
+@router.post("/agents/install", response_model=AgentInstallResponse)
+def install_agent(
+    request: AgentInstallRequest,
+    manager: SessionManagerDep,
+) -> AgentInstallResponse:
+    try:
+        payload = manager.install_project_agent_from_source(
+            source=request.source,
+            agent_name=request.agent_name,
+            force=request.force,
+        )
+    except ProjectAgentInstallError as exc:
+        raise _agent_http_error(exc) from exc
+    return model_from_payload(AgentInstallResponse, payload)

@@ -54,7 +54,7 @@ The Settings page manages persistent local configuration under `~/.pbi-agent/`:
 - Providers hold connection settings such as provider kind, API key, auth mode, and endpoint URLs.
 - Model profiles hold runnable model/runtime settings tied to one saved provider.
 - The active default profile is used when a session or run does not specify another profile.
-- Project skills and commands can be installed from official catalogs, GitHub sources, or server-side local paths.
+- Project skills, commands, and agents can be installed from official catalogs, GitHub sources, or server-side local paths.
 
 See [Providers](/providers) and [Model Profiles](/model-profiles) for setup details.
 

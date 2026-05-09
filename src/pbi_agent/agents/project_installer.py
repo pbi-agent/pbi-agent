@@ -89,12 +89,9 @@ def render_remote_agent_listing(
 def list_remote_project_agents(source: str) -> RemoteAgentListing:
     parsed_source = parse_project_agent_source(source)
     with TemporaryDirectory(prefix="pbi-agent-agent-") as temp_dir:
-        materialized = materialize_project_source(
+        materialized = _materialize_agent_source(
             parsed_source,
             temp_root=Path(temp_dir),
-            source_label="agent",
-            user_agent="pbi-agent-agents",
-            allow_local_file=True,
         )
         candidates = _discover_remote_agent_candidates(
             repo_root=materialized.repo_root,
@@ -137,12 +134,9 @@ def install_project_agent(
     install_root = (install_workspace / _INSTALL_ROOT).resolve()
 
     with TemporaryDirectory(prefix="pbi-agent-agent-") as temp_dir:
-        materialized = materialize_project_source(
+        materialized = _materialize_agent_source(
             parsed_source,
             temp_root=Path(temp_dir),
-            source_label="agent",
-            user_agent="pbi-agent-agents",
-            allow_local_file=True,
         )
         candidates = _discover_remote_agent_candidates(
             repo_root=materialized.repo_root,
@@ -185,6 +179,23 @@ def parse_project_agent_source(
 def parse_github_agent_source(source: str) -> GitHubAgentSource:
     try:
         return parse_github_project_source(source, source_label="agent")
+    except ProjectSourceError as exc:
+        raise ProjectAgentInstallError(str(exc)) from exc
+
+
+def _materialize_agent_source(
+    source: GitHubAgentSource | LocalAgentSource,
+    *,
+    temp_root: Path,
+):
+    try:
+        return materialize_project_source(
+            source,
+            temp_root=temp_root,
+            source_label="agent",
+            user_agent="pbi-agent-agents",
+            allow_local_file=True,
+        )
     except ProjectSourceError as exc:
         raise ProjectAgentInstallError(str(exc)) from exc
 
