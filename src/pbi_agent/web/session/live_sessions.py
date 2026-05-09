@@ -493,55 +493,60 @@ class LiveSessionsMixin:
             role="user",
             content=user_content,
         )
-
-        self._publish_live_event(
-            live_session_id,
-            "message_added",
-            persisted_message_payload(user_message)
-            if user_message is not None
-            else {
-                "item_id": f"user-{uuid.uuid4().hex}",
-                "role": "user",
-                "content": user_content,
-                "file_paths": [],
-                "image_attachments": [],
-                "markdown": False,
-            },
-        )
-        live_session.display.shell_start([normalized_command])
-        result = shell_tool.handle(
-            {"command": normalized_command},
-            ToolContext(
-                settings=live_session.runtime.settings, display=live_session.display
-            ),
-        )
-        exit_code = result.get("exit_code") if isinstance(result, dict) else 1
-        timed_out = bool(result.get("timed_out")) if isinstance(result, dict) else False
-        live_session.display.shell_command(
-            normalized_command,
-            exit_code if isinstance(exit_code, int) else None,
-            timed_out,
-            result={"ok": True, "result": result},
-        )
-        live_session.display.tool_group_end()
-        assistant_content = _format_shell_command_output(result)
-        assistant_message = self._persist_live_session_message(
-            live_session,
-            role="assistant",
-            content=assistant_content,
-        )
-        self._publish_live_event(
-            live_session_id,
-            "message_added",
-            persisted_message_payload(assistant_message)
-            if assistant_message is not None
-            else {
-                "item_id": f"shell-output-{uuid.uuid4().hex}",
-                "role": "assistant",
-                "content": assistant_content,
-                "markdown": True,
-            },
-        )
+        live_session.display.begin_direct_command()
+        try:
+            self._publish_live_event(
+                live_session_id,
+                "message_added",
+                persisted_message_payload(user_message)
+                if user_message is not None
+                else {
+                    "item_id": f"user-{uuid.uuid4().hex}",
+                    "role": "user",
+                    "content": user_content,
+                    "file_paths": [],
+                    "image_attachments": [],
+                    "markdown": False,
+                },
+            )
+            live_session.display.shell_start([normalized_command])
+            result = shell_tool.handle(
+                {"command": normalized_command},
+                ToolContext(
+                    settings=live_session.runtime.settings, display=live_session.display
+                ),
+            )
+            exit_code = result.get("exit_code") if isinstance(result, dict) else 1
+            timed_out = (
+                bool(result.get("timed_out")) if isinstance(result, dict) else False
+            )
+            live_session.display.shell_command(
+                normalized_command,
+                exit_code if isinstance(exit_code, int) else None,
+                timed_out,
+                result={"ok": True, "result": result},
+            )
+            live_session.display.tool_group_end()
+            assistant_content = _format_shell_command_output(result)
+            assistant_message = self._persist_live_session_message(
+                live_session,
+                role="assistant",
+                content=assistant_content,
+            )
+            self._publish_live_event(
+                live_session_id,
+                "message_added",
+                persisted_message_payload(assistant_message)
+                if assistant_message is not None
+                else {
+                    "item_id": f"shell-output-{uuid.uuid4().hex}",
+                    "role": "assistant",
+                    "content": assistant_content,
+                    "markdown": True,
+                },
+            )
+        finally:
+            live_session.display.finish_direct_command()
         return self._serialize_live_session(live_session)
 
     def run_saved_session_shell_command(

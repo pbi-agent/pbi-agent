@@ -503,34 +503,58 @@ export function SessionPage({
     submitInFlightRef.current = true;
     setDirectSubmitPending(true);
     try {
-    const { text, images } = payload;
-    setInputWarnings([]);
-    if (text.startsWith("!")) {
-      if (images.length > 0) {
-        throw new Error("Shell commands cannot include image attachments.");
+      const { text, images } = payload;
+      setInputWarnings([]);
+      if (text.startsWith("!")) {
+        if (images.length > 0) {
+          throw new Error("Shell commands cannot include image attachments.");
+        }
+        const command = text.slice(1).trim();
+        if (!command) {
+          throw new Error("Shell command must be a non-empty string.");
+        }
+        const sessionId = await ensureDraftSession();
+        if (!routeSessionId) {
+          void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+        }
+        const session = await runSessionShellCommand(sessionId, { command });
+        attachLiveSession(getSavedSessionKey(sessionId), session, {
+          preserveItems: true,
+          preserveEventCursor: true,
+        });
+        return;
       }
-      const command = text.slice(1).trim();
-      if (!command) {
-        throw new Error("Shell command must be a non-empty string.");
+      if (text.startsWith("/")) {
+        const sessionId = await ensureDraftSession();
+        const uploadedImageIds = await uploadImagesForCurrentSession(images, sessionId);
+        const session = await sendSessionMessage(sessionId, {
+          text,
+          file_paths: [],
+          image_paths: [],
+          image_upload_ids: uploadedImageIds,
+          profile_id: selectedSavedProfileId,
+          interactive_mode: interactiveMode,
+        });
+        attachLiveSession(getSavedSessionKey(sessionId), session, {
+          preserveItems: true,
+          preserveEventCursor: true,
+        });
+        if (!routeSessionId) {
+          void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+        }
+        return;
       }
-      const sessionId = await ensureDraftSession();
-      if (!routeSessionId) {
-        void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+
+      const expanded = await expandSessionInput(text);
+      if (expanded.warnings.length > 0) {
+        setInputWarnings(expanded.warnings);
       }
-      const session = await runSessionShellCommand(sessionId, { command });
-      attachLiveSession(getSavedSessionKey(sessionId), session, {
-        preserveItems: true,
-        preserveEventCursor: true,
-      });
-      return;
-    }
-    if (text.startsWith("/")) {
       const sessionId = await ensureDraftSession();
       const uploadedImageIds = await uploadImagesForCurrentSession(images, sessionId);
       const session = await sendSessionMessage(sessionId, {
-        text,
-        file_paths: [],
-        image_paths: [],
+        text: expanded.text,
+        file_paths: expanded.file_paths,
+        image_paths: Array.from(new Set(expanded.image_paths)),
         image_upload_ids: uploadedImageIds,
         profile_id: selectedSavedProfileId,
         interactive_mode: interactiveMode,
@@ -542,30 +566,6 @@ export function SessionPage({
       if (!routeSessionId) {
         void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
       }
-      return;
-    }
-
-    const expanded = await expandSessionInput(text);
-    if (expanded.warnings.length > 0) {
-      setInputWarnings(expanded.warnings);
-    }
-    const sessionId = await ensureDraftSession();
-    const uploadedImageIds = await uploadImagesForCurrentSession(images, sessionId);
-    const session = await sendSessionMessage(sessionId, {
-      text: expanded.text,
-      file_paths: expanded.file_paths,
-      image_paths: Array.from(new Set(expanded.image_paths)),
-      image_upload_ids: uploadedImageIds,
-      profile_id: selectedSavedProfileId,
-      interactive_mode: interactiveMode,
-    });
-    attachLiveSession(getSavedSessionKey(sessionId), session, {
-      preserveItems: true,
-      preserveEventCursor: true,
-    });
-    if (!routeSessionId) {
-      void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
-    }
     } finally {
       submitInFlightRef.current = false;
       setDirectSubmitPending(false);

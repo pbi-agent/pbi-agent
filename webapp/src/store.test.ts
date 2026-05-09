@@ -1187,6 +1187,34 @@ describe("session store", () => {
     expect(state.liveSessionId).toBe("live-1");
   });
 
+  it("does not disable input when a submit response matches the applied stream cursor", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", last_event_seq: 8 }),
+    );
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 9,
+      type: "input_state",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: {
+        enabled: true,
+        session_id: "session-1",
+        live_session_id: "live-1",
+      },
+    });
+
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", last_event_seq: 9 }),
+      { preserveItems: true, preserveEventCursor: true },
+    );
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.lastEventSeq).toBe(9);
+    expect(state.inputEnabled).toBe(true);
+  });
+
   it("resets stream state so a snapshot can replace an incomplete replay", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());

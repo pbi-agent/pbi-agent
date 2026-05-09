@@ -10,6 +10,7 @@ import {
   fetchConfigBootstrap,
   fetchSessionDetail,
   fetchSessions,
+  runSessionShellCommand,
   sendSessionMessage,
   setActiveModelProfile,
   setSessionProfile,
@@ -189,6 +190,7 @@ vi.mock("../../api", async (importOriginal) => {
     fetchConfigBootstrap: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
+    runSessionShellCommand: vi.fn(),
     sendSessionMessage: vi.fn(),
     setActiveModelProfile: vi.fn(),
     setSessionProfile: vi.fn(),
@@ -418,6 +420,9 @@ describe("SessionPage", () => {
       },
     ]);
     vi.mocked(sendSessionMessage).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-new", session_id: "session-1", last_event_seq: 3 }),
+    );
+    vi.mocked(runSessionShellCommand).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-new", session_id: "session-1", last_event_seq: 3 }),
     );
     vi.mocked(submitSessionQuestionResponse).mockResolvedValue(
@@ -692,6 +697,50 @@ describe("SessionPage", () => {
       const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
       expect(state?.liveSessionId).toBe("live-new");
       expect(state?.lastEventSeq).toBe(0);
+    });
+  });
+
+  it("submits slash commands directly without mention expansion", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit Slash" }));
+
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    expect(expandSessionInput).not.toHaveBeenCalled();
+    expect(uploadSavedSessionImages).toHaveBeenCalledWith(
+      "session-1",
+      expect.arrayContaining([expect.any(File)]),
+    );
+    expect(sendSessionMessage).toHaveBeenCalledWith("session-1", {
+      text: "/plan",
+      file_paths: [],
+      image_paths: [],
+      image_upload_ids: ["saved-upload-1"],
+      profile_id: "analysis",
+      interactive_mode: false,
+    });
+  });
+
+  it("submits bang-prefixed input through the shell-command endpoint", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit Shell" }));
+
+    await waitFor(() => expect(runSessionShellCommand).toHaveBeenCalledTimes(1));
+    expect(runSessionShellCommand).toHaveBeenCalledWith("session-1", { command: "ls -la" });
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(expandSessionInput).not.toHaveBeenCalled();
+    await waitFor(() => {
+      const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+      expect(state?.liveSessionId).toBe("live-new");
     });
   });
 

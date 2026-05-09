@@ -783,9 +783,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
         ? session.last_event_seq
         : 0;
       const sameLiveSession = current.liveSessionId === session.live_session_id;
-      const hasAppliedNewerStreamEvents = sameLiveSession
+      const hasAppliedCurrentOrNewerStreamEvents = sameLiveSession
         && options.preserveEventCursor
-        && current.lastEventSeq > returnedLastEventSeq;
+        && current.lastEventSeq >= returnedLastEventSeq;
       return {
         ...nextState,
         sessionsByKey: {
@@ -795,9 +795,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
             liveSessionId: session.live_session_id,
             sessionId: session.session_id,
             runtime: runtimeFromSession(session),
-            inputEnabled: hasAppliedNewerStreamEvents ? current.inputEnabled : false,
-            waitMessage: hasAppliedNewerStreamEvents ? current.waitMessage : null,
-            processing: hasAppliedNewerStreamEvents ? current.processing : null,
+            inputEnabled: hasAppliedCurrentOrNewerStreamEvents ? current.inputEnabled : false,
+            waitMessage: hasAppliedCurrentOrNewerStreamEvents ? current.waitMessage : null,
+            processing: hasAppliedCurrentOrNewerStreamEvents ? current.processing : null,
             restoredInput: options.preserveItems ? current.restoredInput : null,
             sessionUsage: options.preserveItems ? current.sessionUsage : null,
             turnUsage: options.preserveItems ? current.turnUsage : null,

@@ -1,4 +1,6 @@
-[X] Inspect duplicate web startup messages
-[X] Remove redundant message or adjust output source
-[X] Add/adjust tests
+# TODO
+
+[X] Inspect stale direct-command restore race
+[X] Patch only review finding
 [X] Run focused validation
+[X] Update memory and summarize

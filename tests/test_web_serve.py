@@ -6208,6 +6208,90 @@ def test_temporary_slash_command_web_events_are_live_only(
     assert "Normal response" in timeline_contents
 
 
+def test_saved_session_shell_command_reenables_input_after_output(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    def idle_run_session_loop(
+        _settings,
+        display,
+        *,
+        resume_session_id=None,
+        on_reload=None,
+        run_session_id=None,
+    ):
+        del _settings, resume_session_id, on_reload, run_session_id
+        while True:
+            if display.user_prompt() == "exit":
+                return 0
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    events: list[dict[str, object]] = []
+    response: dict[str, object] = {}
+    input_enabled_after_command = False
+    last_event_seq_after_command = 0
+    try:
+        with (
+            patch(
+                "pbi_agent.web.session.workers.run_session_loop",
+                idle_run_session_loop,
+            ),
+            patch(
+                "pbi_agent.web.session.live_sessions.shell_tool.handle",
+                return_value={
+                    "stdout": "ok\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "timed_out": False,
+                },
+            ),
+        ):
+            created = manager.create_live_session(session_id=session_id)
+            live_session_id = str(created["live_session_id"])
+            live_session = manager._live_sessions[live_session_id]
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                if live_session.snapshot.input_enabled:
+                    break
+                time.sleep(0.01)
+
+            response = manager.run_saved_session_shell_command(
+                session_id,
+                command="pwd",
+            )
+            events = live_session.event_stream.snapshot()
+            input_enabled_after_command = live_session.snapshot.input_enabled
+            last_event_seq_after_command = live_session.snapshot.last_event_seq
+    finally:
+        manager.shutdown()
+
+    input_events = [event for event in events if event.get("type") == "input_state"]
+    input_enabled_events = []
+    for event in input_events[-3:]:
+        payload = event.get("payload")
+        assert isinstance(payload, dict)
+        input_enabled_events.append(payload.get("enabled"))
+    assert input_enabled_events == [
+        True,
+        False,
+        True,
+    ]
+    assert input_enabled_after_command is True
+    assert response["last_event_seq"] == last_event_seq_after_command
+
+
 def test_web_session_worker_records_turn_run_separately_from_live_projection(
     tmp_path, monkeypatch
 ) -> None:
