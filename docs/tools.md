@@ -37,13 +37,13 @@ Execute shell commands within the workspace root by default.
 | --- | --- | --- | --- |
 | `command` | `string` | yes | Shell command to run. |
 | `working_directory` | `string` | no | Relative directory inside the workspace. Absolute paths are only allowed if they stay within the workspace root. |
-| `timeout_ms` | `integer` | no | Timeout in milliseconds, capped at `120000`. |
+| `timeout_ms` | `integer` | no | Timeout in milliseconds. Defaults to `30000`; values above `300000` are capped. |
 
 ```json
 {
-  "command": "uv run pytest",
+  "command": "uv run pytest -q tests/test_cli.py",
   "working_directory": ".",
-  "timeout_ms": 120000
+  "timeout_ms": 60000
 }
 ```
 

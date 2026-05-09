@@ -1,6 +1,3 @@
-# TODO
-
-[X] Inspect stale direct-command restore race
-[X] Patch only review finding
-[X] Run focused validation
-[X] Update memory and summarize
+[X] Validate strict schema finding for shell timeout metadata
+[X] Fix schema only if documentation/code confirms issue
+[X] Run focused validation and update memory
