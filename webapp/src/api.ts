@@ -10,6 +10,7 @@ import type {
   CreateSessionRequest,
   LiveSessionInputRequest,
   LiveSessionShellCommandRequest,
+  SkillInstallRequest,
   SubmitQuestionResponseRequest,
   UpdateSessionRequest,
 } from "./api-types.generated";
@@ -36,6 +37,9 @@ import type {
   RunSession,
   SessionDetailPayload,
   SessionRecord,
+  SkillCandidatesPayload,
+  SkillInstallPayload,
+  SkillListPayload,
   SlashCommandItem,
   TaskRecord,
 } from "./types";
@@ -170,6 +174,40 @@ export async function fetchConfigBootstrap(): Promise<ConfigBootstrapPayload> {
     "GET /api/config/bootstrap",
     "/api/config/bootstrap",
   );
+}
+
+export async function fetchSkills(): Promise<SkillListPayload> {
+  return apiRequest<"GET /api/config/skills", SkillListPayload>(
+    "GET /api/config/skills",
+    "/api/config/skills",
+  );
+}
+
+export async function fetchSkillCandidates(
+  source?: string | null,
+): Promise<SkillCandidatesPayload> {
+  return apiRequest<
+    "POST /api/config/skills/candidates",
+    SkillCandidatesPayload
+  >("POST /api/config/skills/candidates", "/api/config/skills/candidates", {
+    method: "POST",
+    body: jsonBody(
+      "POST /api/config/skills/candidates",
+      source === undefined ? {} : { source },
+    ),
+  });
+}
+
+export async function installSkill(
+  payload: SkillInstallRequest,
+): Promise<SkillInstallPayload> {
+  return apiRequest<
+    "POST /api/config/skills/install",
+    SkillInstallPayload
+  >("POST /api/config/skills/install", "/api/config/skills/install", {
+    method: "POST",
+    body: jsonBody("POST /api/config/skills/install", payload),
+  });
 }
 
 export async function fetchSessions(): Promise<SessionRecord[]> {

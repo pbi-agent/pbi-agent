@@ -44,6 +44,7 @@ import { ProviderUsageLimitsDialog } from "./ProviderUsageLimitsDialog";
 import { ProvidersSettingsSection } from "./ProvidersSettingsSection";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
+import { SkillsSettingsSection } from "./SkillsSettingsSection";
 
 type ModalState =
   | { type: "none" }
@@ -59,7 +60,14 @@ type ModalState =
 const STALE_MESSAGE =
   "Settings were changed while you were editing. Please review and resubmit.";
 
-type SettingsTabId = "appearance" | "notifications" | "providers" | "model-profiles" | "commands" | "maintenance";
+type SettingsTabId =
+  | "appearance"
+  | "notifications"
+  | "providers"
+  | "model-profiles"
+  | "skills"
+  | "commands"
+  | "maintenance";
 
 const SETTINGS_NAV_GROUPS: Array<{
   label: string;
@@ -81,6 +89,21 @@ const SETTINGS_NAV_GROUPS: Array<{
     ],
   },
   {
+    label: "Project",
+    items: [
+      {
+        id: "skills",
+        label: "Skills",
+        description: "Agent capabilities",
+      },
+      {
+        id: "commands",
+        label: "Commands",
+        description: "Prompt presets",
+      },
+    ],
+  },
+  {
     label: "Server",
     items: [
       {
@@ -92,11 +115,6 @@ const SETTINGS_NAV_GROUPS: Array<{
         id: "model-profiles",
         label: "Model Profiles",
         description: "Runtime defaults",
-      },
-      {
-        id: "commands",
-        label: "Commands",
-        description: "Prompt presets",
       },
       {
         id: "maintenance",
@@ -321,7 +339,7 @@ className="settings-nav__header-close app-close-icon-button"
     );
   }
 
-  const { providers, model_profiles, commands, active_profile_id, maintenance, options } =
+  const { providers, model_profiles, commands, skills, active_profile_id, maintenance, options } =
     configQuery.data;
 
   return (
@@ -430,6 +448,8 @@ className="settings-nav__header-close app-close-icon-button"
                       onDelete={(profile) => setModal({ type: "delete-profile", profile })}
                     />
                   )}
+
+                  {activeTab === "skills" && <SkillsSettingsSection skills={skills} />}
 
                   {activeTab === "commands" && <CommandsSettingsSection commands={commands} />}
 

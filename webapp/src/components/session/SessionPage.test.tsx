@@ -272,6 +272,7 @@ function makeConfigBootstrap(
       },
     ],
     commands: [],
+    skills: [],
     options: {
       provider_kinds: ["openai"],
       reasoning_efforts: ["high"],

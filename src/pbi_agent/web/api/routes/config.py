@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
+
+from pbi_agent.skills.project_installer import ProjectSkillInstallError
 
 from pbi_agent.web.api.deps import (
     ConfigRevisionHeader,
@@ -29,9 +31,21 @@ from pbi_agent.web.api.schemas.config import (
     ProviderResponse,
     ProviderUpdateRequest,
     ProviderViewModel,
+    SkillCandidateRequest,
+    SkillCandidatesResponse,
+    SkillInstallRequest,
+    SkillInstallResponse,
+    SkillListResponse,
+    SkillViewModel,
 )
 
 router = APIRouter(prefix="/api/config", tags=["config"])
+
+
+def _skill_http_error(exc: ProjectSkillInstallError) -> HTTPException:
+    detail = str(exc)
+    status_code = 409 if "already installed" in detail.casefold() else 400
+    return HTTPException(status_code=status_code, detail=detail)
 
 
 @router.get("/bootstrap", response_model=ConfigBootstrapResponse)
@@ -300,3 +314,40 @@ def list_commands(manager: SessionManagerDep) -> CommandListResponse:
         ],
         config_revision=str(payload["config_revision"]),
     )
+
+
+@router.get("/skills", response_model=SkillListResponse)
+def list_skills(manager: SessionManagerDep) -> SkillListResponse:
+    payload = manager.list_project_skills()
+    return SkillListResponse(
+        skills=[model_from_payload(SkillViewModel, item) for item in payload["skills"]],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@router.post("/skills/candidates", response_model=SkillCandidatesResponse)
+def list_skill_candidates(
+    request: SkillCandidateRequest,
+    manager: SessionManagerDep,
+) -> SkillCandidatesResponse:
+    try:
+        payload = manager.list_project_skill_candidates(source=request.source)
+    except ProjectSkillInstallError as exc:
+        raise _skill_http_error(exc) from exc
+    return model_from_payload(SkillCandidatesResponse, payload)
+
+
+@router.post("/skills/install", response_model=SkillInstallResponse)
+def install_skill(
+    request: SkillInstallRequest,
+    manager: SessionManagerDep,
+) -> SkillInstallResponse:
+    try:
+        payload = manager.install_project_skill_from_source(
+            source=request.source,
+            skill_name=request.skill_name,
+            force=request.force,
+        )
+    except ProjectSkillInstallError as exc:
+        raise _skill_http_error(exc) from exc
+    return model_from_payload(SkillInstallResponse, payload)

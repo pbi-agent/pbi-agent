@@ -341,10 +341,59 @@ class CommandListResponse(BaseModel):
     config_revision: str
 
 
+class SkillViewModel(BaseModel):
+    id: str
+    name: str
+    description: str
+    path: str
+
+
+class SkillListResponse(BaseModel):
+    skills: list[SkillViewModel]
+    config_revision: str
+
+
+class SkillCandidateRequest(BaseModel):
+    source: str | None = None
+
+
+class SkillCandidateViewModel(BaseModel):
+    name: str
+    description: str
+    subpath: str | None
+
+
+class SkillCandidatesResponse(BaseModel):
+    source: str
+    ref: str | None
+    candidates: list[SkillCandidateViewModel]
+
+
+class SkillInstallRequest(BaseModel):
+    source: str | None = None
+    skill_name: NonEmptyString
+    force: bool = False
+
+
+class SkillInstallResultViewModel(BaseModel):
+    name: str
+    install_path: str
+    source: str
+    ref: str | None
+    subpath: str | None
+
+
+class SkillInstallResponse(BaseModel):
+    installed: SkillInstallResultViewModel
+    skills: list[SkillViewModel]
+    config_revision: str
+
+
 class ConfigBootstrapResponse(BaseModel):
     providers: list[ProviderViewModel]
     model_profiles: list[ModelProfileViewModel]
     commands: list[CommandViewModel]
+    skills: list[SkillViewModel]
     active_profile_id: str | None
     maintenance: MaintenanceConfigModel
     config_revision: str

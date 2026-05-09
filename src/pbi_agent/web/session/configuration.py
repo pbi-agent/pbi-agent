@@ -45,6 +45,17 @@ from pbi_agent.session_store import (
     KanbanTaskRecord,
     SessionStore,
 )
+from pbi_agent.skills.project_catalog import (
+    ProjectSkillManifest,
+    discover_installed_project_skills,
+)
+from pbi_agent.skills.project_installer import (
+    ProjectSkillInstallResult,
+    RemoteSkillCandidateSummary,
+    install_project_skill,
+    list_remote_project_skills,
+    resolve_default_skills_source,
+)
 from pbi_agent.web.session.serializers import (
     _config_sort_key,
     _resolved_runtime_view,
@@ -89,6 +100,7 @@ class ConfigurationMixin:
                     key=lambda item: _config_sort_key(item.name, item.id),
                 )
             ],
+            "skills": self._installed_skill_views(),
             "active_profile_id": config.web.active_profile_id,
             "maintenance": self._maintenance_view(config.maintenance),
             "config_revision": revision,
@@ -431,6 +443,48 @@ class ConfigurationMixin:
             "config_revision": revision,
         }
 
+    def list_project_skills(self) -> dict[str, Any]:
+        _, revision = load_internal_config_snapshot()
+        return {
+            "skills": self._installed_skill_views(),
+            "config_revision": revision,
+        }
+
+    def list_project_skill_candidates(
+        self,
+        *,
+        source: str | None,
+    ) -> dict[str, Any]:
+        listing = list_remote_project_skills(self._effective_skill_source(source))
+        return {
+            "source": listing.source,
+            "ref": listing.ref,
+            "candidates": [
+                self._skill_candidate_view(candidate)
+                for candidate in listing.candidates
+            ],
+        }
+
+    def install_project_skill_from_source(
+        self,
+        *,
+        source: str | None,
+        skill_name: str,
+        force: bool,
+    ) -> dict[str, Any]:
+        result = install_project_skill(
+            self._effective_skill_source(source),
+            skill_name=skill_name,
+            force=force,
+            workspace=self._workspace_root,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "installed": self._skill_install_result_view(result),
+            "skills": self._installed_skill_views(),
+            "config_revision": revision,
+        }
+
     def _resolve_task_runtime(
         self,
         record: KanbanTaskRecord,
@@ -631,6 +685,58 @@ class ConfigurationMixin:
             "instructions": command.instructions,
             "path": command.path,
         }
+
+    def _installed_skill_views(self) -> list[dict[str, Any]]:
+        return [
+            self._skill_view(skill)
+            for skill in sorted(
+                discover_installed_project_skills(workspace=self._workspace_root),
+                key=lambda item: (item.name.casefold(), item.location.as_posix()),
+            )
+        ]
+
+    def _skill_view(self, skill: ProjectSkillManifest) -> dict[str, Any]:
+        return {
+            "id": skill.name,
+            "name": skill.name,
+            "description": skill.description,
+            "path": self._relative_workspace_path(skill.location),
+        }
+
+    def _skill_candidate_view(
+        self, candidate: RemoteSkillCandidateSummary
+    ) -> dict[str, Any]:
+        return {
+            "name": candidate.name,
+            "description": candidate.description,
+            "subpath": candidate.subpath,
+        }
+
+    def _skill_install_result_view(
+        self, result: ProjectSkillInstallResult
+    ) -> dict[str, Any]:
+        return {
+            "name": result.name,
+            "install_path": self._relative_workspace_path(result.install_path),
+            "source": result.source,
+            "ref": result.ref,
+            "subpath": result.subpath,
+        }
+
+    def _relative_workspace_path(self, path: Path) -> str:
+        resolved_path = path.resolve()
+        try:
+            return resolved_path.relative_to(self._workspace_root.resolve()).as_posix()
+        except ValueError:
+            return resolved_path.as_posix()
+
+    def _effective_skill_source(self, source: str | None) -> str:
+        if source is None:
+            return resolve_default_skills_source()
+        stripped = source.strip()
+        if not stripped:
+            return resolve_default_skills_source()
+        return stripped
 
     def _maintenance_view(self, config: MaintenanceConfig) -> dict[str, Any]:
         return {"retention_days": config.retention_days}

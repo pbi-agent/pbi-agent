@@ -5,7 +5,10 @@ import {
   fetchProviderAuthFlow,
   fetchProviderAuthStatus,
   fetchProviderUsageLimits,
+  fetchSkillCandidates,
+  fetchSkills,
   fetchSessions,
+  installSkill,
   logoutProviderAuth,
   pollProviderAuthFlow,
   refreshProviderAuth,
@@ -238,6 +241,94 @@ describe("api helpers", () => {
     }
     const startInit = startCall[1] as RequestInit;
     expect(startInit.body).toBe(JSON.stringify({ method: "browser" }));
+  });
+
+  it("calls skill config endpoints with the expected payloads", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            skills: [
+              {
+                id: "repo-review",
+                name: "repo-review",
+                description: "Review repository changes",
+                path: ".agents/skills/repo-review/SKILL.md",
+              },
+            ],
+            config_revision: "rev-1",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            source: "owner/repo",
+            ref: "main",
+            candidates: [
+              {
+                name: "repo-review",
+                description: "Review repository changes",
+                subpath: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            installed: {
+              name: "repo-review",
+              install_path: ".agents/skills/repo-review",
+              source: "owner/repo",
+              ref: "main",
+              subpath: null,
+            },
+            skills: [],
+            config_revision: "rev-2",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchSkills();
+    await fetchSkillCandidates("owner/repo");
+    await installSkill({
+      source: "owner/repo",
+      skill_name: "repo-review",
+      force: true,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/config/skills",
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/config/skills/candidates",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ source: "owner/repo" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/config/skills/install",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          source: "owner/repo",
+          skill_name: "repo-review",
+          force: true,
+        }),
+      }),
+    );
   });
 
   it("derives event stream URLs from the current browser location", () => {

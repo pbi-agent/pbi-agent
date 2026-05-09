@@ -29,7 +29,7 @@ export type CommandListResponse = { commands: CommandViewModel[]; config_revisio
 
 export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string };
 
-export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; active_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
+export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; active_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 
 export type ConfigOptionsModel = { provider_kinds: string[]; reasoning_efforts: string[]; openai_service_tiers: string[]; provider_metadata: Record<string, ProviderKindMetadataModel> };
 
@@ -219,6 +219,22 @@ export type SessionUpdatedSseEventPayloadModel = { session: SessionRecordModel }
 
 export type SessionsResponse = { sessions: SessionRecordModel[] };
 
+export type SkillCandidateRequest = { source?: string | null };
+
+export type SkillCandidateViewModel = { name: string; description: string; subpath: string | null };
+
+export type SkillCandidatesResponse = { source: string; ref: string | null; candidates: SkillCandidateViewModel[] };
+
+export type SkillInstallRequest = { source?: string | null; skill_name: string; force?: boolean };
+
+export type SkillInstallResponse = { installed: SkillInstallResultViewModel; skills: SkillViewModel[]; config_revision: string };
+
+export type SkillInstallResultViewModel = { name: string; install_path: string; source: string; ref: string | null; subpath: string | null };
+
+export type SkillListResponse = { skills: SkillViewModel[]; config_revision: string };
+
+export type SkillViewModel = { id: string; name: string; description: string; path: string };
+
 export type SlashCommandItemModel = { name: string; description: string; kind: "local_command" | "command" };
 
 export type SlashCommandSearchResponse = { items: SlashCommandItemModel[] };
@@ -316,6 +332,9 @@ export type ApiOperationResponses = {
   "DELETE /api/config/providers/{provider_id}": void;
   "PATCH /api/config/providers/{provider_id}": ProviderResponse;
   "GET /api/config/providers/{provider_id}/models": ProviderModelListResponse;
+  "GET /api/config/skills": SkillListResponse;
+  "POST /api/config/skills/candidates": SkillCandidatesResponse;
+  "POST /api/config/skills/install": SkillInstallResponse;
   "GET /api/dashboard/stats": DashboardStatsResponse;
   "GET /api/events/sessions/{session_id}": unknown;
   "GET /api/events/{stream_id}": unknown;
@@ -363,6 +382,8 @@ export type ApiJsonRequestBodies = {
   "PATCH /api/config/model-profiles/{profile_id}": ModelProfileUpdateRequest;
   "POST /api/config/providers": ProviderMutationRequest;
   "PATCH /api/config/providers/{provider_id}": ProviderUpdateRequest;
+  "POST /api/config/skills/candidates": SkillCandidateRequest;
+  "POST /api/config/skills/install": SkillInstallRequest;
   "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowStartRequest;
   "POST /api/provider-auth/{provider_id}/import": ProviderAuthImportRequest;
   "POST /api/sessions": CreateSessionRequest;

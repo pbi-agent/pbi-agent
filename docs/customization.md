@@ -80,7 +80,9 @@ The file contents are wrapped in `<project_rules>` tags and appended to the syst
 
 `pbi-agent` also discovers project-local Agent Skills and advertises them to the model through the system prompt.
 
-You can manage project-local installs directly from the CLI:
+You can manage project-local installs from the web UI under **Settings → Project → Skills**. The add dialog can browse the official catalog or install from a GitHub owner/repo, GitHub URL/tree URL, or server-side local path. New sessions see installed skills immediately; active sessions can run `/reload` before the next model request.
+
+You can also manage project-local installs directly from the CLI:
 
 ```bash
 pbi-agent skills add

@@ -129,6 +129,22 @@ def _write_command(root: Path, name: str, content: str) -> None:
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
 
 
+def _write_skill(
+    root: Path,
+    name: str,
+    description: str,
+    *,
+    directory_name: str | None = None,
+) -> Path:
+    skill_dir = root / (directory_name or name)
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n",
+        encoding="utf-8",
+    )
+    return skill_dir
+
+
 def test_combined_timeline_marks_previous_run_messages_historical() -> None:
     snapshot = _combined_timeline_snapshot(
         [
@@ -769,6 +785,160 @@ def test_command_list_endpoint_returns_command_files(
             },
         )
         assert create_response.status_code == 405
+
+
+def test_skill_bootstrap_and_list_endpoint_return_installed_project_skills(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_skill(
+        tmp_path / ".agents" / "skills",
+        "focus",
+        "Keep implementation focused.",
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        bootstrap_response = client.get("/api/config/bootstrap")
+        assert bootstrap_response.status_code == 200
+        bootstrap_payload = bootstrap_response.json()
+        assert bootstrap_payload["skills"] == [
+            {
+                "id": "focus",
+                "name": "focus",
+                "description": "Keep implementation focused.",
+                "path": ".agents/skills/focus/SKILL.md",
+            }
+        ]
+
+        list_response = client.get("/api/config/skills")
+        assert list_response.status_code == 200
+        assert list_response.json() == {
+            "skills": bootstrap_payload["skills"],
+            "config_revision": bootstrap_payload["config_revision"],
+        }
+
+
+def test_skill_candidates_endpoint_uses_local_and_default_sources(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    explicit_source = tmp_path / "explicit-source"
+    default_source = tmp_path / "default-source"
+    _write_skill(explicit_source / "skills", "review", "Review code changes.")
+    _write_skill(default_source / "skills", "plan", "Plan the work.")
+    monkeypatch.setattr(
+        "pbi_agent.web.session.configuration.resolve_default_skills_source",
+        lambda: str(default_source),
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        explicit_response = client.post(
+            "/api/config/skills/candidates",
+            json={"source": str(explicit_source)},
+        )
+        assert explicit_response.status_code == 200
+        assert explicit_response.json() == {
+            "source": str(explicit_source),
+            "ref": None,
+            "candidates": [
+                {
+                    "name": "review",
+                    "description": "Review code changes.",
+                    "subpath": "skills/review",
+                }
+            ],
+        }
+
+        default_payload = {
+            "source": str(default_source),
+            "ref": None,
+            "candidates": [
+                {
+                    "name": "plan",
+                    "description": "Plan the work.",
+                    "subpath": "skills/plan",
+                }
+            ],
+        }
+
+        omitted_response = client.post("/api/config/skills/candidates", json={})
+        assert omitted_response.status_code == 200
+        assert omitted_response.json() == default_payload
+
+        blank_response = client.post(
+            "/api/config/skills/candidates",
+            json={"source": "   "},
+        )
+        assert blank_response.status_code == 200
+        assert blank_response.json() == default_payload
+
+        missing_response = client.post(
+            "/api/config/skills/candidates",
+            json={"source": str(tmp_path / "missing-source")},
+        )
+        assert missing_response.status_code == 400
+        assert "missing-source" in missing_response.json()["detail"]
+
+
+def test_skill_install_endpoint_installs_conflicts_and_forces_replacement(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source_root = tmp_path / "skill-source"
+    _write_skill(source_root / "skills", "ship", "Ship the change.")
+    monkeypatch.setattr(
+        "pbi_agent.web.session.configuration.resolve_default_skills_source",
+        lambda: str(source_root),
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        install_response = client.post(
+            "/api/config/skills/install",
+            json={"source": None, "skill_name": "ship"},
+        )
+        assert install_response.status_code == 200
+        install_payload = install_response.json()
+        assert install_payload["installed"] == {
+            "name": "ship",
+            "install_path": ".agents/skills/ship",
+            "source": str(source_root),
+            "ref": None,
+            "subpath": "skills/ship",
+        }
+        assert install_payload["skills"] == [
+            {
+                "id": "ship",
+                "name": "ship",
+                "description": "Ship the change.",
+                "path": ".agents/skills/ship/SKILL.md",
+            }
+        ]
+        assert (tmp_path / ".agents" / "skills" / "ship" / "SKILL.md").is_file()
+
+        conflict_response = client.post(
+            "/api/config/skills/install",
+            json={"skill_name": "ship"},
+        )
+        assert conflict_response.status_code == 409
+        assert "already installed" in conflict_response.json()["detail"]
+
+        _write_skill(source_root / "skills", "ship", "Ship the updated change.")
+        force_response = client.post(
+            "/api/config/skills/install",
+            json={"source": "   ", "skill_name": "ship", "force": True},
+        )
+        assert force_response.status_code == 200
+        assert force_response.json()["skills"] == [
+            {
+                "id": "ship",
+                "name": "ship",
+                "description": "Ship the updated change.",
+                "path": ".agents/skills/ship/SKILL.md",
+            }
+        ]
 
 
 def test_provider_update_rejects_dual_secret_mutation() -> None:

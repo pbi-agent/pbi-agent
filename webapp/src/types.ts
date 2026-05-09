@@ -4,6 +4,11 @@ import type {
   ProcessingStateModel,
   RunSessionModel,
   SessionRecordModel,
+  SkillCandidateViewModel,
+  SkillCandidatesResponse,
+  SkillInstallResponse,
+  SkillListResponse,
+  SkillViewModel,
   SessionSseEventModel,
   SseControlEventModel,
   SseEventModel,
@@ -434,10 +439,21 @@ export type CommandView = {
   path: string;
 };
 
+export type SkillView = SkillViewModel;
+
+export type SkillCandidateView = SkillCandidateViewModel;
+
+export type SkillListPayload = SkillListResponse;
+
+export type SkillCandidatesPayload = SkillCandidatesResponse;
+
+export type SkillInstallPayload = SkillInstallResponse;
+
 export type ConfigBootstrapPayload = {
   providers: ProviderView[];
   model_profiles: ModelProfileView[];
   commands: CommandView[];
+  skills: SkillView[];
   active_profile_id: string | null;
   maintenance: MaintenanceConfig;
   config_revision: string;

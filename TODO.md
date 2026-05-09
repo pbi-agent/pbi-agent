@@ -1,4 +1,5 @@
 # TODO
 
-[X] Align session header right-side top margin
-[X] Run focused validation, update memory, and hand off
+[X] Backend skill API, schemas, bootstrap data, and focused tests
+[X] Frontend settings skills workflow, docs update, and focused tests
+[X] Final validation, memory update, and handoff

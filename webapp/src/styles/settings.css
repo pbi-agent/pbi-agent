@@ -1000,6 +1000,103 @@
   margin-bottom: var(--sp-4);
 }
 
+.skill-card__description {
+  margin-top: 0;
+  margin-bottom: var(--sp-1);
+}
+
+.skills-success-note {
+  border-left: 2px solid var(--color-success);
+}
+
+.skills-reload-note {
+  border-left: 2px solid var(--color-accent);
+}
+
+.skill-add-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(48rem, calc(100vw - 2rem));
+  max-width: min(48rem, calc(100vw - 2rem));
+  max-height: min(44rem, calc(100vh - 2rem));
+  overflow: hidden;
+}
+
+.skill-source-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.skill-source-form__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.skill-source-form__row [data-slot="button"] {
+  flex: 0 0 auto;
+}
+
+.skill-add-dialog__listing-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.skill-add-dialog__listing-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--color-text);
+}
+
+.skill-add-dialog__source {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.skill-add-dialog__source svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--color-text-tertiary);
+}
+
+.skill-candidate-list {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--sp-3);
+  overflow-y: auto;
+  padding-right: var(--sp-1);
+  scrollbar-gutter: stable;
+}
+
+.skill-candidate-card {
+  flex: 0 0 auto;
+}
+
+.skill-candidate-card__meta {
+  margin-top: calc(var(--sp-2) * -1);
+}
+
+.skill-install-error__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.skill-install-error__content [data-slot="button"] {
+  flex: 0 0 auto;
+}
+
 /* ── Resolved runtime summary in profile card ── */
 
 .runtime-summary {
@@ -1073,6 +1170,13 @@
   .settings-item__actions--provider {
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+
+  .skill-source-form__row,
+  .skill-add-dialog__listing-header,
+  .skill-install-error__content {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .active-profile-control__label {

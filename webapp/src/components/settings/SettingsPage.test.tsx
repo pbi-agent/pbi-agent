@@ -12,6 +12,8 @@ import {
   fetchProviderModels,
   fetchProviderAuthFlow,
   fetchProviderUsageLimits,
+  fetchSkillCandidates,
+  installSkill,
   logoutProviderAuth,
   refreshProviderAuth,
   setActiveModelProfile,
@@ -76,6 +78,8 @@ vi.mock("../../api", async (importOriginal) => {
     startProviderAuthFlow: vi.fn(),
     fetchProviderAuthFlow: vi.fn(),
     fetchProviderUsageLimits: vi.fn(),
+    fetchSkillCandidates: vi.fn(),
+    installSkill: vi.fn(),
     refreshProviderAuth: vi.fn(),
     logoutProviderAuth: vi.fn(),
     updateMaintenanceConfig: vi.fn(),
@@ -216,6 +220,7 @@ function makeConfigBootstrap(
       },
     ],
     commands: [],
+    skills: [],
     options: {
       provider_kinds: ["openai", "chatgpt", "github_copilot"],
       reasoning_efforts: ["high", "medium"],
@@ -460,6 +465,35 @@ describe("SettingsPage", () => {
       plan_type: "Plus",
       fetched_at: "2026-05-01T00:00:00Z",
       buckets: [],
+    });
+    vi.mocked(fetchSkillCandidates).mockResolvedValue({
+      source: "https://github.com/pbi-agent/skills",
+      ref: null,
+      candidates: [
+        {
+          name: "repo-review",
+          description: "Review repository changes",
+          subpath: null,
+        },
+      ],
+    });
+    vi.mocked(installSkill).mockResolvedValue({
+      installed: {
+        name: "repo-review",
+        install_path: ".agents/skills/repo-review",
+        source: "https://github.com/pbi-agent/skills",
+        ref: null,
+        subpath: null,
+      },
+      skills: [
+        {
+          id: "repo-review",
+          name: "repo-review",
+          description: "Review repository changes",
+          path: ".agents/skills/repo-review/SKILL.md",
+        },
+      ],
+      config_revision: "rev-2",
     });
     vi.mocked(updateMaintenanceConfig).mockResolvedValue({
       maintenance: { retention_days: 14 },
@@ -727,6 +761,172 @@ describe("SettingsPage", () => {
     expect(within(dialog).getByRole("heading", { name: "Review Mode" })).toBeInTheDocument();
     expect(within(dialog).getByText("Review proposed code changes.")).toBeInTheDocument();
     expect(within(dialog).getByText("Bugs")).toBeInTheDocument();
+  });
+
+  it("shows Project navigation with Skills and Commands", async () => {
+    renderWithProviders(<SettingsPage />);
+
+    expect(
+      await screen.findByText("Project", {
+        selector: ".settings-nav__group-label",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Skills", { selector: ".settings-nav__item-label" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Commands", { selector: ".settings-nav__item-label" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not fetch skill candidates until the add skill dialog opens", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+
+    expect(await screen.findByText("Project Skills")).toBeInTheDocument();
+    expect(fetchSkillCandidates).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Add Skill" }));
+
+    await waitFor(() => expect(fetchSkillCandidates).toHaveBeenCalledWith(null));
+  });
+
+  it("loads default skill candidates when opening Add Skill", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("button", { name: "Add Skill" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Skill" });
+    expect(await within(dialog).findByText("repo-review")).toBeInTheDocument();
+    expect(fetchSkillCandidates).toHaveBeenCalledWith(null);
+  });
+
+  it("installs a selected skill, refetches settings, and shows success", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap)
+      .mockResolvedValueOnce(makeConfigBootstrap())
+      .mockResolvedValue(
+        makeConfigBootstrap({
+          config_revision: "rev-2",
+          skills: [
+            {
+              id: "repo-review",
+              name: "repo-review",
+              description: "Review repository changes",
+              path: ".agents/skills/repo-review/SKILL.md",
+            },
+          ],
+        }),
+      );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("button", { name: "Add Skill" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Skill" });
+    await within(dialog).findByText("repo-review");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    await waitFor(() =>
+      expect(installSkill).toHaveBeenCalledWith({
+        source: "https://github.com/pbi-agent/skills",
+        skill_name: "repo-review",
+      }),
+    );
+    await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Installed repo-review/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(".agents/skills/repo-review/SKILL.md"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Add Project Skill" })).not.toBeInTheDocument();
+  });
+
+  it("reveals Replace existing on skill install conflict and retries with force", async () => {
+    const user = userEvent.setup();
+    vi.mocked(installSkill)
+      .mockRejectedValueOnce(new ApiError("Skill already installed", 409))
+      .mockResolvedValueOnce({
+        installed: {
+          name: "repo-review",
+          install_path: ".agents/skills/repo-review",
+          source: "https://github.com/pbi-agent/skills",
+          ref: null,
+          subpath: null,
+        },
+        skills: [
+          {
+            id: "repo-review",
+            name: "repo-review",
+            description: "Review repository changes",
+            path: ".agents/skills/repo-review/SKILL.md",
+          },
+        ],
+        config_revision: "rev-2",
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("button", { name: "Add Skill" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Skill" });
+    await within(dialog).findByText("repo-review");
+    await user.click(within(dialog).getByRole("button", { name: "Install" }));
+
+    expect(await within(dialog).findByText("Skill already installed")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Replace existing" }));
+
+    await waitFor(() =>
+      expect(installSkill).toHaveBeenLastCalledWith({
+        source: "https://github.com/pbi-agent/skills",
+        skill_name: "repo-review",
+        force: true,
+      }),
+    );
+  });
+
+  it("browses skill candidates from a custom source", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchSkillCandidates)
+      .mockResolvedValueOnce({
+        source: "https://github.com/pbi-agent/skills",
+        ref: null,
+        candidates: [],
+      })
+      .mockResolvedValueOnce({
+        source: "owner/private-repo",
+        ref: "main",
+        candidates: [
+          {
+            name: "private-skill",
+            description: "Private workflow",
+            subpath: "skills/private-skill",
+          },
+        ],
+      });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("button", { name: "Add Skill" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add Project Skill" });
+    await waitFor(() => expect(fetchSkillCandidates).toHaveBeenCalledWith(null));
+
+    await user.type(
+      within(dialog).getByLabelText("Custom source"),
+      "owner/private-repo",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Browse Source" }));
+
+    await waitFor(() =>
+      expect(fetchSkillCandidates).toHaveBeenLastCalledWith("owner/private-repo"),
+    );
+    expect(await within(dialog).findByText("private-skill")).toBeInTheDocument();
   });
 
   it("saves maintenance retention days", async () => {
