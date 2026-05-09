@@ -12,6 +12,7 @@ from pbi_agent.session_store import (
     ObservabilityEventRecord,
     RunSessionRecord,
     SessionRecord,
+    _sanitize_stale_web_snapshot,
 )
 from pbi_agent.web.display import persisted_message_payload
 from pbi_agent.web.uploads import StoredImageUpload
@@ -204,6 +205,8 @@ def _timeline_snapshot_from_run(
         return None
     if not isinstance(snapshot.get("live_session_id"), str):
         return None
+    if _session_status_from_run(record) == "stale":
+        _sanitize_stale_web_snapshot(snapshot)
     return snapshot
 
 

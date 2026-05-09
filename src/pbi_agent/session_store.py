@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 
 SESSION_DB_PATH_ENV = "PBI_AGENT_SESSION_DB_PATH"
@@ -490,6 +491,99 @@ def _serialize_json(value: object, *, default: str = "{}") -> str:
     if value is None:
         return default
     return json.dumps(value, sort_keys=True)
+
+
+def _set_snapshot_value(
+    snapshot: dict[str, Any],
+    key: str,
+    value: Any,
+) -> bool:
+    if snapshot.get(key) == value:
+        return False
+    snapshot[key] = value
+    return True
+
+
+def _clear_snapshot_value(snapshot: dict[str, Any], key: str) -> bool:
+    if snapshot.get(key) is None:
+        return False
+    snapshot[key] = None
+    return True
+
+
+def _sanitize_stale_web_snapshot(snapshot: dict[str, Any]) -> bool:
+    changed = False
+    changed = _set_snapshot_value(snapshot, "input_enabled", False) or changed
+    changed = _clear_snapshot_value(snapshot, "wait_message") or changed
+    changed = _clear_snapshot_value(snapshot, "processing") or changed
+    changed = _clear_snapshot_value(snapshot, "pending_user_questions") or changed
+    changed = _set_snapshot_value(snapshot, "session_ended", True) or changed
+
+    sub_agents = snapshot.get("sub_agents")
+    if isinstance(sub_agents, dict):
+        for raw_sub_agent in sub_agents.values():
+            if not isinstance(raw_sub_agent, dict):
+                continue
+            sub_agent = raw_sub_agent
+            if sub_agent.get("status") in {
+                "starting",
+                "running",
+                "waiting_for_input",
+            }:
+                sub_agent["status"] = "stale"
+                changed = True
+            changed = _clear_snapshot_value(sub_agent, "wait_message") or changed
+            changed = _clear_snapshot_value(sub_agent, "waitMessage") or changed
+            changed = _clear_snapshot_value(sub_agent, "processing") or changed
+            changed = (
+                _clear_snapshot_value(sub_agent, "pending_user_questions") or changed
+            )
+
+    items = snapshot.get("items")
+    if isinstance(items, list):
+        for raw_item in items:
+            if not isinstance(raw_item, dict):
+                continue
+            item = raw_item
+            if item.get("kind") != "tool_group":
+                continue
+            if item.get("status") == "running":
+                item["status"] = "completed"
+                changed = True
+            entries = item.get("items")
+            if not isinstance(entries, list):
+                continue
+            for raw_entry in entries:
+                if not isinstance(raw_entry, dict):
+                    continue
+                metadata = raw_entry.get("metadata")
+                if not isinstance(metadata, dict):
+                    continue
+                if metadata.get("status") != "running":
+                    continue
+                metadata["status"] = "failed"
+                if metadata.get("success") is not False:
+                    metadata["success"] = False
+                metadata.setdefault(
+                    "detail",
+                    "Interrupted because the server stopped before this tool call finished.",
+                )
+                changed = True
+    return changed
+
+
+def _stale_web_snapshot_json(raw_value: object) -> str | None:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    try:
+        snapshot = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(snapshot, dict):
+        return None
+    if not _sanitize_stale_web_snapshot(snapshot):
+        return None
+    return _serialize_json(snapshot)
 
 
 def _deserialize_file_paths(raw_value: object) -> list[str]:
@@ -1449,19 +1543,47 @@ class SessionStore:
             ).fetchall()
         return [RunSessionRecord(**dict(row)) for row in rows]
 
+    def _sanitize_stale_web_snapshots(self, run_ids: list[int]) -> None:
+        if not run_ids:
+            return
+        unique_ids = sorted(set(run_ids))
+        placeholders = ", ".join("?" for _ in unique_ids)
+        rows = self._conn.execute(
+            f"SELECT id, snapshot_json FROM run_sessions WHERE id IN ({placeholders})",
+            unique_ids,
+        ).fetchall()
+        for row in rows:
+            snapshot_json = _stale_web_snapshot_json(row["snapshot_json"])
+            if snapshot_json is None:
+                continue
+            self._conn.execute(
+                "UPDATE run_sessions SET snapshot_json = ? WHERE id = ?",
+                (snapshot_json, int(row["id"])),
+            )
+
     def mark_web_runs_stale(self, directory: str) -> int:
         normalized_directory = _normalize_directory_key(directory)
         now = _now_iso()
         with self._lock:
-            cursor = self._conn.execute(
-                "UPDATE run_sessions SET status = 'stale', ended_at = ? "
-                "WHERE kind IN ('session', 'task') "
-                "AND agent_type = 'web_session' "
-                "AND status IN ('starting', 'running', 'waiting_for_input') "
-                "AND session_id IN (SELECT session_id FROM sessions WHERE directory = ?)",
-                (now, normalized_directory),
-            )
-            stale_count = cursor.rowcount
+            bound_rows = self._conn.execute(
+                "SELECT rs.id, rs.session_id FROM run_sessions AS rs "
+                "JOIN sessions AS s ON s.session_id = rs.session_id "
+                "WHERE rs.kind IN ('session', 'task') "
+                "AND rs.agent_type = 'web_session' "
+                "AND rs.status IN ('starting', 'running', 'waiting_for_input') "
+                "AND s.directory = ?",
+                (normalized_directory,),
+            ).fetchall()
+            bound_ids = [int(row["id"]) for row in bound_rows]
+            stale_count = 0
+            if bound_ids:
+                placeholders = ", ".join("?" for _ in bound_ids)
+                cursor = self._conn.execute(
+                    f"UPDATE run_sessions SET status = 'stale', ended_at = ? "
+                    f"WHERE id IN ({placeholders})",
+                    (now, *bound_ids),
+                )
+                stale_count = cursor.rowcount
             rows = self._conn.execute(
                 "SELECT id, project_dir, metadata_json FROM run_sessions "
                 "WHERE kind IN ('session', 'task') "
@@ -1509,6 +1631,37 @@ class SessionStore:
                     (now, *unbound_ids),
                 )
                 stale_count += cursor.rowcount
+            stale_web_snapshot_rows = self._conn.execute(
+                "SELECT rs.id FROM run_sessions AS rs "
+                "JOIN sessions AS s ON s.session_id = rs.session_id "
+                "WHERE rs.kind IN ('session', 'task') "
+                "AND rs.agent_type = 'web_session' "
+                "AND rs.status = 'stale' "
+                "AND s.directory = ?",
+                (normalized_directory,),
+            ).fetchall()
+            self._sanitize_stale_web_snapshots(
+                [int(row["id"]) for row in stale_web_snapshot_rows] + unbound_ids
+            )
+            cursor = self._conn.execute(
+                "UPDATE run_sessions SET status = 'stale', ended_at = ? "
+                "WHERE (agent_type IS NULL OR agent_type != 'web_session') "
+                "AND status IN ('started', 'starting', 'running', 'waiting_for_input') "
+                "AND session_id IN "
+                "(SELECT session_id FROM sessions WHERE directory = ?) "
+                "AND EXISTS ("
+                "SELECT 1 FROM run_sessions AS web "
+                "WHERE web.session_id = run_sessions.session_id "
+                "AND web.kind IN ('session', 'task') "
+                "AND web.agent_type = 'web_session' "
+                "AND web.status = 'stale' "
+                "AND web.ended_at IS NOT NULL "
+                "AND web.started_at <= run_sessions.started_at "
+                "AND run_sessions.started_at <= web.ended_at"
+                ")",
+                (now, normalized_directory),
+            )
+            stale_count += cursor.rowcount
             self._conn.commit()
         return stale_count
 

@@ -7445,9 +7445,35 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
                 "role": "assistant",
                 "content": "Working",
                 "markdown": True,
-            }
+            },
+            {
+                "kind": "tool_group",
+                "itemId": "tool-group-1",
+                "label": "shell",
+                "status": "running",
+                "items": [
+                    {
+                        "text": "Running command...",
+                        "metadata": {
+                            "tool_name": "shell",
+                            "status": "running",
+                        },
+                    }
+                ],
+            },
         ],
-        "sub_agents": {},
+        "sub_agents": {
+            "subagent-1": {
+                "title": "Athena",
+                "status": "running",
+                "wait_message": "working",
+                "processing": {
+                    "active": True,
+                    "phase": "tool_execution",
+                    "message": "running sub-agent...",
+                },
+            }
+        },
         "last_event_seq": 2,
     }
     event_1 = {
@@ -7514,6 +7540,101 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
             event_type="web_event",
             metadata=event_2,
         )
+        store.create_run_session(
+            run_session_id="stale-web-owned-turn",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="started",
+            kind="cli",
+            project_dir=str(tmp_path),
+        )
+        store.create_run_session(
+            run_session_id="stale-web-owned-child",
+            session_id=session_id,
+            parent_run_session_id="stale-web-owned-turn",
+            agent_name="Athena",
+            agent_type="default",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="running",
+            kind="cli",
+            project_dir=str(tmp_path),
+        )
+        previous_stale_session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Previously stale session",
+        )
+        store.create_run_session(
+            run_session_id="previous-stale-live-run",
+            session_id=previous_stale_session_id,
+            agent_name="web",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="stale",
+            kind="session",
+            project_dir=str(tmp_path),
+            snapshot={
+                **snapshot,
+                "live_session_id": "previous-stale-live-run",
+                "session_id": previous_stale_session_id,
+            },
+        )
+        store.create_run_session(
+            run_session_id="previous-stale-owned-turn",
+            session_id=previous_stale_session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="started",
+            kind="cli",
+            project_dir=str(tmp_path),
+        )
+        store.create_run_session(
+            run_session_id="post-stale-external-run",
+            session_id=previous_stale_session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="running",
+            kind="cli",
+            project_dir=str(tmp_path),
+        )
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ?, ended_at = ? "
+            "WHERE run_session_id = ?",
+            (
+                "2026-04-16T12:00:00+00:00",
+                "2026-04-16T12:10:00+00:00",
+                "previous-stale-live-run",
+            ),
+        )
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ? WHERE run_session_id = ?",
+            ("2026-04-16T12:05:00+00:00", "previous-stale-owned-turn"),
+        )
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ? WHERE run_session_id = ?",
+            ("2026-04-16T12:11:00+00:00", "post-stale-external-run"),
+        )
+        store._conn.commit()
         other_session_id = store.create_session(
             str(tmp_path),
             "openai",
@@ -7610,6 +7731,13 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
         session_events = manager.get_session_event_stream(session_id).snapshot()
         with SessionStore(db_path=tmp_path / "sessions.db") as store:
             stale_run = store.get_run_session("stale-live-run")
+            stale_web_owned_turn = store.get_run_session("stale-web-owned-turn")
+            stale_web_owned_child = store.get_run_session("stale-web-owned-child")
+            previous_stale_live_run = store.get_run_session("previous-stale-live-run")
+            previous_stale_owned_turn = store.get_run_session(
+                "previous-stale-owned-turn"
+            )
+            post_stale_external_run = store.get_run_session("post-stale-external-run")
             non_web_run = store.get_run_session("non-web-active-run")
             unbound_web_run = store.get_run_session("unbound-web-run")
             other_directory_unbound_web_run = store.get_run_session(
@@ -7631,7 +7759,35 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
     assert stale_run.status == "stale"
     assert stale_run.ended_at is not None
     assert stale_run.last_event_seq == 2
-    assert json.loads(stale_run.snapshot_json)["items"][0]["content"] == "Working"
+    stale_snapshot = json.loads(stale_run.snapshot_json)
+    assert stale_snapshot["items"][0]["content"] == "Working"
+    assert stale_snapshot["input_enabled"] is False
+    assert stale_snapshot["wait_message"] is None
+    assert stale_snapshot["processing"] is None
+    assert stale_snapshot["pending_user_questions"] is None
+    assert stale_snapshot["session_ended"] is True
+    assert stale_snapshot["items"][1]["status"] == "completed"
+    assert stale_snapshot["items"][1]["items"][0]["metadata"]["status"] == "failed"
+    assert stale_snapshot["items"][1]["items"][0]["metadata"]["success"] is False
+    assert stale_snapshot["sub_agents"]["subagent-1"]["status"] == "stale"
+    assert stale_snapshot["sub_agents"]["subagent-1"]["wait_message"] is None
+    assert stale_snapshot["sub_agents"]["subagent-1"]["processing"] is None
+    assert stale_web_owned_turn is not None
+    assert stale_web_owned_turn.status == "stale"
+    assert stale_web_owned_turn.ended_at is not None
+    assert stale_web_owned_child is not None
+    assert stale_web_owned_child.status == "stale"
+    assert stale_web_owned_child.ended_at is not None
+    assert previous_stale_live_run is not None
+    previous_stale_snapshot = json.loads(previous_stale_live_run.snapshot_json)
+    assert previous_stale_snapshot["processing"] is None
+    assert previous_stale_snapshot["session_ended"] is True
+    assert previous_stale_owned_turn is not None
+    assert previous_stale_owned_turn.status == "stale"
+    assert previous_stale_owned_turn.ended_at is not None
+    assert post_stale_external_run is not None
+    assert post_stale_external_run.status == "running"
+    assert post_stale_external_run.ended_at is None
     assert non_web_run is not None
     assert non_web_run.status == "running"
     assert unbound_web_run is not None
@@ -7663,6 +7819,14 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
     ]
     assert detail["timeline"]["live_session_id"] == "stale-live-run"
     assert detail["timeline"]["items"][0]["content"] == "Working"
+    assert detail["timeline"]["wait_message"] is None
+    assert detail["timeline"]["processing"] is None
+    assert detail["timeline"]["session_ended"] is True
+    assert detail["timeline"]["items"][1]["status"] == "completed"
+    assert (
+        detail["timeline"]["sub_agents"]["stale-live-run:subagent-1"]["status"]
+        == "stale"
+    )
     assert listed_session["status"] == "stale"
     assert listed_session["active_live_session_id"] is None
     assert listed_session["active_run_id"] is None
