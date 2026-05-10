@@ -508,6 +508,71 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
   });
 
+  it("summarizes read_web_url as a read in the collapsed Working header", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tool calls",
+            status: "completed",
+            items: [
+              {
+                text: "read_web_url https://example.com done",
+                metadata: { tool_name: "read_web_url", result: { url: "https://example.com" } },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: "Working 1 read" });
+    expect(workingButton).toHaveTextContent(/^Working1 read$/);
+  });
+
+  it("summarizes built-in tools by category and falls back to tool classes/text", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tool calls",
+            status: "completed",
+            items: [
+              { text: "read_file README.md done", metadata: { tool_name: "read_file" } },
+              { text: "Fetched https://example.com", classes: "tool-call-read-web-url" },
+              { text: "web_search pbi-agent done", metadata: { tool_name: "web_search" } },
+              { text: "shell bun run typecheck done", metadata: { tool_name: "shell" } },
+              { text: "apply_patch done", metadata: { tool_name: "apply_patch" } },
+              { text: "replace_in_file done", metadata: { tool_name: "replace_in_file" } },
+              { text: "write_file done", metadata: { tool_name: "write_file" } },
+              { text: "sub_agent done", metadata: { tool_name: "sub_agent" } },
+              { text: "ask_user done", metadata: { tool_name: "ask_user" } },
+              { text: "mcp__custom__lookup done", metadata: { tool_name: "mcp__custom__lookup" } },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByRole("button", {
+      name: "Working 2 reads, 1 search, 1 shell, 3 edits, 1 agent, 1 question, 1 other",
+    })).toBeInTheDocument();
+  });
+
   it("summarizes thoughts and sub-agent calls in the collapsed Working header without showing sub-agent names", () => {
     render(
       <SessionTimeline

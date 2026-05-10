@@ -11,7 +11,6 @@ import type {
   TimelineThinkingItem,
   TimelineToolGroupItem,
   TimelineToolGroupEntry,
-  ToolCallMetadata,
 } from "../../types";
 import { Button } from "../ui/button";
 import {
@@ -142,8 +141,51 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function toolNameFor(metadata: ToolCallMetadata | undefined, fallback: string) {
-  return stringValue(metadata?.tool_name) ?? fallback;
+const KNOWN_TOOL_NAMES = new Set([
+  "apply_patch",
+  "ask_user",
+  "read_file",
+  "read_image",
+  "read_web_url",
+  "replace_in_file",
+  "shell",
+  "sub_agent",
+  "web_search",
+  "write_file",
+]);
+
+function normalizeToolNameCandidate(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function toolNameFromClasses(classes: string | undefined): string | undefined {
+  if (!classes) return undefined;
+  for (const className of classes.split(/\s+/)) {
+    if (!className.startsWith("tool-call-")) continue;
+    const toolName = normalizeToolNameCandidate(className.slice("tool-call-".length));
+    if (toolName) return toolName;
+  }
+  return undefined;
+}
+
+function toolNameFromText(text: string): string | undefined {
+  return normalizeToolNameCandidate(text.match(/[A-Za-z][\w-]*/)?.[0]);
+}
+
+function knownToolName(value: string | undefined): string | undefined {
+  return value && KNOWN_TOOL_NAMES.has(value) ? value : undefined;
+}
+
+function toolNameFor(entry: TimelineToolGroupEntry, groupLabel: string) {
+  const metadataToolName = stringValue(entry.metadata?.tool_name);
+  if (metadataToolName) return normalizeToolNameCandidate(metadataToolName) ?? metadataToolName;
+  return (
+    knownToolName(toolNameFromClasses(entry.classes))
+    ?? knownToolName(normalizeToolNameCandidate(groupLabel))
+    ?? knownToolName(toolNameFromText(entry.text))
+    ?? groupLabel
+  );
 }
 
 function friendlyToolName(toolName: string) {
@@ -175,7 +217,7 @@ function toolItemStatus(toolItem: TimelineToolGroupEntry): string | null {
   return null;
 }
 
-type ToolCategory = "read" | "search" | "list" | "shell" | "edit" | "sub-agent" | "other";
+type ToolCategory = "read" | "search" | "list" | "shell" | "edit" | "sub-agent" | "question" | "other";
 
 function categorizeTool(toolName: string): ToolCategory {
   if (["read_file", "read_image", "read_web_url"].includes(toolName)) return "read";
@@ -184,6 +226,7 @@ function categorizeTool(toolName: string): ToolCategory {
   if (toolName === "shell") return "shell";
   if (["apply_patch", "write_file", "replace_in_file"].includes(toolName)) return "edit";
   if (toolName === "sub_agent") return "sub-agent";
+  if (toolName === "ask_user") return "question";
   return "other";
 }
 
@@ -217,9 +260,10 @@ function categoryCountItems(counts: Map<ToolCategory, number>): CountSummaryItem
     shell: { singular: "shell", plural: "shells" },
     edit: { singular: "edit", plural: "edits" },
     "sub-agent": { singular: "agent", plural: "agents" },
+    question: { singular: "question", plural: "questions" },
     other: { singular: "other", plural: "others" },
   };
-  return (["read", "search", "list", "shell", "edit", "sub-agent", "other"] as ToolCategory[]).map((category) => ({
+  return (["read", "search", "list", "shell", "edit", "sub-agent", "question", "other"] as ToolCategory[]).map((category) => ({
     key: category,
     count: counts.get(category) ?? 0,
     singular: labels[category].singular,
@@ -229,7 +273,7 @@ function categoryCountItems(counts: Map<ToolCategory, number>): CountSummaryItem
 
 function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
   return item.items.map((entry, index) => {
-    const label = toolNameFor(entry.metadata, item.label);
+    const label = toolNameFor(entry, item.label);
     const status = toolItemStatus(entry) ?? item.status ?? null;
     const category = categorizeTool(label);
     return {
@@ -269,7 +313,7 @@ function workRunCountItems(items: WorkItem[], showSubAgentCards: boolean): Count
   }
 
   if (showSubAgentCards) {
-    categoryCounts.set("sub-agent", subAgentIds.size);
+    categoryCounts.set("sub-agent", (categoryCounts.get("sub-agent") ?? 0) + subAgentIds.size);
   }
 
   return [
