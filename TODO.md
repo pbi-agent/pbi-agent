@@ -1,9 +1,11 @@
 # TODO
 
-[>] Orchestrate chat input history shortcut task
-[X] Plan via planner sub-agent
-[X] Execute via worker sub-agent
-[X] Review/fix loop
-[X] Re-review after final validation
-[X] Confidence gate
-[X] Commit if safe
+[X] Resume release publish workflow
+[X] Inspect git status and active release PR
+[X] Prepare v0.7.0 release branch/files
+[X] Run release validation
+[X] Commit, push, and open release PR
+[X] Verify PR checks and merge release PR
+[X] Confirm GitHub Release/tag
+[X] Confirm publish workflow
+[X] Update memory and report

@@ -47,6 +47,7 @@
 
 ## Detailed Task Events
 ## 2026-05-10
+- Published release v0.7.0: prepared PR #290 from post-v0.6.0 chat input history PR #289, validated release locally and in GitHub Actions, merged to master, confirmed GitHub Release/tag and PyPI artifacts; repaired GitHub Release notes to strip VitePress frontmatter.
 - Added special tag highlighting for web chat input/history: Composer overlays non-layout-shifting highlights for `@file` and `$skill` tokens, and user timeline now highlights both persisted file paths and `$skill` tags. Validation: focused Composer/TimelineEntry Vitest, lint, typecheck, web build, and `git diff --check` passed.
 - Implemented `$` skill tag completions in web composer: added `/api/skills/search`, skill mention ranking helper, generated API types/static assets, Composer skill mode/parser/UI, and system prompt `$<skill-name>` explicit invocation rule. Validation: focused skill/API/system pytest, API type codegen pytest, focused Composer/API Vitest, lint, typecheck, web build, Ruff check/format, basedpyright passed.
 - Fixed fork-feature startup crash on existing session databases by having `SessionStore._ensure_schema()` add missing fork metadata columns with defaults; added regression coverage for older `sessions` table hydration. Validation: `uv run pytest -q --tb=short -x tests/test_session_store.py`, focused web fork endpoint pytest, and Ruff check on touched files passed.
