@@ -219,6 +219,106 @@ describe("Composer", () => {
     expect(inputRow).toHaveClass("composer__input-row--interactive");
   });
 
+  it("recalls the latest input history item with ArrowUp in an empty focused textbox", () => {
+    renderComposer({ inputHistory: ["first request", "latest request"] });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    textbox.focus();
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+
+    expect(textbox).toHaveValue("latest request");
+    expect((textbox as HTMLTextAreaElement).selectionStart).toBe("latest request".length);
+    expect((textbox as HTMLTextAreaElement).selectionEnd).toBe("latest request".length);
+  });
+
+  it("walks older history with repeated ArrowUp and stops at the oldest input", () => {
+    renderComposer({ inputHistory: ["oldest", "middle", "latest"] });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    textbox.focus();
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+    expect(textbox).toHaveValue("latest");
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+    expect(textbox).toHaveValue("middle");
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+    expect(textbox).toHaveValue("oldest");
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+    expect(textbox).toHaveValue("oldest");
+  });
+
+  it("moves newer with ArrowDown and restores the pre-history draft", async () => {
+    const user = userEvent.setup();
+    renderComposer({ inputHistory: ["oldest", "latest"] });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.type(textbox, "draft text");
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+    expect(textbox).toHaveValue("latest");
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+    expect(textbox).toHaveValue("oldest");
+    fireEvent.keyDown(textbox, { key: "ArrowDown" });
+    expect(textbox).toHaveValue("latest");
+    fireEvent.keyDown(textbox, { key: "ArrowDown" });
+    expect(textbox).toHaveValue("draft text");
+  });
+
+  it("restores the draft and exits history browsing when input history changes", async () => {
+    const user = userEvent.setup();
+    const { onSubmit, rerender } = renderComposer({ inputHistory: ["old history"] });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.type(textbox, "draft text");
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+    expect(textbox).toHaveValue("old history");
+
+    rerender(
+      <Composer
+        inputEnabled
+        sessionEnded={false}
+        liveSessionId="live-1"
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        onSubmit={onSubmit}
+        inputHistory={["different history"]}
+      />,
+    );
+
+    await waitFor(() => expect(textbox).toHaveValue("draft text"));
+    fireEvent.keyDown(textbox, { key: "ArrowDown" });
+    expect(textbox).toHaveValue("draft text");
+  });
+
+  it("keeps ArrowUp reserved for completion navigation when suggestions are open", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [{ name: "writer", description: "Write prose", path: ".agents/skills/writer/SKILL.md" }],
+    });
+    renderComposer({ inputHistory: ["latest request"] });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.type(textbox, "$w");
+    expect(await screen.findByRole("listbox", { name: "Skill suggestions" })).toBeInTheDocument();
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+
+    expect(textbox).toHaveValue("$w");
+  });
+
+  it("does not override normal multiline ArrowUp navigation below the first line", () => {
+    renderComposer({ inputHistory: ["latest request"] });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    fireEvent.change(textbox, {
+      target: {
+        value: "first line\nsecond line",
+        selectionStart: "first line\nsecond line".length,
+      },
+    });
+    fireEvent.keyDown(textbox, { key: "ArrowUp" });
+
+    expect(textbox).toHaveValue("first line\nsecond line");
+  });
+
   it("does not open the image picker when image inputs are unsupported", async () => {
     const user = userEvent.setup();
     const showPicker = vi.fn();

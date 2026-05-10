@@ -48,6 +48,8 @@ interface ComposerProps {
   inputEnabled: boolean;
   sessionEnded: boolean;
   liveSessionId: string | null;
+  /** Chronological oldest-to-newest user input text for the current conversation. */
+  inputHistory?: string[];
   canCreateSession?: boolean;
   supportsImageInputs: boolean;
   interactiveMode: boolean;
@@ -314,6 +316,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   inputEnabled,
   sessionEnded,
   liveSessionId,
+  inputHistory = [],
   canCreateSession = false,
   supportsImageInputs,
   interactiveMode,
@@ -338,6 +341,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [completionStatusMessage, setCompletionStatusMessage] = useState<string | null>(null);
   const [completionSelectedIndex, setCompletionSelectedIndex] = useState(0);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const [historyDraft, setHistoryDraft] = useState<string | null>(null);
   const completionRequestIdRef = useRef(0);
   const activeCompletionRef = useRef<{
     mode: CompletionMode | null;
@@ -404,6 +409,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setCompletionSelectedIndex(0);
   }, []);
 
+  const resetHistoryBrowsing = useCallback(() => {
+    setHistoryIndex(null);
+    setHistoryDraft(null);
+  }, []);
+
   const syncCursor = useCallback(() => {
     setCursorIndex(textareaRef.current?.selectionStart ?? 0);
   }, []);
@@ -441,6 +451,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       });
     },
     [autoResize, closeCompletions],
+  );
+
+  const applyHistoryInput = useCallback(
+    (nextInput: string, shouldExitHistory = false) => {
+      setInput(nextInput);
+      setCursorIndex(nextInput.length);
+      if (shouldExitHistory) {
+        resetHistoryBrowsing();
+      }
+      closeCompletions();
+
+      window.requestAnimationFrame(() => {
+        const nextElement = textareaRef.current;
+        if (!nextElement) return;
+        nextElement.focus();
+        nextElement.selectionStart = nextInput.length;
+        nextElement.selectionEnd = nextInput.length;
+        autoResize();
+      });
+    },
+    [autoResize, closeCompletions, resetHistoryBrowsing],
   );
 
   const buildMentionReplacement = useCallback(
@@ -521,10 +552,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         return null;
       }
 
+      resetHistoryBrowsing();
       applyInputState(nextState.nextInput, nextState.nextCursor);
       return nextState;
     },
-    [applyInputState, buildMentionReplacement, buildSkillReplacement, buildSlashReplacement, cursorIndex, input],
+    [applyInputState, buildMentionReplacement, buildSkillReplacement, buildSlashReplacement, cursorIndex, input, resetHistoryBrowsing],
   );
 
   const appendFiles = useCallback(
@@ -576,6 +608,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       return undefined;
     }
     const timeoutId = window.setTimeout(() => {
+      resetHistoryBrowsing();
       setInput(restoredInput);
       setCursorIndex(restoredInput.length);
       onRestoredInputConsumed?.();
@@ -587,7 +620,36 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       autoResize();
     }, 0);
     return () => window.clearTimeout(timeoutId);
-  }, [autoResize, onRestoredInputConsumed, restoredInput]);
+  }, [autoResize, onRestoredInputConsumed, resetHistoryBrowsing, restoredInput]);
+
+  const inputHistorySignature = useMemo(() => JSON.stringify(inputHistory), [inputHistory]);
+  const inputHistorySignatureRef = useRef(inputHistorySignature);
+
+  useEffect(() => {
+    if (inputHistorySignatureRef.current === inputHistorySignature) {
+      return undefined;
+    }
+
+    inputHistorySignatureRef.current = inputHistorySignature;
+    if (historyIndex === null && historyDraft === null) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (historyIndex !== null) {
+        applyHistoryInput(historyDraft ?? "", true);
+        return;
+      }
+      resetHistoryBrowsing();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    applyHistoryInput,
+    historyDraft,
+    historyIndex,
+    inputHistorySignature,
+    resetHistoryBrowsing,
+  ]);
 
   useEffect(() => {
     if (!refocusAfterSubmitRef.current || !canSend) {
@@ -670,6 +732,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           images: pendingImages.map((image) => image.file),
         });
         clearPendingImages();
+        resetHistoryBrowsing();
         setInput("");
         setAttachmentMessage(null);
         setCursorIndex(0);
@@ -684,7 +747,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         );
       }
     },
-    [clearPendingImages, closeCompletions, onSubmit, pendingImages],
+    [clearPendingImages, closeCompletions, onSubmit, pendingImages, resetHistoryBrowsing],
   );
 
   useEffect(() => {
@@ -881,11 +944,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         setCompletionSelectedIndex((prev) => (prev + 1) % completionItems.length);
         return;
       }
+      if (!hasCompletionItems && event.key === "ArrowDown") {
+        event.preventDefault();
+        return;
+      }
       if (hasCompletionItems && event.key === "ArrowUp") {
         event.preventDefault();
         setCompletionSelectedIndex(
           (prev) => (prev - 1 + completionItems.length) % completionItems.length,
         );
+        return;
+      }
+      if (!hasCompletionItems && event.key === "ArrowUp") {
+        event.preventDefault();
         return;
       }
       if (hasCompletionItems && event.key === "Tab") {
@@ -912,6 +983,43 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         closeCompletions();
         return;
       }
+    }
+
+    const hasModifier = event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
+    if (!hasModifier && event.key === "ArrowUp" && inputHistory.length > 0 && pendingImages.length === 0) {
+      const historyMatchesCurrentInput = inputHistorySignatureRef.current === inputHistorySignature;
+      const activeHistoryIndex = historyMatchesCurrentInput ? historyIndex : null;
+      const element = event.currentTarget;
+      const selectionStart = element.selectionStart ?? 0;
+      const cursorIsOnFirstLine = element.value.lastIndexOf("\n", Math.max(0, selectionStart - 1)) === -1;
+      if (activeHistoryIndex !== null || input.length === 0 || cursorIsOnFirstLine) {
+        event.preventDefault();
+        const nextIndex = activeHistoryIndex === null
+          ? inputHistory.length - 1
+          : Math.max(0, activeHistoryIndex - 1);
+        if (activeHistoryIndex === null) {
+          inputHistorySignatureRef.current = inputHistorySignature;
+          setHistoryDraft(input);
+        }
+        setHistoryIndex(nextIndex);
+        applyHistoryInput(inputHistory[nextIndex] ?? "");
+        return;
+      }
+    }
+
+    const historyMatchesCurrentInput = inputHistorySignatureRef.current === inputHistorySignature;
+    const activeHistoryIndex = historyMatchesCurrentInput ? historyIndex : null;
+    if (!hasModifier && event.key === "ArrowDown" && activeHistoryIndex !== null) {
+      const activeHistoryDraft = historyMatchesCurrentInput ? historyDraft : null;
+      event.preventDefault();
+      const nextIndex = activeHistoryIndex + 1;
+      if (nextIndex < inputHistory.length) {
+        setHistoryIndex(nextIndex);
+        applyHistoryInput(inputHistory[nextIndex] ?? "");
+      } else {
+        applyHistoryInput(activeHistoryDraft ?? "", true);
+      }
+      return;
     }
 
     if (event.key === "Enter" && !event.shiftKey) {
@@ -1066,6 +1174,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             className="composer__textarea"
             value={input}
             onChange={(event) => {
+              resetHistoryBrowsing();
               setInput(event.target.value);
               setCursorIndex(event.target.selectionStart ?? event.target.value.length);
               autoResize();

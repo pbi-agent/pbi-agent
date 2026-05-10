@@ -718,6 +718,23 @@ export function SessionPage({
     sessionState?.items ?? [],
     isSubAgentRoute ? routeSubAgentId ?? null : null,
   );
+  const composerInputHistory = useMemo(
+    () => {
+      const history: string[] = [];
+      for (const item of displayedItems) {
+        if (
+          item.kind === "message"
+          && item.role === "user"
+          && !item.subAgentId
+          && item.content.trim().length > 0
+        ) {
+          history.push(item.content);
+        }
+      }
+      return history;
+    },
+    [displayedItems],
+  );
   const displayedSubAgents = useSubAgentDisplayMap(
     sessionState?.subAgents ?? {},
     isSubAgentRoute ? routeSubAgentId ?? null : null,
@@ -945,6 +962,7 @@ export function SessionPage({
                 inputEnabled={composerInputEnabled}
                 sessionEnded={sessionState?.sessionEnded ?? false}
                 liveSessionId={sessionState?.liveSessionId ?? null}
+                inputHistory={composerInputHistory}
                 canCreateSession={composerCanStartRun}
                 supportsImageInputs={providerSupportsImages}
                 interactiveMode={interactiveMode}
