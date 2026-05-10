@@ -1,6 +1,6 @@
 # TODO
 
-[X] Inspect saved-session runtime persistence path
-[X] Implement targeted fix for transient command runtime
-[X] Run focused validation
+[X] Inspect command format/examples
+[X] Add check-confidence project command
+[X] Validate command parsing
 [X] Update memory
