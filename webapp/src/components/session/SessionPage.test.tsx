@@ -139,12 +139,14 @@ vi.mock("./Composer", async () => {
         isInterrupting,
         onInterrupt,
         restoredInput,
+        inputHistory,
       }: {
         supportsImageInputs: boolean;
         isSubmitting: boolean;
         inputEnabled?: boolean;
         canCreateSession?: boolean;
         liveSessionId?: string | null;
+        inputHistory?: string[];
         interactiveMode: boolean;
         onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
         canInterrupt?: boolean;
@@ -167,6 +169,7 @@ vi.mock("./Composer", async () => {
           <div>Composer live session {liveSessionId ?? ""}</div>
           <div>Composer interactive {String(interactiveMode)}</div>
           <div>Composer restored {restoredInput ?? ""}</div>
+          <div>Composer history {JSON.stringify(inputHistory ?? [])}</div>
           {canInterrupt ? (
             <button
               type="button"
@@ -588,6 +591,74 @@ describe("SessionPage", () => {
     expect(workspaceLabels).toHaveLength(1);
     expect(within(sidebar).getByText("workspace/demo")).toBeInTheDocument();
     expect(within(topbar).queryByText("workspace/demo")).not.toBeInTheDocument();
+  });
+
+  it("passes only non-empty main-session user messages to the composer history", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "running", active_run_id: "live-history" }),
+      history_items: [],
+      active_live_session: makeLiveSession({ live_session_id: "live-history", session_id: "session-1" }),
+      active_run: null,
+      timeline: {
+        live_session_id: "live-history",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: true,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "main-user-1",
+            role: "user",
+            content: "first request",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "answer",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "sub-user-1",
+            role: "user",
+            content: "sub-agent request",
+            markdown: false,
+            subAgentId: "sub-1",
+          },
+          {
+            kind: "message",
+            itemId: "empty-user",
+            role: "user",
+            content: "   ",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "main-user-2",
+            role: "user",
+            content: "!pwd",
+            markdown: false,
+          },
+        ],
+        sub_agents: { "sub-1": { title: "Researcher", status: "completed" } },
+        last_event_seq: 5,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(
+      await screen.findByText('Composer history ["first request","!pwd"]'),
+    ).toBeInTheDocument();
   });
 
   it("uses the sandbox workspace label in the collapsed session topbar badge", async () => {
