@@ -386,6 +386,7 @@ class SkillViewModel(BaseModel):
     id: str
     name: str
     description: str
+    instructions: str
     path: str
 
 
@@ -434,6 +435,7 @@ class AgentViewModel(BaseModel):
     id: str
     name: str
     description: str
+    instructions: str
     path: str
     model_profile_id: str | None
 

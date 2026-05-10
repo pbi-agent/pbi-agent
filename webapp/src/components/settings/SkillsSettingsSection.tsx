@@ -4,6 +4,7 @@ import {
   AlertCircleIcon,
   CheckCircle2Icon,
   DownloadIcon,
+  EyeIcon,
   FolderGit2Icon,
   PlusIcon,
   SearchIcon,
@@ -23,6 +24,7 @@ import type {
 } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -49,7 +51,13 @@ import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
 
-function SkillCard({ skill }: { skill: SkillView }) {
+function SkillCard({
+  skill,
+  onPreview,
+}: {
+  skill: SkillView;
+  onPreview: () => void;
+}) {
   return (
     <Card className="settings-item settings-item--provider skill-card">
       <div className="provider-card__info">
@@ -61,9 +69,18 @@ function SkillCard({ skill }: { skill: SkillView }) {
         ) : null}
         <div className="provider-card__subtitle">{skill.path}</div>
       </div>
-      <Badge variant="outline" className="settings-item__tag">
-        Project skill
-      </Badge>
+      <div className="settings-item__actions settings-item__actions--provider command-card__actions">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="task-card__action-button"
+          onClick={onPreview}
+        >
+          <EyeIcon data-icon="inline-start" />
+          Preview
+        </Button>
+      </div>
     </Card>
   );
 }
@@ -132,6 +149,7 @@ function candidateInstallSource(
 
 export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
   const queryClient = useQueryClient();
+  const [previewSkill, setPreviewSkill] = useState<SkillView | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [customSource, setCustomSource] = useState("");
   const [listing, setListing] = useState<SkillCandidatesPayload | null>(null);
@@ -289,7 +307,13 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
               description="Add skills from the official catalog, GitHub, or a server-side local path."
             />
           ) : (
-            skills.map((skill) => <SkillCard key={skill.id} skill={skill} />)
+            skills.map((skill) => (
+              <SkillCard
+                key={skill.id}
+                skill={skill}
+                onPreview={() => setPreviewSkill(skill)}
+              />
+            ))
           )}
         </CardContent>
       </Card>
@@ -444,6 +468,16 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {previewSkill ? (
+        <SettingsPreviewDialog
+          title={previewSkill.name}
+          path={previewSkill.path}
+          content={previewSkill.instructions}
+          icon={SparklesIcon}
+          onClose={() => setPreviewSkill(null)}
+        />
+      ) : null}
     </section>
   );
 }

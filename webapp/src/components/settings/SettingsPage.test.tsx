@@ -535,6 +535,7 @@ describe("SettingsPage", () => {
           id: "repo-review",
           name: "repo-review",
           description: "Review repository changes",
+          instructions: "# repo-review\n\nReview repository changes.",
           path: ".agents/skills/repo-review/SKILL.md",
         },
       ],
@@ -565,6 +566,7 @@ describe("SettingsPage", () => {
           id: "repo-reviewer",
           name: "repo-reviewer",
           description: "Review repository changes",
+          instructions: "Review repository changes.",
           path: ".agents/agents/repo-reviewer.md",
           model_profile_id: null,
         },
@@ -831,7 +833,6 @@ describe("SettingsPage", () => {
     expect(screen.getAllByText(/\/review/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Review Mode")).toBeInTheDocument();
     expect(screen.getByText("Profile: analysis")).toBeInTheDocument();
-    expect(screen.getByText("Project command")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
@@ -1031,6 +1032,38 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows agent cards with preview markdown", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        agents: [
+          {
+            id: "code-reviewer",
+            name: "code-reviewer",
+            description: "Review code changes",
+            instructions: "# Agent Prompt\n\nReview code changes carefully.",
+            path: ".agents/agents/code-reviewer.md",
+            model_profile_id: "analysis",
+          },
+        ],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+
+    expect(await screen.findByText("code-reviewer")).toBeInTheDocument();
+    expect(screen.getByText("Review code changes")).toBeInTheDocument();
+    expect(screen.getByText("Profile: analysis")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "code-reviewer" });
+    expect(within(dialog).getByRole("heading", { name: "Agent Prompt" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Review code changes carefully.")).toBeInTheDocument();
+  });
+
   it("does not fetch agent candidates until the add agent dialog opens", async () => {
     const user = userEvent.setup();
 
@@ -1071,6 +1104,7 @@ describe("SettingsPage", () => {
               id: "repo-reviewer",
               name: "repo-reviewer",
               description: "Review repository changes",
+              instructions: "Review repository changes.",
               path: ".agents/agents/repo-reviewer.md",
               model_profile_id: null,
             },
@@ -1117,6 +1151,7 @@ describe("SettingsPage", () => {
             id: "repo-reviewer",
             name: "repo-reviewer",
             description: "Review repository changes",
+            instructions: "Review repository changes.",
             path: ".agents/agents/repo-reviewer.md",
             model_profile_id: null,
           },
@@ -1184,6 +1219,37 @@ describe("SettingsPage", () => {
     expect(await within(dialog).findByText("private-reviewer")).toBeInTheDocument();
   });
 
+  it("shows skill cards with preview markdown", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        skills: [
+          {
+            id: "focus",
+            name: "focus",
+            description: "Keep implementation focused",
+            instructions: "# Focus Skill\n\nKeep implementation focused.\n\n- Scope\n- Verify",
+            path: ".agents/skills/focus/SKILL.md",
+          },
+        ],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+
+    expect(await screen.findByText("focus")).toBeInTheDocument();
+    expect(screen.getByText("Keep implementation focused")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "focus" });
+    expect(within(dialog).getByRole("heading", { name: "Focus Skill" })).toBeInTheDocument();
+    expect(within(dialog).getByText("Keep implementation focused.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Scope")).toBeInTheDocument();
+  });
+
   it("does not fetch skill candidates until the add skill dialog opens", async () => {
     const user = userEvent.setup();
 
@@ -1224,6 +1290,7 @@ describe("SettingsPage", () => {
               id: "repo-review",
               name: "repo-review",
               description: "Review repository changes",
+              instructions: "# repo-review\n\nReview repository changes.",
               path: ".agents/skills/repo-review/SKILL.md",
             },
           ],
@@ -1269,6 +1336,7 @@ describe("SettingsPage", () => {
             id: "repo-review",
             name: "repo-review",
             description: "Review repository changes",
+            instructions: "# repo-review\n\nReview repository changes.",
             path: ".agents/skills/repo-review/SKILL.md",
           },
         ],

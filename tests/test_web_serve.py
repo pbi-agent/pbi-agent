@@ -1163,6 +1163,7 @@ def test_skill_bootstrap_and_list_endpoint_return_installed_project_skills(
                 "id": "focus",
                 "name": "focus",
                 "description": "Keep implementation focused.",
+                "instructions": "# focus",
                 "path": ".agents/skills/focus/SKILL.md",
             }
         ]
@@ -1269,6 +1270,7 @@ def test_skill_install_endpoint_installs_conflicts_and_forces_replacement(
                 "id": "ship",
                 "name": "ship",
                 "description": "Ship the change.",
+                "instructions": "# ship",
                 "path": ".agents/skills/ship/SKILL.md",
             }
         ]
@@ -1292,6 +1294,7 @@ def test_skill_install_endpoint_installs_conflicts_and_forces_replacement(
                 "id": "ship",
                 "name": "ship",
                 "description": "Ship the updated change.",
+                "instructions": "# ship",
                 "path": ".agents/skills/ship/SKILL.md",
             }
         ]
@@ -1319,6 +1322,7 @@ def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
                 "id": "code-reviewer",
                 "name": "code-reviewer",
                 "description": "Review code changes.",
+                "instructions": "You review code changes.",
                 "path": ".agents/agents/code-reviewer.md",
                 "model_profile_id": "analysis",
             }
@@ -1444,6 +1448,7 @@ def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
                 "id": "shipper",
                 "name": "shipper",
                 "description": "Ship the change.",
+                "instructions": "Ship the current implementation.",
                 "path": ".agents/agents/shipper.md",
                 "model_profile_id": None,
             }
@@ -1473,6 +1478,7 @@ def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
                 "id": "shipper",
                 "name": "shipper",
                 "description": "Ship the updated change.",
+                "instructions": "Ship the updated implementation.",
                 "path": ".agents/agents/shipper.md",
                 "model_profile_id": None,
             }

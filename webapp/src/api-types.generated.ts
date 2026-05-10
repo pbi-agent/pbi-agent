@@ -19,7 +19,7 @@ export type AgentInstallResultViewModel = { agent_name: string; install_path: st
 
 export type AgentListResponse = { agents: AgentViewModel[]; config_revision: string };
 
-export type AgentViewModel = { id: string; name: string; description: string; path: string; model_profile_id: string | null };
+export type AgentViewModel = { id: string; name: string; description: string; instructions: string; path: string; model_profile_id: string | null };
 
 export type AllRunsResponse = { runs: AllRunsRunModel[]; total_count: number };
 
@@ -265,7 +265,7 @@ export type SkillInstallResultViewModel = { name: string; install_path: string; 
 
 export type SkillListResponse = { skills: SkillViewModel[]; config_revision: string };
 
-export type SkillViewModel = { id: string; name: string; description: string; path: string };
+export type SkillViewModel = { id: string; name: string; description: string; instructions: string; path: string };
 
 export type SlashCommandItemModel = { name: string; description: string; kind: "local_command" | "command" };
 

@@ -24,7 +24,7 @@ import type {
 } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
-import { MarkdownContent } from "../shared/MarkdownContent";
+import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -73,9 +73,6 @@ function CommandCard({
             Profile: {command.model_profile_id}
           </Badge>
         ) : null}
-        <Badge variant="outline" className="settings-item__tag">
-          Project command
-        </Badge>
         <Button
           type="button"
           variant="ghost"
@@ -88,44 +85,6 @@ function CommandCard({
         </Button>
       </div>
     </Card>
-  );
-}
-
-function CommandPreviewDialog({
-  command,
-  onClose,
-}: {
-  command: CommandView;
-  onClose: () => void;
-}) {
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent className="command-preview-dialog" aria-describedby={undefined}>
-        <DialogHeader className="command-preview-dialog__header">
-          <div className="command-preview-dialog__title-row">
-            <div
-              className="settings-command-icon settings-command-icon--dialog"
-              aria-hidden="true"
-            >
-              <FileTextIcon />
-            </div>
-            <DialogTitle>{command.name}</DialogTitle>
-            <span className="flex-1" />
-            <span className="provider-card__subtitle">{command.path}</span>
-          </div>
-        </DialogHeader>
-        <div className="command-preview-dialog__scroll timeline-entry timeline-entry--assistant">
-          <div className="timeline-entry__content command-preview-dialog__markdown">
-            <MarkdownContent content={command.instructions} />
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -536,8 +495,11 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
       </Dialog>
 
       {previewCommand ? (
-        <CommandPreviewDialog
-          command={previewCommand}
+        <SettingsPreviewDialog
+          title={previewCommand.name}
+          path={previewCommand.path}
+          content={previewCommand.instructions}
+          icon={FileTextIcon}
           onClose={() => setPreviewCommand(null)}
         />
       ) : null}

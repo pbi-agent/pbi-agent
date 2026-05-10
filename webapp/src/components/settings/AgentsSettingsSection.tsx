@@ -4,6 +4,7 @@ import {
   AlertCircleIcon,
   CheckCircle2Icon,
   DownloadIcon,
+  EyeIcon,
   FolderGit2Icon,
   PlusIcon,
   SearchIcon,
@@ -23,6 +24,7 @@ import type {
 } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -49,7 +51,13 @@ import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
 
-function AgentCard({ agent }: { agent: AgentView }) {
+function AgentCard({
+  agent,
+  onPreview,
+}: {
+  agent: AgentView;
+  onPreview: () => void;
+}) {
   return (
     <Card className="settings-item settings-item--provider skill-card">
       <div className="provider-card__info">
@@ -67,9 +75,16 @@ function AgentCard({ agent }: { agent: AgentView }) {
             Profile: {agent.model_profile_id}
           </Badge>
         ) : null}
-        <Badge variant="outline" className="settings-item__tag">
-          Project agent
-        </Badge>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="task-card__action-button"
+          onClick={onPreview}
+        >
+          <EyeIcon data-icon="inline-start" />
+          Preview
+        </Button>
       </div>
     </Card>
   );
@@ -146,6 +161,7 @@ function candidateInstallSource(
 
 export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
   const queryClient = useQueryClient();
+  const [previewAgent, setPreviewAgent] = useState<AgentView | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [customSource, setCustomSource] = useState("");
   const [listing, setListing] = useState<AgentCandidatesPayload | null>(null);
@@ -303,7 +319,13 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
               description="Add agents from the official catalog, GitHub, or a server-side local path."
             />
           ) : (
-            agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)
+            agents.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                onPreview={() => setPreviewAgent(agent)}
+              />
+            ))
           )}
         </CardContent>
       </Card>
@@ -459,6 +481,16 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {previewAgent ? (
+        <SettingsPreviewDialog
+          title={previewAgent.name}
+          path={previewAgent.path}
+          content={previewAgent.instructions}
+          icon={SparklesIcon}
+          onClose={() => setPreviewAgent(null)}
+        />
+      ) : null}
     </section>
   );
 }

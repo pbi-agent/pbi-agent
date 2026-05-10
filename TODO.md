@@ -1,4 +1,7 @@
-[X] Inspect review finding and current sub-agent runtime resolution
-[X] Fix missing sub-agent profile error handling
-[X] Add/adjust focused tests
-[X] Run focused validation
+# TODO
+
+[X] Inspect existing commands preview implementation and API models
+[X] Add backend instructions fields for skills/agents
+[X] Add frontend Preview buttons/dialog reuse for skills/agents
+[X] Update tests/types and validate
+[X] Update MEMORY.md

@@ -22,6 +22,7 @@ class SkillManifestError(ValueError):
 class ProjectSkillManifest:
     name: str
     description: str
+    instructions: str
     location: Path
 
 
@@ -102,6 +103,7 @@ def load_project_skill_manifest(skill_path: Path) -> ProjectSkillManifest:
     return ProjectSkillManifest(
         name=name.strip(),
         description=description.strip(),
+        instructions=_extract_body(content).strip(),
         location=skill_path.resolve(),
     )
 
@@ -119,6 +121,17 @@ def _extract_frontmatter(content: str) -> str:
     if match is None:
         raise SkillManifestError("missing YAML frontmatter.")
     return match.group(1)
+
+
+def _extract_body(content: str) -> str:
+    match = re.match(
+        r"\A---\s*\r?\n.*?\r?\n---[ \t]*(?:\r?\n|\Z)",
+        content,
+        re.DOTALL,
+    )
+    if match is None:
+        return content
+    return content[match.end() :]
 
 
 def _parse_frontmatter(frontmatter: str) -> dict[str, str]:

@@ -830,6 +830,7 @@ class ConfigurationMixin:
             "id": skill.name,
             "name": skill.name,
             "description": skill.description,
+            "instructions": skill.instructions,
             "path": self._relative_workspace_path(skill.location),
         }
 
@@ -867,6 +868,7 @@ class ConfigurationMixin:
             "id": agent.name,
             "name": agent.name,
             "description": agent.description,
+            "instructions": agent.system_prompt,
             "path": self._relative_workspace_path(agent.location),
             "model_profile_id": agent.model_profile_id,
         }
