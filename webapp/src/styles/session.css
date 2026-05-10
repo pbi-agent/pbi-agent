@@ -592,6 +592,21 @@
   height: 5px;
 }
 
+.timeline-entry__fork {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--sp-1);
+}
+
+.timeline-entry__fork-button {
+  color: var(--color-text-tertiary);
+}
+
+.timeline-entry__fork-button:hover,
+.timeline-entry__fork-button:focus-visible {
+  color: var(--color-text-primary);
+}
+
 /* User messages — right aligned, accent tint */
 .timeline-entry--user {
   align-self: flex-end;

@@ -1689,6 +1689,62 @@ def test_update_session_title_endpoint_updates_workspace_session(
     assert stored.title == "Updated title"
 
 
+def test_fork_session_endpoint_creates_truncated_zero_usage_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Original title",
+        )
+        first_message_id = store.add_message(session_id, "user", "first")
+        fork_message_id = store.add_message(session_id, "assistant", "second")
+        store.add_message(session_id, "user", "excluded")
+        store.update_session(
+            session_id,
+            total_tokens=50,
+            input_tokens=30,
+            output_tokens=20,
+            cost_usd=0.05,
+        )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/sessions/{session_id}/fork",
+            json={"message_id": f"msg-{fork_message_id}"},
+        )
+        invalid_response = client.post(
+            f"/api/sessions/{session_id}/fork",
+            json={"message_id": "message-1"},
+        )
+        event = app.state.manager.get_event_stream("app").snapshot()[-1]
+
+    assert response.status_code == 200
+    assert invalid_response.status_code == 400
+    payload = response.json()["session"]
+    assert payload["title"] == "Fork-Original title"
+    assert payload["total_tokens"] == 0
+    assert payload["input_tokens"] == 0
+    assert payload["output_tokens"] == 0
+    assert payload["cost_usd"] == 0.0
+    assert payload["is_fork"] is True
+    assert payload["forked_from_session_id"] == session_id
+    assert payload["forked_from_message_id"] == f"msg-{fork_message_id}"
+    assert event["type"] == "session_created"
+    assert event["payload"]["session"]["session_id"] == payload["session_id"]
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        original = store.list_messages(session_id)
+        forked = store.list_messages(payload["session_id"])
+    assert [message.content for message in original] == ["first", "second", "excluded"]
+    assert [message.content for message in forked] == ["first", "second"]
+    assert forked[0].id != first_message_id
+
+
 def test_update_session_title_endpoint_rejects_blank_title(
     tmp_path, monkeypatch
 ) -> None:

@@ -8,6 +8,7 @@ import threading
 
 import pytest
 
+from pbi_agent.web import uploads
 from pbi_agent.session_store import (
     KANBAN_RUN_STATUS_COMPLETED,
     KANBAN_STAGE_BACKLOG,
@@ -53,6 +54,52 @@ def test_update_previous_id_and_title(tmp_path) -> None:
         rec = store.get_session(sid)
         assert rec is not None
         assert rec.title == "My session"
+
+
+def test_existing_session_table_adds_fork_columns(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE sessions (
+            session_id    TEXT PRIMARY KEY,
+            directory     TEXT NOT NULL,
+            provider      TEXT NOT NULL,
+            provider_id   TEXT,
+            model         TEXT NOT NULL DEFAULT '',
+            profile_id    TEXT,
+            previous_id   TEXT,
+            title         TEXT NOT NULL DEFAULT '',
+            total_tokens  INTEGER NOT NULL DEFAULT 0,
+            input_tokens  INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cost_usd      REAL NOT NULL DEFAULT 0.0,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        );
+        INSERT INTO sessions
+            (session_id, directory, provider, provider_id, model, profile_id,
+             previous_id, title, total_tokens, input_tokens, output_tokens,
+             cost_usd, created_at, updated_at)
+        VALUES
+            ('session-1', '/w', 'openai', NULL, 'gpt-5', NULL, NULL, 'old',
+             0, 0, 0, 0.0, '2026-05-01T00:00:00+00:00',
+             '2026-05-01T00:00:00+00:00');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    with SessionStore(db_path=db) as store:
+        sessions = store.list_sessions("/w")
+        session = store.get_session("session-1")
+
+    assert len(sessions) == 1
+    assert session is not None
+    assert session.is_fork == 0
+    assert session.forked_from_session_id is None
+    assert session.forked_from_message_id is None
+    assert session.fork_created_at is None
 
 
 def test_directory_scoped_listing(tmp_path) -> None:
@@ -286,6 +333,109 @@ def test_list_messages_empty_session(tmp_path) -> None:
         msgs = store.list_messages(sid)
 
     assert msgs == []
+
+
+def test_fork_session_copies_history_through_message_and_resets_usage(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = tmp_path / "sessions.db"
+    monkeypatch.setattr(uploads, "_UPLOADS_ROOT", tmp_path / "uploads")
+    upload = uploads.store_uploaded_image_bytes(
+        raw_bytes=b"\x89PNG\r\n\x1a\nimage-bytes",
+        name="chart.png",
+    )
+    attachment = MessageImageAttachment(
+        upload_id=upload.upload_id,
+        name=upload.name,
+        mime_type=upload.mime_type,
+        byte_count=upload.byte_count,
+        preview_url=f"/api/uploads/{upload.upload_id}",
+    )
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session(
+            "/w",
+            "openai",
+            "gpt-5",
+            "original",
+            provider_id="openai-main",
+            profile_id="fast",
+        )
+        first = store.add_message(
+            sid,
+            "user",
+            "hello",
+            file_paths=["README.md"],
+            provider_id="openai-main",
+            profile_id="fast",
+            image_attachments=[attachment],
+        )
+        fork_point = store.add_message(sid, "assistant", "hi")
+        store.add_message(sid, "user", "after fork")
+        store.update_session(
+            sid,
+            previous_id="resp-after-fork",
+            total_tokens=123,
+            input_tokens=100,
+            output_tokens=23,
+            cost_usd=0.12,
+        )
+
+        forked_id = store.fork_session(sid, fork_point)
+        original = store.get_session(sid)
+        forked = store.get_session(forked_id)
+        original_messages = store.list_messages(sid)
+        forked_messages = store.list_messages(forked_id)
+
+    assert original is not None
+    assert original.total_tokens == 123
+    assert len(original_messages) == 3
+    assert forked is not None
+    assert forked.title == "Fork-original"
+    assert forked.provider == "openai"
+    assert forked.provider_id == "openai-main"
+    assert forked.profile_id == "fast"
+    assert forked.previous_id is None
+    assert forked.total_tokens == 0
+    assert forked.input_tokens == 0
+    assert forked.output_tokens == 0
+    assert forked.cost_usd == pytest.approx(0.0)
+    assert forked.is_fork == 1
+    assert forked.forked_from_session_id == sid
+    assert forked.forked_from_message_id == fork_point
+    assert forked.fork_created_at is not None
+    assert [message.content for message in forked_messages] == ["hello", "hi"]
+    assert forked_messages[0].id != first
+    assert forked_messages[0].file_paths == ["README.md"]
+    assert len(forked_messages[0].image_attachments) == 1
+    forked_attachment = forked_messages[0].image_attachments[0]
+    assert forked_attachment.upload_id != attachment.upload_id
+    assert forked_attachment.name == attachment.name
+    assert forked_attachment.mime_type == attachment.mime_type
+    assert forked_attachment.byte_count == attachment.byte_count
+    assert (
+        forked_attachment.preview_url == f"/api/uploads/{forked_attachment.upload_id}"
+    )
+
+    uploads.delete_uploaded_images([attachment.upload_id])
+    assert (
+        uploads.load_uploaded_image_record(forked_attachment.upload_id).name
+        == "chart.png"
+    )
+
+
+def test_fork_session_rejects_message_from_other_session(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        sid = store.create_session("/w", "openai", "gpt-5", "original")
+        other_sid = store.create_session("/w", "openai", "gpt-5", "other")
+        other_message = store.add_message(other_sid, "user", "not yours")
+
+        with pytest.raises(KeyError):
+            store.fork_session(sid, other_message)
+
+        sessions = store.list_sessions("/w", limit=10)
+
+    assert len(sessions) == 2
 
 
 def test_delete_session_removes_session_and_messages(tmp_path) -> None:

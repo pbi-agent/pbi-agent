@@ -927,6 +927,7 @@ type SessionTimelineProps = {
   itemsVersion: number | string;
   parentSessionId?: string;
   showSubAgentCards?: boolean;
+  onForkMessage?: (messageId: string) => void;
 };
 
 function processingStatesEqual(
@@ -966,6 +967,7 @@ function areSessionTimelinePropsEqual(
     && processingStatesEqual(previous.processing, next.processing)
     && previous.parentSessionId === next.parentSessionId
     && previous.showSubAgentCards === next.showSubAgentCards
+    && previous.onForkMessage === next.onForkMessage
     && subAgentSummariesEqual(previous.subAgents, next.subAgents);
 }
 
@@ -978,6 +980,7 @@ export const SessionTimeline = memo(function SessionTimeline({
   itemsVersion,
   parentSessionId,
   showSubAgentCards = true,
+  onForkMessage,
 }: SessionTimelineProps) {
   const previousLengthRef = useRef<number | undefined>(undefined);
   const previousItemsVersionRef = useRef<number | string | undefined>(undefined);
@@ -1228,6 +1231,7 @@ export const SessionTimeline = memo(function SessionTimeline({
                     : undefined
                 }
                 closeSignal={closeCollapsiblesSignal}
+                onForkMessage={onForkMessage}
               />
             );
           }

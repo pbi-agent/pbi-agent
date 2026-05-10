@@ -79,6 +79,10 @@ def load_uploaded_image(upload_id: str) -> ImageAttachment:
     return load_image_bytes(record.name, raw_bytes)
 
 
+def duplicate_uploaded_image(upload_id: str) -> StoredImageUpload:
+    return store_image_attachment(load_uploaded_image(upload_id))
+
+
 def load_uploaded_image_record(upload_id: str) -> StoredImageUpload:
     metadata_path = _metadata_path(upload_id)
     if not metadata_path.exists():

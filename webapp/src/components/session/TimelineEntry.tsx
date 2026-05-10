@@ -1,5 +1,5 @@
 import { useState, type JSX, type ReactNode } from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, SplitIcon } from "lucide-react";
 import type { ImageAttachment, TimelineItem, TimelineMessageItem } from "../../types";
 import { Button } from "../ui/button";
 import {
@@ -121,6 +121,7 @@ export function TimelineEntry({
   subAgentStatus,
   bare = false,
   closeSignal = null,
+  onForkMessage,
 }: {
   item: TimelineItem;
   subAgentTitle?: string;
@@ -133,6 +134,7 @@ export function TimelineEntry({
   bare?: boolean;
   /** Session timeline signal that closes open details when the final answer arrives. */
   closeSignal?: string | null;
+  onForkMessage?: (messageId: string) => void;
 }) {
   const toolGroupDefaultOpen =
     item.kind === "tool_group"
@@ -184,6 +186,31 @@ export function TimelineEntry({
       : item.role === "debug" ? "debug"
       : "assistant";
 
+    const canFork =
+      onForkMessage
+      && item.messageId
+      && !item.subAgentId
+      && item.role === "assistant";
+    const forkAction = canFork ? (
+      <div className="timeline-entry__fork">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="timeline-entry__fork-button"
+              aria-label="Fork conversation"
+              onClick={() => onForkMessage(item.messageId!)}
+            >
+              <SplitIcon className="rotate-180" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Fork conversation</TooltipContent>
+        </Tooltip>
+      </div>
+    ) : null;
+
     const entry = (
       <div
         className={`timeline-entry timeline-entry--${roleClass}`}
@@ -205,6 +232,7 @@ export function TimelineEntry({
             )
           )}
         </div>
+        {forkAction}
       </div>
     );
 

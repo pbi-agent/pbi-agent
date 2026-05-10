@@ -142,6 +142,14 @@ def _serialize_session(  # pyright: ignore[reportUnusedFunction] - imported by s
         "input_tokens": record.input_tokens,
         "output_tokens": record.output_tokens,
         "cost_usd": record.cost_usd,
+        "is_fork": bool(record.is_fork),
+        "forked_from_session_id": record.forked_from_session_id,
+        "forked_from_message_id": (
+            f"msg-{record.forked_from_message_id}"
+            if record.forked_from_message_id is not None
+            else None
+        ),
+        "fork_created_at": record.fork_created_at,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "status": status,

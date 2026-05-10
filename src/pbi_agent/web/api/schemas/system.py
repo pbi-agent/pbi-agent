@@ -67,6 +67,10 @@ class SessionRecordModel(BaseModel):
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    is_fork: bool = False
+    forked_from_session_id: str | None = None
+    forked_from_message_id: str | None = None
+    fork_created_at: str | None = None
     created_at: str
     updated_at: str
     status: SessionLifecycleStatus = "idle"
@@ -196,6 +200,10 @@ class CreateSessionRequest(BaseModel):
 
 class UpdateSessionRequest(BaseModel):
     title: NonEmptyString
+
+
+class ForkSessionRequest(BaseModel):
+    message_id: NonEmptyString
 
 
 class QuestionAnswerRequest(BaseModel):

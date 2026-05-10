@@ -12,6 +12,7 @@ import {
   fetchSkillCandidates,
   fetchSkills,
   fetchSessions,
+  forkSession,
   installAgent,
   installCommand,
   installSkill,
@@ -67,6 +68,28 @@ describe("api helpers", () => {
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);
     expect(new Headers(init.headers).has("Content-Type")).toBe(false);
+  });
+
+  it("forks saved sessions from a message id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ session: { session_id: "fork-1", title: "Fork-Original" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(forkSession("session-1", "msg-2")).resolves.toEqual({
+      session_id: "fork-1",
+      title: "Fork-Original",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/session-1/fork",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ message_id: "msg-2" }),
+      }),
+    );
   });
 
   it("updates saved sessions with a PATCH payload", async () => {

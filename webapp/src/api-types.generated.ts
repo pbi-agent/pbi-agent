@@ -83,6 +83,8 @@ export type FileMentionItemModel = { path: string; kind: "file" | "image" };
 
 export type FileMentionSearchResponse = { items: FileMentionItemModel[] };
 
+export type ForkSessionRequest = { message_id: string };
+
 export type HTTPValidationError = { detail?: ValidationError[] };
 
 export type HistoryItemModel = { item_id: string; message_id: string; part_ids: MessagePartIdsModel; role: string; content: string; file_paths?: string[]; image_attachments?: ImageAttachmentModel[]; markdown: boolean; historical: boolean; created_at: string };
@@ -227,7 +229,7 @@ export type SessionIdentitySseEventPayloadModel = { live_session_id?: string | n
 
 export type SessionImageUploadResponse = { uploads: ImageAttachmentModel[] };
 
-export type SessionRecordModel = { session_id: string; directory: string; provider: string; provider_id: string | null; model: string; profile_id: string | null; previous_id: string | null; title: string; total_tokens: number; input_tokens: number; output_tokens: number; cost_usd: number; created_at: string; updated_at: string; status?: "idle" | "starting" | "running" | "waiting_for_input" | "ended" | "failed" | "stale"; active_run_id?: string | null; active_live_session_id?: string | null; task_id?: string | null };
+export type SessionRecordModel = { session_id: string; directory: string; provider: string; provider_id: string | null; model: string; profile_id: string | null; previous_id: string | null; title: string; total_tokens: number; input_tokens: number; output_tokens: number; cost_usd: number; is_fork?: boolean; forked_from_session_id?: string | null; forked_from_message_id?: string | null; fork_created_at?: string | null; created_at: string; updated_at: string; status?: "idle" | "starting" | "running" | "waiting_for_input" | "ended" | "failed" | "stale"; active_run_id?: string | null; active_live_session_id?: string | null; task_id?: string | null };
 
 export type SessionResetSseEventModel = { seq: number; created_at: string; type: "session_reset"; payload: EmptyPayloadModel };
 
@@ -394,6 +396,7 @@ export type ApiOperationResponses = {
   "DELETE /api/sessions/{session_id}": void;
   "GET /api/sessions/{session_id}": SessionDetailResponse;
   "PATCH /api/sessions/{session_id}": SessionResponse;
+  "POST /api/sessions/{session_id}/fork": SessionResponse;
   "POST /api/sessions/{session_id}/images": SessionImageUploadResponse;
   "POST /api/sessions/{session_id}/interrupt": LiveSessionResponse;
   "POST /api/sessions/{session_id}/messages": LiveSessionResponse;
@@ -432,6 +435,7 @@ export type ApiJsonRequestBodies = {
   "POST /api/sessions": CreateSessionRequest;
   "POST /api/sessions/expand-input": ExpandInputRequest;
   "PATCH /api/sessions/{session_id}": UpdateSessionRequest;
+  "POST /api/sessions/{session_id}/fork": ForkSessionRequest;
   "POST /api/sessions/{session_id}/messages": LiveSessionInputRequest;
   "POST /api/sessions/{session_id}/new-session": NewSessionRequest;
   "PUT /api/sessions/{session_id}/profile": ActiveProfileRequest;
@@ -462,6 +466,7 @@ export type ApiOperationPathParams = {
   "DELETE /api/sessions/{session_id}": { session_id: string };
   "GET /api/sessions/{session_id}": { session_id: string };
   "PATCH /api/sessions/{session_id}": { session_id: string };
+  "POST /api/sessions/{session_id}/fork": { session_id: string };
   "POST /api/sessions/{session_id}/images": { session_id: string };
   "POST /api/sessions/{session_id}/interrupt": { session_id: string };
   "POST /api/sessions/{session_id}/messages": { session_id: string };

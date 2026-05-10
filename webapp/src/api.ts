@@ -312,6 +312,27 @@ export async function updateSession(
   return result.session;
 }
 
+export async function forkSession(
+  sessionId: string,
+  messageId: string,
+): Promise<SessionRecord> {
+  const payload: ApiJsonRequestBodies["POST /api/sessions/{session_id}/fork"] = {
+    message_id: messageId,
+  };
+  const result = await apiRequest<
+    "POST /api/sessions/{session_id}/fork",
+    SessionResponsePayload
+  >(
+    "POST /api/sessions/{session_id}/fork",
+    pathFor("POST /api/sessions/{session_id}/fork", { session_id: sessionId }),
+    {
+      method: "POST",
+      body: jsonBody("POST /api/sessions/{session_id}/fork", payload),
+    },
+  );
+  return result.session;
+}
+
 export async function deleteSession(sessionId: string): Promise<void> {
   await apiRequest<"DELETE /api/sessions/{session_id}">(
     "DELETE /api/sessions/{session_id}",

@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     input_tokens  INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cost_usd      REAL NOT NULL DEFAULT 0.0,
+    is_fork       INTEGER NOT NULL DEFAULT 0,
+    forked_from_session_id TEXT,
+    forked_from_message_id INTEGER,
+    fork_created_at TEXT,
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
@@ -222,6 +226,10 @@ class SessionRecord:
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    is_fork: int
+    forked_from_session_id: str | None
+    forked_from_message_id: int | None
+    fork_created_at: str | None
     created_at: str
     updated_at: str
 
@@ -654,6 +662,32 @@ def _upload_ids_from_attachments_json(raw_value: object) -> set[str]:
     return upload_ids
 
 
+def _duplicate_image_attachments_for_fork(
+    raw_value: object,
+    duplicated_upload_ids: list[str],
+) -> str:
+    attachments = _deserialize_image_attachments(raw_value)
+    if not attachments:
+        return "[]"
+
+    from pbi_agent.web.uploads import duplicate_uploaded_image
+
+    forked_attachments: list[MessageImageAttachment] = []
+    for attachment in attachments:
+        duplicated = duplicate_uploaded_image(attachment.upload_id)
+        duplicated_upload_ids.append(duplicated.upload_id)
+        forked_attachments.append(
+            MessageImageAttachment(
+                upload_id=duplicated.upload_id,
+                name=duplicated.name,
+                mime_type=duplicated.mime_type,
+                byte_count=duplicated.byte_count,
+                preview_url=f"/api/uploads/{duplicated.upload_id}",
+            )
+        )
+    return _serialize_image_attachments(forked_attachments)
+
+
 def _message_record_from_row(row: sqlite3.Row) -> MessageRecord:
     data = dict(row)
     return MessageRecord(
@@ -747,6 +781,20 @@ class SessionStore:
             self._conn.execute("ALTER TABLE sessions ADD COLUMN provider_id TEXT")
         if "profile_id" not in session_columns:
             self._conn.execute("ALTER TABLE sessions ADD COLUMN profile_id TEXT")
+        if "is_fork" not in session_columns:
+            self._conn.execute(
+                "ALTER TABLE sessions ADD COLUMN is_fork INTEGER NOT NULL DEFAULT 0"
+            )
+        if "forked_from_session_id" not in session_columns:
+            self._conn.execute(
+                "ALTER TABLE sessions ADD COLUMN forked_from_session_id TEXT"
+            )
+        if "forked_from_message_id" not in session_columns:
+            self._conn.execute(
+                "ALTER TABLE sessions ADD COLUMN forked_from_message_id INTEGER"
+            )
+        if "fork_created_at" not in session_columns:
+            self._conn.execute("ALTER TABLE sessions ADD COLUMN fork_created_at TEXT")
 
         message_columns = {
             row["name"]
@@ -1080,9 +1128,10 @@ class SessionStore:
             self._conn.execute(
                 "INSERT INTO sessions "
                 "(session_id, directory, provider, provider_id, model, profile_id, previous_id, title, "
-                "total_tokens, input_tokens, output_tokens, cost_usd, "
+                "total_tokens, input_tokens, output_tokens, cost_usd, is_fork, "
+                "forked_from_session_id, forked_from_message_id, fork_created_at, "
                 "created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, 0, NULL, NULL, NULL, ?, ?)",
                 (
                     session_id,
                     normalized_directory,
@@ -1097,6 +1146,87 @@ class SessionStore:
             )
             self._conn.commit()
         return session_id
+
+    def fork_session(self, session_id: str, fork_message_id: int) -> str:
+        """Create a new session containing messages through ``fork_message_id``."""
+        new_session_id = uuid.uuid4().hex
+        now = _now_iso()
+        duplicated_upload_ids: list[str] = []
+        with self._lock:
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                session_row = self._conn.execute(
+                    "SELECT * FROM sessions WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+                if session_row is None:
+                    self._conn.rollback()
+                    raise KeyError(session_id)
+                message_row = self._conn.execute(
+                    "SELECT * FROM messages WHERE id = ? AND session_id = ?",
+                    (fork_message_id, session_id),
+                ).fetchone()
+                if message_row is None:
+                    self._conn.rollback()
+                    raise KeyError(f"msg-{fork_message_id}")
+
+                self._conn.execute(
+                    "INSERT INTO sessions "
+                    "(session_id, directory, provider, provider_id, model, profile_id, previous_id, title, "
+                    "total_tokens, input_tokens, output_tokens, cost_usd, is_fork, "
+                    "forked_from_session_id, forked_from_message_id, fork_created_at, "
+                    "created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, 1, ?, ?, ?, ?, ?)",
+                    (
+                        new_session_id,
+                        session_row["directory"],
+                        session_row["provider"],
+                        session_row["provider_id"],
+                        session_row["model"],
+                        session_row["profile_id"],
+                        f"Fork-{session_row['title']}",
+                        session_id,
+                        fork_message_id,
+                        now,
+                        now,
+                        now,
+                    ),
+                )
+                rows = self._conn.execute(
+                    "SELECT * FROM messages "
+                    "WHERE session_id = ? AND id <= ? ORDER BY id ASC",
+                    (session_id, fork_message_id),
+                ).fetchall()
+                for row in rows:
+                    image_attachments_json = _duplicate_image_attachments_for_fork(
+                        row["image_attachments_json"],
+                        duplicated_upload_ids,
+                    )
+                    self._conn.execute(
+                        "INSERT INTO messages "
+                        "(session_id, role, content, provider_id, profile_id, "
+                        "file_paths_json, image_attachments_json, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            new_session_id,
+                            row["role"],
+                            row["content"],
+                            row["provider_id"],
+                            row["profile_id"],
+                            row["file_paths_json"],
+                            image_attachments_json,
+                            row["created_at"],
+                        ),
+                    )
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                if duplicated_upload_ids:
+                    from pbi_agent.web.uploads import delete_uploaded_images
+
+                    delete_uploaded_images(duplicated_upload_ids)
+                raise
+        return new_session_id
 
     def update_session(
         self,

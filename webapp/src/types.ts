@@ -44,6 +44,10 @@ export type SessionRecord = {
   input_tokens: number;
   output_tokens: number;
   cost_usd: number;
+  is_fork?: boolean;
+  forked_from_session_id?: string | null;
+  forked_from_message_id?: string | null;
+  fork_created_at?: string | null;
   created_at: string;
   updated_at: string;
   status?: SessionStatus;

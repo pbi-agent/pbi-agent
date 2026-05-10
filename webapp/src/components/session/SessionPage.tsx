@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,6 +18,7 @@ import {
   fetchConfigBootstrap,
   fetchSessionDetail,
   fetchSessions,
+  forkSession,
   interruptSession,
   runSessionShellCommand,
   sendSessionMessage,
@@ -195,6 +196,16 @@ export function SessionPage({
       hydrateSavedSession(session.session_id, []);
       void client.invalidateQueries({ queryKey: ["sessions"] });
       void navigate(`/sessions/${encodeURIComponent(session.session_id)}`, { replace: true });
+    },
+  });
+
+  const forkSessionMutation = useMutation({
+    mutationFn: ({ sessionId, messageId }: { sessionId: string; messageId: string }) =>
+      forkSession(sessionId, messageId),
+    onSuccess: (session) => {
+      hydrateSavedSession(session.session_id, []);
+      void client.invalidateQueries({ queryKey: ["sessions"] });
+      void navigate(`/sessions/${encodeURIComponent(session.session_id)}`);
     },
   });
 
@@ -676,6 +687,12 @@ export function SessionPage({
     }
   };
 
+  const handleForkMessage = useCallback((messageId: string) => {
+    if (!routeSessionId || isSubAgentRoute) return;
+    forkSessionMutation.reset();
+    forkSessionMutation.mutate({ sessionId: routeSessionId, messageId });
+  }, [forkSessionMutation, isSubAgentRoute, routeSessionId]);
+
   const canInterruptActiveTurn = Boolean(
     !isSubAgentRoute
     && sessionState?.liveSessionId
@@ -846,6 +863,12 @@ export function SessionPage({
             <AlertDescription>{setSessionProfileMutation.error.message}</AlertDescription>
           </Alert>
         ) : null}
+        {forkSessionMutation.error ? (
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{forkSessionMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
         {setActiveProfileMutation.error ? (
           <Alert variant="destructive" className="banner banner--error">
             <AlertTriangleIcon />
@@ -890,6 +913,7 @@ export function SessionPage({
               processing={displayedProcessing}
               parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
               showSubAgentCards={!isSubAgentRoute}
+              onForkMessage={!isSubAgentRoute ? handleForkMessage : undefined}
             />
             {!isSubAgentRoute && sessionState?.pendingUserQuestions ? (
               <UserQuestionsPanel
