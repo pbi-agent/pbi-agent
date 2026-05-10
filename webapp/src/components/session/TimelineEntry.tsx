@@ -14,60 +14,94 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
 import { ToolResult } from "./ToolResult";
 
+const SPECIAL_TAG_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
+
+function findSkillTag(content: string, cursor: number): { index: number; tag: string } | undefined {
+  for (let index = cursor; index < content.length; index += 1) {
+    if (content[index] !== "$") continue;
+    const previous = index > 0 ? content[index - 1] : " ";
+    if (index > 0 && !SPECIAL_TAG_BOUNDARY_PATTERN.test(previous)) continue;
+    const next = content[index + 1] ?? "";
+    if (next === "" || next === "(" || next === "{" || /\d/.test(next)) continue;
+
+    let end = index + 1;
+    while (end < content.length && /[A-Za-z0-9_-]/.test(content[end])) {
+      end += 1;
+    }
+    return { index, tag: content.slice(index, end) };
+  }
+  return undefined;
+}
+
+function renderUserTextNodes(
+  content: string,
+  filePaths: string[] | undefined,
+): ReactNode[] {
+  const uniquePaths = filePaths
+    ? Array.from(new Set(filePaths)).sort((left, right) => right.length - left.length)
+    : [];
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  let partIndex = 0;
+
+  while (cursor < content.length) {
+    const skillMatch = findSkillTag(content, cursor);
+    let nextMatch:
+      | {
+          index: number;
+          text: string;
+          kind: "file" | "skill";
+        }
+      | undefined = skillMatch
+        ? {
+            index: skillMatch.index,
+            text: skillMatch.tag,
+            kind: "skill",
+          }
+        : undefined;
+
+    for (const path of uniquePaths) {
+      const index = content.indexOf(path, cursor);
+      if (index < 0) continue;
+      if (
+        !nextMatch ||
+        index < nextMatch.index ||
+        (index === nextMatch.index && path.length > nextMatch.text.length)
+      ) {
+        nextMatch = { index, text: path, kind: "file" };
+      }
+    }
+
+    if (!nextMatch) {
+      nodes.push(content.slice(cursor));
+      break;
+    }
+
+    if (nextMatch.index > cursor) {
+      nodes.push(content.slice(cursor, nextMatch.index));
+    }
+    nodes.push(
+      <span
+        key={`special-tag-${partIndex}`}
+        className={`timeline-entry__special-tag timeline-entry__${nextMatch.kind}-tag`}
+      >
+        {nextMatch.text}
+      </span>,
+    );
+    partIndex += 1;
+    cursor = nextMatch.index + nextMatch.text.length;
+  }
+
+  return nodes;
+}
+
 function renderUserContent(
   content: string,
   filePaths: string[] | undefined,
   imageAttachments: ImageAttachment[] | undefined,
 ): JSX.Element {
   const hasText = content.trim().length > 0;
-  const uniquePaths = filePaths
-    ? Array.from(new Set(filePaths)).sort((left, right) => right.length - left.length)
-    : [];
-
-  const nodes: ReactNode[] = [];
-  if (hasText) {
-    let cursor = 0;
-    let partIndex = 0;
-
-    while (cursor < content.length) {
-      let nextMatch:
-        | {
-            index: number;
-            path: string;
-          }
-        | undefined;
-
-      for (const path of uniquePaths) {
-        const index = content.indexOf(path, cursor);
-        if (index < 0) {
-          continue;
-        }
-        if (
-          !nextMatch ||
-          index < nextMatch.index ||
-          (index === nextMatch.index && path.length > nextMatch.path.length)
-        ) {
-          nextMatch = { index, path };
-        }
-      }
-
-      if (!nextMatch) {
-        nodes.push(content.slice(cursor));
-        break;
-      }
-
-      if (nextMatch.index > cursor) {
-        nodes.push(content.slice(cursor, nextMatch.index));
-      }
-      nodes.push(
-        <span key={`file-tag-${partIndex}`} className="timeline-entry__file-tag">
-          {nextMatch.path}
-        </span>,
-      );
-      partIndex += 1;
-      cursor = nextMatch.index + nextMatch.path.length;
-    }
-  }
+  const nodes = hasText ? renderUserTextNodes(content, filePaths) : [];
 
   return (
     <>

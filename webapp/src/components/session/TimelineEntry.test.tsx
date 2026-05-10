@@ -133,6 +133,23 @@ it("hides fork conversation for user messages", () => {
   expect(screen.queryByRole("button", { name: "Fork conversation" })).not.toBeInTheDocument();
 });
 
+it("highlights file and skill tags in user turn content", () => {
+  const item: TimelineItem = {
+    kind: "message",
+    itemId: "msg-tags",
+    messageId: "msg-tags",
+    role: "user",
+    content: "Summarize src/main.py with $compress",
+    markdown: false,
+    filePaths: ["src/main.py"],
+  };
+
+  const { container } = renderTimelineEntry(item);
+
+  expect(container.querySelector(".timeline-entry__file-tag")).toHaveTextContent("src/main.py");
+  expect(container.querySelector(".timeline-entry__skill-tag")).toHaveTextContent("$compress");
+});
+
 it("copies user turn content from the hover action row", async () => {
   const user = userEvent.setup();
   const writeText = mockClipboardWrite();

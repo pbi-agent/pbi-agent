@@ -652,19 +652,28 @@
   overflow-wrap: anywhere;
 }
 
-.timeline-entry__file-tag {
+.timeline-entry__special-tag {
   display: inline-flex;
   align-items: center;
   margin: 0 0.18rem;
   padding: 0.1rem 0.5rem;
   border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--color-accent-border) 78%, white 22%);
-  background: color-mix(in srgb, var(--color-surface-0) 72%, white 28%);
-  color: var(--color-accent);
   font-family: var(--font-mono);
   font-size: 0.92em;
   line-height: 1.45;
   vertical-align: baseline;
+}
+
+.timeline-entry__file-tag {
+  border: 1px solid var(--color-tag-file-border);
+  background: var(--color-tag-file-bg);
+  color: var(--color-tag-file);
+}
+
+.timeline-entry__skill-tag {
+  border: 1px solid var(--color-tag-skill-border);
+  background: var(--color-tag-skill-bg);
+  color: var(--color-tag-skill);
 }
 
 .timeline-entry__attachments {
@@ -2282,16 +2291,70 @@
   background: var(--background);
 }
 
+.composer__textarea-highlights {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  min-height: 20px;
+  max-height: 200px;
+  padding: 6px var(--sp-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-feature-settings: normal;
+  font-variant-ligatures: none;
+  font-kerning: none;
+  letter-spacing: 0;
+  line-height: var(--leading-normal);
+  tab-size: 4;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.composer__textarea-highlight {
+  /*
+   * IMPORTANT: do not change font-family, letter-spacing, padding, border, or
+   * any other property that affects glyph advance width. The overlay must
+   * measure identically to the textarea so the caret aligns with token edges.
+   */
+  border-radius: var(--radius-sm);
+  background: var(--color-tag-file-bg);
+  color: var(--color-tag-file);
+}
+
+.composer__textarea-highlight--skill {
+  background: var(--color-tag-skill-bg);
+  color: var(--color-tag-skill);
+}
+
 .composer__textarea {
+  position: relative;
+  z-index: 1;
   flex: 1;
   width: 100%;
   min-height: 20px;
   max-height: 200px;
   padding: 6px var(--sp-3);
+  font-family: var(--font-ui);
   font-size: var(--text-sm);
+  font-feature-settings: normal;
+  font-variant-ligatures: none;
+  font-kerning: none;
+  letter-spacing: 0;
   line-height: var(--leading-normal);
+  tab-size: 4;
+  color: transparent;
+  caret-color: var(--color-text-primary);
   background: transparent;
   overflow-y: auto;
+}
+
+.composer__textarea::selection {
+  color: transparent;
+  background: color-mix(in srgb, var(--color-accent) 24%, transparent);
 }
 
 .composer__textarea::placeholder {

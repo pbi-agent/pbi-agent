@@ -19,7 +19,7 @@ function renderComposer(
   overrides: Partial<React.ComponentProps<typeof Composer>> = {},
 ) {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
-  renderWithProviders(
+  const renderResult = renderWithProviders(
     <Composer
       inputEnabled
       sessionEnded={false}
@@ -31,7 +31,7 @@ function renderComposer(
       {...overrides}
     />,
   );
-  return { onSubmit };
+  return { onSubmit, ...renderResult };
 }
 
 function renderSubmittingComposer() {
@@ -125,6 +125,20 @@ describe("Composer", () => {
         Reflect.deleteProperty(inputPrototype, "showPicker");
       }
     }
+  });
+
+  it("highlights file and skill tags inside the message input", async () => {
+    const user = userEvent.setup();
+    const { container } = renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Use @src/main.py with $compress");
+
+    expect(container.querySelector(".composer__textarea-highlight--mention")).toHaveTextContent(
+      "@src/main.py",
+    );
+    expect(container.querySelector(".composer__textarea-highlight--skill")).toHaveTextContent(
+      "$compress",
+    );
   });
 
   it("enables message and image controls for lazy-created sessions", () => {

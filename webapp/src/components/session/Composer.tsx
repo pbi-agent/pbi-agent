@@ -189,6 +189,60 @@ function escapeMentionPath(path: string): string {
   return path.replaceAll(" ", "\\ ");
 }
 
+type HighlightSegment =
+  | { kind: "text"; text: string }
+  | { kind: "mention" | "skill"; text: string };
+
+function parseComposerHighlightSegments(text: string): HighlightSegment[] {
+  const segments: HighlightSegment[] = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    let nextStart = -1;
+    let nextKind: "mention" | "skill" | null = null;
+    for (let index = cursor; index < text.length; index += 1) {
+      const character = text[index];
+      if (character !== "@" && character !== "$") continue;
+      const previous = index > 0 ? text[index - 1] : " ";
+      if (index > 0 && !TOKEN_BOUNDARY_PATTERN.test(previous)) continue;
+      const next = text[index + 1] ?? "";
+      if (character === "@") {
+        if (next === "/" || next === "") continue;
+        nextStart = index;
+        nextKind = "mention";
+        break;
+      }
+      if (next === "" || next === "(" || next === "{" || /\d/.test(next)) continue;
+      nextStart = index;
+      nextKind = "skill";
+      break;
+    }
+
+    if (nextStart < 0 || !nextKind) {
+      segments.push({ kind: "text", text: text.slice(cursor) });
+      break;
+    }
+    if (nextStart > cursor) {
+      segments.push({ kind: "text", text: text.slice(cursor, nextStart) });
+    }
+
+    let tokenEnd = nextStart + 1;
+    while (tokenEnd < text.length) {
+      if (nextKind === "skill" && !/[A-Za-z0-9_-]/.test(text[tokenEnd])) break;
+      if (nextKind === "mention" && text[tokenEnd] === "\\" && text[tokenEnd + 1] === " ") {
+        tokenEnd += 2;
+        continue;
+      }
+      if (TOKEN_BOUNDARY_PATTERN.test(text[tokenEnd])) break;
+      tokenEnd += 1;
+    }
+    segments.push({ kind: nextKind, text: text.slice(nextStart, tokenEnd) });
+    cursor = tokenEnd;
+  }
+
+  return segments.length > 0 ? segments : [{ kind: "text", text }];
+}
+
 function replaceTextRange(
   text: string,
   start: number,
@@ -246,6 +300,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const pendingImagesRef = useRef<PendingImage[]>([]);
   const refocusAfterSubmitRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<ImageFileInput>(null);
 
   useImperativeHandle(ref, () => ({
@@ -265,6 +320,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const isShellMode = shellInput.startsWith("!");
   const shellCommandPreview = shellInput.slice(1).trim();
   const isActionMenuOpen = canSend && !isShellMode && actionMenuOpen;
+  const highlightSegments = parseComposerHighlightSegments(input);
   const activeSlashCommand = parseActiveSlashCommand(input, cursorIndex);
   const activeMention = activeSlashCommand
     ? null
@@ -296,12 +352,22 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setCursorIndex(textareaRef.current?.selectionStart ?? 0);
   }, []);
 
+  const syncHighlightScroll = useCallback(() => {
+    if (!textareaRef.current || !highlightRef.current) return;
+    highlightRef.current.scrollTop = textareaRef.current.scrollTop;
+    highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
+  }, []);
+
   useEffect(() => {
     activeCompletionRef.current = {
       mode: activeCompletionMode,
       query: activeCompletionQuery,
     };
   }, [activeCompletionMode, activeCompletionQuery]);
+
+  useEffect(() => {
+    syncHighlightScroll();
+  }, [input, syncHighlightScroll]);
 
   const applyInputState = useCallback(
     (nextInput: string, nextCursor: number) => {
@@ -923,6 +989,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           </div>
         ) : null}
         <InputGroup className="composer__textarea-wrap">
+          <div ref={highlightRef} className="composer__textarea-highlights" aria-hidden="true">
+            {highlightSegments.map((segment, index) => (
+              segment.kind === "text" ? (
+                <span key={`highlight-${index}`}>{segment.text}</span>
+              ) : (
+                <span
+                  key={`highlight-${index}`}
+                  className={`composer__textarea-highlight composer__textarea-highlight--${segment.kind}`}
+                >
+                  {segment.text}
+                </span>
+              )
+            ))}
+          </div>
           <InputGroupTextarea
             ref={textareaRef}
             name="message"
@@ -938,6 +1018,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             onKeyDown={handleKeyDown}
             onKeyUp={syncCursor}
             onPaste={handleTextareaPaste}
+            onScroll={syncHighlightScroll}
             onSelect={syncCursor}
             placeholder={
               sessionEnded
