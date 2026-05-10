@@ -31,6 +31,10 @@ export type ConnectionState =
 export type SubAgentState = {
   title: string;
   status: string;
+  waitMessage?: string | null;
+  processing?: ProcessingState | null;
+  sessionUsage?: UsagePayload | null;
+  turnUsage?: { usage: UsagePayload | null; elapsedSeconds?: number } | null;
 };
 
 export type SessionRuntimeState = {
@@ -329,6 +333,26 @@ function readProcessingState(value: unknown): ProcessingState | null {
   };
 }
 
+function readUsagePayload(value: unknown): UsagePayload | null {
+  return value !== null && typeof value === "object"
+    ? value as UsagePayload
+    : null;
+}
+
+function readTurnUsage(
+  value: unknown,
+): { usage: UsagePayload | null; elapsedSeconds?: number } | null {
+  if (value === null || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    usage: readUsagePayload(record.usage),
+    elapsedSeconds:
+      typeof record.elapsed_seconds === "number" ? record.elapsed_seconds : undefined,
+  };
+}
+
 function readToolGroupItems(value: unknown): TimelineToolGroupEntry[] {
   if (!Array.isArray(value)) {
     return [];
@@ -369,7 +393,7 @@ function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
         ? raw.image_attachments.filter(isImageAttachment)
         : undefined,
       markdown: Boolean(raw.markdown),
-      subAgentId: readOptionalString(raw.sub_agent_id),
+      subAgentId: readOptionalString(raw.sub_agent_id) ?? readOptionalString(raw.subAgentId),
     };
   }
   if (kind === "thinking") {
@@ -378,7 +402,7 @@ function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
       itemId,
       title: readString(raw.title, "Thinking"),
       content: readString(raw.content),
-      subAgentId: readOptionalString(raw.sub_agent_id),
+      subAgentId: readOptionalString(raw.sub_agent_id) ?? readOptionalString(raw.subAgentId),
     };
   }
   if (kind === "tool_group") {
@@ -388,7 +412,7 @@ function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
       label: readString(raw.label, "Tool calls"),
       status: readToolGroupStatus(raw.status),
       items: readToolGroupItems(raw.items),
-      subAgentId: readOptionalString(raw.sub_agent_id),
+      subAgentId: readOptionalString(raw.sub_agent_id) ?? readOptionalString(raw.subAgentId),
     };
   }
   return null;
@@ -458,6 +482,60 @@ function eventLiveSessionId(event: WebEvent): string | null {
   return "live_session_id" in event.payload && typeof event.payload.live_session_id === "string"
     ? event.payload.live_session_id
     : null;
+}
+
+function eventSubAgentId(event: WebEvent): string | null {
+  return "sub_agent_id" in event.payload && typeof event.payload.sub_agent_id === "string"
+    ? event.payload.sub_agent_id
+    : null;
+}
+
+function updateSubAgentState(
+  subAgents: Record<string, SubAgentState>,
+  subAgentId: string,
+  patch: Partial<SubAgentState>,
+): Record<string, SubAgentState> {
+  const current = subAgents[subAgentId] ?? {
+    title: subAgentId,
+    status: "running",
+  };
+  const next: SubAgentState = { ...current, ...patch };
+  if (patch.status && patch.status !== "running" && patch.status !== "starting") {
+    delete next.waitMessage;
+    delete next.processing;
+  }
+  return {
+    ...subAgents,
+    [subAgentId]: next,
+  };
+}
+
+function normalizeSnapshotSubAgents(
+  subAgents: LiveSessionSnapshot["sub_agents"],
+): Record<string, SubAgentState> {
+  return Object.fromEntries(
+    Object.entries(subAgents).map(([subAgentId, subAgent]) => {
+      const record = subAgent as Record<string, unknown>;
+      const waitMessage = typeof record.waitMessage === "string"
+        ? record.waitMessage
+        : typeof record.wait_message === "string"
+          ? record.wait_message
+          : null;
+      const sessionUsage = readUsagePayload(record.session_usage);
+      const turnUsage = readTurnUsage(record.turn_usage);
+      return [
+        subAgentId,
+        {
+          title: readString(record.title, subAgentId),
+          status: readString(record.status, "completed"),
+          ...(waitMessage ? { waitMessage } : {}),
+          ...(record.processing ? { processing: readProcessingState(record.processing) } : {}),
+          ...(sessionUsage ? { sessionUsage } : {}),
+          ...(turnUsage ? { turnUsage } : {}),
+        },
+      ];
+    }),
+  );
 }
 
 function findSessionKeyByLiveSessionId(
@@ -552,19 +630,40 @@ export function reduceSessionEvent(
       patch.sessionId = nextSessionId;
       break;
     case "input_state":
+      if (eventSubAgentId(event)) {
+        break;
+      }
       patch.inputEnabled = event.payload.enabled;
       break;
-    case "wait_state":
+    case "wait_state": {
+      const subAgentId = eventSubAgentId(event);
+      if (subAgentId) {
+        patch.subAgents = updateSubAgentState(current.subAgents, subAgentId, {
+          waitMessage: event.payload.active
+            ? event.payload.message ?? "Working..."
+            : null,
+        });
+        break;
+      }
       patch.waitMessage = event.payload.active
         ? event.payload.message ?? "Working..."
         : null;
       break;
-    case "processing_state":
+    }
+    case "processing_state": {
+      const subAgentId = eventSubAgentId(event);
+      if (subAgentId) {
+        patch.subAgents = updateSubAgentState(current.subAgents, subAgentId, {
+          processing: readProcessingState(event.payload),
+        });
+        break;
+      }
       patch.processing = readProcessingState(event.payload);
       if (patch.processing === null && current.restoredInput) {
         patch.inputEnabled = true;
       }
       break;
+    }
     case "user_questions_requested":
       patch.pendingUserQuestions = readPendingUserQuestions(event.payload);
       patch.inputEnabled = false;
@@ -574,8 +673,21 @@ export function reduceSessionEvent(
         patch.pendingUserQuestions = null;
       }
       break;
-    case "usage_updated":
-      if (event.payload.sub_agent_id) {
+    case "usage_updated": {
+      const subAgentId = eventSubAgentId(event);
+      if (subAgentId) {
+        patch.subAgents = updateSubAgentState(
+          current.subAgents,
+          subAgentId,
+          event.payload.scope === "session"
+            ? { sessionUsage: event.payload.usage }
+            : {
+                turnUsage: {
+                  usage: event.payload.usage,
+                  elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
+                },
+              },
+        );
         break;
       }
       if (event.payload.scope === "session") {
@@ -587,9 +699,12 @@ export function reduceSessionEvent(
         };
       }
       break;
+    }
     case "message_added": {
       const payload = event.payload;
-      patch.restoredInput = null;
+      if (!payload.sub_agent_id) {
+        patch.restoredInput = null;
+      }
       const item: TimelineItem = {
         kind: "message",
         itemId: payload.item_id,
@@ -612,14 +727,21 @@ export function reduceSessionEvent(
       if (!rawItem || typeof rawItem !== "object") {
         break;
       }
+      const rawRecord = rawItem as Record<string, unknown>;
+      const subAgentId = typeof payload.sub_agent_id === "string"
+        ? payload.sub_agent_id
+        : readOptionalString(rawRecord.sub_agent_id);
       const item = mapSnapshotItem({
-        ...(rawItem as Record<string, unknown>),
+        ...rawRecord,
         kind: "message",
+        ...(subAgentId ? { sub_agent_id: subAgentId } : {}),
       });
       if (!item) {
         break;
       }
-      patch.restoredInput = null;
+      if (!item.subAgentId) {
+        patch.restoredInput = null;
+      }
       patch.items = rekeyItem(current.items, payload.old_item_id, item);
       patch.itemsVersion = current.itemsVersion + 1;
       break;
@@ -667,13 +789,10 @@ export function reduceSessionEvent(
     case "sub_agent_state": {
       const payload = event.payload;
       const subAgentId = payload.sub_agent_id;
-      patch.subAgents = {
-        ...current.subAgents,
-        [subAgentId]: {
-          title: payload.title,
-          status: payload.status,
-        },
-      };
+      patch.subAgents = updateSubAgentState(current.subAgents, subAgentId, {
+        title: payload.title,
+        status: payload.status,
+      });
       break;
     }
     case "session_state":
@@ -783,9 +902,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
         ? session.last_event_seq
         : 0;
       const sameLiveSession = current.liveSessionId === session.live_session_id;
-      const hasAppliedNewerStreamEvents = sameLiveSession
+      const hasAppliedCurrentOrNewerStreamEvents = sameLiveSession
         && options.preserveEventCursor
-        && current.lastEventSeq > returnedLastEventSeq;
+        && current.lastEventSeq >= returnedLastEventSeq;
       return {
         ...nextState,
         sessionsByKey: {
@@ -795,9 +914,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
             liveSessionId: session.live_session_id,
             sessionId: session.session_id,
             runtime: runtimeFromSession(session),
-            inputEnabled: hasAppliedNewerStreamEvents ? current.inputEnabled : false,
-            waitMessage: hasAppliedNewerStreamEvents ? current.waitMessage : null,
-            processing: hasAppliedNewerStreamEvents ? current.processing : null,
+            inputEnabled: hasAppliedCurrentOrNewerStreamEvents ? current.inputEnabled : false,
+            waitMessage: hasAppliedCurrentOrNewerStreamEvents ? current.waitMessage : null,
+            processing: hasAppliedCurrentOrNewerStreamEvents ? current.processing : null,
             restoredInput: options.preserveItems ? current.restoredInput : null,
             sessionUsage: options.preserveItems ? current.sessionUsage : null,
             turnUsage: options.preserveItems ? current.turnUsage : null,
@@ -880,7 +999,7 @@ export const useSessionStore = create<SessionStore>((set) => ({
             pendingUserQuestions: snapshot.pending_user_questions ?? null,
             items,
             itemsVersion: items.length,
-            subAgents: snapshot.sub_agents,
+            subAgents: normalizeSnapshotSubAgents(snapshot.sub_agents),
             lastEventSeq: snapshot.last_event_seq,
           },
         },

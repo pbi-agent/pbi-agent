@@ -30,6 +30,7 @@ from pbi_agent.web.api.schemas.system import (
     ExpandInputResponse,
     FileMentionItemModel,
     FileMentionSearchResponse,
+    ForkSessionRequest,
     HistoryItemModel,
     LiveSessionInputRequest,
     LiveSessionModel,
@@ -142,6 +143,21 @@ def update_session(
         session = manager.update_session_title(session_id, payload.title)
     except KeyError as exc:
         raise not_found("Session not found.") from exc
+    return SessionResponse(session=model_from_payload(SessionRecordModel, session))
+
+
+@router.post("/sessions/{session_id}/fork", response_model=SessionResponse)
+def fork_session(
+    session_id: SessionIdPath,
+    payload: ForkSessionRequest,
+    manager: SessionManagerDep,
+) -> SessionResponse:
+    try:
+        session = manager.fork_session(session_id, payload.message_id)
+    except KeyError as exc:
+        raise not_found("Session or fork point not found.") from exc
+    except ValueError as exc:
+        raise bad_request(str(exc)) from exc
     return SessionResponse(session=model_from_payload(SessionRecordModel, session))
 
 

@@ -553,6 +553,43 @@ describe("useLiveSessionEvents", () => {
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
 
+  it("does not invalidate run queries for sub-agent input state events", () => {
+    const queryClient = new QueryClient();
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
+    const sessionKey = getSavedSessionKey("session-1");
+
+    renderHook(() => useLiveSessionEvents(sessionKey, "live-1"), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const socket = MockEventSource.instances[0];
+    emit(socket, {
+      seq: 1,
+      type: "input_state",
+      payload: {
+        enabled: false,
+        session_id: "session-1",
+        live_session_id: "live-1",
+        sub_agent_id: "sub-1",
+      },
+    });
+    emit(socket, {
+      seq: 2,
+      type: "input_state",
+      payload: {
+        enabled: true,
+        session_id: "session-1",
+        live_session_id: "live-1",
+        sub_agent_id: "sub-1",
+      },
+    });
+
+    expect(useSessionStore.getState().sessionsByKey[sessionKey]?.inputEnabled).toBe(false);
+    expect(invalidateQueries).not.toHaveBeenCalled();
+  });
+
   it("invalidates run queries when the live session ends", () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi

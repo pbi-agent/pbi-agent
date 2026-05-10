@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.types import ToolContext
 
@@ -61,7 +63,7 @@ def test_shell_handle_runs_command_with_workspace_defaults(
             "text": False,
             "shell": True,
             "executable": None,
-            "timeout": shell_tool.MAX_TIMEOUT_MS / 1000.0,
+            "timeout": shell_tool.DEFAULT_TIMEOUT_MS / 1000.0,
         }
     ]
 
@@ -116,6 +118,68 @@ def test_shell_handle_uses_requested_directory_and_clamps_timeout(
         "executable": None,
         "timeout": shell_tool.MAX_TIMEOUT_MS / 1000.0,
     }
+
+
+def test_shell_handle_honors_requested_timeout(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    seen: dict[str, object] = {}
+
+    def fake_run(
+        command: str,
+        *,
+        cwd: str,
+        capture_output: bool,
+        text: bool,
+        shell: bool,
+        executable: str | None,
+        timeout: float,
+    ) -> subprocess.CompletedProcess[bytes]:
+        del cwd, capture_output, text, shell, executable
+        seen["timeout"] = timeout
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout=b"",
+            stderr=b"",
+        )
+
+    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
+
+    result = shell_tool.handle(
+        {"command": "echo hi", "timeout_ms": 12_345},
+        ToolContext(),
+    )
+
+    assert result["exit_code"] == 0
+    assert seen == {"timeout": 12.345}
+
+
+@pytest.mark.parametrize(
+    "timeout_ms",
+    ["1000", 1.5, True, False, 0, -1],
+)
+def test_shell_handle_rejects_invalid_timeout_without_running_subprocess(
+    tmp_path: Path,
+    monkeypatch,
+    timeout_ms: object,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        del args, kwargs
+        raise AssertionError("subprocess.run should not be called")
+
+    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
+
+    result = shell_tool.handle(
+        {"command": "echo hi", "timeout_ms": timeout_ms},
+        ToolContext(),
+    )
+
+    assert result == {"error": "'timeout_ms' must be a positive integer."}
 
 
 def test_shell_handle_returns_timeout_payload(tmp_path: Path, monkeypatch) -> None:
@@ -198,6 +262,18 @@ def test_shell_handle_bounds_large_stdout_and_stderr(
     assert result["stderr"].endswith("-stderr-end")
     assert "chars omitted" in result["stdout"]
     assert "chars omitted" in result["stderr"]
+
+
+def test_shell_tool_schema_keeps_timeout_bounds_in_description_only() -> None:
+    timeout_schema = shell_tool.SPEC.parameters_schema["properties"]["timeout_ms"]
+
+    assert timeout_schema == {
+        "type": "integer",
+        "description": (
+            "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
+            "maximum 300 000 (5 minutes)."
+        ),
+    }
 
 
 def test_resolve_working_directory_allows_absolute_paths_outside_workspace(

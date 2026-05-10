@@ -327,6 +327,10 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
             {"type": "null"},
         ]
     }
+    timeout_schema = shell_parameters["properties"]["timeout_ms"]
+    assert "default" not in timeout_schema
+    assert "minimum" not in timeout_schema
+    assert "maximum" not in timeout_schema
     assert "max_output_tokens" not in body
     assert "prompt_cache_retention" not in body
     assert body["context_management"] == [

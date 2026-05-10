@@ -9,7 +9,7 @@ from pbi_agent.web.api.schemas.system import (
     LiveSessionModel,
     MessagePartIdsModel,
     PendingUserQuestionsModel,
-    ProcessingStateModel,
+    ProcessingPhase,
     SessionRecordModel,
 )
 from pbi_agent.web.api.schemas.tasks import BoardStageModel, TaskRecordModel
@@ -70,6 +70,7 @@ class SessionIdentitySseEventModel(SseEventBaseModel):
 
 class InputStateSseEventPayloadModel(EventIdentityPayloadModel):
     enabled: bool
+    sub_agent_id: str | None = None
 
 
 class InputStateSseEventModel(SseEventBaseModel):
@@ -80,6 +81,7 @@ class InputStateSseEventModel(SseEventBaseModel):
 class WaitStateSseEventPayloadModel(EventIdentityPayloadModel):
     active: bool
     message: str | None = None
+    sub_agent_id: str | None = None
 
 
 class WaitStateSseEventModel(SseEventBaseModel):
@@ -87,9 +89,17 @@ class WaitStateSseEventModel(SseEventBaseModel):
     payload: WaitStateSseEventPayloadModel
 
 
+class ProcessingStateSseEventPayloadModel(EventIdentityPayloadModel):
+    active: bool
+    phase: ProcessingPhase | None = None
+    message: str | None = None
+    active_tool_count: int | None = None
+    sub_agent_id: str | None = None
+
+
 class ProcessingStateSseEventModel(SseEventBaseModel):
     type: Literal["processing_state"]
-    payload: ProcessingStateModel
+    payload: ProcessingStateSseEventPayloadModel
 
 
 class UserQuestionsRequestedSseEventModel(SseEventBaseModel):
@@ -167,6 +177,7 @@ class MessageAddedSseEventModel(SseEventBaseModel):
 class MessageRekeyedSseEventPayloadModel(EventIdentityPayloadModel):
     old_item_id: str
     item: MessageAddedSseEventPayloadModel
+    sub_agent_id: str | None = None
 
 
 class MessageRekeyedSseEventModel(SseEventBaseModel):
@@ -177,6 +188,7 @@ class MessageRekeyedSseEventModel(SseEventBaseModel):
 class MessageRemovedSseEventPayloadModel(EventIdentityPayloadModel):
     item_id: str
     restore_input: str | None = None
+    sub_agent_id: str | None = None
 
 
 class MessageRemovedSseEventModel(SseEventBaseModel):

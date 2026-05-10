@@ -83,6 +83,8 @@ export type FileMentionItemModel = { path: string; kind: "file" | "image" };
 
 export type FileMentionSearchResponse = { items: FileMentionItemModel[] };
 
+export type ForkSessionRequest = { message_id: string };
+
 export type HTTPValidationError = { detail?: ValidationError[] };
 
 export type HistoryItemModel = { item_id: string; message_id: string; part_ids: MessagePartIdsModel; role: string; content: string; file_paths?: string[]; image_attachments?: ImageAttachmentModel[]; markdown: boolean; historical: boolean; created_at: string };
@@ -91,7 +93,7 @@ export type ImageAttachmentModel = { upload_id: string; name: string; mime_type:
 
 export type InputStateSseEventModel = { seq: number; created_at: string; type: "input_state"; payload: InputStateSseEventPayloadModel };
 
-export type InputStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; enabled: boolean };
+export type InputStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; enabled: boolean; sub_agent_id?: string | null };
 
 export type LiveSessionBoundSseEventModel = { seq: number; created_at: string; type: "live_session_bound"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
@@ -107,7 +109,7 @@ export type LiveSessionResponse = { session: LiveSessionModel };
 
 export type LiveSessionShellCommandRequest = { command?: string };
 
-export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; items: Record<string, unknown>[]; sub_agents: Record<string, Record<string, string>>; last_event_seq: number };
+export type LiveSessionSnapshotModel = { live_session_id: string; session_id: string | null; runtime: RuntimeSummaryModel | null; input_enabled: boolean; wait_message: string | null; processing: ProcessingStateModel | null; session_usage: Record<string, unknown> | null; turn_usage: Record<string, unknown> | null; session_ended: boolean; fatal_error: string | null; pending_user_questions: PendingUserQuestionsModel | null; items: Record<string, unknown>[]; sub_agents: Record<string, SubAgentSnapshotModel>; last_event_seq: number };
 
 export type LiveSessionStartedSseEventModel = { seq: number; created_at: string; type: "live_session_started"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
@@ -125,11 +127,11 @@ export type MessagePartIdsModel = { content: string; file_paths?: string[]; imag
 
 export type MessageRekeyedSseEventModel = { seq: number; created_at: string; type: "message_rekeyed"; payload: MessageRekeyedSseEventPayloadModel };
 
-export type MessageRekeyedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; old_item_id: string; item: MessageAddedSseEventPayloadModel };
+export type MessageRekeyedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; old_item_id: string; item: MessageAddedSseEventPayloadModel; sub_agent_id?: string | null };
 
 export type MessageRemovedSseEventModel = { seq: number; created_at: string; type: "message_removed"; payload: MessageRemovedSseEventPayloadModel };
 
-export type MessageRemovedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; restore_input?: string | null };
+export type MessageRemovedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; restore_input?: string | null; sub_agent_id?: string | null };
 
 export type ModelProfileListResponse = { model_profiles: ModelProfileViewModel[]; active_profile_id: string | null; config_revision: string };
 
@@ -153,7 +155,9 @@ export type PendingUserQuestionsModel = { prompt_id: string; questions: PendingU
 
 export type ProcessingStateModel = { active: boolean; phase?: "starting" | "model_wait" | "tool_execution" | "finalizing" | "interrupting" | "retry_wait" | null; message?: string | null; active_tool_count?: number | null };
 
-export type ProcessingStateSseEventModel = { seq: number; created_at: string; type: "processing_state"; payload: ProcessingStateModel };
+export type ProcessingStateSseEventModel = { seq: number; created_at: string; type: "processing_state"; payload: ProcessingStateSseEventPayloadModel };
+
+export type ProcessingStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; active: boolean; phase?: "starting" | "model_wait" | "tool_execution" | "finalizing" | "interrupting" | "retry_wait" | null; message?: string | null; active_tool_count?: number | null; sub_agent_id?: string | null };
 
 export type ProviderAuthFlowResponse = { provider: ProviderViewModel; auth_status: ProviderAuthStatusModel; flow: ProviderAuthFlowViewModel; session?: ProviderAuthSessionModel | null };
 
@@ -225,7 +229,7 @@ export type SessionIdentitySseEventPayloadModel = { live_session_id?: string | n
 
 export type SessionImageUploadResponse = { uploads: ImageAttachmentModel[] };
 
-export type SessionRecordModel = { session_id: string; directory: string; provider: string; provider_id: string | null; model: string; profile_id: string | null; previous_id: string | null; title: string; total_tokens: number; input_tokens: number; output_tokens: number; cost_usd: number; created_at: string; updated_at: string; status?: "idle" | "starting" | "running" | "waiting_for_input" | "ended" | "failed" | "stale"; active_run_id?: string | null; active_live_session_id?: string | null; task_id?: string | null };
+export type SessionRecordModel = { session_id: string; directory: string; provider: string; provider_id: string | null; model: string; profile_id: string | null; previous_id: string | null; title: string; total_tokens: number; input_tokens: number; output_tokens: number; cost_usd: number; is_fork?: boolean; forked_from_session_id?: string | null; forked_from_message_id?: string | null; fork_created_at?: string | null; created_at: string; updated_at: string; status?: "idle" | "starting" | "running" | "waiting_for_input" | "ended" | "failed" | "stale"; active_run_id?: string | null; active_live_session_id?: string | null; task_id?: string | null };
 
 export type SessionResetSseEventModel = { seq: number; created_at: string; type: "session_reset"; payload: EmptyPayloadModel };
 
@@ -266,6 +270,8 @@ export type SkillViewModel = { id: string; name: string; description: string; pa
 export type SlashCommandItemModel = { name: string; description: string; kind: "local_command" | "command" };
 
 export type SlashCommandSearchResponse = { items: SlashCommandItemModel[] };
+
+export type SubAgentSnapshotModel = { title: string; status: string; wait_message?: string | null; processing?: ProcessingStateModel | null; session_usage?: Record<string, unknown> | null; turn_usage?: UsageSnapshotModel | null };
 
 export type SubAgentStateSseEventModel = { seq: number; created_at: string; type: "sub_agent_state"; payload: SubAgentStateSseEventPayloadModel };
 
@@ -315,6 +321,8 @@ export type UsageLimitCreditsModel = { has_credits?: boolean | null; unlimited?:
 
 export type UsageLimitWindowModel = { name: string; used_percent?: number | null; remaining_percent?: number | null; window_minutes?: number | null; resets_at?: number | null; reset_at_iso?: string | null; used_requests?: number | null; total_requests?: number | null; remaining_requests?: number | null };
 
+export type UsageSnapshotModel = { usage: Record<string, unknown> | null; elapsed_seconds?: number | null };
+
 export type UsageUpdatedSseEventModel = { seq: number; created_at: string; type: "usage_updated"; payload: UsageUpdatedSseEventPayloadModel };
 
 export type UsageUpdatedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; scope: "session" | "turn"; usage: TokenUsagePayloadModel; elapsed_seconds?: number | null; sub_agent_id?: string | null };
@@ -329,7 +337,7 @@ export type ValidationError = { loc: (string | number)[]; msg: string; type: str
 
 export type WaitStateSseEventModel = { seq: number; created_at: string; type: "wait_state"; payload: WaitStateSseEventPayloadModel };
 
-export type WaitStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; active: boolean; message?: string | null };
+export type WaitStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; active: boolean; message?: string | null; sub_agent_id?: string | null };
 
 export type WelcomeSseEventModel = { seq: number; created_at: string; type: "welcome"; payload: WelcomeSseEventPayloadModel };
 
@@ -388,6 +396,7 @@ export type ApiOperationResponses = {
   "DELETE /api/sessions/{session_id}": void;
   "GET /api/sessions/{session_id}": SessionDetailResponse;
   "PATCH /api/sessions/{session_id}": SessionResponse;
+  "POST /api/sessions/{session_id}/fork": SessionResponse;
   "POST /api/sessions/{session_id}/images": SessionImageUploadResponse;
   "POST /api/sessions/{session_id}/interrupt": LiveSessionResponse;
   "POST /api/sessions/{session_id}/messages": LiveSessionResponse;
@@ -426,6 +435,7 @@ export type ApiJsonRequestBodies = {
   "POST /api/sessions": CreateSessionRequest;
   "POST /api/sessions/expand-input": ExpandInputRequest;
   "PATCH /api/sessions/{session_id}": UpdateSessionRequest;
+  "POST /api/sessions/{session_id}/fork": ForkSessionRequest;
   "POST /api/sessions/{session_id}/messages": LiveSessionInputRequest;
   "POST /api/sessions/{session_id}/new-session": NewSessionRequest;
   "PUT /api/sessions/{session_id}/profile": ActiveProfileRequest;
@@ -456,6 +466,7 @@ export type ApiOperationPathParams = {
   "DELETE /api/sessions/{session_id}": { session_id: string };
   "GET /api/sessions/{session_id}": { session_id: string };
   "PATCH /api/sessions/{session_id}": { session_id: string };
+  "POST /api/sessions/{session_id}/fork": { session_id: string };
   "POST /api/sessions/{session_id}/images": { session_id: string };
   "POST /api/sessions/{session_id}/interrupt": { session_id: string };
   "POST /api/sessions/{session_id}/messages": { session_id: string };

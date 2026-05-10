@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,6 +18,7 @@ import {
   fetchConfigBootstrap,
   fetchSessionDetail,
   fetchSessions,
+  forkSession,
   interruptSession,
   runSessionShellCommand,
   sendSessionMessage,
@@ -40,8 +41,16 @@ import type {
 } from "../../types";
 import {
   getSavedSessionKey,
+  type SubAgentState,
   useSessionStore,
 } from "../../store";
+import { useSidebarStore } from "../../hooks/useSidebar";
+import { cn } from "../../lib/utils";
+import {
+  projectMainTimelineItems,
+  projectSubAgentTimelineItems,
+  type TimelineProjection,
+} from "../../sessionTimelineProjection";
 import { useSessionEvents } from "../../hooks/useSessionEvents";
 import { ConnectionBadge } from "./ConnectionBadge";
 import { DeleteSessionModal } from "./DeleteSessionModal";
@@ -51,6 +60,7 @@ import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
 import { UserQuestionsPanel } from "./UserQuestionsPanel";
 import { Composer, type ComposerHandle } from "./Composer";
+import { WorkspaceBadge } from "../WorkspaceBadge";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import {
@@ -63,6 +73,51 @@ import {
 import { EmptyState } from "../shared/EmptyState";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+
+type SubAgentDisplayMap = Record<string, { title: string; status: string }>;
+
+function useTimelineDisplayProjection(
+  items: TimelineItem[],
+  routeSubAgentId: string | null,
+): { items: TimelineItem[]; itemsVersion: string } {
+  const routeKey = routeSubAgentId ? `sub-agent:${routeSubAgentId}` : "main";
+  const projection: TimelineProjection = useMemo(
+    () => routeSubAgentId
+      ? projectSubAgentTimelineItems(items, routeSubAgentId)
+      : projectMainTimelineItems(items),
+    [items, routeSubAgentId],
+  );
+  return {
+    items: projection.items,
+    itemsVersion: JSON.stringify([routeKey, projection.signature]),
+  };
+}
+
+function useSubAgentDisplayMap(
+  subAgents: Record<string, SubAgentState>,
+  routeSubAgentId: string | null,
+): SubAgentDisplayMap {
+  return useMemo(() => {
+    if (routeSubAgentId) {
+      const selected = subAgents[routeSubAgentId] ?? {
+        title: routeSubAgentId,
+        status: "completed",
+      };
+      return {
+        [routeSubAgentId]: {
+          title: selected.title,
+          status: selected.status,
+        },
+      };
+    }
+    return Object.fromEntries(
+      Object.entries(subAgents).map(([subAgentId, subAgent]) => [
+        subAgentId,
+        { title: subAgent.title, status: subAgent.status },
+      ]),
+    );
+  }, [routeSubAgentId, subAgents]);
+}
 
 export function SessionPage({
   workspaceRoot,
@@ -87,6 +142,7 @@ export function SessionPage({
   const composerRef = useRef<ComposerHandle>(null);
   const submitInFlightRef = useRef(false);
   const [directSubmitPending, setDirectSubmitPending] = useState(false);
+  const isSidebarOpen = useSidebarStore((state) => state.isOpen);
 
   const routeSessionKey = routeSessionId
     ? getSavedSessionKey(routeSessionId)
@@ -140,6 +196,16 @@ export function SessionPage({
       hydrateSavedSession(session.session_id, []);
       void client.invalidateQueries({ queryKey: ["sessions"] });
       void navigate(`/sessions/${encodeURIComponent(session.session_id)}`, { replace: true });
+    },
+  });
+
+  const forkSessionMutation = useMutation({
+    mutationFn: ({ sessionId, messageId }: { sessionId: string; messageId: string }) =>
+      forkSession(sessionId, messageId),
+    onSuccess: (session) => {
+      hydrateSavedSession(session.session_id, []);
+      void client.invalidateQueries({ queryKey: ["sessions"] });
+      void navigate(`/sessions/${encodeURIComponent(session.session_id)}`);
     },
   });
 
@@ -503,34 +569,58 @@ export function SessionPage({
     submitInFlightRef.current = true;
     setDirectSubmitPending(true);
     try {
-    const { text, images } = payload;
-    setInputWarnings([]);
-    if (text.startsWith("!")) {
-      if (images.length > 0) {
-        throw new Error("Shell commands cannot include image attachments.");
+      const { text, images } = payload;
+      setInputWarnings([]);
+      if (text.startsWith("!")) {
+        if (images.length > 0) {
+          throw new Error("Shell commands cannot include image attachments.");
+        }
+        const command = text.slice(1).trim();
+        if (!command) {
+          throw new Error("Shell command must be a non-empty string.");
+        }
+        const sessionId = await ensureDraftSession();
+        if (!routeSessionId) {
+          void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+        }
+        const session = await runSessionShellCommand(sessionId, { command });
+        attachLiveSession(getSavedSessionKey(sessionId), session, {
+          preserveItems: true,
+          preserveEventCursor: true,
+        });
+        return;
       }
-      const command = text.slice(1).trim();
-      if (!command) {
-        throw new Error("Shell command must be a non-empty string.");
+      if (text.startsWith("/")) {
+        const sessionId = await ensureDraftSession();
+        const uploadedImageIds = await uploadImagesForCurrentSession(images, sessionId);
+        const session = await sendSessionMessage(sessionId, {
+          text,
+          file_paths: [],
+          image_paths: [],
+          image_upload_ids: uploadedImageIds,
+          profile_id: selectedSavedProfileId,
+          interactive_mode: interactiveMode,
+        });
+        attachLiveSession(getSavedSessionKey(sessionId), session, {
+          preserveItems: true,
+          preserveEventCursor: true,
+        });
+        if (!routeSessionId) {
+          void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+        }
+        return;
       }
-      const sessionId = await ensureDraftSession();
-      if (!routeSessionId) {
-        void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
+
+      const expanded = await expandSessionInput(text);
+      if (expanded.warnings.length > 0) {
+        setInputWarnings(expanded.warnings);
       }
-      const session = await runSessionShellCommand(sessionId, { command });
-      attachLiveSession(getSavedSessionKey(sessionId), session, {
-        preserveItems: true,
-        preserveEventCursor: true,
-      });
-      return;
-    }
-    if (text.startsWith("/")) {
       const sessionId = await ensureDraftSession();
       const uploadedImageIds = await uploadImagesForCurrentSession(images, sessionId);
       const session = await sendSessionMessage(sessionId, {
-        text,
-        file_paths: [],
-        image_paths: [],
+        text: expanded.text,
+        file_paths: expanded.file_paths,
+        image_paths: Array.from(new Set(expanded.image_paths)),
         image_upload_ids: uploadedImageIds,
         profile_id: selectedSavedProfileId,
         interactive_mode: interactiveMode,
@@ -542,30 +632,6 @@ export function SessionPage({
       if (!routeSessionId) {
         void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
       }
-      return;
-    }
-
-    const expanded = await expandSessionInput(text);
-    if (expanded.warnings.length > 0) {
-      setInputWarnings(expanded.warnings);
-    }
-    const sessionId = await ensureDraftSession();
-    const uploadedImageIds = await uploadImagesForCurrentSession(images, sessionId);
-    const session = await sendSessionMessage(sessionId, {
-      text: expanded.text,
-      file_paths: expanded.file_paths,
-      image_paths: Array.from(new Set(expanded.image_paths)),
-      image_upload_ids: uploadedImageIds,
-      profile_id: selectedSavedProfileId,
-      interactive_mode: interactiveMode,
-    });
-    attachLiveSession(getSavedSessionKey(sessionId), session, {
-      preserveItems: true,
-      preserveEventCursor: true,
-    });
-    if (!routeSessionId) {
-      void navigate(`/sessions/${encodeURIComponent(sessionId)}`, { replace: true });
-    }
     } finally {
       submitInFlightRef.current = false;
       setDirectSubmitPending(false);
@@ -621,11 +687,16 @@ export function SessionPage({
     }
   };
 
+  const handleForkMessage = useCallback((messageId: string) => {
+    if (!routeSessionId || isSubAgentRoute) return;
+    forkSessionMutation.reset();
+    forkSessionMutation.mutate({ sessionId: routeSessionId, messageId });
+  }, [forkSessionMutation, isSubAgentRoute, routeSessionId]);
+
   const canInterruptActiveTurn = Boolean(
     !isSubAgentRoute
     && sessionState?.liveSessionId
     && !sessionState.sessionEnded
-    && sessionState.processing?.active
     && !sessionState.inputEnabled,
   );
   const isDeleteBusy = deleteSessionMutation.isPending || createSessionMutation.isPending;
@@ -640,22 +711,16 @@ export function SessionPage({
     ? sessionState?.subAgents[routeSubAgentId] ?? null
     : null;
   const selectedSubAgentIsRunning = selectedSubAgent?.status === "running";
-  const displayedItems = useMemo(
-    () => isSubAgentRoute && routeSubAgentId
-      ? (sessionState?.items ?? []).filter((item) => item.subAgentId === routeSubAgentId)
-      : sessionState?.items ?? [],
-    [isSubAgentRoute, routeSubAgentId, sessionState?.items],
+  const {
+    items: displayedItems,
+    itemsVersion: displayedItemsVersion,
+  } = useTimelineDisplayProjection(
+    sessionState?.items ?? [],
+    isSubAgentRoute ? routeSubAgentId ?? null : null,
   );
-  const displayedSubAgents = useMemo(
-    () => isSubAgentRoute && routeSubAgentId
-      ? {
-          [routeSubAgentId]: selectedSubAgent ?? {
-            title: routeSubAgentId,
-            status: "completed",
-          },
-        }
-      : sessionState?.subAgents ?? {},
-    [isSubAgentRoute, routeSubAgentId, selectedSubAgent, sessionState?.subAgents],
+  const displayedSubAgents = useSubAgentDisplayMap(
+    sessionState?.subAgents ?? {},
+    isSubAgentRoute ? routeSubAgentId ?? null : null,
   );
   const latestDisplayedItem = displayedItems.at(-1);
   const selectedSubAgentHasFinalResponse =
@@ -664,12 +729,17 @@ export function SessionPage({
     selectedSubAgentIsRunning && !selectedSubAgentHasFinalResponse;
   const displayedProcessing: ProcessingState | null = isSubAgentRoute
     ? showSelectedSubAgentProcessing
-      ? sessionState?.processing ?? null
+      ? selectedSubAgent?.processing ?? null
       : null
     : sessionState?.processing ?? null;
-  const displayedWaitMessage = isSubAgentRoute && !showSelectedSubAgentProcessing
-    ? null
+  const displayedWaitMessage = isSubAgentRoute
+    ? showSelectedSubAgentProcessing
+      ? selectedSubAgent?.waitMessage ?? null
+      : null
     : sessionState?.waitMessage ?? null;
+  const displayedUsage = isSubAgentRoute
+    ? selectedSubAgent?.sessionUsage ?? selectedSubAgent?.turnUsage?.usage ?? null
+    : sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null;
 
   const sessionListPanel = (
     <SessionSidebar
@@ -699,7 +769,12 @@ export function SessionPage({
         data-debug-connection={sessionState?.connection ?? undefined}
       >
         <div className="session-panel">
-        <div className="session-topbar">
+        <div
+          className={cn(
+            "session-topbar",
+            !isSidebarOpen && "session-topbar--with-workspace",
+          )}
+        >
           <div className="session-topbar__leading">
             <ConnectionBadge connection={topbarConnection} />
             <ProfileSelector
@@ -712,6 +787,11 @@ export function SessionPage({
               }}
             />
           </div>
+          {!isSidebarOpen ? (
+            <div className="session-topbar__workspace" aria-label="Current workspace">
+              <WorkspaceBadge tooltipSide="bottom" />
+            </div>
+          ) : null}
           <div className="session-topbar__actions">
             {!isSubAgentRoute ? (
               <Tooltip>
@@ -742,7 +822,7 @@ export function SessionPage({
             ) : null}
             <UsageBar
               compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
-              usage={sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null}
+              usage={displayedUsage}
             />
           </div>
         </div>
@@ -783,6 +863,12 @@ export function SessionPage({
             <AlertDescription>{setSessionProfileMutation.error.message}</AlertDescription>
           </Alert>
         ) : null}
+        {forkSessionMutation.error ? (
+          <Alert variant="destructive" className="banner banner--error">
+            <AlertTriangleIcon />
+            <AlertDescription>{forkSessionMutation.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
         {setActiveProfileMutation.error ? (
           <Alert variant="destructive" className="banner banner--error">
             <AlertTriangleIcon />
@@ -820,13 +906,14 @@ export function SessionPage({
           <>
             <SessionTimeline
               items={displayedItems}
-              itemsVersion={sessionState?.itemsVersion ?? 0}
+              itemsVersion={displayedItemsVersion}
               subAgents={displayedSubAgents}
               connection={sessionState?.connection ?? "disconnected"}
               waitMessage={displayedWaitMessage}
               processing={displayedProcessing}
               parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
               showSubAgentCards={!isSubAgentRoute}
+              onForkMessage={!isSubAgentRoute ? handleForkMessage : undefined}
             />
             {!isSubAgentRoute && sessionState?.pendingUserQuestions ? (
               <UserQuestionsPanel
@@ -863,7 +950,6 @@ export function SessionPage({
                 interactiveMode={interactiveMode}
                 isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
                 onSubmit={handleSubmit}
-                isProcessing={Boolean(sessionState?.processing?.active)}
                 canInterrupt={canInterruptActiveTurn}
                 isInterrupting={interruptMutation.isPending}
                 restoredInput={sessionState?.restoredInput ?? null}
@@ -957,8 +1043,17 @@ function snapshotItemId(item: Record<string, unknown>): string {
       : "";
 }
 
+function snapshotSubAgentId(item: Record<string, unknown>): string | null {
+  return typeof item.sub_agent_id === "string"
+    ? item.sub_agent_id
+    : typeof item.subAgentId === "string"
+      ? item.subAgentId
+      : null;
+}
+
 function isHistoricalSnapshotMessage(item: Record<string, unknown>): boolean {
   return item.kind === "message"
+    && !snapshotSubAgentId(item)
     && (item.historical === true || snapshotItemId(item).startsWith("history-"));
 }
 

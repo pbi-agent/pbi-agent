@@ -42,7 +42,7 @@ from pbi_agent.config import (
     create_provider_config,
     delete_model_profile_config,
 )
-from pbi_agent.display.protocol import PendingUserQuestion
+from pbi_agent.display.protocol import PendingToolCall, PendingUserQuestion
 from pbi_agent.session_store import (
     MessageImageAttachment,
     MessageRecord,
@@ -232,6 +232,115 @@ def test_combined_timeline_marks_previous_run_messages_historical() -> None:
             "message_id": "current-message-id",
             "role": "user",
             "content": "/review",
+            "historical": True,
+        },
+    ]
+
+
+def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -> None:
+    snapshot = _combined_timeline_snapshot(
+        [
+            _run_record(
+                "completed-run",
+                snapshot={
+                    "live_session_id": "completed-run",
+                    "session_id": "session-1",
+                    "session_ended": True,
+                    "items": [
+                        {
+                            "kind": "tool_group",
+                            "itemId": "subagent-1-tool-group-2",
+                            "label": "read_file",
+                            "items": [],
+                            "sub_agent_id": "subagent-1",
+                        },
+                    ],
+                    "sub_agents": {
+                        "subagent-1": {
+                            "title": "worker",
+                            "status": "completed",
+                        }
+                    },
+                },
+            ),
+        ],
+        persisted_events_by_run_session_id={
+            "completed-run": [
+                {
+                    "seq": 1,
+                    "type": "message_added",
+                    "payload": {
+                        "item_id": "subagent-1-message-1",
+                        "role": "user",
+                        "content": "Delegated task",
+                        "markdown": False,
+                        "sub_agent_id": "subagent-1",
+                    },
+                    "created_at": "2026-05-08T08:47:16Z",
+                },
+                {
+                    "seq": 2,
+                    "type": "tool_group_added",
+                    "payload": {
+                        "item_id": "subagent-1-tool-group-2",
+                        "label": "read_file",
+                        "items": [{"text": "read_file"}],
+                        "status": "completed",
+                        "sub_agent_id": "subagent-1",
+                    },
+                    "created_at": "2026-05-08T08:47:17Z",
+                },
+                {
+                    "seq": 3,
+                    "type": "message_added",
+                    "payload": {
+                        "item_id": "subagent-1-message-3",
+                        "role": "assistant",
+                        "content": "Delegated answer",
+                        "markdown": True,
+                        "sub_agent_id": "subagent-1",
+                    },
+                    "created_at": "2026-05-08T08:47:18Z",
+                },
+            ]
+        },
+    )
+
+    assert snapshot is not None
+    assert snapshot["sub_agents"] == {
+        "completed-run:subagent-1": {
+            "title": "worker",
+            "status": "completed",
+        }
+    }
+    assert snapshot["items"] == [
+        {
+            "item_id": "completed-run:subagent-1-message-1",
+            "role": "user",
+            "content": "Delegated task",
+            "markdown": False,
+            "sub_agent_id": "completed-run:subagent-1",
+            "kind": "message",
+            "itemId": "completed-run:subagent-1-message-1",
+            "historical": True,
+        },
+        {
+            "item_id": "completed-run:subagent-1-tool-group-2",
+            "label": "read_file",
+            "items": [{"text": "read_file"}],
+            "status": "completed",
+            "sub_agent_id": "completed-run:subagent-1",
+            "kind": "tool_group",
+            "itemId": "completed-run:subagent-1-tool-group-2",
+        },
+        {
+            "item_id": "completed-run:subagent-1-message-3",
+            "role": "assistant",
+            "content": "Delegated answer",
+            "markdown": True,
+            "sub_agent_id": "completed-run:subagent-1",
+            "kind": "message",
+            "itemId": "completed-run:subagent-1-message-3",
             "historical": True,
         },
     ]
@@ -1580,6 +1689,62 @@ def test_update_session_title_endpoint_updates_workspace_session(
     assert stored.title == "Updated title"
 
 
+def test_fork_session_endpoint_creates_truncated_zero_usage_session(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Original title",
+        )
+        first_message_id = store.add_message(session_id, "user", "first")
+        fork_message_id = store.add_message(session_id, "assistant", "second")
+        store.add_message(session_id, "user", "excluded")
+        store.update_session(
+            session_id,
+            total_tokens=50,
+            input_tokens=30,
+            output_tokens=20,
+            cost_usd=0.05,
+        )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/sessions/{session_id}/fork",
+            json={"message_id": f"msg-{fork_message_id}"},
+        )
+        invalid_response = client.post(
+            f"/api/sessions/{session_id}/fork",
+            json={"message_id": "message-1"},
+        )
+        event = app.state.manager.get_event_stream("app").snapshot()[-1]
+
+    assert response.status_code == 200
+    assert invalid_response.status_code == 400
+    payload = response.json()["session"]
+    assert payload["title"] == "Fork-Original title"
+    assert payload["total_tokens"] == 0
+    assert payload["input_tokens"] == 0
+    assert payload["output_tokens"] == 0
+    assert payload["cost_usd"] == 0.0
+    assert payload["is_fork"] is True
+    assert payload["forked_from_session_id"] == session_id
+    assert payload["forked_from_message_id"] == f"msg-{fork_message_id}"
+    assert event["type"] == "session_created"
+    assert event["payload"]["session"]["session_id"] == payload["session_id"]
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        original = store.list_messages(session_id)
+        forked = store.list_messages(payload["session_id"])
+    assert [message.content for message in original] == ["first", "second", "excluded"]
+    assert [message.content for message in forked] == ["first", "second"]
+    assert forked[0].id != first_message_id
+
+
 def test_update_session_title_endpoint_rejects_blank_title(
     tmp_path, monkeypatch
 ) -> None:
@@ -2454,6 +2619,213 @@ def test_live_events_include_canonical_identity_in_stream_and_persistence(
     assert run_metadata["directory"] == str(tmp_path).lower()
     assert run_metadata["workspace_root"] == str(tmp_path)
     assert run_metadata["live_session_id"] == live_session_id
+
+
+def test_sub_agent_processing_isolated_from_parent_live_snapshot(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    with TestClient(app):
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = app.state.manager.create_live_session()
+        live_session_id = created["live_session_id"]
+        live_session = app.state.manager._live_sessions[live_session_id]
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "input_state",
+            {
+                "enabled": True,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "wait_state",
+            {
+                "active": True,
+                "message": "Child model wait",
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "processing_state",
+            {
+                "active": True,
+                "phase": "model_wait",
+                "message": "Child model wait",
+                "sub_agent_id": "subagent-1",
+            },
+        )
+
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+
+        assert snapshot["input_enabled"] is False
+        assert snapshot["wait_message"] is None
+        assert snapshot["processing"] == {
+            "active": True,
+            "phase": "tool_execution",
+            "message": "running sub-agent...",
+        }
+        assert snapshot["sub_agents"]["subagent-1"] == {
+            "title": "subagent-1",
+            "status": "running",
+            "wait_message": "Child model wait",
+            "processing": {
+                "active": True,
+                "phase": "model_wait",
+                "message": "Child model wait",
+            },
+        }
+
+        parent_usage = {"context_tokens": 120000, "total_tokens": 120000}
+        child_session_usage = {"context_tokens": 5000, "total_tokens": 5000}
+        child_turn_usage = {"context_tokens": 4200, "total_tokens": 4200}
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "session",
+                "usage": parent_usage,
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "session",
+                "usage": child_session_usage,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "turn",
+                "usage": child_turn_usage,
+                "elapsed_seconds": 2.5,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["session_usage"] == parent_usage
+        assert snapshot["turn_usage"] is None
+        assert snapshot["sub_agents"]["subagent-1"]["session_usage"] == (
+            child_session_usage
+        )
+        assert snapshot["sub_agents"]["subagent-1"]["turn_usage"] == {
+            "usage": child_turn_usage,
+            "elapsed_seconds": 2.5,
+        }
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "processing_state",
+            {
+                "active": False,
+                "phase": None,
+                "message": None,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["processing"] is None
+        assert "processing" not in snapshot["sub_agents"]["subagent-1"]
+        assert snapshot["sub_agents"]["subagent-1"]["session_usage"] == (
+            child_session_usage
+        )
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "processing_state",
+            {
+                "active": True,
+                "phase": "model_wait",
+                "message": "Child model wait",
+                "sub_agent_id": "subagent-1",
+            },
+        )
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "message_added",
+            {
+                "item_id": "subagent-1-message-1",
+                "role": "assistant",
+                "content": "child draft",
+                "markdown": True,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "message_rekeyed",
+            {
+                "old_item_id": "subagent-1-message-1",
+                "sub_agent_id": "subagent-1",
+                "item": {
+                    "item_id": "msg-7",
+                    "role": "assistant",
+                    "content": "child draft",
+                    "markdown": True,
+                },
+            },
+        )
+
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["items"] == [
+            {
+                "item_id": "msg-7",
+                "role": "assistant",
+                "content": "child draft",
+                "markdown": True,
+                "sub_agent_id": "subagent-1",
+                "kind": "message",
+                "itemId": "msg-7",
+            }
+        ]
+
+        interrupted = app.state.manager.interrupt_live_session(live_session_id)
+        assert interrupted["live_session_id"] == live_session_id
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "sub_agent_state",
+            {
+                "sub_agent_id": "subagent-1",
+                "title": "Researcher",
+                "status": "completed",
+            },
+        )
+
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["sub_agents"]["subagent-1"] == {
+            "title": "Researcher",
+            "status": "completed",
+            "session_usage": child_session_usage,
+            "turn_usage": {
+                "usage": child_turn_usage,
+                "elapsed_seconds": 2.5,
+            },
+        }
 
 
 def test_live_session_creation_rechecks_saved_session_under_registration_lock(
@@ -5989,6 +6361,90 @@ def test_web_display_wait_stop_clears_model_wait_processing() -> None:
     ]
 
 
+def test_web_display_wait_stop_keeps_assistant_turn_processing_active() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+
+    display.assistant_start()
+    display.wait_start("analyzing your request...")
+    display.wait_stop()
+
+    assert published[-1] == ("wait_state", {"active": False})
+    processing_payloads = [
+        payload for event_type, payload in published if event_type == "processing_state"
+    ]
+    assert processing_payloads == [
+        {
+            "active": True,
+            "phase": "starting",
+            "message": "starting assistant turn...",
+        },
+        {
+            "active": True,
+            "phase": "model_wait",
+            "message": "analyzing your request...",
+        },
+    ]
+
+    display.assistant_stop()
+
+    assert published[-1] == (
+        "processing_state",
+        {"active": False, "phase": None, "message": None},
+    )
+
+
+def test_web_display_processing_state_has_no_intermediate_inactive_tool_flow() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+
+    display.assistant_start()
+    display.wait_start("analyzing your request...")
+    display.wait_stop()
+    display.tool_execution_start(
+        [PendingToolCall(call_id="call-1", name="shell", arguments={"command": "pwd"})]
+    )
+    display.tool_execution_stop()
+    display.assistant_stop()
+
+    processing_payloads = [
+        payload for event_type, payload in published if event_type == "processing_state"
+    ]
+    assert processing_payloads == [
+        {
+            "active": True,
+            "phase": "starting",
+            "message": "starting assistant turn...",
+        },
+        {
+            "active": True,
+            "phase": "model_wait",
+            "message": "analyzing your request...",
+        },
+        {
+            "active": True,
+            "phase": "tool_execution",
+            "message": "Running 1 local tool",
+            "active_tool_count": 1,
+        },
+        {
+            "active": True,
+            "phase": "finalizing",
+            "message": "sending tool results to model...",
+        },
+        {"active": False, "phase": None, "message": None},
+    ]
+    assert all(payload["active"] for payload in processing_payloads[:-1])
+
+
 def test_web_sub_agent_display_publishes_initial_user_message() -> None:
     published: list[tuple[str, dict]] = []
     display = WebDisplay(
@@ -6206,6 +6662,90 @@ def test_temporary_slash_command_web_events_are_live_only(
     assert reload_output not in timeline_contents
     assert "normal prompt" in timeline_contents
     assert "Normal response" in timeline_contents
+
+
+def test_saved_session_shell_command_reenables_input_after_output(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    def idle_run_session_loop(
+        _settings,
+        display,
+        *,
+        resume_session_id=None,
+        on_reload=None,
+        run_session_id=None,
+    ):
+        del _settings, resume_session_id, on_reload, run_session_id
+        while True:
+            if display.user_prompt() == "exit":
+                return 0
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+
+    manager = WebSessionManager(_settings())
+    manager.start()
+    events: list[dict[str, object]] = []
+    response: dict[str, object] = {}
+    input_enabled_after_command = False
+    last_event_seq_after_command = 0
+    try:
+        with (
+            patch(
+                "pbi_agent.web.session.workers.run_session_loop",
+                idle_run_session_loop,
+            ),
+            patch(
+                "pbi_agent.web.session.live_sessions.shell_tool.handle",
+                return_value={
+                    "stdout": "ok\n",
+                    "stderr": "",
+                    "exit_code": 0,
+                    "timed_out": False,
+                },
+            ),
+        ):
+            created = manager.create_live_session(session_id=session_id)
+            live_session_id = str(created["live_session_id"])
+            live_session = manager._live_sessions[live_session_id]
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                if live_session.snapshot.input_enabled:
+                    break
+                time.sleep(0.01)
+
+            response = manager.run_saved_session_shell_command(
+                session_id,
+                command="pwd",
+            )
+            events = live_session.event_stream.snapshot()
+            input_enabled_after_command = live_session.snapshot.input_enabled
+            last_event_seq_after_command = live_session.snapshot.last_event_seq
+    finally:
+        manager.shutdown()
+
+    input_events = [event for event in events if event.get("type") == "input_state"]
+    input_enabled_events = []
+    for event in input_events[-3:]:
+        payload = event.get("payload")
+        assert isinstance(payload, dict)
+        input_enabled_events.append(payload.get("enabled"))
+    assert input_enabled_events == [
+        True,
+        False,
+        True,
+    ]
+    assert input_enabled_after_command is True
+    assert response["last_event_seq"] == last_event_seq_after_command
 
 
 def test_web_session_worker_records_turn_run_separately_from_live_projection(
@@ -6961,9 +7501,35 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
                 "role": "assistant",
                 "content": "Working",
                 "markdown": True,
-            }
+            },
+            {
+                "kind": "tool_group",
+                "itemId": "tool-group-1",
+                "label": "shell",
+                "status": "running",
+                "items": [
+                    {
+                        "text": "Running command...",
+                        "metadata": {
+                            "tool_name": "shell",
+                            "status": "running",
+                        },
+                    }
+                ],
+            },
         ],
-        "sub_agents": {},
+        "sub_agents": {
+            "subagent-1": {
+                "title": "Athena",
+                "status": "running",
+                "wait_message": "working",
+                "processing": {
+                    "active": True,
+                    "phase": "tool_execution",
+                    "message": "running sub-agent...",
+                },
+            }
+        },
         "last_event_seq": 2,
     }
     event_1 = {
@@ -7030,6 +7596,101 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
             event_type="web_event",
             metadata=event_2,
         )
+        store.create_run_session(
+            run_session_id="stale-web-owned-turn",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="started",
+            kind="cli",
+            project_dir=str(tmp_path),
+        )
+        store.create_run_session(
+            run_session_id="stale-web-owned-child",
+            session_id=session_id,
+            parent_run_session_id="stale-web-owned-turn",
+            agent_name="Athena",
+            agent_type="default",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="running",
+            kind="cli",
+            project_dir=str(tmp_path),
+        )
+        previous_stale_session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Previously stale session",
+        )
+        store.create_run_session(
+            run_session_id="previous-stale-live-run",
+            session_id=previous_stale_session_id,
+            agent_name="web",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="stale",
+            kind="session",
+            project_dir=str(tmp_path),
+            snapshot={
+                **snapshot,
+                "live_session_id": "previous-stale-live-run",
+                "session_id": previous_stale_session_id,
+            },
+        )
+        store.create_run_session(
+            run_session_id="previous-stale-owned-turn",
+            session_id=previous_stale_session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="started",
+            kind="cli",
+            project_dir=str(tmp_path),
+        )
+        store.create_run_session(
+            run_session_id="post-stale-external-run",
+            session_id=previous_stale_session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="running",
+            kind="cli",
+            project_dir=str(tmp_path),
+        )
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ?, ended_at = ? "
+            "WHERE run_session_id = ?",
+            (
+                "2026-04-16T12:00:00+00:00",
+                "2026-04-16T12:10:00+00:00",
+                "previous-stale-live-run",
+            ),
+        )
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ? WHERE run_session_id = ?",
+            ("2026-04-16T12:05:00+00:00", "previous-stale-owned-turn"),
+        )
+        store._conn.execute(
+            "UPDATE run_sessions SET started_at = ? WHERE run_session_id = ?",
+            ("2026-04-16T12:11:00+00:00", "post-stale-external-run"),
+        )
+        store._conn.commit()
         other_session_id = store.create_session(
             str(tmp_path),
             "openai",
@@ -7126,6 +7787,13 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
         session_events = manager.get_session_event_stream(session_id).snapshot()
         with SessionStore(db_path=tmp_path / "sessions.db") as store:
             stale_run = store.get_run_session("stale-live-run")
+            stale_web_owned_turn = store.get_run_session("stale-web-owned-turn")
+            stale_web_owned_child = store.get_run_session("stale-web-owned-child")
+            previous_stale_live_run = store.get_run_session("previous-stale-live-run")
+            previous_stale_owned_turn = store.get_run_session(
+                "previous-stale-owned-turn"
+            )
+            post_stale_external_run = store.get_run_session("post-stale-external-run")
             non_web_run = store.get_run_session("non-web-active-run")
             unbound_web_run = store.get_run_session("unbound-web-run")
             other_directory_unbound_web_run = store.get_run_session(
@@ -7147,7 +7815,35 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
     assert stale_run.status == "stale"
     assert stale_run.ended_at is not None
     assert stale_run.last_event_seq == 2
-    assert json.loads(stale_run.snapshot_json)["items"][0]["content"] == "Working"
+    stale_snapshot = json.loads(stale_run.snapshot_json)
+    assert stale_snapshot["items"][0]["content"] == "Working"
+    assert stale_snapshot["input_enabled"] is False
+    assert stale_snapshot["wait_message"] is None
+    assert stale_snapshot["processing"] is None
+    assert stale_snapshot["pending_user_questions"] is None
+    assert stale_snapshot["session_ended"] is True
+    assert stale_snapshot["items"][1]["status"] == "completed"
+    assert stale_snapshot["items"][1]["items"][0]["metadata"]["status"] == "failed"
+    assert stale_snapshot["items"][1]["items"][0]["metadata"]["success"] is False
+    assert stale_snapshot["sub_agents"]["subagent-1"]["status"] == "stale"
+    assert stale_snapshot["sub_agents"]["subagent-1"]["wait_message"] is None
+    assert stale_snapshot["sub_agents"]["subagent-1"]["processing"] is None
+    assert stale_web_owned_turn is not None
+    assert stale_web_owned_turn.status == "stale"
+    assert stale_web_owned_turn.ended_at is not None
+    assert stale_web_owned_child is not None
+    assert stale_web_owned_child.status == "stale"
+    assert stale_web_owned_child.ended_at is not None
+    assert previous_stale_live_run is not None
+    previous_stale_snapshot = json.loads(previous_stale_live_run.snapshot_json)
+    assert previous_stale_snapshot["processing"] is None
+    assert previous_stale_snapshot["session_ended"] is True
+    assert previous_stale_owned_turn is not None
+    assert previous_stale_owned_turn.status == "stale"
+    assert previous_stale_owned_turn.ended_at is not None
+    assert post_stale_external_run is not None
+    assert post_stale_external_run.status == "running"
+    assert post_stale_external_run.ended_at is None
     assert non_web_run is not None
     assert non_web_run.status == "running"
     assert unbound_web_run is not None
@@ -7179,6 +7875,14 @@ def test_manager_start_marks_active_web_runs_stale_and_preserves_session_history
     ]
     assert detail["timeline"]["live_session_id"] == "stale-live-run"
     assert detail["timeline"]["items"][0]["content"] == "Working"
+    assert detail["timeline"]["wait_message"] is None
+    assert detail["timeline"]["processing"] is None
+    assert detail["timeline"]["session_ended"] is True
+    assert detail["timeline"]["items"][1]["status"] == "completed"
+    assert (
+        detail["timeline"]["sub_agents"]["stale-live-run:subagent-1"]["status"]
+        == "stale"
+    )
     assert listed_session["status"] == "stale"
     assert listed_session["active_live_session_id"] is None
     assert listed_session["active_run_id"] is None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import threading
 from typing import TYPE_CHECKING, Any, cast
 
@@ -15,8 +16,12 @@ from pbi_agent.web.session.serializers import (
     _serialize_run_session,
     _serialize_session,
     _session_status_from_run,
+    _web_event_from_record,
 )
 from pbi_agent.web.uploads import delete_uploaded_images
+
+_PERSISTED_MESSAGE_ID_PATTERN = re.compile(r"^msg-(\d+)$")
+
 
 if TYPE_CHECKING:
     from pbi_agent.web.session.state import EventStream, LiveSessionState
@@ -124,6 +129,16 @@ class SavedSessionsMixin:
             active_run = store.get_latest_session_run(session_id, include_ended=False)
             latest_web_run = store.get_latest_web_session_run(session_id)
             web_runs = store.list_web_session_runs(session_id)
+            web_events_by_run_session_id = {
+                run.run_session_id: [
+                    event
+                    for record in store.list_observability_events(
+                        run_session_id=run.run_session_id
+                    )
+                    if (event := _web_event_from_record(record)) is not None
+                ]
+                for run in web_runs
+            }
         live_session = self._find_live_session_for_saved_session(session_id)
         serialized_active_live_session = (
             self._serialize_live_session(live_session)
@@ -140,7 +155,11 @@ class SavedSessionsMixin:
             if live_session is not None
             else None
         )
-        timeline = _combined_timeline_snapshot(web_runs, live_snapshot)
+        timeline = _combined_timeline_snapshot(
+            web_runs,
+            live_snapshot,
+            persisted_events_by_run_session_id=web_events_by_run_session_id,
+        )
         return {
             "session": _serialize_session(
                 record,
@@ -177,6 +196,26 @@ class SavedSessionsMixin:
             raise KeyError(session_id)
         serialized = _serialize_session(updated)
         self._app_stream.publish("session_updated", {"session": serialized})
+        return serialized
+
+    def fork_session(self, session_id: str, message_id: str) -> dict[str, Any]:
+        match = _PERSISTED_MESSAGE_ID_PATTERN.fullmatch(message_id)
+        if match is None:
+            raise ValueError("Fork point must be a persisted message id.")
+        fork_message_id = int(match.group(1))
+        with SessionStore() as store:
+            record = store.get_session(session_id)
+            if record is None or record.directory != self._directory_key:
+                raise KeyError(session_id)
+            message = store.get_message(fork_message_id)
+            if message is None or message.session_id != session_id:
+                raise KeyError(message_id)
+            forked_session_id = store.fork_session(session_id, fork_message_id)
+            forked = store.get_session(forked_session_id)
+        if forked is None:
+            raise KeyError(forked_session_id)
+        serialized = _serialize_session(forked)
+        self._app_stream.publish("session_created", {"session": serialized})
         return serialized
 
     def list_session_runs(self, session_id: str) -> list[dict[str, Any]]:

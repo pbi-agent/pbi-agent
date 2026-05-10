@@ -17,7 +17,8 @@ from pbi_agent.tools.output import MAX_OUTPUT_CHARS as DEFAULT_MAX_OUTPUT_CHARS
 from pbi_agent.tools.output import bound_output, decode_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
-MAX_TIMEOUT_MS = 120_000
+DEFAULT_TIMEOUT_MS = 30_000
+MAX_TIMEOUT_MS = 300_000
 MAX_STDOUT_CHARS = 12_000
 MAX_STDERR_CHARS = 12_000
 MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
@@ -47,8 +48,8 @@ SPEC = ToolSpec(
             "timeout_ms": {
                 "type": "integer",
                 "description": (
-                    "Timeout in milliseconds (max 120 000). "
-                    "Defaults to 120 000 (2 minutes)."
+                    "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
+                    "maximum 300 000 (5 minutes)."
                 ),
             },
         },
@@ -69,7 +70,11 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     working_directory = _resolve_working_directory(
         root, arguments.get("working_directory")
     )
-    timeout_ms = _normalize_timeout_ms(arguments.get("timeout_ms"))
+    try:
+        timeout_ms = _normalize_timeout_ms(arguments.get("timeout_ms"))
+    except ValueError as exc:
+        return {"error": str(exc)}
+
     effective_command = _bootstrap_command(command)
     shell_executable = os.environ.get(SHELL_EXECUTABLE_ENV) or None
 
@@ -142,11 +147,11 @@ def _resolve_working_directory(root: Path, raw: Any) -> Path:
 
 def _normalize_timeout_ms(raw_timeout: Any) -> int:
     if raw_timeout is None:
-        return MAX_TIMEOUT_MS
-    if not isinstance(raw_timeout, int):
-        return MAX_TIMEOUT_MS
+        return DEFAULT_TIMEOUT_MS
+    if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, int):
+        raise ValueError("'timeout_ms' must be a positive integer.")
     if raw_timeout < 1:
-        return MAX_TIMEOUT_MS
+        raise ValueError("'timeout_ms' must be a positive integer.")
     return min(raw_timeout, MAX_TIMEOUT_MS)
 
 

@@ -44,6 +44,10 @@ export type SessionRecord = {
   input_tokens: number;
   output_tokens: number;
   cost_usd: number;
+  is_fork?: boolean;
+  forked_from_session_id?: string | null;
+  forked_from_message_id?: string | null;
+  fork_created_at?: string | null;
   created_at: string;
   updated_at: string;
   status?: SessionStatus;
@@ -91,6 +95,19 @@ export type BoardStage = {
 };
 
 export type UsagePayload = TokenUsagePayloadModel;
+
+export type SubAgentSnapshot = {
+  title: string;
+  status: string;
+  waitMessage?: string | null;
+  wait_message?: string | null;
+  processing?: ProcessingState | null;
+  session_usage?: UsagePayload | null;
+  turn_usage?: {
+    usage: UsagePayload | null;
+    elapsed_seconds?: number | null;
+  } | null;
+};
 
 export type LiveSessionRuntime = {
   provider_id: string | null;
@@ -178,7 +195,7 @@ export type LiveSessionSnapshot = Omit<
     | { usage: UsagePayload | null; elapsed_seconds?: number | null }
     | null;
   pending_user_questions: PendingUserQuestions | null;
-  sub_agents: Record<string, { title: string; status: string }>;
+  sub_agents: Record<string, SubAgentSnapshot>;
 };
 
 export type ProcessingPhase = NonNullable<ProcessingStateModel["phase"]>;

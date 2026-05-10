@@ -67,6 +67,10 @@ class SessionRecordModel(BaseModel):
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    is_fork: bool = False
+    forked_from_session_id: str | None = None
+    forked_from_message_id: str | None = None
+    fork_created_at: str | None = None
     created_at: str
     updated_at: str
     status: SessionLifecycleStatus = "idle"
@@ -142,6 +146,32 @@ class PendingUserQuestionsModel(BaseModel):
     questions: list[PendingUserQuestionModel]
 
 
+class UsageSnapshotModel(BaseModel):
+    usage: dict[str, Any] | None
+    elapsed_seconds: float | None = None
+
+
+class SubAgentSnapshotModel(BaseModel):
+    title: str
+    status: str
+    wait_message: str | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+    processing: ProcessingStateModel | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+    session_usage: dict[str, Any] | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+    turn_usage: UsageSnapshotModel | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+
+
 class LiveSessionSnapshotModel(BaseModel):
     live_session_id: str
     session_id: str | None
@@ -155,7 +185,7 @@ class LiveSessionSnapshotModel(BaseModel):
     fatal_error: str | None
     pending_user_questions: PendingUserQuestionsModel | None
     items: list[dict[str, Any]]
-    sub_agents: dict[str, dict[str, str]]
+    sub_agents: dict[str, SubAgentSnapshotModel]
     last_event_seq: int
 
 
@@ -170,6 +200,10 @@ class CreateSessionRequest(BaseModel):
 
 class UpdateSessionRequest(BaseModel):
     title: NonEmptyString
+
+
+class ForkSessionRequest(BaseModel):
+    message_id: NonEmptyString
 
 
 class QuestionAnswerRequest(BaseModel):

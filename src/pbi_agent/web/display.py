@@ -467,7 +467,7 @@ class _EventDisplayBase(DisplayProtocol):
             return
         self._waiting_message = None
         self._publish("wait_state", {"active": False})
-        if self._processing_phase == "model_wait":
+        if not self._assistant_active and self._processing_phase == "model_wait":
             self._processing_phase = None
             self._publish(
                 "processing_state",
@@ -885,12 +885,86 @@ class WebDisplay(_EventDisplayBase):
         self._reasoning_effort = reasoning_effort
         self._bind_session_callback = bind_session
         self._input_enabled_state: bool | None = None
+        self._input_state_lock = threading.Lock()
+        self._input_block_prior_states: list[tuple[bool | None, int]] = []
+        self._input_activity_sequence = 0
 
     def _publish_input_state(self, enabled: bool) -> None:
-        if self._input_enabled_state is enabled:
+        with self._input_state_lock:
+            if enabled and self._input_block_prior_states:
+                return
+            if self._input_enabled_state is enabled:
+                return
+            previous_state = self._input_enabled_state
+            self._input_enabled_state = enabled
+        try:
+            self._publish("input_state", {"enabled": enabled})
+        except Exception:
+            with self._input_state_lock:
+                if self._input_enabled_state is enabled:
+                    self._input_enabled_state = previous_state
+            raise
+
+    def _input_state_blocked(self) -> bool:
+        with self._input_state_lock:
+            return bool(self._input_block_prior_states)
+
+    def _put_input_activity(
+        self,
+        value: str | QueuedInput | QueuedRuntimeChange,
+    ) -> None:
+        with self._input_state_lock:
+            self._input_activity_sequence += 1
+            self._input_queue.put(value)
+
+    def _restore_input_state_if_no_activity(self, activity_sequence: int) -> bool:
+        with self._input_state_lock:
+            if (
+                self._input_activity_sequence != activity_sequence
+                or self._input_block_prior_states
+                or self._input_enabled_state is True
+            ):
+                return False
+            previous_state = self._input_enabled_state
+            self._input_enabled_state = True
+            try:
+                self._publish("input_state", {"enabled": True})
+            except Exception:
+                if self._input_enabled_state is True:
+                    self._input_enabled_state = previous_state
+                raise
+            return True
+
+    def begin_direct_command(self) -> None:
+        """Hold interactive input disabled during a direct web command."""
+        with self._input_state_lock:
+            self._input_block_prior_states.append(
+                (self._input_enabled_state, self._input_activity_sequence)
+            )
+        try:
+            self._publish_input_state(False)
+        except Exception:
+            with self._input_state_lock:
+                if self._input_block_prior_states:
+                    self._input_block_prior_states.pop()
+            raise
+
+    def finish_direct_command(self) -> None:
+        """Release a direct web command input hold and restore idle input state."""
+        with self._input_state_lock:
+            if not self._input_block_prior_states:
+                return
+            prior_state, prior_activity_sequence = self._input_block_prior_states.pop()
+            should_restore = (
+                not self._input_block_prior_states and not self._shutdown.is_set()
+            )
+        if not should_restore:
             return
-        self._input_enabled_state = enabled
-        self._publish("input_state", {"enabled": enabled})
+        if prior_state is True and self._restore_input_state_if_no_activity(
+            prior_activity_sequence
+        ):
+            return
+        self._input_event.set()
 
     def render_transient_markdown(self, text: str) -> None:
         from pbi_agent.web.session.events import TRANSIENT_WEB_EVENT_KEY
@@ -968,14 +1042,14 @@ class WebDisplay(_EventDisplayBase):
             interactive_mode=interactive_mode,
             item_id=item_id,
         )
-        self._input_queue.put(queued)
+        self._put_input_activity(queued)
         self._input_event.set()
         self._publish_input_state(False)
 
     def request_new_session(self) -> None:
         from pbi_agent.agent.session import NEW_SESSION_SENTINEL
 
-        self._input_queue.put(NEW_SESSION_SENTINEL)
+        self._put_input_activity(NEW_SESSION_SENTINEL)
         self._input_event.set()
         self._publish_input_state(False)
 
@@ -1043,7 +1117,7 @@ class WebDisplay(_EventDisplayBase):
     ) -> None:
         self._model = runtime.settings.model
         self._reasoning_effort = runtime.settings.reasoning_effort
-        self._input_queue.put(
+        self._put_input_activity(
             QueuedRuntimeChange(
                 runtime=runtime,
                 profile_id=profile_id,
@@ -1059,6 +1133,10 @@ class WebDisplay(_EventDisplayBase):
             except queue.Empty:
                 if self._shutdown.is_set():
                     return "exit"
+                if self._input_state_blocked():
+                    self._input_event.wait(timeout=0.5)
+                    self._input_event.clear()
+                    continue
                 self._publish_input_state(True)
                 self._input_event.wait(timeout=0.5)
                 self._input_event.clear()

@@ -50,7 +50,6 @@ interface ComposerProps {
   interactiveMode: boolean;
   isSubmitting: boolean;
   onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
-  isProcessing?: boolean;
   canInterrupt?: boolean;
   isInterrupting?: boolean;
   restoredInput?: string | null;
@@ -180,14 +179,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   interactiveMode,
   isSubmitting,
   onSubmit,
-  isProcessing = false,
   canInterrupt = false,
   isInterrupting = false,
   restoredInput = null,
   onRestoredInputConsumed,
   onInterrupt,
 }, ref) {
-  const showStopButton = isProcessing && canInterrupt;
+  const showStopButton = canInterrupt;
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [attachmentMessage, setAttachmentMessage] = useState<string | null>(null);

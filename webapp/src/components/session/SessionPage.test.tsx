@@ -1,15 +1,18 @@
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router-dom";
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { SessionPage } from "./SessionPage";
 import { renderWithProviders } from "../../test/render";
 import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
 import {
   ApiError,
   expandSessionInput,
+  fetchBootstrap,
   fetchConfigBootstrap,
   fetchSessionDetail,
   fetchSessions,
+  interruptSession,
+  runSessionShellCommand,
   sendSessionMessage,
   setActiveModelProfile,
   setSessionProfile,
@@ -20,15 +23,23 @@ import {
 import { useSidebarStore } from "../../hooks/useSidebar";
 import { createEmptySessionState, getSavedSessionKey, useSessionStore } from "../../store";
 import type {
+  BootstrapPayload,
   ConfigBootstrapPayload,
   ExpandedSessionInput,
   LiveSession,
   SessionDetailPayload,
   SessionRecord,
+  UsagePayload,
 } from "../../types";
 
+type SessionTimelineMockProps = {
+  items: unknown[];
+  itemsVersion: unknown;
+  [key: string]: unknown;
+};
+
 const usageBarMock = vi.hoisted(() => vi.fn());
-const sessionTimelineMock = vi.hoisted(() => vi.fn());
+const sessionTimelineMock = vi.hoisted(() => vi.fn<(props: SessionTimelineMockProps) => void>());
 const composerFocusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../hooks/useLiveSessionEvents", () => ({
@@ -70,7 +81,7 @@ vi.mock("./SessionSidebar", () => ({
 }));
 
 vi.mock("./SessionTimeline", () => ({
-  SessionTimeline: (props: { items: unknown[] }) => {
+  SessionTimeline: (props: SessionTimelineMockProps) => {
     sessionTimelineMock(props);
     return <div>Timeline {props.items.length}</div>;
   },
@@ -87,6 +98,30 @@ vi.mock("./DeleteSessionModal", () => ({
   DeleteSessionModal: () => <div>Delete Session Modal</div>,
 }));
 
+function latestSessionTimelineProps(): SessionTimelineMockProps {
+  const props: unknown = sessionTimelineMock.mock.calls.at(-1)?.[0];
+  if (!props || typeof props !== "object") {
+    throw new Error("Expected timeline props to be captured");
+  }
+  return props as SessionTimelineMockProps;
+}
+
+function latestUsageBarProps(): { compactThreshold: number | null; usage: UsagePayload | null } {
+  const props: unknown = usageBarMock.mock.calls.at(-1)?.[0];
+  if (!props || typeof props !== "object") {
+    throw new Error("Expected usage props to be captured");
+  }
+  return props as { compactThreshold: number | null; usage: UsagePayload | null };
+}
+
+function getSessionTopbar(): HTMLElement {
+  const topbar = document.querySelector(".session-topbar");
+  if (!(topbar instanceof HTMLElement)) {
+    throw new Error("Expected session topbar to be rendered");
+  }
+  return topbar;
+}
+
 vi.mock("./Composer", async () => {
   const React = await import("react");
 
@@ -100,7 +135,6 @@ vi.mock("./Composer", async () => {
         liveSessionId,
         interactiveMode,
         onSubmit,
-        isProcessing,
         canInterrupt,
         isInterrupting,
         onInterrupt,
@@ -113,7 +147,6 @@ vi.mock("./Composer", async () => {
         liveSessionId?: string | null;
         interactiveMode: boolean;
         onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
-        isProcessing?: boolean;
         canInterrupt?: boolean;
         isInterrupting?: boolean;
         onInterrupt?: () => void;
@@ -134,7 +167,7 @@ vi.mock("./Composer", async () => {
           <div>Composer live session {liveSessionId ?? ""}</div>
           <div>Composer interactive {String(interactiveMode)}</div>
           <div>Composer restored {restoredInput ?? ""}</div>
-          {isProcessing && canInterrupt ? (
+          {canInterrupt ? (
             <button
               type="button"
               aria-label="Interrupt assistant turn"
@@ -186,9 +219,12 @@ vi.mock("../../api", async (importOriginal) => {
     ...actual,
     deleteSession: vi.fn(),
     expandSessionInput: vi.fn(),
+    fetchBootstrap: vi.fn(),
     fetchConfigBootstrap: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
+    interruptSession: vi.fn(),
+    runSessionShellCommand: vi.fn(),
     sendSessionMessage: vi.fn(),
     setActiveModelProfile: vi.fn(),
     setSessionProfile: vi.fn(),
@@ -198,6 +234,26 @@ vi.mock("../../api", async (importOriginal) => {
     uploadSavedSessionImages: vi.fn(),
   };
 });
+
+function makeBootstrap(overrides: Partial<BootstrapPayload> = {}): BootstrapPayload {
+  return {
+    workspace_root: "/workspace/demo",
+    workspace_key: "/workspace/demo",
+    workspace_display_path: "/workspace/demo",
+    is_sandbox: false,
+    provider: null,
+    provider_id: null,
+    profile_id: null,
+    model: null,
+    reasoning_effort: null,
+    supports_image_inputs: true,
+    sessions: [],
+    tasks: [],
+    live_sessions: [],
+    board_stages: [],
+    ...overrides,
+  };
+}
 
 function makeConfigBootstrap(
   overrides: Partial<ConfigBootstrapPayload> = {},
@@ -330,6 +386,33 @@ function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
   };
 }
 
+function makeUsage(overrides: Partial<UsagePayload> = {}): UsagePayload {
+  return {
+    input_tokens: 0,
+    cached_input_tokens: 0,
+    cache_write_tokens: 0,
+    cache_write_1h_tokens: 0,
+    output_tokens: 0,
+    reasoning_tokens: 0,
+    tool_use_tokens: 0,
+    provider_total_tokens: 0,
+    sub_agent_input_tokens: 0,
+    sub_agent_output_tokens: 0,
+    sub_agent_reasoning_tokens: 0,
+    sub_agent_tool_use_tokens: 0,
+    sub_agent_provider_total_tokens: 0,
+    sub_agent_cost_usd: 0,
+    context_tokens: 0,
+    total_tokens: 0,
+    estimated_cost_usd: 0,
+    main_agent_total_tokens: 0,
+    sub_agent_total_tokens: 0,
+    model: "gpt-5.4",
+    service_tier: "default",
+    ...overrides,
+  };
+}
+
 function makeSessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return {
     session_id: "session-1",
@@ -348,6 +431,51 @@ function makeSessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecor
     updated_at: "2026-04-16T10:00:00Z",
     ...overrides,
   };
+}
+
+function mockSessionDetailWithUsage({
+  parentUsage,
+  subAgentUsage,
+}: {
+  parentUsage: UsagePayload;
+  subAgentUsage?: UsagePayload | null;
+}) {
+  vi.mocked(fetchSessionDetail).mockResolvedValue({
+    session: makeSessionRecord({ status: "ended", active_run_id: null }),
+    status: "ended",
+    history_items: [],
+    active_live_session: null,
+    active_run: null,
+    timeline: {
+      live_session_id: "live-1",
+      session_id: "session-1",
+      runtime: {
+        provider: "openai",
+        provider_id: "openai-main",
+        profile_id: "analysis",
+        model: "gpt-5.4",
+        reasoning_effort: "high",
+        compact_threshold: 200000,
+      },
+      input_enabled: false,
+      wait_message: null,
+      processing: null,
+      session_usage: parentUsage,
+      turn_usage: null,
+      session_ended: true,
+      fatal_error: null,
+      pending_user_questions: null,
+      items: [],
+      sub_agents: {
+        "sub-1": {
+          title: "Researcher",
+          status: "completed",
+          ...(subAgentUsage ? { session_usage: subAgentUsage } : {}),
+        },
+      },
+      last_event_seq: 4,
+    },
+  } satisfies SessionDetailPayload);
 }
 
 function renderSessionRoute(route: string) {
@@ -395,6 +523,7 @@ describe("SessionPage", () => {
       liveSessionIndex: {},
       sessionIndex: {},
     });
+    vi.mocked(fetchBootstrap).mockResolvedValue(makeBootstrap());
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(fetchSessions).mockResolvedValue([makeSessionRecord()]);
     vi.mocked(fetchSessionDetail).mockResolvedValue({
@@ -420,10 +549,69 @@ describe("SessionPage", () => {
     vi.mocked(sendSessionMessage).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-new", session_id: "session-1", last_event_seq: 3 }),
     );
+    vi.mocked(runSessionShellCommand).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-new", session_id: "session-1", last_event_seq: 3 }),
+    );
+    vi.mocked(interruptSession).mockResolvedValue(
+      makeLiveSession({ live_session_id: "live-processing", session_id: "session-1" }),
+    );
     vi.mocked(submitSessionQuestionResponse).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-question", session_id: "session-1" }),
     );
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
+  });
+
+  it("shows the workspace badge in the session topbar when the sidebar is collapsed", async () => {
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    const workspaceLabel = await within(topbar).findByText("workspace/demo");
+    const sidebar = screen.getByRole("complementary", { name: "Application sidebar" });
+
+    expect(workspaceLabel.closest(".session-topbar__workspace")).toBeInTheDocument();
+    expect(workspaceLabel.closest(".app-sidebar__workspace-badge")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+    expect(within(sidebar).queryByText("workspace/demo")).not.toBeInTheDocument();
+  });
+
+  it("does not duplicate the workspace badge in the session topbar when the sidebar is open", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    const workspaceLabels = await screen.findAllByText("workspace/demo");
+    const sidebar = screen.getByRole("complementary", { name: "Application sidebar" });
+
+    expect(workspaceLabels).toHaveLength(1);
+    expect(within(sidebar).getByText("workspace/demo")).toBeInTheDocument();
+    expect(within(topbar).queryByText("workspace/demo")).not.toBeInTheDocument();
+  });
+
+  it("uses the sandbox workspace label in the collapsed session topbar badge", async () => {
+    const user = userEvent.setup();
+    act(() => {
+      useSidebarStore.setState({ isOpen: false });
+    });
+    vi.mocked(fetchBootstrap).mockResolvedValue({
+      ...makeBootstrap(),
+      workspace_root: "/workspace/d0918d973e2e241d",
+      workspace_key: "/Users/ada/project",
+      workspace_display_path: "/Users/ada/project",
+      is_sandbox: true,
+    });
+
+    renderSessionRoute("/sessions/session-1");
+
+    const topbar = getSessionTopbar();
+    const workspaceLabel = await within(topbar).findByText("Sandbox · ada/project");
+    expect(within(topbar).queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
+
+    const workspaceBadge = workspaceLabel.closest(".app-sidebar__workspace-badge") as HTMLElement;
+    await user.hover(workspaceBadge);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("/Users/ada/project");
   });
 
   it("uses the shared app tooltip for the interactive mode toggle", async () => {
@@ -567,6 +755,44 @@ describe("SessionPage", () => {
     );
   });
 
+  it("shows parent context usage on the main session route", async () => {
+    const parentUsage = makeUsage({ context_tokens: 120000 });
+    const subAgentUsage = makeUsage({ context_tokens: 5000 });
+    mockSessionDetailWithUsage({ parentUsage, subAgentUsage });
+
+    renderSessionRoute("/sessions/session-1");
+
+    await waitFor(() => {
+      expect(latestUsageBarProps().usage).toEqual(parentUsage);
+    });
+  });
+
+  it("shows selected sub-agent context usage on sub-agent routes", async () => {
+    const parentUsage = makeUsage({ context_tokens: 120000 });
+    const subAgentUsage = makeUsage({ context_tokens: 5000 });
+    mockSessionDetailWithUsage({ parentUsage, subAgentUsage });
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await waitFor(() => {
+      expect(latestUsageBarProps().usage).toEqual(subAgentUsage);
+    });
+  });
+
+  it("does not fall back to parent context usage on sub-agent routes", async () => {
+    const parentUsage = makeUsage({ context_tokens: 120000 });
+    mockSessionDetailWithUsage({ parentUsage, subAgentUsage: null });
+
+    renderSessionRoute("/sessions/session-1/sub-agents/sub-1");
+
+    await waitFor(() => {
+      expect(latestUsageBarProps()).toEqual(expect.objectContaining({
+        compactThreshold: 200000,
+        usage: null,
+      }));
+    });
+  });
+
   it("does not show parent processing as child sub-agent activity", async () => {
     useSessionStore.setState((state) => ({
       ...state,
@@ -653,6 +879,185 @@ describe("SessionPage", () => {
     });
   });
 
+  it("hydrates reopened sub-agent routes with persisted user and assistant messages", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord(),
+      status: "ended",
+      history_items: [
+        {
+          item_id: "msg-parent-user",
+          message_id: "msg-parent-user",
+          role: "user",
+          content: "Parent task",
+          markdown: true,
+          part_ids: { content: "part-parent-user", file_paths: [], image_attachments: [] },
+          file_paths: [],
+          image_attachments: [],
+          historical: true,
+          created_at: "2026-05-09T00:00:00Z",
+        },
+        {
+          item_id: "msg-parent-assistant",
+          message_id: "msg-parent-assistant",
+          role: "assistant",
+          content: "Parent answer",
+          markdown: true,
+          part_ids: { content: "part-parent-assistant", file_paths: [], image_attachments: [] },
+          file_paths: [],
+          image_attachments: [],
+          historical: true,
+          created_at: "2026-05-09T00:00:03Z",
+        },
+      ],
+      active_live_session: null,
+      timeline: {
+        live_session_id: "run-1",
+        session_id: "session-1",
+        runtime: {
+          provider: "openai",
+          provider_id: "openai-main",
+          profile_id: "analysis",
+          model: "gpt-5.4",
+          reasoning_effort: "high",
+          compact_threshold: 200000,
+        },
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "run-1:subagent-25-message-1",
+            role: "user",
+            content: "Delegated task",
+            markdown: false,
+            historical: true,
+            sub_agent_id: "run-1:subagent-25",
+          },
+          {
+            kind: "tool_group",
+            itemId: "run-1:subagent-25-tool-group-2",
+            label: "read_file",
+            items: [{ text: "read_file" }],
+            status: "completed",
+            sub_agent_id: "run-1:subagent-25",
+          },
+          {
+            kind: "message",
+            itemId: "run-1:subagent-25-message-3",
+            role: "assistant",
+            content: "Delegated answer",
+            markdown: true,
+            historical: true,
+            sub_agent_id: "run-1:subagent-25",
+          },
+        ],
+        sub_agents: {
+          "run-1:subagent-25": { title: "worker", status: "completed" },
+        },
+        last_event_seq: 3,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1/sub-agents/run-1%3Asubagent-25");
+
+    await waitFor(() => {
+      const props = latestSessionTimelineProps();
+      expect(props.items).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: "message",
+          itemId: "run-1:subagent-25-message-1",
+          content: "Delegated task",
+        }),
+        expect.objectContaining({
+          kind: "tool_group",
+          itemId: "run-1:subagent-25-tool-group-2",
+        }),
+        expect.objectContaining({
+          kind: "message",
+          itemId: "run-1:subagent-25-message-3",
+          content: "Delegated answer",
+        }),
+      ]));
+    });
+  });
+
+  it("passes collision-free timeline signatures to timeline rendering", async () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    vi.mocked(fetchSessionDetail).mockReturnValue(new Promise<SessionDetailPayload>(() => {}));
+    useSessionStore.setState((state) => ({
+      ...state,
+      sessionIndex: { "session-1": sessionKey },
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: {
+          ...createEmptySessionState(),
+          key: sessionKey,
+          sessionId: "session-1",
+          connection: "connected",
+          items: [
+            {
+              kind: "message",
+              itemId: "assistant-msg",
+              role: "assistant",
+              content: "FB",
+              markdown: true,
+            },
+          ],
+          itemsVersion: 1,
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1");
+
+    await waitFor(() => {
+      const props = latestSessionTimelineProps();
+      expect(props.items).toEqual([expect.objectContaining({ content: "FB" })]);
+      expect(props.itemsVersion).toEqual(expect.stringContaining("FB"));
+    });
+    const firstProps = latestSessionTimelineProps();
+
+    act(() => {
+      useSessionStore.setState((state) => {
+        const current = state.sessionsByKey[sessionKey];
+        if (!current) return state;
+        return {
+          ...state,
+          sessionsByKey: {
+            ...state.sessionsByKey,
+            [sessionKey]: {
+              ...current,
+              items: [
+                {
+                  kind: "message",
+                  itemId: "assistant-msg",
+                  role: "assistant",
+                  content: "Ea",
+                  markdown: true,
+                },
+              ],
+              itemsVersion: current.itemsVersion + 1,
+            },
+          },
+        };
+      });
+    });
+
+    await waitFor(() => {
+      const props = latestSessionTimelineProps();
+      expect(props.items).toEqual([expect.objectContaining({ content: "Ea" })]);
+      expect(props.itemsVersion).toEqual(expect.stringContaining("Ea"));
+    });
+    const secondProps = latestSessionTimelineProps();
+    expect(secondProps.itemsVersion).not.toBe(firstProps.itemsVersion);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     sessionTimelineMock.mockClear();
@@ -692,6 +1097,50 @@ describe("SessionPage", () => {
       const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
       expect(state?.liveSessionId).toBe("live-new");
       expect(state?.lastEventSeq).toBe(0);
+    });
+  });
+
+  it("submits slash commands directly without mention expansion", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit Slash" }));
+
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    expect(expandSessionInput).not.toHaveBeenCalled();
+    expect(uploadSavedSessionImages).toHaveBeenCalledWith(
+      "session-1",
+      expect.arrayContaining([expect.any(File)]),
+    );
+    expect(sendSessionMessage).toHaveBeenCalledWith("session-1", {
+      text: "/plan",
+      file_paths: [],
+      image_paths: [],
+      image_upload_ids: ["saved-upload-1"],
+      profile_id: "analysis",
+      interactive_mode: false,
+    });
+  });
+
+  it("submits bang-prefixed input through the shell-command endpoint", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit Shell" }));
+
+    await waitFor(() => expect(runSessionShellCommand).toHaveBeenCalledTimes(1));
+    expect(runSessionShellCommand).toHaveBeenCalledWith("session-1", { command: "ls -la" });
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(expandSessionInput).not.toHaveBeenCalled();
+    await waitFor(() => {
+      const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+      expect(state?.liveSessionId).toBe("live-new");
     });
   });
 
@@ -2701,7 +3150,31 @@ describe("SessionPage", () => {
 
     expect(await screen.findByText("Composer live session live-processing")).toBeInTheDocument();
     expect(screen.getByText("Composer input enabled false")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Interrupt assistant turn" })).toBeEnabled();
     expect(screen.getByText("Connection disconnected")).toBeInTheDocument();
+
+    act(() => {
+      useSessionStore.setState((state) => {
+        const sessionKey = getSavedSessionKey("session-1");
+        const current = state.sessionsByKey[sessionKey];
+        if (!current) return state;
+        return {
+          ...state,
+          sessionsByKey: {
+            ...state.sessionsByKey,
+            [sessionKey]: {
+              ...current,
+              inputEnabled: true,
+            },
+          },
+        };
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Composer input enabled true")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Interrupt assistant turn" })).not.toBeInTheDocument();
+    });
   });
 
   it("submits hydrated pending questions through the saved-session endpoint", async () => {

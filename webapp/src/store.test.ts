@@ -7,7 +7,13 @@ import {
   type SessionRuntimeState,
   useSessionStore,
 } from "./store";
-import type { LiveSession, SessionWebEvent, UsagePayload, WebEvent } from "./types";
+import type {
+  LiveSession,
+  LiveSessionSnapshot,
+  SessionWebEvent,
+  UsagePayload,
+  WebEvent,
+} from "./types";
 
 function makeLiveSession(overrides: Partial<LiveSession> = {}): LiveSession {
   return {
@@ -503,6 +509,44 @@ describe("session store", () => {
     expect(removed.state.itemsVersion).toBe(3);
   });
 
+  it("preserves child identity when rekeying sub-agent messages", () => {
+    const added = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
+      seq: 1,
+      payload: {
+        item_id: "subagent-1-message-1",
+        role: "assistant",
+        content: "child draft",
+        sub_agent_id: "subagent-1",
+      },
+    }));
+    const rekeyed = reduceSessionEvent(
+      { ...added.state, restoredInput: "parent draft" },
+      makeEvent({
+        seq: 2,
+        type: "message_rekeyed",
+        payload: {
+          old_item_id: "subagent-1-message-1",
+          sub_agent_id: "subagent-1",
+          item: {
+            item_id: "msg-7",
+            role: "assistant",
+            content: "child draft",
+            markdown: true,
+          },
+        },
+      }),
+    );
+
+    expect(rekeyed.state.items).toEqual([
+      expect.objectContaining({
+        itemId: "msg-7",
+        content: "child draft",
+        subAgentId: "subagent-1",
+      }),
+    ]);
+    expect(rekeyed.state.restoredInput).toBe("parent draft");
+  });
+
   it("reduces runtime updates without mutating timeline items", () => {
     const current: SessionRuntimeState = {
       ...createEmptySessionState("session-1"),
@@ -676,6 +720,9 @@ describe("session store", () => {
       elapsedSeconds: 1.5,
     });
     expect(subAgentUsage.state.sessionUsage).toEqual({ total_tokens: 10 });
+    expect(subAgentUsage.state.subAgents["sub-1"]?.sessionUsage).toEqual({
+      total_tokens: 99,
+    });
     expect(subAgentUsage.state.lastEventSeq).toBe(3);
 
     const thinking = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
@@ -711,6 +758,43 @@ describe("session store", () => {
       payload: { sub_agent_id: "sub-1", title: "Review", status: "completed" },
     }));
     expect(subAgent.state.subAgents["sub-1"]).toEqual({
+      title: "Review",
+      status: "completed",
+    });
+
+    const childWait = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
+      seq: 1,
+      type: "wait_state",
+      payload: {
+        active: true,
+        message: "Child model wait",
+        sub_agent_id: "sub-1",
+      },
+    }));
+    const childProcessing = reduceSessionEvent(childWait.state, makeEvent({
+      seq: 2,
+      type: "processing_state",
+      payload: {
+        active: true,
+        phase: "model_wait",
+        message: "Child model wait",
+        sub_agent_id: "sub-1",
+      },
+    }));
+    const childCompleted = reduceSessionEvent(childProcessing.state, makeEvent({
+      seq: 3,
+      type: "sub_agent_state",
+      payload: { sub_agent_id: "sub-1", title: "Review", status: "completed" },
+    }));
+    expect(childWait.state.waitMessage).toBeNull();
+    expect(childWait.state.subAgents["sub-1"]?.waitMessage).toBe("Child model wait");
+    expect(childProcessing.state.processing).toBeNull();
+    expect(childProcessing.state.subAgents["sub-1"]?.processing).toEqual({
+      active: true,
+      phase: "model_wait",
+      message: "Child model wait",
+    });
+    expect(childCompleted.state.subAgents["sub-1"]).toEqual({
       title: "Review",
       status: "completed",
     });
@@ -1187,6 +1271,34 @@ describe("session store", () => {
     expect(state.liveSessionId).toBe("live-1");
   });
 
+  it("does not disable input when a submit response matches the applied stream cursor", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", last_event_seq: 8 }),
+    );
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 9,
+      type: "input_state",
+      created_at: "2026-04-16T12:00:03Z",
+      payload: {
+        enabled: true,
+        session_id: "session-1",
+        live_session_id: "live-1",
+      },
+    });
+
+    useSessionStore.getState().attachLiveSession(
+      sessionKey,
+      makeLiveSession({ live_session_id: "live-1", last_event_seq: 9 }),
+      { preserveItems: true, preserveEventCursor: true },
+    );
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.lastEventSeq).toBe(9);
+    expect(state.inputEnabled).toBe(true);
+  });
+
   it("resets stream state so a snapshot can replace an incomplete replay", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
@@ -1289,7 +1401,53 @@ describe("session store", () => {
     }));
   });
 
-  it("ignores sub-agent usage updates for the top-level context gauge", () => {
+  it("hydrates sub-agent usage from live snapshots", () => {
+    const sessionKey = getSavedSessionKey("session-1");
+    useSessionStore.getState().hydrateLiveSnapshot(
+      sessionKey,
+      makeLiveSession(),
+      {
+        live_session_id: "live-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: makeUsage({ context_tokens: 120000 }),
+        turn_usage: null,
+        session_ended: false,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [],
+        sub_agents: {
+          "subagent-1": {
+            title: "Researcher",
+            status: "completed",
+            session_usage: makeUsage({ context_tokens: 5000 }),
+            turn_usage: {
+              usage: makeUsage({ context_tokens: 4200 }),
+              elapsed_seconds: 2.5,
+            },
+          },
+        },
+        last_event_seq: 7,
+      } satisfies LiveSessionSnapshot,
+    );
+
+    const state = useSessionStore.getState().sessionsByKey[sessionKey];
+    expect(state.sessionUsage).toEqual(makeUsage({ context_tokens: 120000 }));
+    expect(state.subAgents["subagent-1"]).toEqual({
+      title: "Researcher",
+      status: "completed",
+      sessionUsage: makeUsage({ context_tokens: 5000 }),
+      turnUsage: {
+        usage: makeUsage({ context_tokens: 4200 }),
+        elapsedSeconds: 2.5,
+      },
+    });
+  });
+
+  it("stores sub-agent usage updates separately from the top-level context gauge", () => {
     const sessionKey = getSavedSessionKey("session-1");
     useSessionStore.getState().attachLiveSession(sessionKey, makeLiveSession());
 
@@ -1312,9 +1470,27 @@ describe("session store", () => {
         usage: makeUsage({ context_tokens: 5000 }),
       },
     });
+    useSessionStore.getState().applyEvent(sessionKey, {
+      seq: 7,
+      type: "usage_updated",
+      created_at: "2026-04-16T12:00:05Z",
+      payload: {
+        scope: "turn",
+        elapsed_seconds: 1.8,
+        sub_agent_id: "subagent-1",
+        usage: makeUsage({ context_tokens: 4200 }),
+      },
+    });
 
     const state = useSessionStore.getState().sessionsByKey[sessionKey];
     expect(state.sessionUsage).toEqual(makeUsage({ context_tokens: 120000 }));
+    expect(state.subAgents["subagent-1"]?.sessionUsage).toEqual(
+      makeUsage({ context_tokens: 5000 }),
+    );
+    expect(state.subAgents["subagent-1"]?.turnUsage).toEqual({
+      usage: makeUsage({ context_tokens: 4200 }),
+      elapsedSeconds: 1.8,
+    });
   });
 
   it("stores compact threshold from live sessions and runtime updates", () => {

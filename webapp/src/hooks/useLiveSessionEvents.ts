@@ -296,6 +296,9 @@ export function useLiveSessionEvents(
 }
 
 function shouldRefreshRunQueries(event: WebEvent, wasInputEnabled: boolean | null): boolean {
+  if ("sub_agent_id" in event.payload && typeof event.payload.sub_agent_id === "string") {
+    return false;
+  }
   if (event.type === "input_state") {
     return event.payload.enabled === true && wasInputEnabled === false;
   }

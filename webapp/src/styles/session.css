@@ -335,6 +335,34 @@
   min-width: 0;
 }
 
+.session-topbar--with-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+}
+
+.session-topbar--with-workspace .session-topbar__leading {
+  justify-self: start;
+}
+
+.session-topbar--with-workspace .session-topbar__actions {
+  justify-self: end;
+}
+
+.session-topbar__workspace {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  min-width: 0;
+  max-width: min(28rem, 100%);
+  overflow: hidden;
+}
+
+.session-topbar__workspace .app-sidebar__workspace-badge {
+  max-width: min(24rem, 100%);
+}
+
 .session-topbar-control {
   block-size: 2rem;
   min-block-size: 2rem;
@@ -562,6 +590,42 @@
 .timeline-entry__subagent .indicator-dot {
   width: 5px;
   height: 5px;
+}
+
+.timeline-entry__actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.timeline-entry:hover .timeline-entry__actions,
+.timeline-entry:focus-within .timeline-entry__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.timeline-entry--user .timeline-entry__actions {
+  justify-content: flex-end;
+}
+
+.timeline-entry__action-button {
+  color: var(--color-text-tertiary);
+}
+
+.timeline-entry__action-button:hover,
+.timeline-entry__action-button:focus-visible,
+.timeline-entry__action-button[data-copy-status="copied"] {
+  color: var(--color-text-primary);
+}
+
+.timeline-entry__action-button[data-copy-status="failed"] {
+  color: var(--color-error);
 }
 
 /* User messages — right aligned, accent tint */
@@ -798,6 +862,114 @@
 
 .timeline-entry--assistant .timeline-entry__content tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.02);
+}
+
+/* Copyable markdown snippets */
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet {
+  position: relative;
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet--code,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet--table,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet--blockquote {
+  margin: var(--sp-3) 0;
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet--list {
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-code-snippet {
+  overflow: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-code-snippet__header {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  padding: var(--sp-2) calc(var(--sp-6) + var(--sp-2)) var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: color-mix(in srgb, var(--color-surface-3) 68%, transparent);
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-code-snippet__language {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-code-snippet__block {
+  max-height: min(52vh, 560px);
+}
+
+.timeline-entry--assistant .timeline-entry__content pre.markdown-code-snippet__block,
+.timeline-entry--assistant .timeline-entry__content .markdown-code-snippet__block .shiki {
+  margin: 0;
+  padding: var(--sp-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  color: var(--shiki-dark, var(--color-text-secondary));
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
+  white-space: pre;
+  word-break: normal;
+}
+
+.timeline-entry--assistant .timeline-entry__content pre.markdown-code-snippet__block {
+  overflow: auto;
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-code-snippet__block .shiki {
+  overflow: visible;
+}
+
+:root[data-theme="light"] .timeline-entry--assistant .timeline-entry__content .markdown-code-snippet__block .shiki,
+:root[data-theme="light"] .timeline-entry--assistant .timeline-entry__content .markdown-code-snippet__block .shiki span {
+  color: var(--shiki-light, var(--color-text-secondary));
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > pre,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > table,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > blockquote,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > ul,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > ol {
+  margin: 0;
+}
+
+.markdown-copyable-snippet__actions {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+
+.markdown-copyable-snippet:hover > .markdown-copyable-snippet__actions,
+.markdown-copyable-snippet:focus-within > .markdown-copyable-snippet__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.markdown-copyable-snippet__copy {
+  color: var(--color-text-tertiary);
+}
+
+.markdown-copyable-snippet__copy:hover,
+.markdown-copyable-snippet__copy:focus-visible,
+.markdown-copyable-snippet__copy[data-copy-status="copied"] {
+  color: var(--color-text-primary);
+}
+
+.markdown-copyable-snippet__copy[data-copy-status="failed"] {
+  color: var(--color-error);
 }
 
 /* Horizontal rule */
@@ -2974,6 +3146,21 @@
     flex-wrap: wrap;
     gap: var(--sp-2);
     margin-block-start: 0;
+  }
+
+  .session-topbar--with-workspace {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .session-topbar__workspace {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .session-topbar__workspace .app-sidebar__workspace-badge {
+    max-width: 100%;
   }
 
   .profile-selector {
