@@ -96,3 +96,4 @@
 - Implemented frontend chat input history recall: SessionPage now passes main-session non-empty user messages to Composer; Composer handles ArrowUp/ArrowDown history browsing with draft restore and completion priority. Validation: focused Composer/SessionPage Vitest, lint, typecheck, and git diff check passed.
 
 - Fixed Composer history review finding: inputHistory changes while browsing now restore the saved draft and reset history state, with Composer regression coverage. Validation: focused Composer Vitest, lint, and typecheck passed.
+- Implemented startup PyPI update warning: daily maintenance now renders update notices with Rich while keeping plain-string diagnostics, and tests cover first-run-only emission, rendered content, version silence cases, and PyPI request headers/timeout. Validation: focused maintenance/entrypoint pytest, Ruff check/format-check, and basedpyright passed.
