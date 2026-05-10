@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import errno
-import os
 import re
 import threading
 from dataclasses import dataclass
@@ -11,7 +10,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Literal
 
-from pbi_agent.tools.workspace_filters import should_skip_directory_name
+from pbi_agent.web.scan import scan_workspace_files
 
 PATH_CHAR_CLASS = r"A-Za-z0-9._~/\\:-"
 FILE_MENTION_PATTERN = re.compile(r"@(?P<path>(?:\\.|[" + PATH_CHAR_CLASS + r"])+)")
@@ -44,49 +43,107 @@ class MentionSearchResult:
     kind: Literal["file", "image"]
 
 
+ScanStatus = Literal["idle", "scanning", "ready", "failed"]
+
+
+@dataclass(frozen=True, slots=True)
+class MentionSearchPayload:
+    items: list[MentionSearchResult]
+    scan_status: ScanStatus
+    is_stale: bool
+    file_count: int
+    error: str | None = None
+
+
 class WorkspaceFileIndex:
-    """In-memory workspace file cache used by mention autocomplete."""
+    """In-memory workspace file snapshot used by mention autocomplete."""
 
     def __init__(self, root: Path, *, max_files: int = _MAX_WORKSPACE_FILES) -> None:
         self._root = root.resolve()
         self._max_files = max_files
         self._lock = threading.Lock()
         self._file_cache: list[str] | None = None
+        self._status: ScanStatus = "idle"
+        self._error: str | None = None
+        self._scan_thread: threading.Thread | None = None
 
     def refresh_cache(self) -> None:
-        with self._lock:
-            self._file_cache = None
+        self.start_refresh()
 
     def warm_cache(self) -> None:
-        self._get_files()
+        self.start_refresh()
 
-    def search(self, query: str, *, limit: int = 20) -> list[MentionSearchResult]:
+    def start_refresh(self) -> None:
+        with self._lock:
+            if self._scan_thread is not None and self._scan_thread.is_alive():
+                return
+            self._status = "scanning"
+            self._error = None
+            thread = threading.Thread(
+                target=self._refresh_in_background,
+                name="pbi-file-mention-scan",
+                daemon=True,
+            )
+            self._scan_thread = thread
+            thread.start()
+
+    def search(self, query: str, *, limit: int = 20) -> MentionSearchPayload:
         normalized_query = query.strip().replace("\\ ", " ")
         bounded_limit = max(1, min(limit, 200))
+        files, status, error, is_stale = self._snapshot()
+        if files is None:
+            self.start_refresh()
+            files, status, error, is_stale = self._snapshot()
+        file_list = files or []
         matches = _fuzzy_search(
             normalized_query,
-            self._get_files(),
+            file_list,
             limit=bounded_limit,
             include_dotfiles=normalized_query.startswith("."),
         )
-        return [
-            MentionSearchResult(
-                path=path,
-                kind="image"
-                if Path(path).suffix.lower() in IMAGE_FILE_SUFFIXES
-                else "file",
-            )
-            for path in matches
-        ]
-
-    def _get_files(self) -> list[str]:
-        with self._lock:
-            if self._file_cache is None:
-                self._file_cache = _get_workspace_files(
-                    self._root,
-                    max_files=self._max_files,
+        return MentionSearchPayload(
+            items=[
+                MentionSearchResult(
+                    path=path,
+                    kind="image"
+                    if Path(path).suffix.lower() in IMAGE_FILE_SUFFIXES
+                    else "file",
                 )
-            return self._file_cache
+                for path in matches
+            ],
+            scan_status=status,
+            is_stale=is_stale,
+            file_count=len(file_list),
+            error=error,
+        )
+
+    def wait_for_refresh(self, timeout: float | None = None) -> None:
+        with self._lock:
+            thread = self._scan_thread
+        if thread is not None:
+            thread.join(timeout=timeout)
+
+    def _snapshot(self) -> tuple[list[str] | None, ScanStatus, str | None, bool]:
+        with self._lock:
+            files = self._file_cache
+            status = self._status
+            error = self._error
+            is_stale = files is not None and status == "scanning"
+            return files, status, error, is_stale
+
+    def _refresh_in_background(self) -> None:
+        result = scan_workspace_files(self._root)
+        next_files = result.files[: self._max_files]
+        with self._lock:
+            if result.error is not None:
+                self._status = "failed"
+                self._error = result.error
+                if self._file_cache is None:
+                    self._file_cache = []
+            else:
+                self._status = "ready"
+                self._error = None
+                self._file_cache = next_files
 
 
 def expand_file_mentions(
@@ -153,7 +210,9 @@ def search_input_mentions(
     """Return ranked workspace file suggestions for the browser composer."""
 
     mention_index = index or WorkspaceFileIndex(root)
-    return mention_index.search(query, limit=limit)
+    mention_index.warm_cache()
+    mention_index.wait_for_refresh(timeout=5)
+    return mention_index.search(query, limit=limit).items
 
 
 def _collect_mentioned_files(
@@ -196,30 +255,6 @@ def _collect_mentioned_files(
         )
         index = at_index + 1 + result.consumed
 
-    return files
-
-
-def _get_workspace_files(
-    root: Path, *, max_files: int = _MAX_WORKSPACE_FILES
-) -> list[str]:
-    files: list[str] = []
-    for current_root, dir_names, file_names in os.walk(
-        root, topdown=True, followlinks=False
-    ):
-        dir_names[:] = [
-            dir_name
-            for dir_name in sorted(dir_names, key=str.casefold)
-            if not should_skip_directory_name(dir_name)
-        ]
-        for file_name in sorted(file_names, key=str.casefold):
-            path = Path(current_root) / file_name
-            try:
-                relative_path = path.relative_to(root).as_posix()
-            except ValueError:
-                continue
-            files.append(relative_path)
-            if len(files) >= max_files:
-                return files
     return files
 
 
@@ -356,6 +391,8 @@ __all__ = [
     "WorkspaceFileIndex",
     "expand_input_mentions",
     "expand_file_mentions",
+    "MentionSearchPayload",
     "MentionSearchResult",
+    "ScanStatus",
     "search_input_mentions",
 ]

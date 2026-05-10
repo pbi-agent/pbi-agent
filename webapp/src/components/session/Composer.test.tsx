@@ -1,8 +1,8 @@
 import userEvent from "@testing-library/user-event";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { Composer } from "./Composer";
-import { searchSlashCommands } from "../../api";
+import { searchFileMentions, searchSlashCommands } from "../../api";
 import { renderWithProviders } from "../../test/render";
 
 vi.mock("../../api", async (importOriginal) => {
@@ -93,6 +93,13 @@ describe("Composer", () => {
     }
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    vi.mocked(searchFileMentions).mockResolvedValue({
+      items: [],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 0,
+      error: null,
+    });
     vi.mocked(searchSlashCommands).mockResolvedValue([]);
   });
 
@@ -256,6 +263,160 @@ describe("Composer", () => {
       expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("restore this");
     });
     expect(onConsumed).toHaveBeenCalledTimes(1);
+  });
+
+  it("polls cold file-index scans until file mention results are ready", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchFileMentions)
+      .mockResolvedValueOnce({
+        items: [],
+        scan_status: "scanning",
+        is_stale: false,
+        file_count: 0,
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        items: [{ path: "src/main.py", kind: "file" }],
+        scan_status: "ready",
+        is_stale: false,
+        file_count: 1,
+        error: null,
+      });
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "@");
+
+    expect(await screen.findByText("Indexing files...")).toBeInTheDocument();
+    expect(await screen.findByText("@src/main.py", {}, { timeout: 2_000 })).toBeInTheDocument();
+    expect(searchFileMentions).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Indexing files...")).not.toBeInTheDocument();
+  });
+
+  it("polls stale file-index refreshes while preserving items", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchFileMentions)
+      .mockResolvedValueOnce({
+        items: [{ path: "src/old.py", kind: "file" }],
+        scan_status: "scanning",
+        is_stale: true,
+        file_count: 1,
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        items: [{ path: "src/main.py", kind: "file" }],
+        scan_status: "ready",
+        is_stale: false,
+        file_count: 1,
+        error: null,
+      });
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "@ma");
+
+    expect(await screen.findByText("@src/old.py")).toBeInTheDocument();
+    expect(screen.getByText("Refreshing file index...")).toBeInTheDocument();
+    expect(await screen.findByText("@src/main.py", {}, { timeout: 2_000 })).toBeInTheDocument();
+    expect(searchFileMentions).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Refreshing file index...")).not.toBeInTheDocument();
+  });
+
+  it("does not poll dismissed file mention completions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchFileMentions).mockResolvedValue({
+      items: [],
+      scan_status: "scanning",
+      is_stale: false,
+      file_count: 0,
+      error: null,
+    });
+    renderComposer();
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    await user.type(textbox, "@");
+    expect(await screen.findByText("Indexing files...")).toBeInTheDocument();
+    fireEvent.keyDown(textbox, { key: "Escape" });
+    await new Promise((resolve) => window.setTimeout(resolve, 650));
+
+    expect(searchFileMentions).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Indexing files...")).not.toBeInTheDocument();
+  });
+
+  it("shows scan failure messages", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchFileMentions).mockResolvedValueOnce({
+      items: [],
+      scan_status: "failed",
+      is_stale: false,
+      file_count: 0,
+      error: "git failed",
+    });
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "@");
+
+    expect(await screen.findByText("git failed")).toBeInTheDocument();
+  });
+
+  it("discards older file completion responses", async () => {
+    const user = userEvent.setup();
+    let resolveFirst: ((value: Awaited<ReturnType<typeof searchFileMentions>>) => void) | undefined;
+    vi.mocked(searchFileMentions)
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValueOnce({
+        items: [{ path: "beta.txt", kind: "file" }],
+        scan_status: "ready",
+        is_stale: false,
+        file_count: 1,
+        error: null,
+      });
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "@a");
+    await waitFor(() => expect(searchFileMentions).toHaveBeenCalledTimes(1));
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "b");
+    if (!resolveFirst) {
+      throw new Error("first search did not start");
+    }
+    resolveFirst({
+      items: [{ path: "alpha.txt", kind: "file" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      error: null,
+    });
+
+    expect(await screen.findByText("@beta.txt")).toBeInTheDocument();
+    expect(screen.queryByText("@alpha.txt")).not.toBeInTheDocument();
+  });
+
+  it("parses token mentions without treating later at signs as new triggers", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchFileMentions).mockResolvedValueOnce({
+      items: [{ path: "icons/icon@2x.png", kind: "image" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      error: null,
+    });
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "@icons/icon@2");
+
+    expect(await screen.findByText("@icons/icon@2x.png")).toBeInTheDocument();
+    expect(searchFileMentions).toHaveBeenLastCalledWith("icons/icon@2", 8);
+  });
+
+  it("does not open file completions for email or import-alias tokens", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.type(textbox, "user@example.com");
+    expect(screen.queryByRole("listbox", { name: "Workspace file suggestions" })).not.toBeInTheDocument();
+
+    await user.clear(textbox);
+    await user.type(textbox, "@/components");
+    expect(screen.queryByRole("listbox", { name: "Workspace file suggestions" })).not.toBeInTheDocument();
   });
 
   it("renders slash command descriptions inline in parentheses", async () => {

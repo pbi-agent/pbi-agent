@@ -29,8 +29,15 @@ class FileMentionItemModel(BaseModel):
     kind: Literal["file", "image"]
 
 
+ScanStatus = Literal["idle", "scanning", "ready", "failed"]
+
+
 class FileMentionSearchResponse(BaseModel):
     items: list[FileMentionItemModel]
+    scan_status: ScanStatus
+    is_stale: bool
+    file_count: int
+    error: str | None = None
 
 
 class SlashCommandItemModel(BaseModel):

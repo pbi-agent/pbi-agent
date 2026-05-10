@@ -88,8 +88,9 @@ type ImageFileInput = HTMLInputElement & {
   showPicker?: () => void;
 };
 
-const EMAIL_PREFIX_PATTERN = /[a-zA-Z0-9._%+-]$/;
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const TOKEN_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
+const FILE_MENTION_POLL_INTERVAL_MS = 500;
 
 function parseActiveMention(
   text: string,
@@ -99,27 +100,26 @@ function parseActiveMention(
     return null;
   }
 
-  const beforeCursor = text.slice(0, cursorIndex);
-  const atIndex = beforeCursor.lastIndexOf("@");
-  if (atIndex < 0) {
+  let tokenStart = cursorIndex;
+  while (tokenStart > 0 && !TOKEN_BOUNDARY_PATTERN.test(text[tokenStart - 1])) {
+    tokenStart -= 1;
+  }
+  let tokenEnd = cursorIndex;
+  while (tokenEnd < text.length && !TOKEN_BOUNDARY_PATTERN.test(text[tokenEnd])) {
+    tokenEnd += 1;
+  }
+
+  if (text[tokenStart] !== "@" || text[tokenStart + 1] === "/") {
     return null;
   }
-  if (atIndex > 0 && EMAIL_PREFIX_PATTERN.test(text[atIndex - 1])) {
+  if (tokenStart > 0 && !TOKEN_BOUNDARY_PATTERN.test(text[tokenStart - 1])) {
     return null;
   }
 
-  const candidate = text.slice(atIndex + 1, cursorIndex);
-  for (let index = 0; index < candidate.length; index += 1) {
-    const char = candidate[index];
-    const previous = index > 0 ? candidate[index - 1] : "";
-    if ((char === " " || char === "\n" || char === "\t") && previous !== "\\") {
-      return null;
-    }
-  }
-
+  const candidate = text.slice(tokenStart + 1, cursorIndex);
   return {
-    start: atIndex,
-    end: cursorIndex,
+    start: tokenStart,
+    end: tokenEnd,
     query: candidate.replaceAll("\\ ", " "),
   };
 }
@@ -196,8 +196,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [completionOpen, setCompletionOpen] = useState(false);
   const [completionLoading, setCompletionLoading] = useState(false);
   const [completionError, setCompletionError] = useState<string | null>(null);
+  const [completionStatusMessage, setCompletionStatusMessage] = useState<string | null>(null);
   const [completionSelectedIndex, setCompletionSelectedIndex] = useState(0);
   const completionRequestIdRef = useRef(0);
+  const activeCompletionRef = useRef<{
+    mode: CompletionMode | null;
+    query: string | null;
+  }>({ mode: null, query: null });
   const pendingImagesRef = useRef<PendingImage[]>([]);
   const refocusAfterSubmitRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -232,17 +237,26 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const activeCompletionQuery = activeSlashCommand?.query ?? activeMention?.query ?? null;
 
   const closeCompletions = useCallback(() => {
+    completionRequestIdRef.current += 1;
     setCompletionMode(null);
     setCompletionItems([]);
     setCompletionOpen(false);
     setCompletionLoading(false);
     setCompletionError(null);
+    setCompletionStatusMessage(null);
     setCompletionSelectedIndex(0);
   }, []);
 
   const syncCursor = useCallback(() => {
     setCursorIndex(textareaRef.current?.selectionStart ?? 0);
   }, []);
+
+  useEffect(() => {
+    activeCompletionRef.current = {
+      mode: activeCompletionMode,
+      query: activeCompletionQuery,
+    };
+  }, [activeCompletionMode, activeCompletionQuery]);
 
   const applyInputState = useCallback(
     (nextInput: string, nextCursor: number) => {
@@ -494,60 +508,104 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     setCompletionOpen(true);
     setCompletionMode(activeCompletionMode);
     setCompletionError(null);
+    setCompletionStatusMessage(null);
     setCompletionLoading(true);
-    if (completionMode !== activeCompletionMode) {
-      setCompletionItems([]);
-      setCompletionSelectedIndex(0);
-    }
+    setCompletionItems([]);
+    setCompletionSelectedIndex(0);
 
     const requestId = completionRequestIdRef.current + 1;
     completionRequestIdRef.current = requestId;
-    const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const items =
-            activeCompletionMode === "slash"
-              ? (await searchSlashCommands(activeCompletionQuery, 8)).map(
+    const requestMode = activeCompletionMode;
+    const requestQuery = activeCompletionQuery;
+    let cancelled = false;
+    let timeoutId: number | undefined;
+
+    const isCurrentRequest = () =>
+      !cancelled &&
+      completionRequestIdRef.current === requestId &&
+      activeCompletionRef.current.mode === requestMode &&
+      activeCompletionRef.current.query === requestQuery;
+
+    const scheduleSearch = (delayMs: number) => {
+      timeoutId = window.setTimeout(() => {
+        void runSearch();
+      }, delayMs);
+    };
+
+    const runSearch = async () => {
+      if (!isCurrentRequest()) return;
+      try {
+        const payload =
+          requestMode === "slash"
+            ? {
+                items: (await searchSlashCommands(requestQuery, 8)).map(
                   (command): CompletionItem => ({
                     kind: "slash",
                     key: command.name,
                     command,
                   }),
-                )
-              : (await searchFileMentions(activeCompletionQuery, 8)).map(
+                ),
+                loading: false,
+                statusMessage: null,
+                errorMessage: null,
+                shouldPoll: false,
+              }
+            : await searchFileMentions(requestQuery, 8).then((result) => ({
+                items: result.items.map(
                   (mention): CompletionItem => ({
                     kind: "mention",
                     key: mention.path,
                     mention,
                   }),
-                );
-          if (completionRequestIdRef.current !== requestId) return;
-          setCompletionItems(items);
-          setCompletionLoading(false);
-          setCompletionSelectedIndex((previousIndex) =>
-            items.length === 0 ? 0 : Math.min(previousIndex, items.length - 1),
-          );
-        } catch {
-          if (completionRequestIdRef.current !== requestId) return;
-          setCompletionLoading(false);
-          setCompletionError(
-            activeCompletionMode === "slash"
-              ? "Unable to load commands"
-              : "Unable to load files",
-          );
+                ),
+                loading: result.scan_status === "scanning" && result.items.length === 0,
+                statusMessage: result.is_stale
+                  ? "Refreshing file index..."
+                  : result.scan_status === "scanning"
+                    ? "Indexing files..."
+                    : null,
+                errorMessage:
+                  result.scan_status === "failed"
+                    ? result.error ?? "Unable to index workspace files"
+                    : null,
+                shouldPoll: result.scan_status === "scanning",
+              }));
+        if (!isCurrentRequest()) return;
+        setCompletionItems(payload.items);
+        setCompletionLoading(payload.loading);
+        setCompletionStatusMessage(payload.statusMessage);
+        setCompletionError(payload.errorMessage);
+        setCompletionSelectedIndex((previousIndex) =>
+          payload.items.length === 0
+            ? 0
+            : Math.min(previousIndex, payload.items.length - 1),
+        );
+        if (payload.shouldPoll) {
+          scheduleSearch(FILE_MENTION_POLL_INTERVAL_MS);
         }
-      })();
-    }, activeCompletionMode === "slash" ? 60 : 120);
+      } catch {
+        if (!isCurrentRequest()) return;
+        setCompletionLoading(false);
+        setCompletionStatusMessage(null);
+        setCompletionError(
+          requestMode === "slash" ? "Unable to load commands" : "Unable to load files",
+        );
+      }
+    };
+
+    scheduleSearch(activeCompletionMode === "slash" ? 60 : 120);
 
     return () => {
-      window.clearTimeout(timeoutId);
+      cancelled = true;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [
     activeCompletionMode,
     activeCompletionQuery,
     canSend,
     closeCompletions,
-    completionMode,
   ]);
 
   const handleSubmit = async (event?: FormEvent<HTMLFormElement>) => {
@@ -673,16 +731,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     [appendFiles, isShellMode],
   );
 
-  const showCompletionStatus = completionLoading && completionItems.length > 0;
+  const showCompletionStatus = completionStatusMessage !== null && completionItems.length > 0;
   const showCompletionEmptyState =
     completionItems.length === 0 &&
     (completionLoading || completionError !== null || completionOpen);
-  const completionEmptyText = completionLoading
-    ? completionMode === "slash"
-      ? "Searching commands..."
-      : "Searching files..."
-    : completionError ??
-      (completionMode === "slash" ? "No matching commands" : "No matching files");
+  const completionEmptyText = completionError ?? (completionLoading
+    ? completionStatusMessage ??
+      (completionMode === "slash" ? "Searching commands..." : "Searching files...")
+    : completionStatusMessage ??
+      (completionMode === "slash" ? "No matching commands" : "No matching files"));
   const completionLabel =
     completionMode === "slash"
       ? "Slash command suggestions"
@@ -894,7 +951,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           ) : null}
           {showCompletionStatus ? (
             <div className="composer__completion-status">
-              {completionMode === "slash" ? "Updating commands..." : "Updating results..."}
+              {completionStatusMessage}
             </div>
           ) : null}
         </div>

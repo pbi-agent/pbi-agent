@@ -215,6 +215,14 @@ export type FileMentionItem = {
   kind: "file" | "image";
 };
 
+export type FileMentionSearchPayload = {
+  items: FileMentionItem[];
+  scan_status: "idle" | "scanning" | "ready" | "failed";
+  is_stale: boolean;
+  file_count: number;
+  error: string | null;
+};
+
 export type SlashCommandItem = {
   name: string;
   description: string;

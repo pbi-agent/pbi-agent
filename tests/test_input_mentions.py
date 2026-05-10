@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import threading
 from pathlib import Path
 
 import pbi_agent.web.input_mentions as input_mentions
@@ -9,6 +11,7 @@ from pbi_agent.web.input_mentions import (
     expand_input_mentions,
     search_input_mentions,
 )
+from pbi_agent.web.scan import WorkspaceScanResult
 
 
 def test_expand_file_mentions_appends_workspace_file_content(tmp_path: Path) -> None:
@@ -162,7 +165,15 @@ def test_search_input_mentions_returns_ranked_matches(tmp_path: Path) -> None:
     ]
 
 
-def test_search_input_mentions_skips_filtered_directories(tmp_path: Path) -> None:
+def test_search_input_mentions_skips_gitignored_directories(tmp_path: Path) -> None:
+    subprocess.run(
+        ["git", "init"],
+        cwd=tmp_path,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    (tmp_path / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
     (tmp_path / "node_modules").mkdir()
     (tmp_path / "node_modules" / "main.js").write_text("ignored\n", encoding="utf-8")
     (tmp_path / "main.py").write_text("print('hi')\n", encoding="utf-8")
@@ -172,24 +183,35 @@ def test_search_input_mentions_skips_filtered_directories(tmp_path: Path) -> Non
     assert [item.path for item in results] == ["main.py"]
 
 
-def test_workspace_file_index_reuses_cached_file_list(
+def test_workspace_file_index_returns_snapshot_while_refreshing(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    (tmp_path / "main.py").write_text("print('hi')\n", encoding="utf-8")
+    scans_started = threading.Event()
+    release_second_scan = threading.Event()
+    scan_count = 0
 
-    walk_calls = 0
-    original_walk = input_mentions.os.walk
+    def fake_scan(_root: Path):
+        nonlocal scan_count
+        scan_count += 1
+        if scan_count == 1:
+            return WorkspaceScanResult(files=["main.py"])
+        scans_started.set()
+        release_second_scan.wait(timeout=2)
+        return WorkspaceScanResult(files=["other.py"])
 
-    def counting_walk(*args, **kwargs):
-        nonlocal walk_calls
-        walk_calls += 1
-        return original_walk(*args, **kwargs)
-
-    monkeypatch.setattr(input_mentions.os, "walk", counting_walk)
-
+    monkeypatch.setattr(input_mentions, "scan_workspace_files", fake_scan)
     index = WorkspaceFileIndex(tmp_path)
+    index.warm_cache()
+    index.wait_for_refresh(timeout=2)
 
-    assert [item.path for item in index.search("ma", limit=10)] == ["main.py"]
-    assert [item.path for item in index.search("ma", limit=10)] == ["main.py"]
-    assert walk_calls == 1
+    index.refresh_cache()
+    assert scans_started.wait(timeout=2)
+    payload = index.search("ma", limit=10)
+    release_second_scan.set()
+    index.wait_for_refresh(timeout=2)
+
+    assert [item.path for item in payload.items] == ["main.py"]
+    assert payload.scan_status == "scanning"
+    assert payload.is_stale is True
+    assert scan_count == 2

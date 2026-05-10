@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import sqlite3
+import subprocess
 from io import BytesIO, StringIO
 from pathlib import Path
 import threading
@@ -1509,9 +1510,17 @@ def test_provider_update_rejects_dual_secret_mutation() -> None:
 
 def test_file_search_endpoint_returns_workspace_matches(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
+    subprocess.run(
+        ["git", "init"],
+        cwd=tmp_path,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     (tmp_path / "docs").mkdir()
     (tmp_path / "main.py").write_text("print('hi')\n", encoding="utf-8")
     (tmp_path / "docs" / "maintainer.md").write_text("owner\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
     (tmp_path / "node_modules").mkdir()
     (tmp_path / "node_modules" / "main.js").write_text("ignored\n", encoding="utf-8")
 
@@ -1519,12 +1528,22 @@ def test_file_search_endpoint_returns_workspace_matches(tmp_path, monkeypatch) -
 
     with TestClient(app) as client:
         response = client.get("/api/files/search", params={"q": "ma", "limit": 10})
+        for _ in range(20):
+            payload = response.json()
+            if payload["scan_status"] == "ready":
+                break
+            response = client.get("/api/files/search", params={"q": "ma", "limit": 10})
 
     assert response.status_code == 200
-    assert response.json()["items"] == [
+    payload = response.json()
+    assert payload["items"] == [
         {"path": "main.py", "kind": "file"},
         {"path": "docs/maintainer.md", "kind": "file"},
     ]
+    assert payload["scan_status"] == "ready"
+    assert payload["is_stale"] is False
+    assert payload["file_count"] >= 3
+    assert payload["error"] is None
 
 
 def test_slash_command_search_endpoint_returns_web_commands(

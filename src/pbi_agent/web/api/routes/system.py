@@ -431,14 +431,16 @@ def search_workspace_files(
     q: MentionQuery = "",
     limit: MentionLimitQuery = 8,
 ) -> FileMentionSearchResponse:
+    payload = manager.search_file_mentions(q, limit=limit)
     return FileMentionSearchResponse(
         items=[
             FileMentionItemModel(path=item.path, kind=item.kind)
-            for item in manager.search_file_mentions(
-                q,
-                limit=limit,
-            )
-        ]
+            for item in payload.items
+        ],
+        scan_status=payload.scan_status,
+        is_stale=payload.is_stale,
+        file_count=payload.file_count,
+        error=payload.error,
     )
 
 

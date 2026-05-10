@@ -81,7 +81,7 @@ export type ExpandInputResponse = { text: string; file_paths?: string[]; image_p
 
 export type FileMentionItemModel = { path: string; kind: "file" | "image" };
 
-export type FileMentionSearchResponse = { items: FileMentionItemModel[] };
+export type FileMentionSearchResponse = { items: FileMentionItemModel[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; error?: string | null };
 
 export type ForkSessionRequest = { message_id: string };
 

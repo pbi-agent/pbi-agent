@@ -29,7 +29,7 @@ import type {
   ConfigBootstrapPayload,
   DashboardStatsPayload,
   ExpandedSessionInput,
-  FileMentionItem,
+  FileMentionSearchPayload,
   ImageAttachment,
   LiveSession,
   UserQuestionAnswer,
@@ -55,7 +55,7 @@ import type {
 type SessionListResponsePayload = { sessions: SessionRecord[] };
 type SessionResponsePayload = { session: SessionRecord };
 type LiveSessionResponsePayload = { session: LiveSession };
-type FileMentionSearchResponsePayload = { items: FileMentionItem[] };
+type FileMentionSearchResponsePayload = FileMentionSearchPayload;
 type SlashCommandSearchResponsePayload = { items: SlashCommandItem[] };
 type ImageUploadResponsePayload = { uploads: ImageAttachment[] };
 type BoardStagesResponsePayload = { board_stages: BoardStage[] };
@@ -351,7 +351,7 @@ export async function fetchSessionDetail(sessionId: string): Promise<SessionDeta
 export async function searchFileMentions(
   query: string,
   limit = 8,
-): Promise<FileMentionItem[]> {
+): Promise<FileMentionSearchPayload> {
   const params = queryString("GET /api/files/search", {
     q: query,
     limit,
@@ -363,7 +363,7 @@ export async function searchFileMentions(
     "GET /api/files/search",
     `/api/files/search${params}`,
   );
-  return result.items;
+  return result;
 }
 
 export async function searchSlashCommands(
