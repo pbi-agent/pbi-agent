@@ -42,8 +42,13 @@ export function useFileExistence(tokens: string[]): {
         pendingTokenRequests.add(token);
         void searchFileMentions(token, 8, { signal: controller.signal })
           .then((result) => {
-            const status = result.items.some((item) => item.path === token) ? "known" : "unknown";
-            fileExistenceCache.set(token, status);
+            if (result.items.some((item) => item.path === token)) {
+              fileExistenceCache.set(token, "known");
+              return;
+            }
+            if (result.scan_status !== "scanning") {
+              fileExistenceCache.set(token, "unknown");
+            }
           })
           .catch((error: unknown) => {
             if (error instanceof DOMException && error.name === "AbortError") return;
@@ -62,7 +67,7 @@ export function useFileExistence(tokens: string[]): {
       for (const controller of controllers.values()) controller.abort();
       for (const token of unresolved) pendingTokenRequests.delete(token);
     };
-  }, [normalizedTokens]);
+  }, [normalizedTokens, version]);
 
   void version;
   const isFileKnown = useCallback((token: string) => {

@@ -65,6 +65,37 @@ describe("useFileExistence", () => {
     expect(result.current.isFileKnown("docs/file name.md")).toBe(false);
   });
 
+  it("retries instead of caching misses while the file index is scanning", async () => {
+    vi.mocked(searchFileMentions)
+      .mockResolvedValueOnce({
+        items: [],
+        scan_status: "scanning",
+        is_stale: false,
+        file_count: 0,
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        items: [{ path: "src/main.py", kind: "file" }],
+        scan_status: "ready",
+        is_stale: false,
+        file_count: 1,
+        error: null,
+      });
+
+    const { result } = renderHook(() => useFileExistence(["src/main.py"]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(750);
+    });
+    expect(result.current.isFileKnown("src/main.py")).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(750);
+    });
+
+    expect(searchFileMentions).toHaveBeenCalledTimes(2);
+    expect(result.current.isFileKnown("src/main.py")).toBe(true);
+  });
+
   it("caches repeated tokens", async () => {
     vi.mocked(searchFileMentions).mockResolvedValue({
       items: [{ path: "src/main.py", kind: "file" }],
