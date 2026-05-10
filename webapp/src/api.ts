@@ -31,6 +31,7 @@ import type {
   ExpandedSessionInput,
   FileMentionSearchPayload,
   ImageAttachment,
+  SkillMentionSearchPayload,
   LiveSession,
   UserQuestionAnswer,
   MaintenanceConfig,
@@ -56,6 +57,7 @@ type SessionListResponsePayload = { sessions: SessionRecord[] };
 type SessionResponsePayload = { session: SessionRecord };
 type LiveSessionResponsePayload = { session: LiveSession };
 type FileMentionSearchResponsePayload = FileMentionSearchPayload;
+type SkillMentionSearchResponsePayload = SkillMentionSearchPayload;
 type SlashCommandSearchResponsePayload = { items: SlashCommandItem[] };
 type ImageUploadResponsePayload = { uploads: ImageAttachment[] };
 type BoardStagesResponsePayload = { board_stages: BoardStage[] };
@@ -364,6 +366,23 @@ export async function searchFileMentions(
     `/api/files/search${params}`,
   );
   return result;
+}
+
+export async function searchSkillMentions(
+  query: string,
+  limit = 8,
+): Promise<SkillMentionSearchPayload> {
+  const params = queryString("GET /api/skills/search", {
+    q: query,
+    limit,
+  });
+  return apiRequest<
+    "GET /api/skills/search",
+    SkillMentionSearchResponsePayload
+  >(
+    "GET /api/skills/search",
+    `/api/skills/search${params}`,
+  );
 }
 
 export async function searchSlashCommands(

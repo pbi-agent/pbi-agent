@@ -179,6 +179,8 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
     assert f"<location>{skill_dir.joinpath('SKILL.md').resolve()}</location>" in prompt
     assert "Project skills use progressive disclosure" in prompt
     assert "the user explicitly names it" in prompt
+    assert "Treat `$<skill-name>` in user input as an explicit request" in prompt
+    assert "strip the `$` and match `<skill-name>`" in prompt
     assert "load its SKILL.md with read_file using the listed location" in prompt
 
 

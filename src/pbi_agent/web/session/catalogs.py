@@ -10,6 +10,7 @@ from pbi_agent.web.command_registry import (
 )
 from pbi_agent.web.input_mentions import MentionSearchPayload, WorkspaceFileIndex
 from pbi_agent.web.session.state import LiveSessionState
+from pbi_agent.web.skill_mentions import search_skill_mentions
 from pbi_agent.workspace_context import WorkspaceContext
 
 
@@ -84,6 +85,25 @@ class CatalogsMixin:
             ],
             "board_stages": manager.list_board_stages(),
         }
+
+    def search_skill_mentions(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "name": item.name,
+                "description": item.description,
+                "path": item.path,
+            }
+            for item in search_skill_mentions(
+                query,
+                root=self._catalogs_manager()._workspace_root,
+                limit=limit,
+            )
+        ]
 
     def search_slash_commands(
         self,

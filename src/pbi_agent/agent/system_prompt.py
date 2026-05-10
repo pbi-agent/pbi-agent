@@ -112,6 +112,7 @@ def _append_available_skills(base_prompt: str) -> str:
 <skill_loading_rules>
 Project skills use progressive disclosure: the catalog contains only each skill's name, description, and SKILL.md location.
 - Use a skill when the user's task matches its description or the user explicitly names it.
+- Treat `$<skill-name>` in user input as an explicit request to use that skill; strip the `$` and match `<skill-name>` against catalogued skill names.
 - Before applying a matched skill, load its SKILL.md with read_file using the listed location.
 - Treat loaded skill instructions as task guidance for the current session.
 - Resolve relative paths against the skill directory, which is the parent directory of SKILL.md.

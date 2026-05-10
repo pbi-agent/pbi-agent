@@ -265,6 +265,10 @@ export type SkillInstallResultViewModel = { name: string; install_path: string; 
 
 export type SkillListResponse = { skills: SkillViewModel[]; config_revision: string };
 
+export type SkillMentionItemModel = { name: string; description: string; path: string };
+
+export type SkillMentionSearchResponse = { items: SkillMentionItemModel[] };
+
 export type SkillViewModel = { id: string; name: string; description: string; instructions: string; path: string };
 
 export type SlashCommandItemModel = { name: string; description: string; kind: "local_command" | "command" };
@@ -406,6 +410,7 @@ export type ApiOperationResponses = {
   "GET /api/sessions/{session_id}/runs": SessionRunsResponse;
   "POST /api/sessions/{session_id}/runs": LiveSessionResponse;
   "POST /api/sessions/{session_id}/shell-command": LiveSessionResponse;
+  "GET /api/skills/search": SkillMentionSearchResponse;
   "GET /api/slash-commands/search": SlashCommandSearchResponse;
   "GET /api/tasks": TasksResponse;
   "POST /api/tasks": TaskResponse;
@@ -490,6 +495,7 @@ export type ApiOperationQueryParams = {
   "GET /api/runs": { limit?: number; offset?: number; status?: string | null; provider?: string | null; model?: string | null; start_date?: string | null; end_date?: string | null; sort_by?: string; sort_dir?: string; scope?: string };
   "GET /api/runs/{run_session_id}": { scope?: string };
   "GET /api/sessions": { limit?: number };
+  "GET /api/skills/search": { q?: string; limit?: number };
   "GET /api/slash-commands/search": { q?: string; limit?: number };
 };
 

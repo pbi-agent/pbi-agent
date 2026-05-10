@@ -48,6 +48,8 @@ from pbi_agent.web.api.schemas.system import (
     SessionResponse,
     SessionRunsResponse,
     SessionsResponse,
+    SkillMentionItemModel,
+    SkillMentionSearchResponse,
     SlashCommandItemModel,
     SubmitQuestionResponseRequest,
     SlashCommandSearchResponse,
@@ -441,6 +443,20 @@ def search_workspace_files(
         is_stale=payload.is_stale,
         file_count=payload.file_count,
         error=payload.error,
+    )
+
+
+@router.get("/skills/search", response_model=SkillMentionSearchResponse)
+def search_available_skills(
+    manager: SessionManagerDep,
+    q: MentionQuery = "",
+    limit: MentionLimitQuery = 8,
+) -> SkillMentionSearchResponse:
+    return SkillMentionSearchResponse(
+        items=[
+            model_from_payload(SkillMentionItemModel, item)
+            for item in manager.search_skill_mentions(q, limit=limit)
+        ]
     )
 
 

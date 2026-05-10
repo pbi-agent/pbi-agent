@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { Composer } from "./Composer";
-import { searchFileMentions, searchSlashCommands } from "../../api";
+import { searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
 import { renderWithProviders } from "../../test/render";
 
 vi.mock("../../api", async (importOriginal) => {
@@ -10,6 +10,7 @@ vi.mock("../../api", async (importOriginal) => {
   return {
     ...actual,
     searchFileMentions: vi.fn(),
+    searchSkillMentions: vi.fn(),
     searchSlashCommands: vi.fn(),
   };
 });
@@ -100,6 +101,7 @@ describe("Composer", () => {
       file_count: 0,
       error: null,
     });
+    vi.mocked(searchSkillMentions).mockResolvedValue({ items: [] });
     vi.mocked(searchSlashCommands).mockResolvedValue([]);
   });
 
@@ -417,6 +419,124 @@ describe("Composer", () => {
     await user.clear(textbox);
     await user.type(textbox, "@/components");
     expect(screen.queryByRole("listbox", { name: "Workspace file suggestions" })).not.toBeInTheDocument();
+  });
+
+  it("opens and inserts skill tag completions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [
+        {
+          name: "release-writing",
+          description: "Write release notes",
+          path: ".agents/skills/release-writing/SKILL.md",
+        },
+      ],
+    });
+    renderComposer();
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    await user.type(textbox, "$rel");
+
+    expect(await screen.findByRole("listbox", { name: "Skill suggestions" })).toBeInTheDocument();
+    expect(await screen.findByText("$release-writing", { exact: false })).toHaveTextContent(
+      "$release-writing (Write release notes)",
+    );
+    await user.keyboard("{Enter}");
+    expect(textbox).toHaveValue("$release-writing ");
+  });
+
+  it("clicks skill tag completions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [
+        {
+          name: "shadcn",
+          description: "Compose UI",
+          path: ".agents/skills/shadcn/SKILL.md",
+        },
+      ],
+    });
+    renderComposer();
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    await user.type(textbox, "Use $sha");
+    await user.click(await screen.findByText("$shadcn", { exact: false }));
+
+    expect(textbox).toHaveValue("Use $shadcn ");
+  });
+
+  it("discards older skill completion responses", async () => {
+    const user = userEvent.setup();
+    let resolveFirst: ((value: Awaited<ReturnType<typeof searchSkillMentions>>) => void) | undefined;
+    vi.mocked(searchSkillMentions)
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockResolvedValueOnce({
+        items: [
+          {
+            name: "beta",
+            description: "Second skill",
+            path: ".agents/skills/beta/SKILL.md",
+          },
+        ],
+      });
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "$a");
+    await waitFor(() => expect(searchSkillMentions).toHaveBeenCalledTimes(1));
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "b");
+    if (!resolveFirst) {
+      throw new Error("first skill search did not start");
+    }
+    resolveFirst({
+      items: [
+        {
+          name: "alpha",
+          description: "First skill",
+          path: ".agents/skills/alpha/SKILL.md",
+        },
+      ],
+    });
+
+    expect(await screen.findByText("$beta", { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText("$alpha", { exact: false })).not.toBeInTheDocument();
+  });
+
+  it("dismisses skill completions until the token changes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [
+        {
+          name: "writer",
+          description: "Write prose",
+          path: ".agents/skills/writer/SKILL.md",
+        },
+      ],
+    });
+    renderComposer();
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    await user.type(textbox, "$w");
+    expect(await screen.findByRole("listbox", { name: "Skill suggestions" })).toBeInTheDocument();
+    fireEvent.keyDown(textbox, { key: "Escape" });
+    expect(screen.queryByRole("listbox", { name: "Skill suggestions" })).not.toBeInTheDocument();
+
+    await user.type(textbox, "r");
+
+    expect(await screen.findByRole("listbox", { name: "Skill suggestions" })).toBeInTheDocument();
+  });
+
+  it("does not open skill completions for shell variables or shell mode", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.type(textbox, "echo $1 ${{foo}} $(pwd)");
+    expect(screen.queryByRole("listbox", { name: "Skill suggestions" })).not.toBeInTheDocument();
+
+    await user.clear(textbox);
+    await user.type(textbox, "!echo $skill");
+    expect(screen.queryByRole("listbox", { name: "Skill suggestions" })).not.toBeInTheDocument();
+    expect(searchSkillMentions).not.toHaveBeenCalled();
   });
 
   it("renders slash command descriptions inline in parentheses", async () => {

@@ -223,6 +223,16 @@ export type FileMentionSearchPayload = {
   error: string | null;
 };
 
+export type SkillMentionItem = {
+  name: string;
+  description: string;
+  path: string;
+};
+
+export type SkillMentionSearchPayload = {
+  items: SkillMentionItem[];
+};
+
 export type SlashCommandItem = {
   name: string;
   description: string;

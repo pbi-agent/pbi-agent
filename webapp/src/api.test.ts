@@ -19,6 +19,7 @@ import {
   logoutProviderAuth,
   pollProviderAuthFlow,
   refreshProviderAuth,
+  searchSkillMentions,
   setActiveModelProfile,
   startProviderAuthFlow,
   updateSession,
@@ -358,6 +359,32 @@ describe("api helpers", () => {
         }),
       }),
     );
+  });
+
+  it("searches skill mentions with query parameters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              name: "release-writing",
+              description: "Write release notes",
+              path: ".agents/skills/release-writing/SKILL.md",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await searchSkillMentions("release notes", 5);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/skills/search?q=release+notes&limit=5",
+      expect.anything(),
+    );
+    expect(result.items[0]?.name).toBe("release-writing");
   });
 
   it("calls command config endpoints with the expected payloads", async () => {

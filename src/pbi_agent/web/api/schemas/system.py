@@ -50,6 +50,16 @@ class SlashCommandSearchResponse(BaseModel):
     items: list[SlashCommandItemModel]
 
 
+class SkillMentionItemModel(BaseModel):
+    name: str
+    description: str
+    path: str
+
+
+class SkillMentionSearchResponse(BaseModel):
+    items: list[SkillMentionItemModel]
+
+
 class ExpandInputRequest(BaseModel):
     text: str = ""
 

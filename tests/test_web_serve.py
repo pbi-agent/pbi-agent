@@ -1546,6 +1546,33 @@ def test_file_search_endpoint_returns_workspace_matches(tmp_path, monkeypatch) -
     assert payload["error"] is None
 
 
+def test_skill_search_endpoint_returns_installed_project_skills(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    skill_dir = tmp_path / ".agents" / "skills" / "release-writing"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: release-writing\ndescription: Write release notes\n---\n\n# Skill\n",
+        encoding="utf-8",
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get("/api/skills/search", params={"q": "rel", "limit": 8})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "name": "release-writing",
+                "description": "Write release notes",
+                "path": ".agents/skills/release-writing/SKILL.md",
+            }
+        ]
+    }
+
+
 def test_slash_command_search_endpoint_returns_web_commands(
     monkeypatch, tmp_path: Path
 ) -> None:

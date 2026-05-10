@@ -18,8 +18,8 @@ import {
   TerminalIcon,
   XIcon,
 } from "lucide-react";
-import { searchFileMentions, searchSlashCommands } from "../../api";
-import type { FileMentionItem, SlashCommandItem } from "../../types";
+import { searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
+import type { FileMentionItem, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import {
@@ -63,13 +63,18 @@ type ActiveCompletionRange = {
   query: string;
 };
 
-type CompletionMode = "mention" | "slash";
+type CompletionMode = "mention" | "skill" | "slash";
 
 type CompletionItem =
   | {
       kind: "mention";
       key: string;
       mention: FileMentionItem;
+    }
+  | {
+      kind: "skill";
+      key: string;
+      skill: SkillMentionItem;
     }
   | {
       kind: "slash";
@@ -121,6 +126,41 @@ function parseActiveMention(
     start: tokenStart,
     end: tokenEnd,
     query: candidate.replaceAll("\\ ", " "),
+  };
+}
+
+function parseActiveSkillTag(
+  text: string,
+  cursorIndex: number,
+): ActiveCompletionRange | null {
+  if (cursorIndex < 0 || cursorIndex > text.length) {
+    return null;
+  }
+
+  let tokenStart = cursorIndex;
+  while (tokenStart > 0 && !TOKEN_BOUNDARY_PATTERN.test(text[tokenStart - 1])) {
+    tokenStart -= 1;
+  }
+  let tokenEnd = cursorIndex;
+  while (tokenEnd < text.length && !TOKEN_BOUNDARY_PATTERN.test(text[tokenEnd])) {
+    tokenEnd += 1;
+  }
+
+  if (text[tokenStart] !== "$") {
+    return null;
+  }
+  const nextCharacter = text[tokenStart + 1] ?? "";
+  if (["(", "{"].includes(nextCharacter) || /\d/.test(nextCharacter)) {
+    return null;
+  }
+  if (tokenStart > 0 && !TOKEN_BOUNDARY_PATTERN.test(text[tokenStart - 1])) {
+    return null;
+  }
+
+  return {
+    start: tokenStart,
+    end: tokenEnd,
+    query: text.slice(tokenStart + 1, cursorIndex),
   };
 }
 
@@ -229,12 +269,17 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const activeMention = activeSlashCommand
     ? null
     : parseActiveMention(input, cursorIndex);
+  const activeSkillTag = activeSlashCommand || activeMention || isShellMode
+    ? null
+    : parseActiveSkillTag(input, cursorIndex);
   const activeCompletionMode = activeSlashCommand
     ? "slash"
     : activeMention
       ? "mention"
-      : null;
-  const activeCompletionQuery = activeSlashCommand?.query ?? activeMention?.query ?? null;
+      : activeSkillTag
+        ? "skill"
+        : null;
+  const activeCompletionQuery = activeSlashCommand?.query ?? activeMention?.query ?? activeSkillTag?.query ?? null;
 
   const closeCompletions = useCallback(() => {
     completionRequestIdRef.current += 1;
@@ -298,6 +343,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     [],
   );
 
+  const buildSkillReplacement = useCallback(
+    (
+      item: SkillMentionItem,
+      currentText: string,
+      currentCursor: number,
+    ): { nextInput: string; nextCursor: number } | null => {
+      const currentSkill = parseActiveSkillTag(currentText, currentCursor);
+      if (!currentSkill) {
+        return null;
+      }
+
+      return replaceTextRange(
+        currentText,
+        currentSkill.start,
+        currentSkill.end,
+        `$${item.name}`,
+      );
+    },
+    [],
+  );
+
   const buildSlashReplacement = useCallback(
     (
       item: SlashCommandItem,
@@ -326,7 +392,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       const nextState =
         item.kind === "mention"
           ? buildMentionReplacement(item.mention, textValue, cursorValue)
-          : buildSlashReplacement(item.command, textValue, cursorValue);
+          : item.kind === "skill"
+            ? buildSkillReplacement(item.skill, textValue, cursorValue)
+            : buildSlashReplacement(item.command, textValue, cursorValue);
       if (!nextState) {
         return null;
       }
@@ -334,7 +402,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       applyInputState(nextState.nextInput, nextState.nextCursor);
       return nextState;
     },
-    [applyInputState, buildMentionReplacement, buildSlashReplacement, cursorIndex, input],
+    [applyInputState, buildMentionReplacement, buildSkillReplacement, buildSlashReplacement, cursorIndex, input],
   );
 
   const appendFiles = useCallback(
@@ -550,26 +618,40 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 errorMessage: null,
                 shouldPoll: false,
               }
-            : await searchFileMentions(requestQuery, 8).then((result) => ({
-                items: result.items.map(
-                  (mention): CompletionItem => ({
-                    kind: "mention",
-                    key: mention.path,
-                    mention,
-                  }),
-                ),
-                loading: result.scan_status === "scanning" && result.items.length === 0,
-                statusMessage: result.is_stale
-                  ? "Refreshing file index..."
-                  : result.scan_status === "scanning"
-                    ? "Indexing files..."
-                    : null,
-                errorMessage:
-                  result.scan_status === "failed"
-                    ? result.error ?? "Unable to index workspace files"
-                    : null,
-                shouldPoll: result.scan_status === "scanning",
-              }));
+            : requestMode === "skill"
+              ? await searchSkillMentions(requestQuery, 8).then((result) => ({
+                  items: result.items.map(
+                    (skill): CompletionItem => ({
+                      kind: "skill",
+                      key: skill.name,
+                      skill,
+                    }),
+                  ),
+                  loading: false,
+                  statusMessage: null,
+                  errorMessage: null,
+                  shouldPoll: false,
+                }))
+              : await searchFileMentions(requestQuery, 8).then((result) => ({
+                  items: result.items.map(
+                    (mention): CompletionItem => ({
+                      kind: "mention",
+                      key: mention.path,
+                      mention,
+                    }),
+                  ),
+                  loading: result.scan_status === "scanning" && result.items.length === 0,
+                  statusMessage: result.is_stale
+                    ? "Refreshing file index..."
+                    : result.scan_status === "scanning"
+                      ? "Indexing files..."
+                      : null,
+                  errorMessage:
+                    result.scan_status === "failed"
+                      ? result.error ?? "Unable to index workspace files"
+                      : null,
+                  shouldPoll: result.scan_status === "scanning",
+                }));
         if (!isCurrentRequest()) return;
         setCompletionItems(payload.items);
         setCompletionLoading(payload.loading);
@@ -588,7 +670,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         setCompletionLoading(false);
         setCompletionStatusMessage(null);
         setCompletionError(
-          requestMode === "slash" ? "Unable to load commands" : "Unable to load files",
+          requestMode === "slash"
+            ? "Unable to load commands"
+            : requestMode === "skill"
+              ? "Unable to load skills"
+              : "Unable to load files",
         );
       }
     };
@@ -737,13 +823,23 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     (completionLoading || completionError !== null || completionOpen);
   const completionEmptyText = completionError ?? (completionLoading
     ? completionStatusMessage ??
-      (completionMode === "slash" ? "Searching commands..." : "Searching files...")
+      (completionMode === "slash"
+        ? "Searching commands..."
+        : completionMode === "skill"
+          ? "Searching skills..."
+          : "Searching files...")
     : completionStatusMessage ??
-      (completionMode === "slash" ? "No matching commands" : "No matching files"));
+      (completionMode === "slash"
+        ? "No matching commands"
+        : completionMode === "skill"
+          ? "No matching skills"
+          : "No matching files"));
   const completionLabel =
     completionMode === "slash"
       ? "Slash command suggestions"
-      : "Workspace file suggestions";
+      : completionMode === "skill"
+        ? "Skill suggestions"
+        : "Workspace file suggestions";
   const attachmentStatus =
     attachmentMessage ??
     (pendingImages.length > 0
@@ -929,10 +1025,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
               >
                 <span className="composer__completion-copy">
                   <span className="composer__completion-label">
-                    {item.kind === "slash" ? item.command.name : `@${item.mention.path}`}
+                    {item.kind === "slash"
+                      ? item.command.name
+                      : item.kind === "skill"
+                        ? `$${item.skill.name}`
+                        : `@${item.mention.path}`}
                     {item.kind === "slash" && item.command.description ? (
                       <span className="composer__completion-description">
                         {` (${item.command.description})`}
+                      </span>
+                    ) : null}
+                    {item.kind === "skill" && item.skill.description ? (
+                      <span className="composer__completion-description">
+                        {` (${item.skill.description})`}
                       </span>
                     ) : null}
                   </span>
@@ -942,6 +1047,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                     className={`composer__completion-kind composer__completion-kind--${item.mention.kind}`}
                   >
                     {item.mention.kind}
+                  </span>
+                ) : item.kind === "skill" ? (
+                  <span className="composer__completion-kind composer__completion-kind--skill">
+                    skill
                   </span>
                 ) : null}
               </Button>
