@@ -63,6 +63,7 @@ When delegated by orchestrate manager:
 - Implement only requested unchecked plan items or hardening/fix/docs items named by manager.
 - Update `PLAN.md` as work progresses: mark completed checklist items, leave incomplete items unchecked, add brief validation notes.
 - Do not create/update `REVIEW.md` unless manager explicitly asks.
+- Do not edit TODO.md; main instance owns it for orchestration tracking.
 - Do not commit.
 
 ## Handoff discipline

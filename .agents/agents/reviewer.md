@@ -87,7 +87,7 @@ Output plain Markdown with this structure:
 
 ### Findings
 
-If findings exist, emit one `####` subsection per finding in review order.
+If findings exist, create a REVIEW.md file and emit one `####` subsection per finding in review order.
 Use exact field layout inside each finding subsection:
 
 - `title: <≤ 80 chars, imperative>`

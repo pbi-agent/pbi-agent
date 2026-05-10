@@ -35,6 +35,7 @@ When delegated by orchestrate manager:
 - Update `REVIEW.md` as fixes complete: mark fixed items done and add brief validation notes.
 - Update `PLAN.md` only when review fix completes, reopens, or changes plan checklist item.
 - Do not perform fresh general review; manager will call review sub-agent again.
+- Do not edit TODO.md; main instance owns it for orchestration tracking.
 
 ## Validation
 

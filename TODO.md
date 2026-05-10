@@ -1,8 +1,5 @@
 # TODO
 
-[X] Orchestrate `$` skill tag implementation
-[X] Plan via planner sub-agent
-[X] Execute via worker sub-agent
-[X] Review/fix loop
-[X] Confidence gate
-[>] Commit if safe
+[X] Compress `.agents/commands/orchestrate.md`
+[X] Validate markdown/frontmatter preserved
+[X] Update memory
