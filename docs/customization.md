@@ -170,27 +170,21 @@ Supported root:
 
 - `.agents/agents/<agent-name>.md`
 
-Each sub-agent file must include YAML frontmatter with at least:
+Each sub-agent file must include YAML frontmatter with at least `name` and `description`. It may also include `model_profile_id` to use a specific saved profile whenever that sub-agent runs:
 
 ```yaml
 ---
 name: code-reviewer
 description: Review code changes for correctness and test gaps.
+model_profile_id: analysis
 ---
 ```
 
-The Markdown body becomes that sub-agent's system prompt. Sub-agents are model-agnostic and inherit runtime defaults from the active profile or CLI settings:
-
-```yaml
----
-name: code-reviewer
-description: Review code changes for correctness and test gaps.
----
-```
+The Markdown body becomes that sub-agent's system prompt. When `model_profile_id` is omitted, project sub-agents inherit the parent runtime and use the profile's configured `sub_agent_model` when present, falling back to the parent model.
 
 Supported frontmatter in this implementation is intentionally narrow:
 
-- Scalar `key: value` pairs for `name` and `description`
+- Scalar `key: value` pairs for `name`, `description`, and optional `model_profile_id`
 - Quoted strings
 - `|` and `>` block scalars
 - Blank lines and `#` comments
@@ -202,7 +196,7 @@ At runtime, discovered sub-agents are appended to the active system prompt as an
 Project sub-agents:
 
 - Run in isolated child-agent contexts by default. Set `include_context: true` on the `sub_agent` tool call to inherit the parent conversation context.
-- Use the same provider as the parent session.
+- Use the same provider as the parent session unless their frontmatter sets `model_profile_id`.
 - Cannot recursively spawn more sub-agents in this build.
 
 You can inspect the discovered catalog without starting a model request:

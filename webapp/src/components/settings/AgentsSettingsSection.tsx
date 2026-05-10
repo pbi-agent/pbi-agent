@@ -61,9 +61,16 @@ function AgentCard({ agent }: { agent: AgentView }) {
         ) : null}
         <div className="provider-card__subtitle">{agent.path}</div>
       </div>
-      <Badge variant="outline" className="settings-item__tag">
-        Project agent
-      </Badge>
+      <div className="settings-item__actions settings-item__actions--provider command-card__actions">
+        {agent.model_profile_id ? (
+          <Badge variant="outline" className="settings-item__tag">
+            Profile: {agent.model_profile_id}
+          </Badge>
+        ) : null}
+        <Badge variant="outline" className="settings-item__tag">
+          Project agent
+        </Badge>
+      </div>
     </Card>
   );
 }
@@ -99,11 +106,18 @@ function CandidateCard({
         <p className="skill-candidate__description">
           {candidate.description || "No description provided."}
         </p>
-        {candidate.subpath ? (
-          <Badge variant="secondary" className="skill-candidate__subpath">
-            {candidate.subpath}
-          </Badge>
-        ) : null}
+        <div className="command-candidate__badges">
+          {candidate.model_profile_id ? (
+            <Badge variant="outline" className="skill-candidate__subpath">
+              Profile: {candidate.model_profile_id}
+            </Badge>
+          ) : null}
+          {candidate.subpath ? (
+            <Badge variant="secondary" className="skill-candidate__subpath">
+              {candidate.subpath}
+            </Badge>
+          ) : null}
+        </div>
       </div>
       <Button
         type="button"
@@ -399,6 +413,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                                 {
                                   agent_name: conflictRetry.agentName,
                                   description: "",
+                                  model_profile_id: null,
                                   subpath: null,
                                 },
                                 true,

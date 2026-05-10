@@ -47,6 +47,27 @@ def test_discovers_valid_project_sub_agent(tmp_path: Path) -> None:
     ]
 
 
+def test_discovers_model_profile_id(tmp_path: Path) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "reviewer.md",
+        (
+            "---\n"
+            "name: reviewer\n"
+            "description: Reviews code changes.\n"
+            "model_profile_id: Analysis Profile\n"
+            "---\n\n"
+            "Review prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert len(agents) == 1
+    assert agents[0].model_profile_id == "analysis-profile"
+    assert agents[0].system_prompt == "Review prompt."
+
+
 def test_skips_missing_description(tmp_path: Path, capsys) -> None:
     _write_sub_agent(
         tmp_path,

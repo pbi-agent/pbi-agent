@@ -435,6 +435,7 @@ class AgentViewModel(BaseModel):
     name: str
     description: str
     path: str
+    model_profile_id: str | None
 
 
 class AgentListResponse(BaseModel):
@@ -449,6 +450,7 @@ class AgentCandidateRequest(BaseModel):
 class AgentCandidateViewModel(BaseModel):
     agent_name: str
     description: str
+    model_profile_id: str | None
     subpath: str | None
 
 

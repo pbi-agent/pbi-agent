@@ -19,6 +19,7 @@ class ProjectSubAgent:
     description: str
     system_prompt: str
     location: Path
+    model_profile_id: str | None = None
 
 
 def format_project_sub_agents_markdown(workspace: Path | None = None) -> str:
@@ -58,7 +59,10 @@ def render_installed_project_sub_agents(
     table.add_column("Description")
     table.add_column("Location", style="dim")
     for agent in agents:
-        table.add_row(agent.name, agent.description, str(agent.location))
+        description = agent.description
+        if agent.model_profile_id:
+            description = f"{description} [profile: {agent.model_profile_id}]"
+        table.add_row(agent.name, description, str(agent.location))
     active_console.print(table)
     return 0
 
@@ -128,7 +132,9 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
     if not isinstance(description, str) or not description.strip():
         _warn(f"Skipping sub-agent at {agent_path}: missing non-empty 'description'.")
         return None
-    unsupported_keys = sorted(set(metadata) - {"name", "description"})
+    unsupported_keys = sorted(
+        set(metadata) - {"name", "description", "model_profile_id"}
+    )
     if unsupported_keys:
         _warn(
             f"Skipping sub-agent at {agent_path}: unsupported frontmatter keys: "
@@ -136,12 +142,24 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
         )
         return None
 
+    model_profile_id = metadata.get("model_profile_id")
+    normalized_model_profile_id: str | None = None
+    if isinstance(model_profile_id, str) and model_profile_id.strip():
+        from pbi_agent.config import ConfigError, slugify
+
+        try:
+            normalized_model_profile_id = slugify(model_profile_id.strip())
+        except ConfigError:
+            _warn(f"Skipping sub-agent at {agent_path}: invalid 'model_profile_id'.")
+            return None
+
     normalized_name = name.strip()
     return ProjectSubAgent(
         name=normalized_name,
         description=description.strip(),
         system_prompt=_extract_body(content).strip(),
         location=agent_path.resolve(),
+        model_profile_id=normalized_model_profile_id,
     )
 
 

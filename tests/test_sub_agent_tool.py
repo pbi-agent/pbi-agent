@@ -10,7 +10,7 @@ from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools import sub_agent as sub_agent_tool
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
-from pbi_agent.config import Settings
+from pbi_agent.config import ResolvedRuntime, Settings
 
 
 class _ChildDisplay:
@@ -554,6 +554,79 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
     assert isinstance(captured["settings"], Settings)
     assert captured["settings"].model == "gpt-5"
     assert captured["settings"].reasoning_effort == settings.reasoning_effort
+
+
+def test_run_sub_agent_task_uses_project_agent_model_profile(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog=None,
+    ) -> _ProviderStub:
+        del system_prompt, excluded_tools, tool_catalog
+        captured["settings"] = settings
+        return _ProviderStub()
+
+    def fake_resolve_runtime(profile_id: str, *, verbose: bool = False):
+        captured["profile_id"] = profile_id
+        captured["verbose"] = verbose
+        return ResolvedRuntime(
+            settings=Settings(
+                api_key="profile-key",
+                provider="openai",
+                model="gpt-5-analysis",
+                reasoning_effort="high",
+            ),
+            provider_id="provider-analysis",
+            profile_id="analysis",
+        )
+
+    monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.resolve_runtime_for_profile_id",
+        fake_resolve_runtime,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.get_project_sub_agent_by_name",
+        lambda name, workspace=None: type(
+            "AgentDef",
+            (),
+            {
+                "name": name,
+                "description": "Reviews code.",
+                "system_prompt": "You are a code reviewer.",
+                "model_profile_id": "analysis",
+            },
+        )(),
+    )
+
+    result = run_sub_agent_task(
+        "Review the latest patch",
+        Settings(
+            api_key="test-key",
+            provider="openai",
+            model="gpt-5",
+            reasoning_effort="medium",
+            verbose=True,
+        ),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(),
+        agent_type="code-reviewer",
+    )
+
+    assert result["status"] == "completed"
+    assert captured["profile_id"] == "analysis"
+    assert captured["verbose"] is True
+    assert isinstance(captured["settings"], Settings)
+    assert captured["settings"].model == "gpt-5-analysis"
+    assert captured["settings"].reasoning_effort == "high"
 
 
 def test_run_sub_agent_task_rejects_unknown_agent_type() -> None:

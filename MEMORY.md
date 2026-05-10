@@ -63,3 +63,9 @@
 - Fixed review finding for command profile restore: command turns now restore to the submitted UI/session profile instead of the stale live runtime, and existing saved sessions persist that selected profile while keeping command override transient. Validation: focused web pytest, Ruff check/format, source basedpyright, and `git diff --check` passed.
 - Fixed review finding for transient command profile persistence: `QueuedRuntimeChange` can carry a saved-session runtime, and `run_session_loop()` writes session metadata with that saved runtime while the actual command turn uses the transient runtime. Validation: focused session/web pytest, Ruff check/format, source basedpyright, and `git diff --check` passed.
 - Added local project command `/check-confidence` with normalized command frontmatter and `model_profile_id: worker`; it instructs the agent to assess production shipping confidence with calibrated score, comfort reasons, residual risks, and final validation gate. Validation: parsed command with `parse_command_markdown()` and `CommandConfig.validate()`.
+
+## Detailed Task Events
+
+## 2026-05-10
+- Added project sub-agent `model_profile_id` frontmatter support and Settings agent profile badges/candidate metadata; delegated sub-agents with that key resolve and use the saved model profile for the child run only. Validation: focused sub-agent/project-agent/web pytest, full `bun run test:web`, Ruff check/format, source basedpyright, lint, typecheck, docs build, web build.
+- Fixed review finding for sub-agent profile overrides: missing/deleted configured profiles now return structured failed sub-agent results with display lifecycle instead of bubbling as generic tool execution failures. Validation: focused session pytest, Ruff check/format, source basedpyright, and `git diff --check` passed; full `basedpyright tests/test_session.py` still has pre-existing unrelated fixture/decode errors.

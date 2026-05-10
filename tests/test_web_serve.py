@@ -190,11 +190,23 @@ def _write_skill(
     return skill_dir
 
 
-def _write_agent(root: Path, name: str, description: str, prompt: str) -> Path:
+def _write_agent(
+    root: Path,
+    name: str,
+    description: str,
+    prompt: str,
+    *,
+    model_profile_id: str | None = None,
+) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"{name}.md"
+    profile_line = (
+        f"model_profile_id: {model_profile_id}\n"
+        if model_profile_id is not None
+        else ""
+    )
     path.write_text(
-        f"---\nname: {name}\ndescription: {description}\n---\n\n{prompt}\n",
+        f"---\nname: {name}\ndescription: {description}\n{profile_line}---\n\n{prompt}\n",
         encoding="utf-8",
     )
     return path
@@ -1294,6 +1306,7 @@ def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
         "code-reviewer",
         "Review code changes.",
         "You review code changes.",
+        model_profile_id="analysis",
     )
     app = create_app(_settings())
 
@@ -1307,6 +1320,7 @@ def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
                 "name": "code-reviewer",
                 "description": "Review code changes.",
                 "path": ".agents/agents/code-reviewer.md",
+                "model_profile_id": "analysis",
             }
         ]
 
@@ -1329,6 +1343,7 @@ def test_agent_candidates_endpoint_uses_local_and_default_sources(
         "reviewer",
         "Review code changes.",
         "Review the current diff.",
+        model_profile_id="analysis",
     )
     _write_agent(
         default_source / "agents",
@@ -1355,6 +1370,7 @@ def test_agent_candidates_endpoint_uses_local_and_default_sources(
                 {
                     "agent_name": "reviewer",
                     "description": "Review code changes.",
+                    "model_profile_id": "analysis",
                     "subpath": "agents/reviewer.md",
                 }
             ],
@@ -1367,6 +1383,7 @@ def test_agent_candidates_endpoint_uses_local_and_default_sources(
                 {
                     "agent_name": "planner",
                     "description": "Plan the work.",
+                    "model_profile_id": None,
                     "subpath": "agents/planner.md",
                 }
             ],
@@ -1428,6 +1445,7 @@ def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
                 "name": "shipper",
                 "description": "Ship the change.",
                 "path": ".agents/agents/shipper.md",
+                "model_profile_id": None,
             }
         ]
         assert (tmp_path / ".agents" / "agents" / "shipper.md").is_file()
@@ -1456,6 +1474,7 @@ def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
                 "name": "shipper",
                 "description": "Ship the updated change.",
                 "path": ".agents/agents/shipper.md",
+                "model_profile_id": None,
             }
         ]
 

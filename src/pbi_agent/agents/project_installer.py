@@ -33,6 +33,7 @@ class ProjectAgentInstallError(ValueError):
 class RemoteAgentCandidateSummary:
     agent_name: str
     description: str
+    model_profile_id: str | None
     subpath: str | None
 
 
@@ -56,6 +57,7 @@ class ProjectAgentInstallResult:
 class _RemoteAgentCandidate:
     agent_name: str
     description: str
+    model_profile_id: str | None
     system_prompt: str
     source_text: str
     source_path: Path
@@ -115,6 +117,7 @@ def list_remote_project_agents(source: str) -> RemoteAgentListing:
             RemoteAgentCandidateSummary(
                 agent_name=candidate.agent_name,
                 description=candidate.description,
+                model_profile_id=candidate.model_profile_id,
                 subpath=candidate.repo_subpath,
             )
             for candidate in candidates
@@ -249,6 +252,7 @@ def _discover_remote_agent_candidates(
             _RemoteAgentCandidate(
                 agent_name=loaded.name,
                 description=loaded.description,
+                model_profile_id=loaded.model_profile_id,
                 system_prompt=loaded.system_prompt,
                 source_text=agent_path.read_text(encoding="utf-8"),
                 source_path=agent_path,

@@ -22,6 +22,7 @@ from pbi_agent.config import (
     ResolvedRuntime,
     Settings,
     find_command_config_by_alias,
+    resolve_runtime_for_profile_id,
 )
 from pbi_agent.media import load_workspace_image
 from pbi_agent.mcp import format_project_mcp_servers_markdown
@@ -714,55 +715,75 @@ def run_sub_agent_task(
                 },
             }
 
-    child_settings = replace(
-        settings,
-        model=_selected_sub_agent_model(settings),
+    agent_model_profile_id = (
+        getattr(agent_definition, "model_profile_id", None)
+        if agent_definition is not None
+        else None
     )
     from pbi_agent.agent.names import pick_deity_name
 
     child_name = (
         agent_definition.name if agent_definition is not None else pick_deity_name()
     )
-    child_display = display.begin_sub_agent(
-        task_instruction=task_instruction,
-        reasoning_effort=child_settings.reasoning_effort,
-        name=child_name,
-    )
-    _child_tier = child_settings.service_tier or ""
-    child_session_usage = TokenUsage(
-        model=_selected_model(child_settings), service_tier=_child_tier
-    )
-    child_turn_usage = TokenUsage(
-        model=_selected_model(child_settings), service_tier=_child_tier
-    )
-    child_tracer = (
-        parent_tracer.child(
-            agent_name=child_name,
-            agent_type=agent_type or "default",
-            provider=child_settings.provider,
-            provider_id=None,
-            profile_id=None,
-            model=_selected_model(child_settings),
-            metadata={"include_context": include_context},
-        )
-        if parent_tracer is not None
-        else RunTracer.start(
-            store=None,
-            session_id=None,
-            agent_name=child_name,
-            agent_type=agent_type or "default",
-            provider=child_settings.provider,
-            provider_id=None,
-            profile_id=None,
-            model=_selected_model(child_settings),
-            metadata={"include_context": include_context},
-        )
-    )
-    child_display.session_usage(child_session_usage)
+    child_display: DisplayProtocol | None = None
+    child_tracer: RunTracer | None = None
+    child_session_usage: TokenUsage | None = None
+    child_turn_usage: TokenUsage | None = None
     started_at = time.monotonic()
     request_count = 0
 
     try:
+        child_provider_id: str | None = None
+        child_profile_id: str | None = None
+        if agent_model_profile_id:
+            child_runtime = resolve_runtime_for_profile_id(
+                agent_model_profile_id,
+                verbose=settings.verbose,
+            )
+            child_settings = child_runtime.settings
+            child_provider_id = child_runtime.provider_id
+            child_profile_id = child_runtime.profile_id
+        else:
+            child_settings = replace(
+                settings,
+                model=_selected_sub_agent_model(settings),
+            )
+        child_display = display.begin_sub_agent(
+            task_instruction=task_instruction,
+            reasoning_effort=child_settings.reasoning_effort,
+            name=child_name,
+        )
+        _child_tier = child_settings.service_tier or ""
+        child_session_usage = TokenUsage(
+            model=_selected_model(child_settings), service_tier=_child_tier
+        )
+        child_turn_usage = TokenUsage(
+            model=_selected_model(child_settings), service_tier=_child_tier
+        )
+        child_tracer = (
+            parent_tracer.child(
+                agent_name=child_name,
+                agent_type=agent_type or "default",
+                provider=child_settings.provider,
+                provider_id=child_provider_id,
+                profile_id=child_profile_id,
+                model=_selected_model(child_settings),
+                metadata={"include_context": include_context},
+            )
+            if parent_tracer is not None
+            else RunTracer.start(
+                store=None,
+                session_id=None,
+                agent_name=child_name,
+                agent_type=agent_type or "default",
+                provider=child_settings.provider,
+                provider_id=child_provider_id,
+                profile_id=child_profile_id,
+                model=_selected_model(child_settings),
+                metadata={"include_context": include_context},
+            )
+        )
+        child_display.session_usage(child_session_usage)
         with _open_runtime_provider(
             child_settings,
             system_prompt=get_sub_agent_system_prompt(
@@ -824,6 +845,29 @@ def run_sub_agent_task(
                 "final_output": response.text,
             }
     except SubAgentRunError as exc:
+        child_display = child_display or display.begin_sub_agent(
+            task_instruction=task_instruction,
+            reasoning_effort=settings.reasoning_effort,
+            name=child_name,
+        )
+        _fallback_tier = settings.service_tier or ""
+        child_session_usage = child_session_usage or TokenUsage(
+            model=_selected_model(settings), service_tier=_fallback_tier
+        )
+        child_turn_usage = child_turn_usage or TokenUsage(
+            model=_selected_model(settings), service_tier=_fallback_tier
+        )
+        child_tracer = child_tracer or RunTracer.start(
+            store=None,
+            session_id=None,
+            agent_name=child_name,
+            agent_type=agent_type or "default",
+            provider=settings.provider,
+            provider_id=None,
+            profile_id=None,
+            model=_selected_model(settings),
+            metadata={"include_context": include_context},
+        )
         child_display.error(exc.message)
         child_display.finish_sub_agent(status="failed")
         child_tracer.log_error(exc.message, metadata={"phase": "run_sub_agent_task"})
@@ -838,6 +882,29 @@ def run_sub_agent_task(
         }
     except Exception as exc:
         message = str(exc) or exc.__class__.__name__
+        child_display = child_display or display.begin_sub_agent(
+            task_instruction=task_instruction,
+            reasoning_effort=settings.reasoning_effort,
+            name=child_name,
+        )
+        _fallback_tier = settings.service_tier or ""
+        child_session_usage = child_session_usage or TokenUsage(
+            model=_selected_model(settings), service_tier=_fallback_tier
+        )
+        child_turn_usage = child_turn_usage or TokenUsage(
+            model=_selected_model(settings), service_tier=_fallback_tier
+        )
+        child_tracer = child_tracer or RunTracer.start(
+            store=None,
+            session_id=None,
+            agent_name=child_name,
+            agent_type=agent_type or "default",
+            provider=settings.provider,
+            provider_id=None,
+            profile_id=None,
+            model=_selected_model(settings),
+            metadata={"include_context": include_context},
+        )
         child_display.error(message)
         child_display.finish_sub_agent(status="failed")
         child_tracer.log_error(message, metadata={"phase": "run_sub_agent_task"})
@@ -851,9 +918,12 @@ def run_sub_agent_task(
             "error": {"type": "sub_agent_failed", "message": message},
         }
     finally:
-        parent_session_usage.add_sub_agent(child_session_usage)
-        parent_turn_usage.add_sub_agent(child_turn_usage)
-        display.session_usage(parent_session_usage)
+        if child_session_usage is not None:
+            parent_session_usage.add_sub_agent(child_session_usage)
+        if child_turn_usage is not None:
+            parent_turn_usage.add_sub_agent(child_turn_usage)
+        if child_session_usage is not None or child_turn_usage is not None:
+            display.session_usage(parent_session_usage)
 
 
 @contextmanager

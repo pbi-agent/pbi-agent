@@ -34,11 +34,23 @@ from pbi_agent.agents.project_installer import (
 )
 
 
-def _write_agent(root: Path, name: str, description: str, prompt: str) -> Path:
+def _write_agent(
+    root: Path,
+    name: str,
+    description: str,
+    prompt: str,
+    *,
+    model_profile_id: str | None = None,
+) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"{name}.md"
+    profile_line = (
+        f"model_profile_id: {model_profile_id}\n"
+        if model_profile_id is not None
+        else ""
+    )
     path.write_text(
-        f"---\nname: {name}\ndescription: {description}\n---\n\n{prompt}\n",
+        f"---\nname: {name}\ndescription: {description}\n{profile_line}---\n\n{prompt}\n",
         encoding="utf-8",
     )
     return path
@@ -225,6 +237,27 @@ def test_parse_github_agent_source_parses_repo_and_tree_urls() -> None:
     assert repo_source.tree_parts is None
     assert tree_source.owner_repo == "owner/repo"
     assert tree_source.tree_parts == ("feature", "foo", "agents")
+
+
+def test_list_and_install_local_single_agent_file_preserves_model_profile(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source"
+    agent_file = _write_agent(
+        source_root,
+        "code-reviewer",
+        "Reviews code changes.",
+        "You are a code reviewer.",
+        model_profile_id="analysis",
+    )
+
+    listing = list_remote_project_agents(str(agent_file))
+    result = install_project_agent(str(agent_file), workspace=tmp_path / "workspace")
+    installed_path = tmp_path / "workspace" / ".agents" / "agents" / "code-reviewer.md"
+
+    assert listing.candidates[0].model_profile_id == "analysis"
+    assert result.agent_name == "code-reviewer"
+    assert "model_profile_id: analysis" in installed_path.read_text(encoding="utf-8")
 
 
 def test_list_and_install_local_single_agent_file_source(tmp_path: Path) -> None:

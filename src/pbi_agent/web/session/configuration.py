@@ -868,6 +868,7 @@ class ConfigurationMixin:
             "name": agent.name,
             "description": agent.description,
             "path": self._relative_workspace_path(agent.location),
+            "model_profile_id": agent.model_profile_id,
         }
 
     def _agent_candidate_view(
@@ -876,6 +877,7 @@ class ConfigurationMixin:
         return {
             "agent_name": candidate.agent_name,
             "description": candidate.description,
+            "model_profile_id": candidate.model_profile_id,
             "subpath": candidate.subpath,
         }
 

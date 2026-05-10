@@ -7,7 +7,7 @@ export type ActiveProfileResponse = { active_profile_id: string | null; config_r
 
 export type AgentCandidateRequest = { source?: string | null };
 
-export type AgentCandidateViewModel = { agent_name: string; description: string; subpath: string | null };
+export type AgentCandidateViewModel = { agent_name: string; description: string; model_profile_id: string | null; subpath: string | null };
 
 export type AgentCandidatesResponse = { source: string; ref: string | null; candidates: AgentCandidateViewModel[] };
 
@@ -19,7 +19,7 @@ export type AgentInstallResultViewModel = { agent_name: string; install_path: st
 
 export type AgentListResponse = { agents: AgentViewModel[]; config_revision: string };
 
-export type AgentViewModel = { id: string; name: string; description: string; path: string };
+export type AgentViewModel = { id: string; name: string; description: string; path: string; model_profile_id: string | null };
 
 export type AllRunsResponse = { runs: AllRunsRunModel[]; total_count: number };
 

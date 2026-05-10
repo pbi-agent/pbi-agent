@@ -27,6 +27,7 @@ from pbi_agent.agent.session import (
     run_single_turn,
 )
 from pbi_agent.config import (
+    ConfigError,
     DEFAULT_GOOGLE_INTERACTIONS_URL,
     DEFAULT_GOOGLE_MODEL,
     DEFAULT_MAX_TOKENS,
@@ -86,6 +87,8 @@ class _DisplaySpy:
         self.debug_messages: list[str] = []
         self.markdown_calls: list[str] = []
         self.user_message_calls: list[str] = []
+        self.error_calls: list[str] = []
+        self.sub_agent_finish_statuses: list[str] = []
         self.reset_session_calls = 0
         self.assistant_start_calls = 0
         self.assistant_stop_calls = 0
@@ -123,6 +126,9 @@ class _DisplaySpy:
     def render_markdown(self, text: str) -> None:
         self.markdown_calls.append(text)
 
+    def error(self, message: str) -> None:
+        self.error_calls.append(message)
+
     def reset_session(self) -> None:
         self.reset_session_calls += 1
 
@@ -146,7 +152,7 @@ class _DisplaySpy:
         return self
 
     def finish_sub_agent(self, *, status: str) -> None:
-        del status
+        self.sub_agent_finish_statuses.append(status)
 
 
 class _ProviderStub:
@@ -649,6 +655,55 @@ def test_run_sub_agent_task_creates_nested_run_session(tmp_path, monkeypatch) ->
     assert result["status"] == "completed"
     assert len(runs) == 2
     assert runs[1].parent_run_session_id == runs[0].run_session_id
+
+
+def test_run_sub_agent_task_reports_missing_model_profile_as_sub_agent_failure(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Reviews code changes.\n"
+        "model_profile_id: missing-profile\n"
+        "---\n\n"
+        "Review the code.\n",
+        encoding="utf-8",
+    )
+    display = _DisplaySpy()
+
+    def _raise_missing_profile(*_: object, **__: object) -> ResolvedRuntime:
+        raise ConfigError("Unknown profile ID 'missing-profile'.")
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.resolve_runtime_for_profile_id",
+        _raise_missing_profile,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        lambda *_args, **_kwargs: pytest.fail("provider should not open"),
+    )
+
+    result = run_sub_agent_task(
+        "Review this change",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        display,
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        agent_type="reviewer",
+    )
+
+    assert result == {
+        "status": "failed",
+        "error": {
+            "type": "sub_agent_failed",
+            "message": "Unknown profile ID 'missing-profile'.",
+        },
+    }
+    assert display.error_calls == ["Unknown profile ID 'missing-profile'."]
+    assert display.sub_agent_finish_statuses == ["failed"]
 
 
 class _SessionDisplaySpy(_DisplaySpy):
