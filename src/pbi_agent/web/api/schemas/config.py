@@ -334,6 +334,7 @@ class CommandViewModel(BaseModel):
     description: str
     instructions: str
     path: str
+    model_profile_id: str | None
 
 
 class CommandListResponse(BaseModel):
@@ -346,9 +347,11 @@ class CommandCandidateRequest(BaseModel):
 
 
 class CommandCandidateViewModel(BaseModel):
+    name: str
     command_id: str
     slash_alias: str
     description: str
+    model_profile_id: str | None
     subpath: str | None
 
 

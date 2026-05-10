@@ -1,3 +1,8 @@
+---
+name: create-task
+description: Create Kanban Task
+---
+
 # Create Kanban Task
 
 Create a Kanban task from the user's request by invoking the existing CLI. Do not implement or start the task.

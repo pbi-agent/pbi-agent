@@ -1,3 +1,8 @@
+---
+name: retrospective
+description: Retrospective Mode
+---
+
 # Retrospective Mode
 
 Evaluate workflow that just happened and identify most precise customization change for next rep.

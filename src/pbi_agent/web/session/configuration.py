@@ -780,6 +780,7 @@ class ConfigurationMixin:
             "description": command.description,
             "instructions": command.instructions,
             "path": command.path,
+            "model_profile_id": command.model_profile_id,
         }
 
     def _installed_command_views(self) -> list[dict[str, Any]]:
@@ -795,9 +796,11 @@ class ConfigurationMixin:
         self, candidate: RemoteCommandCandidateSummary
     ) -> dict[str, Any]:
         return {
+            "name": candidate.name,
             "command_id": candidate.command_id,
             "slash_alias": candidate.slash_alias,
             "description": candidate.description,
+            "model_profile_id": candidate.model_profile_id,
             "subpath": candidate.subpath,
         }
 

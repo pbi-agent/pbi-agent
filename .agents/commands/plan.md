@@ -1,3 +1,8 @@
+---
+name: plan
+description: Plan Mode (Non-Interactive)
+---
+
 # Plan Mode (Non-Interactive)
 
 Work in 2 phases. Produce implementation-ready plan with no user questions. Plan must be decision-complete and ready for another engineer or agent to execute. Resolve missing choices with grounded assumptions.

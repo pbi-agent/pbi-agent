@@ -41,6 +41,20 @@ def _write_command(root: Path, name: str, content: str) -> Path:
     return path
 
 
+def _command_markdown(
+    name: str,
+    description: str,
+    instructions: str,
+    *,
+    model_profile_id: str | None = None,
+) -> str:
+    metadata = ["---", f"name: {name}", f"description: {description}"]
+    if model_profile_id is not None:
+        metadata.append(f"model_profile_id: {model_profile_id}")
+    metadata.append("---")
+    return "\n".join(metadata) + f"\n\n{instructions}"
+
+
 class _FakeResponse:
     def __init__(self, body: bytes) -> None:
         self._body = body
@@ -144,7 +158,11 @@ def test_render_installed_project_commands_lists_table(tmp_path: Path) -> None:
     _write_command(
         tmp_path / ".agents" / "commands",
         "execute",
-        "# Execute\n\nRun the task end-to-end.\n",
+        _command_markdown(
+            "Execute",
+            "Run the task end-to-end.",
+            "# Execute\n\nRun the task end-to-end.\n",
+        ),
     )
     output = io.StringIO()
 
@@ -180,12 +198,20 @@ def test_discover_installed_project_commands_is_workspace_scoped(
     _write_command(
         workspace_one / ".agents" / "commands",
         "execute",
-        "# Execute\n\nFirst workspace command.\n",
+        _command_markdown(
+            "Execute",
+            "First workspace command.",
+            "# Execute\n\nFirst workspace command.\n",
+        ),
     )
     _write_command(
         workspace_two / ".agents" / "commands",
         "review",
-        "# Review\n\nSecond workspace command.\n",
+        _command_markdown(
+            "Review",
+            "Second workspace command.",
+            "# Review\n\nSecond workspace command.\n",
+        ),
     )
 
     discovered = discover_installed_project_commands(workspace=workspace_one)
@@ -230,7 +256,11 @@ def test_list_and_install_local_single_command_file_source(tmp_path: Path) -> No
     command_file = _write_command(
         source_root,
         "execute",
-        "# Execute\n\nRun the task end-to-end.\n",
+        _command_markdown(
+            "Execute",
+            "Run the task end-to-end.",
+            "# Execute\n\nRun the task end-to-end.\n",
+        ),
     )
 
     listing = list_remote_project_commands(str(command_file))
@@ -252,12 +282,41 @@ def test_list_and_install_local_single_command_file_source(tmp_path: Path) -> No
     assert (tmp_path / "workspace" / ".agents" / "commands" / "execute.md").is_file()
 
 
+def test_install_project_command_preserves_frontmatter(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    command_file = _write_command(
+        source_root,
+        "plan",
+        _command_markdown(
+            "Plan",
+            "Create an implementation plan.",
+            "# Plan\n\nPlan carefully.\n",
+            model_profile_id="analysis",
+        ),
+    )
+
+    install_project_command(str(command_file), workspace=tmp_path / "workspace")
+
+    installed = tmp_path / "workspace" / ".agents" / "commands" / "plan.md"
+    assert installed.read_text(encoding="utf-8").startswith(
+        "---\nname: Plan\ndescription: Create an implementation plan.\nmodel_profile_id: analysis\n---\n"
+    )
+
+
 def test_local_multi_command_source_lists_and_requires_command_for_install(
     tmp_path: Path,
 ) -> None:
     source_root = tmp_path / "source"
-    _write_command(source_root / "commands", "alpha", "# Alpha\n\nAlpha command.\n")
-    _write_command(source_root / "commands", "beta", "# Beta\n\nBeta command.\n")
+    _write_command(
+        source_root / "commands",
+        "alpha",
+        _command_markdown("Alpha", "Alpha command.", "# Alpha\n\nAlpha command.\n"),
+    )
+    _write_command(
+        source_root / "commands",
+        "beta",
+        _command_markdown("Beta", "Beta command.", "# Beta\n\nBeta command.\n"),
+    )
 
     listing = list_remote_project_commands(str(source_root))
 
@@ -274,11 +333,19 @@ def test_local_multi_command_source_lists_and_requires_command_for_install(
 
 def test_local_source_ignores_internal_dot_agents_commands(tmp_path: Path) -> None:
     source_root = tmp_path / "source"
-    _write_command(source_root / "commands", "alpha", "# Alpha\n\nAlpha command.\n")
+    _write_command(
+        source_root / "commands",
+        "alpha",
+        _command_markdown("Alpha", "Alpha command.", "# Alpha\n\nAlpha command.\n"),
+    )
     _write_command(
         source_root / ".agents" / "commands",
         "internal-only",
-        "# Internal\n\nInternal command.\n",
+        _command_markdown(
+            "Internal",
+            "Internal command.",
+            "# Internal\n\nInternal command.\n",
+        ),
     )
 
     listing = list_remote_project_commands(str(source_root))
@@ -295,7 +362,11 @@ def test_explicit_local_agents_commands_directory_is_supported(tmp_path: Path) -
     _write_command(
         source_root / ".agents" / "commands",
         "execute",
-        "# Execute\n\nRun the task end-to-end.\n",
+        _command_markdown(
+            "Execute",
+            "Run the task end-to-end.",
+            "# Execute\n\nRun the task end-to-end.\n",
+        ),
     )
 
     listing = list_remote_project_commands(str(source_root / ".agents" / "commands"))
@@ -310,7 +381,11 @@ def test_install_project_command_attaches_bearer_auth_when_token_exists(
 ) -> None:
     archive_bytes = _make_zip_archive(
         {
-            "repo-main/commands/execute.md": "# Execute\n\nRun the task end-to-end.\n",
+            "repo-main/commands/execute.md": _command_markdown(
+                "Execute",
+                "Run the task end-to-end.",
+                "# Execute\n\nRun the task end-to-end.\n",
+            ),
         }
     )
     seen_requests = _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
@@ -352,7 +427,11 @@ def test_private_repo_404_falls_back_to_git_and_succeeds(
             destination = Path(args[-1])
             (destination / "commands").mkdir(parents=True, exist_ok=True)
             (destination / "commands" / "execute.md").write_text(
-                "# Execute\n\nRun the task end-to-end.\n",
+                _command_markdown(
+                    "Execute",
+                    "Run the task end-to-end.",
+                    "# Execute\n\nRun the task end-to-end.\n",
+                ),
                 encoding="utf-8",
             )
             return subprocess.CompletedProcess(args, 0, "", "")
@@ -376,8 +455,16 @@ def test_remote_listing_ignores_internal_dot_agents_commands(
 ) -> None:
     archive_bytes = _make_zip_archive(
         {
-            "repo-main/commands/execute.md": "# Execute\n\nPublic command.\n",
-            "repo-main/.agents/commands/internal.md": "# Internal\n\nInternal command.\n",
+            "repo-main/commands/execute.md": _command_markdown(
+                "Execute",
+                "Public command.",
+                "# Execute\n\nPublic command.\n",
+            ),
+            "repo-main/.agents/commands/internal.md": _command_markdown(
+                "Internal",
+                "Internal command.",
+                "# Internal\n\nInternal command.\n",
+            ),
         }
     )
     _install_fake_github(monkeypatch, archive_bytes=archive_bytes)
@@ -396,7 +483,11 @@ def test_remote_tree_url_can_target_agents_commands_directory(
 ) -> None:
     archive_bytes = _make_zip_archive(
         {
-            "repo-main/.agents/commands/execute.md": "# Execute\n\nInternal command.\n",
+            "repo-main/.agents/commands/execute.md": _command_markdown(
+                "Execute",
+                "Internal command.",
+                "# Execute\n\nInternal command.\n",
+            ),
         }
     )
     _install_fake_github(
@@ -423,7 +514,11 @@ def test_command_installer_cleans_up_temporary_directories(
 ) -> None:
     archive_bytes = _make_zip_archive(
         {
-            "repo-main/commands/execute.md": "# Execute\n\nRun the task end-to-end.\n",
+            "repo-main/commands/execute.md": _command_markdown(
+                "Execute",
+                "Run the task end-to-end.",
+                "# Execute\n\nRun the task end-to-end.\n",
+            ),
         }
     )
     created_roots = _track_temporary_directories(monkeypatch)

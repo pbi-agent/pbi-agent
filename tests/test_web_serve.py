@@ -42,7 +42,12 @@ from pbi_agent.config import (
     create_provider_config,
     delete_model_profile_config,
 )
-from pbi_agent.display.protocol import PendingToolCall, PendingUserQuestion
+from pbi_agent.display.protocol import (
+    PendingToolCall,
+    PendingUserQuestion,
+    QueuedInput,
+    QueuedRuntimeChange,
+)
 from pbi_agent.session_store import (
     MessageImageAttachment,
     MessageRecord,
@@ -132,7 +137,41 @@ def _write_command(
 ) -> None:
     commands_dir = root / relative_dir
     commands_dir.mkdir(parents=True, exist_ok=True)
+    if not content.lstrip().startswith("---"):
+        content = _command_markdown(
+            _title_from_slug(name),
+            _description_from_markdown(content),
+            content,
+        )
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
+
+
+def _command_markdown(
+    name: str,
+    description: str,
+    instructions: str,
+    *,
+    model_profile_id: str | None = None,
+) -> str:
+    metadata = ["---", f"name: {name}", f"description: {description}"]
+    if model_profile_id is not None:
+        metadata.append(f"model_profile_id: {model_profile_id}")
+    metadata.append("---")
+    return "\n".join(metadata) + f"\n\n{instructions}"
+
+
+def _title_from_slug(value: str) -> str:
+    return " ".join(part.capitalize() for part in value.split("-") if part)
+
+
+def _description_from_markdown(content: str) -> str:
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            heading = stripped.lstrip("#").strip()
+            if heading:
+                return heading
+    return "Project command."
 
 
 def _write_skill(
@@ -897,6 +936,7 @@ def test_command_list_endpoint_returns_command_files(
                 "description": "Focus command",
                 "instructions": "# Focus command\n\nStay focused on the requested change.",
                 "path": ".agents/commands/focus.md",
+                "model_profile_id": None,
             }
         ]
 
@@ -910,6 +950,30 @@ def test_command_list_endpoint_returns_command_files(
             },
         )
         assert create_response.status_code == 405
+
+
+def test_commands_endpoint_exposes_model_profile_id(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_command(
+        tmp_path,
+        "plan",
+        _command_markdown(
+            "Plan",
+            "Plan command",
+            "# Plan command\n\nPlan first.",
+            model_profile_id="analysis",
+        ),
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get("/api/config/commands")
+
+    assert response.status_code == 200
+    assert response.json()["commands"][0]["model_profile_id"] == "analysis"
+    assert response.json()["commands"][0]["instructions"] == (
+        "# Plan command\n\nPlan first."
+    )
 
 
 def test_command_candidates_endpoint_uses_local_and_default_sources(
@@ -947,9 +1011,11 @@ def test_command_candidates_endpoint_uses_local_and_default_sources(
             "ref": None,
             "candidates": [
                 {
+                    "name": "Review",
                     "command_id": "review",
                     "slash_alias": "/review",
                     "description": "Review code changes",
+                    "model_profile_id": None,
                     "subpath": "commands/review.md",
                 }
             ],
@@ -960,9 +1026,11 @@ def test_command_candidates_endpoint_uses_local_and_default_sources(
             "ref": None,
             "candidates": [
                 {
+                    "name": "Plan",
                     "command_id": "plan",
                     "slash_alias": "/plan",
                     "description": "Plan the work",
+                    "model_profile_id": None,
                     "subpath": "commands/plan.md",
                 }
             ],
@@ -1027,6 +1095,7 @@ def test_command_install_endpoint_installs_conflicts_and_forces_replacement(
                 "description": "Ship the change",
                 "instructions": "# Ship the change\n\nShip the current implementation.",
                 "path": ".agents/commands/ship.md",
+                "model_profile_id": None,
             }
         ]
         assert (tmp_path / ".agents" / "commands" / "ship.md").is_file()
@@ -1057,6 +1126,7 @@ def test_command_install_endpoint_installs_conflicts_and_forces_replacement(
                 "description": "Ship the update",
                 "instructions": "# Ship the update\n\nShip the updated implementation.",
                 "path": ".agents/commands/ship.md",
+                "model_profile_id": None,
             }
         ]
 
@@ -6909,6 +6979,341 @@ def test_saved_session_first_message_sets_blank_title(tmp_path, monkeypatch) -> 
 
     assert updated is not None
     assert updated.title == "Summarize the first part of this request and keep going."
+
+
+def test_project_command_model_profile_overrides_submitted_profile(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_command(
+        tmp_path,
+        "plan",
+        _command_markdown(
+            "Plan",
+            "Create an implementation plan.",
+            "# Plan\n\nPlan carefully.",
+            model_profile_id="analysis",
+        ),
+    )
+    provider, _ = create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="test-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="fast",
+            name="Fast",
+            provider_id=provider.id,
+            model="gpt-fast",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id=provider.id,
+            model="gpt-analysis",
+        )
+    )
+
+    queued_runtime_profiles: list[tuple[str | None, bool]] = []
+    queued_inputs: list[str] = []
+
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
+        del _settings, resume_session_id, on_reload
+        for _ in range(3):
+            queued = display.user_prompt()
+            if isinstance(queued, QueuedRuntimeChange):
+                queued_runtime_profiles.append((queued.profile_id, queued.persist))
+                continue
+            if isinstance(queued, QueuedInput):
+                queued_inputs.append(queued.text)
+                continue
+        return 0
+
+    manager = WebSessionManager(_settings())
+    try:
+        manager.start()
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
+        ):
+            live_session = manager.create_live_session(profile_id="fast")
+            live_session_id = live_session["live_session_id"]
+            response = manager.submit_session_input(
+                live_session_id,
+                text="/plan implement this",
+                profile_id="fast",
+            )
+    finally:
+        manager.shutdown()
+
+    assert response["profile_id"] == "fast"
+    assert response["model"] == "gpt-fast"
+    assert queued_runtime_profiles == [("analysis", False), ("fast", False)]
+    assert queued_inputs == ["/plan implement this"]
+
+
+def test_saved_project_command_model_profile_does_not_persist_override(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    _write_command(
+        tmp_path,
+        "plan",
+        _command_markdown(
+            "Plan",
+            "Create an implementation plan.",
+            "# Plan\n\nPlan carefully.",
+            model_profile_id="analysis",
+        ),
+    )
+    provider, _ = create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="test-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="fast",
+            name="Fast",
+            provider_id=provider.id,
+            model="gpt-fast",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id=provider.id,
+            model="gpt-analysis",
+        )
+    )
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-fast",
+            "",
+            provider_id=provider.id,
+            profile_id="fast",
+        )
+
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
+        del _settings, resume_session_id, on_reload
+        for _ in range(3):
+            display.user_prompt()
+        return 0
+
+    manager = WebSessionManager(_settings())
+    try:
+        manager.start()
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
+        ):
+            response = manager.submit_saved_session_input(
+                session_id,
+                text="/plan implement this",
+                profile_id="fast",
+            )
+    finally:
+        manager.shutdown()
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        saved = store.get_session(session_id)
+
+    assert response["profile_id"] == "fast"
+    assert response["model"] == "gpt-fast"
+    assert saved is not None
+    assert saved.profile_id == "fast"
+    assert saved.model == "gpt-fast"
+
+
+def test_existing_saved_project_command_restores_submitted_profile(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    _write_command(
+        tmp_path,
+        "plan",
+        _command_markdown(
+            "Plan",
+            "Create an implementation plan.",
+            "# Plan\n\nPlan carefully.",
+            model_profile_id="analysis",
+        ),
+    )
+    provider, _ = create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="test-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="fast",
+            name="Fast",
+            provider_id=provider.id,
+            model="gpt-fast",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id=provider.id,
+            model="gpt-analysis",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="review",
+            name="Review",
+            provider_id=provider.id,
+            model="gpt-review",
+        )
+    )
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-fast",
+            "",
+            provider_id=provider.id,
+            profile_id="fast",
+        )
+
+    queued_runtime_profiles: list[tuple[str | None, bool]] = []
+    queued_inputs: list[str] = []
+
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
+        del _settings, resume_session_id, on_reload
+        for _ in range(3):
+            queued = display.user_prompt()
+            if isinstance(queued, QueuedRuntimeChange):
+                queued_runtime_profiles.append((queued.profile_id, queued.persist))
+                continue
+            if isinstance(queued, QueuedInput):
+                queued_inputs.append(queued.text)
+                continue
+        return 0
+
+    manager = WebSessionManager(_settings())
+    try:
+        manager.start()
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
+        ):
+            manager.create_live_session(session_id=session_id, profile_id="fast")
+            response = manager.submit_saved_session_input(
+                session_id,
+                text="/plan implement this",
+                profile_id="review",
+            )
+    finally:
+        manager.shutdown()
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        saved = store.get_session(session_id)
+
+    assert response["profile_id"] == "review"
+    assert response["model"] == "gpt-review"
+    assert queued_runtime_profiles == [("analysis", False), ("review", False)]
+    assert queued_inputs == ["/plan implement this"]
+    assert saved is not None
+    assert saved.profile_id == "review"
+    assert saved.model == "gpt-review"
+
+
+def test_project_command_model_profile_does_not_override_local_compact(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_command(
+        tmp_path,
+        "compact",
+        _command_markdown(
+            "Compact",
+            "Project compact.",
+            "# Compact\n\nProject compact.",
+            model_profile_id="analysis",
+        ),
+    )
+    provider, _ = create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="test-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="fast",
+            name="Fast",
+            provider_id=provider.id,
+            model="gpt-fast",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id=provider.id,
+            model="gpt-analysis",
+        )
+    )
+
+    queued_values: list[object] = []
+
+    def fake_run_session_loop(
+        _settings, display, *, resume_session_id=None, on_reload=None
+    ):
+        del _settings, resume_session_id, on_reload
+        queued_values.append(display.user_prompt())
+        return 0
+
+    manager = WebSessionManager(_settings())
+    try:
+        manager.start()
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
+        ):
+            live_session = manager.create_live_session(profile_id="fast")
+            live_session_id = live_session["live_session_id"]
+            response = manager.submit_session_input(
+                live_session_id,
+                text="/compact",
+                profile_id="fast",
+            )
+    finally:
+        manager.shutdown()
+
+    assert response["profile_id"] == "fast"
+    assert response["model"] == "gpt-fast"
+    assert len(queued_values) == 1
+    assert isinstance(queued_values[0], QueuedInput)
+    assert queued_values[0].text == "/compact"
 
 
 def test_saved_session_first_message_keeps_existing_title(

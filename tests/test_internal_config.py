@@ -18,6 +18,7 @@ from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     ConfigConflictError,
     ConfigError,
+    CommandManifestError,
     InternalConfig,
     MaintenanceConfig,
     ModelProfileConfig,
@@ -31,6 +32,7 @@ from pbi_agent.config import (
     load_internal_config,
     load_internal_config_snapshot,
     normalize_slash_alias,
+    parse_command_markdown,
     resolve_runtime,
     resolve_settings,
     resolve_web_runtime,
@@ -110,6 +112,20 @@ def _write_command(root: Path, name: str, content: str) -> Path:
     return path
 
 
+def _command_markdown(
+    name: str,
+    description: str,
+    instructions: str,
+    *,
+    model_profile_id: str | None = None,
+) -> str:
+    metadata = ["---", f"name: {name}", f"description: {description}"]
+    if model_profile_id is not None:
+        metadata.append(f"model_profile_id: {model_profile_id}")
+    metadata.append("---")
+    return "\n".join(metadata) + f"\n\n{instructions}"
+
+
 def test_load_internal_config_treats_old_provider_scoped_shape_as_absent(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -147,7 +163,11 @@ def test_list_command_configs_discovers_command_files(tmp_path: Path) -> None:
     path = _write_command(
         tmp_path,
         "fix-issue.md",
-        "# Fix GitHub Issue\n\nResolve the linked issue.",
+        _command_markdown(
+            "Fix Issue",
+            "Resolve the linked issue.",
+            "# Fix GitHub Issue\n\nResolve the linked issue.",
+        ),
     )
 
     commands = list_command_configs(tmp_path)
@@ -155,9 +175,41 @@ def test_list_command_configs_discovers_command_files(tmp_path: Path) -> None:
     assert [item.id for item in commands] == ["fix-issue"]
     assert commands[0].name == "Fix Issue"
     assert commands[0].slash_alias == "/fix-issue"
-    assert commands[0].description == "Fix GitHub Issue"
+    assert commands[0].description == "Resolve the linked issue."
     assert commands[0].instructions == "# Fix GitHub Issue\n\nResolve the linked issue."
     assert commands[0].path == str(path.relative_to(tmp_path))
+    assert commands[0].model_profile_id is None
+
+
+def test_list_command_configs_parses_model_profile_frontmatter(
+    tmp_path: Path,
+) -> None:
+    _write_command(
+        tmp_path,
+        "plan.md",
+        _command_markdown(
+            "Plan",
+            "Create an implementation plan.",
+            "# Plan\n\nPlan carefully.",
+            model_profile_id="Analysis Profile",
+        ),
+    )
+
+    commands = list_command_configs(tmp_path)
+
+    assert [item.id for item in commands] == ["plan"]
+    assert commands[0].name == "Plan"
+    assert commands[0].description == "Create an implementation plan."
+    assert commands[0].instructions == "# Plan\n\nPlan carefully."
+    assert commands[0].model_profile_id == "analysis-profile"
+
+
+def test_parse_command_markdown_requires_name_description_frontmatter() -> None:
+    with pytest.raises(CommandManifestError, match="missing YAML frontmatter"):
+        parse_command_markdown("# Plan\n\nPlan carefully.")
+
+    with pytest.raises(CommandManifestError, match="missing non-empty 'description'"):
+        parse_command_markdown("---\nname: plan\n---\n\n# Plan")
 
 
 def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> None:
@@ -203,7 +255,15 @@ def test_find_command_config_by_alias_reads_command_files(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    _write_command(tmp_path, "plan.md", "Plan carefully before making changes.")
+    _write_command(
+        tmp_path,
+        "plan.md",
+        _command_markdown(
+            "Plan",
+            "Create an implementation plan.",
+            "Plan carefully before making changes.",
+        ),
+    )
 
     config = load_internal_config()
     command = find_command_config_by_alias("/plan")
@@ -214,8 +274,16 @@ def test_find_command_config_by_alias_reads_command_files(
 
 
 def test_list_command_configs_skips_reserved_command_alias(tmp_path: Path) -> None:
-    _write_command(tmp_path, "skills.md", "List project skills.")
-    _write_command(tmp_path, "reload.md", "Reload context.")
+    _write_command(
+        tmp_path,
+        "skills.md",
+        _command_markdown("skills", "List project skills.", "List project skills."),
+    )
+    _write_command(
+        tmp_path,
+        "reload.md",
+        _command_markdown("reload", "Reload context.", "Reload context."),
+    )
 
     assert list_command_configs(tmp_path) == []
 
@@ -227,8 +295,16 @@ def test_list_command_configs_skips_empty_files(tmp_path: Path) -> None:
 
 
 def test_list_command_configs_skips_duplicate_normalized_names(tmp_path: Path) -> None:
-    _write_command(tmp_path, "fix issue.md", "First instructions.")
-    _write_command(tmp_path, "fix-issue.md", "Second instructions.")
+    _write_command(
+        tmp_path,
+        "fix issue.md",
+        _command_markdown("Fix Issue", "First command.", "First instructions."),
+    )
+    _write_command(
+        tmp_path,
+        "fix-issue.md",
+        _command_markdown("Fix Issue", "Second command.", "Second instructions."),
+    )
 
     commands = list_command_configs(tmp_path)
 

@@ -1,3 +1,8 @@
+---
+name: orchestrate
+description: Orchestrate Mode
+---
+
 # Orchestrate Mode
 
 Decompose work into fewest accurate sub-agent tasks. Use single sub-agent when work is best as one coherent implementation. Execute in parallel only when tasks fully isolated + dependency-free; otherwise execute sequentially. Main agent owns quality.

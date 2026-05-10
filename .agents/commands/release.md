@@ -1,3 +1,8 @@
+---
+name: release
+description: Release Workflow Mode
+---
+
 # Release Workflow Mode
 
 Use `release-writing` skill for complete pbi-agent release workflow. Load `.agents/skills/release-writing/SKILL.md` before acting; follow it as source of truth.

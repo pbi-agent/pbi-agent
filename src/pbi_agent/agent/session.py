@@ -334,6 +334,7 @@ def run_session_loop(
     excluded_tools: set[str] | None = None,
 ) -> int:
     current_runtime = _coerce_runtime(settings)
+    saved_session_runtime = current_runtime
     store = _open_store(current_runtime.settings)
     session_id: str | None = resume_session_id
     title_set = bool(resume_session_id)
@@ -400,11 +401,15 @@ def run_session_loop(
                 message_image_attachments: list[MessageImageAttachment] = []
                 if isinstance(queued_input, QueuedRuntimeChange):
                     current_runtime = queued_input.runtime
-                    _persist_runtime_change(
-                        store,
-                        session_id,
-                        current_runtime,
-                    )
+                    if queued_input.persist:
+                        saved_session_runtime = current_runtime
+                        _persist_runtime_change(
+                            store,
+                            session_id,
+                            saved_session_runtime,
+                        )
+                    elif queued_input.saved_runtime is not None:
+                        saved_session_runtime = queued_input.saved_runtime
                     session_usage = _reset_session(
                         current_runtime,
                     )
@@ -524,7 +529,7 @@ def run_session_loop(
                 if session_id is None:
                     session_id = _create_session(
                         store,
-                        current_runtime,
+                        saved_session_runtime,
                         title=_session_title_for_user_turn(turn_input),
                     )
                     title_set = True
@@ -626,7 +631,7 @@ def run_session_loop(
                     _update_session_after_turn(
                         store,
                         session_id,
-                        current_runtime,
+                        saved_session_runtime,
                         session_usage,
                     )
                     _refresh_provider_history_from_store(

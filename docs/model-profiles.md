@@ -97,8 +97,11 @@ You can clear the active default in Settings by choosing **No default**.
 | One CLI run | `--profile-id PROFILE_ID` |
 | Environment default | `PBI_AGENT_PROFILE_ID=PROFILE_ID` |
 | Web session | Profile selector in the session header |
+| Project slash command | `model_profile_id` in the `.agents/commands/*.md` command frontmatter |
 | Kanban stage | Stage profile in the board editor |
 | Kanban task | Task profile override in the task modal |
+
+A project slash command profile override applies only to that command submission. It bypasses the web session header selection for the submitted turn but does not change the active default profile or the header selection for later non-command turns.
 
 ## Related pages
 

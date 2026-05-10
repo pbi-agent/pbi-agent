@@ -27,10 +27,16 @@ def render_installed_project_commands(
         return 0
 
     table = Table(title="Project Commands", title_style="bold cyan")
+    table.add_column("Name", style="green")
     table.add_column("Alias", style="green")
     table.add_column("Description")
     table.add_column("Location", style="dim")
     for command in project_commands:
-        table.add_row(command.slash_alias, command.description, command.path)
+        table.add_row(
+            command.name,
+            command.slash_alias,
+            command.description,
+            command.path,
+        )
     active_console.print(table)
     return 0

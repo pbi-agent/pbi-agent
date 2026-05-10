@@ -1,3 +1,8 @@
+---
+name: review
+description: Review Mode
+---
+
 # Review Mode
 
 Review proposed code change as if written by another engineer. Prioritize bugs, regressions, actionable risks over style commentary.

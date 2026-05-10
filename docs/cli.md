@@ -126,7 +126,7 @@ Installs a command preset from the official catalog, a local path, or a GitHub r
 | `--list` | `false` | List candidate commands from the selected source without installing anything. |
 | `--force` | `false` | Replace an existing local install under `.agents/commands/<command-name>.md`. |
 
-Public command catalogs are discovered from `commands/*.md` by default. If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
+Public command catalogs are discovered from `commands/*.md` by default. Command files require `name` and `description` frontmatter; the normalized `name` becomes the slash alias and install filename. If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
 
 ## `pbi-agent agents`
 

@@ -510,10 +510,6 @@
   background: var(--color-surface-2);
 }
 
-.settings-item--provider[role="button"]:hover .command-card__view-icon {
-  color: var(--color-text-secondary);
-}
-
 .provider-card__info {
   flex: 1 1 auto;
   min-width: 0;
@@ -536,41 +532,6 @@
   color: var(--color-text-tertiary);
   line-height: var(--leading-normal);
   padding-left: 0;
-}
-
-.settings-item--command {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--sp-3);
-  cursor: pointer;
-}
-
-.settings-item--command .settings-item__name {
-  flex: 0 0 auto;
-  margin-bottom: 0;
-  white-space: nowrap;
-}
-
-.command-card__desc {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.command-card__view-icon {
-  flex: 0 0 auto;
-  width: 1rem;
-  height: 1rem;
-  color: var(--color-text-tertiary);
-  transition: color var(--duration-fast);
-}
-
-.settings-item--command:hover .command-card__view-icon {
-  color: var(--color-text-secondary);
 }
 
 .settings-command-icon {
@@ -1008,6 +969,21 @@
 .skill-card__description {
   margin-top: 0;
   margin-bottom: var(--sp-1);
+}
+
+.command-card__actions {
+  flex-wrap: wrap;
+}
+
+.command-card__alias {
+  font-family: var(--font-mono);
+}
+
+.command-candidate__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
 }
 
 .skills-success-note {

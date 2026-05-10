@@ -1,3 +1,8 @@
+---
+name: ship-task
+description: Ship Task Mode
+---
+
 # Ship Task Mode
 
 Ship completed current task end-to-end. For this command only, authorized to create task branch, commit task-scoped changes, push branch, open pull request, merge into `master`, and delete local + remote task branches after merge.

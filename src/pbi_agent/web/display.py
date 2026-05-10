@@ -1114,6 +1114,8 @@ class WebDisplay(_EventDisplayBase):
         *,
         runtime,
         profile_id: str | None,
+        persist: bool = True,
+        saved_runtime=None,
     ) -> None:
         self._model = runtime.settings.model
         self._reasoning_effort = runtime.settings.reasoning_effort
@@ -1121,6 +1123,8 @@ class WebDisplay(_EventDisplayBase):
             QueuedRuntimeChange(
                 runtime=runtime,
                 profile_id=profile_id,
+                persist=persist,
+                saved_runtime=saved_runtime,
             )
         )
         self._input_event.set()

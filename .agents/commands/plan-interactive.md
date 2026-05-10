@@ -1,3 +1,8 @@
+---
+name: plan-interactive
+description: Plan Mode (Interactive)
+---
+
 # Plan Mode (Interactive)
 
 Work in 3 phases. Produce implementation-ready plan after adaptive clarification. Plan must be decision-complete and ready for another engineer or agent to execute. Resolve discoverable facts through exploration, clarify important missing intent with the user, and handle only minor remaining uncertainty with grounded assumptions.

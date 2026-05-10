@@ -55,6 +55,8 @@ class QueuedInput:
 class QueuedRuntimeChange:
     runtime: ResolvedRuntime
     profile_id: str | None = None
+    persist: bool = True
+    saved_runtime: ResolvedRuntime | None = None
 
 
 @dataclass(slots=True)

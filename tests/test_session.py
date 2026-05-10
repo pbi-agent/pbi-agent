@@ -46,13 +46,16 @@ from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.session_store import SessionStore
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.display.protocol import QueuedInput
+from pbi_agent.display.protocol import QueuedInput, QueuedRuntimeChange
 from pbi_agent.workspace_context import WORKSPACE_KEY_ENV
 
 
 def _write_command(root, name: str, content: str) -> None:
     commands_dir = root / ".agents" / "commands"
     commands_dir.mkdir(parents=True, exist_ok=True)
+    if not content.lstrip().startswith("---"):
+        title = " ".join(part.capitalize() for part in name.split("-") if part)
+        content = f"---\nname: {title}\ndescription: {title} command.\n---\n\n{content}"
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
 
 
@@ -649,7 +652,7 @@ def test_run_sub_agent_task_creates_nested_run_session(tmp_path, monkeypatch) ->
 
 
 class _SessionDisplaySpy(_DisplaySpy):
-    def __init__(self, prompts: list[str | QueuedInput]) -> None:
+    def __init__(self, prompts: list[str | QueuedInput | QueuedRuntimeChange]) -> None:
         super().__init__()
         self.prompts = prompts
         self.prompt_calls = 0
@@ -658,7 +661,7 @@ class _SessionDisplaySpy(_DisplaySpy):
         self.replayed_history = []
         self.retry_notices: list[tuple[int, int]] = []
 
-    def user_prompt(self) -> str | QueuedInput:
+    def user_prompt(self) -> str | QueuedInput | QueuedRuntimeChange:
         value = self.prompts[self.prompt_calls]
         self.prompt_calls += 1
         return value
@@ -1102,6 +1105,63 @@ def test_run_session_loop_persists_per_turn_usage_in_run_sessions(
     assert exit_code == 0
     assert len(runs) == 2
     assert [(run.input_tokens, run.output_tokens) for run in runs] == [(2, 1), (2, 1)]
+
+
+def test_run_session_loop_keeps_transient_runtime_out_of_saved_session(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    provider = _ChatProviderStub()
+    saved_runtime = ResolvedRuntime(
+        settings=Settings(
+            api_key="test-key",
+            provider="openai",
+            model="gpt-fast",
+        ),
+        provider_id="openai-main",
+        profile_id="fast",
+    )
+    command_runtime = ResolvedRuntime(
+        settings=Settings(
+            api_key="test-key",
+            provider="openai",
+            model="gpt-analysis",
+        ),
+        provider_id="openai-main",
+        profile_id="analysis",
+    )
+    display = _SessionDisplaySpy(
+        [
+            QueuedRuntimeChange(
+                runtime=command_runtime,
+                profile_id="analysis",
+                persist=False,
+                saved_runtime=saved_runtime,
+            ),
+            "hello",
+            "quit",
+        ]
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_session_loop(saved_runtime, display)
+
+    with SessionStore(db_path=db_path) as store:
+        session = store.list_all_sessions(limit=1)[0]
+        messages = store.list_messages(session.session_id)
+
+    assert exit_code == 0
+    assert provider.request_messages == ["hello"]
+    assert session.profile_id == "fast"
+    assert session.model == "gpt-fast"
+    assert [message.profile_id for message in messages] == ["analysis", "analysis"]
 
 
 def test_run_session_loop_failed_run_uses_current_turn_usage_only(

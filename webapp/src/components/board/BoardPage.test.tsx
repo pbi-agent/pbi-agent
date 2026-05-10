@@ -233,6 +233,7 @@ function makeConfigBootstrap(
         description: "Plan first",
         instructions: "Plan carefully",
         path: ".agents/commands/plan.md",
+        model_profile_id: null,
       },
     ],
     skills: [],

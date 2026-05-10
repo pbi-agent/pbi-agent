@@ -1,3 +1,8 @@
+---
+name: fix-review
+description: Fix Review Findings
+---
+
 # Fix Review Findings
 
 Fix findings from the previous `/review` turn in this session.

@@ -1,3 +1,9 @@
+---
+name: commit
+description: Commit Mode
+model_profile_id: gpt-5.4-mini-gpt
+---
+
 # Commit Mode
 
 Create one clean local Git commit for the current task-scoped workspace changes.

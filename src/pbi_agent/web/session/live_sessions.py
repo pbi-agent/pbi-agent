@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from pbi_agent.agent.error_formatting import format_user_facing_error
-from pbi_agent.agent.session import TEMPORARY_LOCAL_COMMANDS, _normalize_user_command
+from pbi_agent.agent.session import (
+    COMPACT_COMMAND,
+    TEMPORARY_LOCAL_COMMANDS,
+    _normalize_user_command,
+)
+from pbi_agent.config import ConfigError, find_command_config_by_alias
 from pbi_agent.display.protocol import QueuedInput, UserQuestionAnswer
 from pbi_agent.media import load_workspace_image
 from pbi_agent.models.messages import ImageAttachment
@@ -43,6 +48,8 @@ from pbi_agent.web.uploads import (
     store_image_attachment,
     store_uploaded_image_bytes,
 )
+
+_LOCAL_COMMANDS = TEMPORARY_LOCAL_COMMANDS | {COMPACT_COMMAND}
 
 
 class LiveSessionsMixin:
@@ -257,9 +264,42 @@ class LiveSessionsMixin:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
             raise RuntimeError("Live session has already ended.")
-        requested_runtime = self._resolve_runtime(profile_id)
-        if requested_runtime.profile_id != live_session.runtime.profile_id:
-            self._queue_runtime_change(live_session, profile_id)
+        command_profile_id = self._command_profile_id_for_submission(
+            text,
+        )
+        selected_runtime = self._resolve_runtime(profile_id)
+        current_runtime = live_session.runtime
+        requested_runtime = (
+            self._resolve_runtime(command_profile_id)
+            if command_profile_id is not None
+            else selected_runtime
+        )
+        restore_runtime = selected_runtime
+        should_restore_runtime = False
+        if command_profile_id is None:
+            if selected_runtime.profile_id != current_runtime.profile_id:
+                self._queue_runtime_change(live_session, profile_id)
+        else:
+            if selected_runtime.profile_id != current_runtime.profile_id:
+                live_session.runtime = selected_runtime
+                if live_session.bound_session_id is not None:
+                    self._update_saved_session_runtime(
+                        live_session.bound_session_id,
+                        selected_runtime,
+                    )
+                self._publish_live_session_runtime(live_session)
+                self._publish_live_session_lifecycle(
+                    "live_session_updated",
+                    live_session,
+                )
+            if requested_runtime.profile_id != current_runtime.profile_id:
+                self._queue_transient_runtime_change(
+                    live_session,
+                    requested_runtime,
+                )
+            should_restore_runtime = (
+                requested_runtime.profile_id != restore_runtime.profile_id
+            )
         message_text = text.strip()
         resolved_images: list[ImageAttachment] = []
         message_image_attachments: list[MessageImageAttachment] = []
@@ -303,6 +343,13 @@ class LiveSessionsMixin:
             interactive_mode=interactive_mode,
             item_id=optimistic_item_id,
         )
+        if should_restore_runtime:
+            live_session.display.request_runtime_change(
+                runtime=restore_runtime,
+                profile_id=restore_runtime.profile_id,
+                persist=False,
+                saved_runtime=restore_runtime,
+            )
         self._set_latest_queued_input_item_id(live_session, optimistic_item_id)
         return self._serialize_live_session(live_session)
 
@@ -349,6 +396,24 @@ class LiveSessionsMixin:
             profile_id=profile_id,
             interactive_mode=interactive_mode,
         )
+
+    def _command_profile_id_for_submission(
+        self,
+        text: str,
+    ) -> str | None:
+        stripped = text.strip()
+        if not stripped.startswith("/"):
+            return None
+        head = stripped.split(maxsplit=1)[0]
+        if _normalize_user_command(head) in _LOCAL_COMMANDS:
+            return None
+        try:
+            command = find_command_config_by_alias(head, workspace=self._workspace_root)
+        except ConfigError:
+            return None
+        if command is None or command.model_profile_id is None:
+            return None
+        return command.model_profile_id
 
     def _ensure_saved_session_title(self, session_id: str, text: str) -> None:
         title = _session_title_for_input(text)
@@ -817,6 +882,18 @@ class LiveSessionsMixin:
             self._update_saved_session_runtime(live_session.bound_session_id, runtime)
         self._publish_live_session_runtime(live_session)
         self._publish_live_session_lifecycle("live_session_updated", live_session)
+
+    def _queue_transient_runtime_change(
+        self,
+        live_session: LiveSessionState,
+        runtime,
+    ) -> None:
+        live_session.display.request_runtime_change(
+            runtime=runtime,
+            profile_id=runtime.profile_id,
+            persist=False,
+            saved_runtime=live_session.runtime,
+        )
 
     def _publish_live_session_runtime(self, live_session: LiveSessionState) -> None:
         self._publish_live_event(

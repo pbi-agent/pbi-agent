@@ -43,7 +43,7 @@ export type BootstrapResponse = { workspace_root: string; workspace_key: string;
 
 export type CommandCandidateRequest = { source?: string | null };
 
-export type CommandCandidateViewModel = { command_id: string; slash_alias: string; description: string; subpath: string | null };
+export type CommandCandidateViewModel = { name: string; command_id: string; slash_alias: string; description: string; model_profile_id: string | null; subpath: string | null };
 
 export type CommandCandidatesResponse = { source: string; ref: string | null; candidates: CommandCandidateViewModel[] };
 
@@ -55,7 +55,7 @@ export type CommandInstallResultViewModel = { command_id: string; slash_alias: s
 
 export type CommandListResponse = { commands: CommandViewModel[]; config_revision: string };
 
-export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string };
+export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string; model_profile_id: string | null };
 
 export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; active_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 

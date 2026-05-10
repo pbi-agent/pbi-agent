@@ -1,4 +1,6 @@
 # TODO
 
-[X] Curate MEMORY.md daily maintenance
-[X] Validate MEMORY.md structure
+[X] Inspect saved-session runtime persistence path
+[X] Implement targeted fix for transient command runtime
+[X] Run focused validation
+[X] Update memory

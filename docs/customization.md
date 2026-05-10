@@ -112,7 +112,7 @@ This v1 implementation is project-only. User-level skill directories are intenti
 
 ## Project command files
 
-`pbi-agent` also supports project-local command presets. These are single-turn prompt instructions loaded from Markdown files under `.agents/commands/`, with each filename becoming a slash command such as `/review`.
+`pbi-agent` also supports project-local command presets. These are single-turn prompt instructions loaded from Markdown files under `.agents/commands/`, with each file's frontmatter `name` becoming a slash command such as `/review`.
 
 You can manage project-local command installs from the web UI under **Settings → Project → Commands**. The add dialog matches the skill workflow: browse the official catalog, or install from a GitHub owner/repo, GitHub URL/tree URL, or server-side local path. Installed commands are available from the composer command menu immediately.
 
@@ -129,7 +129,17 @@ Omitting `source` uses the official `pbi-agent/commands` catalog from `https://g
 
 Supported local install root:
 
-- `.agents/commands/<command-name>.md`
+- `.agents/commands/*.md`
+
+Each command file must include YAML frontmatter with at least `name` and `description`. It may also include `model_profile_id` to use a specific saved profile for that command turn:
+
+```yaml
+---
+name: review
+description: Review proposed code changes as if written by another engineer.
+model_profile_id: analysis
+---
+```
 
 Remote public catalogs are discovered from:
 
@@ -137,7 +147,7 @@ Remote public catalogs are discovered from:
 
 If a source repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
 
-At runtime, project commands are discovered from `.agents/commands/*.md`. The normalized filename becomes the slash alias, and the file contents are injected as active turn instructions when the user starts a message with that alias. Reserved built-in local commands such as `/skills`, `/mcp`, `/agents`, `/reload`, and `/compact` still take precedence. See [Session Commands](/session-commands) for how slash commands behave in interactive sessions.
+At runtime, project commands are discovered from `.agents/commands/*.md`. The normalized frontmatter `name` becomes the slash alias, and the Markdown body is injected as active turn instructions when the user starts a message with that alias. Reserved built-in local commands such as `/skills`, `/mcp`, `/agents`, `/reload`, and `/compact` still take precedence. See [Session Commands](/session-commands) for how slash commands behave in interactive sessions.
 
 ## Project sub-agent files
 

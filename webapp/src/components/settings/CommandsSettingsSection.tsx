@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
@@ -53,29 +53,40 @@ function CommandCard({
   command: CommandView;
   onPreview: () => void;
 }) {
-  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onPreview();
-    }
-  }
-
   return (
-    <Card
-      className="settings-item settings-item--provider provider-card"
-      role="button"
-      tabIndex={0}
-      onClick={onPreview}
-      onKeyDown={handleKeyDown}
-    >
+    <Card className="settings-item settings-item--provider skill-card command-card">
       <div className="provider-card__info">
         <span className="settings-item__name">{command.name}</span>
-        <div className="provider-card__subtitle">
-          {command.slash_alias} · {command.description || command.path}
-        </div>
+        {command.description ? (
+          <div className="settings-item__summary skill-card__description">
+            {command.description}
+          </div>
+        ) : null}
         <div className="provider-card__subtitle">{command.path}</div>
       </div>
-      <EyeIcon className="command-card__view-icon" />
+      <div className="settings-item__actions settings-item__actions--provider command-card__actions">
+        <Badge variant="secondary" className="settings-item__tag command-card__alias">
+          {command.slash_alias}
+        </Badge>
+        {command.model_profile_id ? (
+          <Badge variant="outline" className="settings-item__tag">
+            Profile: {command.model_profile_id}
+          </Badge>
+        ) : null}
+        <Badge variant="outline" className="settings-item__tag">
+          Project command
+        </Badge>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="task-card__action-button"
+          onClick={onPreview}
+        >
+          <EyeIcon data-icon="inline-start" />
+          Preview
+        </Button>
+      </div>
     </Card>
   );
 }
@@ -145,15 +156,25 @@ function CandidateCard({
   return (
     <div className="skill-candidate">
       <div className="skill-candidate__main">
-        <div className="skill-candidate__name">{candidate.slash_alias}</div>
+        <div className="skill-candidate__name">{candidate.name}</div>
         <p className="skill-candidate__description">
           {candidate.description || `Install ${candidate.slash_alias}.`}
         </p>
-        {candidate.subpath ? (
+        <div className="command-candidate__badges">
           <Badge variant="secondary" className="skill-candidate__subpath">
-            {candidate.subpath}
+            {candidate.slash_alias}
           </Badge>
-        ) : null}
+          {candidate.model_profile_id ? (
+            <Badge variant="outline" className="skill-candidate__subpath">
+              Profile: {candidate.model_profile_id}
+            </Badge>
+          ) : null}
+          {candidate.subpath ? (
+            <Badge variant="outline" className="skill-candidate__subpath">
+              {candidate.subpath}
+            </Badge>
+          ) : null}
+        </div>
       </div>
       <Button
         type="button"
@@ -192,6 +213,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
   const [installError, setInstallError] = useState<string | null>(null);
   const [conflictRetry, setConflictRetry] = useState<{
     source: string | null;
+    name: string;
     commandName: string;
     slashAlias: string;
   } | null>(null);
@@ -281,6 +303,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
       if (err instanceof ApiError && err.status === 409) {
         setConflictRetry({
           source,
+          name: candidate.name,
           commandName: candidate.command_id,
           slashAlias: candidate.slash_alias,
         });
@@ -461,9 +484,11 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                             onClick={() =>
                               void handleInstall(
                                 {
+                                  name: conflictRetry.name,
                                   command_id: conflictRetry.commandName,
                                   slash_alias: conflictRetry.slashAlias,
                                   description: "",
+                                  model_profile_id: null,
                                   subpath: null,
                                 },
                                 true,

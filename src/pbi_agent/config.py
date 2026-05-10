@@ -12,6 +12,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
+
 from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
@@ -303,6 +305,7 @@ class CommandConfig:
     description: str = ""
     instructions: str = ""
     path: str = ""
+    model_profile_id: str | None = None
 
     def validate(self) -> None:
         self.id = slugify(self.id)
@@ -310,6 +313,11 @@ class CommandConfig:
         self.description = self.description.strip()
         self.instructions = self.instructions.strip()
         self.slash_alias = normalize_slash_alias(self.slash_alias)
+        if self.model_profile_id is not None:
+            model_profile_id = self.model_profile_id.strip()
+            self.model_profile_id = (
+                slugify(model_profile_id) if model_profile_id else None
+            )
         if not self.name:
             raise ConfigError("Command name cannot be empty.")
         if self.slash_alias in RESERVED_COMMAND_ALIASES:
@@ -318,6 +326,10 @@ class CommandConfig:
             )
         if not self.instructions:
             raise ConfigError("Command instructions cannot be empty.")
+
+
+class CommandManifestError(ValueError):
+    """Raised when a project command manifest is invalid."""
 
 
 @dataclass(slots=True)
@@ -405,13 +417,15 @@ def list_command_configs(workspace: Path | None = None) -> list[CommandConfig]:
         if not command_path.is_file() or command_path.suffix != ".md":
             continue
         try:
-            instructions = command_path.read_text(encoding="utf-8").strip()
+            raw_instructions = command_path.read_text(encoding="utf-8").strip()
         except OSError:
             continue
-        if not instructions:
+        try:
+            instructions, metadata = parse_command_markdown(raw_instructions)
+        except CommandManifestError:
             continue
         try:
-            command_id = slugify(command_path.stem)
+            command_id = slugify(metadata["name"])
         except ConfigError:
             continue
         if command_id in seen_ids:
@@ -421,11 +435,12 @@ def list_command_configs(workspace: Path | None = None) -> list[CommandConfig]:
             continue
         command = CommandConfig(
             id=command_id,
-            name=_command_name_from_id(command_id),
+            name=metadata["name"],
             slash_alias=slash_alias,
-            description=_command_description_from_markdown(instructions, command_id),
+            description=metadata["description"],
             instructions=instructions,
             path=str(command_path.relative_to(root)),
+            model_profile_id=metadata.get("model_profile_id"),
         )
         try:
             command.validate()
@@ -436,19 +451,44 @@ def list_command_configs(workspace: Path | None = None) -> list[CommandConfig]:
     return commands
 
 
-def _command_name_from_id(command_id: str) -> str:
-    return " ".join(part.capitalize() for part in command_id.split("-") if part)
+def parse_command_markdown(content: str) -> tuple[str, dict[str, str]]:
+    """Return command body and normalized metadata from required frontmatter."""
 
-
-def _command_description_from_markdown(instructions: str, command_id: str) -> str:
-    for line in instructions.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("#"):
-            continue
-        heading = stripped.lstrip("#").strip()
-        if heading:
-            return heading
-    return f"Activate {_command_name_from_id(command_id)}"
+    match = re.match(
+        r"\A---\s*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)",
+        content,
+        re.DOTALL,
+    )
+    if match is None:
+        raise CommandManifestError("missing YAML frontmatter.")
+    frontmatter = match.group(1)
+    body = content[match.end() :].strip()
+    if not body:
+        raise CommandManifestError("missing command instructions.")
+    try:
+        metadata = parse_simple_frontmatter(
+            frontmatter,
+            block_scalar_keys=frozenset({"description"}),
+            include_keys=frozenset({"name", "description", "model_profile_id"}),
+        )
+    except FrontmatterParseError as exc:
+        raise CommandManifestError(str(exc)) from exc
+    name = metadata.get("name")
+    description = metadata.get("description")
+    if not isinstance(name, str) or not name.strip():
+        raise CommandManifestError("missing non-empty 'name'.")
+    if not isinstance(description, str) or not description.strip():
+        raise CommandManifestError("missing non-empty 'description'.")
+    metadata["name"] = name.strip()
+    metadata["description"] = description.strip()
+    model_profile_id = metadata.get("model_profile_id")
+    if isinstance(model_profile_id, str):
+        stripped_profile_id = model_profile_id.strip()
+        if stripped_profile_id:
+            metadata["model_profile_id"] = stripped_profile_id
+        else:
+            metadata.pop("model_profile_id", None)
+    return body, metadata
 
 
 def _default_responses_url(provider: str) -> str:

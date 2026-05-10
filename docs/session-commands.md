@@ -21,7 +21,7 @@ This page is separate from the [CLI Reference](/cli) and the [Built-in Tools](/t
 | `/agents` | Web and interactive runtime | Shows discovered project sub-agents. |
 | `/reload` | Web and interactive runtime | Reloads workspace instructions, project catalogs, non-MCP tools, and the web file-mention cache. |
 | `/compact` | Web and interactive runtime | Summarizes the current live session into compact context for future turns. |
-| `/<command-name>` | Web and interactive runtime | Applies a project command from `.agents/commands/<command-name>.md` to the current turn. |
+| `/<command-name>` | Web and interactive runtime | Applies a project command from `.agents/commands/*.md` to the current turn. |
 
 ::: tip
 In the web composer, type `/` at the start of the message to search available slash commands. Type `@` in a normal prompt to search workspace files.
@@ -121,22 +121,38 @@ If no saved session context exists yet, pbi-agent reports that there is no activ
 Project command presets live in:
 
 ```text
-.agents/commands/<command-name>.md
+.agents/commands/*.md
 ```
 
-Each Markdown file becomes a slash alias named after its normalized filename. For example:
+Each command file requires YAML frontmatter with the same `name` and `description` shape used by project skills. The command `name` is normalized into the slash alias, and the Markdown body is used as the command instructions:
 
-| File | Slash alias |
+```md
+---
+name: fastapi
+description: FastAPI best practices and conventions. Use when working with FastAPI APIs and Pydantic models for them.
+model_profile_id: analysis
+---
+
+# FastAPI mode
+
+Apply FastAPI conventions before changing API code.
+```
+
+For example:
+
+| Frontmatter `name` | Slash alias |
 | --- | --- |
-| `.agents/commands/plan.md` | `/plan` |
-| `.agents/commands/review.md` | `/review` |
-| `.agents/commands/fix-review.md` | `/fix-review` |
+| `plan` | `/plan` |
+| `review` | `/review` |
+| `fix-review` | `/fix-review` |
 
 When the user starts a turn with a project command alias, the command file content is injected as active instructions for that model turn. The user text is still sent as the turn prompt, so you can include details after the alias:
 
 ```text
 /plan Add OAuth device-flow support to provider auth
 ```
+
+Use optional `model_profile_id` to force a specific saved model profile whenever the command is submitted from the web UI. The profile id is normalized the same way as saved profile ids. If the command sets `model_profile_id`, the command turn uses that profile instead of the profile currently selected in the session header. The selected default/profile is not changed for future non-command turns.
 
 Project slash commands are model turns, unlike built-in local commands such as `/skills` and `/compact`.
 

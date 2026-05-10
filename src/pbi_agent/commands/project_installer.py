@@ -11,8 +11,10 @@ from rich.table import Table
 
 from pbi_agent.config import (
     CommandConfig,
+    CommandManifestError,
     ConfigError,
     RESERVED_COMMAND_ALIASES,
+    parse_command_markdown,
     slugify,
 )
 from pbi_agent.project_sources import (
@@ -37,9 +39,11 @@ class ProjectCommandInstallError(ValueError):
 
 @dataclass(slots=True, frozen=True)
 class RemoteCommandCandidateSummary:
+    name: str
     command_id: str
     slash_alias: str
     description: str
+    model_profile_id: str | None
     subpath: str | None
 
 
@@ -62,10 +66,13 @@ class ProjectCommandInstallResult:
 
 @dataclass(slots=True, frozen=True)
 class _RemoteCommandCandidate:
+    name: str
     command_id: str
     slash_alias: str
     description: str
     instructions: str
+    model_profile_id: str | None
+    install_contents: str
     source_path: Path
     repo_subpath: str | None
 
@@ -81,11 +88,13 @@ def render_remote_command_listing(
 ) -> int:
     active_console = console or Console()
     table = Table(title="Available Commands", title_style="bold cyan")
+    table.add_column("Name", style="green")
     table.add_column("Alias", style="green")
     table.add_column("Description")
     table.add_column("Source Path", style="dim")
     for candidate in listing.candidates:
         table.add_row(
+            candidate.name,
             candidate.slash_alias,
             candidate.description,
             candidate.subpath or ".",
@@ -113,7 +122,8 @@ def list_remote_project_commands(source: str) -> RemoteCommandListing:
 
     if not candidates:
         raise ProjectCommandInstallError(
-            "No valid commands found. Commands require non-empty Markdown files."
+            "No valid commands found. Commands require Markdown files with name "
+            "and description frontmatter."
         )
 
     return RemoteCommandListing(
@@ -121,9 +131,11 @@ def list_remote_project_commands(source: str) -> RemoteCommandListing:
         ref=materialized.ref,
         candidates=[
             RemoteCommandCandidateSummary(
+                name=candidate.name,
                 command_id=candidate.command_id,
                 slash_alias=candidate.slash_alias,
                 description=candidate.description,
+                model_profile_id=candidate.model_profile_id,
                 subpath=candidate.repo_subpath,
             )
             for candidate in candidates
@@ -165,7 +177,7 @@ def install_project_command(
             command_id=selected.command_id,
         )
         _prepare_install_target(target_path, force=force)
-        target_path.write_text(selected.instructions, encoding="utf-8")
+        target_path.write_text(selected.install_contents, encoding="utf-8")
 
     return ProjectCommandInstallResult(
         command_id=selected.command_id,
@@ -282,14 +294,16 @@ def _load_remote_command_candidate(
     repo_root: Path,
 ) -> _RemoteCommandCandidate | None:
     try:
-        instructions = command_path.read_text(encoding="utf-8").strip()
+        raw_instructions = command_path.read_text(encoding="utf-8").strip()
     except OSError:
         return None
-    if not instructions:
+    try:
+        instructions, metadata = parse_command_markdown(raw_instructions)
+    except CommandManifestError:
         return None
 
     try:
-        command_id = slugify(command_path.stem)
+        command_id = slugify(metadata["name"])
     except ConfigError:
         return None
 
@@ -297,14 +311,14 @@ def _load_remote_command_candidate(
     if slash_alias in RESERVED_COMMAND_ALIASES:
         return None
 
-    description = _command_description_from_markdown(instructions, command_id)
     command = CommandConfig(
         id=command_id,
-        name=_command_name_from_id(command_id),
+        name=metadata["name"],
         slash_alias=slash_alias,
-        description=description,
+        description=metadata["description"],
         instructions=instructions,
         path=command_path.name,
+        model_profile_id=metadata.get("model_profile_id"),
     )
     try:
         command.validate()
@@ -313,10 +327,13 @@ def _load_remote_command_candidate(
 
     repo_subpath = command_path.relative_to(repo_root).as_posix()
     return _RemoteCommandCandidate(
+        name=command.name,
         command_id=command.id,
         slash_alias=command.slash_alias,
         description=command.description,
         instructions=command.instructions,
+        model_profile_id=command.model_profile_id,
+        install_contents=raw_instructions,
         source_path=command_path,
         repo_subpath=None if repo_subpath == "." else repo_subpath,
     )
@@ -329,7 +346,8 @@ def _select_remote_command_candidate(
 ) -> _RemoteCommandCandidate:
     if not candidates:
         raise ProjectCommandInstallError(
-            "No valid commands found. Commands require non-empty Markdown files."
+            "No valid commands found. Commands require Markdown files with name "
+            "and description frontmatter."
         )
 
     if command_name is None:
@@ -340,7 +358,10 @@ def _select_remote_command_candidate(
             )
         return candidates[0]
 
-    normalized_name = command_name.casefold().lstrip("/")
+    try:
+        normalized_name = slugify(command_name.lstrip("/"))
+    except ConfigError:
+        normalized_name = command_name.casefold().lstrip("/")
     matched = [
         candidate
         for candidate in candidates
@@ -381,18 +402,3 @@ def _prepare_install_target(target_path: Path, *, force: bool) -> None:
         shutil.rmtree(target_path)
         return
     target_path.unlink()
-
-
-def _command_name_from_id(command_id: str) -> str:
-    return " ".join(part.capitalize() for part in command_id.split("-") if part)
-
-
-def _command_description_from_markdown(instructions: str, command_id: str) -> str:
-    for line in instructions.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("#"):
-            continue
-        heading = stripped.lstrip("#").strip()
-        if heading:
-            return heading
-    return f"Activate {_command_name_from_id(command_id)}"

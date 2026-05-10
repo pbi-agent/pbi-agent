@@ -480,9 +480,11 @@ describe("SettingsPage", () => {
       ref: null,
       candidates: [
         {
+          name: "Repo Review",
           command_id: "repo-review",
           slash_alias: "/repo-review",
           description: "Review repository changes",
+          model_profile_id: null,
           subpath: null,
         },
       ],
@@ -504,6 +506,7 @@ describe("SettingsPage", () => {
           description: "Review repository changes",
           instructions: "# Repo Review\n\nReview repository changes.",
           path: ".agents/commands/repo-review.md",
+          model_profile_id: null,
         },
       ],
       config_revision: "rev-2",
@@ -799,7 +802,7 @@ describe("SettingsPage", () => {
     expect(stop).toHaveBeenCalledTimes(start.mock.calls.length);
   });
 
-  it("shows compact command cards and previews command markdown in a dialog", async () => {
+  it("shows command cards with skill-style metadata and previews markdown", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(
       makeConfigBootstrap({
@@ -810,6 +813,7 @@ describe("SettingsPage", () => {
             slash_alias: "/review",
             description: "Review Mode",
             path: ".agents/commands/review.md",
+            model_profile_id: "analysis",
             instructions:
               "# Review Mode\n\nReview proposed code changes.\n\n- Bugs\n- Tests",
           },
@@ -823,10 +827,11 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("Review")).toBeInTheDocument();
     expect(screen.getAllByText(/\/review/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Review Mode")).toBeInTheDocument();
+    expect(screen.getByText("Profile: analysis")).toBeInTheDocument();
+    expect(screen.getByText("Project command")).toBeInTheDocument();
 
-    // Card is now a single-row clickable element
-    const card = screen.getByText("Review").closest("[role='button']")!;
-    await user.click(card);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Review" });
     expect(within(dialog).getByRole("heading", { name: "Review Mode" })).toBeInTheDocument();
@@ -879,6 +884,7 @@ describe("SettingsPage", () => {
               description: "Review repository changes",
               instructions: "# Repo Review\n\nReview repository changes.",
               path: ".agents/commands/repo-review.md",
+              model_profile_id: null,
             },
           ],
         }),
@@ -931,6 +937,7 @@ describe("SettingsPage", () => {
             description: "Review repository changes",
             instructions: "# Repo Review\n\nReview repository changes.",
             path: ".agents/commands/repo-review.md",
+            model_profile_id: null,
           },
         ],
         config_revision: "rev-2",
@@ -971,9 +978,11 @@ describe("SettingsPage", () => {
         ref: "main",
         candidates: [
           {
+            name: "Private Review",
             command_id: "private-review",
             slash_alias: "/private-review",
             description: "Private review workflow",
+            model_profile_id: "analysis",
             subpath: "commands/private-review.md",
           },
         ],
@@ -998,6 +1007,7 @@ describe("SettingsPage", () => {
       expect(fetchCommandCandidates).toHaveBeenLastCalledWith("owner/private-repo"),
     );
     expect(await within(dialog).findByText("/private-review")).toBeInTheDocument();
+    expect(within(dialog).getByText("Profile: analysis")).toBeInTheDocument();
   });
 
   it("shows Project navigation with Skills, Commands, and Agents", async () => {

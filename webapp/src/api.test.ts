@@ -374,6 +374,7 @@ describe("api helpers", () => {
                 description: "Review repository changes",
                 instructions: "# Repo Review\n\nReview repository changes.",
                 path: ".agents/commands/repo-review.md",
+                model_profile_id: null,
               },
             ],
             config_revision: "rev-1",
@@ -388,9 +389,11 @@ describe("api helpers", () => {
             ref: "main",
             candidates: [
               {
+                name: "Repo Review",
                 command_id: "repo-review",
                 slash_alias: "/repo-review",
                 description: "Review repository changes",
+                model_profile_id: null,
                 subpath: null,
               },
             ],
