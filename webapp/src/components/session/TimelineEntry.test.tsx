@@ -1,5 +1,17 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+const { highlightCodeMock } = vi.hoisted(() => ({
+  highlightCodeMock:
+    vi.fn<(code: string, language: string) => Promise<string | null>>(
+      () => Promise.resolve(null),
+    ),
+}));
+
+vi.mock("@/lib/shiki-highlighter", () => ({
+  highlightCode: highlightCodeMock,
+}));
+
 import { TimelineEntry } from "./TimelineEntry";
 import { TooltipProvider } from "../ui/tooltip";
 import type { TimelineItem } from "../../types";
@@ -24,6 +36,8 @@ function mockClipboardWrite(reject = false) {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  highlightCodeMock.mockReset();
+  highlightCodeMock.mockImplementation(() => Promise.resolve(null));
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: undefined,
@@ -199,6 +213,39 @@ it("copies code block snippets without copying the full turn", async () => {
   await user.click(screen.getByRole("button", { name: "Copy snippet" }));
 
   expect(writeText).toHaveBeenCalledWith("const value = 1;");
+});
+
+it("renders fenced code snippets with detected language chrome", async () => {
+  const item: TimelineItem = {
+    kind: "message",
+    itemId: "msg-code-language",
+    messageId: "msg-code-language",
+    role: "assistant",
+    content:
+      "Absolutely — snippets:\n\n```markdown\nThis is a brief sentence for markdown formatting testing.\n```\n\n```python\nfirst = \"Hello\"\nsecond = \"world\"\nmessage = first + \" \" + second\nprint(message)\n```",
+    markdown: true,
+  };
+
+  const { container } = renderTimelineEntry(item);
+  const snippets = container.querySelectorAll(".markdown-code-snippet");
+
+  expect(snippets).toHaveLength(2);
+  expect(snippets[0]).toHaveAttribute("data-language", "markdown");
+  expect(snippets[0]?.querySelector(".markdown-code-snippet__language"))
+    .toHaveTextContent("markdown");
+  expect(snippets[0]?.querySelector('[data-language="markdown"]'))
+    .toHaveTextContent("This is a brief sentence for markdown formatting testing.");
+  expect(snippets[1]).toHaveAttribute("data-language", "python");
+  expect(snippets[1]?.querySelector(".markdown-code-snippet__language"))
+    .toHaveTextContent("python");
+  expect(snippets[1]?.querySelector('[data-language="python"]'))
+    .toHaveTextContent('first = "Hello"');
+  await waitFor(() => {
+    expect(highlightCodeMock).toHaveBeenCalledWith(
+      'first = "Hello"\nsecond = "world"\nmessage = first + " " + second\nprint(message)',
+      "python",
+    );
+  });
 });
 
 it("copies rendered markdown tables as readable tsv snippets", async () => {

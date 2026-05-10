@@ -1,6 +1,6 @@
 # Session TODO
 
-[X] Inspect current copy shortcut behavior
-[X] Add timed check-icon success state
-[X] Update frontend tests for visible icon feedback
+[X] Diagnose current session markdown/code rendering
+[X] Fix code fence rendering with language-aware snippet UI
+[X] Update/extend frontend tests
 [X] Run focused validation and update memory

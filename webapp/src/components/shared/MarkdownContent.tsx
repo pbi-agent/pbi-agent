@@ -9,12 +9,14 @@ import {
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { CodeBlock } from "@/components/ui/code-block";
 import { cn } from "@/lib/utils";
 import { CopyShortcut } from "./CopyShortcut";
 
 const CopyableSnippetContext = createContext(false);
 
 type ElementWithChildren = ReactElement<{ children?: ReactNode }>;
+type CodeElement = ReactElement<{ className?: string; children?: ReactNode }>;
 
 function isElementWithChildren(value: ReactNode): value is ElementWithChildren {
   return isValidElement<{ children?: ReactNode }>(value);
@@ -38,6 +40,46 @@ function reactNodeToText(value: ReactNode): string {
 
 function stripSingleTrailingNewline(value: string): string {
   return value.endsWith("\n") ? value.slice(0, -1) : value;
+}
+
+function codeElementFromPreChildren(children: ReactNode): CodeElement | undefined {
+  let codeElement: CodeElement | undefined;
+  Children.forEach(children, (child) => {
+    if (codeElement || !isValidElement<{ className?: string; children?: ReactNode }>(child)) {
+      return;
+    }
+    if (child.type === "code") {
+      codeElement = child;
+    }
+  });
+  return codeElement;
+}
+
+function languageFromCodeClass(className: string | undefined): string | undefined {
+  if (!className) {
+    return undefined;
+  }
+  for (const token of className.split(/\s+/)) {
+    const match = /^(?:language|lang)-(.+)$/.exec(token);
+    const language = match?.[1]?.trim().toLowerCase();
+    if (language) {
+      return language;
+    }
+  }
+  return undefined;
+}
+
+function codeFenceFromPreChildren(children: ReactNode): {
+  language?: string;
+  text: string;
+} {
+  const codeElement = codeElementFromPreChildren(children);
+  return {
+    language: languageFromCodeClass(codeElement?.props.className),
+    text: stripSingleTrailingNewline(
+      reactNodeToText(codeElement?.props.children ?? children),
+    ),
+  };
 }
 
 function normalizeTableCell(value: ReactNode): string {
@@ -160,14 +202,34 @@ function CopyableSnippet({
   );
 }
 
+function MarkdownCodeSnippet({
+  language,
+  text,
+}: {
+  language?: string;
+  text: string;
+}) {
+  const languageLabel = language ?? "text";
+  return (
+    <CopyableSnippet className="markdown-copyable-snippet--code" text={text}>
+      <div className="markdown-code-snippet" data-language={languageLabel}>
+        <div className="markdown-code-snippet__header">
+          <span className="markdown-code-snippet__language">{languageLabel}</span>
+        </div>
+        <CodeBlock
+          value={text}
+          language={language}
+          className="markdown-code-snippet__block"
+        />
+      </div>
+    </CopyableSnippet>
+  );
+}
+
 const copyableMarkdownComponents: Components = {
   pre({ children }) {
-    const text = stripSingleTrailingNewline(reactNodeToText(children));
-    return (
-      <CopyableSnippet className="markdown-copyable-snippet--code" text={text}>
-        <pre>{children}</pre>
-      </CopyableSnippet>
-    );
+    const { language, text } = codeFenceFromPreChildren(children);
+    return <MarkdownCodeSnippet language={language} text={text} />;
   },
   table({ children }) {
     return (
