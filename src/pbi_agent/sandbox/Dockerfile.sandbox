@@ -4,7 +4,7 @@ ARG PYTHON_VERSION=3.12.12
 FROM python:${PYTHON_VERSION}-alpine3.22
 
 ARG PBI_AGENT_VERSION
-ARG RUNTIME_APK="bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip"
+ARG RUNTIME_APK="bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip nodejs npm"
 ARG EXTRA_APK=""
 ARG FLEXIBLE_SYSTEM_INSTALL=0
 ARG FLEX_APK="doas"
