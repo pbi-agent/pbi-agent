@@ -87,3 +87,4 @@
 - Fixed `$skill` validated highlighting regression: skill catalog hook uses `limit=200`, so backend mention search now accepts limit 200 instead of rejecting with 422; added endpoint regression coverage. Validation: focused web pytest and Ruff check/format passed.
 - Centered the composer interrupt/send tooltip wrapper by removing its right negative margin that pulled the button toward the composer border. Validation: `bun run lint` and `git diff --check` passed.
 - Fixed review finding for validated file highlights: `useFileExistence` no longer caches misses while file search reports `scan_status: "scanning"`, and retries until ready/known/unknown. Validation: focused hook Vitest, lint, and typecheck passed.
+- Replaced deprecated React `FormEvent` import in Composer submit handler with `SyntheticEvent<HTMLFormElement, SubmitEvent>`. Validation: root `bun run typecheck` passed; initial `bun run typecheck` from `webapp/` failed because script is root-only.

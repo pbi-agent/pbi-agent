@@ -7,8 +7,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
   type KeyboardEvent,
+  type SyntheticEvent,
 } from "react";
 import {
   ArrowUpIcon,
@@ -816,7 +816,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     closeCompletions,
   ]);
 
-  const handleSubmit = async (event?: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event?: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
     event?.preventDefault();
     await submitValue(input);
   };

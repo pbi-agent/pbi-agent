@@ -1,4 +1,5 @@
-[X] Fix file existence cache scanning miss
-[X] Add regression test
-[X] Run focused validation
-[X] Update MEMORY.md
+# TODO
+
+- [X] Replace deprecated Composer FormEvent type.
+- [X] Run focused validation.
+- [X] Update MEMORY.md.
