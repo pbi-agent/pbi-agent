@@ -1,5 +1,5 @@
 # TODO
 
-- [X] Replace deprecated Composer FormEvent type.
-- [X] Run focused validation.
-- [X] Update MEMORY.md.
+- [X] Fetch remote master/tags.
+- [X] Rebase local master commits onto origin/master.
+- [X] Report status and any required conflict steps.
