@@ -1,6 +1,6 @@
 ---
 name: create-task
-description: Create Kanban Task
+description: Create a Kanban task from a user request using the pbi-agent CLI without starting implementation. Use when the user asks to create, add, file, or save a Kanban task/card/ticket.
 ---
 
 # Create Kanban Task
