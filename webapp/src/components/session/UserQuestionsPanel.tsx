@@ -27,17 +27,17 @@ import {
 } from "../ui/card";
 import { Textarea } from "../ui/textarea";
 
-const CUSTOM_OPTION = -1;
-
-type SelectedIndex = 0 | 1 | 2 | typeof CUSTOM_OPTION;
+type SuggestionIndex = 0 | 1 | 2;
+type SelectedIndex = SuggestionIndex | null;
 
 type QuestionDraft = {
   selectedIndex: SelectedIndex;
   customText: string;
 };
 
-const NAV_ORDER: readonly SelectedIndex[] = [0, 1, 2, CUSTOM_OPTION] as const;
-const navPositionOf = (idx: SelectedIndex) => NAV_ORDER.indexOf(idx);
+const NAV_ORDER: readonly SuggestionIndex[] = [0, 1, 2] as const;
+const navPositionOf = (idx: SelectedIndex) =>
+  idx === null ? -1 : NAV_ORDER.indexOf(idx);
 
 function buildInitialDrafts(
   questions: PendingUserQuestions["questions"],
@@ -46,7 +46,7 @@ function buildInitialDrafts(
     questions.map((question) => [
       question.question_id,
       {
-        selectedIndex: (question.recommended_suggestion_index ?? 0) as SelectedIndex,
+        selectedIndex: null,
         customText: "",
       },
     ]),
@@ -83,7 +83,7 @@ export function UserQuestionsPanel({
   const totalQuestions = prompt.questions.length;
   const currentQuestion = prompt.questions[currentIndex];
   const currentDraft: QuestionDraft = drafts[currentQuestion.question_id] ?? {
-    selectedIndex: 0,
+    selectedIndex: null,
     customText: "",
   };
 
@@ -92,10 +92,7 @@ export function UserQuestionsPanel({
   ): boolean => {
     const draft = drafts[question.question_id];
     if (!draft) return false;
-    if (draft.selectedIndex === CUSTOM_OPTION) {
-      return draft.customText.trim().length > 0;
-    }
-    return draft.selectedIndex >= 0 && draft.selectedIndex <= 2;
+    return draft.selectedIndex !== null;
   };
 
   const canSubmit = useMemo(
@@ -108,7 +105,7 @@ export function UserQuestionsPanel({
     setDrafts((current) => ({
       ...current,
       [questionId]: {
-        ...(current[questionId] ?? { selectedIndex: 0 as const, customText: "" }),
+        ...(current[questionId] ?? { selectedIndex: null, customText: "" }),
         ...next,
       },
     }));
@@ -116,15 +113,11 @@ export function UserQuestionsPanel({
 
   const focusOption = (idx: SelectedIndex) => {
     queueMicrotask(() => {
-      if (idx === CUSTOM_OPTION) {
-        textareaRef.current?.focus();
-      } else {
-        optionRefs.current[idx]?.focus();
-      }
+      optionRefs.current[idx ?? 0]?.focus();
     });
   };
 
-  const setSelection = (idx: SelectedIndex) => {
+  const setSelection = (idx: SuggestionIndex) => {
     updateDraft(currentQuestion.question_id, { selectedIndex: idx });
     focusOption(idx);
   };
@@ -133,29 +126,25 @@ export function UserQuestionsPanel({
     if (targetIndex < 0 || targetIndex >= totalQuestions) return;
     setCurrentIndex(targetIndex);
     const draft = drafts[prompt.questions[targetIndex].question_id];
-    focusOption(draft?.selectedIndex ?? 0);
+    focusOption(draft?.selectedIndex ?? null);
   };
 
   const submitAnswers = async () => {
     if (!canSubmit || isSubmitting) return;
     const answers = prompt.questions.map((question) => {
       const draft = drafts[question.question_id] ?? {
-        selectedIndex: 0 as const,
+        selectedIndex: null,
         customText: "",
       };
-      if (draft.selectedIndex === CUSTOM_OPTION) {
-        return {
-          question_id: question.question_id,
-          answer: draft.customText.trim(),
-          selected_suggestion_index: null,
-          custom: true,
-        } satisfies UserQuestionAnswer;
+      if (draft.selectedIndex === null) {
+        throw new Error("Cannot submit unanswered user question.");
       }
       return {
         question_id: question.question_id,
         answer: question.suggestions[draft.selectedIndex],
         selected_suggestion_index: draft.selectedIndex,
-        custom: false,
+        custom: draft.customText.trim().length > 0,
+        custom_note: draft.customText.trim() || null,
       } satisfies UserQuestionAnswer;
     });
     await onSubmit(answers);
@@ -175,7 +164,9 @@ export function UserQuestionsPanel({
       const textarea = target as HTMLTextAreaElement;
       if (event.key === "Escape") {
         event.preventDefault();
-        setSelection(2);
+        if (currentDraft.selectedIndex !== null) {
+          focusOption(currentDraft.selectedIndex);
+        }
         return;
       }
       // Allow leaving the textarea via ArrowUp when caret is at the very start.
@@ -185,7 +176,9 @@ export function UserQuestionsPanel({
         textarea.selectionEnd === 0
       ) {
         event.preventDefault();
-        setSelection(2);
+        if (currentDraft.selectedIndex !== null) {
+          focusOption(currentDraft.selectedIndex);
+        }
         return;
       }
       // Native arrow / character handling otherwise (text editing).
@@ -196,7 +189,7 @@ export function UserQuestionsPanel({
       case "ArrowDown": {
         event.preventDefault();
         const pos = navPositionOf(currentDraft.selectedIndex);
-        const nextPos = Math.min(NAV_ORDER.length - 1, Math.max(0, pos) + 1);
+        const nextPos = Math.min(NAV_ORDER.length - 1, Math.max(-1, pos) + 1);
         setSelection(NAV_ORDER[nextPos]);
         break;
       }
@@ -210,6 +203,7 @@ export function UserQuestionsPanel({
       case "ArrowRight": {
         if (totalQuestions > 1 && currentIndex < totalQuestions - 1) {
           event.preventDefault();
+          interactiveAreaRef.current?.focus();
           goToQuestion(currentIndex + 1);
         }
         break;
@@ -217,6 +211,7 @@ export function UserQuestionsPanel({
       case "ArrowLeft": {
         if (totalQuestions > 1 && currentIndex > 0) {
           event.preventDefault();
+          interactiveAreaRef.current?.focus();
           goToQuestion(currentIndex - 1);
         }
         break;
@@ -224,6 +219,7 @@ export function UserQuestionsPanel({
       case "Enter": {
         event.preventDefault();
         if (currentIndex < totalQuestions - 1) {
+          interactiveAreaRef.current?.focus();
           goToQuestion(currentIndex + 1);
         } else if (canSubmit) {
           void submitAnswers();
@@ -237,10 +233,6 @@ export function UserQuestionsPanel({
 
   const customId = `${prompt.prompt_id}-${currentQuestion.question_id}-custom`;
   const customDescriptionId = `${customId}-description`;
-  const customInvalid =
-    currentDraft.selectedIndex === CUSTOM_OPTION &&
-    !currentDraft.customText.trim();
-
   return (
     <div className="user-questions-panel">
       <Card className="user-questions-panel__card">
@@ -309,7 +301,7 @@ export function UserQuestionsPanel({
                       isSelected && "user-question-option--selected",
                     )}
                     onClick={() => {
-                      setSelection(index as SelectedIndex);
+                      setSelection(index as SuggestionIndex);
                     }}
                   >
                     <span className="user-question-option__label">
@@ -330,22 +322,20 @@ export function UserQuestionsPanel({
             <div
               className={cn(
                 "user-question-custom",
-                currentDraft.selectedIndex === CUSTOM_OPTION
+                currentDraft.customText.trim()
                   ? "user-question-custom--selected"
                   : "user-question-custom--idle",
               )}
-              data-state={
-                currentDraft.selectedIndex === CUSTOM_OPTION ? "selected" : "idle"
-              }
+              data-state={currentDraft.customText.trim() ? "selected" : "idle"}
             >
               <label
                 htmlFor={customId}
                 className="user-question-custom__label"
               >
-                <span>Another response</span>
-                {currentDraft.selectedIndex === CUSTOM_OPTION ? (
+                <span>Additional note</span>
+                {currentDraft.customText.trim() ? (
                   <Badge variant="secondary" className="user-question-custom__badge">
-                    Selected
+                    Included
                   </Badge>
                 ) : null}
               </label>
@@ -353,19 +343,12 @@ export function UserQuestionsPanel({
                 id={customId}
                 ref={textareaRef}
                 value={currentDraft.customText}
-                placeholder="Write a custom answer…"
-                aria-invalid={customInvalid}
+                placeholder="Add optional context for your selected suggestion…"
                 aria-describedby={customDescriptionId}
                 rows={2}
                 className="user-question-custom__textarea"
-                onFocus={() => {
-                  updateDraft(currentQuestion.question_id, {
-                    selectedIndex: CUSTOM_OPTION,
-                  });
-                }}
                 onChange={(event) => {
                   updateDraft(currentQuestion.question_id, {
-                    selectedIndex: CUSTOM_OPTION,
                     customText: event.target.value,
                   });
                 }}
@@ -374,7 +357,7 @@ export function UserQuestionsPanel({
                 id={customDescriptionId}
                 className="user-question-custom__description"
               >
-                Use this if none of the suggestions fit. Press{" "}
+                Optional note sent with your selected suggestion. Press{" "}
                 <kbd className="user-questions-panel__kbd">
                   Esc
                 </kbd>{" "}

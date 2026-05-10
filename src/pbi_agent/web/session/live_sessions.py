@@ -464,35 +464,25 @@ class LiveSessionsMixin:
                 raise ValueError("Question response contains duplicate answers.")
             seen_ids.add(question_id)
             answer_text = str(raw_answer.get("answer") or "").strip()
-            if not answer_text:
-                raise ValueError("Question answers must be non-empty.")
             selected_index = raw_answer.get("selected_suggestion_index")
-            custom = bool(raw_answer.get("custom"))
+            custom_note = str(raw_answer.get("custom_note") or "").strip()
             question = question_by_id[question_id]
             suggestions = question.get("suggestions")
             if not isinstance(suggestions, list) or len(suggestions) != 3:
                 raise RuntimeError("Pending user question suggestions are invalid.")
-            if custom:
-                if selected_index is not None:
-                    raise ValueError(
-                        "Custom answers cannot include a selected suggestion index."
-                    )
-            else:
-                if not isinstance(selected_index, int) or selected_index not in {
-                    0,
-                    1,
-                    2,
-                }:
-                    raise ValueError(
-                        "Suggestion answers must include a valid suggestion index."
-                    )
-                answer_text = str(suggestions[selected_index])
+            if not isinstance(selected_index, int) or selected_index not in {0, 1, 2}:
+                raise ValueError(
+                    "Question answers must include a selected suggestion index."
+                )
+            answer_text = str(suggestions[selected_index])
+            if custom_note:
+                answer_text = f"{answer_text}\n\nAdditional note: {custom_note}"
             parsed_answers.append(
                 UserQuestionAnswer(
                     question_id=question_id,
                     question=str(question.get("question") or ""),
                     answer=answer_text,
-                    custom=custom,
+                    custom=bool(custom_note),
                 )
             )
         if seen_ids != set(question_by_id):

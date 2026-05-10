@@ -149,6 +149,7 @@ export type UserQuestionAnswer = {
   answer: string;
   selected_suggestion_index: 0 | 1 | 2 | null;
   custom: boolean;
+  custom_note: string | null;
 };
 
 export type MessagePartIds = {

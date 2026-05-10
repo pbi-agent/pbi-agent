@@ -211,6 +211,7 @@ class QuestionAnswerRequest(BaseModel):
     answer: str
     selected_suggestion_index: int | None = None
     custom: bool = False
+    custom_note: str | None = None
 
 
 class SubmitQuestionResponseRequest(BaseModel):

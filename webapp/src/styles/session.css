@@ -2660,7 +2660,6 @@
 .user-questions-panel {
   padding: var(--sp-3) var(--sp-5);
   background: transparent;
-  border-top: 1px solid var(--color-border);
   flex-shrink: 0;
   animation: fade-in var(--duration-normal) var(--ease-out);
 }
@@ -2945,7 +2944,6 @@
   gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
   background: color-mix(in srgb, var(--color-surface-2) 68%, transparent);
-  border-top: 1px solid var(--color-border);
 }
 
 .user-questions-panel__navigation,

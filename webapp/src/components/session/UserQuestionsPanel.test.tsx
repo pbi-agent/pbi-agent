@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -36,7 +36,7 @@ const multiPrompt: PendingUserQuestions = {
 };
 
 describe("UserQuestionsPanel", () => {
-  it("preselects the recommended suggestion and submits answers", async () => {
+  it("requires an explicit suggestion selection before submitting", async () => {
     const onSubmit = vi.fn();
     render(
       <UserQuestionsPanel
@@ -48,6 +48,10 @@ describe("UserQuestionsPanel", () => {
     );
 
     const recommended = screen.getByRole("button", { name: /Use RESTRecommended/i });
+    expect(recommended).toHaveAttribute("data-variant", "outline");
+    expect(screen.getByRole("button", { name: "Send answers" })).toBeDisabled();
+
+    await userEvent.click(recommended);
     expect(recommended).toHaveAttribute("data-variant", "default");
 
     await userEvent.click(screen.getByRole("button", { name: "Send answers" }));
@@ -58,11 +62,12 @@ describe("UserQuestionsPanel", () => {
         answer: "Use REST",
         selected_suggestion_index: 0,
         custom: false,
+        custom_note: null,
       },
     ]);
   });
 
-  it("submits a custom answer when the text option is used", async () => {
+  it("submits a custom note alongside the selected suggestion", async () => {
     const onSubmit = vi.fn();
     render(
       <UserQuestionsPanel
@@ -73,15 +78,19 @@ describe("UserQuestionsPanel", () => {
       />,
     );
 
-    await userEvent.type(screen.getByLabelText("Another response"), "Use GraphQL");
+    await userEvent.type(screen.getByLabelText("Additional note"), "Prefer the simplest path");
+    expect(screen.getByRole("button", { name: "Send answers" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: /Use RESTRecommended/i }));
     await userEvent.click(screen.getByRole("button", { name: "Send answers" }));
 
     expect(onSubmit).toHaveBeenCalledWith([
       {
         question_id: "q_1",
-        answer: "Use GraphQL",
-        selected_suggestion_index: null,
+        answer: "Use REST",
+        selected_suggestion_index: 0,
         custom: true,
+        custom_note: "Prefer the simplest path",
       },
     ]);
   });
@@ -99,10 +108,10 @@ describe("UserQuestionsPanel", () => {
     const panel = screen.getByText(/Which API style should I use\?/).closest("fieldset");
     expect(panel).not.toBeNull();
     expect(within(panel as HTMLElement).getAllByRole("button")).toHaveLength(3);
-    expect(screen.getByLabelText("Another response")).toBeInTheDocument();
+    expect(screen.getByLabelText("Additional note")).toBeInTheDocument();
   });
 
-  it("changes the highlighted option with arrow keys", async () => {
+  it("autofocuses the first suggestion so arrow keys work without clicking", async () => {
     render(
       <UserQuestionsPanel
         prompt={prompt}
@@ -115,15 +124,16 @@ describe("UserQuestionsPanel", () => {
     const recommended = screen.getByRole("button", {
       name: /Use RESTRecommended/i,
     });
+    expect(recommended).toHaveAttribute("data-variant", "outline");
+    await waitFor(() => expect(recommended).toHaveFocus());
+
+    await userEvent.keyboard("{ArrowDown}");
     expect(recommended).toHaveAttribute("data-variant", "default");
 
     await userEvent.keyboard("{ArrowDown}");
     const second = screen.getByRole("button", { name: "Use WebSocket" });
     expect(second).toHaveAttribute("data-variant", "default");
     expect(recommended).toHaveAttribute("data-variant", "outline");
-
-    await userEvent.keyboard("{ArrowUp}");
-    expect(recommended).toHaveAttribute("data-variant", "default");
   });
 
   it("shows one question at a time with navigation between them", async () => {
@@ -150,6 +160,7 @@ describe("UserQuestionsPanel", () => {
       screen.queryByText(/Which API style should I use\?/),
     ).toBeNull();
 
+    screen.getByRole("group", { name: "Question 2 of 2" }).focus();
     await userEvent.keyboard("{ArrowLeft}");
     expect(
       screen.getByText(/Which API style should I use\?/),
@@ -182,13 +193,38 @@ describe("UserQuestionsPanel", () => {
         answer: "Use SSE",
         selected_suggestion_index: 2,
         custom: false,
+        custom_note: null,
       },
       {
         question_id: "q_b",
         answer: "SQLite",
         selected_suggestion_index: 1,
         custom: false,
+        custom_note: null,
       },
     ]);
+  });
+
+  it("keeps send disabled until every question has a selected suggestion", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <UserQuestionsPanel
+        prompt={multiPrompt}
+        isSubmitting={false}
+        errorMessage={null}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const sendButton = screen.getByRole("button", { name: "Send answers" });
+    expect(sendButton).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: /Use RESTRecommended/i }));
+    expect(sendButton).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next question" }));
+    await userEvent.click(screen.getByRole("button", { name: /PostgresRecommended/i }));
+
+    expect(sendButton).toBeEnabled();
   });
 });
