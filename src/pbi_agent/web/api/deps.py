@@ -10,7 +10,7 @@ from pbi_agent.web.session_manager import WebSessionManager
 NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 LimitQuery = Annotated[int, Query(ge=1, le=200)]
 MentionQuery = Annotated[str, Query(max_length=200)]
-MentionLimitQuery = Annotated[int, Query(ge=1, le=50)]
+MentionLimitQuery = Annotated[int, Query(ge=1, le=200)]
 LiveSessionIdPath = Annotated[
     str,
     FastAPIPath(min_length=1, description="The live session identifier."),

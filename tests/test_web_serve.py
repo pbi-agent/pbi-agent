@@ -1573,6 +1573,25 @@ def test_skill_search_endpoint_returns_installed_project_skills(
     }
 
 
+def test_skill_search_endpoint_accepts_catalog_limit(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    skill_dir = tmp_path / ".agents" / "skills" / "compress"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: compress\ndescription: Compress notes\n---\n\n# Skill\n",
+        encoding="utf-8",
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get("/api/skills/search", params={"q": "", "limit": 200})
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["name"] == "compress"
+
+
 def test_slash_command_search_endpoint_returns_web_commands(
     monkeypatch, tmp_path: Path
 ) -> None:

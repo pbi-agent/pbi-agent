@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -21,6 +22,8 @@ import {
 import { searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
 import type { FileMentionItem, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
+import { useFileExistence } from "../../hooks/useFileExistence";
+import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -193,51 +196,94 @@ type HighlightSegment =
   | { kind: "text"; text: string }
   | { kind: "mention" | "skill"; text: string };
 
-function parseComposerHighlightSegments(text: string): HighlightSegment[] {
+type HighlightValidators = {
+  skillNames: Set<string>;
+  isFileKnown: (token: string) => boolean;
+  isShellMode: boolean;
+};
+
+function findNextHighlightCandidate(
+  text: string,
+  cursor: number,
+): { start: number; kind: "mention" | "skill"; end: number } | null {
+  for (let index = cursor; index < text.length; index += 1) {
+    const character = text[index];
+    if (character !== "@" && character !== "$") continue;
+    const previous = index > 0 ? text[index - 1] : " ";
+    if (index > 0 && !TOKEN_BOUNDARY_PATTERN.test(previous)) continue;
+    const next = text[index + 1] ?? "";
+    if (character === "@") {
+      if (next === "/" || next === "") continue;
+      let end = index + 1;
+      while (end < text.length) {
+        if (text[end] === "\\" && text[end + 1] === " ") {
+          end += 2;
+          continue;
+        }
+        if (TOKEN_BOUNDARY_PATTERN.test(text[end])) break;
+        end += 1;
+      }
+      return { start: index, kind: "mention", end };
+    }
+    if (next === "" || next === "(" || next === "{" || /\d/.test(next)) continue;
+    let end = index + 1;
+    while (end < text.length && /[A-Za-z0-9_-]/.test(text[end])) end += 1;
+    return { start: index, kind: "skill", end };
+  }
+  return null;
+}
+
+function appendHighlightSegment(segments: HighlightSegment[], segment: HighlightSegment): void {
+  if (segment.kind === "text" && segment.text.length === 0) return;
+  const previous = segments.at(-1);
+  if (previous?.kind === "text" && segment.kind === "text") {
+    previous.text += segment.text;
+    return;
+  }
+  segments.push(segment);
+}
+
+function collectComposerFileTokens(text: string, shellMode: boolean): string[] {
+  if (shellMode) return [];
+  const tokens = new Set<string>();
+  let cursor = 0;
+  while (cursor < text.length) {
+    const candidate = findNextHighlightCandidate(text, cursor);
+    if (!candidate) break;
+    if (candidate.kind === "mention") {
+      tokens.add(text.slice(candidate.start + 1, candidate.end).replaceAll("\\ ", " "));
+    }
+    cursor = candidate.end;
+  }
+  return Array.from(tokens);
+}
+
+function parseComposerHighlightSegments(
+  text: string,
+  { skillNames, isFileKnown, isShellMode: shellMode }: HighlightValidators,
+): HighlightSegment[] {
+  if (shellMode) return [{ kind: "text", text }];
+
   const segments: HighlightSegment[] = [];
   let cursor = 0;
 
   while (cursor < text.length) {
-    let nextStart = -1;
-    let nextKind: "mention" | "skill" | null = null;
-    for (let index = cursor; index < text.length; index += 1) {
-      const character = text[index];
-      if (character !== "@" && character !== "$") continue;
-      const previous = index > 0 ? text[index - 1] : " ";
-      if (index > 0 && !TOKEN_BOUNDARY_PATTERN.test(previous)) continue;
-      const next = text[index + 1] ?? "";
-      if (character === "@") {
-        if (next === "/" || next === "") continue;
-        nextStart = index;
-        nextKind = "mention";
-        break;
-      }
-      if (next === "" || next === "(" || next === "{" || /\d/.test(next)) continue;
-      nextStart = index;
-      nextKind = "skill";
+    const candidate = findNextHighlightCandidate(text, cursor);
+    if (!candidate) {
+      appendHighlightSegment(segments, { kind: "text", text: text.slice(cursor) });
       break;
     }
+    appendHighlightSegment(segments, { kind: "text", text: text.slice(cursor, candidate.start) });
 
-    if (nextStart < 0 || !nextKind) {
-      segments.push({ kind: "text", text: text.slice(cursor) });
-      break;
-    }
-    if (nextStart > cursor) {
-      segments.push({ kind: "text", text: text.slice(cursor, nextStart) });
-    }
-
-    let tokenEnd = nextStart + 1;
-    while (tokenEnd < text.length) {
-      if (nextKind === "skill" && !/[A-Za-z0-9_-]/.test(text[tokenEnd])) break;
-      if (nextKind === "mention" && text[tokenEnd] === "\\" && text[tokenEnd + 1] === " ") {
-        tokenEnd += 2;
-        continue;
-      }
-      if (TOKEN_BOUNDARY_PATTERN.test(text[tokenEnd])) break;
-      tokenEnd += 1;
-    }
-    segments.push({ kind: nextKind, text: text.slice(nextStart, tokenEnd) });
-    cursor = tokenEnd;
+    const tokenText = text.slice(candidate.start, candidate.end);
+    const shouldHighlight = candidate.kind === "skill"
+      ? skillNames.has(tokenText.slice(1))
+      : isFileKnown(tokenText.slice(1).replaceAll("\\ ", " "));
+    appendHighlightSegment(segments, {
+      kind: shouldHighlight ? candidate.kind : "text",
+      text: tokenText,
+    });
+    cursor = candidate.end;
   }
 
   return segments.length > 0 ? segments : [{ kind: "text", text }];
@@ -317,10 +363,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const canSend =
     (Boolean(liveSessionId) || canCreateSession) && inputEnabled && !sessionEnded && !isSubmitting;
   const shellInput = input.trimStart();
-  const isShellMode = shellInput.startsWith("!");
+  const isShellMode = useMemo(() => input.trimStart().startsWith("!"), [input]);
+  const skillNames = useSkillCatalog();
+  const fileTokens = useMemo(
+    () => collectComposerFileTokens(input, isShellMode),
+    [input, isShellMode],
+  );
+  const { isFileKnown } = useFileExistence(fileTokens);
   const shellCommandPreview = shellInput.slice(1).trim();
   const isActionMenuOpen = canSend && !isShellMode && actionMenuOpen;
-  const highlightSegments = parseComposerHighlightSegments(input);
+  const highlightSegments = parseComposerHighlightSegments(input, {
+    skillNames,
+    isFileKnown,
+    isShellMode,
+  });
   const activeSlashCommand = parseActiveSlashCommand(input, cursorIndex);
   const activeMention = activeSlashCommand
     ? null

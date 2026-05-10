@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Composer } from "./Composer";
 import { searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
 import { renderWithProviders } from "../../test/render";
+import { resetFileExistenceForTest } from "../../hooks/useFileExistence";
+import { resetSkillCatalogForTest } from "../../hooks/useSkillCatalog";
 
 vi.mock("../../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api")>();
@@ -81,6 +83,9 @@ const inputPrototype: InputPrototypeWithPicker = HTMLInputElement.prototype;
 
 describe("Composer", () => {
   beforeEach(() => {
+    resetFileExistenceForTest();
+    resetSkillCatalogForTest();
+    vi.useRealTimers();
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
       callback(0);
       return 0;
@@ -127,18 +132,73 @@ describe("Composer", () => {
     }
   });
 
-  it("highlights file and skill tags inside the message input", async () => {
+  it("highlights file and skill tags inside the message input only after validation", async () => {
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [{ name: "compress", description: "Compress", path: ".agents/skills/compress/SKILL.md" }],
+    });
+    vi.mocked(searchFileMentions).mockResolvedValue({
+      items: [{ path: "src/main.py", kind: "file" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      error: null,
+    });
     const user = userEvent.setup();
     const { container } = renderComposer();
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Use @src/main.py with $compress");
 
-    expect(container.querySelector(".composer__textarea-highlight--mention")).toHaveTextContent(
-      "@src/main.py",
-    );
-    expect(container.querySelector(".composer__textarea-highlight--skill")).toHaveTextContent(
-      "$compress",
-    );
+    await waitFor(() => {
+      expect(container.querySelector(".composer__textarea-highlight--skill")).toHaveTextContent(
+        "$compress",
+      );
+    });
+    await waitFor(() => {
+      expect(container.querySelector(".composer__textarea-highlight--mention")).toHaveTextContent(
+        "@src/main.py",
+      );
+    });
+  });
+
+  it("keeps unknown file and skill tags plain", async () => {
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [{ name: "compress", description: "Compress", path: ".agents/skills/compress/SKILL.md" }],
+    });
+    vi.mocked(searchFileMentions).mockResolvedValue({
+      items: [],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 0,
+      error: null,
+    });
+    const user = userEvent.setup();
+    const { container } = renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Use @made/up/path.py with $notaskill");
+
+    await waitFor(() => expect(searchFileMentions).toHaveBeenCalled());
+    expect(container.querySelector(".composer__textarea-highlight--mention")).not.toBeInTheDocument();
+    expect(container.querySelector(".composer__textarea-highlight--skill")).not.toBeInTheDocument();
+  });
+
+  it("renders no highlight chips in shell mode", async () => {
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [{ name: "HOME", description: "Home", path: ".agents/skills/HOME/SKILL.md" }],
+    });
+    vi.mocked(searchFileMentions).mockResolvedValue({
+      items: [{ path: "src/x.py", kind: "file" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      error: null,
+    });
+    const user = userEvent.setup();
+    const { container } = renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "!ls $HOME @src/x.py");
+
+    expect(container.querySelector(".composer__textarea-highlight")).not.toBeInTheDocument();
+    expect(searchFileMentions).not.toHaveBeenCalledWith("src/x.py", expect.anything(), expect.anything());
   });
 
   it("enables message and image controls for lazy-created sessions", () => {
@@ -550,7 +610,8 @@ describe("Composer", () => {
     await user.clear(textbox);
     await user.type(textbox, "!echo $skill");
     expect(screen.queryByRole("listbox", { name: "Skill suggestions" })).not.toBeInTheDocument();
-    expect(searchSkillMentions).not.toHaveBeenCalled();
+    expect(searchSkillMentions).toHaveBeenCalledWith("", 200);
+    expect(searchSkillMentions).toHaveBeenCalledTimes(1);
   });
 
   it("renders slash command descriptions inline in parentheses", async () => {

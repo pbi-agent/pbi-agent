@@ -13,6 +13,7 @@ import { Separator } from "../ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { isApplyPatchToolMetadata } from "./GitDiffResult";
 import { ToolResult } from "./ToolResult";
+import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 
 const SPECIAL_TAG_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
 
@@ -33,9 +34,25 @@ function findSkillTag(content: string, cursor: number): { index: number; tag: st
   return undefined;
 }
 
+function findKnownSkillTag(
+  content: string,
+  cursor: number,
+  skillNames: Set<string>,
+): { index: number; tag: string } | undefined {
+  let nextCursor = cursor;
+  while (nextCursor < content.length) {
+    const match = findSkillTag(content, nextCursor);
+    if (!match) return undefined;
+    if (skillNames.has(match.tag.slice(1))) return match;
+    nextCursor = match.index + match.tag.length;
+  }
+  return undefined;
+}
+
 function renderUserTextNodes(
   content: string,
   filePaths: string[] | undefined,
+  skillNames: Set<string>,
 ): ReactNode[] {
   const uniquePaths = filePaths
     ? Array.from(new Set(filePaths)).sort((left, right) => right.length - left.length)
@@ -45,7 +62,7 @@ function renderUserTextNodes(
   let partIndex = 0;
 
   while (cursor < content.length) {
-    const skillMatch = findSkillTag(content, cursor);
+    const skillMatch = findKnownSkillTag(content, cursor, skillNames);
     let nextMatch:
       | {
           index: number;
@@ -99,9 +116,10 @@ function renderUserContent(
   content: string,
   filePaths: string[] | undefined,
   imageAttachments: ImageAttachment[] | undefined,
+  skillNames: Set<string>,
 ): JSX.Element {
   const hasText = content.trim().length > 0;
-  const nodes = hasText ? renderUserTextNodes(content, filePaths) : [];
+  const nodes = hasText ? renderUserTextNodes(content, filePaths, skillNames) : [];
 
   return (
     <>
@@ -171,6 +189,7 @@ export function TimelineEntry({
   closeSignal?: string | null;
   onForkMessage?: (messageId: string) => void;
 }) {
+  const skillNames = useSkillCatalog();
   const toolGroupDefaultOpen =
     item.kind === "tool_group"
     && item.status !== "running"
@@ -276,6 +295,7 @@ export function TimelineEntry({
               item.kind === "message" && item.role === "user"
                 ? item.imageAttachments
                 : undefined,
+              skillNames,
             )
           )}
         </div>

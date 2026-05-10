@@ -12,7 +12,17 @@ vi.mock("@/lib/shiki-highlighter", () => ({
   highlightCode: highlightCodeMock,
 }));
 
+vi.mock("../../api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../api")>();
+  return {
+    ...actual,
+    searchSkillMentions: vi.fn(),
+  };
+});
+
 import { TimelineEntry } from "./TimelineEntry";
+import { searchSkillMentions } from "../../api";
+import { resetSkillCatalogForTest } from "../../hooks/useSkillCatalog";
 import { TooltipProvider } from "../ui/tooltip";
 import type { TimelineItem } from "../../types";
 
@@ -21,6 +31,11 @@ function renderTimelineEntry(item: TimelineItem, props: Partial<Parameters<typeo
     wrapper: TooltipProvider,
   });
 }
+
+beforeEach(() => {
+  resetSkillCatalogForTest();
+  vi.mocked(searchSkillMentions).mockResolvedValue({ items: [] });
+});
 
 function mockClipboardWrite(reject = false) {
   const writeText = reject
@@ -133,7 +148,10 @@ it("hides fork conversation for user messages", () => {
   expect(screen.queryByRole("button", { name: "Fork conversation" })).not.toBeInTheDocument();
 });
 
-it("highlights file and skill tags in user turn content", () => {
+it("highlights file and installed skill tags in user turn content", async () => {
+  vi.mocked(searchSkillMentions).mockResolvedValue({
+    items: [{ name: "compress", description: "Compress", path: ".agents/skills/compress/SKILL.md" }],
+  });
   const item: TimelineItem = {
     kind: "message",
     itemId: "msg-tags",
@@ -147,7 +165,34 @@ it("highlights file and skill tags in user turn content", () => {
   const { container } = renderTimelineEntry(item);
 
   expect(container.querySelector(".timeline-entry__file-tag")).toHaveTextContent("src/main.py");
-  expect(container.querySelector(".timeline-entry__skill-tag")).toHaveTextContent("$compress");
+  expect(container.querySelector(".timeline-entry__skill-tag")).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(container.querySelector(".timeline-entry__skill-tag")).toHaveTextContent("$compress");
+  });
+});
+
+it("keeps unknown skill tags in user turn content plain", async () => {
+  vi.mocked(searchSkillMentions).mockResolvedValue({
+    items: [{ name: "compress", description: "Compress", path: ".agents/skills/compress/SKILL.md" }],
+  });
+  const item: TimelineItem = {
+    kind: "message",
+    itemId: "msg-unknown-skill",
+    messageId: "msg-unknown-skill",
+    role: "user",
+    content: "Use $notaskill then $compress",
+    markdown: false,
+  };
+
+  const { container } = renderTimelineEntry(item);
+
+  await waitFor(() => {
+    expect(container.querySelector(".timeline-entry__skill-tag")).toHaveTextContent("$compress");
+  });
+  expect(container.querySelector(".timeline-entry__user-text")).toHaveTextContent(
+    "Use $notaskill then $compress",
+  );
+  expect(container.querySelectorAll(".timeline-entry__skill-tag")).toHaveLength(1);
 });
 
 it("copies user turn content from the hover action row", async () => {

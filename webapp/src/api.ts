@@ -353,6 +353,7 @@ export async function fetchSessionDetail(sessionId: string): Promise<SessionDeta
 export async function searchFileMentions(
   query: string,
   limit = 8,
+  init?: RequestInit,
 ): Promise<FileMentionSearchPayload> {
   const params = queryString("GET /api/files/search", {
     q: query,
@@ -364,6 +365,7 @@ export async function searchFileMentions(
   >(
     "GET /api/files/search",
     `/api/files/search${params}`,
+    init,
   );
   return result;
 }
