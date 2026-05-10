@@ -592,19 +592,40 @@
   height: 5px;
 }
 
-.timeline-entry__fork {
+.timeline-entry__actions {
   display: flex;
   justify-content: flex-start;
+  gap: var(--sp-1);
   margin-top: var(--sp-1);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
 }
 
-.timeline-entry__fork-button {
+.timeline-entry:hover .timeline-entry__actions,
+.timeline-entry:focus-within .timeline-entry__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.timeline-entry--user .timeline-entry__actions {
+  justify-content: flex-end;
+}
+
+.timeline-entry__action-button {
   color: var(--color-text-tertiary);
 }
 
-.timeline-entry__fork-button:hover,
-.timeline-entry__fork-button:focus-visible {
+.timeline-entry__action-button:hover,
+.timeline-entry__action-button:focus-visible,
+.timeline-entry__action-button[data-copy-status="copied"] {
   color: var(--color-text-primary);
+}
+
+.timeline-entry__action-button[data-copy-status="failed"] {
+  color: var(--color-error);
 }
 
 /* User messages — right aligned, accent tint */
@@ -841,6 +862,59 @@
 
 .timeline-entry--assistant .timeline-entry__content tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.02);
+}
+
+/* Copyable markdown snippets */
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet {
+  position: relative;
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet--code,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet--table,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet--blockquote {
+  margin: var(--sp-3) 0;
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet--list {
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > pre,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > table,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > blockquote,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > ul,
+.timeline-entry--assistant .timeline-entry__content .markdown-copyable-snippet > ol {
+  margin: 0;
+}
+
+.markdown-copyable-snippet__actions {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+
+.markdown-copyable-snippet:hover > .markdown-copyable-snippet__actions,
+.markdown-copyable-snippet:focus-within > .markdown-copyable-snippet__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.markdown-copyable-snippet__copy {
+  color: var(--color-text-tertiary);
+}
+
+.markdown-copyable-snippet__copy:hover,
+.markdown-copyable-snippet__copy:focus-visible,
+.markdown-copyable-snippet__copy[data-copy-status="copied"] {
+  color: var(--color-text-primary);
+}
+
+.markdown-copyable-snippet__copy[data-copy-status="failed"] {
+  color: var(--color-error);
 }
 
 /* Horizontal rule */

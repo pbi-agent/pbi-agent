@@ -7,6 +7,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
+import { CopyShortcut } from "../shared/CopyShortcut";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { Separator } from "../ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -186,28 +187,40 @@ export function TimelineEntry({
       : item.role === "debug" ? "debug"
       : "assistant";
 
+    const canCopyTurn = item.role === "user" || item.role === "assistant";
     const canFork =
       onForkMessage
       && item.messageId
       && !item.subAgentId
       && item.role === "assistant";
+    const turnCopyAction = canCopyTurn ? (
+      <CopyShortcut
+        text={item.content}
+        ariaLabel="Copy turn"
+        className="timeline-entry__action-button timeline-entry__copy-button"
+      />
+    ) : null;
     const forkAction = canFork ? (
-      <div className="timeline-entry__fork">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              className="timeline-entry__fork-button"
-              aria-label="Fork conversation"
-              onClick={() => onForkMessage(item.messageId!)}
-            >
-              <SplitIcon className="rotate-180" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Fork conversation</TooltipContent>
-        </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            className="timeline-entry__action-button timeline-entry__fork-button"
+            aria-label="Fork conversation"
+            onClick={() => onForkMessage(item.messageId!)}
+          >
+            <SplitIcon className="rotate-180" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Fork conversation</TooltipContent>
+      </Tooltip>
+    ) : null;
+    const turnActions = turnCopyAction || forkAction ? (
+      <div className="timeline-entry__actions">
+        {turnCopyAction}
+        {forkAction}
       </div>
     ) : null;
 
@@ -219,7 +232,7 @@ export function TimelineEntry({
         {subAgentBanner}
         <div className="timeline-entry__content">
           {item.markdown && roleClass !== "user" ? (
-            <MarkdownContent content={item.content} />
+            <MarkdownContent content={item.content} copyable={item.role === "assistant"} />
           ) : (
             renderUserContent(
               item.content,
@@ -232,7 +245,7 @@ export function TimelineEntry({
             )
           )}
         </div>
-        {forkAction}
+        {turnActions}
       </div>
     );
 
