@@ -2538,7 +2538,6 @@
 .composer__input-tooltip-trigger {
   display: inline-flex;
   flex-shrink: 0;
-  margin-inline-end: -0.3rem;
 }
 
 .composer__action-trigger {
