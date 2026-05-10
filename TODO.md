@@ -1,7 +1,6 @@
 # TODO
 
-[X] Inspect current agent names and references
-[X] Rename sub-agents to action-style names
-[X] Update orchestrate references/instructions
-[X] Validate discovery/frontmatter and diff
-[X] Update MEMORY.md
+- [X] Inspect agent files
+- [X] Compress agent Markdown prose
+- [X] Validate parsing/diff whitespace
+- [X] Update memory
