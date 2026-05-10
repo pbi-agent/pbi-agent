@@ -165,6 +165,26 @@ def test_search_input_mentions_returns_ranked_matches(tmp_path: Path) -> None:
     ]
 
 
+def test_search_input_mentions_includes_hidden_nonignored_directories(
+    tmp_path: Path,
+) -> None:
+    subprocess.run(
+        ["git", "init"],
+        cwd=tmp_path,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    commands_dir = tmp_path / ".agents" / "commands"
+    commands_dir.mkdir(parents=True)
+    (commands_dir / "plan.md").write_text("---\nname: plan\n---\n", encoding="utf-8")
+    (tmp_path / "planning.md").write_text("visible\n", encoding="utf-8")
+
+    results = search_input_mentions("plan", root=tmp_path, limit=10)
+
+    assert ".agents/commands/plan.md" in [item.path for item in results]
+
+
 def test_search_input_mentions_skips_gitignored_directories(tmp_path: Path) -> None:
     subprocess.run(
         ["git", "init"],

@@ -22,12 +22,20 @@ def test_scan_workspace_files_includes_nested_files_and_hidden_nonignored_files(
     _git_init(tmp_path)
     (tmp_path / "src" / "deep").mkdir(parents=True)
     (tmp_path / "src" / "deep" / "app.py").write_text("print('hi')\n", encoding="utf-8")
+    (tmp_path / ".agents" / "commands").mkdir(parents=True)
+    (tmp_path / ".agents" / "commands" / "plan.md").write_text(
+        "---\nname: plan\n---\n", encoding="utf-8"
+    )
     (tmp_path / ".env.example").write_text("TOKEN=\n", encoding="utf-8")
 
     result = scan_workspace_files(tmp_path)
 
     assert result.error is None
-    assert result.files == [".env.example", "src/deep/app.py"]
+    assert result.files == [
+        ".agents/commands/plan.md",
+        ".env.example",
+        "src/deep/app.py",
+    ]
 
 
 def test_scan_workspace_files_excludes_gitignored_files_and_folders(

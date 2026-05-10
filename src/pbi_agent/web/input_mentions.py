@@ -99,7 +99,6 @@ class WorkspaceFileIndex:
             normalized_query,
             file_list,
             limit=bounded_limit,
-            include_dotfiles=normalized_query.startswith("."),
         )
         return MentionSearchPayload(
             items=[
@@ -288,10 +287,6 @@ def _fuzzy_score(query: str, candidate: str) -> float:
     return SequenceMatcher(None, query_lower, candidate_lower).ratio() * 15
 
 
-def _is_dotpath(path: str) -> bool:
-    return any(part.startswith(".") for part in path.split("/"))
-
-
 def _path_depth(path: str) -> int:
     return path.count("/")
 
@@ -301,21 +296,15 @@ def _fuzzy_search(
     candidates: list[str],
     *,
     limit: int,
-    include_dotfiles: bool,
 ) -> list[str]:
-    filtered = (
-        candidates
-        if include_dotfiles
-        else [candidate for candidate in candidates if not _is_dotpath(candidate)]
-    )
     if not query:
-        return sorted(filtered, key=lambda item: (_path_depth(item), item.lower()))[
+        return sorted(candidates, key=lambda item: (_path_depth(item), item.lower()))[
             :limit
         ]
 
     scored = [
         (score, candidate)
-        for candidate in filtered
+        for candidate in candidates
         if (score := _fuzzy_score(query, candidate)) >= _MIN_FUZZY_SCORE
     ]
     scored.sort(key=lambda item: -item[0])
