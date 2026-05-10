@@ -1,9 +1,9 @@
 # TODO
 
-[>] Publish release v0.6.0
-[ ] Check local status and PR #288 checks
-[ ] Merge release PR if clean
-[ ] Confirm GitHub Release/tag
-[ ] Confirm publish workflow
-[ ] Update release notes if needed
-[ ] Report status
+[>] Orchestrate chat input history shortcut task
+[X] Plan via planner sub-agent
+[X] Execute via worker sub-agent
+[X] Review/fix loop
+[X] Re-review after final validation
+[X] Confidence gate
+[X] Commit if safe
