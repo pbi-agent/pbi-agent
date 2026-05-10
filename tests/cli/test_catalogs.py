@@ -172,6 +172,10 @@ class DefaultWebCommandTests(unittest.TestCase):
             commands_dir = root_dir / ".agents" / "commands"
             commands_dir.mkdir(parents=True)
             (commands_dir / "execute.md").write_text(
+                "---\n"
+                "name: execute\n"
+                "description: Run the task end-to-end.\n"
+                "---\n\n"
                 "# Execute\n\nRun the task end-to-end.\n",
                 encoding="utf-8",
             )
