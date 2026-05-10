@@ -1,4 +1,4 @@
 # TODO
 
-[X] Fix Working summary tool coverage
-[X] Final validation + memory/handoff
+[X] Curate MEMORY.md daily maintenance
+[X] Validate MEMORY.md structure
