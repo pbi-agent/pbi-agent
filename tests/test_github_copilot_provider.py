@@ -100,6 +100,43 @@ def _make_settings(**overrides: object) -> Settings:
     return Settings(**defaults)
 
 
+def test_github_copilot_responses_provider_advertises_simple_edit_tools_only() -> None:
+    provider = GitHubCopilotProvider(_make_settings(web_search=True))
+
+    tool_names = {
+        tool["name"]
+        for tool in provider._delegate._tools
+        if "name" in tool  # type: ignore[attr-defined]
+    }
+    assert "apply_patch" not in tool_names
+    assert "replace_in_file" in tool_names
+    assert "write_file" in tool_names
+    assert "read_web_url" in tool_names
+
+
+def test_github_copilot_provider_hides_read_web_url_without_web_search() -> None:
+    provider = GitHubCopilotProvider(_make_settings(web_search=False))
+
+    tool_names = {
+        tool["name"]
+        for tool in provider._delegate._tools
+        if "name" in tool  # type: ignore[attr-defined]
+    }
+    assert "read_web_url" not in tool_names
+
+
+def test_github_copilot_chat_provider_advertises_simple_edit_tools_only() -> None:
+    provider = GitHubCopilotProvider(_make_settings(model="claude-sonnet-4"))
+
+    tool_names = {
+        tool["function"]["name"]
+        for tool in provider._delegate._tools  # type: ignore[attr-defined]
+    }
+    assert "apply_patch" not in tool_names
+    assert "replace_in_file" in tool_names
+    assert "write_file" in tool_names
+
+
 def test_github_copilot_openai_model_uses_responses_headers_and_omits_max_tokens(
     monkeypatch,
 ) -> None:

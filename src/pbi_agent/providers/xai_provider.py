@@ -36,6 +36,7 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
+from pbi_agent.tools.availability import effective_excluded_tool_names
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
 from pbi_agent.display.protocol import DisplayProtocol
@@ -122,8 +123,11 @@ class XAIProvider(Provider):
         self._instructions = system_prompt
 
     def refresh_tools(self) -> None:
+        excluded_tools = effective_excluded_tool_names(
+            self._settings, self._excluded_tools
+        )
         self._tools = self._tool_catalog.get_openai_tool_definitions(
-            excluded_names=self._excluded_tools
+            excluded_names=excluded_tools
         )
         if self._settings.web_search:
             self._tools.append({"type": "web_search"})

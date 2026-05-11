@@ -38,6 +38,26 @@ def _make_settings(**overrides: object) -> Settings:
     return Settings(**defaults)
 
 
+def test_anthropic_provider_advertises_simple_edit_tools_only() -> None:
+    provider = AnthropicProvider(_make_settings(web_search=True))
+
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "apply_patch" not in tool_names
+    assert "replace_in_file" in tool_names
+    assert "write_file" in tool_names
+    assert "read_web_url" in tool_names
+
+
+def test_anthropic_provider_hides_read_web_url_without_web_search() -> None:
+    provider = AnthropicProvider(_make_settings(web_search=False))
+
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "read_web_url" not in tool_names
+    assert not any(
+        tool.get("type") == "web_search_20250305" for tool in provider._tools
+    )
+
+
 def test_anthropic_parse_response_extracts_cache_usage_and_tool_calls() -> None:
     provider = AnthropicProvider(_make_settings())
 

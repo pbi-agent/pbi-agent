@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from pbi_agent.config import Settings
 from pbi_agent.tools import registry
+from pbi_agent.tools.availability import effective_excluded_tool_names
 
 
 def test_registry_exposes_expected_built_in_tools() -> None:
@@ -37,6 +39,39 @@ def test_registry_exposes_expected_built_in_tools() -> None:
 def test_registry_returns_none_for_unknown_tool() -> None:
     assert registry.get_tool_handler("missing_tool") is None
     assert registry.get_tool_spec("missing_tool") is None
+
+
+def test_effective_excluded_tool_names_openai_uses_v4a_editing() -> None:
+    excluded = effective_excluded_tool_names(
+        Settings(provider="openai", web_search=True), {"ask_user"}
+    )
+
+    assert {"ask_user", "replace_in_file", "write_file"} <= excluded
+    assert "apply_patch" not in excluded
+    assert "read_web_url" not in excluded
+
+
+def test_effective_excluded_tool_names_chatgpt_uses_v4a_editing() -> None:
+    excluded = effective_excluded_tool_names(Settings(provider="chatgpt"), set())
+
+    assert {"replace_in_file", "write_file"} <= excluded
+    assert "apply_patch" not in excluded
+
+
+def test_effective_excluded_tool_names_non_openai_uses_simple_editing() -> None:
+    excluded = effective_excluded_tool_names(Settings(provider="anthropic"), None)
+
+    assert "apply_patch" in excluded
+    assert "replace_in_file" not in excluded
+    assert "write_file" not in excluded
+
+
+def test_effective_excluded_tool_names_hides_read_web_url_without_web_search() -> None:
+    excluded = effective_excluded_tool_names(
+        Settings(provider="openai", web_search=False)
+    )
+
+    assert "read_web_url" in excluded
 
 
 def test_apply_patch_schema_accepts_patch_only() -> None:

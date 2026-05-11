@@ -31,6 +31,23 @@ def _make_settings(**overrides: object) -> Settings:
     return Settings(**defaults)
 
 
+def test_generic_provider_advertises_simple_edit_tools_only() -> None:
+    provider = GenericProvider(_make_settings(web_search=True))
+
+    tool_names = {tool["function"]["name"] for tool in provider._tools}
+    assert "apply_patch" not in tool_names
+    assert "replace_in_file" in tool_names
+    assert "write_file" in tool_names
+    assert "read_web_url" in tool_names
+
+
+def test_generic_provider_hides_read_web_url_without_web_search() -> None:
+    provider = GenericProvider(_make_settings(web_search=False))
+
+    tool_names = {tool["function"]["name"] for tool in provider._tools}
+    assert "read_web_url" not in tool_names
+
+
 def test_azure_chat_completions_uses_api_key_header_and_endpoint(
     monkeypatch,
     display_spy,

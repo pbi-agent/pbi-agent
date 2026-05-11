@@ -40,6 +40,7 @@ from pbi_agent.providers.chatgpt_codex_backend import (
 )
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
+from pbi_agent.tools.availability import effective_excluded_tool_names
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext, ToolResult
 from pbi_agent.web.uploads import load_uploaded_image
@@ -145,8 +146,11 @@ class OpenAIProvider(Provider):
         self._instructions = system_prompt
 
     def refresh_tools(self) -> None:
+        excluded_tools = effective_excluded_tool_names(
+            self._settings, self._excluded_tools
+        )
         base_tools = self._tool_catalog.get_openai_tool_definitions(
-            excluded_names=self._excluded_tools
+            excluded_names=excluded_tools
         )
         self._tools = self._chatgpt_backend.serialize_tools(base_tools)
         if self._settings.web_search:

@@ -4,8 +4,8 @@ Uses direct HTTP calls (``urllib.request``) to the Anthropic Messages API.
 Conversation history is managed client-side by maintaining a full
 ``messages`` list that is sent with every request.
 
-All tools (including shell and apply_patch) are registered function tools
-— no provider-specific native tool types.
+Advertised local tools are provider-policy filtered function tools;
+native web-search is appended separately when enabled.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
+from pbi_agent.tools.availability import effective_excluded_tool_names
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
 from pbi_agent.web.uploads import load_uploaded_image
@@ -125,8 +126,11 @@ class AnthropicProvider(Provider):
         self._system_prompt = system_prompt
 
     def refresh_tools(self) -> None:
+        excluded_tools = effective_excluded_tool_names(
+            self._settings, self._excluded_tools
+        )
         self._tools = self._tool_catalog.get_anthropic_tool_definitions(
-            excluded_names=self._excluded_tools
+            excluded_names=excluded_tools
         )
         if self._settings.web_search:
             self._tools.append(_anthropic_web_search_tool(self._settings.model))

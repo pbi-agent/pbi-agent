@@ -613,6 +613,45 @@ def test_openai_provider_can_exclude_sub_agent_tool() -> None:
     }
 
 
+def test_openai_provider_advertises_v4a_tools_only() -> None:
+    provider = OpenAIProvider(_make_settings(web_search=True))
+
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "apply_patch" in tool_names
+    assert "replace_in_file" not in tool_names
+    assert "write_file" not in tool_names
+    assert "read_web_url" in tool_names
+
+
+def test_openai_provider_hides_read_web_url_without_web_search() -> None:
+    provider = OpenAIProvider(_make_settings(web_search=False))
+
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "read_web_url" not in tool_names
+    assert {"type": "web_search"} not in provider._tools
+
+
+def test_chatgpt_provider_advertises_v4a_tools_only() -> None:
+    provider = OpenAIProvider(_make_settings(provider="chatgpt"))
+
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "apply_patch" in tool_names
+    assert "replace_in_file" not in tool_names
+    assert "write_file" not in tool_names
+
+
+def test_openai_provider_policy_exclusions_survive_set_excluded_tools() -> None:
+    provider = OpenAIProvider(_make_settings())
+
+    provider.set_excluded_tools({"ask_user"})
+
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "ask_user" not in tool_names
+    assert "apply_patch" in tool_names
+    assert "replace_in_file" not in tool_names
+    assert "write_file" not in tool_names
+
+
 def test_openai_provider_uses_custom_tool_catalog() -> None:
     catalog = ToolCatalog.from_builtin_registry().merged(
         [
