@@ -57,6 +57,7 @@ function renderPanel(route = "/board") {
 
 describe("AppSessionsContextPanel", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     mocks.fetchSessions.mockResolvedValue([makeSession()]);
     mocks.updateSession.mockResolvedValue(makeSession({ title: "Renamed" }));
     mocks.deleteSession.mockResolvedValue(undefined);

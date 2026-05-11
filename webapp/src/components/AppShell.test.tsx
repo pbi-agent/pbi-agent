@@ -142,6 +142,7 @@ function makeConfigBootstrap(
 
 describe("AppShell", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     vi.mocked(fetchBootstrap).mockResolvedValue(makeBootstrap());
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     act(() => {
@@ -184,6 +185,18 @@ describe("AppShell", () => {
 
     expect(await screen.findByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
+  });
+
+  it("links the Sessions nav item back to the last opened session", async () => {
+    window.localStorage.setItem("pbi-agent.last-opened-session-id", "session-1");
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    expect(await screen.findByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute(
+      "href",
+      "/sessions/session-1",
+    );
   });
 
   it("places the workspace badge in the sidebar header", async () => {

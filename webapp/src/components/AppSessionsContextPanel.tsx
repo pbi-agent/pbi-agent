@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteSession, fetchSessions, updateSession } from "../api";
+import { forgetLastOpenedSessionId } from "../hooks/useLastOpenedSession";
 import type { SessionDetailPayload, SessionRecord } from "../types";
 import { DeleteSessionModal } from "./session/DeleteSessionModal";
 import { SessionSidebar } from "./session/SessionSidebar";
@@ -69,6 +70,7 @@ export function AppSessionsContextPanel() {
     if (!pendingDeleteSession) return;
     const deletingActive = pendingDeleteSession.session_id === routeSessionId;
     await deleteSessionMutation.mutateAsync(pendingDeleteSession.session_id);
+    forgetLastOpenedSessionId(pendingDeleteSession.session_id);
     client.setQueryData<SessionRecord[] | undefined>(["sessions"], (sessions) =>
       (sessions ?? []).filter(
         (session) => session.session_id !== pendingDeleteSession.session_id,

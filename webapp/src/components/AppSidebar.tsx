@@ -8,6 +8,7 @@ import {
   SquareKanbanIcon,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useLastOpenedSessionPath } from "../hooks/useLastOpenedSession";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useSidebarStore } from "../hooks/useSidebar";
 import { AppSessionsContextPanel } from "./AppSessionsContextPanel";
@@ -179,25 +180,39 @@ function AppSidebarHead() {
 }
 
 function AppSidebarNav({ collapsed }: { collapsed: boolean }) {
+  const lastOpenedSessionPath = useLastOpenedSessionPath();
   return (
     <nav
       className={cn("app-sidebar__nav", collapsed && "app-sidebar__nav--collapsed")}
       aria-label="Primary navigation"
     >
       {appNavItems.map((item) => (
-        <SidebarNavLink key={item.to} item={item} collapsed={collapsed} />
+        <SidebarNavLink
+          key={item.to}
+          item={item}
+          collapsed={collapsed}
+          targetPath={item.to === "/sessions" ? lastOpenedSessionPath : item.to}
+        />
       ))}
     </nav>
   );
 }
 
-function SidebarNavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function SidebarNavLink({
+  item,
+  collapsed,
+  targetPath,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  targetPath: string;
+}) {
   const Icon = item.icon;
   const { pathname } = useLocation();
   const isActive = isNavItemActive(pathname, item.to);
   const link = (
     <NavLink
-      to={item.to}
+      to={targetPath}
       className={cn(
         "app-sidebar__nav-item",
         collapsed && "app-sidebar__nav-item--collapsed",

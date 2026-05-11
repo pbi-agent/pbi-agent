@@ -1,6 +1,6 @@
-# Reduce topbar header height & keep sidebar/topbar aligned
+# Keep last opened session when returning to Sessions
 
-- [X] Drop `--topbar-height` from `56px` to `48px` in `webapp/src/styles/tokens.css`.
-- [X] Drop `--sidebar-width-collapsed` to `48px` so the collapsed sidebar head stays a square that matches the topbar height.
-- [X] Verify 40 px toggle + 32 px controls + 28 px workspace badge still center inside the 48 px head.
-- [X] `bun run lint`, `bun run typecheck`, `bun run test:web`, `bun run web:build`.
+- [X] Inspect frontend routes and sidebar session navigation.
+- [X] Implement last-opened session target for Sessions tab.
+- [X] Add/update UI tests.
+- [X] Run focused validation.
