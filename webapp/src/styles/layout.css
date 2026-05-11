@@ -47,15 +47,19 @@
   align-items: stretch;
 }
 
-/* Header — logo + centered workspace + collapse toggle */
+/* Header — logo + centered workspace + collapse toggle.
+ * Uses a fixed height (not min-height) so its bottom border lines up pixel-
+ * perfectly with the session topbar's bottom border on the right pane. */
 .app-sidebar__head {
   display: grid;
   grid-template-columns: var(--app-sidebar-action-size) minmax(0, 1fr) var(--app-sidebar-action-size);
   align-items: center;
   column-gap: var(--sp-2);
-  min-height: var(--topbar-height);
-  padding: var(--sp-2) var(--sp-3);
+  block-size: var(--topbar-height);
+  min-block-size: var(--topbar-height);
+  padding: 0 var(--sp-3);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .app-sidebar--collapsed .app-sidebar__head {
@@ -160,11 +164,28 @@
   max-width: 100%;
   min-width: 0;
   justify-content: flex-start;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 1.75rem;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--muted) 65%, transparent);
+  color: var(--muted-foreground);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
   line-height: var(--leading-normal);
-  padding: var(--sp-2);
   overflow: hidden;
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.app-sidebar__workspace-badge:hover,
+.app-sidebar__workspace-badge:focus-visible {
+  background: color-mix(in srgb, var(--muted) 100%, transparent);
+  color: var(--foreground);
 }
 
 .app-sidebar__workspace-badge-text {

@@ -1,8 +1,7 @@
-# Sidebar UX refactor
+# Sidebar/topbar header bottom-border alignment
 
-- [X] Create global `AppSessionsContextPanel` (sessions list + delete modal + handlers).
-- [X] Make `AppSidebarLayout` default the sessions panel as its context slot.
-- [X] Remove duplicate session-list state/JSX from `SessionPage`.
-- [X] CSS polish: align sidebar typography, spacing, and section header with the rest of the nav.
-- [X] Tests: add `AppSessionsContextPanel.test.tsx`. Existing suites untouched.
-- [X] `bun run test:web`, `bun run lint`, `bun run typecheck`, `bun run web:build`.
+- [X] Lock `.app-sidebar__head` to `block-size: var(--topbar-height)` with `padding-block: 0`, keep grid.
+- [X] Lock `.session-topbar` to `block-size: var(--topbar-height)` with `padding-block: 0`, keep flex.
+- [X] Keep `min-block-size` as a safety net on both so a flex shell can't collapse them under content.
+- [X] Update responsive `@media (max-width: 768px)` rule to use `block-size: auto; min-block-size: 0` so the stacked mobile topbar still expands.
+- [X] `bun run lint`, `bun run typecheck`, `bun run test:web`, `bun run web:build`.

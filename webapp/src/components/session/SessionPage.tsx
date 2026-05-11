@@ -1298,7 +1298,7 @@ function ProfileSelector({
           type="button"
           variant="outline"
           size="sm"
-          className="profile-selector__trigger"
+          className="session-topbar-control profile-selector__trigger"
           disabled={disabled}
           aria-label={`Model profile: ${label}`}
         >
