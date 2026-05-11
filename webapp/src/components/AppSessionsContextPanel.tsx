@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteSession, fetchSessions, updateSession } from "../api";
 import { forgetLastOpenedSessionId } from "../hooks/useLastOpenedSession";
+import { useSidebarStore } from "../hooks/useSidebar";
 import type { SessionDetailPayload, SessionRecord } from "../types";
 import { DeleteSessionModal } from "./session/DeleteSessionModal";
 import { SessionSidebar } from "./session/SessionSidebar";
@@ -20,6 +21,7 @@ export function AppSessionsContextPanel() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const { sessionId: routeSessionId } = useParams<{ sessionId?: string }>();
+  const closeSidebar = useSidebarStore((state) => state.close);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
 
   const sessionsQuery = useQuery({
@@ -53,6 +55,7 @@ export function AppSessionsContextPanel() {
 
   const handleNewSession = () => {
     void navigate("/sessions");
+    closeSidebar();
   };
 
   const handleResumeSession = (sessionId: string) => {
