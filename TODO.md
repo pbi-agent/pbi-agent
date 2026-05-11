@@ -1,9 +1,6 @@
 # TODO
 
-[>] Orchestrate chat input history shortcut task
-[X] Plan via planner sub-agent
-[X] Execute via worker sub-agent
-[X] Review/fix loop
-[X] Re-review after final validation
-[X] Confidence gate
-[X] Commit if safe
+[X] Identify current/released sandbox Docker image
+[X] Build edited sandbox image
+[X] Compare image sizes and report delta
+[X] Update task memory

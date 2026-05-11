@@ -95,3 +95,8 @@
 - Implemented frontend chat input history recall: SessionPage now passes main-session non-empty user messages to Composer; Composer handles ArrowUp/ArrowDown history browsing with draft restore and completion priority. Validation: focused Composer/SessionPage Vitest, lint, typecheck, and git diff check passed.
 
 - Fixed Composer history review finding: inputHistory changes while browsing now restore the saved draft and reset history state, with Composer regression coverage. Validation: focused Composer Vitest, lint, and typecheck passed.
+
+## 2026-05-11
+- Built edited sandbox image as `pbi-agent-sandbox:size-test` with `PBI_AGENT_VERSION=0.6.0` and compared to running/released `pbi-agent-sandbox:0.6.0`: Docker image listing grew from 730MB to 1.87GB (delta ~1.14GB); docker-save/inspect compressed bytes grew from 174,354,432 to 481,106,432 (delta ~306.8MB). Validation: image build passed and tool versions verified.
+- Added fixed-version uv 0.11.13 and bun 1.3.13 installs to sandbox Dockerfile using the official installer scripts as the pbi user, with UV_INSTALL_DIR/BUN_INSTALL env and version checks. Validation: git diff --check passed; Alpine 3.22 docker smoke test verified `uv --version` and `bun --version` (with runtime libstdc++ package present).
+- Updated sandbox Dockerfile Rust support: runtime APKs now include rust/cargo/rustfmt plus build-base/musl-dev/openssl-dev/pkgconf prerequisites, and container env creates CARGO_HOME/RUSTUP_HOME. Validation: git diff --check and Alpine 3.22 docker package/tool smoke test (`rustc`, `cargo`, `rustfmt`, `cargo fmt`) passed.

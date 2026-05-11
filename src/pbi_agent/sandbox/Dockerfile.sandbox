@@ -4,7 +4,7 @@ ARG PYTHON_VERSION=3.12.12
 FROM python:${PYTHON_VERSION}-alpine3.22
 
 ARG PBI_AGENT_VERSION
-ARG RUNTIME_APK="bash ca-certificates curl git github-cli libstdc++ patch ripgrep unzip nodejs npm"
+ARG RUNTIME_APK="bash build-base ca-certificates cargo curl git github-cli libstdc++ musl-dev nodejs npm openssl-dev patch pkgconf ripgrep rust rustfmt unzip"
 ARG EXTRA_APK=""
 ARG FLEXIBLE_SYSTEM_INSTALL=0
 ARG FLEX_APK="doas"
@@ -18,6 +18,10 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     XDG_DATA_HOME="/home/pbi/.local/share" \
     XDG_STATE_HOME="/home/pbi/.local/state" \
     XDG_CACHE_HOME="/home/pbi/.cache" \
+    BUN_INSTALL="/home/pbi/.bun" \
+    CARGO_HOME="/home/pbi/.cargo" \
+    RUSTUP_HOME="/home/pbi/.rustup" \
+    UV_INSTALL_DIR="/home/pbi/.local/bin" \
     PBI_AGENT_SHELL_BOOTSTRAP="/usr/local/share/pbi-agent/sandbox-shell-env" \
     PBI_AGENT_SHELL_EXECUTABLE="/usr/local/bin/pbi-agent-shell" \
     PATH="/home/pbi/.local/bin:/home/pbi/bin:/home/pbi/.bun/bin:/home/pbi/.cargo/bin:/home/pbi/.local/share/pnpm:${PATH}"
@@ -39,11 +43,14 @@ fi
 install -d -o pbi -g pbi \
     /workspace \
     "${HOME}" \
+    "${HOME}/.bun" \
     "${HOME}/.cache" \
     "${HOME}/.config" \
+    "${HOME}/.cargo" \
     "${HOME}/.local/bin" \
     "${HOME}/.local/share" \
     "${HOME}/.local/state" \
+    "${HOME}/.rustup" \
     "${HOME}/bin"
 install -d -m 0755 /usr/local/share/pbi-agent
 
@@ -130,6 +137,11 @@ fi
 unset pbi_bootstrap
 PROFILE
 cp "${HOME}/.profile" "${HOME}/.bashrc"
+
+su pbi -c 'set -o pipefail; export UV_INSTALL_DIR="$HOME/.local/bin"; curl -LsSf https://astral.sh/uv/0.11.13/install.sh | sh'
+su pbi -c 'set -o pipefail; export BUN_INSTALL="$HOME/.bun"; curl -fsSL https://bun.com/install | bash -s "bun-v1.3.13"'
+su pbi -c '"$HOME/.local/bin/uv" --version'
+su pbi -c '"$HOME/.bun/bin/bun" --version'
 
 cat > /usr/local/bin/pbi-agent-sandbox-entrypoint <<'ENTRYPOINT'
 #!/bin/bash
