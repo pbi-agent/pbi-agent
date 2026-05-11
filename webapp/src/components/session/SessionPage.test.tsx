@@ -576,7 +576,7 @@ describe("SessionPage", () => {
     const sidebar = screen.getByRole("complementary", { name: "Application sidebar" });
 
     expect(workspaceLabel.closest(".session-topbar__workspace")).toBeInTheDocument();
-    expect(workspaceLabel.closest(".app-sidebar__workspace-badge")).toBeInTheDocument();
+    expect(workspaceLabel.closest('[data-variant="outline"]')).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(within(sidebar).queryByText("workspace/demo")).not.toBeInTheDocument();
   });
@@ -680,7 +680,7 @@ describe("SessionPage", () => {
     const workspaceLabel = await within(topbar).findByText("Sandbox · ada/project");
     expect(within(topbar).queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
 
-    const workspaceBadge = workspaceLabel.closest(".app-sidebar__workspace-badge") as HTMLElement;
+    const workspaceBadge = workspaceLabel.closest('[data-variant="outline"]') as HTMLElement;
     await user.hover(workspaceBadge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("/Users/ada/project");
   });

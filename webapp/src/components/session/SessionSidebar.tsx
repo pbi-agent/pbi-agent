@@ -212,7 +212,7 @@ export function SessionSidebar({
                           <MoreHorizontalIcon />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="session-card__menu">
+<DropdownMenuContent align="end">
                         <DropdownMenuGroup>
                           <DropdownMenuItem
                             className="session-card__menu-item"

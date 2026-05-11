@@ -117,7 +117,7 @@ function CandidateCard({
           {candidate.description || "No description provided."}
         </p>
         {candidate.subpath ? (
-          <Badge variant="secondary" className="skill-candidate__subpath">
+          <Badge variant="secondary">
             {candidate.subpath}
           </Badge>
         ) : null}

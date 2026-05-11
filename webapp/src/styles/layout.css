@@ -158,48 +158,6 @@
   overflow: hidden;
 }
 
-.app-sidebar__workspace-badge {
-  flex: 0 1 auto;
-  width: auto;
-  max-width: 100%;
-  min-width: 0;
-  justify-content: flex-start;
-  align-items: center;
-  gap: var(--sp-1);
-  height: 1.75rem;
-  padding: 0 var(--sp-2);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--muted) 65%, transparent);
-  color: var(--muted-foreground);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  line-height: var(--leading-normal);
-  overflow: hidden;
-  transition:
-    background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
-}
-
-.app-sidebar__workspace-badge:hover,
-.app-sidebar__workspace-badge:focus-visible {
-  background: color-mix(in srgb, var(--muted) 100%, transparent);
-  color: var(--foreground);
-}
-
-.app-sidebar__workspace-badge-text {
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: rtl;
-  text-align: left;
-  unicode-bidi: isolate;
-}
-
 /* Primary navigation */
 .app-sidebar__nav {
   display: flex;

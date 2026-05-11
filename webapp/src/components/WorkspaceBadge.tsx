@@ -37,11 +37,9 @@ export function WorkspaceBadge({
   const workspaceBadge = (
     <Badge
       variant="outline"
-      className={cn("app-sidebar__workspace-badge", className)}
+      className={cn("max-w-full min-w-0 justify-start overflow-hidden font-mono", className)}
     >
-      <span className={cn("app-sidebar__workspace-badge-text", textClassName)}>
-        {workspaceBadgeLabel}
-      </span>
+      <span className={cn("min-w-0 truncate", textClassName)}>{workspaceBadgeLabel}</span>
     </Badge>
   );
 

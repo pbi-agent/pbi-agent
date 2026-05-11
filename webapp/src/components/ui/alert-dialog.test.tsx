@@ -26,13 +26,10 @@ function DestructiveAlertDialog() {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="delete-confirm-modal__cancel" variant="outline">
+          <AlertDialogCancel variant="outline">
             Cancel
           </AlertDialogCancel>
-          <AlertDialogAction
-            className="delete-confirm-modal__confirm"
-            variant="destructive"
-          >
+          <AlertDialogAction variant="destructive">
             Delete
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -73,7 +70,6 @@ describe("AlertDialog", () => {
     expect(action).toHaveClass(
       "bg-destructive/10",
       "text-destructive",
-      "delete-confirm-modal__confirm",
     );
   });
 });

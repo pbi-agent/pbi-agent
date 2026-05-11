@@ -616,7 +616,10 @@ function SubAgentCard({
     >
       <BotIcon />
       <span className="working-items__sub-agent-main">{name}</span>
-      <Badge variant="secondary" className={`working-items__sub-agent-status status-pill status-pill--${statusModifier}`}>
+      <Badge
+        variant={statusModifier === "idle" ? "secondary" : statusModifier}
+        className="working-items__sub-agent-status"
+      >
         {status}
       </Badge>
     </button>

@@ -1,26 +1,15 @@
 import { Badge } from "../ui/badge";
 
-export function StatusPill({
-  status,
-}: {
-  status: string;
-}) {
-  const isRunning = [
-    "running",
-    "started",
-    "starting",
-    "waiting_for_input",
-  ].includes(status);
-  const isComplete = ["completed", "interrupted", "ended"].includes(status);
-  const modifier =
-    isRunning ? "running"
-    : isComplete ? "completed"
-    : status === "failed" ? "failed"
-    : "idle";
+const runningStatuses = new Set(["running", "started", "starting", "waiting_for_input"]);
+const completedStatuses = new Set(["completed", "interrupted", "ended"]);
 
-  return (
-    <Badge variant="secondary" className={`status-pill status-pill--${modifier}`}>
-      {status}
-    </Badge>
-  );
+function statusVariant(status: string): "secondary" | "running" | "completed" | "failed" {
+  if (runningStatuses.has(status)) return "running";
+  if (completedStatuses.has(status)) return "completed";
+  if (status === "failed") return "failed";
+  return "secondary";
+}
+
+export function StatusPill({ status }: { status: string }) {
+  return <Badge variant={statusVariant(status)}>{status}</Badge>;
 }

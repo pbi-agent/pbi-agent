@@ -1,16 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { BoardStage, CommandView, ModelProfileView } from "../../types";
-import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+import { FormDialog } from "../ui/form-dialog";
 import {
   Field,
   FieldDescription,
@@ -136,21 +129,21 @@ export function BoardStageEditorModal({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => {
-      if (!open && !isSaving) onClose();
-    }}>
-      <DialogContent className="modal-card--board-editor">
-        <DialogHeader>
-          <DialogTitle>Board Stages</DialogTitle>
-        </DialogHeader>
-
-        <form
-          className="task-form"
-          onSubmit={(event) => {
-            void handleSubmit(event);
-          }}
-        >
-          <div className="board-stage-editor">
+    <FormDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isSaving) onClose();
+      }}
+      title="Board Stages"
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      isPending={isSaving}
+      error={error}
+      primaryAction={{ label: "Save Board", pendingLabel: "Saving..." }}
+      size="wide"
+    >
+      <div className="board-stage-editor">
             {items.map((item, index) => {
               const fixedStage = isFixedStage(item.id);
               const fixedStageLabel = item.id === BACKLOG_STAGE_ID
@@ -251,7 +244,7 @@ export function BoardStageEditorModal({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="task-form__action-button board-stage-editor__remove-button"
+className="board-stage-editor__remove-button"
                   onClick={() => removeStage(index)}
                   disabled={isSaving || items.length === 1 || fixedStage}
                 >
@@ -263,34 +256,15 @@ export function BoardStageEditorModal({
             })}
           </div>
 
-          {error ? (
-            <Alert variant="destructive" className="settings-error-banner">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <DialogFooter className="app-action-row app-action-row--between board-stage-editor__actions">
-            <Button
-              type="button"
-              variant="outline"
-              className="task-form__action-button"
-              onClick={addStage}
-              disabled={isSaving}
-            >
-              <PlusIcon data-icon="inline-start" />
-              Add Stage
-            </Button>
-            <Button
-              type="submit"
-              variant="default"
-              className="task-form__action-button"
-              disabled={isSaving}
-            >
-              {isSaving ? "Saving..." : "Save Board"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={addStage}
+        disabled={isSaving}
+      >
+        <PlusIcon data-icon="inline-start" />
+        Add Stage
+      </Button>
+    </FormDialog>
   );
 }

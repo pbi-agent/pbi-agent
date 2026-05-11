@@ -71,7 +71,7 @@ function AgentCard({
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
         {agent.model_profile_id ? (
-          <Badge variant="outline" className="settings-item__tag">
+          <Badge variant="outline">
             Profile: {agent.model_profile_id}
           </Badge>
         ) : null}
@@ -123,12 +123,12 @@ function CandidateCard({
         </p>
         <div className="command-candidate__badges">
           {candidate.model_profile_id ? (
-            <Badge variant="outline" className="skill-candidate__subpath">
+            <Badge variant="outline">
               Profile: {candidate.model_profile_id}
             </Badge>
           ) : null}
           {candidate.subpath ? (
-            <Badge variant="secondary" className="skill-candidate__subpath">
+            <Badge variant="secondary">
               {candidate.subpath}
             </Badge>
           ) : null}

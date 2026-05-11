@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ActivityIcon,
@@ -19,13 +20,7 @@ import type {
 } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+import { FormDialog } from "../ui/form-dialog";
 import { Skeleton } from "../ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -43,13 +38,11 @@ const STATUS_LABEL: Record<StatusKey, string> = {
   unknown: "Unknown",
 };
 
-const STATUS_BADGE_CLASSES: Record<StatusKey, string> = {
-  ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  warning:
-    "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  exhausted:
-    "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  unknown: "border-border bg-muted text-muted-foreground",
+const STATUS_BADGE_VARIANTS: Record<StatusKey, ComponentProps<typeof Badge>["variant"]> = {
+  ok: "success",
+  warning: "warning",
+  exhausted: "failed",
+  unknown: "secondary",
 };
 
 function getProgressTone(percent: number | null): {
@@ -172,14 +165,25 @@ export function ProviderUsageLimitsDialog({ provider, onClose }: Props) {
     staleTime: 30_000,
   });
 
+  const accountLabel = usageQuery.data?.account_label ?? provider.auth_status.email ?? null;
+
   return (
-    <Dialog
+    <FormDialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      title="Usage & limits"
+      description={
+        <span className="truncate">
+          <span className="font-medium text-foreground">{provider.name}</span>
+          {accountLabel ? <span> · {accountLabel}</span> : null}
+        </span>
+      }
+      icon={<GaugeIcon className="size-5" />}
+      size="lg"
     >
-      <DialogContent className="provider-usage-dialog flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <div className="provider-usage-dialog">
         <UsageDialogHeader
           provider={provider}
           usage={usageQuery.data}
@@ -188,7 +192,7 @@ export function ProviderUsageLimitsDialog({ provider, onClose }: Props) {
           }}
           isFetching={usageQuery.isFetching}
         />
-        <div className="provider-usage-dialog__scroll flex-1 overflow-y-auto">
+        <div className="provider-usage-dialog__scroll">
           {usageQuery.isLoading ? (
             <UsageLoadingState />
           ) : usageQuery.isError ? (
@@ -208,8 +212,8 @@ export function ProviderUsageLimitsDialog({ provider, onClose }: Props) {
             </div>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FormDialog>
   );
 }
 
@@ -225,50 +229,27 @@ function UsageDialogHeader({
   isFetching: boolean;
 }) {
   const planType = usage?.plan_type ?? provider.auth_status.plan_type ?? null;
-  const accountLabel =
-    usage?.account_label ?? provider.auth_status.email ?? null;
   const fetchedAtText = formatFetchedAt(usage?.fetched_at);
 
   return (
-    <DialogHeader className="provider-usage-dialog__header gap-0 border-b border-border/60">
-      <div className="provider-usage-dialog__header-top">
-        <div className="provider-usage-dialog__header-identity">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <GaugeIcon className="size-5" />
-          </div>
-          <div className="provider-usage-dialog__header-content min-w-0">
-            <DialogTitle className="text-base leading-tight">
-              Usage &amp; limits
-            </DialogTitle>
-            <DialogDescription className="mt-1 truncate">
-              <span className="font-medium text-foreground">
-                {provider.name}
-              </span>
-              {accountLabel ? (
-                <span className="text-muted-foreground"> · {accountLabel}</span>
-              ) : null}
-            </DialogDescription>
-          </div>
-        </div>
-        {planType ? (
-          <Badge
-            variant="outline"
-            className="provider-usage-dialog__plan-badge border-primary/30 bg-primary/5 capitalize text-primary"
-          >
-            <SparklesIcon className="size-3" />
-            {planType}
-          </Badge>
-        ) : null}
-      </div>
+    <div className="provider-usage-dialog__header">
       <div className="provider-usage-dialog__meta flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        {fetchedAtText ? (
-          <span className="inline-flex min-w-0 items-center gap-1.5">
-            <CalendarClockIcon className="size-3.5 shrink-0" />
-            <span className="truncate">Updated {fetchedAtText}</span>
-          </span>
-        ) : (
-          <span aria-hidden="true" />
-        )}
+        <span className="inline-flex min-w-0 items-center gap-2">
+          {fetchedAtText ? (
+            <>
+              <CalendarClockIcon className="size-3.5 shrink-0" />
+              <span className="truncate">Updated {fetchedAtText}</span>
+            </>
+          ) : (
+            <span aria-hidden="true" />
+          )}
+          {planType ? (
+            <Badge variant="info" className="provider-usage-dialog__plan-badge capitalize">
+              <SparklesIcon className="size-3" />
+              {planType}
+            </Badge>
+          ) : null}
+        </span>
         <Button
           type="button"
           variant="outline"
@@ -285,7 +266,7 @@ function UsageDialogHeader({
           Refresh
         </Button>
       </div>
-    </DialogHeader>
+    </div>
   );
 }
 
@@ -323,11 +304,8 @@ function BucketCard({ bucket }: { bucket: UsageLimitBucket }) {
           </h3>
         </div>
         <Badge
-          variant="outline"
-          className={cn(
-            "provider-usage-bucket__status-badge uppercase tracking-wide",
-            STATUS_BADGE_CLASSES[bucket.status],
-          )}
+          variant={STATUS_BADGE_VARIANTS[bucket.status]}
+          className="provider-usage-bucket__status-badge uppercase tracking-wide"
         >
           {STATUS_LABEL[bucket.status]}
         </Badge>

@@ -13,13 +13,7 @@ import type {
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+import { FormDialog } from "../ui/form-dialog";
 import { Field, FieldLabel } from "../ui/field";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 
@@ -150,16 +144,14 @@ export function ProviderAuthFlowModal({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => {
-      if (!open && !isStarting) onClose();
-    }}>
-      <DialogContent className="task-form-dialog">
-        <DialogHeader>
-          <DialogTitle>Connect {authModeLabel}</DialogTitle>
-        </DialogHeader>
-
-        <div className="task-form provider-auth-flow-modal">
-         <div className="task-form__body">
+    <FormDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isStarting) onClose();
+      }}
+      title={`Connect ${authModeLabel}`}
+    >
+      <div className="provider-auth-flow-modal">
           <p className="sr-only">
             Authorize {provider.name} with your {accountLabel}.
           </p>
@@ -215,23 +207,22 @@ export function ProviderAuthFlowModal({
           {flow && (
             <div className="provider-auth-flow-panel">
               <div className="settings-item__meta">
-                <Badge variant="secondary" className="settings-item__tag">
+                <Badge variant="secondary">
                   {flow.method === "browser" ? "Browser flow" : "Device code"}
                 </Badge>
                 <Badge
-                  variant="secondary"
-                  className={`settings-item__tag ${
+                  variant={
                     flow.status === "completed"
-                      ? "settings-item__tag--success"
+                      ? "success"
                       : flow.status === "failed"
-                        ? "settings-item__tag--error"
-                        : ""
-                  }`}
+                        ? "destructive"
+                        : "secondary"
+                  }
                 >
                   {flow.status}
                 </Badge>
                 {flow.backend && (
-                  <Badge variant="outline" className="settings-item__tag">{flow.backend}</Badge>
+                  <Badge variant="outline">{flow.backend}</Badge>
                 )}
               </div>
 
@@ -366,10 +357,7 @@ export function ProviderAuthFlowModal({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-         </div>
-        </div>
-        <DialogFooter className="sr-only" />
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FormDialog>
   );
 }

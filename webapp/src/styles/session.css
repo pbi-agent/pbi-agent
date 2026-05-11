@@ -234,10 +234,6 @@
   color: var(--color-text);
 }
 
-.session-card__menu {
-  min-width: 152px;
-}
-
 .session-card__menu-item {
   display: flex;
   align-items: center;
@@ -372,9 +368,6 @@
   overflow: hidden;
 }
 
-.session-topbar__workspace .app-sidebar__workspace-badge {
-  max-width: min(24rem, 100%);
-}
 
 /* Generic action control inside the topbar.
  * Borrows the sidebar nav-item visual language: muted text, transparent
@@ -469,13 +462,6 @@
   text-overflow: ellipsis;
   text-align: left;
   white-space: nowrap;
-}
-
-.profile-selector__dropdown {
-  width: max-content;
-  min-width: max(14rem, var(--radix-dropdown-menu-trigger-width));
-  max-width: min(24rem, calc(100vw - var(--sp-4)));
-  overflow-x: visible;
 }
 
 .profile-selector__option {
@@ -1954,44 +1940,6 @@
   gap: var(--sp-2);
 }
 
-.tool-result-card__status,
-.tool-result-card__tool-name,
-.tool-result-card__call-id {
-  font-family: var(--font-mono);
-}
-
-.tool-result-card__status,
-.tool-result-card__tool-name {
-  min-height: 1.625rem;
-  padding-block: var(--sp-1);
-  padding-inline: var(--sp-2);
-  gap: var(--sp-1);
-  line-height: var(--leading-normal);
-}
-
-.tool-result-card__status-spinner {
-  width: 0.75rem;
-  height: 0.75rem;
-  border: 2px solid currentColor;
-  border-top-color: transparent;
-  border-radius: var(--radius-pill);
-  animation: spin 0.8s linear infinite;
-}
-
-.tool-result-card__content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  padding: var(--sp-3);
-}
-
-.tool-result-card__call-id {
-  align-self: flex-end;
-  max-width: 16rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .tool-result__section {
   overflow: hidden;
   border: 1px solid var(--color-border-subtle);
@@ -3247,9 +3195,6 @@
     max-width: 100%;
   }
 
-  .session-topbar__workspace .app-sidebar__workspace-badge {
-    max-width: 100%;
-  }
 
   .profile-selector {
     width: 100%;
@@ -3404,16 +3349,6 @@
   white-space: nowrap;
 }
 
-.run-card__badge {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-.run-card__badge--sub {
-  background: var(--color-info-muted);
-  color: var(--color-info);
-}
-
 .run-card__meta {
   display: flex;
   align-items: center;
@@ -3489,45 +3424,6 @@
 }
 
 /* ── Wide Modal (Run Detail) ── */
-
-.modal-card--wide {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: min(960px, calc(100vw - 16px));
-  max-width: none;
-  max-height: calc(100dvh - 16px);
-  padding: 0;
-  overflow: hidden;
-  border-color: color-mix(in srgb, var(--color-border) 82%, transparent);
-  background: color-mix(in srgb, var(--color-surface-0) 88%, transparent);
-  backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-lg);
-}
-
-.modal-card--wide [data-slot="dialog-header"] {
-  position: relative;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  flex: 0 0 auto;
-  padding: var(--sp-5) var(--sp-6);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.modal-card--wide [data-slot="dialog-title"] {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-semi);
-  line-height: var(--leading-normal);
-  letter-spacing: -0.01em;
-}
-
-.modal-card--wide .modal-card__close {
-  position: static;
-  flex: 0 0 auto;
-}
 
 /* ── Run Detail ── */
 
@@ -3878,24 +3774,6 @@
   min-width: var(--sp-4);
 }
 
-.event-row__badge {
-  min-height: 1.5rem;
-  padding-inline: var(--sp-2);
-  font-size: var(--text-xs);
-  font-family: var(--font-mono);
-  line-height: var(--leading-normal);
-}
-
-.event-row__badge--ok {
-  background: var(--color-success-muted);
-  color: var(--color-success);
-}
-
-.event-row__badge--error {
-  background: var(--color-error-muted);
-  color: var(--color-error);
-}
-
 .event-row__duration,
 .event-row__tokens {
   flex: 0 0 auto;
@@ -3985,36 +3863,4 @@
   max-height: 300px;
   overflow-y: auto;
   margin: 0;
-}
-
-/* ── Status Pills ── */
-
-.status-pill {
-  display: inline-block;
-  padding: 1px var(--sp-2);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  border-radius: var(--radius-pill);
-  text-transform: capitalize;
-  white-space: nowrap;
-}
-
-.status-pill--completed {
-  background: var(--color-success-muted);
-  color: var(--color-success);
-}
-
-.status-pill--failed {
-  background: var(--color-error-muted);
-  color: var(--color-error);
-}
-
-.status-pill--running {
-  background: var(--color-info-muted);
-  color: var(--color-info);
-}
-
-.status-pill--idle {
-  background: var(--color-surface-3);
-  color: var(--color-text-tertiary);
 }

@@ -35,23 +35,6 @@
   font-weight: var(--weight-semi);
 }
 
-.modal-card__close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  font-size: var(--text-lg);
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast), color var(--duration-fast);
-}
-
-.modal-card__close:hover {
-  background: var(--color-surface-2);
-  color: var(--color-text);
-}
-
 .app-close-icon-button {
   color: var(--color-text-tertiary);
   transition:
@@ -202,46 +185,6 @@
   padding: var(--sp-4) var(--sp-6);
 }
 
-.task-form__action-button {
-  min-width: 4.5rem;
-  padding-inline: var(--sp-4);
-  margin: 0;
-  vertical-align: middle;
-  transition:
-    background var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
-}
-
-/* Primary action (Save Changes / Add Provider / Add Profile) */
-.task-form__action-button[data-variant="default"] {
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-  border-color: transparent;
-}
-
-.task-form__action-button[data-variant="default"]:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-}
-
-.task-form__action-button[data-variant="default"]:disabled {
-  background: var(--color-surface-3);
-  color: var(--color-text-tertiary);
-}
-
-/* Secondary action (Cancel) */
-.task-form__action-button[data-variant="outline"] {
-  background: transparent;
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-
-.task-form__action-button[data-variant="outline"]:hover:not(:disabled) {
-  background: var(--color-surface-3);
-  border-color: var(--color-border-focus);
-  color: var(--color-text);
-}
-
 @media (max-width: 40rem) {
   .task-form-dialog {
     width: min(35rem, calc(100dvw - 1rem));
@@ -252,63 +195,6 @@
     margin: 0 calc(var(--sp-4) * -1) calc(var(--sp-4) * -1);
     padding: var(--sp-4);
   }
-}
-
-.task-form__submit {
-  width: 100%;
-  padding: var(--sp-3);
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semi);
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast);
-  margin-top: var(--sp-2);
-}
-
-.task-form__submit:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-}
-
-.task-form__submit:disabled {
-  background: var(--color-surface-3);
-  color: var(--color-text-tertiary);
-}
-
-.delete-confirm-modal__cancel,
-.delete-confirm-modal__confirm {
-  transition:
-    background var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
-}
-
-.delete-confirm-modal__cancel {
-  background: transparent;
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-
-.delete-confirm-modal__cancel:hover:not(:disabled) {
-  background: var(--color-surface-3);
-  border-color: var(--color-border-focus);
-  color: var(--color-text);
-}
-
-.delete-confirm-modal__confirm {
-  background: var(--color-error-muted);
-  color: var(--color-error);
-  border-color: transparent;
-}
-
-.delete-confirm-modal__confirm:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-error) 24%, transparent);
-  color: var(--color-error);
-}
-
-.delete-confirm-modal__confirm:disabled {
-  background: var(--color-surface-3);
-  color: var(--color-text-tertiary);
 }
 
 .modal-card--confirm {

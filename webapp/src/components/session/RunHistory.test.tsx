@@ -127,6 +127,6 @@ describe("RunHistory", () => {
     await user.click(await screen.findByRole("button", { name: /toggle run history/i }));
 
     const status = await screen.findByText("completed");
-    expect(status).toHaveClass("status-pill--completed");
+    expect(status).toHaveAttribute("data-variant", "completed");
   });
 });

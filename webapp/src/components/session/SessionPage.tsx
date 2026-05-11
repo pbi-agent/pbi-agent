@@ -1309,7 +1309,7 @@ function ProfileSelector({
       </DropdownMenuTrigger>
 
       {modelProfiles.length > 0 ? (
-        <DropdownMenuContent className="profile-selector__dropdown" align="start">
+<DropdownMenuContent className="min-w-64" align="start">
           <DropdownMenuGroup>
             {modelProfiles.map((profile) => {
               const isSelected = profile.id === selectedProfileId;

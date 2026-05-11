@@ -65,11 +65,11 @@ function CommandCard({
         <div className="provider-card__subtitle">{command.path}</div>
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
-        <Badge variant="secondary" className="settings-item__tag command-card__alias">
+        <Badge variant="secondary">
           {command.slash_alias}
         </Badge>
         {command.model_profile_id ? (
-          <Badge variant="outline" className="settings-item__tag">
+          <Badge variant="outline">
             Profile: {command.model_profile_id}
           </Badge>
         ) : null}
@@ -120,16 +120,16 @@ function CandidateCard({
           {candidate.description || `Install ${candidate.slash_alias}.`}
         </p>
         <div className="command-candidate__badges">
-          <Badge variant="secondary" className="skill-candidate__subpath">
+          <Badge variant="secondary">
             {candidate.slash_alias}
           </Badge>
           {candidate.model_profile_id ? (
-            <Badge variant="outline" className="skill-candidate__subpath">
+            <Badge variant="outline">
               Profile: {candidate.model_profile_id}
             </Badge>
           ) : null}
           {candidate.subpath ? (
-            <Badge variant="outline" className="skill-candidate__subpath">
+            <Badge variant="outline">
               {candidate.subpath}
             </Badge>
           ) : null}

@@ -222,7 +222,7 @@ describe("AppShell", () => {
     expect(headerChildren[1]).toHaveClass("app-sidebar__workspace-slot");
     expect(headerChildren[2]).toBe(collapseButton);
 
-    expect(workspaceLabel.closest(".app-sidebar__workspace-badge")).toBeInTheDocument();
+    expect(workspaceLabel.closest('[data-variant="outline"]')).toBeInTheDocument();
     expect(sidebar.querySelector(".app-sidebar__workspace")).toBeNull();
     expect(screen.getByRole("navigation", { name: "Primary navigation" }).previousElementSibling).toBe(
       headerElement,
@@ -294,7 +294,7 @@ describe("AppShell", () => {
     expect(header).toContainElement(workspaceLabel);
     expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
 
-    const workspaceBadge = workspaceLabel.closest(".app-sidebar__workspace-badge") as HTMLElement;
+    const workspaceBadge = workspaceLabel.closest('[data-variant="outline"]') as HTMLElement;
     await user.hover(workspaceBadge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("/Users/ada/project");
   });

@@ -119,12 +119,12 @@ function RunCard({
       onClick={onSelect}
     >
       <div className="run-card__header">
-        <Badge variant="secondary" className={`run-card__status status-pill status-pill--${statusModifier}`}>
+        <Badge variant={statusModifier === "idle" ? "secondary" : statusModifier} className="run-card__status">
           {run.status}
         </Badge>
         <span className="run-card__agent">{agentLabel}</span>
         {run.parent_run_session_id ? (
-          <Badge variant="outline" className="run-card__badge run-card__badge--sub">sub</Badge>
+          <Badge variant="outline">sub</Badge>
         ) : null}
       </div>
       <div className="run-card__meta">

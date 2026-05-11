@@ -102,7 +102,7 @@ describe("RunDetailModal", () => {
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
     const status = await screen.findByText("completed");
-    expect(status).toHaveClass("status-pill--completed");
+    expect(status).toHaveAttribute("data-variant", "completed");
   });
 
   it("renders fatal errors from run detail", async () => {
@@ -126,7 +126,7 @@ describe("RunDetailModal", () => {
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
     const status = await screen.findByText("interrupted");
-    expect(status).toHaveClass("status-pill--completed");
+    expect(status).toHaveAttribute("data-variant", "completed");
     expect(screen.getByText("Session interrupted.")).toBeInTheDocument();
   });
 

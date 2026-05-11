@@ -34,11 +34,9 @@ describe("DeleteConfirmModal", () => {
 
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect(cancel).toHaveAttribute("data-variant", "outline");
-    expect(cancel).toHaveClass("delete-confirm-modal__cancel");
 
     const action = screen.getByRole("button", { name: "Delete" });
     expect(action).toHaveAttribute("data-variant", "destructive");
-    expect(action).toHaveClass("delete-confirm-modal__confirm");
   });
 
   it("disables the confirmation action while delete is pending", async () => {
