@@ -1,6 +1,8 @@
-# TODO
+# Sidebar UX refactor
 
-[X] Add build essentials to sandbox image
-[X] Inspect Dockerfile package list
-[X] Add Alpine build toolchain package
-[X] Validate diff
+- [X] Create global `AppSessionsContextPanel` (sessions list + delete modal + handlers).
+- [X] Make `AppSidebarLayout` default the sessions panel as its context slot.
+- [X] Remove duplicate session-list state/JSX from `SessionPage`.
+- [X] CSS polish: align sidebar typography, spacing, and section header with the rest of the nav.
+- [X] Tests: add `AppSessionsContextPanel.test.tsx`. Existing suites untouched.
+- [X] `bun run test:web`, `bun run lint`, `bun run typecheck`, `bun run web:build`.

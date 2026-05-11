@@ -13,7 +13,6 @@ import { AppSidebarLayout } from "../AppSidebar";
 import {
   ApiError,
   createSession,
-  deleteSession,
   expandSessionInput,
   fetchConfigBootstrap,
   fetchSessionDetail,
@@ -25,7 +24,6 @@ import {
   setActiveModelProfile,
   setSessionProfile,
   submitSessionQuestionResponse,
-  updateSession,
   uploadSavedSessionImages,
 } from "../../api";
 import type {
@@ -33,7 +31,6 @@ import type {
   LiveSession,
   ModelProfileView,
   SessionDetailPayload,
-  SessionRecord,
   TimelineItem,
   LiveSessionSnapshot,
   ProcessingState,
@@ -53,9 +50,7 @@ import {
 } from "../../sessionTimelineProjection";
 import { useSessionEvents } from "../../hooks/useSessionEvents";
 import { ConnectionBadge } from "./ConnectionBadge";
-import { DeleteSessionModal } from "./DeleteSessionModal";
 import { RunHistory } from "./RunHistory";
-import { SessionSidebar } from "./SessionSidebar";
 import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
 import { UserQuestionsPanel } from "./UserQuestionsPanel";
@@ -134,7 +129,6 @@ export function SessionPage({
   }>();
   const isSubAgentRoute = Boolean(routeSessionId && routeSubAgentId);
   const [inputWarnings, setInputWarnings] = useState<string[]>([]);
-  const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
   const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
   const [interactiveMode, setInteractiveMode] = useState(() =>
     window.localStorage.getItem("pbi-agent.interactive-mode") === "true",
@@ -277,29 +271,6 @@ export function SessionPage({
       if (selectedRouteSessionKey) {
         updateRuntimeFromSession(selectedRouteSessionKey, session);
       }
-    },
-  });
-
-  const deleteSessionMutation = useMutation({
-    mutationFn: deleteSession,
-  });
-
-  const updateSessionMutation = useMutation({
-    mutationFn: ({ sessionId, title }: { sessionId: string; title: string }) =>
-      updateSession(sessionId, { title }),
-    onSuccess: (updatedSession) => {
-      client.setQueryData<SessionRecord[] | undefined>(["sessions"], (sessions) =>
-        (sessions ?? []).map((session) =>
-          session.session_id === updatedSession.session_id ? updatedSession : session,
-        ),
-      );
-      client.setQueryData<SessionDetailPayload | undefined>(
-        ["session", updatedSession.session_id],
-        (detail) => detail ? { ...detail, session: updatedSession } : detail,
-      );
-      void client.invalidateQueries({ queryKey: ["sessions"] });
-      void client.invalidateQueries({ queryKey: ["bootstrap"] });
-      void client.invalidateQueries({ queryKey: ["session", updatedSession.session_id] });
     },
   });
 
@@ -666,27 +637,6 @@ export function SessionPage({
     void navigate("/sessions");
   };
 
-  const handleUpdateSessionTitle = async (session: SessionRecord, title: string) => {
-    await updateSessionMutation.mutateAsync({
-      sessionId: session.session_id,
-      title,
-    });
-  };
-
-  const handleDeleteSession = async () => {
-    if (!pendingDeleteSession) return;
-    const deletingActive = pendingDeleteSession.session_id === routeSessionId;
-    await deleteSessionMutation.mutateAsync(pendingDeleteSession.session_id);
-    client.setQueryData<SessionRecord[] | undefined>(["sessions"], (sessions) =>
-      (sessions ?? []).filter((session) => session.session_id !== pendingDeleteSession.session_id),
-    );
-    setPendingDeleteSession(null);
-    await client.invalidateQueries({ queryKey: ["sessions"] });
-    if (deletingActive) {
-      void navigate("/sessions", { replace: true });
-    }
-  };
-
   const handleForkMessage = useCallback((messageId: string) => {
     if (!routeSessionId || isSubAgentRoute) return;
     forkSessionMutation.reset();
@@ -699,7 +649,6 @@ export function SessionPage({
     && !sessionState.sessionEnded
     && !sessionState.inputEnabled,
   );
-  const isDeleteBusy = deleteSessionMutation.isPending || createSessionMutation.isPending;
   const sessionDetailError = routeSessionId ? sessionDetailQuery.error : null;
   const sessionNotFound =
     sessionDetailError instanceof ApiError && sessionDetailError.status === 404;
@@ -758,25 +707,8 @@ export function SessionPage({
     ? selectedSubAgent?.sessionUsage ?? selectedSubAgent?.turnUsage?.usage ?? null
     : sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null;
 
-  const sessionListPanel = (
-    <SessionSidebar
-      sessions={sessionsQuery.data ?? []}
-      isLoading={sessionsQuery.isLoading}
-      activeSessionId={routeSessionId ?? sessionState?.sessionId ?? null}
-      onNewSession={handleNewSession}
-      onResumeSession={(sessionId) => {
-        void navigate(`/sessions/${encodeURIComponent(sessionId)}`);
-      }}
-      onUpdateSession={handleUpdateSessionTitle}
-      onDeleteSession={(session) => {
-        deleteSessionMutation.reset();
-        setPendingDeleteSession(session);
-      }}
-    />
-  );
-
   return (
-    <AppSidebarLayout contextPanel={sessionListPanel}>
+    <AppSidebarLayout>
       <section
         className="session-panel-wrapper"
         data-debug-session-key={selectedRouteSessionKey ?? undefined}
@@ -985,22 +917,6 @@ export function SessionPage({
         )}
       </div>
 
-      {pendingDeleteSession ? (
-        <DeleteSessionModal
-          session={pendingDeleteSession}
-          isDeleting={isDeleteBusy}
-          error={deleteSessionMutation.error?.message ?? null}
-          onConfirm={() => {
-            void handleDeleteSession();
-          }}
-          onClose={() => {
-            if (!isDeleteBusy) {
-              deleteSessionMutation.reset();
-              setPendingDeleteSession(null);
-            }
-          }}
-        />
-      ) : null}
       </section>
     </AppSidebarLayout>
   );

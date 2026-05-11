@@ -10,8 +10,10 @@ import {
 import { NavLink, useLocation } from "react-router-dom";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useSidebarStore } from "../hooks/useSidebar";
+import { AppSessionsContextPanel } from "./AppSessionsContextPanel";
 import { WorkspaceBadge } from "./WorkspaceBadge";
 import { Button } from "./ui/button";
+import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "../lib/utils";
 
@@ -105,6 +107,7 @@ export function AppSidebarLayout({ children, contextPanel }: AppSidebarLayoutPro
 
 function AppSidebar({ contextPanel }: { contextPanel?: ReactNode }) {
   const isOpen = useSidebarStore((state) => state.isOpen);
+  const resolvedContext = contextPanel ?? <AppSessionsContextPanel />;
   return (
     <aside
       id="app-sidebar"
@@ -114,9 +117,10 @@ function AppSidebar({ contextPanel }: { contextPanel?: ReactNode }) {
       <AppSidebarHead />
       <AppSidebarNav collapsed={!isOpen} />
       {isOpen ? (
-        <div className="app-sidebar__context">
-          {contextPanel ?? <div className="app-sidebar__context-spacer" aria-hidden="true" />}
-        </div>
+        <>
+          <Separator className="app-sidebar__divider" />
+          <div className="app-sidebar__context">{resolvedContext}</div>
+        </>
       ) : (
         <div className="app-sidebar__context-spacer" aria-hidden="true" />
       )}

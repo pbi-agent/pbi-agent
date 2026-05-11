@@ -23,6 +23,7 @@
   min-height: 0;
   height: 100%;
   gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-3) 0;
 }
 
 .session-sidebar__header {
@@ -30,22 +31,27 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
-  padding: 0 var(--sp-1);
+  padding: 0 var(--sp-2);
   flex-shrink: 0;
+  min-height: 1.75rem;
 }
 
 .session-sidebar__title {
   font-size: var(--text-xs);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--color-text-tertiary);
+  color: var(--muted-foreground);
   margin: 0;
 }
 
 .session-sidebar__new-button {
+  height: 1.75rem;
+  padding: 0 var(--sp-2);
+  gap: 4px;
   color: var(--muted-foreground);
   font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
   line-height: var(--leading-normal);
   background: transparent;
   box-shadow: none;
@@ -57,6 +63,8 @@
 }
 
 .session-sidebar__new-button svg {
+  width: 0.875rem;
+  height: 0.875rem;
   transition:
     opacity var(--duration-fast) var(--ease),
     transform var(--duration-fast) var(--ease-out);
@@ -78,7 +86,7 @@
 .session-sidebar__list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-1) 0;
+  padding: var(--sp-1) 0 var(--sp-3);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -88,7 +96,7 @@
 .session-sidebar__empty {
   padding: var(--sp-3) var(--sp-2);
   font-size: var(--text-xs);
-  color: var(--color-text-tertiary);
+  color: var(--muted-foreground);
 }
 
 
@@ -96,34 +104,33 @@
 .session-card {
   position: relative;
   border-radius: var(--radius-md);
-  transition: background var(--duration-fast) var(--ease-out);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
   width: 100%;
 }
 
 .session-card:hover {
-  background: var(--color-surface-2);
+  background: var(--muted);
 }
 
 .session-card--active {
-  background: var(--color-accent-muted);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
-.session-card--active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--color-accent);
+.session-card--active:hover {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.session-card--active .session-card__title {
+  color: var(--primary);
 }
 
 .session-card__main {
   display: flex;
   width: 100%;
   height: auto;
-  min-height: 58px;
+  min-height: 52px;
   min-width: 0;
   flex-direction: column;
   align-items: stretch;
@@ -141,7 +148,7 @@
   min-width: 0;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  color: var(--color-text);
+  color: var(--foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -164,7 +171,7 @@
   min-width: 0;
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
-  color: var(--color-text-tertiary);
+  color: var(--muted-foreground);
 }
 
 .session-card__time {

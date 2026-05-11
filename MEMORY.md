@@ -100,3 +100,4 @@
 
 ## 2026-05-11
 - Added Alpine `build-base` to sandbox Docker image runtime APK list so build-essential-style compiler tooling is present. Validation: inspected focused git diff only; no image build run.
+- Lifted session-history sidebar into a global `AppSessionsContextPanel` rendered by `AppSidebarLayout` so the sessions list now appears on Sessions, Kanban, and Dashboard. SessionPage drops its inline `SessionSidebar`/`DeleteSessionModal` and update/delete mutations (moved into the new panel). CSS in `session.css`/`layout.css` aligned sidebar typography, spacing, and active state with the primary nav, and a soft divider separates nav from the session list. Behaviour preserved (same queries, navigation, modals). Validation: `bun run test:web` (477 pass, +3 new), `bun run lint`, `bun run typecheck`, `bun run web:build`.

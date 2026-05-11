@@ -184,7 +184,15 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  flex-shrink: 0;
+}
+
+/* Soft divider between primary nav and the contextual section below */
+.app-sidebar__divider {
+  margin: 0 var(--sp-3);
+  background: var(--border);
+  opacity: 0.6;
   flex-shrink: 0;
 }
 
