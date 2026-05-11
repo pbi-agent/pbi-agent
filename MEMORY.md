@@ -97,3 +97,6 @@
 
 - Fixed Composer history review finding: inputHistory changes while browsing now restore the saved draft and reset history state, with Composer regression coverage. Validation: focused Composer Vitest, lint, and typecheck passed.
 - Implemented startup PyPI update warning: daily maintenance now renders update notices with Rich while keeping plain-string diagnostics, and tests cover first-run-only emission, rendered content, version silence cases, and PyPI request headers/timeout. Validation: focused maintenance/entrypoint pytest, Ruff check/format-check, and basedpyright passed.
+
+## 2026-05-11
+- Added Alpine `build-base` to sandbox Docker image runtime APK list so build-essential-style compiler tooling is present. Validation: inspected focused git diff only; no image build run.
