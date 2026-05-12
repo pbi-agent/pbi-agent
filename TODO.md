@@ -1,5 +1,4 @@
-[X] Inspect tool card content spacing
-[X] Add shared internal padding
-[X] Validate frontend
-[X] Rebuild static assets
+[X] Inspect sub-agent tool card status badge
+[X] Apply shared meta badge styling
+[X] Validate focused frontend checks
 [X] Update memory

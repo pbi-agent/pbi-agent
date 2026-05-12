@@ -618,6 +618,7 @@ function SubAgentCard({
       <span className="working-items__sub-agent-main">{name}</span>
       <Badge
         variant={statusModifier === "idle" ? "secondary" : statusModifier}
+        size="meta"
         className="working-items__sub-agent-status"
       >
         {status}
