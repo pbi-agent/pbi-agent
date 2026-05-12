@@ -1715,6 +1715,16 @@ describe("SettingsPage", () => {
     expect(document.querySelector('select[name="provider-kind"]')).toHaveClass(
       "task-form__select",
     );
+    const credentialSource = document.querySelector(".secret-mode-tabs");
+    expect(credentialSource).not.toBeNull();
+    const [envVarSourceButton, apiKeySourceButton] = Array.from(
+      credentialSource?.querySelectorAll('[data-slot="toggle-group-item"]') ?? [],
+    );
+    expect(envVarSourceButton).toHaveTextContent("Env var");
+    expect(envVarSourceButton).toHaveAttribute("data-state", "on");
+    await user.click(apiKeySourceButton as HTMLElement);
+    expect(apiKeySourceButton).toHaveTextContent("API key");
+    expect(apiKeySourceButton).toHaveAttribute("data-state", "on");
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute(
       "data-variant",
       "outline",
