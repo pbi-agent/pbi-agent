@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2Icon, ChevronDownIcon, Clock3Icon, DotIcon } from "lucide-react";
 import { fetchSessionRuns } from "../../api";
 import type { RunSession } from "../../types";
+import { StatusPill } from "../shared/StatusPill";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import {
@@ -98,12 +99,6 @@ function RunCard({
   run: RunSession;
   onSelect: () => void;
 }) {
-  const statusModifier =
-    isRunComplete(run.status) ? "completed"
-    : run.status === "failed" ? "failed"
-    : isRunActive(run.status) ? "running"
-    : "idle";
-
   const agentLabel = run.agent_name ?? run.agent_type ?? "agent";
   const modelLabel = run.model ?? "unknown";
   const durationLabel = run.total_duration_ms != null
@@ -119,9 +114,7 @@ function RunCard({
       onClick={onSelect}
     >
       <div className="run-card__header">
-        <Badge variant={statusModifier === "idle" ? "secondary" : statusModifier} className="run-card__status">
-          {run.status}
-        </Badge>
+        <StatusPill status={run.status} size="meta" className="run-card__status" />
         <span className="run-card__agent">{agentLabel}</span>
         {run.parent_run_session_id ? (
           <Badge variant="outline">sub</Badge>
@@ -169,10 +162,6 @@ function RunCard({
 
 function isRunActive(status: string): boolean {
   return !["completed", "interrupted", "ended", "failed", "stale"].includes(status);
-}
-
-function isRunComplete(status: string): boolean {
-  return ["completed", "interrupted", "ended"].includes(status);
 }
 
 function compareRunsNewestFirst(a: RunSession, b: RunSession): number {

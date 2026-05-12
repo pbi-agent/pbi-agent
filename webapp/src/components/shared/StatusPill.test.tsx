@@ -19,4 +19,13 @@ describe("StatusPill", () => {
 
     expect(screen.getByText(status)).toHaveAttribute("data-variant", variant);
   });
+
+  it("can render with shared metadata badge sizing", () => {
+    render(<StatusPill status="started" size="meta" className="run-card__status" />);
+
+    const status = screen.getByText("started");
+    expect(status).toHaveAttribute("data-variant", "running");
+    expect(status).toHaveAttribute("data-size", "meta");
+    expect(status).toHaveClass("run-card__status");
+  });
 });

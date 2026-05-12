@@ -1,3 +1,5 @@
+import type * as React from "react";
+
 import { Badge } from "../ui/badge";
 
 const runningStatuses = new Set(["running", "started", "starting", "waiting_for_input"]);
@@ -10,6 +12,19 @@ function statusVariant(status: string): "secondary" | "running" | "completed" | 
   return "secondary";
 }
 
-export function StatusPill({ status }: { status: string }) {
-  return <Badge variant={statusVariant(status)}>{status}</Badge>;
+type StatusPillProps = Omit<React.ComponentProps<typeof Badge>, "asChild" | "children" | "variant"> & {
+  status: string;
+};
+
+export function StatusPill({ status, className, size, ...props }: StatusPillProps) {
+  return (
+    <Badge
+      variant={statusVariant(status)}
+      size={size}
+      className={className}
+      {...props}
+    >
+      {status}
+    </Badge>
+  );
 }

@@ -1,7 +1,7 @@
 # TODO
 
-[X] Inspect saved snapshot and current shared badge implementation
-[X] Fix shared badge meta padding without one-off workspace CSS
+[X] Inspect run-history status badge implementation
+[X] Reuse shared meta badge styling for run status badge
 [X] Update tests/static assets
-[X] Validate focused frontend checks
+[X] Run focused frontend validation
 [X] Update memory

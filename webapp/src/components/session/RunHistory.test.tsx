@@ -128,5 +128,6 @@ describe("RunHistory", () => {
 
     const status = await screen.findByText("completed");
     expect(status).toHaveAttribute("data-variant", "completed");
+    expect(status).toHaveAttribute("data-size", "meta");
   });
 });
