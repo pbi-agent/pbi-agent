@@ -1412,7 +1412,11 @@ describe("SettingsPage", () => {
     expect(input).toHaveValue(30);
     await user.clear(input);
     await user.type(input, "14");
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    const saveButton = screen.getByRole("button", { name: "Save Changes" });
+    expect(saveButton).toHaveClass("settings-action-button");
+    expect(saveButton).toHaveAttribute("data-variant", "ghost");
+    expect(saveButton).toHaveAttribute("data-size", "sm");
+    await user.click(saveButton);
 
     await waitFor(() => {
       expect(updateMaintenanceConfig).toHaveBeenCalledWith(14, "rev-1");

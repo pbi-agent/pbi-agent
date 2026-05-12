@@ -1,6 +1,6 @@
 # TODO
 
-[X] Fetch remotes and inspect branch relationship
-[X] Merge origin/master into local master
-[X] Resolve conflicts with user-approved policy
-[X] Validate final branch/status
+[X] Inspect shell tool schema/defaults
+[-] Update required-field generation if safe
+[-] Run focused validation
+[-] Update MEMORY.md

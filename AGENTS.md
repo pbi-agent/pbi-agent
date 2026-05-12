@@ -63,69 +63,6 @@ uv tool install --reinstall .
 
 Protect context usage. **Any command with unknown or potentially large output must be byte-capped.**
 
-Default pattern:
-
-```bash
-COMMAND 2>&1 | head -c 4000
-```
-
-For logs or recent failures:
-
-```bash
-COMMAND 2>&1 | tail -c 4000
-```
-
-Do not rely on line limits as the only cap. A single line can be huge. Avoid using only:
-
-```bash
-head -n
-tail -n
-sed -n '1,20p'
-```
-
-Scope before printing content:
-
-- list files with `rg -l` before printing matches
-- count matches with `rg -c` before reading them
-- search specific paths instead of whole directories
-- use `rg -m`, `--max-count`, `--max-filesize`, and small context when useful
-- inspect file size before reading unknown generated files, logs, JSONL, or minified JSON
-
-For commands where the exit code matters, capture output first, print a capped amount, then exit with the original status:
-
-```bash
-tmp="$(mktemp)"
-COMMAND >"$tmp" 2>&1
-status=$?
-tail -c 5000 "$tmp"
-rm -f "$tmp"
-exit "$status"
-```
-
-Avoid unbounded output from:
-
-```bash
-cat path/to/file
-rg -n "term" .
-find .
-ls -R
-git diff
-npm test
-npm run build
-select *
-```
-
-Use bounded versions instead:
-
-```bash
-rg -l "term" . | head -c 2000
-rg -n -m 20 "term" src 2>&1 | head -c 2000
-git diff -- path/to/file 2>&1 | head -c 6000
-find . -type f 2>&1 | head -c 2000
-```
-
-If the capped output is insufficient, narrow the command. Do not repeatedly increase the cap unless the task requires more context.
-
 ## Communication
 
 Before editing, state the approach only for non-trivial tasks.
