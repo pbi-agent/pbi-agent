@@ -110,7 +110,7 @@ export function TaskCard({
           type="button"
           variant="ghost"
           size="sm"
-          className="task-card__action-button"
+          className="task-card__action-button task-card__action-button--danger"
           onClick={onDelete}
           disabled={isReadonly}
         >
