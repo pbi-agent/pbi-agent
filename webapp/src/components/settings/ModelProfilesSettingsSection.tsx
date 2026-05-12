@@ -33,11 +33,11 @@ function ProfileCard({
         </div>
       </div>
       <div className="provider-card__actions">
-        <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onEdit}>
+        <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onEdit}>
           <EditIcon data-icon="inline-start" />
           Edit
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onDelete}>
+        <Button type="button" variant="ghost" size="sm" className="settings-action-button settings-action-button--danger" onClick={onDelete}>
           <Trash2Icon data-icon="inline-start" />
           Delete
         </Button>
@@ -68,7 +68,7 @@ export function ModelProfilesSettingsSection({
       type="button"
       variant="ghost"
       size="sm"
-      className="task-card__action-button"
+      className="settings-action-button"
       onClick={onCreate}
       disabled={providers.length === 0}
     >

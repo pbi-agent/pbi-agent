@@ -74,7 +74,7 @@ function SkillCard({
           type="button"
           variant="ghost"
           size="sm"
-          className="task-card__action-button"
+          className="settings-action-button"
           onClick={onPreview}
         >
           <EyeIcon data-icon="inline-start" />
@@ -117,7 +117,7 @@ function CandidateCard({
           {candidate.description || "No description provided."}
         </p>
         {candidate.subpath ? (
-          <Badge variant="secondary" className="skill-candidate__subpath">
+          <Badge size="meta" variant="secondary">
             {candidate.subpath}
           </Badge>
         ) : null}
@@ -128,7 +128,7 @@ function CandidateCard({
         variant="outline"
         onClick={onInstall}
         disabled={disabled}
-        className="skill-candidate__action"
+        className="skill-candidate__action settings-action-button"
       >
         {isInstalling ? (
           <LoadingSpinner size="sm" />
@@ -293,7 +293,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
             type="button"
             variant="ghost"
             size="sm"
-            className="task-card__action-button"
+            className="settings-action-button"
             onClick={openAddDialog}
           >
             <PlusIcon data-icon="inline-start" />
@@ -354,7 +354,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                       <Button
                         type="submit"
                         variant="outline"
-                        className="skill-source-form__submit"
+                        className="skill-source-form__submit settings-action-button"
                         disabled={isBusy}
                       >
                         {loadingCandidates ? (
@@ -388,6 +388,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                       </span>
                       {listing?.ref ? (
                         <Badge
+                          size="meta"
                           variant="outline"
                           className="skill-add-dialog__source-ref"
                         >

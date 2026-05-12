@@ -1,17 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Trash2Icon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface Props {
   title: string;
@@ -43,46 +31,18 @@ export function DeleteConfirmModal({
   }
 
   return (
-    <AlertDialog open onOpenChange={(open) => {
-      if (!open && !isPending) onClose();
-    }}>
-      <AlertDialogContent size="sm">
-        <AlertDialogHeader>
-          <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20 dark:text-destructive">
-            <Trash2Icon />
-          </AlertDialogMedia>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription asChild>
-            <div>{body}</div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-
-        {error ? (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        <AlertDialogFooter>
-          <AlertDialogCancel
-            className="delete-confirm-modal__cancel"
-            onClick={onClose}
-            disabled={isPending}
-          >
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            className="delete-confirm-modal__confirm"
-            onClick={() => {
-              void handleConfirm();
-            }}
-            disabled={isPending}
-          >
-            {isPending ? "Deleting…" : confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isPending) onClose();
+      }}
+      title={title}
+      description={body}
+      confirmLabel={confirmLabel}
+      pendingLabel="Deleting…"
+      onConfirm={handleConfirm}
+      isPending={isPending}
+      error={error}
+    />
   );
 }

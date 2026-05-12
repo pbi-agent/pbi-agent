@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2Icon, ChevronDownIcon, Clock3Icon, DotIcon } from "lucide-react";
+import { ChevronDownIcon, Clock3Icon } from "lucide-react";
 import { fetchSessionRuns } from "../../api";
 import type { RunSession } from "../../types";
-import { Badge } from "../ui/badge";
+import { StatusPill } from "../shared/StatusPill";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -98,19 +98,15 @@ function RunCard({
   run: RunSession;
   onSelect: () => void;
 }) {
-  const statusModifier =
-    isRunComplete(run.status) ? "completed"
-    : run.status === "failed" ? "failed"
-    : isRunActive(run.status) ? "running"
-    : "idle";
-
   const agentLabel = run.agent_name ?? run.agent_type ?? "agent";
   const modelLabel = run.model ?? "unknown";
-  const durationLabel = run.total_duration_ms != null
-    ? formatDuration(run.total_duration_ms)
-    : null;
-  const totalTokens =
-    run.input_tokens + run.output_tokens + run.reasoning_tokens + run.tool_use_tokens;
+  const totalTokens = totalRunTokens(run);
+  const durationLabel = formatDuration(run.total_duration_ms);
+  const detailSummary = [
+    modelLabel,
+    `${formatCount(totalTokens)} tok`,
+    formatCost(run.estimated_cost_usd),
+  ].join(" · ");
 
   return (
     <button
@@ -119,49 +115,12 @@ function RunCard({
       onClick={onSelect}
     >
       <div className="run-card__header">
-        <Badge variant="secondary" className={`run-card__status status-pill status-pill--${statusModifier}`}>
-          {run.status}
-        </Badge>
-        <span className="run-card__agent">{agentLabel}</span>
-        {run.parent_run_session_id ? (
-          <Badge variant="outline" className="run-card__badge run-card__badge--sub">sub</Badge>
-        ) : null}
+        <StatusPill status={run.status} size="meta" className="run-card__status" />
+        <span className="run-card__agent" title={agentLabel}>{agentLabel}</span>
+        {durationLabel ? <span className="run-card__duration">{durationLabel}</span> : null}
       </div>
-      <div className="run-card__meta">
-        <span className="run-card__model">{modelLabel}</span>
-        {run.provider ? (
-          <>
-            <DotIcon className="run-card__sep" aria-hidden="true" />
-            <span>{run.provider}</span>
-          </>
-        ) : null}
-        {durationLabel ? (
-          <>
-            <DotIcon className="run-card__sep" aria-hidden="true" />
-            <span>{durationLabel}</span>
-          </>
-        ) : null}
-      </div>
-      <div className="run-card__stats">
-        {totalTokens > 0 ? (
-          <span className="run-card__stat">{formatCount(totalTokens)} tok</span>
-        ) : null}
-        {run.total_api_calls > 0 ? (
-          <span className="run-card__stat">{run.total_api_calls} API calls</span>
-        ) : null}
-        {run.total_tool_calls > 0 ? (
-          <span className="run-card__stat">{run.total_tool_calls} tool calls</span>
-        ) : null}
-        {run.error_count > 0 ? (
-          <span className="run-card__stat run-card__stat--error">{run.error_count} errors</span>
-        ) : null}
-        {run.estimated_cost_usd > 0 ? (
-          <span className="run-card__stat">${run.estimated_cost_usd.toFixed(4)}</span>
-        ) : null}
-      </div>
-      <div className="run-card__time">
-        <CheckCircle2Icon aria-hidden="true" />
-        {formatTimestamp(run.started_at)}
+      <div className="run-card__summary" title={detailSummary}>
+        <span className="run-card__summary-text">{detailSummary}</span>
       </div>
     </button>
   );
@@ -171,21 +130,13 @@ function isRunActive(status: string): boolean {
   return !["completed", "interrupted", "ended", "failed", "stale"].includes(status);
 }
 
-function isRunComplete(status: string): boolean {
-  return ["completed", "interrupted", "ended"].includes(status);
-}
-
 function compareRunsNewestFirst(a: RunSession, b: RunSession): number {
   return new Date(b.started_at).getTime() - new Date(a.started_at).getTime();
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(1)}s`;
-  const m = Math.floor(s / 60);
-  const rs = Math.round(s % 60);
-  return `${m}m ${rs}s`;
+function totalRunTokens(run: RunSession): number {
+  if (run.provider_total_tokens > 0) return run.provider_total_tokens;
+  return run.input_tokens + run.output_tokens + run.reasoning_tokens + run.tool_use_tokens;
 }
 
 function formatCount(n: number): string {
@@ -194,17 +145,20 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-function formatTimestamp(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
+function formatDuration(durationMs: number | null): string | null {
+  if (durationMs === null) return null;
+  if (durationMs <= 0) return "0s";
+  const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h${minutes}m`;
+  if (minutes > 0) return `${minutes}m${seconds}s`;
+  return `${seconds}s`;
+}
+
+function formatCost(cost: number): string {
+  if (cost === 0) return "$0.00";
+  if (cost >= 0.01) return `$${cost.toFixed(2)}`;
+  return `$${cost.toFixed(4)}`;
 }

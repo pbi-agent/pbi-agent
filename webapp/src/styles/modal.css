@@ -35,23 +35,6 @@
   font-weight: var(--weight-semi);
 }
 
-.modal-card__close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  font-size: var(--text-lg);
-  color: var(--color-text-tertiary);
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast), color var(--duration-fast);
-}
-
-.modal-card__close:hover {
-  background: var(--color-surface-2);
-  color: var(--color-text);
-}
-
 .app-close-icon-button {
   color: var(--color-text-tertiary);
   transition:
@@ -85,6 +68,8 @@
 
 /* ── Task Form ── */
 .task-form-dialog {
+  --task-form-dialog-padding: var(--sp-6);
+
   width: min(35rem, calc(100dvw - 2rem));
   max-width: none;
   max-height: calc(100dvh - 2rem);
@@ -92,11 +77,23 @@
   grid-template-columns: minmax(0, 1fr);
   flex-direction: column;
   gap: var(--sp-5);
-  overflow: visible;
-  padding: var(--sp-6);
+  overflow: hidden;
+  padding: var(--task-form-dialog-padding);
   border-color: var(--color-border);
   background: color-mix(in srgb, var(--color-surface-1) 88%, transparent);
   backdrop-filter: blur(16px);
+}
+
+.task-form-dialog[data-size="sm"] {
+  width: min(24rem, calc(100dvw - 2rem));
+}
+
+.task-form-dialog[data-size="lg"] {
+  width: min(42rem, calc(100dvw - 2rem));
+}
+
+.task-form-dialog[data-size="wide"] {
+  width: min(56rem, calc(100dvw - 2rem));
 }
 
 .task-form-dialog [data-slot="dialog-header"] {
@@ -117,6 +114,9 @@
 }
 
 .task-form__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -191,6 +191,58 @@
   width: 100%;
 }
 
+.task-form-dialog [data-slot="dialog-footer"] {
+  flex: 0 0 auto;
+  margin: 0 calc(var(--task-form-dialog-padding) * -1) calc(var(--task-form-dialog-padding) * -1);
+  padding: var(--sp-4) var(--task-form-dialog-padding);
+  border-top: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
+  background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"] {
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="default"] {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="outline"] {
+  color: var(--foreground);
+  background: var(--background);
+  border-color: var(--color-border);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"]:not(:disabled):hover,
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"]:not(:disabled):focus-visible {
+  transform: translateY(-1px);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="default"]:not(:disabled):hover,
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="default"]:not(:disabled):focus-visible {
+  color: var(--primary-foreground);
+  background: var(--color-accent-hover);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="outline"]:not(:disabled):hover,
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="outline"]:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
 .task-form__footer {
   display: flex;
   flex-wrap: wrap;
@@ -202,50 +254,21 @@
   padding: var(--sp-4) var(--sp-6);
 }
 
-.task-form__action-button {
-  min-width: 4.5rem;
-  padding-inline: var(--sp-4);
-  margin: 0;
-  vertical-align: middle;
-  transition:
-    background var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
-}
-
-/* Primary action (Save Changes / Add Provider / Add Profile) */
-.task-form__action-button[data-variant="default"] {
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-  border-color: transparent;
-}
-
-.task-form__action-button[data-variant="default"]:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-}
-
-.task-form__action-button[data-variant="default"]:disabled {
-  background: var(--color-surface-3);
-  color: var(--color-text-tertiary);
-}
-
-/* Secondary action (Cancel) */
-.task-form__action-button[data-variant="outline"] {
-  background: transparent;
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-
-.task-form__action-button[data-variant="outline"]:hover:not(:disabled) {
-  background: var(--color-surface-3);
-  border-color: var(--color-border-focus);
-  color: var(--color-text);
-}
-
 @media (max-width: 40rem) {
   .task-form-dialog {
+    --task-form-dialog-padding: var(--sp-4);
+
     width: min(35rem, calc(100dvw - 1rem));
-    padding: var(--sp-4);
+  }
+
+  .task-form-dialog[data-size="sm"],
+  .task-form-dialog[data-size="lg"],
+  .task-form-dialog[data-size="wide"] {
+    width: min(56rem, calc(100dvw - 1rem));
+  }
+
+  .task-form-dialog [data-slot="dialog-footer"] {
+    padding-block: var(--sp-4);
   }
 
   .task-form__footer {
@@ -254,61 +277,95 @@
   }
 }
 
-.task-form__submit {
-  width: 100%;
-  padding: var(--sp-3);
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semi);
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast);
-  margin-top: var(--sp-2);
+/* ── Alert Dialog ── */
+
+[data-slot="alert-dialog-content"] {
+  --alert-dialog-padding: var(--sp-5);
+
+  overflow: hidden;
+  padding: var(--alert-dialog-padding);
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-1) 90%, transparent);
+  box-shadow: var(--shadow-lg);
 }
 
-.task-form__submit:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+[data-slot="alert-dialog-header"] {
+  gap: var(--sp-2);
 }
 
-.task-form__submit:disabled {
-  background: var(--color-surface-3);
-  color: var(--color-text-tertiary);
+[data-slot="alert-dialog-media"] {
+  margin-bottom: var(--sp-1);
 }
 
-.delete-confirm-modal__cancel,
-.delete-confirm-modal__confirm {
+[data-slot="alert-dialog-media"].text-destructive {
+  background: color-mix(in srgb, var(--color-error) 18%, transparent);
+  color: var(--color-error);
+}
+
+[data-slot="alert-dialog-footer"] {
+  margin: 0 calc(var(--alert-dialog-padding) * -1)
+    calc(var(--alert-dialog-padding) * -1);
+  padding: var(--sp-2) var(--alert-dialog-padding);
+  border-color: var(--color-border-subtle);
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
+  background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
+}
+
+[data-slot="alert-dialog-footer"] > .alert-dialog__button {
+  min-width: 0;
   transition:
+    color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease),
     border-color var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out) !important;
 }
 
-.delete-confirm-modal__cancel {
-  background: transparent;
-  color: var(--color-text);
-  border-color: var(--color-border);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > .alert-dialog__button:not(:disabled):focus-visible {
+  transform: translateY(-1px) !important;
 }
 
-.delete-confirm-modal__cancel:hover:not(:disabled) {
-  background: var(--color-surface-3);
-  border-color: var(--color-border-focus);
-  color: var(--color-text);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="outline"] {
+  color: var(--foreground) !important;
+  background: var(--background) !important;
+  border-color: var(--color-border) !important;
 }
 
-.delete-confirm-modal__confirm {
-  background: var(--color-error-muted);
-  color: var(--color-error);
-  border-color: transparent;
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="outline"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="outline"]:not(:disabled):focus-visible {
+  color: var(--foreground) !important;
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted)) !important;
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent) !important;
 }
 
-.delete-confirm-modal__confirm:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-error) 24%, transparent);
-  color: var(--color-error);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="default"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="default"]:not(:disabled):focus-visible {
+  color: var(--primary-foreground) !important;
+  background: var(--color-accent-hover) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent) !important;
 }
 
-.delete-confirm-modal__confirm:disabled {
-  background: var(--color-surface-3);
-  color: var(--color-text-tertiary);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="destructive"] {
+  color: var(--color-error) !important;
+  background: color-mix(in srgb, var(--color-error) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--color-error) 20%, transparent) !important;
+}
+
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="destructive"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="destructive"]:not(:disabled):focus-visible {
+  color: var(--background) !important;
+  background: var(--color-error) !important;
+  border-color: var(--color-error) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-error) 28%, transparent) !important;
+}
+
+@media (max-width: 40rem) {
+  [data-slot="alert-dialog-content"] {
+    --alert-dialog-padding: var(--sp-4);
+  }
 }
 
 .modal-card--confirm {

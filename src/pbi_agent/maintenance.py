@@ -7,6 +7,10 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+
 from pbi_agent import __version__
 from pbi_agent.config import load_internal_config
 from pbi_agent.session_store import SessionStore
@@ -41,7 +45,7 @@ def run_startup_maintenance() -> MaintenanceResult:
             )
             notice = check_update_notice()
             if notice:
-                print(notice, file=sys.stderr)
+                render_update_notice(notice)
             success = True
             return MaintenanceResult(ran=True, update_notice=notice)
     except Exception as exc:  # noqa: BLE001 - startup maintenance is best-effort
@@ -66,6 +70,19 @@ def check_update_notice() -> str | None:
             f"Run: {UPDATE_COMMAND}"
         )
     return None
+
+
+def render_update_notice(notice: str, *, console: Console | None = None) -> None:
+    active_console = console or Console(stderr=True)
+    body = Text(notice.replace(". Run: ", ".\nRun: "))
+    active_console.print(
+        Panel(
+            body,
+            title="Update available",
+            border_style="yellow",
+            expand=False,
+        )
+    )
 
 
 def _latest_pypi_version() -> str | None:

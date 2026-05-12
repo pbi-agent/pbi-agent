@@ -508,6 +508,238 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
   });
 
+  it("shows long Working tool lists in a five-row scroll area and centers opened tools", async () => {
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollTo = scrollTo;
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 0;
+    });
+    const { container } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tools",
+            status: "completed",
+            items: Array.from({ length: 7 }, (_, index) => ({
+              text: `file ${index + 1}`,
+              metadata: {
+                tool_name: "read_file",
+                arguments: { path: `file-${index + 1}.txt` },
+                result: { path: `file-${index + 1}.txt`, content: `file ${index + 1}` },
+              },
+            })),
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    openWorking(0, false);
+    const scrollArea = container.querySelector<HTMLElement>(".working-items--scrollable");
+    expect(scrollArea).toBeInTheDocument();
+    if (!scrollArea) throw new Error("Expected scrollable Working items area");
+    expect(screen.getAllByRole("button").filter((button) =>
+      button.classList.contains("working-items__tool-trigger"),
+    )).toHaveLength(7);
+
+    Object.defineProperty(scrollArea, "clientHeight", { configurable: true, value: 200 });
+    Object.defineProperty(scrollArea, "scrollHeight", { configurable: true, value: 600 });
+    scrollArea.scrollTop = 100;
+    scrollArea.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 300,
+      bottom: 200,
+      left: 0,
+      width: 300,
+      height: 200,
+      toJSON: () => ({}),
+    });
+
+    const sixthToolButton = screen.getByRole("button", { name: /Read.*file-6\.txt/i });
+    const sixthToolItem = sixthToolButton.closest<HTMLElement>(".working-items__item");
+    expect(sixthToolItem).not.toBeNull();
+    sixthToolItem!.getBoundingClientRect = () => ({
+      x: 0,
+      y: 300,
+      top: 300,
+      right: 300,
+      bottom: 340,
+      left: 0,
+      width: 300,
+      height: 40,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.click(sixthToolButton);
+
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenCalledWith({
+        top: 320,
+        behavior: "smooth",
+      });
+    });
+    rafSpy.mockRestore();
+  });
+
+  it("grows the long Working scroll area enough to fit an opened tool card", async () => {
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 0;
+    });
+    const { container } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tools",
+            status: "completed",
+            items: Array.from({ length: 7 }, (_, index) => ({
+              text: `file ${index + 1}`,
+              metadata: {
+                tool_name: "read_file",
+                arguments: { path: `file-${index + 1}.txt` },
+                result: { path: `file-${index + 1}.txt`, content: `file ${index + 1}` },
+              },
+            })),
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    openWorking(0, false);
+    const scrollArea = container.querySelector<HTMLElement>(".working-items--scrollable");
+    expect(scrollArea).toBeInTheDocument();
+    if (!scrollArea) throw new Error("Expected scrollable Working items area");
+    Object.defineProperty(scrollArea, "clientHeight", { configurable: true, value: 160 });
+    Object.defineProperty(scrollArea, "scrollHeight", { configurable: true, value: 700 });
+
+    const sixthToolButton = screen.getByRole("button", { name: /Read.*file-6\.txt/i });
+    const sixthToolItem = sixthToolButton.closest<HTMLElement>(".working-items__item");
+    expect(sixthToolItem).not.toBeNull();
+    Object.defineProperty(sixthToolItem!, "scrollHeight", { configurable: true, value: 320 });
+
+    fireEvent.click(sixthToolButton);
+
+    await waitFor(() => {
+      expect(scrollArea.style.getPropertyValue("--working-items-max-height")).toBe("336px");
+    });
+    rafSpy.mockRestore();
+  });
+
+  it("offers a shortcut button to fully expand long Working tool lists", async () => {
+    const { container } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tools",
+            status: "completed",
+            items: Array.from({ length: 7 }, (_, index) => ({
+              text: `file ${index + 1}`,
+              metadata: {
+                tool_name: "read_file",
+                arguments: { path: `file-${index + 1}.txt` },
+                result: { path: `file-${index + 1}.txt`, content: `file ${index + 1}` },
+              },
+            })),
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    openWorking(0, false);
+
+    const expandButton = screen.getByRole("button", { name: "Fully expand Working tool list" });
+    expect(expandButton).toHaveTextContent("+2 more");
+
+    fireEvent.click(expandButton);
+
+    await waitFor(() => {
+      expect(container.querySelector(".working-items--fully-expanded")).toBeInTheDocument();
+    });
+    const limitButton = screen.getByRole("button", { name: "Limit Working tool list to five rows" });
+    expect(limitButton).toHaveAttribute("aria-pressed", "true");
+    expect(limitButton).toHaveTextContent("Show recent 5");
+  });
+
+  it("closes the previously opened tool card when another tool card is opened", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tool calls",
+            status: "completed",
+            items: [
+              {
+                text: "read_file alpha.txt",
+                metadata: {
+                  tool_name: "read_file",
+                  arguments: { path: "alpha.txt" },
+                  result: { path: "alpha.txt", content: "ALPHA_CONTENT" },
+                },
+              },
+              {
+                text: "read_file beta.txt",
+                metadata: {
+                  tool_name: "read_file",
+                  arguments: { path: "beta.txt" },
+                  result: { path: "beta.txt", content: "BETA_CONTENT" },
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    openWorking(0, false);
+    const toolButtons = () =>
+      screen.getAllByRole("button").filter((button) =>
+        button.classList.contains("working-items__tool-trigger"),
+      );
+
+    fireEvent.click(toolButtons()[0]);
+    expect(screen.getByText("ALPHA_CONTENT")).toBeInTheDocument();
+    expect(screen.queryByText("BETA_CONTENT")).not.toBeInTheDocument();
+    expect(toolButtons()[0]).toHaveAttribute("aria-expanded", "true");
+    expect(toolButtons()[1]).toHaveAttribute("aria-expanded", "false");
+
+    // Opening the second tool card must close the first one.
+    fireEvent.click(toolButtons()[1]);
+    expect(screen.queryByText("ALPHA_CONTENT")).not.toBeInTheDocument();
+    expect(screen.getByText("BETA_CONTENT")).toBeInTheDocument();
+    expect(toolButtons()[0]).toHaveAttribute("aria-expanded", "false");
+    expect(toolButtons()[1]).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("summarizes read_web_url as a read in the collapsed Working header", () => {
     render(
       <SessionTimeline
@@ -1197,15 +1429,31 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       />,
     );
 
-    openWorking();
+    // Working block is a single-open accordion: only one tool card is
+    // expanded at a time. Open each tool card in turn and verify its
+    // content renders correctly.
+    openWorking(0, false);
+    const toolButtons = () =>
+      screen.getAllByRole("button").filter((button) =>
+        button.classList.contains("working-items__tool-trigger"),
+      );
 
-expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
+    fireEvent.click(toolButtons()[0]);
+    expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     expect(screen.getByText(/2.0 KB/)).toBeInTheDocument();
+
+    fireEvent.click(toolButtons()[1]);
     expect(screen.getAllByText("https://example.com")[0]).toBeInTheDocument();
     expect(screen.getByText("# Example")).toBeInTheDocument();
+
+    fireEvent.click(toolButtons()[2]);
     expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://example.com/docs");
+
+    fireEvent.click(toolButtons()[3]);
     expect(screen.getByText("Review tests")).toBeInTheDocument();
     expect(screen.getByText("Looks good")).toBeInTheDocument();
+
+    fireEvent.click(toolButtons()[4]);
     expect(screen.getAllByText("mcp__custom__lookup").length).toBeGreaterThan(0);
     expect(screen.getByText(/"value": "ok"/)).toBeInTheDocument();
   });

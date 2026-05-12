@@ -576,7 +576,8 @@ describe("SessionPage", () => {
     const sidebar = screen.getByRole("complementary", { name: "Application sidebar" });
 
     expect(workspaceLabel.closest(".session-topbar__workspace")).toBeInTheDocument();
-    expect(workspaceLabel.closest(".app-sidebar__workspace-badge")).toBeInTheDocument();
+    const workspaceBadge = workspaceLabel.closest('[data-size="meta"]');
+    expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(within(sidebar).queryByText("workspace/demo")).not.toBeInTheDocument();
   });
@@ -680,7 +681,9 @@ describe("SessionPage", () => {
     const workspaceLabel = await within(topbar).findByText("Sandbox · ada/project");
     expect(within(topbar).queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
 
-    const workspaceBadge = workspaceLabel.closest(".app-sidebar__workspace-badge") as HTMLElement;
+    const workspaceBadge = workspaceLabel.closest('[data-size="meta"]') as HTMLElement;
+    expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
+    expect(workspaceBadge).toHaveClass("max-w-full", "overflow-hidden");
     await user.hover(workspaceBadge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("/Users/ada/project");
   });
@@ -2924,6 +2927,40 @@ describe("SessionPage", () => {
       profile_id: "analysis",
       interactive_mode: false,
     });
+  });
+
+  it("opens a responsive profile menu for long model names", async () => {
+    const user = userEvent.setup();
+    const baseConfig = makeConfigBootstrap();
+    const analysisProfile = baseConfig.model_profiles[0];
+    const longProfile = {
+      ...analysisProfile,
+      id: "long-profile",
+      name: "Claude Sonnet Extra Long Model Profile",
+      model: "claude-sonnet-4-6-with-a-very-long-deployment-name",
+      is_active_default: false,
+      resolved_runtime: {
+        ...analysisProfile.resolved_runtime,
+        profile_id: "long-profile",
+        model: "claude-sonnet-4-6-with-a-very-long-deployment-name",
+      },
+    };
+
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue({
+      ...baseConfig,
+      model_profiles: [analysisProfile, longProfile],
+    });
+
+    renderSessionRoute("/sessions");
+
+    const trigger = await screen.findByRole("button", { name: "Model profile: Analysis" });
+    await user.click(trigger);
+
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveClass("profile-selector__content");
+    const option = within(menu).getByText("Analysis").closest("[role='menuitem']");
+    expect(option).toHaveClass("profile-selector__option", "is-selected");
+    expect(screen.getByText("claude-sonnet-4-6-with-a-very-long-deployment-name")).toBeInTheDocument();
   });
 
   it("allows changing the profile for a dormant saved session after restart", async () => {

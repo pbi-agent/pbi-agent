@@ -118,3 +118,15 @@
     @apply font-sans;
     }
 }
+
+/* Shared Badge metadata size.
+ * Use the size attribute instead of data-slot because Radix TooltipTrigger with
+ * asChild replaces the workspace badge's data-slot while preserving data-size.
+ */
+[data-variant][data-size="meta"] {
+  min-height: 24px;
+  padding: 2px var(--sp-2) 3px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: var(--leading-normal);
+}

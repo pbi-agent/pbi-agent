@@ -142,6 +142,7 @@ function makeConfigBootstrap(
 
 describe("AppShell", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     vi.mocked(fetchBootstrap).mockResolvedValue(makeBootstrap());
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     act(() => {
@@ -186,6 +187,18 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute("href", "/sessions");
   });
 
+  it("links the Sessions nav item back to the last opened session", async () => {
+    window.localStorage.setItem("pbi-agent.last-opened-session-id", "session-1");
+
+    renderWithProviders(<AppShell />, { route: "/board" });
+
+    expect(await screen.findByRole("navigation", { name: "Primary navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sessions" })).toHaveAttribute(
+      "href",
+      "/sessions/session-1",
+    );
+  });
+
   it("places the workspace badge in the sidebar header", async () => {
     renderWithProviders(<AppShell />, { route: "/board" });
 
@@ -209,7 +222,8 @@ describe("AppShell", () => {
     expect(headerChildren[1]).toHaveClass("app-sidebar__workspace-slot");
     expect(headerChildren[2]).toBe(collapseButton);
 
-    expect(workspaceLabel.closest(".app-sidebar__workspace-badge")).toBeInTheDocument();
+    const workspaceBadge = workspaceLabel.closest('[data-size="meta"]');
+    expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
     expect(sidebar.querySelector(".app-sidebar__workspace")).toBeNull();
     expect(screen.getByRole("navigation", { name: "Primary navigation" }).previousElementSibling).toBe(
       headerElement,
@@ -281,7 +295,9 @@ describe("AppShell", () => {
     expect(header).toContainElement(workspaceLabel);
     expect(screen.queryByText("workspace/d0918d973e2e241d")).not.toBeInTheDocument();
 
-    const workspaceBadge = workspaceLabel.closest(".app-sidebar__workspace-badge") as HTMLElement;
+    const workspaceBadge = workspaceLabel.closest('[data-size="meta"]') as HTMLElement;
+    expect(workspaceBadge).toHaveAttribute("data-variant", "secondary");
+    expect(workspaceBadge).toHaveClass("max-w-full", "overflow-hidden");
     await user.hover(workspaceBadge);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("/Users/ada/project");
   });

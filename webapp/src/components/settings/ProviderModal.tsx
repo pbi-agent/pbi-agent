@@ -1,14 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { ConfigOptions, ProviderView } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
-import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+import { FormDialog } from "../ui/form-dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
@@ -208,24 +201,23 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
   const accountAuthLabel = selectedAuthModeMetadata?.account_label;
 
   return (
-    <Dialog
+    <FormDialog
       open
       onOpenChange={(open) => {
         if (!open && !isPending) onClose();
       }}
+      title={isEdit ? "Edit Provider" : "Add Provider"}
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      isPending={isPending}
+      error={error}
+      primaryAction={{
+        label: isEdit ? "Save Changes" : "Add Provider",
+        pendingLabel: "Saving…",
+      }}
+      onCancel={onClose}
     >
-      <DialogContent className="task-form-dialog">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Provider" : "Add Provider"}</DialogTitle>
-        </DialogHeader>
-
-        <form
-          className="task-form"
-          onSubmit={(event) => {
-            void handleSubmit(event);
-          }}
-        >
-          <div className="task-form__body">
             <FieldGroup>
               <Field>
                 <FieldLabel>Name</FieldLabel>
@@ -398,35 +390,6 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                 </Field>
               )}
             </FieldGroup>
-
-            {error && (
-              <Alert variant="destructive" className="task-form__error">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          <DialogFooter className="app-action-row app-action-row--end task-form__footer">
-            <Button
-              type="button"
-              variant="outline"
-              className="task-form__action-button"
-              onClick={onClose}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="default"
-              className="task-form__action-button"
-              disabled={isPending}
-            >
-              {isPending ? "Saving…" : isEdit ? "Save Changes" : "Add Provider"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

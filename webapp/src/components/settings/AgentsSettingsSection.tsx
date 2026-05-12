@@ -71,7 +71,7 @@ function AgentCard({
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
         {agent.model_profile_id ? (
-          <Badge variant="outline" className="settings-item__tag">
+          <Badge size="meta" variant="outline">
             Profile: {agent.model_profile_id}
           </Badge>
         ) : null}
@@ -79,7 +79,7 @@ function AgentCard({
           type="button"
           variant="ghost"
           size="sm"
-          className="task-card__action-button"
+          className="settings-action-button"
           onClick={onPreview}
         >
           <EyeIcon data-icon="inline-start" />
@@ -123,12 +123,12 @@ function CandidateCard({
         </p>
         <div className="command-candidate__badges">
           {candidate.model_profile_id ? (
-            <Badge variant="outline" className="skill-candidate__subpath">
+            <Badge size="meta" variant="outline">
               Profile: {candidate.model_profile_id}
             </Badge>
           ) : null}
           {candidate.subpath ? (
-            <Badge variant="secondary" className="skill-candidate__subpath">
+            <Badge size="meta" variant="secondary">
               {candidate.subpath}
             </Badge>
           ) : null}
@@ -140,7 +140,7 @@ function CandidateCard({
         variant="outline"
         onClick={onInstall}
         disabled={disabled}
-        className="skill-candidate__action"
+        className="skill-candidate__action settings-action-button"
       >
         {isInstalling ? (
           <LoadingSpinner size="sm" />
@@ -305,7 +305,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
             type="button"
             variant="ghost"
             size="sm"
-            className="task-card__action-button"
+            className="settings-action-button"
             onClick={openAddDialog}
           >
             <PlusIcon data-icon="inline-start" />
@@ -366,7 +366,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                       <Button
                         type="submit"
                         variant="outline"
-                        className="skill-source-form__submit"
+                        className="skill-source-form__submit settings-action-button"
                         disabled={isBusy}
                       >
                         {loadingCandidates ? (
@@ -400,6 +400,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                       </span>
                       {listing?.ref ? (
                         <Badge
+                          size="meta"
                           variant="outline"
                           className="skill-add-dialog__source-ref"
                         >

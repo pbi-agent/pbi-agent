@@ -1,37 +1,57 @@
-# Plan: Provider-Aware Tool Availability
+Decisions are locked. Here is the plan.
+
+---
+
+# Plan — Normalize Dialog, AlertDialog, Validation Buttons, DropdownMenu, and Badge in `webapp/`
 
 ## Summary
-Centralize provider tool-availability policy so the model only sees the editing and web tools appropriate for the active backend. OpenAI official Responses API and the ChatGPT Codex backend use V4A `apply_patch`; other providers use the simpler file edit tools. `read_web_url` follows the existing `web_search` runtime flag.
 
-## Checklist
-- [X] Add a small shared tool-policy helper, e.g. `pbi_agent.tools.availability.effective_excluded_tool_names(settings, excluded_names)`, that merges session exclusions with backend policy.
-- [X] Apply the helper in every provider `refresh_tools()` before provider-specific tool serialization/native web-search appending: OpenAI, xAI, Google, Anthropic, Generic, and GitHub Copilot delegates.
-- [X] For `settings.provider in {"openai", "chatgpt"}`, advertise `apply_patch` and hide `replace_in_file`/`write_file`; this covers both OpenAI official API and ChatGPT Codex because both flow through `OpenAIProvider`/`ChatGPTCodexBackend`.
-- [X] For all other providers/backends, hide `apply_patch` and keep `replace_in_file`/`write_file` available.
-- [X] Hide `read_web_url` whenever `settings.web_search` is false; keep native provider search tools controlled by the existing `if settings.web_search` branches.
-- [X] Keep the built-in registry and tool handlers unchanged so direct tool tests, display formatting, and MCP catalog merging still work; only provider-advertised tool definitions change.
-- [X] Ensure `Provider.set_excluded_tools()` continues to work by storing session-only exclusions while each `refresh_tools()` recomputes policy exclusions, so toggling `ask_user`/`sub_agent` cannot re-enable hidden tools.
-- [X] Update stale inline/docs wording that says all providers receive `apply_patch` or that `read_web_url` is always available.
+Audit and normalize the five surfaces (`Dialog`, `AlertDialog`, dialog-footer validation buttons, `DropdownMenu`, `Badge`) so every call site uses a single canonical shadcn primitive. Two thin composite primitives (`FormDialog`, `ConfirmDialog`) absorb the repeated dialog boilerplate, the `Badge` primitive grows semantic variants that replace ~6 BEM stylesheets, and bespoke per-component CSS overrides for these primitives are removed from `modal.css`, `utilities.css`, `session.css`, and `settings.css`.
 
-## Public Interfaces / Behavior Changes
-- No CLI flags, config schema, web API, or persisted data changes.
-- Provider tool lists change:
-  - OpenAI/chatgpt: `apply_patch` yes; `replace_in_file`/`write_file` no.
-  - Non-OpenAI providers, including Azure, generic OpenAI-compatible, GitHub Copilot, xAI, Google, and Anthropic: `apply_patch` no; `replace_in_file`/`write_file` yes.
-  - All providers: `read_web_url` only when `settings.web_search` is true.
-- MCP tools and native web-search result parsing/display behavior are unchanged.
+Deliverable for this phase: implementation of Section "Implementation Changes".
+
+## Implementation Checklist
+
+- [X] Add `FormDialog` and `ConfirmDialog` composite primitives.
+- [X] Extend `Badge` with `success`, `warning`, `info`, `running`, `completed`, and `failed`; status variants render a built-in leading dot.
+- [X] Migrate listed form/wide dialog consumers to `FormDialog`: `ProviderModal`, `ModelProfileModal`, `TaskModal`, `BoardStageEditorModal`, `OnboardingModal`, `ProviderAuthFlowModal`, `RunDetailModal`, `SettingsPreviewDialog`, `ProviderUsageLimitsDialog`.
+- [X] Migrate listed confirmation consumers to `ConfirmDialog`: `DeleteSessionModal`, `DeleteConfirmModal`.
+- [X] Migrate Badge call sites for status pills, settings tags, command/skill aliases, run/event/tool badges, `WorkspaceBadge`, `ProviderAuthFlowModal`, and session sub-agent status to semantic variants.
+- [X] Migrate dropdown sizing for `SessionSidebar` and `SessionPage` profile selector to shadcn defaults / Tailwind width utility.
+- [X] Remove targeted dead CSS for dialog action button overrides, delete-confirm overrides, status-pill styles, badge-only styles, dropdown sizing, wide modal/preview shell remnants, and workspace-badge BEM styling.
+- [X] Add/update frontend tests for `FormDialog`, `ConfirmDialog`, Badge variants, and migrated modal/status call sites.
+
+## Validation Notes
+
+- [X] `bun run typecheck` — passed.
+- [X] Focused Vitest for new primitives and migrated modal/status call sites — passed (`26` tests).
+- [X] `bun run lint` — passed.
+- [X] `bun run test:web` — passed (`42` files, `494` tests). Existing React `act(...)` warnings from Composer/TimelineEntry remain warnings only.
+- [X] `bun run web:build` — passed; static app assets regenerated under `src/pbi_agent/web/static/app`.
+- [X] Review fix validation: `bun run test:web -- webapp/src/components/ui/form-dialog.test.tsx` and `bun run typecheck` — passed.
+- [X] Review fix validation: `bun run test:web -- webapp/src/components/shared/StatusPill.test.tsx`, `bun run typecheck`, and `bun run lint` — passed.
+- [X] Review fix validation: `bun run test:web -- webapp/src/components/ui/badge.test.tsx`, `bun run typecheck`, and `bun run lint` — passed.
+- [X] Confidence-gate hardening: `git diff --check` — passed after removing extra blank line at EOF in `webapp/src/styles/session.css`.
+- [X] Final frontend gate: `git diff --check`, `bun run lint`, `bun run typecheck`, `bun run test:web` (43 files, 505 tests; existing `act(...)` warnings only), and `bun run web:build` — passed.
+- [ ] Manual visual smoke not run in this delegated pass.
+
+## Follow-up Notes
+
+- `app-action-row`, `app-close-icon-button`, and `modal-icon-shell` intentionally remain because they are still used outside this normalization surface.
+- The add/install dialogs in `CommandsSettingsSection`, `SkillsSettingsSection`, and `AgentsSettingsSection` still use the broader task-form body/input/list layout classes; they were outside the listed dialog call-site migration and remain covered by existing settings tests.
 
 ## Test Plan
-- [X] Add focused tests for the shared policy helper covering OpenAI/chatgpt, non-OpenAI providers, existing caller exclusions, and `web_search=False`.
-- [X] Add/adjust provider tests to inspect serialized tool names for OpenAI official API and ChatGPT Codex backend: `apply_patch` present, `replace_in_file`/`write_file` absent, and `read_web_url` gated by `web_search`.
-- [X] Add/adjust provider tests for representative non-OpenAI formats (Anthropic, Google, xAI, Generic, GitHub Copilot) to assert `apply_patch` absent, file edit tools present, and `read_web_url` gated.
-- [X] Add a regression test that `set_excluded_tools({"ask_user"})` preserves policy exclusions after refresh.
-- [X] Validate with `uv run pytest -q --tb=short -x tests/test_tool_registry.py tests/test_openai_provider.py tests/test_generic_provider.py tests/test_anthropic_provider.py tests/test_google_provider.py tests/test_xai_provider.py tests/test_github_copilot_provider.py tests/test_provider_factory.py`. Passed.
-- [X] Run Python quality checks: `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright`. Passed.
-- [!] Final full-suite check `uv run pytest -q --tb=short -x` stopped at unrelated existing sandbox expectation `tests/cli/test_sandbox.py::DefaultWebCommandTests::test_sandbox_dockerfile_uses_alpine_with_minimal_apk_packages` expecting the pre-Rust minimal APK list.
-- [-] If docs are edited, run `bun run docs:build`. Skipped; no docs edited.
 
-## Assumptions / Scope
-- “OpenAI model/backend” means repo provider kinds `openai` and `chatgpt`; `gpt-*` model names served by Azure, Generic, GitHub Copilot, or other providers remain non-OpenAI for this policy.
-- “Available” means advertised in provider tool definitions sent to the model. The registry and handlers remain registered for direct execution/tests and existing runtime fallback behavior.
-- No backward-compatibility shims or migrations are needed.
+- **Unit (Vitest)**: `FormDialog` renders title/description/icon, submits on Enter, disables primary while `isPending`, shows error alert, hides footer when `primaryAction` omitted; `ConfirmDialog` calls `onConfirm`, blocks dismissal while `isPending`, renders error alert.
+- **Badge variants**: DOM assertion that each new variant emits expected `data-variant` and renders the leading dot for `running|completed|failed`.
+- **Call-site regressions**: run `bun run test:web` and confirm migrated modals pass without their old className-based selectors; update tests to use roles/names and `data-variant` where relevant.
+- **Build & lint**: `bun run typecheck`, `bun run lint`, `bun run web:build` after migration; `uv run pytest -q --tb=short -x` is not required (no Python source changes).
+- **Visual smoke**: manual pass through Sessions tab (delete session, profile selector dropdown, run history menu, run detail modal), Board tab (task modal, stage editor modal), Settings tab (provider modal, model profile modal, provider auth flow, usage limits dialog, command preview, delete confirms, skill cards), Dashboard tab (runs count badge), and Onboarding modal.
+
+## Assumptions
+
+- The migration accepts minor visual diffs where current CSS deviated from shadcn defaults (e.g. action-button min-width disappears, `status-pill::before` becomes an inline `<span>` dot inside the badge). Visual parity is not a constraint — convergence on shadcn tokens is.
+- `ProviderAuthFlowModal` is treated as a form-style dialog even though its internal actions remain step-specific. Multi-step state stays inside the component.
+- `RunDetailModal`'s `size="wide"` exists in `FormDialog` and maps to `sm:max-w-4xl`.
+- `WorkspaceBadge`, `StatusPill`, and dashboard count badges stay as wrapper components where they own behavior/layout; they no longer hand-style the inner Badge with BEM badge classes.
+- No backward-compatibility shims were added.

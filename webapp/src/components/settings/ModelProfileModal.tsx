@@ -10,13 +10,7 @@ import type {
 import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+import { FormDialog } from "../ui/form-dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
@@ -440,24 +434,24 @@ export function ModelProfileModal({
   }
 
   return (
-    <Dialog
+    <FormDialog
       open
       onOpenChange={(open) => {
         if (!open && !isPending) onClose();
       }}
+      title={isEdit ? "Edit Profile" : "Add Profile"}
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      isPending={isPending}
+      error={error}
+      primaryAction={{
+        label: isEdit ? "Save Changes" : "Add Profile",
+        pendingLabel: "Saving…",
+        disabled: providers.length === 0,
+      }}
+      onCancel={onClose}
     >
-      <DialogContent className="task-form-dialog">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Profile" : "Add Profile"}</DialogTitle>
-        </DialogHeader>
-
-        <form
-          className="task-form"
-          onSubmit={(event) => {
-            void handleSubmit(event);
-          }}
-        >
-          <div className="task-form__body">
             <FieldGroup>
               <Field>
                 <FieldLabel>Name</FieldLabel>
@@ -733,35 +727,6 @@ export function ModelProfileModal({
                 </Field>
               </div>
             </FieldGroup>
-
-            {error && (
-              <Alert variant="destructive" className="task-form__error">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          <DialogFooter className="app-action-row app-action-row--end task-form__footer">
-            <Button
-              type="button"
-              variant="outline"
-              className="task-form__action-button"
-              onClick={onClose}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="default"
-              className="task-form__action-button"
-              disabled={isPending || providers.length === 0}
-            >
-              {isPending ? "Saving…" : isEdit ? "Save Changes" : "Add Profile"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

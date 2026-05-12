@@ -83,31 +83,31 @@ function ProviderCard({
       <div className="provider-card__actions">
         {showAuthActions && (
           <>
-            <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onConnect} disabled={isBusy}>
+            <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onConnect} disabled={isBusy}>
               <PlugZapIcon data-icon="inline-start" />
               {authStatus.has_session ? "Reconnect" : "Connect"}
             </Button>
-            <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onRefresh} disabled={isBusy || !authStatus.can_refresh}>
+            <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onRefresh} disabled={isBusy || !authStatus.can_refresh}>
               <CheckCircle2Icon data-icon="inline-start" />
               Refresh
             </Button>
             {showUsageAction && (
-              <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onShowUsage}>
+              <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onShowUsage}>
                 <GaugeIcon data-icon="inline-start" />
                 Usage
               </Button>
             )}
-            <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onDisconnect} disabled={isBusy || !authStatus.has_session}>
+            <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onDisconnect} disabled={isBusy || !authStatus.has_session}>
               <UnplugIcon data-icon="inline-start" />
               Disconnect
             </Button>
           </>
         )}
-        <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onEdit}>
+        <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onEdit}>
           <EditIcon data-icon="inline-start" />
           Edit
         </Button>
-        <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onDelete} disabled={isBusy}>
+        <Button type="button" variant="ghost" size="sm" className="settings-action-button settings-action-button--danger" onClick={onDelete} disabled={isBusy}>
           <Trash2Icon data-icon="inline-start" />
           Delete
         </Button>
@@ -147,7 +147,7 @@ export function ProvidersSettingsSection({
             <CardTitle className="settings-panel__title">Providers</CardTitle>
             <div className="settings-panel__subtitle">LLM provider connections and credentials</div>
           </div>
-          <Button type="button" variant="ghost" size="sm" className="task-card__action-button" onClick={onCreate}>
+          <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onCreate}>
             <PlusIcon data-icon="inline-start" />
             Add Provider
           </Button>
