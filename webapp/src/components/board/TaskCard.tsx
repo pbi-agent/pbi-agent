@@ -55,7 +55,7 @@ export function TaskCard({
       <CardHeader className="task-card__drag-handle" {...listeners} {...attributes}>
         <div className="task-card__chrome-row">
           <GripVerticalIcon className="task-card__grip" aria-hidden="true" />
-          <StatusPill status={task.run_status} />
+          <StatusPill status={task.run_status} size="meta" className="task-card__status" />
         </div>
         <TaskCardContent task={task} />
       </CardHeader>

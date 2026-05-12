@@ -55,6 +55,7 @@ describe("TaskCard", () => {
     );
 
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.getByText("idle").closest('[data-size="meta"]')).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Stop/ })).not.toBeInTheDocument();
   });
 
