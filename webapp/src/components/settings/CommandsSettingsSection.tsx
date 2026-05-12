@@ -65,11 +65,11 @@ function CommandCard({
         <div className="provider-card__subtitle">{command.path}</div>
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
-        <Badge variant="secondary">
+        <Badge size="meta" variant="secondary">
           {command.slash_alias}
         </Badge>
         {command.model_profile_id ? (
-          <Badge variant="outline">
+          <Badge size="meta" variant="outline">
             Profile: {command.model_profile_id}
           </Badge>
         ) : null}
@@ -77,7 +77,7 @@ function CommandCard({
           type="button"
           variant="ghost"
           size="sm"
-          className="task-card__action-button"
+          className="settings-action-button"
           onClick={onPreview}
         >
           <EyeIcon data-icon="inline-start" />
@@ -120,16 +120,16 @@ function CandidateCard({
           {candidate.description || `Install ${candidate.slash_alias}.`}
         </p>
         <div className="command-candidate__badges">
-          <Badge variant="secondary">
+          <Badge size="meta" variant="secondary">
             {candidate.slash_alias}
           </Badge>
           {candidate.model_profile_id ? (
-            <Badge variant="outline">
+            <Badge size="meta" variant="outline">
               Profile: {candidate.model_profile_id}
             </Badge>
           ) : null}
           {candidate.subpath ? (
-            <Badge variant="outline">
+            <Badge size="meta" variant="outline">
               {candidate.subpath}
             </Badge>
           ) : null}
@@ -315,7 +315,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
             type="button"
             variant="ghost"
             size="sm"
-            className="task-card__action-button"
+            className="settings-action-button"
             onClick={openAddDialog}
           >
             <PlusIcon data-icon="inline-start" />
@@ -410,6 +410,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                       </span>
                       {listing?.ref ? (
                         <Badge
+                          size="meta"
                           variant="outline"
                           className="skill-add-dialog__source-ref"
                         >

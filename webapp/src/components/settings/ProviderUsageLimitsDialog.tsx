@@ -244,7 +244,7 @@ function UsageDialogHeader({
             <span aria-hidden="true" />
           )}
           {planType ? (
-            <Badge variant="info" className="provider-usage-dialog__plan-badge capitalize">
+            <Badge size="meta" variant="info" className="provider-usage-dialog__plan-badge capitalize">
               <SparklesIcon className="size-3" />
               {planType}
             </Badge>
@@ -304,6 +304,7 @@ function BucketCard({ bucket }: { bucket: UsageLimitBucket }) {
           </h3>
         </div>
         <Badge
+          size="meta"
           variant={STATUS_BADGE_VARIANTS[bucket.status]}
           className="provider-usage-bucket__status-badge uppercase tracking-wide"
         >

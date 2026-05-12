@@ -207,10 +207,11 @@ export function ProviderAuthFlowModal({
           {flow && (
             <div className="provider-auth-flow-panel">
               <div className="settings-item__meta">
-                <Badge variant="secondary">
+                <Badge size="meta" variant="secondary">
                   {flow.method === "browser" ? "Browser flow" : "Device code"}
                 </Badge>
                 <Badge
+                  size="meta"
                   variant={
                     flow.status === "completed"
                       ? "success"
@@ -222,7 +223,7 @@ export function ProviderAuthFlowModal({
                   {flow.status}
                 </Badge>
                 {flow.backend && (
-                  <Badge variant="outline">{flow.backend}</Badge>
+                  <Badge size="meta" variant="outline">{flow.backend}</Badge>
                 )}
               </div>
 

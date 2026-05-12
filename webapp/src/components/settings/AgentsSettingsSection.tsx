@@ -71,7 +71,7 @@ function AgentCard({
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
         {agent.model_profile_id ? (
-          <Badge variant="outline">
+          <Badge size="meta" variant="outline">
             Profile: {agent.model_profile_id}
           </Badge>
         ) : null}
@@ -79,7 +79,7 @@ function AgentCard({
           type="button"
           variant="ghost"
           size="sm"
-          className="task-card__action-button"
+          className="settings-action-button"
           onClick={onPreview}
         >
           <EyeIcon data-icon="inline-start" />
@@ -123,12 +123,12 @@ function CandidateCard({
         </p>
         <div className="command-candidate__badges">
           {candidate.model_profile_id ? (
-            <Badge variant="outline">
+            <Badge size="meta" variant="outline">
               Profile: {candidate.model_profile_id}
             </Badge>
           ) : null}
           {candidate.subpath ? (
-            <Badge variant="secondary">
+            <Badge size="meta" variant="secondary">
               {candidate.subpath}
             </Badge>
           ) : null}
@@ -305,7 +305,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
             type="button"
             variant="ghost"
             size="sm"
-            className="task-card__action-button"
+            className="settings-action-button"
             onClick={openAddDialog}
           >
             <PlusIcon data-icon="inline-start" />
@@ -400,6 +400,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                       </span>
                       {listing?.ref ? (
                         <Badge
+                          size="meta"
                           variant="outline"
                           className="skill-add-dialog__source-ref"
                         >
