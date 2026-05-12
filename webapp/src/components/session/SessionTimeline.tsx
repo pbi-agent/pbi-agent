@@ -21,7 +21,6 @@ import {
 } from "../ui/collapsible";
 import {
   Accordion,
-  AccordionContent,
   AccordionItem,
 } from "../ui/accordion";
 import { Badge } from "../ui/badge";
@@ -834,7 +833,10 @@ function WorkingItemsPanel({
                     </Button>
                   </AccordionPrimitive.Trigger>
                 </AccordionPrimitive.Header>
-                <AccordionContent className="working-items__accordion-content pt-0 pb-0">
+                <AccordionPrimitive.Content
+                  data-slot="accordion-content"
+                  className="working-items__accordion-content"
+                >
                   <div className="working-items__tool-detail">
                     <ToolResult
                       metadata={entry.entry.metadata}
@@ -842,7 +844,7 @@ function WorkingItemsPanel({
                       running={entry.status === "running"}
                     />
                   </div>
-                </AccordionContent>
+                </AccordionPrimitive.Content>
               </AccordionItem>
             );
           }
@@ -868,13 +870,16 @@ function WorkingItemsPanel({
                   </Button>
                 </AccordionPrimitive.Trigger>
               </AccordionPrimitive.Header>
-              <AccordionContent className="working-items__accordion-content pt-0 pb-0">
+              <AccordionPrimitive.Content
+                data-slot="accordion-content"
+                className="working-items__accordion-content"
+              >
                 {group.items.map((item) => (
                   <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
                     <MarkdownContent content={item.content} />
                   </div>
                 ))}
-              </AccordionContent>
+              </AccordionPrimitive.Content>
             </AccordionItem>
           );
         })}

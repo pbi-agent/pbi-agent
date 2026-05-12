@@ -1367,6 +1367,40 @@
   transform: rotate(90deg);
 }
 
+/* Accordion content for the Working panel:
+ *
+ * We bypass the shadcn AccordionContent wrapper here because it pins the
+ * inner div to `h-(--radix-accordion-content-height)` — a fixed pixel
+ * height measured at open time.  That clips async-rendered content
+ * (Shiki, markdown, diffs, images) that settles after the initial open.
+ *
+ * Instead we use AccordionPrimitive.Content directly and only constrain
+ * height during the open/close animation, then release it so the panel
+ * grows naturally and the parent ResizeObserver can size the scroll area
+ * around the real content height.
+ */
+.working-items__accordion-content {
+  overflow: hidden;
+}
+
+.working-items__accordion-content[data-state="open"] {
+  animation: working-items-accordion-down 200ms ease-out;
+}
+
+.working-items__accordion-content[data-state="closed"] {
+  animation: working-items-accordion-up 200ms ease-out;
+}
+
+@keyframes working-items-accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes working-items-accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
 .timeline-entry__work-run-body {
   display: flex;
   flex-direction: column;
