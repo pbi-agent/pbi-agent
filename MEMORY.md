@@ -86,3 +86,6 @@
 - Added ChatGPT provider auth dialog hover/focus styling for Browser/Device code method tabs and primary/secondary flow action buttons, rebuilt static assets, and validated focused SettingsPage tests, lint, typecheck, web build, and diff check.
 - Kept ChatGPT provider auth dialog action buttons content-width (overriding task-form full-width submit) while preserving centered primary start action, rebuilt static assets, and validated focused SettingsPage tests, lint, typecheck, web build, and diff check.
 - Harmonized shared alert/confirm dialogs with app modal padding, clipped rounded footer, standard hover/focus button effects, and destructive red confirm hover; rebuilt static assets and validated focused delete dialog tests, lint, typecheck, web build, and diff check.
+
+- Tightened shared alert dialog footers (thinner bottom background) and strengthened footer button hover/focus overrides, including destructive red hover; rebuilt static assets and validated focused delete dialog tests, lint, typecheck, web build, and diff check.
+- Fixed shared alert-dialog footer hover by marking Radix `asChild` actions/cancels with `alert-dialog__button` and targeting that class instead of `data-slot=button`; rebuilt static assets and validated alert/delete dialog tests, lint, typecheck, web build, and diff check.

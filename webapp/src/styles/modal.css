@@ -303,63 +303,63 @@
 }
 
 [data-slot="alert-dialog-footer"] {
-  margin: var(--sp-1) calc(var(--alert-dialog-padding) * -1)
+  margin: 0 calc(var(--alert-dialog-padding) * -1)
     calc(var(--alert-dialog-padding) * -1);
-  padding: var(--sp-3) var(--alert-dialog-padding);
+  padding: var(--sp-2) var(--alert-dialog-padding);
   border-color: var(--color-border-subtle);
   border-bottom-right-radius: inherit;
   border-bottom-left-radius: inherit;
   background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
 }
 
-[data-slot="alert-dialog-footer"] > [data-slot="button"] {
+[data-slot="alert-dialog-footer"] > .alert-dialog__button {
   min-width: 0;
   transition:
     color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease),
     border-color var(--duration-fast) var(--ease),
     box-shadow var(--duration-fast) var(--ease),
-    transform var(--duration-fast) var(--ease-out);
+    transform var(--duration-fast) var(--ease-out) !important;
 }
 
-[data-slot="alert-dialog-footer"] > [data-slot="button"]:not(:disabled):hover,
-[data-slot="alert-dialog-footer"] > [data-slot="button"]:not(:disabled):focus-visible {
-  transform: translateY(-1px);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > .alert-dialog__button:not(:disabled):focus-visible {
+  transform: translateY(-1px) !important;
 }
 
-[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="outline"] {
-  color: var(--foreground);
-  background: var(--background);
-  border-color: var(--color-border);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="outline"] {
+  color: var(--foreground) !important;
+  background: var(--background) !important;
+  border-color: var(--color-border) !important;
 }
 
-[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="outline"]:not(:disabled):hover,
-[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="outline"]:not(:disabled):focus-visible {
-  color: var(--foreground);
-  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
-  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="outline"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="outline"]:not(:disabled):focus-visible {
+  color: var(--foreground) !important;
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted)) !important;
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent) !important;
 }
 
-[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="default"]:not(:disabled):hover,
-[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="default"]:not(:disabled):focus-visible {
-  color: var(--primary-foreground);
-  background: var(--color-accent-hover);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="default"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="default"]:not(:disabled):focus-visible {
+  color: var(--primary-foreground) !important;
+  background: var(--color-accent-hover) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent) !important;
 }
 
-[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="destructive"] {
-  color: var(--color-error);
-  background: color-mix(in srgb, var(--color-error) 12%, transparent);
-  border-color: color-mix(in srgb, var(--color-error) 20%, transparent);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="destructive"] {
+  color: var(--color-error) !important;
+  background: color-mix(in srgb, var(--color-error) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--color-error) 20%, transparent) !important;
 }
 
-[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="destructive"]:not(:disabled):hover,
-[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="destructive"]:not(:disabled):focus-visible {
-  color: var(--destructive-foreground, white);
-  background: var(--color-error);
-  border-color: var(--color-error);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-error) 28%, transparent);
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="destructive"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > .alert-dialog__button[data-variant="destructive"]:not(:disabled):focus-visible {
+  color: var(--background) !important;
+  background: var(--color-error) !important;
+  border-color: var(--color-error) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-error) 28%, transparent) !important;
 }
 
 @media (max-width: 40rem) {

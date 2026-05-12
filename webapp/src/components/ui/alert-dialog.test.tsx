@@ -55,6 +55,7 @@ describe("AlertDialog", () => {
 
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect(cancel).toHaveAttribute("data-variant", "outline");
+    expect(cancel).toHaveClass("alert-dialog__button");
 
     const footer = dialog.querySelector('[data-slot="alert-dialog-footer"]');
     expect(footer).toHaveClass(
@@ -67,6 +68,7 @@ describe("AlertDialog", () => {
     const action = screen.getByRole("button", { name: "Delete" });
     expect(action).toHaveAttribute("data-slot", "alert-dialog-action");
     expect(action).toHaveAttribute("data-variant", "destructive");
+    expect(action).toHaveClass("alert-dialog__button");
     expect(action).toHaveClass(
       "bg-destructive/10",
       "text-destructive",

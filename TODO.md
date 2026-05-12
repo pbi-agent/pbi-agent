@@ -1,5 +1,5 @@
-# TODO
-
-[X] Find alert dialog components/styles
-[X] Apply shared padding/footer/button/destructive styling
-[X] Validate focused tests/build and update memory
+[X] Inspect alert dialog implementations/styles
+[X] Compare working alert/dialog hover patterns
+[X] Fix shared alert hover/footer styling
+[X] Run focused validation
+[X] Update memory
