@@ -29,25 +29,41 @@
 }
 
 .board-layout__action-button {
+  height: 1.75rem;
+  padding: 0 var(--sp-2);
+  gap: 4px;
   color: var(--muted-foreground);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-normal);
+  background: transparent;
+  box-shadow: none;
   transition:
     color var(--duration-fast) var(--ease),
-    background var(--duration-fast) var(--ease);
+    background var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .board-layout__action-button svg {
-  opacity: 0.7;
+  width: 0.875rem;
+  height: 0.875rem;
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .board-layout__action-button:not(:disabled):hover,
 .board-layout__action-button:not(:disabled):focus-visible {
   color: var(--foreground);
-  background: var(--muted);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
 }
 
 .board-layout__action-button:not(:disabled):hover svg,
 .board-layout__action-button:not(:disabled):focus-visible svg {
-  opacity: 1;
+  transform: scale(1.06);
 }
 
 .board-layout__title {
