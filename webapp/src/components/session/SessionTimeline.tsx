@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { BotIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
+import { Accordion as AccordionPrimitive } from "radix-ui";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { ConnectionState } from "../../store";
 import type {
@@ -18,6 +19,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+} from "../ui/accordion";
 import { Badge } from "../ui/badge";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { ToolResult } from "./ToolResult";
@@ -651,23 +657,18 @@ function WorkingItemsPanel({
   const lastAutoScrolledGroupKeyRef = useRef<string | null>(null);
   const needsScroll = groups.length > WORKING_ITEMS_MAX_VISIBLE;
   const [dynamicMaxHeight, setDynamicMaxHeight] = useState<number | null>(null);
-  const [openGroupsState, setOpenGroupsState] = useState<{
+  // Single open value: opening one item automatically closes any other,
+  // courtesy of the Radix Accordion type="single" semantics.
+  const [openValueState, setOpenValueState] = useState<{
     closeSignal: string | null;
-    groups: Record<string, boolean>;
-  }>({ closeSignal, groups: {} });
-  const [openToolsState, setOpenToolsState] = useState<{
-    closeSignal: string | null;
-    tools: Record<string, boolean>;
-  }>({ closeSignal, tools: {} });
-  const openGroups = openGroupsState.closeSignal === closeSignal
-    ? openGroupsState.groups
-    : {};
-  const openTools = openToolsState.closeSignal === closeSignal
-    ? openToolsState.tools
-    : {};
+    value: string;
+  }>({ closeSignal, value: "" });
+  const openValue = openValueState.closeSignal === closeSignal
+    ? openValueState.value
+    : "";
 
   const lastGroupKey = groups.at(-1)?.key ?? null;
-  const hasOpenTool = Object.values(openTools).some(Boolean);
+  const hasOpenItem = openValue !== "";
 
   const scheduleScrollToLatestGroup = useCallback(() => {
     if (!needsScroll || fullExpanded || !lastGroupKey) return;
@@ -731,7 +732,7 @@ function WorkingItemsPanel({
     const preferredGroup = preferredKey ? groupRefs.current.get(preferredKey) : null;
     let tallestOpenGroup = preferredGroup?.scrollHeight ?? 0;
     for (const groupEl of groupRefs.current.values()) {
-      const openContent = groupEl.querySelector('[data-slot="collapsible-content"][data-state="open"]');
+      const openContent = groupEl.querySelector('[data-slot="accordion-content"][data-state="open"]');
       if (!openContent) continue;
       tallestOpenGroup = Math.max(tallestOpenGroup, groupEl.scrollHeight);
     }
@@ -784,9 +785,14 @@ function WorkingItemsPanel({
     });
   }, [scrollGroupToCenter, syncDynamicMaxHeight]);
 
-  const panelStyle = needsScroll && !fullExpanded && hasOpenTool && dynamicMaxHeight !== null
+  const panelStyle = needsScroll && !fullExpanded && hasOpenItem && dynamicMaxHeight !== null
     ? { "--working-items-max-height": `${dynamicMaxHeight}px` } as CSSProperties
     : undefined;
+
+  const handleAccordionValueChange = useCallback((nextValue: string) => {
+    setOpenValueState({ closeSignal, value: nextValue });
+    if (nextValue) scheduleScrollGroupToCenter(nextValue);
+  }, [closeSignal, scheduleScrollGroupToCenter]);
 
   return (
     <div
@@ -794,42 +800,41 @@ function WorkingItemsPanel({
       ref={setScrollRef}
       style={panelStyle}
     >
-      {groups.map((group) => {
-        if (group.kind === "sub_agent") {
-          return (
-            <div key={group.key} ref={setGroupRef(group.key)} className="working-items__item">
-              <SubAgentCard group={group} subAgents={subAgents} parentSessionId={parentSessionId} />
-            </div>
-          );
-        }
-        if (group.kind === "tool") {
-          const entry = group.entry;
-          const toolOpen = Boolean(openTools[entry.key]);
-          return (
-            <Collapsible
-              key={group.key}
-              open={toolOpen}
-              onOpenChange={(nextOpen) => {
-                setOpenToolsState((prev) => ({
-                  closeSignal,
-                  tools: {
-                    ...(prev.closeSignal === closeSignal ? prev.tools : {}),
-                    [entry.key]: nextOpen,
-                  },
-                }));
-                if (nextOpen) scheduleScrollGroupToCenter(group.key);
-              }}
-            >
-              <div ref={setGroupRef(group.key)} className="working-items__item">
-                <CollapsibleTrigger asChild>
-                  <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
-                    <ChevronRightIcon className="timeline-entry__chevron" />
-                    <span className="working-items__tool-title">{entry.displayLabel}</span>
-                    <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
-                    {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
+      <Accordion
+        type="single"
+        collapsible
+        value={openValue}
+        onValueChange={handleAccordionValueChange}
+        className="working-items__accordion"
+      >
+        {groups.map((group) => {
+          if (group.kind === "sub_agent") {
+            return (
+              <div key={group.key} ref={setGroupRef(group.key)} className="working-items__item">
+                <SubAgentCard group={group} subAgents={subAgents} parentSessionId={parentSessionId} />
+              </div>
+            );
+          }
+          if (group.kind === "tool") {
+            const entry = group.entry;
+            return (
+              <AccordionItem
+                key={group.key}
+                value={group.key}
+                ref={setGroupRef(group.key)}
+                className="working-items__item working-items__accordion-item"
+              >
+                <AccordionPrimitive.Header className="working-items__accordion-header">
+                  <AccordionPrimitive.Trigger asChild>
+                    <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
+                      <ChevronRightIcon className="timeline-entry__chevron" />
+                      <span className="working-items__tool-title">{entry.displayLabel}</span>
+                      <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
+                      {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
+                    </Button>
+                  </AccordionPrimitive.Trigger>
+                </AccordionPrimitive.Header>
+                <AccordionContent className="working-items__accordion-content pt-0 pb-0">
                   <div className="working-items__tool-detail">
                     <ToolResult
                       metadata={entry.entry.metadata}
@@ -837,49 +842,43 @@ function WorkingItemsPanel({
                       running={entry.status === "running"}
                     />
                   </div>
-                </CollapsibleContent>
-              </div>
-            </Collapsible>
-          );
-        }
-        const open = Boolean(openGroups[group.key]);
-        const groupLabel = "Thinking";
-        return (
-          <Collapsible
-            key={group.key}
-            open={open}
-            onOpenChange={(nextOpen) => setOpenGroupsState((prev) => ({
-              closeSignal,
-              groups: {
-                ...(prev.closeSignal === closeSignal ? prev.groups : {}),
-                [group.key]: nextOpen,
-              },
-            }))}
-          >
-            <div ref={setGroupRef(group.key)} className="working-items__item">
-              <CollapsibleTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="working-items__group-trigger"
-                  aria-label={groupLabel}
-                >
-                  <ChevronRightIcon className="timeline-entry__chevron" />
-                  <span>{groupLabel}</span>
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
+                </AccordionContent>
+              </AccordionItem>
+            );
+          }
+          const groupLabel = "Thinking";
+          return (
+            <AccordionItem
+              key={group.key}
+              value={group.key}
+              ref={setGroupRef(group.key)}
+              className="working-items__item working-items__accordion-item"
+            >
+              <AccordionPrimitive.Header className="working-items__accordion-header">
+                <AccordionPrimitive.Trigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="working-items__group-trigger"
+                    aria-label={groupLabel}
+                  >
+                    <ChevronRightIcon className="timeline-entry__chevron" />
+                    <span>{groupLabel}</span>
+                  </Button>
+                </AccordionPrimitive.Trigger>
+              </AccordionPrimitive.Header>
+              <AccordionContent className="working-items__accordion-content pt-0 pb-0">
                 {group.items.map((item) => (
                   <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
                     <MarkdownContent content={item.content} />
                   </div>
                 ))}
-              </CollapsibleContent>
-            </div>
-          </Collapsible>
-        );
-      })}
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
     </div>
   );
 }

@@ -1345,6 +1345,28 @@
   transform: rotate(90deg);
 }
 
+/* Working panel accordion: rotate the leading chevron when the accordion */
+/* item is open and reset the shadcn AccordionItem default border. */
+.working-items__accordion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.working-items__accordion-item {
+  border-bottom: 0;
+}
+
+.working-items__accordion-header {
+  display: flex;
+  width: 100%;
+}
+
+[data-slot="accordion-item"][data-state="open"] .timeline-entry__chevron {
+  transform: rotate(90deg);
+}
+
 .timeline-entry__work-run-body {
   display: flex;
   flex-direction: column;

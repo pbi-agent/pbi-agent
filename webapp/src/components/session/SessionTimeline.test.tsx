@@ -683,6 +683,63 @@ describe("SessionTimeline", () => {
     expect(limitButton).toHaveTextContent("Show recent 5");
   });
 
+  it("closes the previously opened tool card when another tool card is opened", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tool calls",
+            status: "completed",
+            items: [
+              {
+                text: "read_file alpha.txt",
+                metadata: {
+                  tool_name: "read_file",
+                  arguments: { path: "alpha.txt" },
+                  result: { path: "alpha.txt", content: "ALPHA_CONTENT" },
+                },
+              },
+              {
+                text: "read_file beta.txt",
+                metadata: {
+                  tool_name: "read_file",
+                  arguments: { path: "beta.txt" },
+                  result: { path: "beta.txt", content: "BETA_CONTENT" },
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    openWorking(0, false);
+    const toolButtons = () =>
+      screen.getAllByRole("button").filter((button) =>
+        button.classList.contains("working-items__tool-trigger"),
+      );
+
+    fireEvent.click(toolButtons()[0]);
+    expect(screen.getByText("ALPHA_CONTENT")).toBeInTheDocument();
+    expect(screen.queryByText("BETA_CONTENT")).not.toBeInTheDocument();
+    expect(toolButtons()[0]).toHaveAttribute("aria-expanded", "true");
+    expect(toolButtons()[1]).toHaveAttribute("aria-expanded", "false");
+
+    // Opening the second tool card must close the first one.
+    fireEvent.click(toolButtons()[1]);
+    expect(screen.queryByText("ALPHA_CONTENT")).not.toBeInTheDocument();
+    expect(screen.getByText("BETA_CONTENT")).toBeInTheDocument();
+    expect(toolButtons()[0]).toHaveAttribute("aria-expanded", "false");
+    expect(toolButtons()[1]).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("summarizes read_web_url as a read in the collapsed Working header", () => {
     render(
       <SessionTimeline
@@ -1372,15 +1429,31 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
       />,
     );
 
-    openWorking();
+    // Working block is a single-open accordion: only one tool card is
+    // expanded at a time. Open each tool card in turn and verify its
+    // content renders correctly.
+    openWorking(0, false);
+    const toolButtons = () =>
+      screen.getAllByRole("button").filter((button) =>
+        button.classList.contains("working-items__tool-trigger"),
+      );
 
-expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
+    fireEvent.click(toolButtons()[0]);
+    expect(screen.getAllByText("logo.jpg")[0]).toBeInTheDocument();
     expect(screen.getByText(/2.0 KB/)).toBeInTheDocument();
+
+    fireEvent.click(toolButtons()[1]);
     expect(screen.getAllByText("https://example.com")[0]).toBeInTheDocument();
     expect(screen.getByText("# Example")).toBeInTheDocument();
+
+    fireEvent.click(toolButtons()[2]);
     expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://example.com/docs");
+
+    fireEvent.click(toolButtons()[3]);
     expect(screen.getByText("Review tests")).toBeInTheDocument();
     expect(screen.getByText("Looks good")).toBeInTheDocument();
+
+    fireEvent.click(toolButtons()[4]);
     expect(screen.getAllByText("mcp__custom__lookup").length).toBeGreaterThan(0);
     expect(screen.getByText(/"value": "ok"/)).toBeInTheDocument();
   });
