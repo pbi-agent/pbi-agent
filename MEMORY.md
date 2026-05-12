@@ -55,6 +55,7 @@
 ## Detailed Task Events
 ## 2026-05-12
 - Normalized web shadcn dialog/confirm/badge/dropdown surfaces per existing PLAN.md, fixed review issues for onboarding close, StatusPill grouping, and Badge `asChild`, reran final frontend gate (`git diff --check`, lint, typecheck, `test:web`, `web:build`) successfully, and committed product files as `9bfb378`. Manual visual smoke remains not run.
+- Shipped the sandbox Dockerfile follow-up by updating the stale `RUNTIME_APK` test expectation to include `build-base`; reran `ruff check`, `ruff format`, `basedpyright`, `dead_code.py`, full `pytest`, and full web `test:web`/lint/typecheck/build successfully. Next context: branch + PR for the 36 local commits plus this fix.
 - Added extra padding to the shared workspace badge call site, rebuilt static web assets, and validated with `bun run lint`, `bun run typecheck`, focused AppShell/SessionPage web tests, `bun run web:build`, and `git diff --check`.
 - Fixed persistent workspace badge padding by adding explicit `.workspace-badge`/label CSS matching `.session-card__model`, switched it to `secondary`, rebuilt static assets, and validated lint/typecheck/focused AppShell+SessionPage tests/web build/diff check.
 - Tested `browser-use` skill against local web app at `http://127.0.0.1:7424/`; reset browser-use after initial connection failure, opened `/sessions`, and inspected title/text successfully. No code changes.
