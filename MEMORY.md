@@ -54,6 +54,7 @@
 
 ## Detailed Task Events
 ## 2026-05-12
+- Added shared hover/focus styling for the settings install-conflict `Replace existing` action across Skills/Commands/Agents, rebuilt static assets, and validated `git diff --check`, `bun run lint`, `bun run typecheck`, and `bun run test:web`.
 - Normalized web shadcn dialog/confirm/badge/dropdown surfaces per existing PLAN.md, fixed review issues for onboarding close, StatusPill grouping, and Badge `asChild`, reran final frontend gate (`git diff --check`, lint, typecheck, `test:web`, `web:build`) successfully, and committed product files as `9bfb378`. Manual visual smoke remains not run.
 - Shipped the sandbox Dockerfile follow-up by updating the stale `RUNTIME_APK` test expectation to include `build-base`; reran `ruff check`, `ruff format`, `basedpyright`, `dead_code.py`, full `pytest`, and full web `test:web`/lint/typecheck/build successfully. Next context: branch + PR for the 36 local commits plus this fix.
 - Added extra padding to the shared workspace badge call site, rebuilt static web assets, and validated with `bun run lint`, `bun run typecheck`, focused AppShell/SessionPage web tests, `bun run web:build`, and `git diff --check`.
@@ -89,3 +90,4 @@
 - Harmonized shared alert/confirm dialogs with app modal padding, clipped rounded footer, standard hover/focus button effects, and destructive red confirm hover; rebuilt static assets and validated focused delete dialog tests, lint, typecheck, web build, and diff check.
 - Merged `origin/master` into local `master` as merge commit `87bc881`; conflicts were resolved by keeping the local sandbox Dockerfile superset, taking source PLAN/TODO, and preserving both MEMORY histories before compaction. Validation: fetch/merge/status, conflict marker scan, and `git diff --cached --check`; no test suite run.
 - Styled Maintenance settings Save Changes with the standard compact ghost `settings-action-button`, added SettingsPage assertions, rebuilt static assets, and validated focused SettingsPage test, full `test:web`, lint, typecheck, and web build.
+- Added shared hover/focus styling for the settings install-conflict `Replace existing` action across Skills/Commands/Agents, rebuilt static assets, and validated `bun run lint`, `bun run typecheck`, `bun run web:build`, and `bun run test:web` (existing React act warnings only).
