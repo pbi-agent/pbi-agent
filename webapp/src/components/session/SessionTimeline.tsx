@@ -1,6 +1,6 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { BotIcon, ChevronRightIcon } from "lucide-react";
+import { BotIcon, ChevronRightIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { ConnectionState } from "../../store";
 import type {
@@ -27,6 +27,7 @@ import { SessionWelcome } from "./SessionWelcome";
 const USER_MESSAGE_TOP_OFFSET = 8;
 const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
 const WORKING_ITEMS_MAX_VISIBLE = 5;
+const WORKING_ITEMS_OPEN_GUTTER_PX = 16;
 const WORK_RUN_PHASE_MIN_VISIBLE_MS = 600;
 const WORK_RUN_PHASE_TRANSITION_MS = 300;
 const WORK_RUN_PHASE_HOLD_MS =
@@ -634,17 +635,21 @@ function WorkingItemsPanel({
   closeSignal,
   parentSessionId,
   showSubAgentCards = true,
+  fullExpanded = false,
 }: {
   items: WorkItem[];
   subAgents: Record<string, { title: string; status: string }>;
   closeSignal: string | null;
   parentSessionId?: string;
   showSubAgentCards?: boolean;
+  fullExpanded?: boolean;
 }) {
   const groups = useMemo(() => buildWorkingGroups(items, showSubAgentCards), [items, showSubAgentCards]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const groupRefs = useRef(new Map<string, HTMLDivElement>());
+  const lastAutoScrolledGroupKeyRef = useRef<string | null>(null);
   const needsScroll = groups.length > WORKING_ITEMS_MAX_VISIBLE;
+  const [dynamicMaxHeight, setDynamicMaxHeight] = useState<number | null>(null);
   const [openGroupsState, setOpenGroupsState] = useState<{
     closeSignal: string | null;
     groups: Record<string, boolean>;
@@ -661,21 +666,56 @@ function WorkingItemsPanel({
     : {};
 
   const lastGroupKey = groups.at(-1)?.key ?? null;
+  const hasOpenTool = Object.values(openTools).some(Boolean);
 
-  useEffect(() => {
-    if (!needsScroll) return;
-    const scrollEl = scrollRef.current;
-    if (!scrollEl) return;
-    scrollEl.scrollTop = scrollEl.scrollHeight;
-  }, [lastGroupKey, needsScroll]);
+  const scheduleScrollToLatestGroup = useCallback(() => {
+    if (!needsScroll || fullExpanded || !lastGroupKey) return;
+    if (lastAutoScrolledGroupKeyRef.current === lastGroupKey) return;
+    lastAutoScrolledGroupKeyRef.current = lastGroupKey;
+    requestAnimationFrame(() => {
+      const scrollEl = scrollRef.current;
+      if (!scrollEl) return;
+      scrollEl.scrollTop = scrollEl.scrollHeight;
+    });
+  }, [fullExpanded, lastGroupKey, needsScroll]);
+
+  const setScrollRef = useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    if (node) scheduleScrollToLatestGroup();
+  }, [scheduleScrollToLatestGroup]);
 
   const setGroupRef = useCallback((key: string) => (node: HTMLDivElement | null) => {
     if (node) {
       groupRefs.current.set(key, node);
+      if (key === lastGroupKey) scheduleScrollToLatestGroup();
       return;
     }
     groupRefs.current.delete(key);
-  }, []);
+  }, [lastGroupKey, scheduleScrollToLatestGroup]);
+
+  const syncDynamicMaxHeight = useCallback((preferredKey?: string) => {
+    if (!needsScroll || fullExpanded) {
+      setDynamicMaxHeight(null);
+      return;
+    }
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+
+    const preferredGroup = preferredKey ? groupRefs.current.get(preferredKey) : null;
+    let tallestOpenGroup = preferredGroup?.scrollHeight ?? 0;
+    for (const groupEl of groupRefs.current.values()) {
+      const openContent = groupEl.querySelector('[data-slot="collapsible-content"][data-state="open"]');
+      if (!openContent) continue;
+      tallestOpenGroup = Math.max(tallestOpenGroup, groupEl.scrollHeight);
+    }
+
+    const nextHeight = tallestOpenGroup > scrollEl.clientHeight
+      ? Math.ceil(tallestOpenGroup + WORKING_ITEMS_OPEN_GUTTER_PX)
+      : null;
+    setDynamicMaxHeight((currentHeight) => (
+      currentHeight === nextHeight ? currentHeight : nextHeight
+    ));
+  }, [fullExpanded, needsScroll]);
 
   const scrollGroupToCenter = useCallback((key: string) => {
     if (!needsScroll) return;
@@ -695,14 +735,20 @@ function WorkingItemsPanel({
 
   const scheduleScrollGroupToCenter = useCallback((key: string) => {
     requestAnimationFrame(() => {
+      syncDynamicMaxHeight(key);
       requestAnimationFrame(() => scrollGroupToCenter(key));
     });
-  }, [scrollGroupToCenter]);
+  }, [scrollGroupToCenter, syncDynamicMaxHeight]);
+
+  const panelStyle = needsScroll && !fullExpanded && hasOpenTool && dynamicMaxHeight !== null
+    ? { "--working-items-max-height": `${dynamicMaxHeight}px` } as CSSProperties
+    : undefined;
 
   return (
     <div
-      className={`working-items${needsScroll ? " working-items--scrollable" : ""}`}
-      ref={scrollRef}
+      className={`working-items${needsScroll ? " working-items--scrollable" : ""}${fullExpanded ? " working-items--fully-expanded" : ""}`}
+      ref={setScrollRef}
+      style={panelStyle}
     >
       {groups.map((group) => {
         if (group.kind === "sub_agent") {
@@ -949,7 +995,14 @@ function WorkRun({
     open: false,
     closeSignal,
   });
+  const [fullExpandedState, setFullExpandedState] = useState({
+    expanded: false,
+    closeSignal,
+  });
   const open = openState.closeSignal === closeSignal ? openState.open : false;
+  const rawFullExpanded = fullExpandedState.closeSignal === closeSignal
+    ? fullExpandedState.expanded
+    : false;
   const contentRef = useRef<HTMLDivElement>(null);
   const workRunSummary = useMemo(
     () => summarizeWorkRun(unit.items, showSubAgentCards ?? true),
@@ -970,6 +1023,43 @@ function WorkRun({
   const hasVisibleSummary = workRunSummaryItems.some((item) => item.count > 0);
   const isVisiblyActive = active || unit.running || hasRunningSubAgent;
   const showPlaceholderSummary = active && !hasVisibleSummary;
+  const workRunGroupCount = useMemo(
+    () => buildWorkingGroups(unit.items, showSubAgentCards ?? true).length,
+    [showSubAgentCards, unit.items],
+  );
+  const canFullExpand = workRunGroupCount > WORKING_ITEMS_MAX_VISIBLE;
+  const fullExpanded = canFullExpand && rawFullExpanded;
+
+  const setOpenFromUser = useCallback((nextOpen: boolean) => {
+    setOpenState({ open: nextOpen, closeSignal });
+    if (nextOpen) {
+      onUserOpen?.(contentRef.current);
+    }
+  }, [closeSignal, onUserOpen]);
+
+  const toggleFullExpanded = useCallback(() => {
+    if (!canFullExpand) return;
+    setOpenState({ open: true, closeSignal });
+    setFullExpandedState((current) => ({
+      closeSignal,
+      expanded: current.closeSignal === closeSignal ? !current.expanded : true,
+    }));
+    requestAnimationFrame(() => onUserOpen?.(contentRef.current));
+  }, [canFullExpand, closeSignal, onUserOpen]);
+
+  const handleWorkRunHeaderKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!canFullExpand || !event.altKey || event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleFullExpanded();
+  }, [canFullExpand, toggleFullExpanded]);
+
+  const handleWorkRunHeaderClickCapture = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    if (!canFullExpand || !event.altKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleFullExpanded();
+  }, [canFullExpand, toggleFullExpanded]);
 
   return (
     <div
@@ -978,33 +1068,48 @@ function WorkRun({
     >
       <Collapsible
         open={open}
-        onOpenChange={(nextOpen) => {
-          setOpenState({ open: nextOpen, closeSignal });
-          if (nextOpen) {
-            onUserOpen?.(contentRef.current);
-          }
-        }}
+        onOpenChange={setOpenFromUser}
       >
-        <CollapsibleTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="timeline-entry__header timeline-entry__header--work-run"
-            data-phase={phase ?? undefined}
-            aria-label={workRunSummary ? `Working ${workRunSummary}` : "Working"}
-          >
-            <ChevronRightIcon className="timeline-entry__chevron" />
-            <TextShimmer text="Working" active={isVisiblyActive} className="timeline-entry__working-label" />
-            {showPlaceholderSummary ? (
-              <span className="working-items__summary working-items__summary--placeholder" aria-hidden="true">
-                Preparing…
-              </span>
-            ) : (
-              <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
-            )}
-          </Button>
-        </CollapsibleTrigger>
+        <div className="timeline-entry__work-run-header-row">
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="timeline-entry__header timeline-entry__header--work-run"
+              data-phase={phase ?? undefined}
+              aria-label={workRunSummary ? `Working ${workRunSummary}` : "Working"}
+              aria-keyshortcuts={canFullExpand ? "Alt+Enter" : undefined}
+              title={canFullExpand ? "Click to expand. Alt-click or Alt+Enter fully expands the tool list." : undefined}
+              onClickCapture={handleWorkRunHeaderClickCapture}
+              onKeyDown={handleWorkRunHeaderKeyDown}
+            >
+              <ChevronRightIcon className="timeline-entry__chevron" />
+              <TextShimmer text="Working" active={isVisiblyActive} className="timeline-entry__working-label" />
+              {showPlaceholderSummary ? (
+                <span className="working-items__summary working-items__summary--placeholder" aria-hidden="true">
+                  Preparing…
+                </span>
+              ) : (
+                <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
+              )}
+            </Button>
+          </CollapsibleTrigger>
+          {canFullExpand ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="timeline-entry__work-run-full-button"
+              aria-label={fullExpanded ? "Limit Working tool list to five rows" : "Fully expand Working tool list"}
+              aria-pressed={fullExpanded}
+              onClick={toggleFullExpanded}
+            >
+              {fullExpanded ? <Minimize2Icon data-icon="inline-start" /> : <Maximize2Icon data-icon="inline-start" />}
+              <span>{fullExpanded ? "Limit" : "Full"}</span>
+            </Button>
+          ) : null}
+        </div>
         {hasItems ? (
           <CollapsibleContent>
             <div className="timeline-entry__work-run-body" ref={contentRef}>
@@ -1014,6 +1119,7 @@ function WorkRun({
                 closeSignal={closeSignal}
                 parentSessionId={parentSessionId}
                 showSubAgentCards={showSubAgentCards}
+                fullExpanded={fullExpanded}
               />
             </div>
           </CollapsibleContent>

@@ -590,6 +590,92 @@ describe("SessionTimeline", () => {
     rafSpy.mockRestore();
   });
 
+  it("grows the long Working scroll area enough to fit an opened tool card", async () => {
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 0;
+    });
+    const { container } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tools",
+            status: "completed",
+            items: Array.from({ length: 7 }, (_, index) => ({
+              text: `file ${index + 1}`,
+              metadata: {
+                tool_name: "read_file",
+                arguments: { path: `file-${index + 1}.txt` },
+                result: { path: `file-${index + 1}.txt`, content: `file ${index + 1}` },
+              },
+            })),
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    openWorking(0, false);
+    const scrollArea = container.querySelector<HTMLElement>(".working-items--scrollable");
+    expect(scrollArea).toBeInTheDocument();
+    if (!scrollArea) throw new Error("Expected scrollable Working items area");
+    Object.defineProperty(scrollArea, "clientHeight", { configurable: true, value: 160 });
+    Object.defineProperty(scrollArea, "scrollHeight", { configurable: true, value: 700 });
+
+    const sixthToolButton = screen.getByRole("button", { name: /Read.*file-6\.txt/i });
+    const sixthToolItem = sixthToolButton.closest<HTMLElement>(".working-items__item");
+    expect(sixthToolItem).not.toBeNull();
+    Object.defineProperty(sixthToolItem!, "scrollHeight", { configurable: true, value: 320 });
+
+    fireEvent.click(sixthToolButton);
+
+    await waitFor(() => {
+      expect(scrollArea.style.getPropertyValue("--working-items-max-height")).toBe("336px");
+    });
+    rafSpy.mockRestore();
+  });
+
+  it("offers a shortcut button to fully expand long Working tool lists", async () => {
+    const { container } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Tools",
+            status: "completed",
+            items: Array.from({ length: 7 }, (_, index) => ({
+              text: `file ${index + 1}`,
+              metadata: {
+                tool_name: "read_file",
+                arguments: { path: `file-${index + 1}.txt` },
+                result: { path: `file-${index + 1}.txt`, content: `file ${index + 1}` },
+              },
+            })),
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Fully expand Working tool list" }));
+
+    await waitFor(() => {
+      expect(container.querySelector(".working-items--fully-expanded")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Limit Working tool list to five rows" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("summarizes read_web_url as a read in the collapsed Working header", () => {
     render(
       <SessionTimeline

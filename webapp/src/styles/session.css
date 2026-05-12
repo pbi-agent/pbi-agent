@@ -1145,6 +1145,13 @@
   margin: var(--sp-1) 0;
 }
 
+.timeline-entry__work-run-header-row {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
 .timeline-entry__header--work-run {
   display: flex;
   align-items: center;
@@ -1158,6 +1165,7 @@
   color: var(--color-muted-foreground);
   cursor: pointer;
   user-select: none;
+  min-width: 0;
   transition:
     background var(--duration-fast),
     border-left-color var(--duration-normal) var(--ease-out),
@@ -1189,6 +1197,24 @@
 .timeline-entry__header--work-run[data-phase="retry_wait"] {
   border-left-color: var(--color-warning);
   color: var(--color-warning);
+}
+
+.timeline-entry__work-run-full-button {
+  height: 2rem;
+  flex: 0 0 auto;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  color: var(--color-muted-foreground);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  background: transparent;
+}
+
+.timeline-entry__work-run-full-button:hover,
+.timeline-entry__work-run-full-button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--color-foreground);
 }
 
 .timeline-entry__working-label {
@@ -1315,11 +1341,18 @@
 }
 
 .working-items--scrollable {
-  max-height: calc(10rem + var(--sp-2) + var(--sp-2) + var(--sp-2) + var(--sp-2));
+  max-height: var(--working-items-max-height, calc(10rem + var(--sp-2) + var(--sp-2) + var(--sp-2) + var(--sp-2)));
   overflow-y: auto;
   padding-right: var(--sp-1);
   scroll-behavior: smooth;
   scrollbar-gutter: stable;
+}
+
+.working-items--fully-expanded {
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 0;
+  scrollbar-gutter: auto;
 }
 
 .working-items__item {
