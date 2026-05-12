@@ -1713,12 +1713,17 @@
 }
 
 .git-diff-result__content {
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
 }
 
 .git-diff-result__viewport {
   max-height: min(52vh, 560px);
   overflow: auto;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-bg) 82%, var(--color-card));
 }
 
@@ -1940,6 +1945,13 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--sp-2);
+}
+
+.tool-result-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
 }
 
 .tool-result__section {
