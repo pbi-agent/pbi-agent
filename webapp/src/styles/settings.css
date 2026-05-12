@@ -1409,13 +1409,19 @@
   padding: 0.95rem 1rem;
 }
 
+.settings-preview-dialog {
+  --task-form-dialog-padding: var(--sp-4);
+
+  gap: var(--sp-3);
+}
+
 .settings-preview-dialog [data-slot="dialog-header"] {
   display: flex;
   min-width: 0;
   flex-direction: row;
   align-items: center;
-  gap: var(--sp-3);
-  padding-right: 3rem;
+  gap: var(--sp-2);
+  padding-right: 2.75rem;
 }
 
 .settings-preview-dialog .modal-icon-shell {
@@ -1442,12 +1448,13 @@
 
 .command-preview-dialog__scroll {
   min-height: 0;
-  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
   overflow: auto;
-  scrollbar-gutter: stable both-edges;
+  scrollbar-gutter: stable;
 }
 
 .command-preview-dialog__markdown {
+  padding: var(--sp-4);
   border-radius: var(--radius-lg);
 }
 

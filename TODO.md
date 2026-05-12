@@ -1,3 +1,5 @@
-[X] Inspect preview modal header implementation
-[X] Update preview header to one-line layout
-[X] Run focused validation and rebuild
+# TODO
+
+[>] Update Add Provider credential source control hover/active styling
+[ ] Run focused frontend validation
+[ ] Update task memory
