@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchBootstrap } from "../api";
-import { cn } from "../lib/utils";
-import { Badge } from "./ui/badge";
+import { MetaBadge } from "./MetaBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type WorkspaceBadgeProps = {
@@ -35,12 +34,9 @@ export function WorkspaceBadge({
   if (!workspaceBadgeLabel) return null;
 
   const workspaceBadge = (
-    <Badge
-      variant="outline"
-      className={cn("max-w-full min-w-0 justify-start overflow-hidden font-mono", className)}
-    >
-      <span className={cn("min-w-0 truncate", textClassName)}>{workspaceBadgeLabel}</span>
-    </Badge>
+    <MetaBadge truncate className={className} labelClassName={textClassName}>
+      {workspaceBadgeLabel}
+    </MetaBadge>
   );
 
   return workspaceDisplayPath ? (

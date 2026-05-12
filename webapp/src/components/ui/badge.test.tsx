@@ -30,4 +30,12 @@ describe("Badge", () => {
     expect(link).toHaveClass("bg-sky-500/10", "text-sky-600");
     expect(container.querySelector('[data-slot="badge-dot"]')).not.toBeInTheDocument();
   });
+
+  it("supports the compact metadata size", () => {
+    render(<Badge variant="secondary" size="meta">claude-opus-4-7-1</Badge>);
+
+    const badge = screen.getByText("claude-opus-4-7-1");
+    expect(badge).toHaveAttribute("data-size", "meta");
+    expect(badge).toHaveClass("font-mono", "text-[0.6875rem]", "py-[2px]", "pb-[3px]");
+  });
 });

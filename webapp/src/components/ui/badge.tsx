@@ -32,9 +32,14 @@ const badgeVariants = cva(
         failed:
           "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 [a]:hover:bg-rose-500/20",
       },
+      size: {
+        default: "",
+        meta: "px-2 py-[2px] pb-[3px] font-mono text-[0.6875rem] leading-normal",
+      },
     },
     defaultVariants: {
       variant: "default",
+      size: "default",
     },
   }
 )
@@ -48,6 +53,7 @@ const statusDotClassName: Record<string, string> = {
 function Badge({
   className,
   variant = "default",
+  size = "default",
   asChild = false,
   children,
   ...props
@@ -61,7 +67,8 @@ function Badge({
       <Comp
         data-slot="badge"
         data-variant={variant}
-        className={cn(badgeVariants({ variant }), className)}
+        data-size={size}
+        className={cn(badgeVariants({ variant, size }), className)}
         {...props}
       >
         {children}
@@ -73,7 +80,8 @@ function Badge({
     <Comp
       data-slot="badge"
       data-variant={variant}
-      className={cn(badgeVariants({ variant }), className)}
+      data-size={size}
+      className={cn(badgeVariants({ variant, size }), className)}
       {...props}
     >
       {dotClassName ? (

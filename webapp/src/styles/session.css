@@ -183,16 +183,7 @@
 }
 
 .session-card__model {
-  display: inline-flex;
-  align-items: center;
   max-width: 8.5rem;
-  min-height: 24px;
-  padding: 2px var(--sp-2) 3px;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  line-height: var(--leading-normal);
-  overflow: visible;
-  text-overflow: clip;
 }
 
 .session-card__menu-trigger {
@@ -464,12 +455,23 @@
   white-space: nowrap;
 }
 
+.profile-selector__content {
+  inline-size: max-content;
+  min-inline-size: max(var(--radix-dropdown-menu-trigger-width), 18rem);
+  max-inline-size: min(32rem, calc(100vw - (var(--sp-4) * 2)));
+  max-block-size: min(var(--radix-dropdown-menu-content-available-height), 70vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .profile-selector__option {
   gap: var(--sp-2);
   width: 100%;
+  min-width: 0;
   align-items: flex-start;
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
+  white-space: normal;
 }
 
 .profile-selector__option-check {

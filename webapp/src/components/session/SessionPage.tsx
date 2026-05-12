@@ -1309,14 +1309,14 @@ function ProfileSelector({
       </DropdownMenuTrigger>
 
       {modelProfiles.length > 0 ? (
-<DropdownMenuContent className="min-w-64" align="start">
+        <DropdownMenuContent className="profile-selector__content" align="start">
           <DropdownMenuGroup>
             {modelProfiles.map((profile) => {
               const isSelected = profile.id === selectedProfileId;
               return (
                 <DropdownMenuItem
                   key={profile.id}
-                  className="profile-selector__option"
+                  className={cn("profile-selector__option", isSelected && "is-selected")}
                   onClick={() => {
                     onChange(profile.id);
                     setIsOpen(false);
