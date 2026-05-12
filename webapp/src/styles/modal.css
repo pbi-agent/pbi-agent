@@ -277,6 +277,97 @@
   }
 }
 
+/* ── Alert Dialog ── */
+
+[data-slot="alert-dialog-content"] {
+  --alert-dialog-padding: var(--sp-5);
+
+  overflow: hidden;
+  padding: var(--alert-dialog-padding);
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-1) 90%, transparent);
+  box-shadow: var(--shadow-lg);
+}
+
+[data-slot="alert-dialog-header"] {
+  gap: var(--sp-2);
+}
+
+[data-slot="alert-dialog-media"] {
+  margin-bottom: var(--sp-1);
+}
+
+[data-slot="alert-dialog-media"].text-destructive {
+  background: color-mix(in srgb, var(--color-error) 18%, transparent);
+  color: var(--color-error);
+}
+
+[data-slot="alert-dialog-footer"] {
+  margin: var(--sp-1) calc(var(--alert-dialog-padding) * -1)
+    calc(var(--alert-dialog-padding) * -1);
+  padding: var(--sp-3) var(--alert-dialog-padding);
+  border-color: var(--color-border-subtle);
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
+  background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
+}
+
+[data-slot="alert-dialog-footer"] > [data-slot="button"] {
+  min-width: 0;
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+[data-slot="alert-dialog-footer"] > [data-slot="button"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > [data-slot="button"]:not(:disabled):focus-visible {
+  transform: translateY(-1px);
+}
+
+[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="outline"] {
+  color: var(--foreground);
+  background: var(--background);
+  border-color: var(--color-border);
+}
+
+[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="outline"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="outline"]:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="default"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="default"]:not(:disabled):focus-visible {
+  color: var(--primary-foreground);
+  background: var(--color-accent-hover);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="destructive"] {
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-error) 20%, transparent);
+}
+
+[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="destructive"]:not(:disabled):hover,
+[data-slot="alert-dialog-footer"] > [data-slot="button"][data-variant="destructive"]:not(:disabled):focus-visible {
+  color: var(--destructive-foreground, white);
+  background: var(--color-error);
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-error) 28%, transparent);
+}
+
+@media (max-width: 40rem) {
+  [data-slot="alert-dialog-content"] {
+    --alert-dialog-padding: var(--sp-4);
+  }
+}
+
 .modal-card--confirm {
   width: min(460px, calc(100vw - 32px));
 }
