@@ -65,3 +65,4 @@
 - Applied shared `Badge size="meta"` styling to live-session tool card badges (shell/read/generic status, tool name, call id, and edit diff status/stats/call id), rebuilt static assets, and validated lint/typecheck/focused ToolResult+SessionTimeline+Badge tests/web build/diff check.
 - Added shared internal content padding/gaps to live-session tool result and edit diff cards, inset diff/code viewports with borders, rebuilt static assets, and validated lint/typecheck/focused ToolResult+SessionTimeline+Badge tests/web build/diff check.
 - Applied shared `Badge size="meta"` styling to Working-panel sub-agent status badges, rebuilt static assets, and validated lint/typecheck/focused SessionTimeline+Badge tests/web build/diff check.
+- Reduced session composer width to the same centered 1120px content column/padding as the timeline (width only), rebuilt static assets, and validated lint/typecheck/focused Composer+SessionPage tests/web build/diff check.

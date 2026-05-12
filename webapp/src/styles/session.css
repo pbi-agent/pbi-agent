@@ -2187,7 +2187,10 @@
 
 /* ── Composer ── */
 .composer {
-  padding: var(--sp-2) var(--sp-3);
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--sp-2) var(--sp-8);
   flex-shrink: 0;
 }
 
@@ -3173,6 +3176,10 @@
 @media (max-width: 768px) {
   .timeline {
     padding: var(--sp-4) var(--sp-4);
+  }
+
+  .composer {
+    padding-inline: var(--sp-4);
   }
 
   .session-topbar {
