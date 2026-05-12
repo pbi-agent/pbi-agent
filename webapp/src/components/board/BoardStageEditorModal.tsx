@@ -243,6 +243,7 @@ export function BoardStageEditorModal({
               <Button
                 type="button"
                 variant="ghost"
+                size="sm"
                 className="board-stage-editor__remove-button"
                 onClick={() => removeStage(index)}
                 disabled={isSaving || items.length === 1 || fixedStage}
@@ -260,6 +261,7 @@ export function BoardStageEditorModal({
           type="button"
           variant="outline"
           size="sm"
+          className="board-stage-editor__add-button"
           onClick={addStage}
           disabled={isSaving}
         >

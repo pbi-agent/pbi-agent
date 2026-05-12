@@ -198,6 +198,47 @@
   background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
 }
 
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"] {
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="default"] {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="outline"] {
+  color: var(--foreground);
+  background: var(--background);
+  border-color: var(--color-border);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"]:not(:disabled):hover,
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"]:not(:disabled):focus-visible {
+  transform: translateY(-1px);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="default"]:not(:disabled):hover,
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="default"]:not(:disabled):focus-visible {
+  color: var(--primary-foreground);
+  background: var(--color-accent-hover);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="outline"]:not(:disabled):hover,
+.task-form-dialog [data-slot="dialog-footer"] > [data-slot="button"][data-variant="outline"]:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
 .task-form__footer {
   display: flex;
   flex-wrap: wrap;
