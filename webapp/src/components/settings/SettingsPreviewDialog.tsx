@@ -28,6 +28,7 @@ export function SettingsPreviewDialog({
       description={path}
       icon={<Icon />}
       size="wide"
+      contentClassName="settings-preview-dialog"
     >
       <div className="command-preview-dialog__scroll timeline-entry timeline-entry--assistant">
         <div className="timeline-entry__content command-preview-dialog__markdown">

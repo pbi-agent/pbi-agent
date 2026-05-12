@@ -1409,6 +1409,37 @@
   padding: 0.95rem 1rem;
 }
 
+.settings-preview-dialog [data-slot="dialog-header"] {
+  display: flex;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-right: 3rem;
+}
+
+.settings-preview-dialog .modal-icon-shell {
+  flex: 0 0 auto;
+}
+
+.settings-preview-dialog [data-slot="dialog-title"] {
+  flex: 0 1 auto;
+  max-width: 40%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-preview-dialog [data-slot="dialog-description"] {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .command-preview-dialog__scroll {
   min-height: 0;
   padding: var(--sp-4) var(--sp-5) var(--sp-5);

@@ -1,3 +1,3 @@
-[X] Inspect project add dialogs/components
-[X] Normalize Browse button hover and Install badge styling
+[X] Inspect preview modal header implementation
+[X] Update preview header to one-line layout
 [X] Run focused validation and rebuild
