@@ -1,40 +1,57 @@
-# Plan: Startup PyPI Update Warning
+Decisions are locked. Here is the plan.
+
+---
+
+# Plan — Normalize Dialog, AlertDialog, Validation Buttons, DropdownMenu, and Badge in `webapp/`
 
 ## Summary
-Add/finish the CLI startup update warning by using the existing daily maintenance startup hook to check PyPI once per UTC day and render a Rich warning when a newer `pbi-agent` release exists. Keep the check best-effort and silent on network/API failures.
 
-## Checklist
-- [X] Keep `run_startup_maintenance()` as the only startup entry point, called from `pbi_agent.cli.entrypoint.main()` before command routing.
-- [X] In `src/pbi_agent/maintenance.py`, preserve the existing daily claim policy (`maintenance_state` + UTC date): only the first process that claims daily maintenance runs the PyPI check; later runs that day skip it.
-- [X] Keep the PyPI lookup on `https://pypi.org/pypi/pbi-agent/json` using `urllib.request`, a short timeout, JSON `Accept`, and `User-Agent: pbi-agent/<current-version>`.
-- [X] Compare the PyPI `info.version` to `pbi_agent.__version__`; warn only when PyPI is strictly newer. Keep failures, malformed payloads, equal versions, and older versions silent.
-- [X] Replace the plain `print(notice, file=sys.stderr)` with a small Rich renderer that writes to stderr, for example a yellow warning panel containing `pbi-agent <current> -> <latest>` and `uv tool install pbi-agent --upgrade`.
-- [X] Keep `MaintenanceResult.update_notice` as a plain string for tests/diagnostics; add an optional-console rendering helper if needed for deterministic Rich tests.
-- [X] Do not add config flags, DB schema changes, migrations, frontend/web UI warnings, or new dependencies.
+Audit and normalize the five surfaces (`Dialog`, `AlertDialog`, dialog-footer validation buttons, `DropdownMenu`, `Badge`) so every call site uses a single canonical shadcn primitive. Two thin composite primitives (`FormDialog`, `ConfirmDialog`) absorb the repeated dialog boilerplate, the `Badge` primitive grows semantic variants that replace ~6 BEM stylesheets, and bespoke per-component CSS overrides for these primitives are removed from `modal.css`, `utilities.css`, `session.css`, and `settings.css`.
 
-## Public Interfaces / Types
-- User-visible CLI behavior changes: a once-daily Rich-formatted stderr warning appears when PyPI has a newer `pbi-agent` version.
-- No CLI arguments, config shape, FastAPI contract, persisted schema, provider/tool interfaces, or frontend types change.
-- Internal helper functions in `pbi_agent.maintenance` may be added/refined for rendering and tests.
+Deliverable for this phase: implementation of Section "Implementation Changes".
 
-## Test Plan
-- [X] Update `tests/test_maintenance.py` so daily maintenance asserts the update check runs once per day and the Rich warning is emitted only on the first run.
-- [X] Add/adjust coverage for the rendered warning content: title/wording, current version, latest version, and exact upgrade command `uv tool install pbi-agent --upgrade`.
-- [X] Keep/update version comparison tests for newer, equal, and older PyPI versions.
-- [X] Mock `urllib.request.urlopen` or `_latest_pypi_version()` in tests; no test should require network access.
-- [X] Validate with `uv run pytest -q --tb=short -x tests/test_maintenance.py` and at least one CLI entrypoint-focused suite such as `uv run pytest -q --tb=short -x tests/cli/test_entrypoint.py`.
-- [X] Run Python quality checks for the touched surface: `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright`.
+## Implementation Checklist
+
+- [X] Add `FormDialog` and `ConfirmDialog` composite primitives.
+- [X] Extend `Badge` with `success`, `warning`, `info`, `running`, `completed`, and `failed`; status variants render a built-in leading dot.
+- [X] Migrate listed form/wide dialog consumers to `FormDialog`: `ProviderModal`, `ModelProfileModal`, `TaskModal`, `BoardStageEditorModal`, `OnboardingModal`, `ProviderAuthFlowModal`, `RunDetailModal`, `SettingsPreviewDialog`, `ProviderUsageLimitsDialog`.
+- [X] Migrate listed confirmation consumers to `ConfirmDialog`: `DeleteSessionModal`, `DeleteConfirmModal`.
+- [X] Migrate Badge call sites for status pills, settings tags, command/skill aliases, run/event/tool badges, `WorkspaceBadge`, `ProviderAuthFlowModal`, and session sub-agent status to semantic variants.
+- [X] Migrate dropdown sizing for `SessionSidebar` and `SessionPage` profile selector to shadcn defaults / Tailwind width utility.
+- [X] Remove targeted dead CSS for dialog action button overrides, delete-confirm overrides, status-pill styles, badge-only styles, dropdown sizing, wide modal/preview shell remnants, and workspace-badge BEM styling.
+- [X] Add/update frontend tests for `FormDialog`, `ConfirmDialog`, Badge variants, and migrated modal/status call sites.
 
 ## Validation Notes
-- Passed: `uv run pytest -q --tb=short -x tests/test_maintenance.py`.
-- Passed: `uv run pytest -q --tb=short -x tests/cli/test_entrypoint.py`.
-- Passed: `uv run ruff check .`.
-- Passed: `uv run ruff format --check .` after formatting touched files with `uv run ruff format src/pbi_agent/maintenance.py tests/test_maintenance.py`.
-- Passed: `uv run basedpyright`.
-- Final gate passed: `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, and `uv run pytest -q --tb=short -x`.
 
-## Assumptions / Scope
-- “Once a day” means the repository’s existing maintenance policy: one successful daily claim per UTC date in the internal session DB.
-- The warning should appear for any CLI startup path, including `web`, because the maintenance hook runs before command-specific routing.
-- PyPI/network failures must never block startup or print noisy errors; only an actual newer version produces the Rich warning.
-- The required suggested command is exactly `uv tool install pbi-agent --upgrade`.
+- [X] `bun run typecheck` — passed.
+- [X] Focused Vitest for new primitives and migrated modal/status call sites — passed (`26` tests).
+- [X] `bun run lint` — passed.
+- [X] `bun run test:web` — passed (`42` files, `494` tests). Existing React `act(...)` warnings from Composer/TimelineEntry remain warnings only.
+- [X] `bun run web:build` — passed; static app assets regenerated under `src/pbi_agent/web/static/app`.
+- [X] Review fix validation: `bun run test:web -- webapp/src/components/ui/form-dialog.test.tsx` and `bun run typecheck` — passed.
+- [X] Review fix validation: `bun run test:web -- webapp/src/components/shared/StatusPill.test.tsx`, `bun run typecheck`, and `bun run lint` — passed.
+- [X] Review fix validation: `bun run test:web -- webapp/src/components/ui/badge.test.tsx`, `bun run typecheck`, and `bun run lint` — passed.
+- [X] Confidence-gate hardening: `git diff --check` — passed after removing extra blank line at EOF in `webapp/src/styles/session.css`.
+- [X] Final frontend gate: `git diff --check`, `bun run lint`, `bun run typecheck`, `bun run test:web` (43 files, 505 tests; existing `act(...)` warnings only), and `bun run web:build` — passed.
+- [ ] Manual visual smoke not run in this delegated pass.
+
+## Follow-up Notes
+
+- `app-action-row`, `app-close-icon-button`, and `modal-icon-shell` intentionally remain because they are still used outside this normalization surface.
+- The add/install dialogs in `CommandsSettingsSection`, `SkillsSettingsSection`, and `AgentsSettingsSection` still use the broader task-form body/input/list layout classes; they were outside the listed dialog call-site migration and remain covered by existing settings tests.
+
+## Test Plan
+
+- **Unit (Vitest)**: `FormDialog` renders title/description/icon, submits on Enter, disables primary while `isPending`, shows error alert, hides footer when `primaryAction` omitted; `ConfirmDialog` calls `onConfirm`, blocks dismissal while `isPending`, renders error alert.
+- **Badge variants**: DOM assertion that each new variant emits expected `data-variant` and renders the leading dot for `running|completed|failed`.
+- **Call-site regressions**: run `bun run test:web` and confirm migrated modals pass without their old className-based selectors; update tests to use roles/names and `data-variant` where relevant.
+- **Build & lint**: `bun run typecheck`, `bun run lint`, `bun run web:build` after migration; `uv run pytest -q --tb=short -x` is not required (no Python source changes).
+- **Visual smoke**: manual pass through Sessions tab (delete session, profile selector dropdown, run history menu, run detail modal), Board tab (task modal, stage editor modal), Settings tab (provider modal, model profile modal, provider auth flow, usage limits dialog, command preview, delete confirms, skill cards), Dashboard tab (runs count badge), and Onboarding modal.
+
+## Assumptions
+
+- The migration accepts minor visual diffs where current CSS deviated from shadcn defaults (e.g. action-button min-width disappears, `status-pill::before` becomes an inline `<span>` dot inside the badge). Visual parity is not a constraint — convergence on shadcn tokens is.
+- `ProviderAuthFlowModal` is treated as a form-style dialog even though its internal actions remain step-specific. Multi-step state stays inside the component.
+- `RunDetailModal`'s `size="wide"` exists in `FormDialog` and maps to `sm:max-w-4xl`.
+- `WorkspaceBadge`, `StatusPill`, and dashboard count badges stay as wrapper components where they own behavior/layout; they no longer hand-style the inner Badge with BEM badge classes.
+- No backward-compatibility shims were added.
