@@ -38,6 +38,7 @@ type FormDialogProps = {
   cancelLabel?: React.ReactNode;
   onCancel?: () => void;
   size?: "sm" | "md" | "lg" | "wide";
+  contentClassName?: string;
   showCloseButton?: boolean;
   children: React.ReactNode;
 };
@@ -62,6 +63,7 @@ export function FormDialog({
   cancelLabel = "Cancel",
   onCancel,
   size = "md",
+  contentClassName,
   showCloseButton = true,
   children,
 }: FormDialogProps) {
@@ -74,7 +76,7 @@ export function FormDialog({
         </Alert>
       ) : null}
       {primaryAction ? (
-        <DialogFooter>
+        <DialogFooter className="app-action-row app-action-row--end">
           {onCancel ? (
             <Button
               type="button"
@@ -103,10 +105,12 @@ export function FormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        data-size={size}
         showCloseButton={showCloseButton}
         className={cn(
-          "flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden",
+          "task-form-dialog flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden",
           sizeClassName[size],
+          contentClassName,
         )}
       >
         <DialogHeader className="pr-10">

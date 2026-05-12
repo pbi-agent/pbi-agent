@@ -29,8 +29,13 @@ describe("FormDialog", () => {
     renderFormDialog();
 
     expect(screen.getByRole("dialog", { name: "Edit profile" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Edit profile" })).toHaveClass("task-form-dialog");
+    expect(screen.getByRole("dialog", { name: "Edit profile" })).toHaveAttribute("data-size", "md");
     expect(screen.getByText("Update the profile settings.")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Name" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save" }).closest('[data-slot="dialog-footer"]'),
+    ).toHaveClass("app-action-row", "app-action-row--end");
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-variant", "outline");
     expect(screen.getByRole("button", { name: "Save" })).toHaveAttribute("data-variant", "default");
   });

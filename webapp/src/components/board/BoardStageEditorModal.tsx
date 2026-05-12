@@ -141,130 +141,132 @@ export function BoardStageEditorModal({
       isPending={isSaving}
       error={error}
       primaryAction={{ label: "Save Board", pendingLabel: "Saving..." }}
+      onCancel={onClose}
       size="wide"
     >
       <div className="board-stage-editor">
-            {items.map((item, index) => {
-              const fixedStage = isFixedStage(item.id);
-              const fixedStageLabel = item.id === BACKLOG_STAGE_ID
-                ? "Backlog stays first and never runs directly."
-                : item.id === DONE_STAGE_ID
-                  ? "Done stays last and is archive-only."
-                  : null;
+        {items.map((item, index) => {
+          const fixedStage = isFixedStage(item.id);
+          const fixedStageLabel = item.id === BACKLOG_STAGE_ID
+            ? "Backlog stays first and never runs directly."
+            : item.id === DONE_STAGE_ID
+              ? "Done stays last and is archive-only."
+              : null;
 
-              return (
-                <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
-                <div className="board-stage-editor__ordering">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="board-stage-editor__icon-button"
-                    onClick={() => moveItem(index, -1)}
-                    disabled={index === 0 || isSaving || fixedStage}
-                  >
-                    <ArrowUpIcon />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="board-stage-editor__icon-button"
-                    onClick={() => moveItem(index, 1)}
-                    disabled={index === items.length - 1 || isSaving || fixedStage}
-                  >
-                    <ArrowDownIcon />
-                  </Button>
-                </div>
-
-                <FieldGroup className="board-stage-editor__fields">
-                  <Field>
-                    <FieldLabel>Name</FieldLabel>
-                    <Input
-                      className="task-form__input"
-                      value={item.name}
-                      onChange={(event) => updateItem(index, { name: event.target.value })}
-                      required
-                      disabled={fixedStage}
-                    />
-                  </Field>
-                  {fixedStageLabel ? (
-                    <FieldDescription>{fixedStageLabel}</FieldDescription>
-                  ) : null}
-
-                  <div className="task-form__row">
-                    <Field>
-                      <FieldLabel>Profile</FieldLabel>
-                      <NativeSelect
-                        className="task-form__select"
-                        value={item.profile_id}
-                        onChange={(event) => updateItem(index, { profile_id: event.target.value })}
-                        disabled={fixedStage}
-                      >
-                        <NativeSelectOption value="">No default profile</NativeSelectOption>
-                        {profiles.map((profile) => (
-                          <NativeSelectOption key={profile.id} value={profile.id}>
-                            {profile.name}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                    </Field>
-
-                    <Field>
-                      <FieldLabel>Command</FieldLabel>
-                      <NativeSelect
-                        className="task-form__select"
-                        value={item.command_id}
-                        onChange={(event) => updateItem(index, { command_id: event.target.value })}
-                        disabled={fixedStage}
-                      >
-                        <NativeSelectOption value="">No default command</NativeSelectOption>
-                        {commands.map((command) => (
-                          <NativeSelectOption key={command.id} value={command.id}>
-                            {command.name} ({command.slash_alias})
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                    </Field>
-                  </div>
-
-                  <Field orientation="horizontal" className="board-stage-editor__toggle">
-                    <Checkbox
-                      className="board-stage-editor__checkbox"
-                      checked={item.auto_start}
-                      onCheckedChange={(checked) => updateItem(index, { auto_start: checked === true })}
-                      disabled={fixedStage}
-                    />
-                    <FieldLabel>
-                    Auto-start when a task enters this stage
-                    </FieldLabel>
-                  </Field>
-                </FieldGroup>
-
+          return (
+            <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
+              <div className="board-stage-editor__ordering">
                 <Button
                   type="button"
                   variant="ghost"
-className="board-stage-editor__remove-button"
-                  onClick={() => removeStage(index)}
-                  disabled={isSaving || items.length === 1 || fixedStage}
+                  size="icon-sm"
+                  className="board-stage-editor__icon-button"
+                  onClick={() => moveItem(index, -1)}
+                  disabled={index === 0 || isSaving || fixedStage}
                 >
-                  <Trash2Icon data-icon="inline-start" />
-                  Remove
+                  <ArrowUpIcon />
                 </Button>
-                </div>
-              );
-            })}
-          </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="board-stage-editor__icon-button"
+                  onClick={() => moveItem(index, 1)}
+                  disabled={index === items.length - 1 || isSaving || fixedStage}
+                >
+                  <ArrowDownIcon />
+                </Button>
+              </div>
 
-      <Button
-        type="button"
-        variant="outline"
-        onClick={addStage}
-        disabled={isSaving}
-      >
-        <PlusIcon data-icon="inline-start" />
-        Add Stage
-      </Button>
+              <FieldGroup className="board-stage-editor__fields">
+                <Field>
+                  <FieldLabel>Name</FieldLabel>
+                  <Input
+                    className="task-form__input"
+                    value={item.name}
+                    onChange={(event) => updateItem(index, { name: event.target.value })}
+                    required
+                    disabled={fixedStage}
+                  />
+                </Field>
+                {fixedStageLabel ? (
+                  <FieldDescription>{fixedStageLabel}</FieldDescription>
+                ) : null}
+
+                <div className="task-form__row">
+                  <Field>
+                    <FieldLabel>Profile</FieldLabel>
+                    <NativeSelect
+                      className="task-form__select"
+                      value={item.profile_id}
+                      onChange={(event) => updateItem(index, { profile_id: event.target.value })}
+                      disabled={fixedStage}
+                    >
+                      <NativeSelectOption value="">No default profile</NativeSelectOption>
+                      {profiles.map((profile) => (
+                        <NativeSelectOption key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel>Command</FieldLabel>
+                    <NativeSelect
+                      className="task-form__select"
+                      value={item.command_id}
+                      onChange={(event) => updateItem(index, { command_id: event.target.value })}
+                      disabled={fixedStage}
+                    >
+                      <NativeSelectOption value="">No default command</NativeSelectOption>
+                      {commands.map((command) => (
+                        <NativeSelectOption key={command.id} value={command.id}>
+                          {command.name} ({command.slash_alias})
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+                </div>
+
+                <Field orientation="horizontal" className="board-stage-editor__toggle">
+                  <Checkbox
+                    className="board-stage-editor__checkbox"
+                    checked={item.auto_start}
+                    onCheckedChange={(checked) => updateItem(index, { auto_start: checked === true })}
+                    disabled={fixedStage}
+                  />
+                  <FieldLabel>Auto-start when a task enters this stage</FieldLabel>
+                </Field>
+              </FieldGroup>
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="board-stage-editor__remove-button"
+                onClick={() => removeStage(index)}
+                disabled={isSaving || items.length === 1 || fixedStage}
+              >
+                <Trash2Icon data-icon="inline-start" />
+                Remove
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="board-stage-editor__toolbar app-action-row app-action-row--compact">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={addStage}
+          disabled={isSaving}
+        >
+          <PlusIcon data-icon="inline-start" />
+          Add Stage
+        </Button>
+      </div>
     </FormDialog>
   );
 }

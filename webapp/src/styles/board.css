@@ -466,12 +466,7 @@
   gap: var(--sp-3);
   flex: 1 1 auto;
   min-height: 0;
-  max-height: min(65dvh, 720px);
-  overflow-y: auto;
-  overflow-x: visible;
-  padding: 0.25rem;
-  margin: -0.25rem;
-  scrollbar-gutter: stable;
+  overflow: visible;
 }
 
 .board-stage-editor__row {
@@ -586,6 +581,10 @@
 
 .board-stage-editor__remove-button {
   align-self: flex-start;
+}
+
+.board-stage-editor__toolbar {
+  justify-content: flex-start;
 }
 
 .board-stage-editor__actions {
