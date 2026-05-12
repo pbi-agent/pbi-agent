@@ -1051,6 +1051,23 @@
   flex: 0 0 auto;
 }
 
+.skill-source-form__submit.settings-action-button {
+  height: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0 var(--sp-3);
+  border-color: var(--color-border);
+  background: var(--background);
+}
+
+.skill-source-form__submit.settings-action-button:not(:disabled):hover,
+.skill-source-form__submit.settings-action-button:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
 .skill-add-dialog__divider {
   margin: 0;
 }
@@ -1167,20 +1184,28 @@
 
 .skill-candidate__action {
   flex: 0 0 auto;
+  border-color: var(--color-border);
+  background: transparent;
   transition:
+    color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease),
     border-color var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
 }
 
-.skill-candidate__action:not(:disabled):hover {
-  background: var(--color-accent-muted);
-  border-color: var(--color-accent-border);
-  color: var(--color-accent);
+.skill-candidate__action:not(:disabled):hover,
+.skill-candidate__action:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
 }
 
-.skill-candidate__action:not(:disabled):hover svg {
-  color: var(--color-accent);
+.skill-candidate__action:not(:disabled):hover svg,
+.skill-candidate__action:not(:disabled):focus-visible svg {
+  color: var(--foreground);
 }
 
 .skill-install-error__content {

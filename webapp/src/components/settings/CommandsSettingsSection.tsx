@@ -141,7 +141,7 @@ function CandidateCard({
         variant="outline"
         onClick={onInstall}
         disabled={disabled}
-        className="skill-candidate__action"
+        className="skill-candidate__action settings-action-button"
       >
         {isInstalling ? (
           <LoadingSpinner size="sm" />
@@ -376,7 +376,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
                       <Button
                         type="submit"
                         variant="outline"
-                        className="skill-source-form__submit"
+                        className="skill-source-form__submit settings-action-button"
                         disabled={isBusy}
                       >
                         {loadingCandidates ? (
