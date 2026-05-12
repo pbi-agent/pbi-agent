@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { BotIcon, ChevronRightIcon, Maximize2Icon, Minimize2Icon } from "lucide-react";
+import { BotIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { ConnectionState } from "../../store";
 import type {
@@ -28,6 +28,7 @@ const USER_MESSAGE_TOP_OFFSET = 8;
 const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
 const WORKING_ITEMS_MAX_VISIBLE = 5;
 const WORKING_ITEMS_OPEN_GUTTER_PX = 16;
+const WORKING_ITEMS_OPEN_MAX_VH = 0.7;
 const WORK_RUN_PHASE_MIN_VISIBLE_MS = 600;
 const WORK_RUN_PHASE_TRANSITION_MS = 300;
 const WORK_RUN_PHASE_HOLD_MS =
@@ -684,23 +685,49 @@ function WorkingItemsPanel({
     if (node) scheduleScrollToLatestGroup();
   }, [scheduleScrollToLatestGroup]);
 
-  const setGroupRef = useCallback((key: string) => (node: HTMLDivElement | null) => {
-    if (node) {
-      groupRefs.current.set(key, node);
-      if (key === lastGroupKey) scheduleScrollToLatestGroup();
+  // Stable ref-bridge so the ResizeObserver callback (created once per group node)
+  // always reads the current measurement function without resubscribing.
+  const syncDynamicMaxHeightRef = useRef<(preferredKey?: string) => void>(() => {});
+
+  const setGroupRef = useCallback((key: string) => (node: HTMLDivElement | null): (() => void) | void => {
+    if (!node) {
+      groupRefs.current.delete(key);
       return;
     }
-    groupRefs.current.delete(key);
+    groupRefs.current.set(key, node);
+    if (key === lastGroupKey) scheduleScrollToLatestGroup();
+
+    // React 19 ref-callback cleanup — no useEffect needed.
+    // Observe size changes so async-rendered tool content (Shiki, markdown,
+    // images) re-trigger height measurement once layout settles.
+    if (typeof ResizeObserver === "undefined") {
+      return () => {
+        groupRefs.current.delete(key);
+      };
+    }
+    const observer = new ResizeObserver(() => {
+      syncDynamicMaxHeightRef.current(key);
+    });
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      groupRefs.current.delete(key);
+    };
   }, [lastGroupKey, scheduleScrollToLatestGroup]);
 
   const syncDynamicMaxHeight = useCallback((preferredKey?: string) => {
     if (!needsScroll || fullExpanded) {
-      setDynamicMaxHeight(null);
+      setDynamicMaxHeight((current) => (current === null ? current : null));
       return;
     }
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
 
+    // Use scrollHeight directly: closed Collapsibles unmount their content
+    // (Presence pattern), so the group's scrollHeight is naturally small when
+    // closed and equals the trigger + natural content height when open.
+    // The ResizeObserver attached in setGroupRef keeps this in sync as
+    // async-rendered content (markdown, syntax highlighting, images) settles.
     const preferredGroup = preferredKey ? groupRefs.current.get(preferredKey) : null;
     let tallestOpenGroup = preferredGroup?.scrollHeight ?? 0;
     for (const groupEl of groupRefs.current.values()) {
@@ -709,13 +736,30 @@ function WorkingItemsPanel({
       tallestOpenGroup = Math.max(tallestOpenGroup, groupEl.scrollHeight);
     }
 
-    const nextHeight = tallestOpenGroup > scrollEl.clientHeight
-      ? Math.ceil(tallestOpenGroup + WORKING_ITEMS_OPEN_GUTTER_PX)
-      : null;
-    setDynamicMaxHeight((currentHeight) => (
-      currentHeight === nextHeight ? currentHeight : nextHeight
-    ));
+    if (tallestOpenGroup === 0) {
+      setDynamicMaxHeight((current) => (current === null ? current : null));
+      return;
+    }
+
+    const viewportCap = typeof window !== "undefined"
+      ? Math.floor(window.innerHeight * WORKING_ITEMS_OPEN_MAX_VH)
+      : Number.POSITIVE_INFINITY;
+    const desired = Math.ceil(tallestOpenGroup + WORKING_ITEMS_OPEN_GUTTER_PX);
+    const capped = Math.min(desired, viewportCap);
+    setDynamicMaxHeight((current) => {
+      // Initial growth: only set when the natural height exceeds the default
+      // scroll constraint.  Once grown, only allow further growth so async
+      // content settling doesn't visually pop the panel smaller mid-load.
+      if (current === null) return capped > scrollEl.clientHeight ? capped : null;
+      return Math.max(current, capped);
+    });
   }, [fullExpanded, needsScroll]);
+
+  // "Latest ref" pattern: keep ResizeObserver callbacks pointing at the
+  // current syncDynamicMaxHeight without resubscribing on every render.
+  useEffect(() => {
+    syncDynamicMaxHeightRef.current = syncDynamicMaxHeight;
+  }, [syncDynamicMaxHeight]);
 
   const scrollGroupToCenter = useCallback((key: string) => {
     if (!needsScroll) return;
@@ -1095,20 +1139,6 @@ function WorkRun({
               )}
             </Button>
           </CollapsibleTrigger>
-          {canFullExpand ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="timeline-entry__work-run-full-button"
-              aria-label={fullExpanded ? "Limit Working tool list to five rows" : "Fully expand Working tool list"}
-              aria-pressed={fullExpanded}
-              onClick={toggleFullExpanded}
-            >
-              {fullExpanded ? <Minimize2Icon data-icon="inline-start" /> : <Maximize2Icon data-icon="inline-start" />}
-              <span>{fullExpanded ? "Limit" : "Full"}</span>
-            </Button>
-          ) : null}
         </div>
         {hasItems ? (
           <CollapsibleContent>
@@ -1121,6 +1151,32 @@ function WorkRun({
                 showSubAgentCards={showSubAgentCards}
                 fullExpanded={fullExpanded}
               />
+              {canFullExpand ? (
+                <button
+                  type="button"
+                  className="working-items__more-toggle"
+                  aria-label={fullExpanded ? "Limit Working tool list to five rows" : "Fully expand Working tool list"}
+                  aria-pressed={fullExpanded}
+                  aria-keyshortcuts="Alt+Enter"
+                  onClick={toggleFullExpanded}
+                >
+                  {fullExpanded ? (
+                    <>
+                      <ChevronUpIcon className="working-items__more-toggle-icon" />
+                      <span className="working-items__more-toggle-label">
+                        Show recent {WORKING_ITEMS_MAX_VISIBLE}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDownIcon className="working-items__more-toggle-icon" />
+                      <span className="working-items__more-toggle-label">
+                        +{Math.max(0, workRunGroupCount - WORKING_ITEMS_MAX_VISIBLE)} more
+                      </span>
+                    </>
+                  )}
+                </button>
+              ) : null}
             </div>
           </CollapsibleContent>
         ) : null}

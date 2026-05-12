@@ -668,12 +668,19 @@ describe("SessionTimeline", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Fully expand Working tool list" }));
+    openWorking(0, false);
+
+    const expandButton = screen.getByRole("button", { name: "Fully expand Working tool list" });
+    expect(expandButton).toHaveTextContent("+2 more");
+
+    fireEvent.click(expandButton);
 
     await waitFor(() => {
       expect(container.querySelector(".working-items--fully-expanded")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "Limit Working tool list to five rows" })).toHaveAttribute("aria-pressed", "true");
+    const limitButton = screen.getByRole("button", { name: "Limit Working tool list to five rows" });
+    expect(limitButton).toHaveAttribute("aria-pressed", "true");
+    expect(limitButton).toHaveTextContent("Show recent 5");
   });
 
   it("summarizes read_web_url as a read in the collapsed Working header", () => {
