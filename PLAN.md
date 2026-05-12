@@ -1,43 +1,37 @@
-# Plan: Up-Arrow Chat Input History Recall
+# Plan: Provider-Aware Tool Availability
 
 ## Summary
-Add frontend-only input history recall for the session composer. When the Message textbox is focused and completions are not active, `ArrowUp` recalls the latest user message from the current main conversation so it can be resent or edited. Repeated `ArrowUp` walks older user inputs; `ArrowDown` walks newer inputs and restores the in-progress draft. No backend/API contract changes are needed.
+Centralize provider tool-availability policy so the model only sees the editing and web tools appropriate for the active backend. OpenAI official Responses API and the ChatGPT Codex backend use V4A `apply_patch`; other providers use the simpler file edit tools. `read_web_url` follows the existing `web_search` runtime flag.
 
 ## Checklist
-- [X] Add a `inputHistory?: string[]` prop to `Composer`, documented as chronological oldest-to-newest user input text for the current conversation.
-- [X] In `SessionPage`, derive `inputHistory` from the displayed main-session timeline: include only non-empty `TimelineMessageItem` entries where `role === "user"` and no `subAgentId`; pass it to `Composer`.
-- [X] In `Composer`, add history navigation state: current history index plus a saved draft value captured before history browsing starts.
-- [X] Handle keyboard shortcuts in `Composer` after the existing completion-menu branch so completions keep priority:
-  - `ArrowUp` with no modifiers recalls latest/older history when history exists, no images are pending, and the cursor is on the first line or the input is empty.
-  - `ArrowDown` with no modifiers works only while browsing history; it moves newer, then restores the saved draft and exits history mode.
-  - Recalled text is written into the textbox, cursor moves to the end, completions close, and auto-resize runs.
-- [X] Reset history-browsing state on manual input changes, submit success, restored input consumption, completion insertion, and when `inputHistory` changes to a different conversation/history set.
-- [X] Keep image attachments out of recall; recalled history is text only. Shell commands and slash commands are recalled as their stored text (for example `!pwd` or `/plan`).
-- [X] Update `SessionPage.test.tsx` Composer mock typing to accept the new optional prop.
+- [X] Add a small shared tool-policy helper, e.g. `pbi_agent.tools.availability.effective_excluded_tool_names(settings, excluded_names)`, that merges session exclusions with backend policy.
+- [X] Apply the helper in every provider `refresh_tools()` before provider-specific tool serialization/native web-search appending: OpenAI, xAI, Google, Anthropic, Generic, and GitHub Copilot delegates.
+- [X] For `settings.provider in {"openai", "chatgpt"}`, advertise `apply_patch` and hide `replace_in_file`/`write_file`; this covers both OpenAI official API and ChatGPT Codex because both flow through `OpenAIProvider`/`ChatGPTCodexBackend`.
+- [X] For all other providers/backends, hide `apply_patch` and keep `replace_in_file`/`write_file` available.
+- [X] Hide `read_web_url` whenever `settings.web_search` is false; keep native provider search tools controlled by the existing `if settings.web_search` branches.
+- [X] Keep the built-in registry and tool handlers unchanged so direct tool tests, display formatting, and MCP catalog merging still work; only provider-advertised tool definitions change.
+- [X] Ensure `Provider.set_excluded_tools()` continues to work by storing session-only exclusions while each `refresh_tools()` recomputes policy exclusions, so toggling `ask_user`/`sub_agent` cannot re-enable hidden tools.
+- [X] Update stale inline/docs wording that says all providers receive `apply_patch` or that `read_web_url` is always available.
 
-## Public Interfaces / Types
-- Frontend component interface only: `ComposerProps` gains optional `inputHistory?: string[]`.
-- No FastAPI, generated API types, persisted schema, or provider/tool behavior changes.
+## Public Interfaces / Behavior Changes
+- No CLI flags, config schema, web API, or persisted data changes.
+- Provider tool lists change:
+  - OpenAI/chatgpt: `apply_patch` yes; `replace_in_file`/`write_file` no.
+  - Non-OpenAI providers, including Azure, generic OpenAI-compatible, GitHub Copilot, xAI, Google, and Anthropic: `apply_patch` no; `replace_in_file`/`write_file` yes.
+  - All providers: `read_web_url` only when `settings.web_search` is true.
+- MCP tools and native web-search result parsing/display behavior are unchanged.
 
 ## Test Plan
-- [X] Add/extend `Composer.test.tsx` coverage for focused empty textbox + `ArrowUp` recalling the latest history item.
-- [X] Test repeated `ArrowUp` moves to older inputs and stops at the oldest input.
-- [X] Test `ArrowDown` moves newer and restores the pre-history draft.
-- [X] Test `ArrowUp` continues to navigate completion suggestions when a completion list is open.
-- [X] Test `ArrowUp` does not override normal multiline navigation when the cursor is not on the first line.
-- [X] Add/extend `SessionPage.test.tsx` coverage that only main-session user messages are supplied as composer history.
-- [X] Validate with `bun run test:web -- webapp/src/components/session/Composer.test.tsx webapp/src/components/session/SessionPage.test.tsx`, then `bun run typecheck` and `bun run lint`.
-
-## Validation Notes
-- Passed: `bun run test:web -- webapp/src/components/session/Composer.test.tsx webapp/src/components/session/SessionPage.test.tsx` (81 tests). React act warnings were emitted by Composer tests, but the focused suite passed.
-- Passed: `bun run typecheck`.
-- Passed: `bun run lint`.
-- Passed: `git diff --check`.
-- Review fix passed: `bun run test:web -- webapp/src/components/session/Composer.test.tsx` (32 tests; existing React act warnings emitted), `bun run lint`, and `bun run typecheck`.
-- Final validation passed: `bun run test:web` (37 files, 474 tests). Existing React act warnings were emitted in Composer and TimelineEntry tests.
-- Final validation passed: `bun run web:build`. Vite/Rolldown emitted existing chunk-size warnings only.
+- [X] Add focused tests for the shared policy helper covering OpenAI/chatgpt, non-OpenAI providers, existing caller exclusions, and `web_search=False`.
+- [X] Add/adjust provider tests to inspect serialized tool names for OpenAI official API and ChatGPT Codex backend: `apply_patch` present, `replace_in_file`/`write_file` absent, and `read_web_url` gated by `web_search`.
+- [X] Add/adjust provider tests for representative non-OpenAI formats (Anthropic, Google, xAI, Generic, GitHub Copilot) to assert `apply_patch` absent, file edit tools present, and `read_web_url` gated.
+- [X] Add a regression test that `set_excluded_tools({"ask_user"})` preserves policy exclusions after refresh.
+- [X] Validate with `uv run pytest -q --tb=short -x tests/test_tool_registry.py tests/test_openai_provider.py tests/test_generic_provider.py tests/test_anthropic_provider.py tests/test_google_provider.py tests/test_xai_provider.py tests/test_github_copilot_provider.py tests/test_provider_factory.py`. Passed.
+- [X] Run Python quality checks: `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright`. Passed.
+- [!] Final full-suite check `uv run pytest -q --tb=short -x` stopped at unrelated existing sandbox expectation `tests/cli/test_sandbox.py::DefaultWebCommandTests::test_sandbox_dockerfile_uses_alpine_with_minimal_apk_packages` expecting the pre-Rust minimal APK list.
+- [-] If docs are edited, run `bun run docs:build`. Skipped; no docs edited.
 
 ## Assumptions / Scope
-- “Current conversation” means the visible main session timeline in the Session tab, not sub-agent transcripts or other sessions.
-- Recall uses stored message text, so previously expanded file mentions are recalled as stored text rather than reconstructing original `@file` tokens.
-- The shortcut is frontend-only and does not persist a separate input-history store.
+- “OpenAI model/backend” means repo provider kinds `openai` and `chatgpt`; `gpt-*` model names served by Azure, Generic, GitHub Copilot, or other providers remain non-OpenAI for this policy.
+- “Available” means advertised in provider tool definitions sent to the model. The registry and handlers remain registered for direct execution/tests and existing runtime fallback behavior.
+- No backward-compatibility shims or migrations are needed.
