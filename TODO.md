@@ -1,4 +1,2 @@
-[X] Inspect session composer/message width styles
-[X] Reduce composer width to match user/assistant cards
+[X] Add run duration after agent name in run history card
 [X] Validate focused frontend checks
-[X] Update memory

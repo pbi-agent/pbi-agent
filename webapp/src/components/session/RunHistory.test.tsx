@@ -106,10 +106,41 @@ describe("RunHistory", () => {
     await waitFor(() => expect(toggle).toHaveAttribute("aria-expanded", "true"));
 
     await waitFor(() => expect(mockFetchSessionRuns).toHaveBeenCalledTimes(2));
-    await screen.findByText("gpt-5.5");
+    await screen.findByText(/gpt-5\.5/);
 
     const statuses = screen.getAllByText("completed");
     expect(statuses[0].closest("button")).toHaveTextContent("gpt-5.5");
+  });
+
+  it("shows duration in the header and a minimal model, tokens, and cost summary", async () => {
+    const user = userEvent.setup();
+    mockFetchSessionRuns.mockResolvedValue([
+      makeRun({
+        input_tokens: 100,
+        output_tokens: 20,
+        reasoning_tokens: 3,
+        provider_total_tokens: 0,
+        estimated_cost_usd: 0.8467,
+        total_duration_ms: 65_000,
+        total_api_calls: 4,
+        total_tool_calls: 2,
+        error_count: 1,
+      }),
+    ]);
+
+    renderWithProviders(<RunHistory sessionId="session-1" />);
+
+    await user.click(await screen.findByRole("button", { name: /toggle run history/i }));
+
+    const summary = await screen.findByText("gpt-5.4 · 123 tok · $0.85");
+    const runButton = summary.closest("button");
+    if (!runButton) throw new Error("Run summary button not found");
+    expect(summary).not.toHaveAttribute("data-slot", "badge");
+    expect(runButton).not.toHaveTextContent("openai");
+    expect(runButton).not.toHaveTextContent("API");
+    expect(runButton).not.toHaveTextContent("tools");
+    expect(runButton).not.toHaveTextContent("err");
+    expect(runButton).toHaveTextContent("1m5s");
   });
 
   it("shows completed runs as terminal completed-style runs", async () => {
