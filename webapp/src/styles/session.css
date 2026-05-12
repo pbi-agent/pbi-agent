@@ -1314,6 +1314,18 @@
   gap: var(--sp-2);
 }
 
+.working-items--scrollable {
+  max-height: calc(10rem + var(--sp-2) + var(--sp-2) + var(--sp-2) + var(--sp-2));
+  overflow-y: auto;
+  padding-right: var(--sp-1);
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+.working-items__item {
+  min-width: 0;
+}
+
 .working-items__group-trigger,
 .working-items__tool-trigger,
 .working-items__sub-agent-card {

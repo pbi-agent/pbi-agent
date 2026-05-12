@@ -26,6 +26,7 @@ import { SessionWelcome } from "./SessionWelcome";
 
 const USER_MESSAGE_TOP_OFFSET = 8;
 const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
+const WORKING_ITEMS_MAX_VISIBLE = 5;
 const WORK_RUN_PHASE_MIN_VISIBLE_MS = 600;
 const WORK_RUN_PHASE_TRANSITION_MS = 300;
 const WORK_RUN_PHASE_HOLD_MS =
@@ -641,6 +642,9 @@ function WorkingItemsPanel({
   showSubAgentCards?: boolean;
 }) {
   const groups = useMemo(() => buildWorkingGroups(items, showSubAgentCards), [items, showSubAgentCards]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const groupRefs = useRef(new Map<string, HTMLDivElement>());
+  const needsScroll = groups.length > WORKING_ITEMS_MAX_VISIBLE;
   const [openGroupsState, setOpenGroupsState] = useState<{
     closeSignal: string | null;
     groups: Record<string, boolean>;
@@ -656,11 +660,57 @@ function WorkingItemsPanel({
     ? openToolsState.tools
     : {};
 
+  const lastGroupKey = groups.at(-1)?.key ?? null;
+
+  useEffect(() => {
+    if (!needsScroll) return;
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    scrollEl.scrollTop = scrollEl.scrollHeight;
+  }, [lastGroupKey, needsScroll]);
+
+  const setGroupRef = useCallback((key: string) => (node: HTMLDivElement | null) => {
+    if (node) {
+      groupRefs.current.set(key, node);
+      return;
+    }
+    groupRefs.current.delete(key);
+  }, []);
+
+  const scrollGroupToCenter = useCallback((key: string) => {
+    if (!needsScroll) return;
+    const scrollEl = scrollRef.current;
+    const groupEl = groupRefs.current.get(key);
+    if (!scrollEl || !groupEl) return;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const groupRect = groupEl.getBoundingClientRect();
+    const centeredOffset = (scrollEl.clientHeight - Math.min(groupRect.height, scrollEl.clientHeight)) / 2;
+    const targetTop = scrollEl.scrollTop + groupRect.top - scrollRect.top - centeredOffset;
+    const maxTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+    scrollEl.scrollTo({
+      top: Math.min(Math.max(0, targetTop), maxTop),
+      behavior: "smooth",
+    });
+  }, [needsScroll]);
+
+  const scheduleScrollGroupToCenter = useCallback((key: string) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollGroupToCenter(key));
+    });
+  }, [scrollGroupToCenter]);
+
   return (
-    <div className="working-items">
+    <div
+      className={`working-items${needsScroll ? " working-items--scrollable" : ""}`}
+      ref={scrollRef}
+    >
       {groups.map((group) => {
         if (group.kind === "sub_agent") {
-          return <SubAgentCard key={group.key} group={group} subAgents={subAgents} parentSessionId={parentSessionId} />;
+          return (
+            <div key={group.key} ref={setGroupRef(group.key)} className="working-items__item">
+              <SubAgentCard group={group} subAgents={subAgents} parentSessionId={parentSessionId} />
+            </div>
+          );
         }
         if (group.kind === "tool") {
           const entry = group.entry;
@@ -669,31 +719,36 @@ function WorkingItemsPanel({
             <Collapsible
               key={group.key}
               open={toolOpen}
-              onOpenChange={(nextOpen) => setOpenToolsState((prev) => ({
-                closeSignal,
-                tools: {
-                  ...(prev.closeSignal === closeSignal ? prev.tools : {}),
-                  [entry.key]: nextOpen,
-                },
-              }))}
+              onOpenChange={(nextOpen) => {
+                setOpenToolsState((prev) => ({
+                  closeSignal,
+                  tools: {
+                    ...(prev.closeSignal === closeSignal ? prev.tools : {}),
+                    [entry.key]: nextOpen,
+                  },
+                }));
+                if (nextOpen) scheduleScrollGroupToCenter(group.key);
+              }}
             >
-              <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
-                  <ChevronRightIcon className="timeline-entry__chevron" />
-                  <span className="working-items__tool-title">{entry.displayLabel}</span>
-                  <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
-                  {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="working-items__tool-detail">
-                  <ToolResult
-                    metadata={entry.entry.metadata}
-                    text={entry.entry.text}
-                    running={entry.status === "running"}
-                  />
-                </div>
-              </CollapsibleContent>
+              <div ref={setGroupRef(group.key)} className="working-items__item">
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
+                    <ChevronRightIcon className="timeline-entry__chevron" />
+                    <span className="working-items__tool-title">{entry.displayLabel}</span>
+                    <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
+                    {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="working-items__tool-detail">
+                    <ToolResult
+                      metadata={entry.entry.metadata}
+                      text={entry.entry.text}
+                      running={entry.status === "running"}
+                    />
+                  </div>
+                </CollapsibleContent>
+              </div>
             </Collapsible>
           );
         }
@@ -711,25 +766,27 @@ function WorkingItemsPanel({
               },
             }))}
           >
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="working-items__group-trigger"
-                aria-label={groupLabel}
-              >
-                <ChevronRightIcon className="timeline-entry__chevron" />
-                <span>{groupLabel}</span>
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              {group.items.map((item) => (
-                <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
-                  <MarkdownContent content={item.content} />
-                </div>
-              ))}
-            </CollapsibleContent>
+            <div ref={setGroupRef(group.key)} className="working-items__item">
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="working-items__group-trigger"
+                  aria-label={groupLabel}
+                >
+                  <ChevronRightIcon className="timeline-entry__chevron" />
+                  <span>{groupLabel}</span>
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                {group.items.map((item) => (
+                  <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
+                    <MarkdownContent content={item.content} />
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </div>
           </Collapsible>
         );
       })}
