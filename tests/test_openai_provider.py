@@ -306,31 +306,23 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
     assert body["instructions"] == "be concise"
     function_tools = [tool for tool in body["tools"] if tool.get("type") == "function"]
     assert function_tools
-    assert all(tool["strict"] is True for tool in function_tools)
+    assert all("strict" not in tool for tool in function_tools)
     shell_tool = next(tool for tool in function_tools if tool["name"] == "shell")
     shell_parameters = shell_tool["parameters"]
-    assert shell_parameters["required"] == [
+    assert shell_parameters["required"] == ["command"]
+    assert list(shell_parameters["properties"]) == [
         "command",
         "working_directory",
         "timeout_ms",
     ]
-    working_directory_schema = shell_parameters["properties"]["working_directory"]
-    assert working_directory_schema == {
-        "anyOf": [
-            {
-                "type": "string",
-                "description": (
-                    "Working directory for the command. Relative paths resolve "
-                    "from the workspace root. Defaults to the workspace root."
-                ),
-            },
-            {"type": "null"},
-        ]
-    }
-    timeout_schema = shell_parameters["properties"]["timeout_ms"]
-    assert "default" not in timeout_schema
-    assert "minimum" not in timeout_schema
-    assert "maximum" not in timeout_schema
+    assert shell_parameters["properties"]["working_directory"]["description"] == (
+        "Working directory for the command. Relative paths resolve "
+        "from the workspace root. Defaults to the workspace root."
+    )
+    assert shell_parameters["properties"]["timeout_ms"]["description"] == (
+        "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
+        "maximum 300 000 (5 minutes)."
+    )
     assert "max_output_tokens" not in body
     assert "prompt_cache_retention" not in body
     assert body["context_management"] == [

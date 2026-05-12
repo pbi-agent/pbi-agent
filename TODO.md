@@ -1,6 +1,5 @@
-# TODO
-
-[X] Find install conflict alert/action styling
-[X] Add hover/focus effect for Replace existing across settings install dialogs
-[X] Run focused frontend validation
-[X] Update MEMORY.md
+[X] Revert ChatGPT shell schema hack and restore shell tool schema
+[X] Inspect current diff
+[X] Edit backend and shell spec
+[X] Run focused validation
+[X] Update memory

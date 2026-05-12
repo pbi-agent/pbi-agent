@@ -27,10 +27,7 @@ SHELL_EXECUTABLE_ENV = "PBI_AGENT_SHELL_EXECUTABLE"
 
 SPEC = ToolSpec(
     name="shell",
-    description=(
-        "Run a shell command. Returns stdout, stderr, and "
-        "exit code. Use shell for file discovery."
-    ),
+    description=("Run a shell command. Returns stdout, stderr, and exit code."),
     parameters_schema={
         "type": "object",
         "properties": {
