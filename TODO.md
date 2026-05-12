@@ -1,5 +1,5 @@
 # TODO
 
-[X] Update Add Provider credential source control hover/active styling
-[X] Run focused frontend validation
-[X] Update task memory
+[X] Find auth dialog action button styling
+[X] Make auth flow buttons fit content width
+[X] Validate and update memory

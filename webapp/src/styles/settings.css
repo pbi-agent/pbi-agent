@@ -823,6 +823,22 @@
   min-width: 0;
 }
 
+.provider-auth-mode-tabs [data-slot="toggle-group-item"]:not(:disabled):hover,
+.provider-auth-mode-tabs [data-slot="toggle-group-item"]:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+  transform: translateY(-1px);
+}
+
+.provider-auth-mode-tabs [data-slot="toggle-group-item"][data-state="on"] {
+  background: color-mix(in srgb, var(--primary) 16%, var(--background));
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--foreground) 10%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
 .provider-auth-flow-modal > .task-form__body > [data-slot="field"]:has(.provider-auth-mode-tabs) {
   margin-top: var(--sp-2);
 }
@@ -902,6 +918,39 @@
   display: flex;
   gap: var(--sp-2);
   flex-wrap: wrap;
+}
+
+.provider-auth-primary-action,
+.provider-auth-secondary-action {
+  width: auto;
+  align-self: flex-start;
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.provider-auth-flow-modal > .provider-auth-primary-action {
+  margin-inline: auto;
+}
+
+.provider-auth-primary-action:not(:disabled):hover,
+.provider-auth-primary-action:not(:disabled):focus-visible {
+  color: var(--primary-foreground);
+  background: var(--color-accent-hover);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+  transform: translateY(-1px);
+}
+
+.provider-auth-secondary-action:not(:disabled):hover,
+.provider-auth-secondary-action:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
 }
 
 /* ── Active default profile control ── */

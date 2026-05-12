@@ -190,7 +190,7 @@ export function ProviderAuthFlowModal({
           {!flow && (
             <Button
               type="button"
-              className="task-form__submit"
+              className="task-form__submit provider-auth-primary-action"
               onClick={() => {
                   void handleStart(method);
                 }}
@@ -265,6 +265,7 @@ export function ProviderAuthFlowModal({
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="provider-auth-secondary-action"
                         onClick={() => {
                           void copyDeviceCode();
                         }}
@@ -312,6 +313,7 @@ export function ProviderAuthFlowModal({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="provider-auth-secondary-action"
                     onClick={() => {
                       const next =
                         flow.method === "browser"
@@ -332,6 +334,7 @@ export function ProviderAuthFlowModal({
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="provider-auth-secondary-action"
                     onClick={() => {
                       void handleStart(method);
                     }}
@@ -344,6 +347,7 @@ export function ProviderAuthFlowModal({
                 <Button
                   type="button"
                   size="sm"
+                  className="provider-auth-primary-action"
                   onClick={onClose}
                   disabled={isStarting}
                 >
