@@ -127,7 +127,10 @@ def _display_apply_patch_result(
     success = _patch_success(result, payload)
     display_diff = result.display_metadata.get("diff")
     if not isinstance(display_diff, str):
-        display_diff = str(arguments.get("diff") or arguments.get("patch") or "")
+        if isinstance(call.arguments, str) and call.arguments.strip():
+            display_diff = call.arguments
+        else:
+            display_diff = str(arguments.get("diff") or arguments.get("patch") or "")
     display_path = result.display_metadata.get("path")
     if not isinstance(display_path, str) or not display_path:
         display_path = str(arguments.get("path") or "<missing path>")
@@ -141,7 +144,7 @@ def _display_apply_patch_result(
         display_operation,
         success,
         call_id=result.call_id,
-        detail=_patch_detail(payload),
+        detail=_patch_detail(payload, result.output_json if result.is_error else ""),
         diff=display_diff,
         diff_line_numbers=diff_line_numbers_metadata(
             result.display_metadata.get("diff_line_numbers")
@@ -186,7 +189,7 @@ def _patch_success(result: ToolResult, payload: dict[str, Any]) -> bool:
     return True
 
 
-def _patch_detail(payload: dict[str, Any]) -> str:
+def _patch_detail(payload: dict[str, Any], fallback_text: str = "") -> str:
     result_payload = payload.get("result")
     if isinstance(result_payload, dict):
         status_value = result_payload.get("status")
@@ -207,4 +210,4 @@ def _patch_detail(payload: dict[str, Any]) -> str:
             return value.strip()
     if isinstance(error_payload, str) and error_payload.strip():
         return error_payload.strip()
-    return ""
+    return fallback_text.strip()

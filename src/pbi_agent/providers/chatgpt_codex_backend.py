@@ -239,8 +239,7 @@ class ChatGPTCodexBackend:
         response: CompletedResponse,
         results: list[ToolResult],
     ) -> list[dict[str, Any]]:
-        del response
-        return to_function_call_output_items(results)
+        return to_function_call_output_items(results, response.function_calls)
 
 
 class ResponsesConversationReplay:

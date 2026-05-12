@@ -304,6 +304,7 @@ class ToolCall:
     call_id: str
     name: str
     arguments: dict | str | None
+    kind: str = "function"
 
 
 @dataclass(slots=True)

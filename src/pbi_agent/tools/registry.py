@@ -67,14 +67,24 @@ def get_openai_tool_definitions(
     """
     tools: list[dict[str, Any]] = []
     for spec in get_tool_specs(excluded_names=excluded_names):
-        tools.append(
-            {
-                "type": "function",
-                "name": spec.name,
-                "description": spec.description,
-                "parameters": spec.parameters_schema,
-            }
-        )
+        if spec.is_freeform:
+            tools.append(
+                {
+                    "type": "custom",
+                    "name": spec.name,
+                    "description": spec.description,
+                    "format": spec.freeform_format,
+                }
+            )
+        else:
+            tools.append(
+                {
+                    "type": "function",
+                    "name": spec.name,
+                    "description": spec.description,
+                    "parameters": spec.parameters_schema,
+                }
+            )
     return tools
 
 
@@ -88,6 +98,8 @@ def get_anthropic_tool_definitions(
     """
     tools: list[dict[str, Any]] = []
     for spec in get_tool_specs(excluded_names=excluded_names):
+        if spec.is_freeform:
+            continue
         tools.append(
             {
                 "name": spec.name,
@@ -104,6 +116,8 @@ def get_openai_chat_tool_definitions(
     """Return tool definitions in OpenAI Chat Completions format."""
     tools: list[dict[str, Any]] = []
     for spec in get_tool_specs(excluded_names=excluded_names):
+        if spec.is_freeform:
+            continue
         tools.append(
             {
                 "type": "function",

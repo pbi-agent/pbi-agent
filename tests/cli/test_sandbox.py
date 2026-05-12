@@ -617,7 +617,7 @@ class DefaultWebCommandTests(unittest.TestCase):
         content = dockerfile.read_text(encoding="utf-8")
         self.assertIn("FROM python:${PYTHON_VERSION}-alpine3.22", content)
         self.assertIn(
-            'ARG RUNTIME_APK="bash build-base ca-certificates curl git github-cli libstdc++ patch ripgrep unzip nodejs npm"',
+            'ARG RUNTIME_APK="bash build-base ca-certificates cargo curl git github-cli libstdc++ musl-dev nodejs npm openssl-dev patch pkgconf ripgrep rust rustfmt unzip"',
             content,
         )
         self.assertIn('ARG EXTRA_APK=""', content)

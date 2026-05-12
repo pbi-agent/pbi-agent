@@ -1,9 +1,8 @@
 """Custom ``apply_patch`` tool – applies V4A patches to files.
 
-This replaces the provider-specific native patch/editor tools (OpenAI
-``apply_patch``, Anthropic ``str_replace_based_edit_tool``) with a single,
-provider-agnostic function tool that goes through the normal tool registry
-and execution pipeline.
+OpenAI-compatible Responses providers advertise this as a Codex-style
+freeform custom tool constrained by the V4A Lark grammar. The execution path
+still routes through the normal local tool registry.
 """
 
 from __future__ import annotations
@@ -11,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from lark import Lark, LarkError
 
 from pbi_agent.tools.apply_diff import (
     ApplyDiffMode,
@@ -27,34 +28,56 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 
 SPEC = ToolSpec(
     name="apply_patch",
-    description=(
-        "Apply a V4A patch to files. The patch must include "
-        "*** Begin Patch, one or more file sections, and *** End Patch."
-    ),
-    parameters_schema={
-        "type": "object",
-        "properties": {
-            "patch": {
-                "type": "string",
-                "description": (
-                    "Full V4A patch. Grammar: Patch := Begin {FileOp} End. "
-                    "Begin := '*** Begin Patch'; End := '*** End Patch'. "
-                    "FileOp := AddFile | DeleteFile | UpdateFile. AddFile := "
-                    "'*** Add File: <path>' followed by '+' content lines. "
-                    "DeleteFile := '*** Delete File: <path>'. UpdateFile := "
-                    "'*** Update File: <path>' followed by hunks. Hunk := "
-                    "'@@' [anchor] followed by lines prefixed with space for "
-                    "context, '-' for removals, or '+' for insertions. Paths "
-                    "may be relative to the workspace root or absolute. "
-                    "Unified diffs are not accepted."
-                ),
-            },
-        },
-        "required": ["patch"],
-        "additionalProperties": False,
-    },
+    description="Use the `apply_patch` tool to edit files. This is a FREEFORM tool, so do not wrap the patch in JSON.",
     is_destructive=True,
+    freeform_format={
+        "type": "grammar",
+        "syntax": "lark",
+        "definition": """start: begin_patch hunk+ end_patch
+begin_patch: "*** Begin Patch" LF
+end_patch: "*** End Patch" LF?
+
+hunk: add_hunk | delete_hunk | update_hunk
+add_hunk: "*** Add File: " filename LF add_line+
+delete_hunk: "*** Delete File: " filename LF
+update_hunk: "*** Update File: " filename LF change_move? change?
+
+filename: /(.+)/
+add_line: "+" /(.*)/ LF -> line
+
+change_move: "*** Move to: " filename LF
+change: (change_context | change_line)+ eof_line?
+change_context: ("@@" | "@@ " /(.+)/) LF
+change_line: ("+" | "-" | " ") /(.*)/ LF
+eof_line: "*** End of File" LF
+
+%import common.LF
+""",
+    },
 )
+
+_VALIDATION_GRAMMAR = r"""start: begin_patch hunk+ end_patch
+begin_patch: "*** Begin Patch" LF
+end_patch: "*** End Patch" LF?
+
+hunk: add_hunk | delete_hunk | update_hunk
+add_hunk: "*** Add File: " filename LF add_line+
+delete_hunk: "*** Delete File: " filename LF
+update_hunk: "*** Update File: " filename LF change_move? change?
+
+filename: LINE
+add_line: "+" LINE? LF -> line
+
+change_move: "*** Move to: " filename LF
+change: (change_context | change_line)+ eof_line?
+change_context: ("@@" | "@@ " LINE) LF
+change_line: ("+" | "-" | " ") LINE? LF
+eof_line: "*** End of File" LF
+
+LINE: /[^\n]+/
+%import common.LF
+"""
+_VALIDATION_PARSER = Lark(_VALIDATION_GRAMMAR, parser="lalr")
 
 BEGIN_PATCH = "*** Begin Patch"
 END_PATCH = "*** End Patch"
@@ -115,7 +138,16 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                     target_path, operation.diff
                 )
             elif operation.operation_type == "update_file":
-                applied = _update_file(target_path, operation.diff)
+                move_to_path = (
+                    resolve_safe_path(root, operation.move_to)
+                    if operation.move_to is not None
+                    else None
+                )
+                applied = _update_file(
+                    target_path,
+                    operation.diff,
+                    move_to_path=move_to_path,
+                )
             elif operation.operation_type == "delete_file":
                 _delete_file(target_path)
             else:
@@ -134,6 +166,8 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
                 item["replaced_existing_file"] = True
             if applied is not None and applied.warnings:
                 item["warnings"] = list(applied.warnings)
+            if operation.move_to is not None:
+                item["move_to"] = operation.move_to
             summaries.append(item)
 
         if first_applied is not None:
@@ -174,12 +208,11 @@ def _parse_patch(patch: str) -> list[PatchOperation]:
     lines = [line.rstrip("\r") for line in patch.split("\n")]
     if lines and lines[-1] == "":
         lines.pop()
-    if lines and lines[0] == "":
-        lines = lines[1:]
     if not lines or lines[0] != BEGIN_PATCH:
         raise ValueError("patch must start with '*** Begin Patch'.")
     if lines[-1] != END_PATCH:
         raise ValueError("patch must end with '*** End Patch'.")
+    _validate_patch_grammar(patch)
 
     operations: list[PatchOperation] = []
     index = 1
@@ -191,9 +224,6 @@ def _parse_patch(patch: str) -> list[PatchOperation]:
             operation, index = _parse_update_file(lines, index)
         elif line.startswith(DELETE_FILE):
             operation, index = _parse_delete_file(lines, index)
-        elif not line:
-            index += 1
-            continue
         else:
             raise ValueError(f"Invalid patch line: {line}")
         operations.append(operation)
@@ -231,11 +261,25 @@ def _parse_update_file(lines: list[str], index: int) -> tuple[PatchOperation, in
             break
         body.append(line)
         index += 1
-    if move_to is not None:
-        raise ValueError("Move/rename operations are not supported yet.")
     if not body:
-        raise ValueError(f"Update File '{path}' must include at least one hunk.")
-    return PatchOperation("update_file", path, "\n".join(body), move_to), index
+        raise ValueError(f"Update file hunk for path '{path}' is empty")
+    if not any(line.startswith((" ", "+", "-")) for line in body):
+        raise ValueError("Update hunk does not contain any lines")
+    diff = "\n".join(body) if body else None
+    return PatchOperation("update_file", path, diff, move_to), index
+
+
+def _validate_patch_grammar(patch: str) -> None:
+    try:
+        _VALIDATION_PARSER.parse(patch)
+    except LarkError as exc:
+        if _looks_like_unified_diff(patch):
+            raise ValueError(
+                "Unified diff syntax is not supported by apply_patch. Use a V4A "
+                "patch, replace_in_file for targeted edits, or write_file for "
+                "full-file writes."
+            ) from exc
+        raise ValueError(f"Invalid apply_patch grammar: {exc}") from exc
 
 
 def _parse_delete_file(lines: list[str], index: int) -> tuple[PatchOperation, int]:
@@ -271,14 +315,33 @@ def _create_file(path: Path, diff: str | None) -> tuple[bool, AppliedPatchResult
     return replaced_existing_file, applied
 
 
-def _update_file(path: Path, diff: str | None) -> AppliedPatchResult:
+def _update_file(
+    path: Path,
+    diff: str | None,
+    *,
+    move_to_path: Path | None = None,
+) -> AppliedPatchResult:
     if not path.exists():
         raise FileNotFoundError(f"file not found: {path}")
-    if not isinstance(diff, str) or not diff:
-        raise ValueError("'diff' is required for update_file and must be non-empty.")
+    if path.is_dir():
+        raise IsADirectoryError(f"path is a directory: {path}")
     current = path.read_text(encoding="utf-8")
-    applied = _apply_v4a_diff(current, diff, mode="default")
-    path.write_text(applied.new_content, encoding="utf-8")
+    if isinstance(diff, str) and diff:
+        applied = _apply_v4a_diff(current, diff, mode="default")
+    else:
+        applied = AppliedPatchResult(
+            original_content=current,
+            new_content=current,
+            display_diff=diff or "",
+            diff_line_numbers=[],
+        )
+    destination = move_to_path or path
+    if destination.is_dir():
+        raise IsADirectoryError(f"path is a directory: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(applied.new_content, encoding="utf-8")
+    if move_to_path is not None and move_to_path != path:
+        path.unlink()
     return applied
 
 

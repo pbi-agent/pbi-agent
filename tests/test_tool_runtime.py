@@ -450,6 +450,104 @@ def test_execute_tool_calls_keeps_apply_patch_display_metadata_out_of_output(
     }
 
 
+def test_execute_tool_calls_accepts_apply_patch_freeform_input(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        tool_runtime,
+        "get_tool_handler",
+        lambda name: apply_patch_tool.handle if name == "apply_patch" else None,
+    )
+    monkeypatch.setattr(
+        tool_runtime,
+        "get_tool_spec",
+        lambda name: apply_patch_tool.SPEC if name == "apply_patch" else None,
+    )
+
+    call = ToolCall(
+        call_id="call_1",
+        name="apply_patch",
+        arguments="*** Begin Patch\n*** Add File: notes.txt\n+hello\n*** End Patch",
+        kind="custom",
+    )
+    tracer = Mock()
+    batch = tool_runtime.execute_tool_calls(
+        [call], max_workers=1, context=ToolContext(tracer=tracer)
+    )
+
+    assert batch.results[0].output_json == (
+        "Success. Updated the following files:\nA notes.txt\n"
+    )
+    assert tool_runtime.to_function_call_output_items(batch.results, [call]) == [
+        {
+            "type": "custom_tool_call_output",
+            "call_id": "call_1",
+            "output": "Success. Updated the following files:\nA notes.txt\n",
+        }
+    ]
+    assert tracer.log_tool_call.call_args.kwargs["tool_output"] == (
+        "Success. Updated the following files:\nA notes.txt\n"
+    )
+    assert (tmp_path / "notes.txt").read_text(encoding="utf-8") == "hello"
+
+
+def test_to_function_call_output_items_uses_custom_output_for_freeform_calls() -> None:
+    items = tool_runtime.to_function_call_output_items(
+        [ToolResult(call_id="call_1", output_json='{"ok": true}')],
+        [
+            ToolCall(
+                call_id="call_1",
+                name="apply_patch",
+                arguments="*** Begin Patch\n",
+                kind="custom",
+            )
+        ],
+    )
+
+    assert items == [
+        {
+            "type": "custom_tool_call_output",
+            "call_id": "call_1",
+            "output": '{"ok": true}',
+        }
+    ]
+
+
+def test_execute_tool_calls_formats_apply_patch_freeform_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        tool_runtime,
+        "get_tool_handler",
+        lambda name: apply_patch_tool.handle if name == "apply_patch" else None,
+    )
+    monkeypatch.setattr(
+        tool_runtime,
+        "get_tool_spec",
+        lambda name: apply_patch_tool.SPEC if name == "apply_patch" else None,
+    )
+
+    batch = tool_runtime.execute_tool_calls(
+        [
+            ToolCall(
+                call_id="call_1",
+                name="apply_patch",
+                arguments="*** Add File: notes.txt\n+hello",
+                kind="custom",
+            )
+        ],
+        max_workers=1,
+    )
+
+    assert batch.had_errors is True
+    assert batch.results[0].is_error is True
+    assert batch.results[0].output_json == "patch must start with '*** Begin Patch'."
+
+
 def test_execute_tool_calls_serializes_tabular_read_file_output(
     tmp_path: Path,
     monkeypatch,

@@ -28,12 +28,12 @@ def test_registry_exposes_expected_built_in_tools() -> None:
     anthropic_tool_names = {
         item["name"] for item in registry.get_anthropic_tool_definitions()
     }
-    assert anthropic_tool_names == expected
+    assert anthropic_tool_names == expected - {"apply_patch"}
 
     chat_tool_names = {
         item["function"]["name"] for item in registry.get_openai_chat_tool_definitions()
     }
-    assert chat_tool_names == expected
+    assert chat_tool_names == expected - {"apply_patch"}
 
 
 def test_registry_returns_none_for_unknown_tool() -> None:
@@ -74,13 +74,31 @@ def test_effective_excluded_tool_names_hides_read_web_url_without_web_search() -
     assert "read_web_url" in excluded
 
 
-def test_apply_patch_schema_accepts_patch_only() -> None:
+def test_apply_patch_uses_codex_freeform_spec() -> None:
     spec = registry.get_tool_spec("apply_patch")
 
     assert spec is not None
-    assert set(spec.parameters_schema["properties"]) == {"patch"}
-    assert spec.parameters_schema["required"] == ["patch"]
-    assert "Codex" not in spec.description
+    assert spec.parameters_schema == {}
+    assert spec.description == (
+        "Use the `apply_patch` tool to edit files. This is a FREEFORM tool, so "
+        "do not wrap the patch in JSON."
+    )
+    assert spec.freeform_format is not None
+    assert spec.freeform_format["type"] == "grammar"
+    assert spec.freeform_format["syntax"] == "lark"
+    assert "start: begin_patch hunk+ end_patch" in spec.freeform_format["definition"]
+
+    openai_tool = next(
+        item
+        for item in registry.get_openai_tool_definitions()
+        if item["name"] == "apply_patch"
+    )
+    assert openai_tool == {
+        "type": "custom",
+        "name": "apply_patch",
+        "description": spec.description,
+        "format": spec.freeform_format,
+    }
 
 
 def test_registry_sub_agent_schema_uses_project_agent_enum(
