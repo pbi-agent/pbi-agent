@@ -68,6 +68,8 @@
 
 /* ── Task Form ── */
 .task-form-dialog {
+  --task-form-dialog-padding: var(--sp-6);
+
   width: min(35rem, calc(100dvw - 2rem));
   max-width: none;
   max-height: calc(100dvh - 2rem);
@@ -75,8 +77,8 @@
   grid-template-columns: minmax(0, 1fr);
   flex-direction: column;
   gap: var(--sp-5);
-  overflow: visible;
-  padding: var(--sp-6);
+  overflow: hidden;
+  padding: var(--task-form-dialog-padding);
   border-color: var(--color-border);
   background: color-mix(in srgb, var(--color-surface-1) 88%, transparent);
   backdrop-filter: blur(16px);
@@ -191,10 +193,12 @@
 
 .task-form-dialog [data-slot="dialog-footer"] {
   flex: 0 0 auto;
-  margin: 0 calc(var(--sp-6) * -1) calc(var(--sp-6) * -1);
-  padding: var(--sp-4) var(--sp-6);
+  margin: 0 calc(var(--task-form-dialog-padding) * -1) calc(var(--task-form-dialog-padding) * -1);
+  padding: var(--sp-4) var(--task-form-dialog-padding);
   border-top: 1px solid var(--color-border-subtle);
-  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  border-radius: 0;
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
   background: color-mix(in srgb, var(--color-surface-2) 82%, transparent);
 }
 
@@ -252,8 +256,9 @@
 
 @media (max-width: 40rem) {
   .task-form-dialog {
+    --task-form-dialog-padding: var(--sp-4);
+
     width: min(35rem, calc(100dvw - 1rem));
-    padding: var(--sp-4);
   }
 
   .task-form-dialog[data-size="sm"],
@@ -263,8 +268,7 @@
   }
 
   .task-form-dialog [data-slot="dialog-footer"] {
-    margin: 0 calc(var(--sp-4) * -1) calc(var(--sp-4) * -1);
-    padding: var(--sp-4);
+    padding-block: var(--sp-4);
   }
 
   .task-form__footer {
