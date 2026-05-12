@@ -130,6 +130,7 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
         <CardAction className="git-diff-result__actions">
           <Badge
             variant={metadata.success === false ? "destructive" : "secondary"}
+            size="meta"
             className="git-diff-result__status"
           >
             {metadata.success === false ? (
@@ -142,6 +143,7 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
           <div className="git-diff-result__stats" aria-label="Diff summary">
             <Badge
               variant="outline"
+              size="meta"
               className="git-diff-result__stat git-diff-result__stat--added"
             >
               <PlusIcon data-icon="inline-start" />
@@ -149,6 +151,7 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
             </Badge>
             <Badge
               variant="outline"
+              size="meta"
               className="git-diff-result__stat git-diff-result__stat--removed"
             >
               <MinusIcon data-icon="inline-start" />
@@ -173,7 +176,7 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
         <div className="git-diff-result__footer">
           <span>{footerLabel}</span>
           {metadata.call_id ? (
-            <Badge variant="ghost" className="git-diff-result__call-id">
+            <Badge variant="ghost" size="meta" className="git-diff-result__call-id">
               {metadata.call_id}
             </Badge>
           ) : null}
@@ -208,7 +211,7 @@ function DeletedFileResult({ metadata }: { metadata: ApplyPatchToolMetadata }) {
           </div>
         </div>
         <div className="git-diff-result__actions git-diff-result__actions--delete">
-          <Badge variant="secondary" className="git-diff-result__status">
+          <Badge variant="secondary" size="meta" className="git-diff-result__status">
             <CheckCircle2Icon data-icon="inline-start" />
             Done
           </Badge>

@@ -275,7 +275,7 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, ch
           </div>
         </div>
         <CardAction className="tool-result-card__actions">
-          <Badge variant={failed ? "destructive" : "secondary"}>
+          <Badge variant={failed ? "destructive" : "secondary"} size="meta">
             {failed ? (
               <XCircleIcon data-icon="inline-start" />
             ) : running ? (
@@ -286,13 +286,13 @@ function ToolCard({ metadata, running, icon, title, description, statusLabel, ch
             {label}
           </Badge>
           {metadata?.tool_name && !FILE_EDIT_TOOL_NAMES.has(metadata.tool_name) ? (
-            <Badge variant="outline">{metadata.tool_name}</Badge>
+            <Badge variant="outline" size="meta">{metadata.tool_name}</Badge>
           ) : null}
         </CardAction>
       </CardHeader>
       <CardContent className="tool-result-card__content">
         {children}
-{metadata?.call_id ? <Badge variant="ghost">{metadata.call_id}</Badge> : null}
+        {metadata?.call_id ? <Badge variant="ghost" size="meta">{metadata.call_id}</Badge> : null}
       </CardContent>
     </Card>
   );
