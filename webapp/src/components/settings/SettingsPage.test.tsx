@@ -1707,7 +1707,7 @@ describe("SettingsPage", () => {
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
 
     const dialog = screen.getByRole("dialog", { name: "Add Provider" });
-    expect(dialog).toHaveClass("task-form-dialog");
+    expect(dialog.querySelector('[data-slot="dialog-title"]')).toHaveTextContent("Add Provider");
     expect(dialog.querySelector(".task-form__body")).not.toBeNull();
     expect(document.querySelector('input[name="provider-name"]')).toHaveClass(
       "task-form__input",
@@ -1715,11 +1715,23 @@ describe("SettingsPage", () => {
     expect(document.querySelector('select[name="provider-kind"]')).toHaveClass(
       "task-form__select",
     );
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
-      "task-form__action-button",
+    const credentialSource = document.querySelector(".secret-mode-tabs");
+    expect(credentialSource).not.toBeNull();
+    const [envVarSourceButton, apiKeySourceButton] = Array.from(
+      credentialSource?.querySelectorAll('[data-slot="toggle-group-item"]') ?? [],
     );
-    expect(screen.getByRole("button", { name: "Add Provider" })).toHaveClass(
-      "task-form__action-button",
+    expect(envVarSourceButton).toHaveTextContent("Env var");
+    expect(envVarSourceButton).toHaveAttribute("data-state", "on");
+    await user.click(apiKeySourceButton as HTMLElement);
+    expect(apiKeySourceButton).toHaveTextContent("API key");
+    expect(apiKeySourceButton).toHaveAttribute("data-state", "on");
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute(
+      "data-variant",
+      "outline",
+    );
+    expect(screen.getByRole("button", { name: "Add Provider" })).toHaveAttribute(
+      "data-variant",
+      "default",
     );
   });
 
@@ -2111,7 +2123,7 @@ describe("SettingsPage", () => {
     await user.click(await screen.findByRole("button", { name: "Add Profile" }));
 
     const dialog = screen.getByRole("dialog", { name: "Add Profile" });
-    expect(dialog).toHaveClass("task-form-dialog");
+    expect(dialog.querySelector('[data-slot="dialog-title"]')).toHaveTextContent("Add Profile");
     expect(dialog.querySelector(".task-form__body")).not.toBeNull();
     expect(document.querySelector('input[name="profile-name"]')).toHaveClass(
       "task-form__input",
@@ -2119,11 +2131,13 @@ describe("SettingsPage", () => {
     expect(document.querySelector('select[name="provider-id"]')).toHaveClass(
       "task-form__select",
     );
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
-      "task-form__action-button",
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute(
+      "data-variant",
+      "outline",
     );
-    expect(screen.getByRole("button", { name: "Add Profile" })).toHaveClass(
-      "task-form__action-button",
+    expect(screen.getByRole("button", { name: "Add Profile" })).toHaveAttribute(
+      "data-variant",
+      "default",
     );
   });
 

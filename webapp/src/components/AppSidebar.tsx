@@ -8,10 +8,13 @@ import {
   SquareKanbanIcon,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useLastOpenedSessionPath } from "../hooks/useLastOpenedSession";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useSidebarStore } from "../hooks/useSidebar";
+import { AppSessionsContextPanel } from "./AppSessionsContextPanel";
 import { WorkspaceBadge } from "./WorkspaceBadge";
 import { Button } from "./ui/button";
+import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "../lib/utils";
 
@@ -105,6 +108,7 @@ export function AppSidebarLayout({ children, contextPanel }: AppSidebarLayoutPro
 
 function AppSidebar({ contextPanel }: { contextPanel?: ReactNode }) {
   const isOpen = useSidebarStore((state) => state.isOpen);
+  const resolvedContext = contextPanel ?? <AppSessionsContextPanel />;
   return (
     <aside
       id="app-sidebar"
@@ -114,9 +118,10 @@ function AppSidebar({ contextPanel }: { contextPanel?: ReactNode }) {
       <AppSidebarHead />
       <AppSidebarNav collapsed={!isOpen} />
       {isOpen ? (
-        <div className="app-sidebar__context">
-          {contextPanel ?? <div className="app-sidebar__context-spacer" aria-hidden="true" />}
-        </div>
+        <>
+          <Separator className="app-sidebar__divider" />
+          <div className="app-sidebar__context">{resolvedContext}</div>
+        </>
       ) : (
         <div className="app-sidebar__context-spacer" aria-hidden="true" />
       )}
@@ -175,25 +180,39 @@ function AppSidebarHead() {
 }
 
 function AppSidebarNav({ collapsed }: { collapsed: boolean }) {
+  const lastOpenedSessionPath = useLastOpenedSessionPath();
   return (
     <nav
       className={cn("app-sidebar__nav", collapsed && "app-sidebar__nav--collapsed")}
       aria-label="Primary navigation"
     >
       {appNavItems.map((item) => (
-        <SidebarNavLink key={item.to} item={item} collapsed={collapsed} />
+        <SidebarNavLink
+          key={item.to}
+          item={item}
+          collapsed={collapsed}
+          targetPath={item.to === "/sessions" ? lastOpenedSessionPath : item.to}
+        />
       ))}
     </nav>
   );
 }
 
-function SidebarNavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function SidebarNavLink({
+  item,
+  collapsed,
+  targetPath,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  targetPath: string;
+}) {
   const Icon = item.icon;
   const { pathname } = useLocation();
   const isActive = isNavItemActive(pathname, item.to);
   const link = (
     <NavLink
-      to={item.to}
+      to={targetPath}
       className={cn(
         "app-sidebar__nav-item",
         collapsed && "app-sidebar__nav-item--collapsed",

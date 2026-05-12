@@ -1,16 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { BoardStage, CommandView, ModelProfileView } from "../../types";
-import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+import { FormDialog } from "../ui/form-dialog";
 import {
   Field,
   FieldDescription,
@@ -136,161 +129,146 @@ export function BoardStageEditorModal({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => {
-      if (!open && !isSaving) onClose();
-    }}>
-      <DialogContent className="modal-card--board-editor">
-        <DialogHeader>
-          <DialogTitle>Board Stages</DialogTitle>
-        </DialogHeader>
+    <FormDialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isSaving) onClose();
+      }}
+      title="Board Stages"
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      isPending={isSaving}
+      error={error}
+      primaryAction={{ label: "Save Board", pendingLabel: "Saving..." }}
+      onCancel={onClose}
+      size="wide"
+    >
+      <div className="board-stage-editor">
+        {items.map((item, index) => {
+          const fixedStage = isFixedStage(item.id);
+          const fixedStageLabel = item.id === BACKLOG_STAGE_ID
+            ? "Backlog stays first and never runs directly."
+            : item.id === DONE_STAGE_ID
+              ? "Done stays last and is archive-only."
+              : null;
 
-        <form
-          className="task-form"
-          onSubmit={(event) => {
-            void handleSubmit(event);
-          }}
-        >
-          <div className="board-stage-editor">
-            {items.map((item, index) => {
-              const fixedStage = isFixedStage(item.id);
-              const fixedStageLabel = item.id === BACKLOG_STAGE_ID
-                ? "Backlog stays first and never runs directly."
-                : item.id === DONE_STAGE_ID
-                  ? "Done stays last and is archive-only."
-                  : null;
-
-              return (
-                <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
-                <div className="board-stage-editor__ordering">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="board-stage-editor__icon-button"
-                    onClick={() => moveItem(index, -1)}
-                    disabled={index === 0 || isSaving || fixedStage}
-                  >
-                    <ArrowUpIcon />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="board-stage-editor__icon-button"
-                    onClick={() => moveItem(index, 1)}
-                    disabled={index === items.length - 1 || isSaving || fixedStage}
-                  >
-                    <ArrowDownIcon />
-                  </Button>
-                </div>
-
-                <FieldGroup className="board-stage-editor__fields">
-                  <Field>
-                    <FieldLabel>Name</FieldLabel>
-                    <Input
-                      className="task-form__input"
-                      value={item.name}
-                      onChange={(event) => updateItem(index, { name: event.target.value })}
-                      required
-                      disabled={fixedStage}
-                    />
-                  </Field>
-                  {fixedStageLabel ? (
-                    <FieldDescription>{fixedStageLabel}</FieldDescription>
-                  ) : null}
-
-                  <div className="task-form__row">
-                    <Field>
-                      <FieldLabel>Profile</FieldLabel>
-                      <NativeSelect
-                        className="task-form__select"
-                        value={item.profile_id}
-                        onChange={(event) => updateItem(index, { profile_id: event.target.value })}
-                        disabled={fixedStage}
-                      >
-                        <NativeSelectOption value="">No default profile</NativeSelectOption>
-                        {profiles.map((profile) => (
-                          <NativeSelectOption key={profile.id} value={profile.id}>
-                            {profile.name}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                    </Field>
-
-                    <Field>
-                      <FieldLabel>Command</FieldLabel>
-                      <NativeSelect
-                        className="task-form__select"
-                        value={item.command_id}
-                        onChange={(event) => updateItem(index, { command_id: event.target.value })}
-                        disabled={fixedStage}
-                      >
-                        <NativeSelectOption value="">No default command</NativeSelectOption>
-                        {commands.map((command) => (
-                          <NativeSelectOption key={command.id} value={command.id}>
-                            {command.name} ({command.slash_alias})
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
-                    </Field>
-                  </div>
-
-                  <Field orientation="horizontal" className="board-stage-editor__toggle">
-                    <Checkbox
-                      className="board-stage-editor__checkbox"
-                      checked={item.auto_start}
-                      onCheckedChange={(checked) => updateItem(index, { auto_start: checked === true })}
-                      disabled={fixedStage}
-                    />
-                    <FieldLabel>
-                    Auto-start when a task enters this stage
-                    </FieldLabel>
-                  </Field>
-                </FieldGroup>
-
+          return (
+            <div key={`${item.id || "new"}-${index}`} className="board-stage-editor__row">
+              <div className="board-stage-editor__ordering">
                 <Button
                   type="button"
                   variant="ghost"
-                  className="task-form__action-button board-stage-editor__remove-button"
-                  onClick={() => removeStage(index)}
-                  disabled={isSaving || items.length === 1 || fixedStage}
+                  size="icon-sm"
+                  className="board-stage-editor__icon-button"
+                  onClick={() => moveItem(index, -1)}
+                  disabled={index === 0 || isSaving || fixedStage}
                 >
-                  <Trash2Icon data-icon="inline-start" />
-                  Remove
+                  <ArrowUpIcon />
                 </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="board-stage-editor__icon-button"
+                  onClick={() => moveItem(index, 1)}
+                  disabled={index === items.length - 1 || isSaving || fixedStage}
+                >
+                  <ArrowDownIcon />
+                </Button>
+              </div>
+
+              <FieldGroup className="board-stage-editor__fields">
+                <Field>
+                  <FieldLabel>Name</FieldLabel>
+                  <Input
+                    className="task-form__input"
+                    value={item.name}
+                    onChange={(event) => updateItem(index, { name: event.target.value })}
+                    required
+                    disabled={fixedStage}
+                  />
+                </Field>
+                {fixedStageLabel ? (
+                  <FieldDescription>{fixedStageLabel}</FieldDescription>
+                ) : null}
+
+                <div className="task-form__row">
+                  <Field>
+                    <FieldLabel>Profile</FieldLabel>
+                    <NativeSelect
+                      className="task-form__select"
+                      value={item.profile_id}
+                      onChange={(event) => updateItem(index, { profile_id: event.target.value })}
+                      disabled={fixedStage}
+                    >
+                      <NativeSelectOption value="">No default profile</NativeSelectOption>
+                      {profiles.map((profile) => (
+                        <NativeSelectOption key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel>Command</FieldLabel>
+                    <NativeSelect
+                      className="task-form__select"
+                      value={item.command_id}
+                      onChange={(event) => updateItem(index, { command_id: event.target.value })}
+                      disabled={fixedStage}
+                    >
+                      <NativeSelectOption value="">No default command</NativeSelectOption>
+                      {commands.map((command) => (
+                        <NativeSelectOption key={command.id} value={command.id}>
+                          {command.name} ({command.slash_alias})
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                  </Field>
                 </div>
-              );
-            })}
-          </div>
 
-          {error ? (
-            <Alert variant="destructive" className="settings-error-banner">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
+                <Field orientation="horizontal" className="board-stage-editor__toggle">
+                  <Checkbox
+                    className="board-stage-editor__checkbox"
+                    checked={item.auto_start}
+                    onCheckedChange={(checked) => updateItem(index, { auto_start: checked === true })}
+                    disabled={fixedStage}
+                  />
+                  <FieldLabel>Auto-start when a task enters this stage</FieldLabel>
+                </Field>
+              </FieldGroup>
 
-          <DialogFooter className="app-action-row app-action-row--between board-stage-editor__actions">
-            <Button
-              type="button"
-              variant="outline"
-              className="task-form__action-button"
-              onClick={addStage}
-              disabled={isSaving}
-            >
-              <PlusIcon data-icon="inline-start" />
-              Add Stage
-            </Button>
-            <Button
-              type="submit"
-              variant="default"
-              className="task-form__action-button"
-              disabled={isSaving}
-            >
-              {isSaving ? "Saving..." : "Save Board"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="board-stage-editor__remove-button"
+                onClick={() => removeStage(index)}
+                disabled={isSaving || items.length === 1 || fixedStage}
+              >
+                <Trash2Icon data-icon="inline-start" />
+                Remove
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="board-stage-editor__toolbar app-action-row app-action-row--compact">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="board-stage-editor__add-button"
+          onClick={addStage}
+          disabled={isSaving}
+        >
+          <PlusIcon data-icon="inline-start" />
+          Add Stage
+        </Button>
+      </div>
+    </FormDialog>
   );
 }

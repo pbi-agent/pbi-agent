@@ -395,6 +395,7 @@ export function BoardPage() {
           <Button
             type="button"
             variant="ghost"
+            size="sm"
             className="board-layout__action-button"
             onClick={() => openBoardEditor(false)}
           >
@@ -404,6 +405,7 @@ export function BoardPage() {
           <Button
             type="button"
             variant="ghost"
+            size="sm"
             className="board-layout__action-button"
             onClick={openNewTask}
           >

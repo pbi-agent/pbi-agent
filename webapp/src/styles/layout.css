@@ -47,15 +47,19 @@
   align-items: stretch;
 }
 
-/* Header — logo + centered workspace + collapse toggle */
+/* Header — logo + centered workspace + collapse toggle.
+ * Uses a fixed height (not min-height) so its bottom border lines up pixel-
+ * perfectly with the session topbar's bottom border on the right pane. */
 .app-sidebar__head {
   display: grid;
   grid-template-columns: var(--app-sidebar-action-size) minmax(0, 1fr) var(--app-sidebar-action-size);
   align-items: center;
   column-gap: var(--sp-2);
-  min-height: var(--topbar-height);
-  padding: var(--sp-2) var(--sp-3);
+  block-size: var(--topbar-height);
+  min-block-size: var(--topbar-height);
+  padding: 0 var(--sp-3);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .app-sidebar--collapsed .app-sidebar__head {
@@ -154,37 +158,20 @@
   overflow: hidden;
 }
 
-.app-sidebar__workspace-badge {
-  flex: 0 1 auto;
-  width: auto;
-  max-width: 100%;
-  min-width: 0;
-  justify-content: flex-start;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  padding: var(--sp-2);
-  overflow: hidden;
-}
-
-.app-sidebar__workspace-badge-text {
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: rtl;
-  text-align: left;
-  unicode-bidi: isolate;
-}
-
 /* Primary navigation */
 .app-sidebar__nav {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  flex-shrink: 0;
+}
+
+/* Soft divider between primary nav and the contextual section below */
+.app-sidebar__divider {
+  margin: 0 var(--sp-3);
+  background: var(--border);
+  opacity: 0.6;
   flex-shrink: 0;
 }
 

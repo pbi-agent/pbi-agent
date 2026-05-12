@@ -55,7 +55,7 @@ export function TaskCard({
       <CardHeader className="task-card__drag-handle" {...listeners} {...attributes}>
         <div className="task-card__chrome-row">
           <GripVerticalIcon className="task-card__grip" aria-hidden="true" />
-          <StatusPill status={task.run_status} />
+          <StatusPill status={task.run_status} size="meta" className="task-card__status" />
         </div>
         <TaskCardContent task={task} />
       </CardHeader>
@@ -110,7 +110,7 @@ export function TaskCard({
           type="button"
           variant="ghost"
           size="sm"
-          className="task-card__action-button"
+          className="task-card__action-button task-card__action-button--danger"
           onClick={onDelete}
           disabled={isReadonly}
         >

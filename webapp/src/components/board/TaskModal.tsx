@@ -10,13 +10,7 @@ import { ImageIcon, XIcon } from "lucide-react";
 import type { BoardStage, ImageAttachment, ModelProfileView } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+import { FormDialog } from "../ui/form-dialog";
 import {
   Field,
   FieldGroup,
@@ -185,18 +179,18 @@ export function TaskModal({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => {
-      if (!open) onClose();
-    }}>
-      <DialogContent className="task-form-dialog">
-        <DialogHeader>
-          <DialogTitle>
-            {task.taskId ? "Edit Task" : "New Task"}
-          </DialogTitle>
-        </DialogHeader>
-
-        <form className="task-form" onSubmit={onSave}>
-          <input
+    <FormDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={task.taskId ? "Edit Task" : "New Task"}
+      onSubmit={onSave}
+      isPending={isSaving}
+      primaryAction={{ label: "Save", pendingLabel: "Saving..." }}
+      onCancel={onClose}
+    >
+      <input
             ref={imageInputRef}
             type="file"
             name="task-image-upload"
@@ -205,8 +199,7 @@ export function TaskModal({
             hidden
             onChange={handleImageInput}
           />
-          <div className="task-form__body">
-            <FieldGroup>
+          <FieldGroup>
               <Field>
                 <FieldLabel htmlFor={titleId}>Title</FieldLabel>
                 <Input
@@ -363,29 +356,6 @@ export function TaskModal({
                 </NativeSelect>
               </Field>
             </FieldGroup>
-          </div>
-
-          <DialogFooter className="app-action-row app-action-row--end task-form__footer">
-            <Button
-              type="button"
-              variant="outline"
-              className="task-form__action-button"
-              onClick={onClose}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="default"
-              className="task-form__action-button"
-              disabled={isSaving}
-            >
-              {isSaving ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

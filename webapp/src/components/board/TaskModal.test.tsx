@@ -129,7 +129,7 @@ describe("TaskModal", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "New Task" });
-    expect(dialog).toHaveClass("task-form-dialog");
+    expect(dialog.querySelector('[data-slot="dialog-title"]')).toHaveTextContent("New Task");
     expect(screen.getByRole("heading", { name: "New Task" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Draft implementation plan")).toHaveClass("task-form__input");
     expect(screen.getByDisplayValue("Write a careful implementation plan.")).toHaveClass("task-form__textarea");

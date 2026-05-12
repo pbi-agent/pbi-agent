@@ -1,55 +1,6 @@
 /* ── Shared Utilities ──────────────────────────────────────────────── */
 
 /* Status pills */
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1);
-  min-height: 1.75rem;
-  padding: var(--sp-1) var(--sp-2);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: var(--leading-normal);
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.status-pill::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-pill--idle {
-  color: var(--color-text-secondary);
-  background: var(--color-surface-2);
-}
-.status-pill--idle::before { background: var(--color-text-tertiary); }
-
-.status-pill--running {
-  color: var(--color-accent);
-  background: var(--color-accent-muted);
-}
-.status-pill--running::before {
-  background: var(--color-accent);
-  animation: pulse-dot 1.5s ease-in-out infinite;
-}
-
-.status-pill--completed {
-  color: var(--color-success);
-  background: var(--color-success-muted);
-}
-.status-pill--completed::before { background: var(--color-success); }
-
-.status-pill--failed {
-  color: var(--color-error);
-  background: var(--color-error-muted);
-}
-.status-pill--failed::before { background: var(--color-error); }
 
 /* Connection indicator dot */
 .indicator-dot {

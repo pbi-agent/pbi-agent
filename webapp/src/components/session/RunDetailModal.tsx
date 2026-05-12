@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ActivityIcon,
@@ -12,19 +12,12 @@ import {
   TerminalIcon,
   TriangleAlertIcon,
   WrenchIcon,
-  XIcon,
 } from "lucide-react";
 import { fetchRunDetail } from "../../api";
 import type { ObservabilityEvent, RunSession } from "../../types";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
+import { FormDialog } from "../ui/form-dialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Alert, AlertDescription } from "../ui/alert";
 
@@ -37,14 +30,6 @@ export function RunDetailModal({
   onClose: () => void;
   scope?: "workspace" | "global";
 }) {
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
   const detailQuery = useQuery({
     queryKey: ["run-detail", runSessionId, scope],
     queryFn: () => fetchRunDetail(runSessionId, scope),
@@ -55,26 +40,16 @@ export function RunDetailModal({
   });
 
   return (
-    <Dialog open onOpenChange={(open) => {
-      if (!open) onClose();
-    }}>
-      <DialogContent className="modal-card--wide" showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>Run Detail</DialogTitle>
-          <DialogDescription className="sr-only">Detailed metrics and event timeline for this agent run</DialogDescription>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="app-close-icon-button modal-card__close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            <XIcon />
-          </Button>
-        </DialogHeader>
-
-        <div className="run-detail">
+    <FormDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title="Run Detail"
+      description="Detailed metrics and event timeline for this agent run"
+      size="wide"
+    >
+      <div className="run-detail">
           {detailQuery.isLoading ? (
             <div className="run-detail__loading">
               <LoadingSpinner size="md" />
@@ -87,9 +62,8 @@ export function RunDetailModal({
               <EventTimeline events={detailQuery.data.events} />
             </>
           ) : null}
-        </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FormDialog>
   );
 }
 
@@ -114,7 +88,7 @@ function RunSummary({ run }: { run: RunSession }) {
       <div className="run-kpi__hero">
         <div className="run-kpi__hero-card">
           <span className="run-kpi__hero-label">Status</span>
-          <Badge variant="secondary" className={`status-pill status-pill--${statusModifier}`}>{run.status}</Badge>
+          <Badge variant={statusModifier === "idle" ? "secondary" : statusModifier}>{run.status}</Badge>
         </div>
         <div className="run-kpi__hero-card">
           <span className="run-kpi__hero-label"><ClockIcon data-icon="inline-start" /> Duration</span>
@@ -252,13 +226,13 @@ function EventRow({ event }: { event: ObservabilityEvent }) {
         <span className="event-row__spacer" />
 
         {event.success === false ? (
-          <Badge variant="destructive" className="event-row__badge event-row__badge--error">fail</Badge>
+          <Badge variant="destructive">fail</Badge>
         ) : event.success === true ? (
-          <Badge variant="secondary" className="event-row__badge event-row__badge--ok">ok</Badge>
+          <Badge variant="success">ok</Badge>
         ) : null}
 
         {event.status_code != null ? (
-          <Badge variant={event.status_code >= 400 ? "destructive" : "secondary"} className={`event-row__badge${event.status_code >= 400 ? " event-row__badge--error" : ""}`}>
+          <Badge variant={event.status_code >= 400 ? "destructive" : "success"}>
             {event.status_code}
           </Badge>
         ) : null}

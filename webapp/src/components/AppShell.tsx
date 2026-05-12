@@ -128,6 +128,7 @@ export function AppShell() {
 
       {showOnboardingModal && (
         <OnboardingModal
+          openSettings={openSettings}
           isOnSettingsPage={settingsOpen}
           onDismissOnSettings={() => {
             setDismissedOnboardingOnSettings(true);

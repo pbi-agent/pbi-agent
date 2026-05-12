@@ -6,7 +6,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import type { SessionRecord } from "../../types";
-import { Badge } from "../ui/badge";
+import { MetaBadge } from "../MetaBadge";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -188,9 +188,9 @@ export function SessionSidebar({
                       </span>
                       <div className="session-card__meta">
                         <time className="session-card__time">{formatDate(session.updated_at)}</time>
-                        <Badge variant="secondary" className="session-card__model">
+                        <MetaBadge className="session-card__model">
                           {session.model}
-                        </Badge>
+                        </MetaBadge>
                       </div>
                     </Button>
 
@@ -212,7 +212,7 @@ export function SessionSidebar({
                           <MoreHorizontalIcon />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="session-card__menu">
+<DropdownMenuContent align="end">
                         <DropdownMenuGroup>
                           <DropdownMenuItem
                             className="session-card__menu-item"

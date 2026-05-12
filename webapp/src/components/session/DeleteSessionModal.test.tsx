@@ -43,10 +43,11 @@ describe("DeleteSessionModal", () => {
     expect(footer).not.toHaveClass("app-action-row");
 
     const cancel = screen.getByRole("button", { name: "Cancel" });
-    expect(cancel).toHaveClass("delete-confirm-modal__cancel");
+    expect(cancel).toHaveAttribute("data-variant", "outline");
+    expect(cancel).toHaveClass("alert-dialog__button");
 
     const action = screen.getByRole("button", { name: "Delete session" });
     expect(action).toHaveAttribute("data-variant", "destructive");
-    expect(action).toHaveClass("delete-confirm-modal__confirm");
+    expect(action).toHaveClass("alert-dialog__button");
   });
 });

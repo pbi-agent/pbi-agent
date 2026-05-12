@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { BotIcon, ChevronRightIcon } from "lucide-react";
+import { BotIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
+import { Accordion as AccordionPrimitive } from "radix-ui";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { ConnectionState } from "../../store";
 import type {
@@ -18,6 +19,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
+import {
+  Accordion,
+  AccordionItem,
+} from "../ui/accordion";
 import { Badge } from "../ui/badge";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { ToolResult } from "./ToolResult";
@@ -26,6 +31,9 @@ import { SessionWelcome } from "./SessionWelcome";
 
 const USER_MESSAGE_TOP_OFFSET = 8;
 const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
+const WORKING_ITEMS_MAX_VISIBLE = 5;
+const WORKING_ITEMS_OPEN_GUTTER_PX = 16;
+const WORKING_ITEMS_OPEN_MAX_VH = 0.7;
 const WORK_RUN_PHASE_MIN_VISIBLE_MS = 600;
 const WORK_RUN_PHASE_TRANSITION_MS = 300;
 const WORK_RUN_PHASE_HOLD_MS =
@@ -616,7 +624,11 @@ function SubAgentCard({
     >
       <BotIcon />
       <span className="working-items__sub-agent-main">{name}</span>
-      <Badge variant="secondary" className={`working-items__sub-agent-status status-pill status-pill--${statusModifier}`}>
+      <Badge
+        variant={statusModifier === "idle" ? "secondary" : statusModifier}
+        size="meta"
+        className="working-items__sub-agent-status"
+      >
         {status}
       </Badge>
     </button>
@@ -629,106 +641,249 @@ function WorkingItemsPanel({
   closeSignal,
   parentSessionId,
   showSubAgentCards = true,
+  fullExpanded = false,
 }: {
   items: WorkItem[];
   subAgents: Record<string, { title: string; status: string }>;
   closeSignal: string | null;
   parentSessionId?: string;
   showSubAgentCards?: boolean;
+  fullExpanded?: boolean;
 }) {
   const groups = useMemo(() => buildWorkingGroups(items, showSubAgentCards), [items, showSubAgentCards]);
-  const [openGroupsState, setOpenGroupsState] = useState<{
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const groupRefs = useRef(new Map<string, HTMLDivElement>());
+  const lastAutoScrolledGroupKeyRef = useRef<string | null>(null);
+  const needsScroll = groups.length > WORKING_ITEMS_MAX_VISIBLE;
+  const [dynamicMaxHeight, setDynamicMaxHeight] = useState<number | null>(null);
+  // Single open value: opening one item automatically closes any other,
+  // courtesy of the Radix Accordion type="single" semantics.
+  const [openValueState, setOpenValueState] = useState<{
     closeSignal: string | null;
-    groups: Record<string, boolean>;
-  }>({ closeSignal, groups: {} });
-  const [openToolsState, setOpenToolsState] = useState<{
-    closeSignal: string | null;
-    tools: Record<string, boolean>;
-  }>({ closeSignal, tools: {} });
-  const openGroups = openGroupsState.closeSignal === closeSignal
-    ? openGroupsState.groups
-    : {};
-  const openTools = openToolsState.closeSignal === closeSignal
-    ? openToolsState.tools
-    : {};
+    value: string;
+  }>({ closeSignal, value: "" });
+  const openValue = openValueState.closeSignal === closeSignal
+    ? openValueState.value
+    : "";
+
+  const lastGroupKey = groups.at(-1)?.key ?? null;
+  const hasOpenItem = openValue !== "";
+
+  const scheduleScrollToLatestGroup = useCallback(() => {
+    if (!needsScroll || fullExpanded || !lastGroupKey) return;
+    if (lastAutoScrolledGroupKeyRef.current === lastGroupKey) return;
+    lastAutoScrolledGroupKeyRef.current = lastGroupKey;
+    requestAnimationFrame(() => {
+      const scrollEl = scrollRef.current;
+      if (!scrollEl) return;
+      scrollEl.scrollTop = scrollEl.scrollHeight;
+    });
+  }, [fullExpanded, lastGroupKey, needsScroll]);
+
+  const setScrollRef = useCallback((node: HTMLDivElement | null) => {
+    scrollRef.current = node;
+    if (node) scheduleScrollToLatestGroup();
+  }, [scheduleScrollToLatestGroup]);
+
+  // Stable ref-bridge so the ResizeObserver callback (created once per group node)
+  // always reads the current measurement function without resubscribing.
+  const syncDynamicMaxHeightRef = useRef<(preferredKey?: string) => void>(() => {});
+
+  const setGroupRef = useCallback((key: string) => (node: HTMLDivElement | null): (() => void) | void => {
+    if (!node) {
+      groupRefs.current.delete(key);
+      return;
+    }
+    groupRefs.current.set(key, node);
+    if (key === lastGroupKey) scheduleScrollToLatestGroup();
+
+    // React 19 ref-callback cleanup — no useEffect needed.
+    // Observe size changes so async-rendered tool content (Shiki, markdown,
+    // images) re-trigger height measurement once layout settles.
+    if (typeof ResizeObserver === "undefined") {
+      return () => {
+        groupRefs.current.delete(key);
+      };
+    }
+    const observer = new ResizeObserver(() => {
+      syncDynamicMaxHeightRef.current(key);
+    });
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      groupRefs.current.delete(key);
+    };
+  }, [lastGroupKey, scheduleScrollToLatestGroup]);
+
+  const syncDynamicMaxHeight = useCallback((preferredKey?: string) => {
+    if (!needsScroll || fullExpanded) {
+      setDynamicMaxHeight((current) => (current === null ? current : null));
+      return;
+    }
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+
+    // Use scrollHeight directly: closed Collapsibles unmount their content
+    // (Presence pattern), so the group's scrollHeight is naturally small when
+    // closed and equals the trigger + natural content height when open.
+    // The ResizeObserver attached in setGroupRef keeps this in sync as
+    // async-rendered content (markdown, syntax highlighting, images) settles.
+    const preferredGroup = preferredKey ? groupRefs.current.get(preferredKey) : null;
+    let tallestOpenGroup = preferredGroup?.scrollHeight ?? 0;
+    for (const groupEl of groupRefs.current.values()) {
+      const openContent = groupEl.querySelector('[data-slot="accordion-content"][data-state="open"]');
+      if (!openContent) continue;
+      tallestOpenGroup = Math.max(tallestOpenGroup, groupEl.scrollHeight);
+    }
+
+    if (tallestOpenGroup === 0) {
+      setDynamicMaxHeight((current) => (current === null ? current : null));
+      return;
+    }
+
+    const viewportCap = typeof window !== "undefined"
+      ? Math.floor(window.innerHeight * WORKING_ITEMS_OPEN_MAX_VH)
+      : Number.POSITIVE_INFINITY;
+    const desired = Math.ceil(tallestOpenGroup + WORKING_ITEMS_OPEN_GUTTER_PX);
+    const capped = Math.min(desired, viewportCap);
+    setDynamicMaxHeight((current) => {
+      // Initial growth: only set when the natural height exceeds the default
+      // scroll constraint.  Once grown, only allow further growth so async
+      // content settling doesn't visually pop the panel smaller mid-load.
+      if (current === null) return capped > scrollEl.clientHeight ? capped : null;
+      return Math.max(current, capped);
+    });
+  }, [fullExpanded, needsScroll]);
+
+  // "Latest ref" pattern: keep ResizeObserver callbacks pointing at the
+  // current syncDynamicMaxHeight without resubscribing on every render.
+  useEffect(() => {
+    syncDynamicMaxHeightRef.current = syncDynamicMaxHeight;
+  }, [syncDynamicMaxHeight]);
+
+  const scrollGroupToCenter = useCallback((key: string) => {
+    if (!needsScroll) return;
+    const scrollEl = scrollRef.current;
+    const groupEl = groupRefs.current.get(key);
+    if (!scrollEl || !groupEl) return;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const groupRect = groupEl.getBoundingClientRect();
+    const centeredOffset = (scrollEl.clientHeight - Math.min(groupRect.height, scrollEl.clientHeight)) / 2;
+    const targetTop = scrollEl.scrollTop + groupRect.top - scrollRect.top - centeredOffset;
+    const maxTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+    scrollEl.scrollTo({
+      top: Math.min(Math.max(0, targetTop), maxTop),
+      behavior: "smooth",
+    });
+  }, [needsScroll]);
+
+  const scheduleScrollGroupToCenter = useCallback((key: string) => {
+    requestAnimationFrame(() => {
+      syncDynamicMaxHeight(key);
+      requestAnimationFrame(() => scrollGroupToCenter(key));
+    });
+  }, [scrollGroupToCenter, syncDynamicMaxHeight]);
+
+  const panelStyle = needsScroll && !fullExpanded && hasOpenItem && dynamicMaxHeight !== null
+    ? { "--working-items-max-height": `${dynamicMaxHeight}px` } as CSSProperties
+    : undefined;
+
+  const handleAccordionValueChange = useCallback((nextValue: string) => {
+    setOpenValueState({ closeSignal, value: nextValue });
+    if (nextValue) scheduleScrollGroupToCenter(nextValue);
+  }, [closeSignal, scheduleScrollGroupToCenter]);
 
   return (
-    <div className="working-items">
-      {groups.map((group) => {
-        if (group.kind === "sub_agent") {
-          return <SubAgentCard key={group.key} group={group} subAgents={subAgents} parentSessionId={parentSessionId} />;
-        }
-        if (group.kind === "tool") {
-          const entry = group.entry;
-          const toolOpen = Boolean(openTools[entry.key]);
-          return (
-            <Collapsible
-              key={group.key}
-              open={toolOpen}
-              onOpenChange={(nextOpen) => setOpenToolsState((prev) => ({
-                closeSignal,
-                tools: {
-                  ...(prev.closeSignal === closeSignal ? prev.tools : {}),
-                  [entry.key]: nextOpen,
-                },
-              }))}
-            >
-              <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
-                  <ChevronRightIcon className="timeline-entry__chevron" />
-                  <span className="working-items__tool-title">{entry.displayLabel}</span>
-                  <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
-                  {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="working-items__tool-detail">
-                  <ToolResult
-                    metadata={entry.entry.metadata}
-                    text={entry.entry.text}
-                    running={entry.status === "running"}
-                  />
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          );
-        }
-        const open = Boolean(openGroups[group.key]);
-        const groupLabel = "Thinking";
-        return (
-          <Collapsible
-            key={group.key}
-            open={open}
-            onOpenChange={(nextOpen) => setOpenGroupsState((prev) => ({
-              closeSignal,
-              groups: {
-                ...(prev.closeSignal === closeSignal ? prev.groups : {}),
-                [group.key]: nextOpen,
-              },
-            }))}
-          >
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="working-items__group-trigger"
-                aria-label={groupLabel}
+    <div
+      className={`working-items${needsScroll ? " working-items--scrollable" : ""}${fullExpanded ? " working-items--fully-expanded" : ""}`}
+      ref={setScrollRef}
+      style={panelStyle}
+    >
+      <Accordion
+        type="single"
+        collapsible
+        value={openValue}
+        onValueChange={handleAccordionValueChange}
+        className="working-items__accordion"
+      >
+        {groups.map((group) => {
+          if (group.kind === "sub_agent") {
+            return (
+              <div key={group.key} ref={setGroupRef(group.key)} className="working-items__item">
+                <SubAgentCard group={group} subAgents={subAgents} parentSessionId={parentSessionId} />
+              </div>
+            );
+          }
+          if (group.kind === "tool") {
+            const entry = group.entry;
+            return (
+              <AccordionItem
+                key={group.key}
+                value={group.key}
+                ref={setGroupRef(group.key)}
+                className="working-items__item working-items__accordion-item"
               >
-                <ChevronRightIcon className="timeline-entry__chevron" />
-                <span>{groupLabel}</span>
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              {group.items.map((item) => (
-                <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
-                  <MarkdownContent content={item.content} />
-                </div>
-              ))}
-            </CollapsibleContent>
-          </Collapsible>
-        );
-      })}
+                <AccordionPrimitive.Header className="working-items__accordion-header">
+                  <AccordionPrimitive.Trigger asChild>
+                    <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
+                      <ChevronRightIcon className="timeline-entry__chevron" />
+                      <span className="working-items__tool-title">{entry.displayLabel}</span>
+                      <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
+                      {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
+                    </Button>
+                  </AccordionPrimitive.Trigger>
+                </AccordionPrimitive.Header>
+                <AccordionPrimitive.Content
+                  data-slot="accordion-content"
+                  className="working-items__accordion-content"
+                >
+                  <div className="working-items__tool-detail">
+                    <ToolResult
+                      metadata={entry.entry.metadata}
+                      text={entry.entry.text}
+                      running={entry.status === "running"}
+                    />
+                  </div>
+                </AccordionPrimitive.Content>
+              </AccordionItem>
+            );
+          }
+          const groupLabel = "Thinking";
+          return (
+            <AccordionItem
+              key={group.key}
+              value={group.key}
+              ref={setGroupRef(group.key)}
+              className="working-items__item working-items__accordion-item"
+            >
+              <AccordionPrimitive.Header className="working-items__accordion-header">
+                <AccordionPrimitive.Trigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="working-items__group-trigger"
+                    aria-label={groupLabel}
+                  >
+                    <ChevronRightIcon className="timeline-entry__chevron" />
+                    <span>{groupLabel}</span>
+                  </Button>
+                </AccordionPrimitive.Trigger>
+              </AccordionPrimitive.Header>
+              <AccordionPrimitive.Content
+                data-slot="accordion-content"
+                className="working-items__accordion-content"
+              >
+                {group.items.map((item) => (
+                  <div key={item.itemId} className="working-items__thinking-detail" data-timeline-item-id={item.itemId}>
+                    <MarkdownContent content={item.content} />
+                  </div>
+                ))}
+              </AccordionPrimitive.Content>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
     </div>
   );
 }
@@ -888,7 +1043,14 @@ function WorkRun({
     open: false,
     closeSignal,
   });
+  const [fullExpandedState, setFullExpandedState] = useState({
+    expanded: false,
+    closeSignal,
+  });
   const open = openState.closeSignal === closeSignal ? openState.open : false;
+  const rawFullExpanded = fullExpandedState.closeSignal === closeSignal
+    ? fullExpandedState.expanded
+    : false;
   const contentRef = useRef<HTMLDivElement>(null);
   const workRunSummary = useMemo(
     () => summarizeWorkRun(unit.items, showSubAgentCards ?? true),
@@ -909,6 +1071,43 @@ function WorkRun({
   const hasVisibleSummary = workRunSummaryItems.some((item) => item.count > 0);
   const isVisiblyActive = active || unit.running || hasRunningSubAgent;
   const showPlaceholderSummary = active && !hasVisibleSummary;
+  const workRunGroupCount = useMemo(
+    () => buildWorkingGroups(unit.items, showSubAgentCards ?? true).length,
+    [showSubAgentCards, unit.items],
+  );
+  const canFullExpand = workRunGroupCount > WORKING_ITEMS_MAX_VISIBLE;
+  const fullExpanded = canFullExpand && rawFullExpanded;
+
+  const setOpenFromUser = useCallback((nextOpen: boolean) => {
+    setOpenState({ open: nextOpen, closeSignal });
+    if (nextOpen) {
+      onUserOpen?.(contentRef.current);
+    }
+  }, [closeSignal, onUserOpen]);
+
+  const toggleFullExpanded = useCallback(() => {
+    if (!canFullExpand) return;
+    setOpenState({ open: true, closeSignal });
+    setFullExpandedState((current) => ({
+      closeSignal,
+      expanded: current.closeSignal === closeSignal ? !current.expanded : true,
+    }));
+    requestAnimationFrame(() => onUserOpen?.(contentRef.current));
+  }, [canFullExpand, closeSignal, onUserOpen]);
+
+  const handleWorkRunHeaderKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!canFullExpand || !event.altKey || event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleFullExpanded();
+  }, [canFullExpand, toggleFullExpanded]);
+
+  const handleWorkRunHeaderClickCapture = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    if (!canFullExpand || !event.altKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleFullExpanded();
+  }, [canFullExpand, toggleFullExpanded]);
 
   return (
     <div
@@ -917,33 +1116,34 @@ function WorkRun({
     >
       <Collapsible
         open={open}
-        onOpenChange={(nextOpen) => {
-          setOpenState({ open: nextOpen, closeSignal });
-          if (nextOpen) {
-            onUserOpen?.(contentRef.current);
-          }
-        }}
+        onOpenChange={setOpenFromUser}
       >
-        <CollapsibleTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="timeline-entry__header timeline-entry__header--work-run"
-            data-phase={phase ?? undefined}
-            aria-label={workRunSummary ? `Working ${workRunSummary}` : "Working"}
-          >
-            <ChevronRightIcon className="timeline-entry__chevron" />
-            <TextShimmer text="Working" active={isVisiblyActive} className="timeline-entry__working-label" />
-            {showPlaceholderSummary ? (
-              <span className="working-items__summary working-items__summary--placeholder" aria-hidden="true">
-                Preparing…
-              </span>
-            ) : (
-              <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
-            )}
-          </Button>
-        </CollapsibleTrigger>
+        <div className="timeline-entry__work-run-header-row">
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="timeline-entry__header timeline-entry__header--work-run"
+              data-phase={phase ?? undefined}
+              aria-label={workRunSummary ? `Working ${workRunSummary}` : "Working"}
+              aria-keyshortcuts={canFullExpand ? "Alt+Enter" : undefined}
+              title={canFullExpand ? "Click to expand. Alt-click or Alt+Enter fully expands the tool list." : undefined}
+              onClickCapture={handleWorkRunHeaderClickCapture}
+              onKeyDown={handleWorkRunHeaderKeyDown}
+            >
+              <ChevronRightIcon className="timeline-entry__chevron" />
+              <TextShimmer text="Working" active={isVisiblyActive} className="timeline-entry__working-label" />
+              {showPlaceholderSummary ? (
+                <span className="working-items__summary working-items__summary--placeholder" aria-hidden="true">
+                  Preparing…
+                </span>
+              ) : (
+                <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
+              )}
+            </Button>
+          </CollapsibleTrigger>
+        </div>
         {hasItems ? (
           <CollapsibleContent>
             <div className="timeline-entry__work-run-body" ref={contentRef}>
@@ -953,7 +1153,34 @@ function WorkRun({
                 closeSignal={closeSignal}
                 parentSessionId={parentSessionId}
                 showSubAgentCards={showSubAgentCards}
+                fullExpanded={fullExpanded}
               />
+              {canFullExpand ? (
+                <button
+                  type="button"
+                  className="working-items__more-toggle"
+                  aria-label={fullExpanded ? "Limit Working tool list to five rows" : "Fully expand Working tool list"}
+                  aria-pressed={fullExpanded}
+                  aria-keyshortcuts="Alt+Enter"
+                  onClick={toggleFullExpanded}
+                >
+                  {fullExpanded ? (
+                    <>
+                      <ChevronUpIcon className="working-items__more-toggle-icon" />
+                      <span className="working-items__more-toggle-label">
+                        Show recent {WORKING_ITEMS_MAX_VISIBLE}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDownIcon className="working-items__more-toggle-icon" />
+                      <span className="working-items__more-toggle-label">
+                        +{Math.max(0, workRunGroupCount - WORKING_ITEMS_MAX_VISIBLE)} more
+                      </span>
+                    </>
+                  )}
+                </button>
+              ) : null}
             </div>
           </CollapsibleContent>
         ) : null}
