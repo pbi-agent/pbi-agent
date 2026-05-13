@@ -1,5 +1,4 @@
-- [X] Reproduce/identify first-open Working scroll gap
-- [X] Patch active Working user-open scroll behavior
-- [X] Add focused regression coverage
-- [X] Run focused frontend validation
+- [X] Locate settings sidebar layout/styles
+- [X] Add small-screen sidebar scrolling
+- [X] Run focused validation
 - [X] Update task memory

@@ -386,25 +386,27 @@ className="settings-nav__header-close app-close-icon-button"
                       <span className="sr-only">Close</span>
                     </Button>
                   </div>
-                  {SETTINGS_NAV_GROUPS.map((group) => (
-                    <div className="settings-nav__group" key={group.label}>
-                      <div className="settings-nav__group-label">{group.label}</div>
-                      <div className="settings-nav__items">
-                        {group.items.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className={`settings-nav__item ${activeTab === item.id ? "settings-nav__item--active" : ""}`}
-                            aria-pressed={activeTab === item.id}
-                            onClick={() => setActiveTab(item.id)}
-                          >
-                            <span className="settings-nav__item-label">{item.label}</span>
-                            <span className="settings-nav__item-description">{item.description}</span>
-                          </button>
-                        ))}
+                  <div className="settings-nav__body">
+                    {SETTINGS_NAV_GROUPS.map((group) => (
+                      <div className="settings-nav__group" key={group.label}>
+                        <div className="settings-nav__group-label">{group.label}</div>
+                        <div className="settings-nav__items">
+                          {group.items.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`settings-nav__item ${activeTab === item.id ? "settings-nav__item--active" : ""}`}
+                              aria-pressed={activeTab === item.id}
+                              onClick={() => setActiveTab(item.id)}
+                            >
+                              <span className="settings-nav__item-label">{item.label}</span>
+                              <span className="settings-nav__item-description">{item.description}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </aside>
 
                 <div className="settings-tab-content">
