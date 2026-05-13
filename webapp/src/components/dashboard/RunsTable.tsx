@@ -304,7 +304,11 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
                       onClick={() => handleRowClick(run)}
                     >
                       <TableCell>
-                        <StatusPill status={run.status} />
+                        <StatusPill
+                          status={run.status}
+                          size="meta"
+                          className="runs-row__status"
+                        />
                       </TableCell>
                       <TableCell className="runs-row__session">
                         <RunSessionTitle title={run.session_title} />

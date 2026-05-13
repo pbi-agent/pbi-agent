@@ -7,7 +7,7 @@ import os
 import sqlite3
 import threading
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -98,7 +98,6 @@ CREATE TABLE IF NOT EXISTS run_sessions (
     cache_write_1h_tokens   INTEGER NOT NULL DEFAULT 0,
     output_tokens           INTEGER NOT NULL DEFAULT 0,
     reasoning_tokens        INTEGER NOT NULL DEFAULT 0,
-    tool_use_tokens         INTEGER NOT NULL DEFAULT 0,
     provider_total_tokens   INTEGER NOT NULL DEFAULT 0,
     estimated_cost_usd      REAL NOT NULL DEFAULT 0.0,
     total_tool_calls        INTEGER NOT NULL DEFAULT 0,
@@ -278,7 +277,6 @@ class RunSessionRecord:
     cache_write_1h_tokens: int
     output_tokens: int
     reasoning_tokens: int
-    tool_use_tokens: int
     provider_total_tokens: int
     estimated_cost_usd: float
     total_tool_calls: int
@@ -292,6 +290,11 @@ class RunSessionRecord:
     exit_code: int | None
     fatal_error: str | None
     metadata_json: str
+
+
+_RUN_SESSION_RECORD_COLUMNS = tuple(
+    field_info.name for field_info in fields(RunSessionRecord)
+)
 
 
 @dataclass(slots=True)
@@ -702,6 +705,13 @@ def _message_record_from_row(row: sqlite3.Row) -> MessageRecord:
             data.get("image_attachments_json")
         ),
         created_at=data["created_at"],
+    )
+
+
+def _run_session_record_from_row(row: sqlite3.Row) -> RunSessionRecord:
+    data = dict(row)
+    return RunSessionRecord(
+        **{name: data[name] for name in _RUN_SESSION_RECORD_COLUMNS}
     )
 
 
@@ -1477,7 +1487,6 @@ class SessionStore:
         cache_write_1h_tokens: int | None = None,
         output_tokens: int | None = None,
         reasoning_tokens: int | None = None,
-        tool_use_tokens: int | None = None,
         provider_total_tokens: int | None = None,
         estimated_cost_usd: float | None = None,
         total_tool_calls: int | None = None,
@@ -1508,7 +1517,6 @@ class SessionStore:
             "cache_write_1h_tokens": cache_write_1h_tokens,
             "output_tokens": output_tokens,
             "reasoning_tokens": reasoning_tokens,
-            "tool_use_tokens": tool_use_tokens,
             "provider_total_tokens": provider_total_tokens,
             "estimated_cost_usd": estimated_cost_usd,
             "total_tool_calls": total_tool_calls,
@@ -1606,7 +1614,7 @@ class SessionStore:
             ).fetchone()
         if row is None:
             return None
-        return RunSessionRecord(**dict(row))
+        return _run_session_record_from_row(row)
 
     def get_next_observability_step_index(self, run_session_id: str) -> int:
         with self._lock:
@@ -1626,7 +1634,7 @@ class SessionStore:
                 "ORDER BY started_at ASC, id ASC",
                 (session_id,),
             ).fetchall()
-        return [RunSessionRecord(**dict(row)) for row in rows]
+        return [_run_session_record_from_row(row) for row in rows]
 
     def get_latest_session_run(
         self,
@@ -1648,7 +1656,7 @@ class SessionStore:
                 "ORDER BY started_at DESC, id DESC LIMIT 1",
                 params,
             ).fetchone()
-        return RunSessionRecord(**dict(row)) if row is not None else None
+        return _run_session_record_from_row(row) if row is not None else None
 
     def get_latest_web_session_run(
         self,
@@ -1661,7 +1669,7 @@ class SessionStore:
                 "ORDER BY started_at DESC, id DESC LIMIT 1",
                 (session_id,),
             ).fetchone()
-        return RunSessionRecord(**dict(row)) if row is not None else None
+        return _run_session_record_from_row(row) if row is not None else None
 
     def list_web_session_runs(self, session_id: str) -> list[RunSessionRecord]:
         with self._lock:
@@ -1671,7 +1679,7 @@ class SessionStore:
                 "ORDER BY started_at ASC, id ASC",
                 (session_id,),
             ).fetchall()
-        return [RunSessionRecord(**dict(row)) for row in rows]
+        return [_run_session_record_from_row(row) for row in rows]
 
     def _sanitize_stale_web_snapshots(self, run_ids: list[int]) -> None:
         if not run_ids:

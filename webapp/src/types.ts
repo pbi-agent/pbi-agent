@@ -554,6 +554,8 @@ export type ApplyPatchToolMetadata = {
   success?: boolean;
   detail?: string;
   diff?: string;
+  operation_count?: number | null;
+  affected_paths?: string[] | null;
   diff_line_numbers?: Array<{ old: number | null; new: number | null }>;
   call_id?: string;
   status?: ToolCallStatus;
@@ -633,7 +635,6 @@ export type RunSession = {
   cache_write_1h_tokens: number;
   output_tokens: number;
   reasoning_tokens: number;
-  tool_use_tokens: number;
   provider_total_tokens: number;
   estimated_cost_usd: number;
   total_tool_calls: number;

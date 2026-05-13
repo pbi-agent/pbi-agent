@@ -306,31 +306,23 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
     assert body["instructions"] == "be concise"
     function_tools = [tool for tool in body["tools"] if tool.get("type") == "function"]
     assert function_tools
-    assert all(tool["strict"] is True for tool in function_tools)
+    assert all("strict" not in tool for tool in function_tools)
     shell_tool = next(tool for tool in function_tools if tool["name"] == "shell")
     shell_parameters = shell_tool["parameters"]
-    assert shell_parameters["required"] == [
+    assert shell_parameters["required"] == ["command"]
+    assert list(shell_parameters["properties"]) == [
         "command",
         "working_directory",
         "timeout_ms",
     ]
-    working_directory_schema = shell_parameters["properties"]["working_directory"]
-    assert working_directory_schema == {
-        "anyOf": [
-            {
-                "type": "string",
-                "description": (
-                    "Working directory for the command. Relative paths resolve "
-                    "from the workspace root. Defaults to the workspace root."
-                ),
-            },
-            {"type": "null"},
-        ]
-    }
-    timeout_schema = shell_parameters["properties"]["timeout_ms"]
-    assert "default" not in timeout_schema
-    assert "minimum" not in timeout_schema
-    assert "maximum" not in timeout_schema
+    assert shell_parameters["properties"]["working_directory"]["description"] == (
+        "Working directory for the command. Relative paths resolve "
+        "from the workspace root. Defaults to the workspace root."
+    )
+    assert shell_parameters["properties"]["timeout_ms"]["description"] == (
+        "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
+        "maximum 300 000 (5 minutes)."
+    )
     assert "max_output_tokens" not in body
     assert "prompt_cache_retention" not in body
     assert body["context_management"] == [
@@ -618,6 +610,11 @@ def test_openai_provider_advertises_v4a_tools_only() -> None:
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "apply_patch" in tool_names
+    apply_patch_tool = next(
+        tool for tool in provider._tools if tool.get("name") == "apply_patch"
+    )
+    assert apply_patch_tool["type"] == "custom"
+    assert apply_patch_tool["format"]["syntax"] == "lark"
     assert "replace_in_file" not in tool_names
     assert "write_file" not in tool_names
     assert "read_web_url" in tool_names
@@ -738,6 +735,35 @@ def test_openai_parse_response_extracts_function_calls_reasoning_and_usage() -> 
     assert result.usage.output_tokens == 233
     assert result.usage.reasoning_tokens == 207
     assert result.usage.model == DEFAULT_MODEL
+
+
+def test_openai_parse_response_extracts_custom_tool_calls() -> None:
+    provider = OpenAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_123",
+            "model": DEFAULT_MODEL,
+            "output": [
+                {
+                    "type": "custom_tool_call",
+                    "call_id": "call_patch",
+                    "name": "apply_patch",
+                    "input": "*** Begin Patch\n*** Delete File: old.txt\n*** End Patch",
+                    "status": "completed",
+                },
+            ],
+        }
+    )
+
+    assert result.function_calls == [
+        ToolCall(
+            call_id="call_patch",
+            name="apply_patch",
+            arguments="*** Begin Patch\n*** Delete File: old.txt\n*** End Patch",
+            kind="custom",
+        )
+    ]
 
 
 def test_openai_parse_response_preserves_reasoning_summary_display_blocks() -> None:
@@ -1610,6 +1636,38 @@ data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"com
             "arguments": '{"path":"README.md"}',
             "call_id": "call_1",
             "name": "read_file",
+            "status": "completed",
+        }
+    ]
+
+
+def test_parse_sse_response_merges_custom_tool_input_delta() -> None:
+    response = _parse_sse_response(
+        """event: response.created
+data: {"type":"response.created","response":{"id":"resp_chatgpt","model":"gpt-5"}}
+
+event: response.custom_tool_call_input.delta
+data: {"type":"response.custom_tool_call_input.delta","item_id":"ctc_123","delta":"*** Begin Patch\\n"}
+
+event: response.custom_tool_call_input.delta
+data: {"type":"response.custom_tool_call_input.delta","item_id":"ctc_123","delta":"*** Delete File: old.txt\\n*** End Patch"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":3,"item":{"type":"custom_tool_call","id":"ctc_123","call_id":"call_1","name":"apply_patch","status":"completed"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_chatgpt","status":"completed","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":2,"output_tokens_details":{"reasoning_tokens":0}}}}
+
+"""
+    )
+
+    assert response["output"] == [
+        {
+            "type": "custom_tool_call",
+            "id": "ctc_123",
+            "input": "*** Begin Patch\n*** Delete File: old.txt\n*** End Patch",
+            "call_id": "call_1",
+            "name": "apply_patch",
             "status": "completed",
         }
     ]

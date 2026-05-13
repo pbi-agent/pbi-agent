@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { BotIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
 import { Accordion as AccordionPrimitive } from "radix-ui";
@@ -34,6 +34,8 @@ const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
 const WORKING_ITEMS_MAX_VISIBLE = 5;
 const WORKING_ITEMS_OPEN_GUTTER_PX = 16;
 const WORKING_ITEMS_OPEN_MAX_VH = 0.7;
+const WORK_RUN_OPEN_BOTTOM_GUTTER_PX = 16;
+const WORK_RUN_OPEN_LAYOUT_SETTLE_MS = 260;
 const WORK_RUN_PHASE_MIN_VISIBLE_MS = 600;
 const WORK_RUN_PHASE_TRANSITION_MS = 300;
 const WORK_RUN_PHASE_HOLD_MS =
@@ -908,6 +910,12 @@ function waitForImages(container: HTMLElement): Promise<void> {
   ).then(() => {});
 }
 
+function waitForNextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
 type WorkRunPhase = ProcessingPhase | "active";
 
 function useVisibleWorkRunPhase(phase: WorkRunPhase | null) {
@@ -1023,7 +1031,9 @@ function WorkRun({
   subAgents,
   active,
   phase,
+  open,
   closeSignal,
+  onOpenChange,
   onUserOpen,
   parentSessionId,
   showSubAgentCards,
@@ -1032,22 +1042,19 @@ function WorkRun({
   subAgents: Record<string, { title: string; status: string }>;
   active: boolean;
   phase: WorkRunPhase | null;
+  open: boolean;
   closeSignal: string | null;
+  onOpenChange: (nextOpen: boolean) => void;
   onUserOpen?: (contentEl: HTMLElement | null) => void;
   parentSessionId?: string;
   showSubAgentCards?: boolean;
 }) {
   const hasItems = unit.items.length > 0;
   const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
-  const [openState, setOpenState] = useState({
-    open: false,
-    closeSignal,
-  });
   const [fullExpandedState, setFullExpandedState] = useState({
     expanded: false,
     closeSignal,
   });
-  const open = openState.closeSignal === closeSignal ? openState.open : false;
   const rawFullExpanded = fullExpandedState.closeSignal === closeSignal
     ? fullExpandedState.expanded
     : false;
@@ -1077,23 +1084,32 @@ function WorkRun({
   );
   const canFullExpand = workRunGroupCount > WORKING_ITEMS_MAX_VISIBLE;
   const fullExpanded = canFullExpand && rawFullExpanded;
+  const pendingUserOpenScrollRef = useRef(false);
 
   const setOpenFromUser = useCallback((nextOpen: boolean) => {
-    setOpenState({ open: nextOpen, closeSignal });
-    if (nextOpen) {
-      onUserOpen?.(contentRef.current);
-    }
-  }, [closeSignal, onUserOpen]);
+    pendingUserOpenScrollRef.current = nextOpen;
+    onOpenChange(nextOpen);
+  }, [onOpenChange]);
 
   const toggleFullExpanded = useCallback(() => {
     if (!canFullExpand) return;
-    setOpenState({ open: true, closeSignal });
+    pendingUserOpenScrollRef.current = true;
+    onOpenChange(true);
     setFullExpandedState((current) => ({
       closeSignal,
       expanded: current.closeSignal === closeSignal ? !current.expanded : true,
     }));
-    requestAnimationFrame(() => onUserOpen?.(contentRef.current));
-  }, [canFullExpand, closeSignal, onUserOpen]);
+  }, [canFullExpand, closeSignal, onOpenChange]);
+
+  useLayoutEffect(() => {
+    if (!open || !pendingUserOpenScrollRef.current) return;
+    const contentEl = contentRef.current;
+    if (!contentEl) return;
+    // The first open mounts CollapsibleContent after the click handler, so
+    // wait until the committed layout before measuring and aligning it.
+    pendingUserOpenScrollRef.current = false;
+    onUserOpen?.(contentEl);
+  });
 
   const handleWorkRunHeaderKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
     if (!canFullExpand || !event.altKey || event.key !== "Enter") return;
@@ -1256,6 +1272,14 @@ export const SessionTimeline = memo(function SessionTimeline({
   const previousLengthRef = useRef<number | undefined>(undefined);
   const previousItemsVersionRef = useRef<number | string | undefined>(undefined);
   const previousVisibleItemsChangeKeyRef = useRef<string | undefined>(undefined);
+  const scrollRequestRef = useRef(0);
+  const [openWorkRunState, setOpenWorkRunState] = useState<{
+    key: string | null;
+    closeSignal: string | null;
+  }>({
+    key: null,
+    closeSignal: null,
+  });
   const latestRawItem = items.at(-1);
   const visibleItems = useMemo(
     () => items.filter((item) => !isGenericRetryMessageItem(item)),
@@ -1323,6 +1347,24 @@ export const SessionTimeline = memo(function SessionTimeline({
     latestItem?.kind === "message" && latestItem.role === "assistant"
       ? latestItem.itemId
       : null;
+  const openWorkRunKey = openWorkRunState.closeSignal === closeCollapsiblesSignal
+    ? openWorkRunState.key
+    : null;
+
+  const setWorkRunOpen = useCallback((unitKey: string, nextOpen: boolean) => {
+    setOpenWorkRunState((current) => {
+      if (nextOpen) {
+        return { key: unitKey, closeSignal: closeCollapsiblesSignal };
+      }
+      if (
+        current.closeSignal !== closeCollapsiblesSignal
+        || current.key !== unitKey
+      ) {
+        return current;
+      }
+      return { key: null, closeSignal: closeCollapsiblesSignal };
+    });
+  }, [closeCollapsiblesSignal]);
 
   const scrollToTarget = useCallback(
     (container: HTMLElement, target: HTMLElement, offset: number) => {
@@ -1335,17 +1377,16 @@ export const SessionTimeline = memo(function SessionTimeline({
     [markProgrammaticScroll],
   );
 
-  const scrollToTargetBottomIfNeeded = useCallback(
+  const scrollToTargetBottom = useCallback(
     (container: HTMLElement, target: HTMLElement) => {
       if (!container.isConnected || !target.isConnected) return;
       const containerRect = container.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       const delta = targetRect.bottom - containerRect.bottom;
-      if (delta <= 0) return;
       const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
       markProgrammaticScroll();
       container.scrollTo({
-        top: Math.min(container.scrollTop + delta, maxScrollTop),
+        top: Math.min(Math.max(container.scrollTop + delta, 0), maxScrollTop),
         behavior: "instant",
       });
     },
@@ -1363,35 +1404,55 @@ export const SessionTimeline = memo(function SessionTimeline({
       setShowNewMessages(false);
       const align = () => {
         if (!container.isConnected) return;
-        markProgrammaticScroll();
-        if (contentEl && contentEl.isConnected) {
+        if (contentEl && !contentEl.isConnected) return;
+        if (contentEl) {
           // Bring the bottom of the freshly expanded panel into view so the
           // latest tool output is visible without ever jumping the viewport
-          // upward.
+          // upward. Keep a small gutter so the panel does not sit underneath
+          // the composer shadow/edge when it is the last conversation item.
           const containerRect = container.getBoundingClientRect();
           const contentRect = contentEl.getBoundingClientRect();
-          const delta = contentRect.bottom - containerRect.bottom;
+          const delta = contentRect.bottom - (
+            containerRect.bottom - WORK_RUN_OPEN_BOTTOM_GUTTER_PX
+          );
           if (delta > 0) {
             const maxScrollTop = Math.max(
               0,
               container.scrollHeight - container.clientHeight,
             );
+            markProgrammaticScroll();
             container.scrollTo({
               top: Math.min(container.scrollTop + delta, maxScrollTop),
               behavior: "instant",
             });
-            return;
           }
+          return;
         }
         // Fallback: stick to the very bottom of the timeline.
+        markProgrammaticScroll();
         container.scrollTo({
           top: container.scrollHeight,
           behavior: "instant",
         });
       };
-      // Wait one frame so the Collapsible has finished laying out its
-      // content; otherwise the rect math runs against the pre-open layout.
-      requestAnimationFrame(align);
+      // Wait for the open content to mount and then re-check after layout has
+      // settled. The first open can grow in multiple phases (Radix presence,
+      // measured scroll constraints, syntax/markdown rendering), and a single
+      // early frame can still see the old scrollHeight.
+      requestAnimationFrame(() => {
+        align();
+        requestAnimationFrame(align);
+      });
+      window.setTimeout(align, WORK_RUN_OPEN_LAYOUT_SETTLE_MS);
+      if (contentEl && typeof ResizeObserver !== "undefined") {
+        const observer = new ResizeObserver(() => {
+          requestAnimationFrame(align);
+        });
+        observer.observe(contentEl);
+        window.setTimeout(() => {
+          observer.disconnect();
+        }, WORK_RUN_OPEN_LAYOUT_SETTLE_MS);
+      }
     },
     [containerRef, markProgrammaticScroll, setShowNewMessages, userScrolledRef],
   );
@@ -1426,8 +1487,14 @@ export const SessionTimeline = memo(function SessionTimeline({
 
     const isNewItem =
       previousLength !== undefined && visibleItems.length > previousLength;
+    const latestUserMessageChanged =
+      previousVisibleItemsChangeKey !== undefined
+      && latestItemIsUserMessage
+      && previousVisibleItemsChangeKey !== visibleItemsChangeKey;
+    const scrollRequestId = scrollRequestRef.current + 1;
 
-    if (isNewItem && latestItem) {
+    if ((isNewItem || latestUserMessageChanged) && latestItem) {
+      scrollRequestRef.current = scrollRequestId;
       // New item added — scroll to the top of that item
       // querySelectorAll + last picks the innermost match: when the new item
       // is rendered inside an expanded WorkRun the inner TimelineEntry shares
@@ -1441,10 +1508,18 @@ export const SessionTimeline = memo(function SessionTimeline({
 
       if (latestItemIsUserMessage) {
         // Always scroll to user messages
+        setShowNewMessages(false);
         if (target) {
-          void waitForImages(container).then(() => {
+          void waitForImages(target).then(async () => {
             if (latestUserMessageHasImages) {
-              scrollToTargetBottomIfNeeded(container, target);
+              // Cached images can report complete before the new attachment
+              // has taken its final layout height. Give the browser one paint
+              // after decode/load before anchoring the message bottom.
+              await waitForNextAnimationFrame();
+            }
+            if (scrollRequestRef.current !== scrollRequestId) return;
+            if (latestUserMessageHasImages) {
+              scrollToTargetBottom(container, target);
             } else {
               scrollToTarget(container, target, USER_MESSAGE_TOP_OFFSET);
             }
@@ -1455,6 +1530,7 @@ export const SessionTimeline = memo(function SessionTimeline({
         // Scroll to top of new assistant/tool/thinking item
         if (target) {
           void waitForImages(container).then(() => {
+            if (scrollRequestRef.current !== scrollRequestId) return;
             scrollToTarget(container, target, ASSISTANT_MESSAGE_TOP_OFFSET);
           });
         }
@@ -1462,6 +1538,7 @@ export const SessionTimeline = memo(function SessionTimeline({
         setShowNewMessages(true);
       }
     } else if (!isNewItem) {
+      scrollRequestRef.current = scrollRequestId;
       // Existing item content updated — stick to bottom
       if (!userScrolledRef.current) {
         markProgrammaticScroll();
@@ -1470,7 +1547,9 @@ export const SessionTimeline = memo(function SessionTimeline({
         setShowNewMessages(true);
       }
     }
-  }, [containerRef, itemsVersion, latestRawItem, visibleItemsChangeKey, visibleItems.length, latestItem, latestItemIsUserMessage, latestUserMessageHasImages, userScrolledRef, setShowNewMessages, scrollToTarget, scrollToTargetBottomIfNeeded, markProgrammaticScroll]);
+  }, [containerRef, itemsVersion, latestRawItem, visibleItemsChangeKey, visibleItems.length, latestItem, latestItemIsUserMessage, latestUserMessageHasImages, userScrolledRef, setShowNewMessages, scrollToTarget, scrollToTargetBottom, markProgrammaticScroll]);
+
+  const shouldShowNewMessages = showNewMessages && !latestItemIsUserMessage;
 
   if (visibleItems.length === 0 && connection === "connected" && !sessionIsActive) {
     return (
@@ -1507,11 +1586,10 @@ export const SessionTimeline = memo(function SessionTimeline({
             );
           }
           const isActiveUnit = unit.key === activeWorkRunKey;
-          // Only the active/running WorkRun should treat user-opens as a
-          // "follow the latest output" intent. Expanding a completed
-          // historical block must not reset auto-follow or hide the
-          // new-messages badge.
-          const isActiveRunningUnit = isActiveUnit && unit.running;
+          // Only the currently active WorkRun should treat user-opens as a
+          // "follow the latest output" intent. An active block can be between
+          // tool phases (for example model_wait/finalizing) even when none of
+          // its tool groups currently reports `running`.
           return (
             <WorkRun
               key={unit.key}
@@ -1519,16 +1597,18 @@ export const SessionTimeline = memo(function SessionTimeline({
               subAgents={subAgents}
               active={isActiveUnit}
               phase={isActiveUnit ? visibleActivePhase : null}
+              open={openWorkRunKey === unit.key}
               closeSignal={closeCollapsiblesSignal}
+              onOpenChange={(nextOpen) => setWorkRunOpen(unit.key, nextOpen)}
               onUserOpen={
-                isActiveRunningUnit ? handleUserOpenCollapsible : undefined
+                isActiveUnit ? handleUserOpenCollapsible : undefined
               }
               parentSessionId={parentSessionId}
               showSubAgentCards={showSubAgentCards}
             />
           );
         })}
-        {showNewMessages ? (
+        {shouldShowNewMessages ? (
           <Button
             type="button"
             variant="secondary"

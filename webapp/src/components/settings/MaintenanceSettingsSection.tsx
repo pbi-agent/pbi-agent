@@ -75,8 +75,9 @@ export function MaintenanceSettingsSection({
           <div className="settings-panel__actions">
             <Button
               type="button"
-              variant="default"
-              className="task-form__action-button"
+              variant="ghost"
+              size="sm"
+              className="settings-action-button"
               onClick={() => void handleSave()}
               disabled={saving}
             >

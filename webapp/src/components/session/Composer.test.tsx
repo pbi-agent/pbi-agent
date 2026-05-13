@@ -427,6 +427,19 @@ describe("Composer", () => {
     });
   });
 
+  it("shows a processing rail when the composer is locked by an active turn", () => {
+    const { container } = renderComposer({
+      inputEnabled: false,
+      isProcessing: true,
+    });
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
+    expect(container.querySelector(".composer__input-row--processing")).toBeInTheDocument();
+    expect(container.querySelector(".composer__processing-indicator")).not.toBeInTheDocument();
+    expect(container.querySelector(".composer__processing-bar")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Assistant is processing");
+  });
+
   it("restores interrupted input into the textbox", async () => {
     const onConsumed = vi.fn();
     renderComposer({

@@ -1137,6 +1137,12 @@ class OpenAIProvider(Provider):
                     function_call_items[call_id] = dict(item)
                 function_calls.append(_parse_function_call(item))
 
+            elif item_type == "custom_tool_call":
+                call_id = item.get("call_id")
+                if isinstance(call_id, str) and call_id:
+                    function_call_items[call_id] = dict(item)
+                function_calls.append(_parse_custom_tool_call(item))
+
             elif item_type == "web_search_call":
                 had_web_search_call = True
                 item_sources = _extract_web_search_sources(item)
@@ -1368,6 +1374,13 @@ def _parse_stream_events(events: list[dict[str, Any]]) -> dict[str, Any]:
                 _append_sse_function_arguments_delta(
                     output_items, item_indexes, item_id, delta
                 )
+        elif event_type == "response.custom_tool_call_input.delta":
+            item_id = payload.get("item_id") or payload.get("call_id")
+            delta = payload.get("delta")
+            if isinstance(item_id, str) and isinstance(delta, str):
+                _append_sse_custom_tool_input_delta(
+                    output_items, item_indexes, item_id, delta
+                )
         elif event_type == "response.reasoning_summary_text.delta":
             item_id = payload.get("item_id")
             delta = payload.get("delta")
@@ -1511,6 +1524,21 @@ def _append_sse_function_arguments_delta(
     item["arguments"] = f"{item.get('arguments', '')}{delta}"
 
 
+def _append_sse_custom_tool_input_delta(
+    output_items: dict[int, dict[str, Any]],
+    item_indexes: dict[str, int],
+    item_id: str,
+    delta: str,
+) -> None:
+    item = _get_or_create_sse_item(
+        output_items,
+        item_indexes,
+        item_id,
+        item_type="custom_tool_call",
+    )
+    item["input"] = f"{item.get('input', '')}{delta}"
+
+
 def _append_sse_reasoning_summary_delta(
     output_items: dict[int, dict[str, Any]],
     item_indexes: dict[str, int],
@@ -1576,6 +1604,8 @@ def _get_or_create_sse_item(
             new_item["summary"] = []
         elif item_type == "function_call":
             new_item["arguments"] = ""
+        elif item_type == "custom_tool_call":
+            new_item["input"] = ""
         output_items[output_index] = new_item
         return new_item
     return item
@@ -1612,6 +1642,16 @@ def _parse_function_call(item: dict[str, Any]) -> ToolCall:
         call_id=str(item.get("call_id", "")),
         name=str(item.get("name", "")),
         arguments=arguments,
+    )
+
+
+def _parse_custom_tool_call(item: dict[str, Any]) -> ToolCall:
+    raw_input = item.get("input", "")
+    return ToolCall(
+        call_id=str(item.get("call_id", "")),
+        name=str(item.get("name", "")),
+        arguments=raw_input if isinstance(raw_input, str) else str(raw_input),
+        kind="custom",
     )
 
 

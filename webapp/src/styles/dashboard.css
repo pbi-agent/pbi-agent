@@ -429,6 +429,18 @@
 
 /* ── Runs table row specifics ──────────────────────────────────────── */
 
+.runs-row__status[data-size='meta'] {
+  min-height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.runs-row__status [data-slot='badge-dot'] {
+  width: 5px;
+  height: 5px;
+}
+
 .runs-row__session {
   max-width: 160px;
   overflow: hidden;

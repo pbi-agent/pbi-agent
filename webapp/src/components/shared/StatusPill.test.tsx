@@ -28,4 +28,12 @@ describe("StatusPill", () => {
     expect(status).toHaveAttribute("data-size", "meta");
     expect(status).toHaveClass("run-card__status");
   });
+
+  it("can render custom text with the mapped status styling", () => {
+    render(<StatusPill status="completed">ok</StatusPill>);
+
+    const status = screen.getByText("ok");
+    expect(status).toHaveAttribute("data-variant", "completed");
+    expect(status).not.toHaveTextContent("completed");
+  });
 });

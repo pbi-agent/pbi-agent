@@ -13,6 +13,7 @@ from pbi_agent.display.protocol import (
     DisplayProtocol,
     PendingToolCall,
     PendingToolGroup,
+    PendingToolGroupItem,
     PendingUserQuestion,
     QueuedInput,
     QueuedRuntimeChange,
@@ -34,6 +35,19 @@ EventPublisher = Callable[[str, dict[str, Any]], None]
 SummaryPublisher = Callable[[str], None]
 SessionBinder = Callable[[str | None], None]
 _ATTACHED_IMAGES_MARKER = "[attached images:"
+_APPLY_PATCH_HEADER_TO_OPERATION = {
+    "*** Add File: ": "create_file",
+    "*** Update File: ": "update_file",
+    "*** Delete File: ": "delete_file",
+}
+_APPLY_PATCH_MOVE_TO_HEADER = "*** Move to: "
+
+
+@dataclass(frozen=True, slots=True)
+class _ApplyPatchDisplayOperation:
+    operation: str
+    path: str
+    diff: str = ""
 
 
 def _plain_text(markup: str) -> str:
@@ -51,12 +65,10 @@ def _usage_payload(usage: TokenUsage) -> dict[str, Any]:
         "cache_write_1h_tokens": snap.cache_write_1h_tokens,
         "output_tokens": snap.output_tokens,
         "reasoning_tokens": snap.reasoning_tokens,
-        "tool_use_tokens": snap.tool_use_tokens,
         "provider_total_tokens": snap.provider_total_tokens,
         "sub_agent_input_tokens": snap.sub_agent_input_tokens,
         "sub_agent_output_tokens": snap.sub_agent_output_tokens,
         "sub_agent_reasoning_tokens": snap.sub_agent_reasoning_tokens,
-        "sub_agent_tool_use_tokens": snap.sub_agent_tool_use_tokens,
         "sub_agent_provider_total_tokens": snap.sub_agent_provider_total_tokens,
         "sub_agent_cost_usd": snap.sub_agent_cost_usd,
         "context_tokens": snap.context_tokens,
@@ -104,6 +116,275 @@ def _tool_error_payload(result: Any) -> Any:
     if isinstance(body, dict):
         return body.get("error")
     return None
+
+
+def _patch_detail_from_result_body(result_body: Any, fallback_text: Any = "") -> str:
+    if isinstance(result_body, dict):
+        status_value = result_body.get("status")
+        if (
+            isinstance(status_value, str)
+            and status_value.strip().lower() == "completed"
+        ):
+            return ""
+        for key in ("error", "message"):
+            value = result_body.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    if isinstance(fallback_text, str):
+        return fallback_text.strip()
+    return ""
+
+
+def _apply_patch_running_summary(arguments: Any) -> dict[str, Any]:
+    if isinstance(arguments, dict):
+        summary: dict[str, Any] = {}
+        path = arguments.get("path")
+        operation = arguments.get("operation_type") or arguments.get("operation")
+        diff = arguments.get("diff")
+        if isinstance(path, str) and path:
+            summary["path"] = path
+        if isinstance(operation, str) and operation:
+            summary["operation"] = operation
+        if isinstance(diff, str) and diff:
+            summary["diff"] = diff
+        if "path" in summary or "operation" in summary:
+            summary["operation_count"] = 1
+            if "path" in summary:
+                summary["affected_paths"] = [summary["path"]]
+        return summary
+
+    if not isinstance(arguments, str) or not arguments.strip():
+        return {}
+
+    operations = _apply_patch_operations_from_v4a(arguments)
+    if not operations:
+        return {}
+
+    first_hunk: list[str] = []
+    capturing_first_hunk = False
+    captured_first_hunk = False
+    for line in arguments.splitlines():
+        if _is_apply_patch_file_operation_header(line):
+            capturing_first_hunk = False
+            continue
+        if (
+            line.startswith("@@")
+            and len(operations) == 1
+            and operations[0].operation in {"update_file", "move_file"}
+            and not captured_first_hunk
+        ):
+            first_hunk.append(line)
+            capturing_first_hunk = True
+            captured_first_hunk = True
+            continue
+        if capturing_first_hunk:
+            if line.startswith("*** ") or line.startswith("@@"):
+                capturing_first_hunk = False
+                continue
+            if line[:1] in {" ", "-", "+"}:
+                first_hunk.append(line)
+
+    first_operation = operations[0]
+    summary = {
+        "path": first_operation.path,
+        "operation": first_operation.operation,
+        "operation_count": len(operations),
+        "affected_paths": [operation.path for operation in operations],
+    }
+    if first_hunk:
+        summary["diff"] = "\n".join(first_hunk[:80])
+    return summary
+
+
+def _apply_patch_completed_summary(
+    *,
+    arguments: Any,
+    result_body: Any,
+    path: str,
+    operation: str,
+) -> dict[str, Any]:
+    operations = _apply_patch_operations_from_result(result_body)
+    if not operations:
+        operations = _apply_patch_operations_from_v4a(arguments)
+    if not operations:
+        operations = [_ApplyPatchDisplayOperation(operation, path)] if path else []
+    if not operations:
+        return {}
+    return {
+        "operation_count": len(operations),
+        "affected_paths": [operation.path for operation in operations],
+    }
+
+
+def _apply_patch_operations_from_result(
+    result_body: Any,
+) -> list[_ApplyPatchDisplayOperation]:
+    if not isinstance(result_body, dict):
+        return []
+    raw_operations = result_body.get("operations")
+    if not isinstance(raw_operations, list):
+        return []
+    operations: list[_ApplyPatchDisplayOperation] = []
+    for item in raw_operations:
+        if not isinstance(item, dict):
+            continue
+        operation = item.get("operation_type")
+        path = item.get("path")
+        move_to = item.get("move_to")
+        if not isinstance(operation, str) or not isinstance(path, str) or not path:
+            continue
+        if isinstance(move_to, str) and move_to:
+            operations.append(
+                _ApplyPatchDisplayOperation("move_file", f"{path} → {move_to}")
+            )
+        else:
+            operations.append(_ApplyPatchDisplayOperation(operation, path))
+    return operations
+
+
+def _apply_patch_operations_from_v4a(
+    arguments: Any,
+) -> list[_ApplyPatchDisplayOperation]:
+    if not isinstance(arguments, str) or not arguments.strip():
+        return []
+    operations: list[_ApplyPatchDisplayOperation] = []
+    current_operation: str | None = None
+    current_path: str | None = None
+    current_diff: list[str] = []
+
+    def flush_current() -> None:
+        nonlocal current_operation, current_path, current_diff
+        if current_operation and current_path:
+            operations.append(
+                _ApplyPatchDisplayOperation(
+                    current_operation,
+                    current_path,
+                    "\n".join(current_diff),
+                )
+            )
+        current_operation = None
+        current_path = None
+        current_diff = []
+
+    for line in arguments.splitlines():
+        if line in {"*** Begin Patch", "*** End Patch"}:
+            continue
+        if (
+            line.startswith(_APPLY_PATCH_MOVE_TO_HEADER)
+            and current_operation == "update_file"
+        ):
+            destination = line.removeprefix(_APPLY_PATCH_MOVE_TO_HEADER).strip()
+            current_operation = "move_file"
+            current_path = (
+                f"{current_path} → {destination}" if current_path else destination
+            )
+            continue
+        matched_header = False
+        for header, operation in _APPLY_PATCH_HEADER_TO_OPERATION.items():
+            if not line.startswith(header):
+                continue
+            flush_current()
+            path = line.removeprefix(header).strip()
+            if operation == "delete_file":
+                operations.append(_ApplyPatchDisplayOperation(operation, path))
+            else:
+                current_operation = operation
+                current_path = path
+            matched_header = True
+            break
+        if matched_header:
+            continue
+        if current_operation and not line.startswith("*** "):
+            current_diff.append(line)
+    flush_current()
+    return operations
+
+
+def _is_apply_patch_file_operation_header(line: str) -> bool:
+    return any(line.startswith(header) for header in _APPLY_PATCH_HEADER_TO_OPERATION)
+
+
+def _apply_patch_operation_call_id(call_id: str, index: int) -> str:
+    if not call_id or index == 0:
+        return call_id
+    return f"{call_id}:{index}"
+
+
+def _apply_patch_tool_group_item(
+    *,
+    operation: _ApplyPatchDisplayOperation,
+    call_id: str,
+    status: str,
+    success: bool | None,
+    verbose: bool,
+    arguments: Any = None,
+    result: Any = None,
+    detail: str = "",
+    error: Any = None,
+    diff_line_numbers: list[dict[str, int | None]] | None = None,
+) -> PendingToolGroupItem:
+    tool_name, text = route_function_result(
+        "apply_patch",
+        verbose=verbose,
+        status=(
+            "[cyan]running[/cyan]"
+            if status == "running"
+            else status_markup(success=success)
+        ),
+        call_id=call_id,
+        arguments={
+            "path": operation.path,
+            "operation_type": operation.operation,
+            "detail": detail,
+            "diff": operation.diff,
+        },
+    )
+    metadata: dict[str, Any] = {
+        "tool_name": tool_name,
+        "path": operation.path,
+        "operation": operation.operation,
+        "detail": detail,
+        "diff": operation.diff,
+        "call_id": call_id,
+        "status": status,
+        "operation_count": 1,
+        "affected_paths": [operation.path],
+    }
+    if success is not None:
+        metadata["success"] = success
+    if arguments is not None:
+        metadata["arguments"] = _metadata_payload(arguments)
+    if result is not None:
+        metadata["result"] = result
+    if error is not None:
+        metadata["error"] = error
+    if diff_line_numbers:
+        metadata["diff_line_numbers"] = diff_line_numbers
+    return PendingToolGroupItem(
+        _plain_text(text),
+        classes=tool_item_class(tool_name),
+        metadata=metadata,
+    )
+
+
+def _apply_patch_operation_matches_diff_metadata(
+    operation_item: _ApplyPatchDisplayOperation,
+    *,
+    path: str,
+    operation: str,
+    diff: str,
+) -> bool:
+    if diff and operation_item.diff != diff:
+        return False
+    if operation_item.operation == operation and operation_item.path == path:
+        return True
+    return (
+        operation == "update_file"
+        and operation_item.operation == "move_file"
+        and (
+            operation_item.path == path or operation_item.path.startswith(f"{path} → ")
+        )
+    )
 
 
 def history_message_content(message: MessageRecord) -> str:
@@ -165,6 +446,15 @@ def persisted_message_payload(
         "historical": historical,
         "created_at": message.created_at,
     }
+
+
+def _tool_item_call_id_matches(
+    item: PendingToolGroupItem,
+    call_id: str,
+    prefixed_call_id: str,
+) -> bool:
+    item_call_id = str(item.metadata.get("call_id") or "")
+    return item_call_id == call_id or item_call_id.startswith(prefixed_call_id)
 
 
 @dataclass(slots=True)
@@ -377,7 +667,7 @@ class _EventDisplayBase(DisplayProtocol):
             },
         )
 
-    def user_prompt(self) -> str | QueuedInput:
+    def user_prompt(self) -> str | QueuedInput | QueuedRuntimeChange:
         raise RuntimeError("This display does not support interactive user input.")
 
     def assistant_start(self) -> None:
@@ -421,23 +711,57 @@ class _EventDisplayBase(DisplayProtocol):
             self._tool_group.start(label, function_count=count)
         for call in displayable_calls:
             self._tool_group.update_for_function(call.name)
+            if call.name == "apply_patch":
+                operations = _apply_patch_operations_from_v4a(call.arguments)
+                if len(operations) > 1:
+                    self._replace_tool_items_for_call(
+                        call.call_id,
+                        [
+                            _apply_patch_tool_group_item(
+                                operation=operation,
+                                call_id=_apply_patch_operation_call_id(
+                                    call.call_id, index
+                                ),
+                                status="running",
+                                success=None,
+                                verbose=self.verbose,
+                                arguments=call.arguments if index == 0 else None,
+                            )
+                            for index, operation in enumerate(operations)
+                        ],
+                    )
+                    continue
+            apply_patch_summary = (
+                _apply_patch_running_summary(call.arguments)
+                if call.name == "apply_patch"
+                else {}
+            )
+            route_arguments = call.arguments
+            if apply_patch_summary:
+                route_arguments = {
+                    "path": apply_patch_summary.get("path", ""),
+                    "operation_type": apply_patch_summary.get("operation", ""),
+                }
             tool_name, text = route_function_result(
                 call.name,
                 verbose=self.verbose,
                 status="[cyan]running[/cyan]",
                 call_id=call.call_id,
-                arguments=call.arguments,
+                arguments=route_arguments,
             )
+            metadata = {
+                "tool_name": tool_name,
+                "call_id": call.call_id,
+                "status": "running",
+                "arguments": _metadata_payload(call.arguments),
+            }
+            if apply_patch_summary:
+                metadata.update(apply_patch_summary)
             self._tool_group.upsert_item(
                 _plain_text(text),
                 call_id=call.call_id,
                 classes=tool_item_class(tool_name),
-                metadata={
-                    "tool_name": tool_name,
-                    "call_id": call.call_id,
-                    "status": "running",
-                    "arguments": _metadata_payload(call.arguments),
-                },
+                metadata=metadata,
             )
         self._publish_tool_group_update()
 
@@ -640,6 +964,50 @@ class _EventDisplayBase(DisplayProtocol):
     ) -> None:
         if self._tool_group.function_count:
             self._tool_group.update_for_function(tool_name)
+        result_body = _tool_result_body(result)
+        if tool_name == "apply_patch":
+            operations = _apply_patch_operations_from_v4a(arguments)
+            if not operations:
+                operations = _apply_patch_operations_from_result(result_body)
+            if len(operations) > 1:
+                detail_text = _patch_detail_from_result_body(
+                    result_body,
+                    result if not success else "",
+                )
+                error_payload = _tool_error_payload(result)
+                self._replace_tool_items_for_call(
+                    call_id,
+                    [
+                        _apply_patch_tool_group_item(
+                            operation=operation_item,
+                            call_id=_apply_patch_operation_call_id(call_id, index),
+                            status="completed" if success else "failed",
+                            success=success,
+                            verbose=self.verbose,
+                            arguments=arguments if index == 0 else None,
+                            result=result_body if index == 0 else None,
+                            detail=detail_text,
+                            error=error_payload,
+                            diff_line_numbers=diff_line_numbers
+                            if _apply_patch_operation_matches_diff_metadata(
+                                operation_item,
+                                path=path,
+                                operation=operation,
+                                diff=diff,
+                            )
+                            else None,
+                        )
+                        for index, operation_item in enumerate(operations)
+                    ],
+                )
+                self._publish_tool_group_update()
+                return
+            if len(operations) == 1:
+                parsed_operation = operations[0]
+                path = parsed_operation.path
+                operation = parsed_operation.operation
+                if parsed_operation.diff:
+                    diff = parsed_operation.diff
         routed_tool_name, text = route_function_result(
             tool_name,
             verbose=self.verbose,
@@ -652,7 +1020,12 @@ class _EventDisplayBase(DisplayProtocol):
                 "diff": diff,
             },
         )
-        result_body = _tool_result_body(result)
+        patch_summary = _apply_patch_completed_summary(
+            arguments=arguments,
+            result_body=result_body,
+            path=path,
+            operation=operation,
+        )
         metadata = {
             "tool_name": routed_tool_name,
             "path": path,
@@ -666,6 +1039,7 @@ class _EventDisplayBase(DisplayProtocol):
             "result": result_body,
             "error": _tool_error_payload(result),
         }
+        metadata.update(patch_summary)
         if diff_line_numbers:
             metadata["diff_line_numbers"] = diff_line_numbers
 
@@ -753,6 +1127,36 @@ class _EventDisplayBase(DisplayProtocol):
 
     def _clear_tool_group_item_id(self) -> None:
         self._active_tool_group_item_id = None
+
+    def _replace_tool_items_for_call(
+        self,
+        call_id: str,
+        items: list[PendingToolGroupItem],
+    ) -> None:
+        if call_id:
+            prefix = f"{call_id}:"
+            replacement_index: int | None = None
+            kept_items: list[PendingToolGroupItem] = []
+            for item in self._tool_group.items:
+                if _tool_item_call_id_matches(item, call_id, prefix):
+                    if replacement_index is None:
+                        replacement_index = len(kept_items)
+                    continue
+                kept_items.append(item)
+            if replacement_index is None:
+                replacement_index = len(kept_items)
+            kept_items[replacement_index:replacement_index] = items
+            self._tool_group.items = kept_items
+        else:
+            self._tool_group.items.extend(items)
+        self._rebuild_tool_group_call_index()
+
+    def _rebuild_tool_group_call_index(self) -> None:
+        self._tool_group.item_by_call_id.clear()
+        for index, item in enumerate(self._tool_group.items):
+            item_call_id = str(item.metadata.get("call_id") or "")
+            if item_call_id:
+                self._tool_group.item_by_call_id[item_call_id] = index
 
     def retry_notice(self, attempt: int, max_retries: int) -> None:
         self.wait_stop()

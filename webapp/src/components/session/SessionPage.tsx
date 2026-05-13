@@ -698,6 +698,13 @@ export function SessionPage({
       ? selectedSubAgent?.processing ?? null
       : null
     : sessionState?.processing ?? null;
+  const composerIsProcessing = Boolean(
+    displayedProcessing?.active
+    || directSubmitPending
+    || sendInputMutation.isPending
+    || shellCommandMutation.isPending
+    || (canInterruptActiveTurn && !sessionState?.pendingUserQuestions),
+  );
   const displayedWaitMessage = isSubAgentRoute
     ? showSelectedSubAgentProcessing
       ? selectedSubAgent?.waitMessage ?? null
@@ -899,6 +906,7 @@ export function SessionPage({
                 supportsImageInputs={providerSupportsImages}
                 interactiveMode={interactiveMode}
                 isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
+                isProcessing={composerIsProcessing}
                 onSubmit={handleSubmit}
                 canInterrupt={canInterruptActiveTurn}
                 isInterrupting={interruptMutation.isPending}
@@ -1142,13 +1150,15 @@ function timelineForDisplay(
       && messageSignature(historyItem) === signature
     ));
   };
-  const rememberPendingHistoryBoundary = (item: Record<string, unknown>) => {
-    if (consumedHistoryIndexes.size > 0) return;
+  const rememberPendingHistoryBoundary = (item: Record<string, unknown>): boolean => {
     const boundaryIndex = skippedHistoryBoundaryIndex(item);
-    if (boundaryIndex < 0) return;
-    pendingHistoryBoundaryIndex = pendingHistoryBoundaryIndex === null
-      ? boundaryIndex
-      : Math.min(pendingHistoryBoundaryIndex, boundaryIndex);
+    if (boundaryIndex < 0) return false;
+    if (consumedHistoryIndexes.size === 0) {
+      pendingHistoryBoundaryIndex = pendingHistoryBoundaryIndex === null
+        ? boundaryIndex
+        : Math.min(pendingHistoryBoundaryIndex, boundaryIndex);
+    }
+    return true;
   };
   const flushPendingAtHistoryBoundary = (): boolean => {
     if (pendingHistoryBoundaryIndex === null || pendingUnanchoredItems.length === 0) {
@@ -1205,7 +1215,24 @@ function timelineForDisplay(
       continue;
     }
     if (isHistoricalSnapshotMessage(item)) {
-      rememberPendingHistoryBoundary(item);
+      const signature = messageSignature(item);
+      if (signature && historySignatureCounts.has(signature)) {
+        rememberPendingHistoryBoundary(item);
+        continue;
+      }
+      if (rememberPendingHistoryBoundary(item)) {
+        continue;
+      }
+      // Previous-run model output that was shown live may not have a
+      // persisted message_id. Keep it when it does not match saved history.
+      if (consumedHistoryIndexes.size === 0) {
+        pendingUnanchoredItems.push(item);
+        continue;
+      }
+      mergedItems.push(...pendingUnanchoredItems);
+      pendingUnanchoredItems.length = 0;
+      pendingHistoryBoundaryIndex = null;
+      mergedItems.push(item);
       continue;
     }
     if (activeTimeline && consumedHistoryIndexes.size === 0) {

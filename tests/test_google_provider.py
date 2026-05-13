@@ -223,7 +223,6 @@ def test_google_parse_response_extracts_function_calls_thoughts_and_usage() -> N
                 "total_cached_tokens": 12,
                 "total_output_tokens": 33,
                 "total_thought_tokens": 207,
-                "total_tool_use_tokens": 50,
                 "total_tokens": 666,
             },
             "outputs": [
@@ -262,7 +261,6 @@ def test_google_parse_response_extracts_function_calls_thoughts_and_usage() -> N
     assert result.usage.cached_input_tokens == 12
     assert result.usage.output_tokens == 33
     assert result.usage.reasoning_tokens == 207
-    assert result.usage.tool_use_tokens == 50
     assert result.usage.provider_total_tokens == 666
     assert result.usage.total_tokens == 666
     assert result.usage.model == DEFAULT_GOOGLE_MODEL
@@ -480,7 +478,6 @@ def test_google_request_turn_retries_after_rate_limit_and_renders_thinking(
             "total_cached_tokens": 1,
             "total_output_tokens": 4,
             "total_thought_tokens": 2,
-            "total_tool_use_tokens": 3,
             "total_tokens": 15,
         },
         "outputs": [
@@ -544,7 +541,6 @@ def test_google_request_turn_retries_after_rate_limit_and_renders_thinking(
     assert display_spy.session_usage_snapshots[-1].input_tokens == 6
     assert display_spy.session_usage_snapshots[-1].cached_input_tokens == 1
     assert display_spy.session_usage_snapshots[-1].output_tokens == 4
-    assert display_spy.session_usage_snapshots[-1].tool_use_tokens == 3
     assert display_spy.session_usage_snapshots[-1].total_tokens == 15
 
 

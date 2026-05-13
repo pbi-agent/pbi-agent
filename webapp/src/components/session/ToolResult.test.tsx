@@ -243,22 +243,29 @@ describe("ToolResult", () => {
       },
     );
 
-    it("falls back to the generic card while a file-edit tool is still running", () => {
+    it("renders a compact file-edit card while a tool is still running", () => {
       const { container } = render(
         <ToolResult
           running
           text=""
           metadata={{
-            tool_name: "replace_in_file",
+            tool_name: "apply_patch",
             call_id: "call_running",
             status: "running",
-            arguments: { path: "TODO.md", old_string: "Old", new_string: "New" },
+            path: "TODO.md",
+            operation: "update_file",
+            operation_count: 1,
+            arguments: "*** Begin Patch\n*** Update File: TODO.md\n@@\n-Old\n+New\n*** End Patch\n",
           }}
         />,
       );
 
       expect(container.querySelector(".git-diff-result")).toBeNull();
       expect(container.querySelector(".tool-result-card")).not.toBeNull();
+      expect(screen.getByText("TODO.md")).toBeInTheDocument();
+      expect(screen.getByText("Updating")).toBeInTheDocument();
+      expect(screen.getByText("Running")).toBeInTheDocument();
+      expect(screen.queryByText("Arguments")).not.toBeInTheDocument();
     });
   });
 

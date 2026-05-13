@@ -447,7 +447,6 @@ def _serialize_run_session(  # pyright: ignore[reportUnusedFunction] - imported 
         "cache_write_1h_tokens": record.cache_write_1h_tokens,
         "output_tokens": record.output_tokens,
         "reasoning_tokens": record.reasoning_tokens,
-        "tool_use_tokens": record.tool_use_tokens,
         "provider_total_tokens": record.provider_total_tokens,
         "estimated_cost_usd": record.estimated_cost_usd,
         "total_tool_calls": record.total_tool_calls,

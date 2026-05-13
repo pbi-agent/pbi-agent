@@ -76,6 +76,41 @@ const SETTINGS_NAV_GROUPS: Array<{
   items: Array<{ id: SettingsTabId; label: string; description: string }>;
 }> = [
   {
+    label: "Models",
+    items: [
+      {
+        id: "providers",
+        label: "Providers",
+        description: "Connections and credentials",
+      },
+      {
+        id: "model-profiles",
+        label: "Model Profiles",
+        description: "Runtime defaults",
+      },
+    ],
+  },
+  {
+    label: "Project",
+    items: [
+      {
+        id: "commands",
+        label: "Commands",
+        description: "Prompt presets",
+      },
+      {
+        id: "skills",
+        label: "Skills",
+        description: "Agent capabilities",
+      },
+      {
+        id: "agents",
+        label: "Agents",
+        description: "Delegated workers",
+      },
+    ],
+  },
+  {
     label: "Desktop",
     items: [
       {
@@ -91,38 +126,8 @@ const SETTINGS_NAV_GROUPS: Array<{
     ],
   },
   {
-    label: "Project",
+    label: "Data",
     items: [
-      {
-        id: "skills",
-        label: "Skills",
-        description: "Agent capabilities",
-      },
-      {
-        id: "commands",
-        label: "Commands",
-        description: "Prompt presets",
-      },
-      {
-        id: "agents",
-        label: "Agents",
-        description: "Delegated workers",
-      },
-    ],
-  },
-  {
-    label: "Server",
-    items: [
-      {
-        id: "providers",
-        label: "Providers",
-        description: "Connections and credentials",
-      },
-      {
-        id: "model-profiles",
-        label: "Model Profiles",
-        description: "Runtime defaults",
-      },
       {
         id: "maintenance",
         label: "Maintenance",
@@ -139,7 +144,7 @@ function shouldPromptProviderAuth(provider: ProviderView): boolean {
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { open, closeSettings } = useSettingsDialog();
-  const [activeTab, setActiveTab] = useState<SettingsTabId>("notifications");
+  const [activeTab, setActiveTab] = useState<SettingsTabId>("providers");
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [pageError, setPageError] = useState<string | null>(null);
   const [busyProviderId, setBusyProviderId] = useState<string | null>(null);
@@ -381,25 +386,27 @@ className="settings-nav__header-close app-close-icon-button"
                       <span className="sr-only">Close</span>
                     </Button>
                   </div>
-                  {SETTINGS_NAV_GROUPS.map((group) => (
-                    <div className="settings-nav__group" key={group.label}>
-                      <div className="settings-nav__group-label">{group.label}</div>
-                      <div className="settings-nav__items">
-                        {group.items.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className={`settings-nav__item ${activeTab === item.id ? "settings-nav__item--active" : ""}`}
-                            aria-pressed={activeTab === item.id}
-                            onClick={() => setActiveTab(item.id)}
-                          >
-                            <span className="settings-nav__item-label">{item.label}</span>
-                            <span className="settings-nav__item-description">{item.description}</span>
-                          </button>
-                        ))}
+                  <div className="settings-nav__body">
+                    {SETTINGS_NAV_GROUPS.map((group) => (
+                      <div className="settings-nav__group" key={group.label}>
+                        <div className="settings-nav__group-label">{group.label}</div>
+                        <div className="settings-nav__items">
+                          {group.items.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`settings-nav__item ${activeTab === item.id ? "settings-nav__item--active" : ""}`}
+                              aria-pressed={activeTab === item.id}
+                              onClick={() => setActiveTab(item.id)}
+                            >
+                              <span className="settings-nav__item-label">{item.label}</span>
+                              <span className="settings-nav__item-description">{item.description}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </aside>
 
                 <div className="settings-tab-content">

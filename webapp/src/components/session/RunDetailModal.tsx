@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ActivityIcon,
   BotIcon,
   BrainIcon,
   ChevronRightIcon,
@@ -9,17 +8,17 @@ import {
   ClockIcon,
   DatabaseIcon,
   ServerIcon,
-  TerminalIcon,
   TriangleAlertIcon,
   WrenchIcon,
 } from "lucide-react";
 import { fetchRunDetail } from "../../api";
 import type { ObservabilityEvent, RunSession } from "../../types";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { FormDialog } from "../ui/form-dialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import { CopyShortcut } from "../shared/CopyShortcut";
 import { Alert, AlertDescription } from "../ui/alert";
+import { StatusPill } from "../shared/StatusPill";
 
 export function RunDetailModal({
   runSessionId,
@@ -50,18 +49,18 @@ export function RunDetailModal({
       size="wide"
     >
       <div className="run-detail">
-          {detailQuery.isLoading ? (
-            <div className="run-detail__loading">
-              <LoadingSpinner size="md" />
-            </div>
-          ) : detailQuery.isError ? (
-            <div className="run-detail__error">Failed to load run details.</div>
-          ) : detailQuery.data ? (
-            <>
-              <RunSummary run={detailQuery.data.run} />
-              <EventTimeline events={detailQuery.data.events} />
-            </>
-          ) : null}
+        {detailQuery.isLoading ? (
+          <div className="run-detail__loading">
+            <LoadingSpinner size="md" />
+          </div>
+        ) : detailQuery.isError ? (
+          <div className="run-detail__error">Failed to load run details.</div>
+        ) : detailQuery.data ? (
+          <>
+            <RunSummary run={detailQuery.data.run} />
+            <EventTimeline events={detailQuery.data.events} />
+          </>
+        ) : null}
       </div>
     </FormDialog>
   );
@@ -72,102 +71,111 @@ function isRunActive(status: string): boolean {
 }
 
 function RunSummary({ run }: { run: RunSession }) {
-  const statusModifier =
-    isRunComplete(run.status) ? "completed"
-    : run.status === "failed" ? "failed"
-    : isRunActive(run.status) ? "running"
-    : "idle";
-
   const durationLabel = run.total_duration_ms != null
     ? formatDurationLong(run.total_duration_ms)
     : "--";
+  const costLabel = run.estimated_cost_usd > 0
+    ? `$${run.estimated_cost_usd.toFixed(4)}`
+    : "--";
+  const agentLabel = run.agent_name ?? run.agent_type ?? "--";
+  const providerLabel = run.provider ?? "--";
+  const modelLabel = run.model ?? "--";
+  const hasTimeline = Boolean(run.started_at || run.ended_at);
 
   return (
-    <div className="run-kpi" aria-label="Run key performance indicators">
-      {/* Hero row */}
-      <div className="run-kpi__hero">
-        <div className="run-kpi__hero-card">
-          <span className="run-kpi__hero-label">Status</span>
-          <Badge variant={statusModifier === "idle" ? "secondary" : statusModifier}>{run.status}</Badge>
-        </div>
-        <div className="run-kpi__hero-card">
-          <span className="run-kpi__hero-label"><ClockIcon data-icon="inline-start" /> Duration</span>
-          <span className="run-kpi__hero-value">{durationLabel}</span>
-        </div>
-        <div className="run-kpi__hero-card">
-          <span className="run-kpi__hero-label"><CircleDollarSignIcon data-icon="inline-start" /> Cost</span>
-          <span className="run-kpi__hero-value">{run.estimated_cost_usd > 0 ? `$${run.estimated_cost_usd.toFixed(4)}` : "--"}</span>
-        </div>
+    <section className="run-header" aria-label="Run summary">
+      {/* Top bar: identity + key metrics */}
+      <div className="run-header__topbar">
+        <StatusPill status={run.status} size="meta" className="run-header__status" />
+        <span className="run-header__agent">
+          <BotIcon data-icon="inline-start" />
+          {agentLabel}
+        </span>
+        <span className="run-header__sep" aria-hidden="true">·</span>
+        <span className="run-header__model">
+          {providerLabel}
+          <span className="run-header__sep" aria-hidden="true">/</span>
+          <span className="run-header__model-name">{modelLabel}</span>
+        </span>
+        <span className="run-header__topbar-spacer" />
+        <span className="run-header__kpi">
+          <ClockIcon />
+          <span className="run-header__kpi-value">{durationLabel}</span>
+        </span>
+        <span className="run-header__kpi-divider" aria-hidden="true" />
+        <span className="run-header__kpi run-header__kpi--accent">
+          <CircleDollarSignIcon />
+          <span className="run-header__kpi-value">{costLabel}</span>
+        </span>
       </div>
 
       {run.fatal_error ? (
-        <Alert variant="destructive" className="banner banner--error">
+        <Alert variant="destructive" className="run-header__alert">
           <TriangleAlertIcon />
           <AlertDescription>{run.fatal_error}</AlertDescription>
         </Alert>
       ) : null}
 
-      {/* Counters row */}
-      <div className="run-kpi__counters">
-        <KpiCounter icon={ServerIcon} label="API calls" value={run.total_api_calls} />
-        <KpiCounter icon={WrenchIcon} label="Tool calls" value={run.total_tool_calls} />
-        <KpiCounter icon={TriangleAlertIcon} label="Errors" value={run.error_count} variant={run.error_count > 0 ? "danger" : undefined} />
+      {/* Stats grid — all metrics in one uniform row */}
+      <div className="run-header__grid">
+        <KpiCell icon={ServerIcon} value={fmt(run.total_api_calls)} label="API" />
+        <KpiCell icon={WrenchIcon} value={fmt(run.total_tool_calls)} label="Tools" />
+        <KpiCell
+          icon={TriangleAlertIcon}
+          value={fmt(run.error_count)}
+          label="Errors"
+          tone={run.error_count > 0 ? "danger" : undefined}
+        />
+        <KpiCell value={fmt(run.input_tokens)} label="Input" />
+        <KpiCell value={fmt(run.output_tokens)} label="Output" />
+        <KpiCell icon={BrainIcon} value={fmt(run.reasoning_tokens)} label="Reasoning" />
+        <KpiCell icon={DatabaseIcon} value={fmt(run.cached_input_tokens)} label="Cached" />
       </div>
 
-      {/* Token breakdown */}
-      <div className="run-kpi__tokens">
-        <h4 className="run-kpi__tokens-heading"><ActivityIcon data-icon="inline-start" /> Tokens</h4>
-        <div className="run-kpi__tokens-grid">
-          <TokenStat label="Input" value={run.input_tokens} />
-          <TokenStat label="Output" value={run.output_tokens} />
-          <TokenStat label="Reasoning" value={run.reasoning_tokens} icon={BrainIcon} />
-          <TokenStat label="Cached" value={run.cached_input_tokens} icon={DatabaseIcon} />
-          <TokenStat label="Tool-use" value={run.tool_use_tokens} icon={TerminalIcon} />
+      {/* Timeline footer */}
+      {hasTimeline ? (
+        <div className="run-header__timeline">
+          {run.started_at ? (
+            <span className="run-header__time">
+              <ClockIcon data-icon="inline-start" />
+              <span className="run-header__time-label">Started</span>
+              <span>{formatFullTimestamp(run.started_at)}</span>
+            </span>
+          ) : null}
+          {run.started_at && run.ended_at ? (
+            <ChevronRightIcon className="run-header__time-arrow" aria-hidden="true" />
+          ) : null}
+          {run.ended_at ? (
+            <span className="run-header__time">
+              <span className="run-header__time-label">Ended</span>
+              <span>{formatFullTimestamp(run.ended_at)}</span>
+            </span>
+          ) : null}
         </div>
-      </div>
+      ) : null}
+    </section>
+  );
+}
 
-      {/* Meta footer */}
-      <div className="run-kpi__meta">
-        <MetaItem icon={BotIcon} label="Agent" value={run.agent_name ?? run.agent_type ?? "--"} />
-        <MetaItem icon={ServerIcon} label="Provider" value={run.provider ?? "--"} />
-        <MetaItem label="Model" value={run.model ?? "--"} mono />
-        {run.started_at ? <MetaItem icon={ClockIcon} label="Started" value={formatFullTimestamp(run.started_at)} /> : null}
-        {run.ended_at ? <MetaItem icon={ClockIcon} label="Ended" value={formatFullTimestamp(run.ended_at)} /> : null}
-      </div>
+function KpiCell({
+  icon: Icon,
+  value,
+  label,
+  tone,
+}: {
+  icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  value: string;
+  label: string;
+  tone?: "danger";
+}) {
+  return (
+    <div className={`run-header__cell${tone === "danger" ? " run-header__cell--danger" : ""}`}>
+      <span className="run-header__cell-value">
+        {Icon ? <Icon /> : null}
+        {value}
+      </span>
+      <span className="run-header__cell-label">{label}</span>
     </div>
-  );
-}
-
-function isRunComplete(status: string): boolean {
-  return ["completed", "interrupted", "ended"].includes(status);
-}
-
-function KpiCounter({ icon: Icon, label, value, variant }: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; label: string; value: number; variant?: "danger" }) {
-  return (
-    <span className={`run-kpi__counter${variant === "danger" ? " run-kpi__counter--danger" : ""}`}>
-      <Icon data-icon="inline-start" />
-      <span className="run-kpi__counter-value">{value}</span>
-      <span className="run-kpi__counter-label">{label}</span>
-    </span>
-  );
-}
-
-function TokenStat({ label, value, icon: Icon }: { label: string; value: number; icon?: React.ComponentType<React.SVGProps<SVGSVGElement>> }) {
-  return (
-    <div className="run-kpi__token-stat">
-      <span className="run-kpi__token-label">{Icon ? <Icon data-icon="inline-start" /> : null}{label}</span>
-      <span className="run-kpi__token-value">{fmt(value)}</span>
-    </div>
-  );
-}
-
-function MetaItem({ icon: Icon, label, value, mono }: { icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>; label: string; value: string; mono?: boolean }) {
-  return (
-    <span className="run-kpi__meta-item">
-      {Icon ? <Icon data-icon="inline-start" /> : null}
-      <span className="run-kpi__meta-label">{label}:</span>
-      <span className={mono ? "run-kpi__meta-value--mono" : undefined}>{value}</span>
-    </span>
   );
 }
 
@@ -219,22 +227,12 @@ function EventRow({ event }: { event: ObservabilityEvent }) {
           <span className="event-row__tool">{event.tool_name}</span>
         ) : null}
 
-        {event.model ? (
-          <span className="event-row__model">{event.model}</span>
-        ) : null}
-
         <span className="event-row__spacer" />
 
         {event.success === false ? (
-          <Badge variant="destructive">fail</Badge>
+          <StatusPill status="failed" size="meta" className="event-row__status">fail</StatusPill>
         ) : event.success === true ? (
-          <Badge variant="success">ok</Badge>
-        ) : null}
-
-        {event.status_code != null ? (
-          <Badge variant={event.status_code >= 400 ? "destructive" : "success"}>
-            {event.status_code}
-          </Badge>
+          <StatusPill status="completed" size="meta" className="event-row__status">ok</StatusPill>
         ) : null}
 
         {event.duration_ms != null ? (
@@ -244,7 +242,7 @@ function EventRow({ event }: { event: ObservabilityEvent }) {
         ) : null}
 
         {event.total_tokens != null && event.total_tokens > 0 ? (
-          <span className="event-row__tokens">{fmt(event.total_tokens)} tok</span>
+          <span className="event-row__tokens">{fmt(event.total_tokens)}</span>
         ) : null}
 
         {hasPayload ? (
@@ -296,7 +294,14 @@ function PayloadSection({
   return (
     <div className={`payload-section${variant === "error" ? " payload-section--error" : ""}`}>
       <span className="payload-section__label">{label}</span>
-      <pre className="payload-section__content">{text}</pre>
+      <div className="payload-section__content-card">
+        <pre className="payload-section__content">{text}</pre>
+        <CopyShortcut
+          text={text}
+          ariaLabel={`Copy ${label}`}
+          className="timeline-entry__action-button payload-section__copy"
+        />
+      </div>
     </div>
   );
 }

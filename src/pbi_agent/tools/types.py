@@ -18,8 +18,13 @@ if TYPE_CHECKING:
 class ToolSpec:
     name: str
     description: str
-    parameters_schema: dict[str, Any]
+    parameters_schema: dict[str, Any] = field(default_factory=dict)
     is_destructive: bool = False
+    freeform_format: dict[str, str] | None = None
+
+    @property
+    def is_freeform(self) -> bool:
+        return self.freeform_format is not None
 
 
 @dataclass(slots=True, frozen=True)

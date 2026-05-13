@@ -113,7 +113,6 @@ def _run_record(
         cache_write_1h_tokens=0,
         output_tokens=0,
         reasoning_tokens=0,
-        tool_use_tokens=0,
         provider_total_tokens=0,
         estimated_cost_usd=0.0,
         total_tool_calls=0,
@@ -6604,6 +6603,298 @@ def test_web_display_processing_state_has_no_intermediate_inactive_tool_flow() -
         {"active": False, "phase": None, "message": None},
     ]
     assert all(payload["active"] for payload in processing_payloads[:-1])
+
+
+def test_web_display_apply_patch_running_event_summarizes_raw_v4a_input() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    patch_text = (
+        "*** Begin Patch\n"
+        "*** Update File: TEST_APPLY_PATCH.md\n"
+        "@@\n"
+        "-Status: pending\n"
+        "+Status: running label passed\n"
+        "*** End Patch\n"
+    )
+
+    display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="call-patch", name="apply_patch", arguments=patch_text
+            )
+        ]
+    )
+
+    tool_events = [
+        payload for event_type, payload in published if event_type == "tool_group_added"
+    ]
+    assert tool_events
+    item = tool_events[-1]["items"][0]
+    metadata = item["metadata"]
+    assert "<missing operation_type>" not in item["text"]
+    assert "<missing path>" not in item["text"]
+    assert item["text"].startswith("update_file TEST_APPLY_PATCH.md")
+    assert metadata["arguments"] == patch_text
+    assert metadata["path"] == "TEST_APPLY_PATCH.md"
+    assert metadata["operation"] == "update_file"
+    assert metadata["operation_count"] == 1
+    assert metadata["diff"] == "@@\n-Status: pending\n+Status: running label passed"
+
+
+def test_web_display_apply_patch_running_event_counts_multiple_raw_v4a_ops() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    patch_text = (
+        "*** Begin Patch\n"
+        "*** Add File: first.txt\n"
+        "+first\n"
+        "*** Update File: second.txt\n"
+        "@@\n"
+        "-old\n"
+        "+new\n"
+        "*** Delete File: third.txt\n"
+        "*** End Patch\n"
+    )
+
+    display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="call-patch", name="apply_patch", arguments=patch_text
+            )
+        ]
+    )
+
+    tool_events = [
+        payload for event_type, payload in published if event_type == "tool_group_added"
+    ]
+    items = tool_events[-1]["items"]
+    assert len(items) == 3
+    item = items[0]
+    metadata = item["metadata"]
+    assert item["text"].startswith("create_file first.txt")
+    assert metadata["path"] == "first.txt"
+    assert metadata["operation"] == "create_file"
+    assert metadata["operation_count"] == 1
+    assert items[1]["text"].startswith("update_file second.txt")
+    assert items[1]["metadata"]["path"] == "second.txt"
+    assert items[1]["metadata"]["operation"] == "update_file"
+    assert items[1]["metadata"]["diff"] == "@@\n-old\n+new"
+    assert items[2]["text"].startswith("delete_file third.txt")
+    assert items[2]["metadata"]["path"] == "third.txt"
+    assert items[2]["metadata"]["operation"] == "delete_file"
+
+
+def test_web_display_apply_patch_running_event_summarizes_raw_v4a_move() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    patch_text = (
+        "*** Begin Patch\n"
+        "*** Update File: old-name.md\n"
+        "*** Move to: new-name.md\n"
+        "@@\n"
+        "-Old title\n"
+        "+New title\n"
+        "*** End Patch\n"
+    )
+
+    display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="call-patch", name="apply_patch", arguments=patch_text
+            )
+        ]
+    )
+
+    tool_events = [
+        payload for event_type, payload in published if event_type == "tool_group_added"
+    ]
+    item = tool_events[-1]["items"][0]
+    metadata = item["metadata"]
+    assert item["text"].startswith("move_file old-name.md → new-name.md")
+    assert metadata["path"] == "old-name.md → new-name.md"
+    assert metadata["operation"] == "move_file"
+    assert metadata["operation_count"] == 1
+    assert metadata["diff"] == "@@\n-Old title\n+New title"
+
+
+def test_web_display_apply_patch_completed_event_lists_multiple_raw_v4a_paths() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    patch_text = (
+        "*** Begin Patch\n"
+        "*** Update File: TODO.md\n"
+        "@@\n"
+        "-old\n"
+        "+new\n"
+        "*** Add File: apply_patch_tool_smoke.txt\n"
+        "+created\n"
+        "*** End Patch\n"
+    )
+
+    display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="call-patch", name="apply_patch", arguments=patch_text
+            )
+        ]
+    )
+    display.patch_result(
+        "TODO.md",
+        "update_file",
+        True,
+        call_id="call-patch",
+        diff="@@\n-old\n+new",
+        arguments=patch_text,
+        result="Success. Updated the following files:\nM TODO.md\nA apply_patch_tool_smoke.txt\n",
+    )
+
+    tool_events = [
+        payload for event_type, payload in published if event_type == "tool_group_added"
+    ]
+    items = tool_events[-1]["items"]
+    assert len(items) == 2
+    assert all(item["metadata"]["status"] == "completed" for item in items)
+    item = items[0]
+    metadata = item["metadata"]
+    assert metadata["path"] == "TODO.md"
+    assert metadata["operation"] == "update_file"
+    assert metadata["operation_count"] == 1
+    assert metadata["affected_paths"] == ["TODO.md"]
+    assert metadata["arguments"] == patch_text
+    assert metadata["result"] == (
+        "Success. Updated the following files:\n"
+        "M TODO.md\n"
+        "A apply_patch_tool_smoke.txt\n"
+    )
+    assert items[1]["text"].startswith("create_file apply_patch_tool_smoke.txt")
+    assert items[1]["metadata"]["path"] == "apply_patch_tool_smoke.txt"
+    assert items[1]["metadata"]["operation"] == "create_file"
+    assert items[1]["metadata"]["operation_count"] == 1
+    assert items[1]["metadata"]["affected_paths"] == ["apply_patch_tool_smoke.txt"]
+    assert "arguments" not in items[1]["metadata"]
+
+
+def test_web_display_apply_patch_completed_event_summarizes_single_raw_v4a_move() -> (
+    None
+):
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    patch_text = (
+        "*** Begin Patch\n"
+        "*** Update File: old-name.md\n"
+        "*** Move to: new-name.md\n"
+        "@@\n"
+        "-Old title\n"
+        "+New title\n"
+        "*** End Patch\n"
+    )
+
+    display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="call-patch", name="apply_patch", arguments=patch_text
+            )
+        ]
+    )
+    display.patch_result(
+        "old-name.md",
+        "update_file",
+        True,
+        call_id="call-patch",
+        diff="@@\n-Old title\n+New title",
+        arguments=patch_text,
+        result="Success. Updated the following files:\nM old-name.md\n",
+    )
+
+    tool_events = [
+        payload for event_type, payload in published if event_type == "tool_group_added"
+    ]
+    item = tool_events[-1]["items"][0]
+    metadata = item["metadata"]
+    assert item["text"].startswith("move_file old-name.md → new-name.md")
+    assert metadata["path"] == "old-name.md → new-name.md"
+    assert metadata["operation"] == "move_file"
+    assert metadata["operation_count"] == 1
+    assert metadata["affected_paths"] == ["old-name.md → new-name.md"]
+    assert metadata["diff"] == "@@\n-Old title\n+New title"
+
+
+def test_web_display_apply_patch_completed_event_preserves_mixed_tool_order() -> None:
+    published: list[tuple[str, dict]] = []
+    display = WebDisplay(
+        publish_event=lambda event_type, payload: published.append(
+            (event_type, payload)
+        )
+    )
+    patch_text = (
+        "*** Begin Patch\n"
+        "*** Update File: TODO.md\n"
+        "@@\n"
+        "-old\n"
+        "+new\n"
+        "*** Add File: apply_patch_tool_smoke.txt\n"
+        "+created\n"
+        "*** End Patch\n"
+    )
+
+    display.tool_execution_start(
+        [
+            PendingToolCall(
+                call_id="call-patch", name="apply_patch", arguments=patch_text
+            ),
+            PendingToolCall(
+                call_id="call-shell",
+                name="shell",
+                arguments={"command": "printf ok"},
+            ),
+        ]
+    )
+    display.patch_result(
+        "TODO.md",
+        "update_file",
+        True,
+        call_id="call-patch",
+        diff="@@\n-old\n+new",
+        arguments=patch_text,
+        result=(
+            "Success. Updated the following files:\n"
+            "M TODO.md\n"
+            "A apply_patch_tool_smoke.txt\n"
+        ),
+    )
+
+    tool_events = [
+        payload for event_type, payload in published if event_type == "tool_group_added"
+    ]
+    items = tool_events[-1]["items"]
+    assert [item["metadata"]["call_id"] for item in items] == [
+        "call-patch",
+        "call-patch:1",
+        "call-shell",
+    ]
+    assert items[0]["metadata"]["path"] == "TODO.md"
+    assert items[1]["metadata"]["path"] == "apply_patch_tool_smoke.txt"
+    assert items[2]["metadata"]["tool_name"] == "shell"
 
 
 def test_web_sub_agent_display_publishes_initial_user_message() -> None:

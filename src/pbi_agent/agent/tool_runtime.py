@@ -12,7 +12,7 @@ from typing import Any
 from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import ToolCall
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.registry import get_tool_handler
+from pbi_agent.tools.registry import get_tool_handler, get_tool_spec
 from pbi_agent.tools.types import ToolContext, ToolOutput, ToolResult
 
 _log = logging.getLogger(__name__)
@@ -148,7 +148,11 @@ def _executor_warmup_wait(release: threading.Event) -> None:
     release.wait()
 
 
-def to_function_call_output_items(results: list[ToolResult]) -> list[dict[str, Any]]:
+def to_function_call_output_items(
+    results: list[ToolResult],
+    calls: list[ToolCall] | None = None,
+) -> list[dict[str, Any]]:
+    calls_by_id = {call.call_id: call for call in calls or []}
     items: list[dict[str, Any]] = []
     for result in results:
         output: str | list[dict[str, Any]] = result.output_json
@@ -161,13 +165,18 @@ def to_function_call_output_items(results: list[ToolResult]) -> list[dict[str, A
                         "image_url": data_url_for_image(attachment),
                     }
                 )
-        items.append(
-            {
-                "type": "function_call_output",
-                "call_id": result.call_id,
-                "output": output,
-            }
+        call = calls_by_id.get(result.call_id)
+        item_type = (
+            "custom_tool_call_output"
+            if call is not None and call.kind == "custom"
+            else "function_call_output"
         )
+        item: dict[str, Any] = {
+            "type": item_type,
+            "call_id": result.call_id,
+            "output": output,
+        }
+        items.append(item)
     return items
 
 
@@ -182,6 +191,9 @@ def _execute_one_tool_call(
     handler = (
         tool_catalog.get_handler(call.name) if tool_catalog is not None else None
     ) or get_tool_handler(call.name)
+    spec = (tool_catalog.get_spec(call.name) if tool_catalog is not None else None) or (
+        get_tool_spec(call.name)
+    )
     if handler is None:
         result = _error_result(
             call, "unknown_tool", f"Tool '{call.name}' is not registered."
@@ -202,7 +214,10 @@ def _execute_one_tool_call(
         )
         return result
 
-    args_or_error = _normalize_arguments(call.arguments)
+    args_or_error = _normalize_arguments(
+        call.arguments,
+        freeform=bool(spec is not None and spec.is_freeform),
+    )
     if isinstance(args_or_error, str):
         result = _error_result(call, "invalid_arguments", args_or_error)
         _log_tool_call(
@@ -226,25 +241,35 @@ def _execute_one_tool_call(
         output = handler(args_or_error, tool_context)
         attachments = []
         display_metadata = dict(tool_context.display_metadata)
+        is_codex_apply_patch = _is_codex_apply_patch_call(call, spec)
         if isinstance(output, ToolOutput):
             payload = {"ok": True, "result": output.result}
             attachments = list(output.attachments)
             display_metadata.update(output.display_metadata)
         else:
             payload = {"ok": True, "result": output}
+        output_json = json.dumps(payload)
+        is_error = False
+        output_payload: Any = payload
+        if is_codex_apply_patch:
+            result_payload = payload["result"]
+            is_error = _apply_patch_result_failed(result_payload)
+            output_json = _format_codex_apply_patch_output(result_payload)
+            output_payload = output_json
         result = ToolResult(
             call_id=call.call_id,
-            output_json=json.dumps(payload),
-            is_error=False,
+            output_json=output_json,
+            is_error=is_error,
             attachments=attachments,
             display_metadata=display_metadata,
         )
         _log_tool_call(
             tracer=tracer,
             call=call,
-            output_payload=payload,
+            output_payload=output_payload,
             duration_ms=_duration_ms(start),
-            success=True,
+            success=not is_error,
+            error_message=output_json if is_error else None,
             metadata={"attachment_count": len(attachments)},
         )
         _log.debug(
@@ -284,12 +309,16 @@ class ToolThreadStartError(RuntimeError):
 
 def _normalize_arguments(
     arguments: dict[str, Any] | str | None,
+    *,
+    freeform: bool = False,
 ) -> dict[str, Any] | str:
     if arguments is None:
         return {}
     if isinstance(arguments, dict):
         return arguments
     if isinstance(arguments, str):
+        if freeform:
+            return {"patch": arguments}
         if not arguments.strip():
             return {}
         try:
@@ -325,11 +354,62 @@ def _duration_ms(start: float) -> int:
     return max(0, int((time.monotonic() - start) * 1000))
 
 
+def _is_codex_apply_patch_call(call: ToolCall, spec: Any) -> bool:
+    return (
+        call.name == "apply_patch"
+        and call.kind == "custom"
+        and bool(spec is not None and spec.is_freeform)
+    )
+
+
+def _apply_patch_result_failed(result_payload: Any) -> bool:
+    if not isinstance(result_payload, dict):
+        return False
+    status = str(result_payload.get("status") or "").strip().lower()
+    return status == "failed" or bool(result_payload.get("error"))
+
+
+def _format_codex_apply_patch_output(result_payload: Any) -> str:
+    if isinstance(result_payload, str):
+        return result_payload
+    if not isinstance(result_payload, dict):
+        return json.dumps(result_payload, separators=(",", ":"))
+    if _apply_patch_result_failed(result_payload):
+        return str(
+            result_payload.get("error")
+            or result_payload.get("message")
+            or "apply_patch failed"
+        )
+
+    operations = result_payload.get("operations")
+    if not isinstance(operations, list):
+        return str(result_payload.get("message") or "Success. Updated files.")
+
+    lines = ["Success. Updated the following files:"]
+    for operation in operations:
+        if not isinstance(operation, dict):
+            continue
+        path = operation.get("move_to") or operation.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        lines.append(f"{_apply_patch_operation_letter(operation)} {path}")
+    return "\n".join(lines) + "\n"
+
+
+def _apply_patch_operation_letter(operation: dict[str, Any]) -> str:
+    operation_type = operation.get("operation_type")
+    if operation_type == "create_file":
+        return "A"
+    if operation_type == "delete_file":
+        return "D"
+    return "M"
+
+
 def _log_tool_call(
     *,
     tracer,
     call: ToolCall,
-    output_payload: dict[str, Any],
+    output_payload: Any,
     duration_ms: int,
     success: bool,
     error_message: str | None = None,

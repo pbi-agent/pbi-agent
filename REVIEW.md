@@ -1,3 +1,0 @@
-# Review Findings
-
-- [X] [P2] `webapp/src/components/ui/badge.tsx:66-73` — Preserve `Badge asChild` for status variants. Adding the built-in status dot as a sibling before `children` means `<Badge asChild variant="running"><a>...</a></Badge>` passes multiple children to Radix `Slot.Root`, which expects a single slottable child and will throw at render time; this regresses the existing `asChild` API for the newly added semantic status variants. Fixed by using an `asChild` render path that passes only `children` to `Slot.Root` and skipping dot injection there; validation passed: `bun run test:web -- webapp/src/components/ui/badge.test.tsx`, `bun run typecheck`, `bun run lint`.

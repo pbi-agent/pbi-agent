@@ -496,6 +496,40 @@ def test_create_and_list_run_sessions(tmp_path) -> None:
     assert runs[1].total_duration_ms == 42
 
 
+def test_run_session_records_ignore_extra_database_columns(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        session_id = store.create_session("/w", "openai", "gpt-5", "trace me")
+        run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="default",
+            profile_id="analysis",
+            model="gpt-5",
+        )
+        store._conn.execute(  # noqa: SLF001
+            "ALTER TABLE run_sessions "
+            "ADD COLUMN tool_use_tokens INTEGER NOT NULL DEFAULT 0"
+        )
+        store._conn.execute(  # noqa: SLF001
+            "UPDATE run_sessions SET tool_use_tokens = 12 WHERE run_session_id = ?",
+            (run_id,),
+        )
+        store._conn.commit()  # noqa: SLF001
+
+        run = store.get_run_session(run_id)
+        runs = store.list_run_sessions(session_id)
+        latest_run = store.get_latest_session_run(session_id)
+
+    assert run is not None
+    assert run.run_session_id == run_id
+    assert [item.run_session_id for item in runs] == [run_id]
+    assert latest_run is not None
+    assert latest_run.run_session_id == run_id
+
+
 def test_add_and_list_observability_events(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

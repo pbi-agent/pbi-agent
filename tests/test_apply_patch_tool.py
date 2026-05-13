@@ -230,7 +230,7 @@ def test_apply_patch_handle_rejects_unified_diff(
     assert target.read_text(encoding="utf-8") == "hello\nworld\n"
 
 
-def test_apply_patch_handle_update_file_strips_accidental_leading_blank_line(
+def test_apply_patch_handle_rejects_accidental_leading_blank_line(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -259,19 +259,12 @@ def test_apply_patch_handle_update_file_strips_accidental_leading_blank_line(
         context,
     )
 
-    assert result["status"] == "completed"
+    assert result["status"] == "failed"
+    assert "Invalid apply_patch grammar" in result["error"]
     assert target.read_text(encoding="utf-8") == (
-        "[X] Add focused tests and validate\n"
-        "[X] Update memory\n"
-        "\n"
-        "<!-- Test comment: apply_patch tool is working! -->"
+        "[X] Add focused tests and validate\n[X] Update memory"
     )
-    assert context.display_metadata["diff"] == (
-        " [X] Add focused tests and validate\n"
-        " [X] Update memory\n"
-        "+\n"
-        "+<!-- Test comment: apply_patch tool is working! -->"
-    )
+    assert context.display_metadata == {}
 
 
 def test_apply_patch_handle_metadata_does_not_reapply_raw_diff(
@@ -376,8 +369,7 @@ def test_apply_patch_handle_update_file_reports_leading_blank_line_hint(
     )
 
     assert result["status"] == "failed"
-    assert "V4A hunk begins with an empty context line" in result["error"]
-    assert "remove the leading blank line" in result["error"]
+    assert "Invalid apply_patch grammar" in result["error"]
 
 
 def test_apply_patch_handle_allows_absolute_paths_outside_workspace(
@@ -412,7 +404,7 @@ def test_apply_patch_handle_rejects_missing_envelope() -> None:
     assert "patch must start with '*** Begin Patch'" in result["error"]
 
 
-def test_apply_patch_handle_rejects_move_operations(
+def test_apply_patch_handle_move_operations(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -433,8 +425,78 @@ def test_apply_patch_handle_rejects_move_operations(
         ToolContext(),
     )
 
+    assert result["status"] == "completed"
+    assert result["operations"] == [
+        {"operation_type": "update_file", "path": "old.txt", "move_to": "new.txt"}
+    ]
+    assert not (tmp_path / "old.txt").exists()
+    assert (tmp_path / "new.txt").read_text(encoding="utf-8") == "hello"
+
+
+def test_apply_patch_handle_rejects_empty_update_hunk(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes.txt"
+    target.write_text("hello", encoding="utf-8")
+
+    result = apply_patch_tool.handle(
+        {
+            "patch": ("*** Begin Patch\n*** Update File: notes.txt\n*** End Patch"),
+        },
+        ToolContext(),
+    )
+
     assert result["status"] == "failed"
-    assert "Move/rename operations are not supported yet" in result["error"]
+    assert "Update file hunk for path 'notes.txt' is empty" in result["error"]
+    assert target.read_text(encoding="utf-8") == "hello"
+
+
+def test_apply_patch_handle_rejects_move_only_update_hunk(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "old.txt"
+    target.write_text("hello", encoding="utf-8")
+
+    result = apply_patch_tool.handle(
+        {
+            "patch": (
+                "*** Begin Patch\n"
+                "*** Update File: old.txt\n"
+                "*** Move to: new.txt\n"
+                "*** End Patch"
+            ),
+        },
+        ToolContext(),
+    )
+
+    assert result["status"] == "failed"
+    assert "Update file hunk for path 'old.txt' is empty" in result["error"]
+    assert target.read_text(encoding="utf-8") == "hello"
+    assert not (tmp_path / "new.txt").exists()
+
+
+def test_apply_patch_handle_rejects_empty_update_context(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "notes.txt"
+    target.write_text("hello", encoding="utf-8")
+
+    result = apply_patch_tool.handle(
+        {
+            "patch": "*** Begin Patch\n*** Update File: notes.txt\n@@\n*** End Patch",
+        },
+        ToolContext(),
+    )
+
+    assert result["status"] == "failed"
+    assert "Update hunk does not contain any lines" in result["error"]
+    assert target.read_text(encoding="utf-8") == "hello"
 
 
 def test_apply_patch_handle_validates_required_arguments() -> None:

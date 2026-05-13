@@ -375,7 +375,6 @@ class RunTracer:
                 ),
                 output_tokens=snap.output_tokens if snap is not None else None,
                 reasoning_tokens=snap.reasoning_tokens if snap is not None else None,
-                tool_use_tokens=snap.tool_use_tokens if snap is not None else None,
                 provider_total_tokens=(
                     snap.provider_total_tokens if snap is not None else None
                 ),

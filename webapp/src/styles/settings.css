@@ -78,7 +78,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
   padding: var(--sp-5) var(--sp-3);
   background: var(--color-surface-1);
   border-right: 1px solid var(--color-border);
@@ -113,6 +115,18 @@
 
 .settings-nav__eyebrow {
   color: var(--color-text-secondary);
+}
+
+.settings-nav__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .settings-nav__group {
@@ -1276,6 +1290,21 @@
 
 .skill-install-error__content [data-slot="button"] {
   flex: 0 0 auto;
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.skill-install-error__content [data-slot="button"]:not(:disabled):hover,
+.skill-install-error__content [data-slot="button"]:not(:disabled):focus-visible {
+  color: var(--background);
+  background: var(--destructive);
+  border-color: var(--destructive);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--destructive) 28%, transparent);
+  transform: translateY(-1px);
 }
 
 /* ── Resolved runtime summary in profile card ── */
@@ -1314,7 +1343,6 @@
     flex-direction: row;
     align-items: flex-start;
     gap: var(--sp-3);
-    overflow-x: auto;
     padding: var(--sp-3);
     border-right: 0;
     border-bottom: 1px solid var(--color-border);
@@ -1322,6 +1350,13 @@
 
   .settings-nav__eyebrow {
     display: none;
+  }
+
+  .settings-nav__body {
+    flex-direction: row;
+    gap: var(--sp-3);
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .settings-nav__group {

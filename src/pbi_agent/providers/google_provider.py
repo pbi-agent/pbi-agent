@@ -565,7 +565,6 @@ class GoogleProvider(Provider):
         cached_input_tokens = int(_usage_value(usage_obj, "total_cached_tokens"))
         output_tokens = int(_usage_value(usage_obj, "total_output_tokens"))
         reasoning_tokens = int(_usage_value(usage_obj, "total_thought_tokens"))
-        tool_use_tokens = int(_usage_value(usage_obj, "total_tool_use_tokens"))
         provider_total_tokens = int(_usage_value(usage_obj, "total_tokens"))
 
         return CompletedResponse(
@@ -576,7 +575,6 @@ class GoogleProvider(Provider):
                 cached_input_tokens=cached_input_tokens,
                 output_tokens=output_tokens,
                 reasoning_tokens=reasoning_tokens,
-                tool_use_tokens=tool_use_tokens,
                 provider_total_tokens=provider_total_tokens,
                 context_tokens=provider_total_tokens,
                 model=_response_model_name(response_json),

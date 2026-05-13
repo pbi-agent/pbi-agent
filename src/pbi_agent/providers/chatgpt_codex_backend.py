@@ -153,7 +153,7 @@ class ChatGPTCodexBackend:
     def serialize_tools(self, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not self._enabled:
             return tools
-        return _serialize_chatgpt_tools(tools)
+        return [dict(tool) for tool in tools]
 
     def capture_response_headers(self, response: Any) -> None:
         if not self._enabled:
@@ -239,8 +239,7 @@ class ChatGPTCodexBackend:
         response: CompletedResponse,
         results: list[ToolResult],
     ) -> list[dict[str, Any]]:
-        del response
-        return to_function_call_output_items(results)
+        return to_function_call_output_items(results, response.function_calls)
 
 
 class ResponsesConversationReplay:
@@ -687,73 +686,3 @@ def _strip_backend_ids(value: Any) -> Any:
     if isinstance(value, list):
         return [_strip_backend_ids(item) for item in value]
     return value
-
-
-def _serialize_chatgpt_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    serialized: list[dict[str, Any]] = []
-    for tool in tools:
-        if tool.get("type") == "function":
-            parameters = tool.get("parameters")
-            serialized.append(
-                {
-                    **tool,
-                    "parameters": (
-                        _to_chatgpt_strict_schema(parameters)
-                        if isinstance(parameters, dict)
-                        else parameters
-                    ),
-                    "strict": True,
-                }
-            )
-            continue
-        serialized.append(dict(tool))
-    return serialized
-
-
-def _to_chatgpt_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    transformed: dict[str, Any] = {}
-    for key, value in schema.items():
-        if key == "properties" and isinstance(value, dict):
-            transformed[key] = {
-                prop_name: (
-                    _to_chatgpt_strict_schema(prop_schema)
-                    if isinstance(prop_schema, dict)
-                    else prop_schema
-                )
-                for prop_name, prop_schema in value.items()
-            }
-            continue
-        if key in {"items", "additionalProperties"} and isinstance(value, dict):
-            transformed[key] = _to_chatgpt_strict_schema(value)
-            continue
-        if key in {"anyOf", "allOf", "oneOf"} and isinstance(value, list):
-            transformed[key] = [
-                _to_chatgpt_strict_schema(item) if isinstance(item, dict) else item
-                for item in value
-            ]
-            continue
-        transformed[key] = value
-
-    properties = transformed.get("properties")
-    if not isinstance(properties, dict):
-        return transformed
-
-    original_required = transformed.get("required")
-    required = (
-        [str(item) for item in original_required if isinstance(item, str)]
-        if isinstance(original_required, list)
-        else []
-    )
-
-    for prop_name, prop_schema in list(properties.items()):
-        if prop_name in required or not isinstance(prop_schema, dict):
-            continue
-        properties[prop_name] = {
-            "anyOf": [
-                prop_schema,
-                {"type": "null"},
-            ]
-        }
-
-    transformed["required"] = list(properties.keys())
-    return transformed

@@ -1,4 +1,5 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type MouseEvent, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   MoreHorizontalIcon,
   PencilIcon,
@@ -32,6 +33,21 @@ function formatDate(dateStr: string): string {
   if (diffHr < 24) return `${diffHr}h ago`;
   if (diffDay < 7) return `${diffDay}d ago`;
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function sessionHref(sessionId: string): string {
+  return `/sessions/${encodeURIComponent(sessionId)}`;
+}
+
+function shouldResumeInCurrentTab(event: MouseEvent<HTMLAnchorElement>): boolean {
+  return (
+    event.button === 0 &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    !event.defaultPrevented
+  );
 }
 
 export type SessionSidebarProps = {
@@ -175,23 +191,31 @@ export function SessionSidebar({
                 ) : (
                   <>
                     <Button
-                      type="button"
+                      asChild
                       variant="ghost"
                       className="session-card__main"
-                      onClick={() => {
-                        setOpenMenuSessionId(null);
-                        onResumeSession(session.session_id);
-                      }}
                     >
-                      <span className="session-card__title">
-                        {session.title || "Untitled session"}
-                      </span>
-                      <div className="session-card__meta">
-                        <time className="session-card__time">{formatDate(session.updated_at)}</time>
-                        <MetaBadge className="session-card__model">
-                          {session.model}
-                        </MetaBadge>
-                      </div>
+                      <Link
+                        to={sessionHref(session.session_id)}
+                        onClick={(event) => {
+                          setOpenMenuSessionId(null);
+                          if (!shouldResumeInCurrentTab(event)) {
+                            return;
+                          }
+                          event.preventDefault();
+                          onResumeSession(session.session_id);
+                        }}
+                      >
+                        <span className="session-card__title">
+                          {session.title || "Untitled session"}
+                        </span>
+                        <div className="session-card__meta">
+                          <time className="session-card__time">{formatDate(session.updated_at)}</time>
+                          <MetaBadge className="session-card__model">
+                            {session.model}
+                          </MetaBadge>
+                        </div>
+                      </Link>
                     </Button>
 
                     <DropdownMenu
@@ -212,7 +236,7 @@ export function SessionSidebar({
                           <MoreHorizontalIcon />
                         </Button>
                       </DropdownMenuTrigger>
-<DropdownMenuContent align="end">
+                      <DropdownMenuContent align="end">
                         <DropdownMenuGroup>
                           <DropdownMenuItem
                             className="session-card__menu-item"

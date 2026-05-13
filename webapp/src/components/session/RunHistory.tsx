@@ -136,7 +136,7 @@ function compareRunsNewestFirst(a: RunSession, b: RunSession): number {
 
 function totalRunTokens(run: RunSession): number {
   if (run.provider_total_tokens > 0) return run.provider_total_tokens;
-  return run.input_tokens + run.output_tokens + run.reasoning_tokens + run.tool_use_tokens;
+  return run.input_tokens + run.output_tokens + run.reasoning_tokens;
 }
 
 function formatCount(n: number): string {
