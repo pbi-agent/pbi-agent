@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { BotIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
 import { Accordion as AccordionPrimitive } from "radix-ui";
@@ -34,6 +34,8 @@ const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
 const WORKING_ITEMS_MAX_VISIBLE = 5;
 const WORKING_ITEMS_OPEN_GUTTER_PX = 16;
 const WORKING_ITEMS_OPEN_MAX_VH = 0.7;
+const WORK_RUN_OPEN_BOTTOM_GUTTER_PX = 16;
+const WORK_RUN_OPEN_LAYOUT_SETTLE_MS = 260;
 const WORK_RUN_PHASE_MIN_VISIBLE_MS = 600;
 const WORK_RUN_PHASE_TRANSITION_MS = 300;
 const WORK_RUN_PHASE_HOLD_MS =
@@ -1082,23 +1084,32 @@ function WorkRun({
   );
   const canFullExpand = workRunGroupCount > WORKING_ITEMS_MAX_VISIBLE;
   const fullExpanded = canFullExpand && rawFullExpanded;
+  const pendingUserOpenScrollRef = useRef(false);
 
   const setOpenFromUser = useCallback((nextOpen: boolean) => {
+    pendingUserOpenScrollRef.current = nextOpen;
     onOpenChange(nextOpen);
-    if (nextOpen) {
-      onUserOpen?.(contentRef.current);
-    }
-  }, [onOpenChange, onUserOpen]);
+  }, [onOpenChange]);
 
   const toggleFullExpanded = useCallback(() => {
     if (!canFullExpand) return;
+    pendingUserOpenScrollRef.current = true;
     onOpenChange(true);
     setFullExpandedState((current) => ({
       closeSignal,
       expanded: current.closeSignal === closeSignal ? !current.expanded : true,
     }));
-    requestAnimationFrame(() => onUserOpen?.(contentRef.current));
-  }, [canFullExpand, closeSignal, onOpenChange, onUserOpen]);
+  }, [canFullExpand, closeSignal, onOpenChange]);
+
+  useLayoutEffect(() => {
+    if (!open || !pendingUserOpenScrollRef.current) return;
+    const contentEl = contentRef.current;
+    if (!contentEl) return;
+    // The first open mounts CollapsibleContent after the click handler, so
+    // wait until the committed layout before measuring and aligning it.
+    pendingUserOpenScrollRef.current = false;
+    onUserOpen?.(contentEl);
+  });
 
   const handleWorkRunHeaderKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
     if (!canFullExpand || !event.altKey || event.key !== "Enter") return;
@@ -1393,35 +1404,55 @@ export const SessionTimeline = memo(function SessionTimeline({
       setShowNewMessages(false);
       const align = () => {
         if (!container.isConnected) return;
-        markProgrammaticScroll();
-        if (contentEl && contentEl.isConnected) {
+        if (contentEl && !contentEl.isConnected) return;
+        if (contentEl) {
           // Bring the bottom of the freshly expanded panel into view so the
           // latest tool output is visible without ever jumping the viewport
-          // upward.
+          // upward. Keep a small gutter so the panel does not sit underneath
+          // the composer shadow/edge when it is the last conversation item.
           const containerRect = container.getBoundingClientRect();
           const contentRect = contentEl.getBoundingClientRect();
-          const delta = contentRect.bottom - containerRect.bottom;
+          const delta = contentRect.bottom - (
+            containerRect.bottom - WORK_RUN_OPEN_BOTTOM_GUTTER_PX
+          );
           if (delta > 0) {
             const maxScrollTop = Math.max(
               0,
               container.scrollHeight - container.clientHeight,
             );
+            markProgrammaticScroll();
             container.scrollTo({
               top: Math.min(container.scrollTop + delta, maxScrollTop),
               behavior: "instant",
             });
-            return;
           }
+          return;
         }
         // Fallback: stick to the very bottom of the timeline.
+        markProgrammaticScroll();
         container.scrollTo({
           top: container.scrollHeight,
           behavior: "instant",
         });
       };
-      // Wait one frame so the Collapsible has finished laying out its
-      // content; otherwise the rect math runs against the pre-open layout.
-      requestAnimationFrame(align);
+      // Wait for the open content to mount and then re-check after layout has
+      // settled. The first open can grow in multiple phases (Radix presence,
+      // measured scroll constraints, syntax/markdown rendering), and a single
+      // early frame can still see the old scrollHeight.
+      requestAnimationFrame(() => {
+        align();
+        requestAnimationFrame(align);
+      });
+      window.setTimeout(align, WORK_RUN_OPEN_LAYOUT_SETTLE_MS);
+      if (contentEl && typeof ResizeObserver !== "undefined") {
+        const observer = new ResizeObserver(() => {
+          requestAnimationFrame(align);
+        });
+        observer.observe(contentEl);
+        window.setTimeout(() => {
+          observer.disconnect();
+        }, WORK_RUN_OPEN_LAYOUT_SETTLE_MS);
+      }
     },
     [containerRef, markProgrammaticScroll, setShowNewMessages, userScrolledRef],
   );
@@ -1555,11 +1586,10 @@ export const SessionTimeline = memo(function SessionTimeline({
             );
           }
           const isActiveUnit = unit.key === activeWorkRunKey;
-          // Only the active/running WorkRun should treat user-opens as a
-          // "follow the latest output" intent. Expanding a completed
-          // historical block must not reset auto-follow or hide the
-          // new-messages badge.
-          const isActiveRunningUnit = isActiveUnit && unit.running;
+          // Only the currently active WorkRun should treat user-opens as a
+          // "follow the latest output" intent. An active block can be between
+          // tool phases (for example model_wait/finalizing) even when none of
+          // its tool groups currently reports `running`.
           return (
             <WorkRun
               key={unit.key}
@@ -1571,7 +1601,7 @@ export const SessionTimeline = memo(function SessionTimeline({
               closeSignal={closeCollapsiblesSignal}
               onOpenChange={(nextOpen) => setWorkRunOpen(unit.key, nextOpen)}
               onUserOpen={
-                isActiveRunningUnit ? handleUserOpenCollapsible : undefined
+                isActiveUnit ? handleUserOpenCollapsible : undefined
               }
               parentSessionId={parentSessionId}
               showSubAgentCards={showSubAgentCards}

@@ -2635,7 +2635,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     expect(screen.queryByText("ls -la")).not.toBeInTheDocument();
   });
 
-  it("scrolls the timeline to the end of the expanded content when the user opens a running Working block", async () => {
+  it("scrolls the timeline to the end of the expanded content on the first open of a running Working block", async () => {
     const items = [
       {
         kind: "message" as const,
@@ -2675,33 +2675,209 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
 
     const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
     expect(scrollArea).not.toBeNull();
+    let scrollHeight = 700;
     Object.defineProperties(scrollArea!, {
       clientHeight: { configurable: true, value: 400 },
-      scrollHeight: { configurable: true, value: 2000 },
-      scrollTop: { configurable: true, writable: true, value: 0 },
+      scrollHeight: {
+        configurable: true,
+        get: () => scrollHeight,
+      },
+      scrollTop: { configurable: true, writable: true, value: 100 },
     });
 
     const scrollSpy = vi.spyOn(scrollArea!, "scrollTo");
-
-    const workingButton = screen.getByRole("button", { name: /Working/ });
-    expect(workingButton).toHaveAttribute("aria-expanded", "false");
-
-    await act(async () => {
-      fireEvent.click(workingButton);
-      // Flush the requestAnimationFrame inside the open handler.
-      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    scrollSpy.mockImplementation((options?: ScrollToOptions | number) => {
+      const top = typeof options === "number" ? options : options?.top;
+      if (typeof top === "number") {
+        scrollArea!.scrollTop = top;
+      }
+      scrollHeight = 1000;
+    });
+    scrollSpy.mockClear();
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    rectSpy.mockImplementation(function getMockRect(this: HTMLElement) {
+      if (this === scrollArea) {
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          right: 400,
+          bottom: 400,
+          left: 0,
+          width: 400,
+          height: 400,
+          toJSON: () => ({}),
+        };
+      }
+      if (this.classList.contains("timeline-entry__work-run-body")) {
+        return {
+          x: 0,
+          y: 0,
+          top: 120,
+          right: 400,
+          bottom: 950,
+          left: 0,
+          width: 400,
+          height: 830,
+          toJSON: () => ({}),
+        };
+      }
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        width: 0,
+        height: 0,
+        toJSON: () => ({}),
+      };
     });
 
-    expect(workingButton).toHaveAttribute("aria-expanded", "true");
-    // The user-open handler must call scrollTo so the bottom of the
-    // newly-expanded content is visible (i.e. the latest tool output).
-    expect(scrollSpy).toHaveBeenCalled();
-    const lastCall = scrollSpy.mock.calls.at(-1)?.[0] as ScrollToOptions;
-    expect(lastCall.behavior).toBe("instant");
-    // Either we landed on the very bottom of the timeline, or we advanced
-    // toward it — never jumped above the prior position (which would have
-    // been the "go to top" bug).
-    expect((lastCall.top ?? 0)).toBeGreaterThanOrEqual(0);
+    try {
+      const workingButton = screen.getByRole("button", { name: /Working/ });
+      expect(workingButton).toHaveAttribute("aria-expanded", "false");
+
+      await act(async () => {
+        fireEvent.click(workingButton);
+        // Flush the requestAnimationFrames inside the open handler. The first
+        // frame can still see the pre-open scrollHeight; the second verifies
+        // that we retry after the layout has settled.
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+      });
+
+      expect(workingButton).toHaveAttribute("aria-expanded", "true");
+      expect(scrollSpy).toHaveBeenCalledWith({
+        top: 300,
+        behavior: "instant",
+      });
+      expect(scrollSpy).toHaveBeenCalledWith({
+        top: 600,
+        behavior: "instant",
+      });
+      expect(scrollSpy).not.toHaveBeenCalledWith({
+        top: 1000,
+        behavior: "instant",
+      });
+    } finally {
+      rectSpy.mockRestore();
+    }
+  });
+
+  it("scrolls the active Working block on first open while the run is between tool phases", async () => {
+    const items = [
+      {
+        kind: "message" as const,
+        itemId: "user-1",
+        role: "user" as const,
+        content: "Run a long task",
+        markdown: false,
+      },
+      {
+        kind: "thinking" as const,
+        itemId: "thinking-1",
+        title: "Thinking",
+        content: "Checking the next step.",
+      },
+      {
+        kind: "tool_group" as const,
+        itemId: "tool-1",
+        label: "shell",
+        status: "completed" as const,
+        items: [
+          {
+            text: "echo done",
+            metadata: {
+              tool_name: "shell",
+              status: "completed" as const,
+              command: "echo done",
+            },
+          },
+        ],
+      },
+    ];
+
+    const { container } = render(
+      <SessionTimeline
+        items={items}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Thinking..." }}
+        itemsVersion={1}
+      />,
+    );
+
+    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    expect(scrollArea).not.toBeNull();
+    Object.defineProperties(scrollArea!, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1000 },
+      scrollTop: { configurable: true, writable: true, value: 100 },
+    });
+    const scrollSpy = vi.spyOn(scrollArea!, "scrollTo");
+    scrollSpy.mockClear();
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    rectSpy.mockImplementation(function getMockRect(this: HTMLElement) {
+      if (this === scrollArea) {
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          right: 400,
+          bottom: 400,
+          left: 0,
+          width: 400,
+          height: 400,
+          toJSON: () => ({}),
+        };
+      }
+      if (this.classList.contains("timeline-entry__work-run-body")) {
+        return {
+          x: 0,
+          y: 0,
+          top: 120,
+          right: 400,
+          bottom: 950,
+          left: 0,
+          width: 400,
+          height: 830,
+          toJSON: () => ({}),
+        };
+      }
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        width: 0,
+        height: 0,
+        toJSON: () => ({}),
+      };
+    });
+
+    try {
+      const workingButton = screen.getByRole("button", { name: /Working/ });
+      expect(workingButton).toHaveAttribute("data-phase", "model_wait");
+
+      await act(async () => {
+        fireEvent.click(workingButton);
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+      });
+
+      expect(workingButton).toHaveAttribute("aria-expanded", "true");
+      expect(scrollSpy).toHaveBeenCalledWith({
+        top: 600,
+        behavior: "instant",
+      });
+    } finally {
+      rectSpy.mockRestore();
+    }
   });
 
   it("does not jump the viewport when the user opens a completed historical Working block", async () => {

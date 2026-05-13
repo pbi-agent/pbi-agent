@@ -1,11 +1,5 @@
-- [X] Locate session Working block timeline styles
-- [X] Fix left-side line to stop at visible item-card bottom when collapsed
-- [-] Add/update regression coverage if practical
+- [X] Reproduce/identify first-open Working scroll gap
+- [X] Patch active Working user-open scroll behavior
+- [X] Add focused regression coverage
 - [X] Run focused frontend validation
 - [X] Update task memory
-- [X] Trace saved-session history/timeline merge for missing assistant output text
-- [X] Preserve unmatched historical assistant output messages after restart
-- [X] Add saved-session regression coverage
-- [X] Run focused SessionPage validation
-- [X] Run broader frontend validation/build
-- [X] Update task memory for output-text replay fix
