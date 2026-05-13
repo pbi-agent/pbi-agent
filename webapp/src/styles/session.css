@@ -3417,7 +3417,8 @@
 }
 
 .run-history__panel {
-  width: min(280px, calc(100vw - 32px));
+  width: max-content;
+  min-width: min(280px, calc(100vw - 32px));
   max-width: calc(100vw - 32px);
   max-height: min(420px, calc(100vh - 96px));
 }
@@ -3436,6 +3437,8 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  width: max-content;
+  max-width: 100%;
   min-width: 0;
 }
 
