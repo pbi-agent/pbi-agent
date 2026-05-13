@@ -2218,6 +2218,107 @@ describe("SessionPage", () => {
     ]);
   });
 
+  it("keeps unmatched historical model output messages when reopening a saved session", async () => {
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-user",
+          message_id: "msg-user",
+          part_ids: { content: "msg-user:content", file_paths: [], image_attachments: [] },
+          role: "user",
+          content: "check the default tab",
+          file_paths: [],
+          image_attachments: [],
+          markdown: false,
+          historical: true,
+          created_at: "2026-05-13T22:02:42Z",
+        },
+        {
+          item_id: "history-final",
+          message_id: "msg-final",
+          part_ids: { content: "msg-final:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "Ensured.",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-05-13T22:04:24Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "historical-run-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "historical-run-1:msg-user",
+            message_id: "msg-user",
+            role: "user",
+            content: "check the default tab",
+            markdown: false,
+            historical: true,
+          },
+          {
+            kind: "message",
+            itemId: "historical-run-1:message-126",
+            role: "assistant",
+            content: "I’ll verify the settings default tab in the source/tests.",
+            markdown: true,
+            historical: true,
+          },
+          {
+            kind: "tool_group",
+            itemId: "historical-run-1:tool-group-127",
+            label: "Tool calls",
+            status: "completed",
+            items: [],
+          },
+          {
+            kind: "message",
+            itemId: "historical-run-1:msg-final",
+            message_id: "msg-final",
+            role: "assistant",
+            content: "Ensured.",
+            markdown: true,
+            historical: true,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 689,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 4")).toBeInTheDocument();
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items.map((item) => item.itemId)).toEqual([
+      "history-user",
+      "historical-run-1:message-126",
+      "historical-run-1:tool-group-127",
+      "history-final",
+    ]);
+    expect(state?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        itemId: "historical-run-1:message-126",
+        content: "I’ll verify the settings default tab in the source/tests.",
+      }),
+    ]));
+  });
+
   it("keeps pre-compaction work traces before later active-run messages", async () => {
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord({ status: "running", active_run_id: "review-run" }),
