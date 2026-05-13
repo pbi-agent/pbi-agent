@@ -3484,14 +3484,18 @@
   overflow: hidden;
 }
 
-.run-card__status[data-size='meta'] {
+.run-card__status[data-size='meta'],
+.run-detail__status[data-size='meta'],
+.event-row__status[data-size='meta'] {
   min-height: 18px;
   padding: 0 6px;
   font-size: 10px;
   line-height: 16px;
 }
 
-.run-card__status [data-slot='badge-dot'] {
+.run-card__status [data-slot='badge-dot'],
+.run-detail__status [data-slot='badge-dot'],
+.event-row__status [data-slot='badge-dot'] {
   width: 5px;
   height: 5px;
 }

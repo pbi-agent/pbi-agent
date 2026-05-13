@@ -15,11 +15,11 @@ import {
 } from "lucide-react";
 import { fetchRunDetail } from "../../api";
 import type { ObservabilityEvent, RunSession } from "../../types";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { FormDialog } from "../ui/form-dialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Alert, AlertDescription } from "../ui/alert";
+import { StatusPill } from "../shared/StatusPill";
 
 export function RunDetailModal({
   runSessionId,
@@ -72,12 +72,6 @@ function isRunActive(status: string): boolean {
 }
 
 function RunSummary({ run }: { run: RunSession }) {
-  const statusModifier =
-    isRunComplete(run.status) ? "completed"
-    : run.status === "failed" ? "failed"
-    : isRunActive(run.status) ? "running"
-    : "idle";
-
   const durationLabel = run.total_duration_ms != null
     ? formatDurationLong(run.total_duration_ms)
     : "--";
@@ -88,7 +82,7 @@ function RunSummary({ run }: { run: RunSession }) {
       <div className="run-kpi__hero">
         <div className="run-kpi__hero-card">
           <span className="run-kpi__hero-label">Status</span>
-          <Badge variant={statusModifier === "idle" ? "secondary" : statusModifier}>{run.status}</Badge>
+          <StatusPill status={run.status} size="meta" className="run-detail__status" />
         </div>
         <div className="run-kpi__hero-card">
           <span className="run-kpi__hero-label"><ClockIcon data-icon="inline-start" /> Duration</span>
@@ -136,10 +130,6 @@ function RunSummary({ run }: { run: RunSession }) {
       </div>
     </div>
   );
-}
-
-function isRunComplete(status: string): boolean {
-  return ["completed", "interrupted", "ended"].includes(status);
 }
 
 function KpiCounter({ icon: Icon, label, value, variant }: { icon: React.ComponentType<React.SVGProps<SVGSVGElement>>; label: string; value: number; variant?: "danger" }) {
@@ -226,15 +216,19 @@ function EventRow({ event }: { event: ObservabilityEvent }) {
         <span className="event-row__spacer" />
 
         {event.success === false ? (
-          <Badge variant="destructive">fail</Badge>
+          <StatusPill status="failed" size="meta" className="event-row__status">fail</StatusPill>
         ) : event.success === true ? (
-          <Badge variant="success">ok</Badge>
+          <StatusPill status="completed" size="meta" className="event-row__status">ok</StatusPill>
         ) : null}
 
         {event.status_code != null ? (
-          <Badge variant={event.status_code >= 400 ? "destructive" : "success"}>
+          <StatusPill
+            status={event.status_code >= 400 ? "failed" : "completed"}
+            size="meta"
+            className="event-row__status"
+          >
             {event.status_code}
-          </Badge>
+          </StatusPill>
         ) : null}
 
         {event.duration_ms != null ? (

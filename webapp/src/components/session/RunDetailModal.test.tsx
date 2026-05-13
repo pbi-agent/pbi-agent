@@ -89,8 +89,38 @@ describe("RunDetailModal", () => {
 
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
-    expect(await screen.findByText("completed")).toBeInTheDocument();
+    const status = await screen.findByText("completed");
+    expect(status).toHaveAttribute("data-variant", "completed");
+    expect(status).toHaveAttribute("data-size", "meta");
+    expect(status).toHaveClass("run-detail__status");
     expect(screen.getByText("Events (2)")).toBeInTheDocument();
+  });
+
+  it("uses shared status badge variants for event success and status code chips", async () => {
+    mockFetchRunDetail.mockResolvedValue({
+      run: makeRun({ status: "completed" }),
+      events: [
+        makeEvent({
+          step_index: 1,
+          event_type: "model_call",
+          success: true,
+          status_code: 200,
+        }),
+      ],
+    });
+
+    renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
+
+    const okBadge = await screen.findByText("ok");
+    const statusCodeBadge = screen.getByText("200");
+    expect(okBadge).toHaveAttribute("data-variant", "completed");
+    expect(statusCodeBadge).toHaveAttribute("data-variant", "completed");
+    expect(okBadge).toHaveAttribute("data-size", "meta");
+    expect(statusCodeBadge).toHaveAttribute("data-size", "meta");
+    expect(okBadge).toHaveClass("event-row__status");
+    expect(statusCodeBadge).toHaveClass("event-row__status");
+    expect(okBadge.querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
+    expect(statusCodeBadge.querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
   });
 
   it("treats completed runs as terminal", async () => {

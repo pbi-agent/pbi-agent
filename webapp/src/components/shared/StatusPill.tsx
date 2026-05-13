@@ -12,11 +12,11 @@ function statusVariant(status: string): "secondary" | "running" | "completed" | 
   return "secondary";
 }
 
-type StatusPillProps = Omit<React.ComponentProps<typeof Badge>, "asChild" | "children" | "variant"> & {
+type StatusPillProps = Omit<React.ComponentProps<typeof Badge>, "asChild" | "variant"> & {
   status: string;
 };
 
-export function StatusPill({ status, className, size, ...props }: StatusPillProps) {
+export function StatusPill({ status, className, size, children, ...props }: StatusPillProps) {
   return (
     <Badge
       variant={statusVariant(status)}
@@ -24,7 +24,7 @@ export function StatusPill({ status, className, size, ...props }: StatusPillProp
       className={className}
       {...props}
     >
-      {status}
+      {children ?? status}
     </Badge>
   );
 }

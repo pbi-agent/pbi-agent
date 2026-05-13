@@ -69,3 +69,6 @@
 - Fixed review finding for single-file `apply_patch` moves: completion metadata now uses the parsed V4A `Move to` operation/path, so completed cards stay `move_file old → new`; focused web-display pytest, Ruff, format check, basedpyright, and `git diff --check` passed.
 - Made run history dropdown content-sized/responsive by letting the menu/list use `max-content` with viewport caps; validation passed with `bun run typecheck` and `bun run lint`.
 - Compressed `MEMORY.md` long-term durable notes and purged 2026-05-12 detailed events after deciding no extra durable follow-up was needed; validation was structure inspection only.
+- Updated Run Detail status badge to reuse shared `StatusPill` styling instead of local variant mapping; validation passed with focused RunDetailModal Vitest, `bun run typecheck`, and `bun run lint`.
+- Fixed Run Detail event `ok`/HTTP-status chips to use shared completed/failed Badge variants with status dots; focused RunDetailModal test, Bun typecheck/lint, and `git diff --check` passed.
+- Corrected Run Detail badge styling by using compact `StatusPill` for header and event ok/status-code chips, allowing custom status-pill text, and rebuilding bundled static app; focused Vitest, Bun typecheck/lint/build, and `git diff --check` passed.
