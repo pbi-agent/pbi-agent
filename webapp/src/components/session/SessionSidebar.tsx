@@ -219,7 +219,7 @@ export function SessionSidebar({
                             onClick={() => beginEdit(session)}
                           >
                             <PencilIcon />
-                            Edit title
+                            Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             variant="destructive"

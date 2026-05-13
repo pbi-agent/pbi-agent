@@ -908,6 +908,12 @@ function waitForImages(container: HTMLElement): Promise<void> {
   ).then(() => {});
 }
 
+function waitForNextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
 type WorkRunPhase = ProcessingPhase | "active";
 
 function useVisibleWorkRunPhase(phase: WorkRunPhase | null) {
@@ -1256,6 +1262,7 @@ export const SessionTimeline = memo(function SessionTimeline({
   const previousLengthRef = useRef<number | undefined>(undefined);
   const previousItemsVersionRef = useRef<number | string | undefined>(undefined);
   const previousVisibleItemsChangeKeyRef = useRef<string | undefined>(undefined);
+  const scrollRequestRef = useRef(0);
   const latestRawItem = items.at(-1);
   const visibleItems = useMemo(
     () => items.filter((item) => !isGenericRetryMessageItem(item)),
@@ -1335,17 +1342,16 @@ export const SessionTimeline = memo(function SessionTimeline({
     [markProgrammaticScroll],
   );
 
-  const scrollToTargetBottomIfNeeded = useCallback(
+  const scrollToTargetBottom = useCallback(
     (container: HTMLElement, target: HTMLElement) => {
       if (!container.isConnected || !target.isConnected) return;
       const containerRect = container.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
       const delta = targetRect.bottom - containerRect.bottom;
-      if (delta <= 0) return;
       const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
       markProgrammaticScroll();
       container.scrollTo({
-        top: Math.min(container.scrollTop + delta, maxScrollTop),
+        top: Math.min(Math.max(container.scrollTop + delta, 0), maxScrollTop),
         behavior: "instant",
       });
     },
@@ -1426,8 +1432,14 @@ export const SessionTimeline = memo(function SessionTimeline({
 
     const isNewItem =
       previousLength !== undefined && visibleItems.length > previousLength;
+    const latestUserMessageChanged =
+      previousVisibleItemsChangeKey !== undefined
+      && latestItemIsUserMessage
+      && previousVisibleItemsChangeKey !== visibleItemsChangeKey;
+    const scrollRequestId = scrollRequestRef.current + 1;
 
-    if (isNewItem && latestItem) {
+    if ((isNewItem || latestUserMessageChanged) && latestItem) {
+      scrollRequestRef.current = scrollRequestId;
       // New item added — scroll to the top of that item
       // querySelectorAll + last picks the innermost match: when the new item
       // is rendered inside an expanded WorkRun the inner TimelineEntry shares
@@ -1441,10 +1453,18 @@ export const SessionTimeline = memo(function SessionTimeline({
 
       if (latestItemIsUserMessage) {
         // Always scroll to user messages
+        setShowNewMessages(false);
         if (target) {
-          void waitForImages(container).then(() => {
+          void waitForImages(target).then(async () => {
             if (latestUserMessageHasImages) {
-              scrollToTargetBottomIfNeeded(container, target);
+              // Cached images can report complete before the new attachment
+              // has taken its final layout height. Give the browser one paint
+              // after decode/load before anchoring the message bottom.
+              await waitForNextAnimationFrame();
+            }
+            if (scrollRequestRef.current !== scrollRequestId) return;
+            if (latestUserMessageHasImages) {
+              scrollToTargetBottom(container, target);
             } else {
               scrollToTarget(container, target, USER_MESSAGE_TOP_OFFSET);
             }
@@ -1455,6 +1475,7 @@ export const SessionTimeline = memo(function SessionTimeline({
         // Scroll to top of new assistant/tool/thinking item
         if (target) {
           void waitForImages(container).then(() => {
+            if (scrollRequestRef.current !== scrollRequestId) return;
             scrollToTarget(container, target, ASSISTANT_MESSAGE_TOP_OFFSET);
           });
         }
@@ -1462,6 +1483,7 @@ export const SessionTimeline = memo(function SessionTimeline({
         setShowNewMessages(true);
       }
     } else if (!isNewItem) {
+      scrollRequestRef.current = scrollRequestId;
       // Existing item content updated — stick to bottom
       if (!userScrolledRef.current) {
         markProgrammaticScroll();
@@ -1470,7 +1492,9 @@ export const SessionTimeline = memo(function SessionTimeline({
         setShowNewMessages(true);
       }
     }
-  }, [containerRef, itemsVersion, latestRawItem, visibleItemsChangeKey, visibleItems.length, latestItem, latestItemIsUserMessage, latestUserMessageHasImages, userScrolledRef, setShowNewMessages, scrollToTarget, scrollToTargetBottomIfNeeded, markProgrammaticScroll]);
+  }, [containerRef, itemsVersion, latestRawItem, visibleItemsChangeKey, visibleItems.length, latestItem, latestItemIsUserMessage, latestUserMessageHasImages, userScrolledRef, setShowNewMessages, scrollToTarget, scrollToTargetBottom, markProgrammaticScroll]);
+
+  const shouldShowNewMessages = showNewMessages && !latestItemIsUserMessage;
 
   if (visibleItems.length === 0 && connection === "connected" && !sessionIsActive) {
     return (
@@ -1528,7 +1552,7 @@ export const SessionTimeline = memo(function SessionTimeline({
             />
           );
         })}
-        {showNewMessages ? (
+        {shouldShowNewMessages ? (
           <Button
             type="button"
             variant="secondary"
