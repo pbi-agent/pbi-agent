@@ -1,6 +1,4 @@
-- [X] Fix stale run-session row field crash
-- [X] Inspect RunSessionRecord queries
-- [X] Patch row-to-record mapping/query shape
-- [X] Add regression coverage
-- [X] Run focused validation
-- [X] Update MEMORY.md
+- [X] Locate settings tab/nav definition
+- [X] Reorder settings sections to requested template
+- [X] Run targeted frontend validation
+- [X] Update task memory

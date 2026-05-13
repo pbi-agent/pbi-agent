@@ -622,7 +622,11 @@ describe("SettingsPage", () => {
   });
 
   it("renders notification controls with desktop and sound disabled by default", async () => {
+    const user = userEvent.setup();
+
     renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Notifications");
 
     const desktopCheckbox = await screen.findByRole("checkbox", {
       name: /desktop notifications/i,
@@ -683,6 +687,8 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Notifications");
+
     await user.click(await screen.findByRole("checkbox", {
       name: /desktop notifications/i,
     }));
@@ -699,6 +705,8 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Notifications");
+
     await user.click(await screen.findByRole("checkbox", {
       name: /desktop notifications/i,
     }));
@@ -712,6 +720,8 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
 
     renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Notifications");
 
     expect(
       screen.queryByRole("combobox", { name: /notification sound/i }),
@@ -733,6 +743,8 @@ describe("SettingsPage", () => {
 
     renderWithProviders(<SettingsPage />);
 
+    await openSettingsTab(user, "Notifications");
+
     await user.selectOptions(
       await screen.findByRole("combobox", { name: /notification sound/i }),
       "pulse",
@@ -743,7 +755,11 @@ describe("SettingsPage", () => {
   });
 
   it("hides notification sound selection and preview when sounds are disabled", async () => {
+    const user = userEvent.setup();
+
     renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Notifications");
 
     await screen.findByRole("checkbox", { name: /sound notifications/i });
 
@@ -797,6 +813,8 @@ describe("SettingsPage", () => {
     });
 
     renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Notifications");
 
     await user.click(
       await screen.findByRole("button", { name: /preview notification sound/i }),
@@ -1013,23 +1031,33 @@ describe("SettingsPage", () => {
     expect(within(dialog).getByText("Profile: analysis")).toBeInTheDocument();
   });
 
-  it("shows Project navigation with Skills, Commands, and Agents", async () => {
+  it("shows settings navigation in the requested grouping order", async () => {
     renderWithProviders(<SettingsPage />);
 
     expect(
-      await screen.findByText("Project", {
+      await screen.findByText("Models", {
         selector: ".settings-nav__group-label",
       }),
     ).toBeInTheDocument();
+
+    const groups = Array.from(document.querySelectorAll(".settings-nav__group"));
     expect(
-      screen.getByText("Skills", { selector: ".settings-nav__item-label" }),
-    ).toBeInTheDocument();
+      groups.map((group) =>
+        group.querySelector(".settings-nav__group-label")?.textContent,
+      ),
+    ).toEqual(["Models", "Project", "Desktop", "Data"]);
     expect(
-      screen.getByText("Commands", { selector: ".settings-nav__item-label" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Agents", { selector: ".settings-nav__item-label" }),
-    ).toBeInTheDocument();
+      groups.map((group) =>
+        Array.from(group.querySelectorAll(".settings-nav__item-label")).map(
+          (item) => item.textContent,
+        ),
+      ),
+    ).toEqual([
+      ["Providers", "Model Profiles"],
+      ["Commands", "Skills", "Agents"],
+      ["Appearance", "Notifications"],
+      ["Maintenance"],
+    ]);
   });
 
   it("shows agent cards with preview markdown", async () => {

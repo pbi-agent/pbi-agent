@@ -76,6 +76,41 @@ const SETTINGS_NAV_GROUPS: Array<{
   items: Array<{ id: SettingsTabId; label: string; description: string }>;
 }> = [
   {
+    label: "Models",
+    items: [
+      {
+        id: "providers",
+        label: "Providers",
+        description: "Connections and credentials",
+      },
+      {
+        id: "model-profiles",
+        label: "Model Profiles",
+        description: "Runtime defaults",
+      },
+    ],
+  },
+  {
+    label: "Project",
+    items: [
+      {
+        id: "commands",
+        label: "Commands",
+        description: "Prompt presets",
+      },
+      {
+        id: "skills",
+        label: "Skills",
+        description: "Agent capabilities",
+      },
+      {
+        id: "agents",
+        label: "Agents",
+        description: "Delegated workers",
+      },
+    ],
+  },
+  {
     label: "Desktop",
     items: [
       {
@@ -91,38 +126,8 @@ const SETTINGS_NAV_GROUPS: Array<{
     ],
   },
   {
-    label: "Project",
+    label: "Data",
     items: [
-      {
-        id: "skills",
-        label: "Skills",
-        description: "Agent capabilities",
-      },
-      {
-        id: "commands",
-        label: "Commands",
-        description: "Prompt presets",
-      },
-      {
-        id: "agents",
-        label: "Agents",
-        description: "Delegated workers",
-      },
-    ],
-  },
-  {
-    label: "Server",
-    items: [
-      {
-        id: "providers",
-        label: "Providers",
-        description: "Connections and credentials",
-      },
-      {
-        id: "model-profiles",
-        label: "Model Profiles",
-        description: "Runtime defaults",
-      },
       {
         id: "maintenance",
         label: "Maintenance",
@@ -139,7 +144,7 @@ function shouldPromptProviderAuth(provider: ProviderView): boolean {
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { open, closeSettings } = useSettingsDialog();
-  const [activeTab, setActiveTab] = useState<SettingsTabId>("notifications");
+  const [activeTab, setActiveTab] = useState<SettingsTabId>("providers");
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [pageError, setPageError] = useState<string | null>(null);
   const [busyProviderId, setBusyProviderId] = useState<string | null>(null);
