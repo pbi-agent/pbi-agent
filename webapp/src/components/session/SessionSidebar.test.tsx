@@ -72,6 +72,28 @@ describe("SessionSidebar", () => {
     expect(props.onResumeSession).toHaveBeenCalledWith("session-1");
   });
 
+  it("renders the session card as a link to support browser tab actions", () => {
+    renderSidebar();
+
+    expect(screen.getByRole("link", { name: /Planning session/i })).toHaveAttribute(
+      "href",
+      "/sessions/session-1",
+    );
+  });
+
+  it("keeps the actions menu separate from session navigation", async () => {
+    const user = userEvent.setup();
+    const props = renderSidebar();
+
+    await user.click(screen.getByRole("button", { name: "Open actions for Planning session" }));
+    expect(props.onResumeSession).not.toHaveBeenCalled();
+
+    await user.click(await screen.findByRole("menuitem", { name: /delete/i }));
+
+    expect(props.onDeleteSession).toHaveBeenCalledWith(props.sessions[0]);
+    expect(props.onResumeSession).not.toHaveBeenCalled();
+  });
+
   it("opens the edit action and saves a changed title", async () => {
     const user = userEvent.setup();
     const props = renderSidebar();

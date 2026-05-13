@@ -123,12 +123,10 @@ class TokenUsagePayloadModel(BaseModel):
     cache_write_1h_tokens: int
     output_tokens: int
     reasoning_tokens: int
-    tool_use_tokens: int
     provider_total_tokens: int
     sub_agent_input_tokens: int
     sub_agent_output_tokens: int
     sub_agent_reasoning_tokens: int
-    sub_agent_tool_use_tokens: int
     sub_agent_provider_total_tokens: int
     sub_agent_cost_usd: float
     context_tokens: int

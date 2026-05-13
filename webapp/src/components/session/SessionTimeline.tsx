@@ -1029,7 +1029,9 @@ function WorkRun({
   subAgents,
   active,
   phase,
+  open,
   closeSignal,
+  onOpenChange,
   onUserOpen,
   parentSessionId,
   showSubAgentCards,
@@ -1038,22 +1040,19 @@ function WorkRun({
   subAgents: Record<string, { title: string; status: string }>;
   active: boolean;
   phase: WorkRunPhase | null;
+  open: boolean;
   closeSignal: string | null;
+  onOpenChange: (nextOpen: boolean) => void;
   onUserOpen?: (contentEl: HTMLElement | null) => void;
   parentSessionId?: string;
   showSubAgentCards?: boolean;
 }) {
   const hasItems = unit.items.length > 0;
   const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
-  const [openState, setOpenState] = useState({
-    open: false,
-    closeSignal,
-  });
   const [fullExpandedState, setFullExpandedState] = useState({
     expanded: false,
     closeSignal,
   });
-  const open = openState.closeSignal === closeSignal ? openState.open : false;
   const rawFullExpanded = fullExpandedState.closeSignal === closeSignal
     ? fullExpandedState.expanded
     : false;
@@ -1085,21 +1084,21 @@ function WorkRun({
   const fullExpanded = canFullExpand && rawFullExpanded;
 
   const setOpenFromUser = useCallback((nextOpen: boolean) => {
-    setOpenState({ open: nextOpen, closeSignal });
+    onOpenChange(nextOpen);
     if (nextOpen) {
       onUserOpen?.(contentRef.current);
     }
-  }, [closeSignal, onUserOpen]);
+  }, [onOpenChange, onUserOpen]);
 
   const toggleFullExpanded = useCallback(() => {
     if (!canFullExpand) return;
-    setOpenState({ open: true, closeSignal });
+    onOpenChange(true);
     setFullExpandedState((current) => ({
       closeSignal,
       expanded: current.closeSignal === closeSignal ? !current.expanded : true,
     }));
     requestAnimationFrame(() => onUserOpen?.(contentRef.current));
-  }, [canFullExpand, closeSignal, onUserOpen]);
+  }, [canFullExpand, closeSignal, onOpenChange, onUserOpen]);
 
   const handleWorkRunHeaderKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
     if (!canFullExpand || !event.altKey || event.key !== "Enter") return;
@@ -1263,6 +1262,13 @@ export const SessionTimeline = memo(function SessionTimeline({
   const previousItemsVersionRef = useRef<number | string | undefined>(undefined);
   const previousVisibleItemsChangeKeyRef = useRef<string | undefined>(undefined);
   const scrollRequestRef = useRef(0);
+  const [openWorkRunState, setOpenWorkRunState] = useState<{
+    key: string | null;
+    closeSignal: string | null;
+  }>({
+    key: null,
+    closeSignal: null,
+  });
   const latestRawItem = items.at(-1);
   const visibleItems = useMemo(
     () => items.filter((item) => !isGenericRetryMessageItem(item)),
@@ -1330,6 +1336,24 @@ export const SessionTimeline = memo(function SessionTimeline({
     latestItem?.kind === "message" && latestItem.role === "assistant"
       ? latestItem.itemId
       : null;
+  const openWorkRunKey = openWorkRunState.closeSignal === closeCollapsiblesSignal
+    ? openWorkRunState.key
+    : null;
+
+  const setWorkRunOpen = useCallback((unitKey: string, nextOpen: boolean) => {
+    setOpenWorkRunState((current) => {
+      if (nextOpen) {
+        return { key: unitKey, closeSignal: closeCollapsiblesSignal };
+      }
+      if (
+        current.closeSignal !== closeCollapsiblesSignal
+        || current.key !== unitKey
+      ) {
+        return current;
+      }
+      return { key: null, closeSignal: closeCollapsiblesSignal };
+    });
+  }, [closeCollapsiblesSignal]);
 
   const scrollToTarget = useCallback(
     (container: HTMLElement, target: HTMLElement, offset: number) => {
@@ -1543,7 +1567,9 @@ export const SessionTimeline = memo(function SessionTimeline({
               subAgents={subAgents}
               active={isActiveUnit}
               phase={isActiveUnit ? visibleActivePhase : null}
+              open={openWorkRunKey === unit.key}
               closeSignal={closeCollapsiblesSignal}
+              onOpenChange={(nextOpen) => setWorkRunOpen(unit.key, nextOpen)}
               onUserOpen={
                 isActiveRunningUnit ? handleUserOpenCollapsible : undefined
               }

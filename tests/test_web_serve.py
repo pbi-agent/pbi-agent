@@ -113,7 +113,6 @@ def _run_record(
         cache_write_1h_tokens=0,
         output_tokens=0,
         reasoning_tokens=0,
-        tool_use_tokens=0,
         provider_total_tokens=0,
         estimated_cost_usd=0.0,
         total_tool_calls=0,

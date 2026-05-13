@@ -54,6 +54,7 @@ interface ComposerProps {
   supportsImageInputs: boolean;
   interactiveMode: boolean;
   isSubmitting: boolean;
+  isProcessing?: boolean;
   onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
   canInterrupt?: boolean;
   isInterrupting?: boolean;
@@ -321,6 +322,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   supportsImageInputs,
   interactiveMode,
   isSubmitting,
+  isProcessing = false,
   onSubmit,
   canInterrupt = false,
   isInterrupting = false,
@@ -367,6 +369,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const canSend =
     (Boolean(liveSessionId) || canCreateSession) && inputEnabled && !sessionEnded && !isSubmitting;
+  const showProcessingAnimation = isProcessing && !sessionEnded && !canSend;
   const shellInput = input.trimStart();
   const isShellMode = useMemo(() => input.trimStart().startsWith("!"), [input]);
   const skillNames = useSkillCatalog();
@@ -1079,6 +1082,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     "composer__input-row",
     isShellMode && "composer__input-row--shell",
     interactiveMode && "composer__input-row--interactive",
+    showProcessingAnimation && "composer__input-row--processing",
   );
 
   return (
@@ -1196,6 +1200,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             disabled={!canSend}
           />
         </InputGroup>
+        {showProcessingAnimation ? (
+          <span className="sr-only" role="status" aria-live="polite">
+            Assistant is processing
+          </span>
+        ) : null}
         <InputGroup className="composer__send-group">
           <InputGroupAddon align="inline-end">
             {showStopButton ? (

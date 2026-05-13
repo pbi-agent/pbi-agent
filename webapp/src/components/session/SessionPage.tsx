@@ -698,6 +698,13 @@ export function SessionPage({
       ? selectedSubAgent?.processing ?? null
       : null
     : sessionState?.processing ?? null;
+  const composerIsProcessing = Boolean(
+    displayedProcessing?.active
+    || directSubmitPending
+    || sendInputMutation.isPending
+    || shellCommandMutation.isPending
+    || (canInterruptActiveTurn && !sessionState?.pendingUserQuestions),
+  );
   const displayedWaitMessage = isSubAgentRoute
     ? showSelectedSubAgentProcessing
       ? selectedSubAgent?.waitMessage ?? null
@@ -899,6 +906,7 @@ export function SessionPage({
                 supportsImageInputs={providerSupportsImages}
                 interactiveMode={interactiveMode}
                 isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
+                isProcessing={composerIsProcessing}
                 onSubmit={handleSubmit}
                 canInterrupt={canInterruptActiveTurn}
                 isInterrupting={interruptMutation.isPending}

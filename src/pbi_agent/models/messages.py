@@ -149,7 +149,6 @@ class TokenUsage:
     cache_write_1h_tokens: int = 0
     output_tokens: int = 0
     reasoning_tokens: int = 0
-    tool_use_tokens: int = 0
     provider_total_tokens: int = 0
     sub_agent_input_tokens: int = 0
     sub_agent_cached_input_tokens: int = 0
@@ -157,7 +156,6 @@ class TokenUsage:
     sub_agent_cache_write_1h_tokens: int = 0
     sub_agent_output_tokens: int = 0
     sub_agent_reasoning_tokens: int = 0
-    sub_agent_tool_use_tokens: int = 0
     sub_agent_provider_total_tokens: int = 0
     sub_agent_cost_usd: float = 0.0
     context_tokens: int = 0
@@ -248,7 +246,6 @@ class TokenUsage:
             self.cache_write_1h_tokens += other_snapshot.cache_write_1h_tokens
             self.output_tokens += other_snapshot.output_tokens
             self.reasoning_tokens += other_snapshot.reasoning_tokens
-            self.tool_use_tokens += other_snapshot.tool_use_tokens
             self.provider_total_tokens += other_snapshot.provider_total_tokens
             if as_sub_agent:
                 self.sub_agent_input_tokens += other_snapshot.input_tokens
@@ -259,7 +256,6 @@ class TokenUsage:
                 )
                 self.sub_agent_output_tokens += other_snapshot.output_tokens
                 self.sub_agent_reasoning_tokens += other_snapshot.reasoning_tokens
-                self.sub_agent_tool_use_tokens += other_snapshot.tool_use_tokens
                 self.sub_agent_provider_total_tokens += (
                     other_snapshot.provider_total_tokens
                 )
@@ -282,7 +278,6 @@ class TokenUsage:
                 cache_write_1h_tokens=self.cache_write_1h_tokens,
                 output_tokens=self.output_tokens,
                 reasoning_tokens=self.reasoning_tokens,
-                tool_use_tokens=self.tool_use_tokens,
                 provider_total_tokens=self.provider_total_tokens,
                 sub_agent_input_tokens=self.sub_agent_input_tokens,
                 sub_agent_cached_input_tokens=self.sub_agent_cached_input_tokens,
@@ -290,7 +285,6 @@ class TokenUsage:
                 sub_agent_cache_write_1h_tokens=self.sub_agent_cache_write_1h_tokens,
                 sub_agent_output_tokens=self.sub_agent_output_tokens,
                 sub_agent_reasoning_tokens=self.sub_agent_reasoning_tokens,
-                sub_agent_tool_use_tokens=self.sub_agent_tool_use_tokens,
                 sub_agent_provider_total_tokens=self.sub_agent_provider_total_tokens,
                 sub_agent_cost_usd=self.sub_agent_cost_usd,
                 context_tokens=self.context_tokens,

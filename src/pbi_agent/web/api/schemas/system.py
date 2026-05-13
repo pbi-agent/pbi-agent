@@ -314,7 +314,6 @@ class RunSessionModel(BaseModel):
     cache_write_1h_tokens: int
     output_tokens: int
     reasoning_tokens: int
-    tool_use_tokens: int
     provider_total_tokens: int
     estimated_cost_usd: float
     total_tool_calls: int

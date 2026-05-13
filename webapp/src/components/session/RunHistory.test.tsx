@@ -36,7 +36,6 @@ function makeRun(overrides: Partial<RunSession>): RunSession {
     cache_write_1h_tokens: 0,
     output_tokens: 2,
     reasoning_tokens: 0,
-    tool_use_tokens: 0,
     provider_total_tokens: 3,
     estimated_cost_usd: 0,
     total_tool_calls: 0,

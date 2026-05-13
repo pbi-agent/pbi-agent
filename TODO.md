@@ -1,4 +1,6 @@
-[X] Reproduce/inspect image attachment auto-scroll path
-[X] Fix bottom anchoring for newly sent image messages
-[X] Add/update focused frontend tests
-[X] Run validation
+- [X] Fix stale run-session row field crash
+- [X] Inspect RunSessionRecord queries
+- [X] Patch row-to-record mapping/query shape
+- [X] Add regression coverage
+- [X] Run focused validation
+- [X] Update MEMORY.md

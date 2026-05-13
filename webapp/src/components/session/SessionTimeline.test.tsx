@@ -2967,6 +2967,61 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     },
   );
 
+  it("closes other Working blocks when one is expanded", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            role: "user",
+            content: "Do the work",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [{ text: "first output" }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            role: "assistant",
+            content: "Continuing.",
+            markdown: true,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-2",
+            label: "read_file",
+            status: "completed",
+            items: [{ text: "second output" }],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    let workingButtons = screen.getAllByRole("button", { name: /Working/ });
+    expect(workingButtons).toHaveLength(2);
+
+    fireEvent.click(workingButtons[0]);
+    expect(workingButtons[0]).toHaveAttribute("aria-expanded", "true");
+    expect(workingButtons[1]).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(workingButtons[1]);
+
+    workingButtons = screen.getAllByRole("button", { name: /Working/ });
+    expect(workingButtons[0]).toHaveAttribute("aria-expanded", "false");
+    expect(workingButtons[1]).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("keeps the next Working block collapsed after an intermediate assistant message", () => {
     const firstTool = {
       kind: "tool_group" as const,

@@ -35,7 +35,6 @@ function makeRun(overrides: Partial<RunSession> = {}): RunSession {
     cache_write_1h_tokens: 0,
     output_tokens: 2,
     reasoning_tokens: 0,
-    tool_use_tokens: 0,
     provider_total_tokens: 3,
     estimated_cost_usd: 0,
     total_tool_calls: 0,
@@ -92,7 +91,7 @@ describe("RunDetailModal", () => {
     const status = await screen.findByText("completed");
     expect(status).toHaveAttribute("data-variant", "completed");
     expect(status).toHaveAttribute("data-size", "meta");
-    expect(status).toHaveClass("run-detail__status");
+    expect(status).toHaveClass("run-header__status");
     expect(screen.getByText("Events (2)")).toBeInTheDocument();
   });
 

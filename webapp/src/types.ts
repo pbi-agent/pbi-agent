@@ -635,7 +635,6 @@ export type RunSession = {
   cache_write_1h_tokens: number;
   output_tokens: number;
   reasoning_tokens: number;
-  tool_use_tokens: number;
   provider_total_tokens: number;
   estimated_cost_usd: number;
   total_tool_calls: number;
