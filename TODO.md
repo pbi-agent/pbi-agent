@@ -1,4 +1,4 @@
-- [X] Locate settings tab/nav definition
-- [X] Reorder settings sections to requested template
-- [X] Run targeted frontend validation
+- [X] Verify Settings default tab is Providers
+- [X] Add/confirm regression coverage
+- [X] Run focused validation
 - [X] Update task memory

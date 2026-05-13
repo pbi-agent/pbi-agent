@@ -1060,6 +1060,23 @@ describe("SettingsPage", () => {
     ]);
   });
 
+  it("opens the Providers settings tab by default", async () => {
+    renderWithProviders(<SettingsPage />);
+
+    expect(
+      await screen.findByRole("button", { name: "Add Provider" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("LLM provider connections and credentials")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /Providers\s*Connections and credentials/,
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.queryByRole("button", { name: "Add Profile" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows agent cards with preview markdown", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(
