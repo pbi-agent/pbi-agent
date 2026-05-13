@@ -227,26 +227,12 @@ function EventRow({ event }: { event: ObservabilityEvent }) {
           <span className="event-row__tool">{event.tool_name}</span>
         ) : null}
 
-        {event.model ? (
-          <span className="event-row__model">{event.model}</span>
-        ) : null}
-
         <span className="event-row__spacer" />
 
         {event.success === false ? (
           <StatusPill status="failed" size="meta" className="event-row__status">fail</StatusPill>
         ) : event.success === true ? (
           <StatusPill status="completed" size="meta" className="event-row__status">ok</StatusPill>
-        ) : null}
-
-        {event.status_code != null ? (
-          <StatusPill
-            status={event.status_code >= 400 ? "failed" : "completed"}
-            size="meta"
-            className="event-row__status"
-          >
-            {event.status_code}
-          </StatusPill>
         ) : null}
 
         {event.duration_ms != null ? (

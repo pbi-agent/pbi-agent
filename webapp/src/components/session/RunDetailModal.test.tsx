@@ -110,9 +110,10 @@ describe("RunDetailModal", () => {
     expect(status).toHaveAttribute("data-size", "meta");
     expect(status).toHaveClass("run-header__status");
     expect(screen.getByText("Events (2)")).toBeInTheDocument();
+    expect(screen.getAllByText("gpt-5.4")).toHaveLength(1);
   });
 
-  it("uses shared status badge variants for event success and status code chips", async () => {
+  it("uses shared status badge variants for event success without rendering status code chips", async () => {
     mockFetchRunDetail.mockResolvedValue({
       run: makeRun({ status: "completed" }),
       events: [
@@ -128,15 +129,11 @@ describe("RunDetailModal", () => {
     renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
 
     const okBadge = await screen.findByText("ok");
-    const statusCodeBadge = screen.getByText("200");
     expect(okBadge).toHaveAttribute("data-variant", "completed");
-    expect(statusCodeBadge).toHaveAttribute("data-variant", "completed");
     expect(okBadge).toHaveAttribute("data-size", "meta");
-    expect(statusCodeBadge).toHaveAttribute("data-size", "meta");
     expect(okBadge).toHaveClass("event-row__status");
-    expect(statusCodeBadge).toHaveClass("event-row__status");
     expect(okBadge.querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
-    expect(statusCodeBadge.querySelector('[data-slot="badge-dot"]')).toBeInTheDocument();
+    expect(screen.queryByText("200")).not.toBeInTheDocument();
   });
 
   it("treats completed runs as terminal", async () => {

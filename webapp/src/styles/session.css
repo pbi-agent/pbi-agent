@@ -3983,8 +3983,7 @@
 .event-row__type--step { color: var(--color-text-secondary); }
 .event-row__type--default { color: var(--color-text-secondary); }
 
-.event-row__tool,
-.event-row__model {
+.event-row__tool {
   min-width: 0;
   max-width: min(32ch, 100%);
   min-height: 1.5rem;
