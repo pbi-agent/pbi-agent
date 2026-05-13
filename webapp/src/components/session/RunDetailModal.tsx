@@ -16,6 +16,7 @@ import type { ObservabilityEvent, RunSession } from "../../types";
 import { Button } from "../ui/button";
 import { FormDialog } from "../ui/form-dialog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
+import { CopyShortcut } from "../shared/CopyShortcut";
 import { Alert, AlertDescription } from "../ui/alert";
 import { StatusPill } from "../shared/StatusPill";
 
@@ -307,7 +308,14 @@ function PayloadSection({
   return (
     <div className={`payload-section${variant === "error" ? " payload-section--error" : ""}`}>
       <span className="payload-section__label">{label}</span>
-      <pre className="payload-section__content">{text}</pre>
+      <div className="payload-section__content-card">
+        <pre className="payload-section__content">{text}</pre>
+        <CopyShortcut
+          text={text}
+          ariaLabel={`Copy ${label}`}
+          className="timeline-entry__action-button payload-section__copy"
+        />
+      </div>
     </div>
   );
 }

@@ -4066,8 +4066,11 @@
   min-width: 0;
 }
 
-.payload-section--error .payload-section__content {
+.payload-section--error .payload-section__content-card {
   border-left: 2px solid var(--color-error);
+}
+
+.payload-section--error .payload-section__content {
   color: var(--color-error);
 }
 
@@ -4079,11 +4082,30 @@
   color: var(--color-text-tertiary);
 }
 
-.payload-section__content {
-  padding: var(--sp-3);
+.payload-section__content-card {
+  position: relative;
+  min-width: 0;
   background: color-mix(in srgb, var(--color-surface-0) 86%, transparent);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+
+.payload-section__content-card:hover,
+.payload-section__content-card:focus-within {
+  background: color-mix(in srgb, var(--color-surface-0) 94%, transparent);
+  border-color: color-mix(in srgb, var(--color-accent-border) 45%, var(--color-border-subtle));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-border) 18%, transparent);
+}
+
+.payload-section__content {
+  padding: var(--sp-3);
+  padding-right: calc(var(--sp-3) + 2rem);
+  background: transparent;
+  border: 0;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: var(--leading-relaxed);
@@ -4094,4 +4116,26 @@
   max-height: 300px;
   overflow-y: auto;
   margin: 0;
+}
+
+.payload-section__copy {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
+}
+
+.payload-section__content-card:hover .payload-section__copy,
+.payload-section__content-card:focus-within .payload-section__copy,
+.payload-section__copy[data-copy-status="copied"],
+.payload-section__copy[data-copy-status="failed"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }

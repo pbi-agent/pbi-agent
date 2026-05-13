@@ -1,4 +1,4 @@
-- [X] Locate settings sidebar layout/styles
-- [X] Add small-screen sidebar scrolling
-- [X] Run focused validation
+- [X] Locate Run Detail input/output rendering and session copy shortcut styling
+- [X] Add copy shortcut to each Run Detail input/output content card
+- [X] Run focused frontend validation
 - [X] Update task memory

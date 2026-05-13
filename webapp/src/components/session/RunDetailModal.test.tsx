@@ -1,4 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../test/render";
 import { fetchRunDetail } from "../../api";
 import { RunDetailModal } from "./RunDetailModal";
@@ -13,6 +14,15 @@ vi.mock("../../api", async (importOriginal) => {
 });
 
 const mockFetchRunDetail = vi.mocked(fetchRunDetail);
+
+function mockClipboardWrite() {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  return writeText;
+}
 
 function makeRun(overrides: Partial<RunSession> = {}): RunSession {
   return {
@@ -80,6 +90,13 @@ describe("RunDetailModal", () => {
     mockFetchRunDetail.mockReset();
   });
 
+  afterEach(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+
   it("renders final status and event count from run detail", async () => {
     mockFetchRunDetail.mockResolvedValue({
       run: makeRun({ status: "completed" }),
@@ -144,6 +161,40 @@ describe("RunDetailModal", () => {
 
     expect(await screen.findByText("failed")).toBeInTheDocument();
     expect(screen.getByText("RuntimeError: boom")).toBeInTheDocument();
+  });
+
+  it("copies expanded input and output payload cards", async () => {
+    const user = userEvent.setup();
+    const writeText = mockClipboardWrite();
+    const toolInput = { command: "echo hi" };
+    mockFetchRunDetail.mockResolvedValue({
+      run: makeRun({ status: "completed" }),
+      events: [
+        makeEvent({
+          event_type: "tool_call",
+          tool_name: "shell",
+          tool_input: toolInput,
+          tool_output: "done",
+        }),
+      ],
+    });
+
+    renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
+
+    await user.click(await screen.findByRole("button", { name: /tool_call/ }));
+    const copyInput = screen.getByRole("button", { name: "Copy Tool Input" });
+    const copyOutput = screen.getByRole("button", { name: "Copy Tool Output" });
+
+    expect(copyInput).toHaveClass("payload-section__copy");
+    expect(copyOutput).toHaveClass("payload-section__copy");
+
+    await user.click(copyInput);
+    await user.click(copyOutput);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenNthCalledWith(1, JSON.stringify(toolInput, null, 2));
+      expect(writeText).toHaveBeenNthCalledWith(2, "done");
+    });
   });
 
   it("treats interrupted runs as terminal", async () => {
