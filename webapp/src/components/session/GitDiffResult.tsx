@@ -56,12 +56,14 @@ const OPERATION_LABELS: Record<string, string> = {
   create_file: "Created",
   update_file: "Updated",
   delete_file: "Deleted",
+  move_file: "Moved",
 };
 
 const FAILED_OPERATION_LABELS: Record<string, string> = {
   create_file: "Create failed",
   update_file: "Update failed",
   delete_file: "Delete failed",
+  move_file: "Move failed",
 };
 
 /**
@@ -100,6 +102,8 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
   );
   const operationLabel = operationLabelFor(metadata);
   const statusLabel = metadata.success === false ? "Failed" : "Done";
+  const title = titleFor(metadata);
+  const fileCountLabel = fileCountDescription(metadata);
   const visibleBlocks =
     parsed.blocks.length > 0
       ? compactContextBlocks(parsed.blocks)
@@ -119,10 +123,11 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
           </span>
           <div className="git-diff-result__title-copy">
             <CardTitle className="git-diff-result__title">
-              {metadata.path ?? "Unknown file"}
+              {title}
             </CardTitle>
             <CardDescription className="git-diff-result__description">
               <span>{operationLabel}</span>
+              {fileCountLabel ? <span>{fileCountLabel}</span> : null}
               {metadata.detail ? <span>{metadata.detail}</span> : null}
             </CardDescription>
           </div>
@@ -222,7 +227,9 @@ function DeletedFileResult({ metadata }: { metadata: ApplyPatchToolMetadata }) {
 }
 
 function isSuccessfulDeleteFile(metadata: ApplyPatchToolMetadata): boolean {
-  return metadata.operation === "delete_file" && metadata.success !== false;
+  const count =
+    typeof metadata.operation_count === "number" ? metadata.operation_count : 1;
+  return metadata.operation === "delete_file" && metadata.success !== false && count <= 1;
 }
 
 function operationLabelFor(metadata: ApplyPatchToolMetadata): string {
@@ -230,6 +237,50 @@ function operationLabelFor(metadata: ApplyPatchToolMetadata): string {
     return FAILED_OPERATION_LABELS[metadata.operation ?? ""] ?? "Patch failed";
   }
   return OPERATION_LABELS[metadata.operation ?? ""] ?? metadata.operation ?? "Edited";
+}
+
+function titleFor(metadata: ApplyPatchToolMetadata): string {
+  const primaryPath = metadata.path ?? "Unknown file";
+  const affectedPaths = Array.isArray(metadata.affected_paths)
+    ? metadata.affected_paths.filter(
+        (path): path is string => typeof path === "string" && path.length > 0,
+      )
+    : [];
+  const paths = uniquePaths([primaryPath, ...affectedPaths]);
+  const count =
+    typeof metadata.operation_count === "number" &&
+    metadata.operation_count > paths.length
+      ? metadata.operation_count
+      : paths.length;
+  if (count <= 1 || paths.length <= 1) {
+    return primaryPath;
+  }
+  if (paths.length === 2 && count === 2) {
+    return `${paths[0]} + ${paths[1]}`;
+  }
+  const hiddenCount = Math.max(0, count - 2);
+  return `${paths[0]} + ${paths[1]}${
+    hiddenCount > 0 ? ` + ${hiddenCount} file${hiddenCount === 1 ? "" : "s"}` : ""
+  }`;
+}
+
+function fileCountDescription(metadata: ApplyPatchToolMetadata): string | null {
+  const count =
+    typeof metadata.operation_count === "number" ? metadata.operation_count : null;
+  return count && count > 1 ? `${count} files` : null;
+}
+
+function uniquePaths(paths: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const path of paths) {
+    if (seen.has(path)) {
+      continue;
+    }
+    seen.add(path);
+    unique.push(path);
+  }
+  return unique;
 }
 
 function parseV4aDiff(

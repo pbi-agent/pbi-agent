@@ -1,6 +1,7 @@
 import {
   BotIcon,
   CheckCircle2Icon,
+  FileCode2Icon,
   FileImageIcon,
   FileTextIcon,
   GlobeIcon,
@@ -41,6 +42,9 @@ export function ToolResult({ metadata, text, running = false }: ToolResultProps)
   if (metadata && isApplyPatchToolMetadata(metadata) && !running) {
     return <GitDiffResult metadata={metadata} />;
   }
+  if (metadata && isApplyPatchToolMetadata(metadata) && running) {
+    return <FileEditRunningToolResult metadata={metadata} text={text} running={running} />;
+  }
 
   if (toolName === "shell") {
     return <ShellToolResult metadata={metadata} text={text} running={running} />;
@@ -62,6 +66,27 @@ export function ToolResult({ metadata, text, running = false }: ToolResultProps)
   }
 
   return <GenericToolResult metadata={metadata} text={text} running={running} />;
+}
+
+function FileEditRunningToolResult({ metadata, running }: ToolResultProps) {
+  const count = numberValue(metadata?.operation_count);
+  const countLabel = count && count > 1 ? `${count} files` : null;
+  const description = [
+    runningOperationLabel(metadata?.operation),
+    countLabel,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <ToolCard
+      metadata={metadata}
+      running={running}
+      icon={<FileCode2Icon />}
+      title={metadata?.path ?? "Editing file"}
+      description={description || "Editing file"}
+    >
+      {null}
+    </ToolCard>
+  );
 }
 
 function ShellToolResult({ metadata, running }: ToolResultProps) {
@@ -367,6 +392,13 @@ function ToolNotice({ label, value, tone }: { label: string; value: string; tone
 
 function toolNameFor(metadata: ToolCallMetadata | undefined): string {
   return typeof metadata?.tool_name === "string" ? metadata.tool_name : "";
+}
+
+function runningOperationLabel(operation: unknown): string {
+  if (operation === "create_file") return "Creating";
+  if (operation === "update_file") return "Updating";
+  if (operation === "delete_file") return "Deleting";
+  return "Editing";
 }
 
 function objectValue(value: unknown): Record<string, unknown> | undefined {

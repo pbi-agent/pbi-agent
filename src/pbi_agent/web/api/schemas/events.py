@@ -220,6 +220,8 @@ class ToolCallMetadataModel(BaseModel):
     success: bool | None = None
     detail: str | None = None
     diff: str | None = None
+    operation_count: int | None = None
+    affected_paths: list[str] | None = None
     diff_line_numbers: list[DiffLineNumberModel] | None = None
     call_id: str | None = None
     status: Literal["running", "completed", "failed"] | None = None

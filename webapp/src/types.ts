@@ -554,6 +554,8 @@ export type ApplyPatchToolMetadata = {
   success?: boolean;
   detail?: string;
   diff?: string;
+  operation_count?: number | null;
+  affected_paths?: string[] | null;
   diff_line_numbers?: Array<{ old: number | null; new: number | null }>;
   call_id?: string;
   status?: ToolCallStatus;
