@@ -1,4 +1,5 @@
-- [X] Locate Run Detail status-code badge rendering
-- [X] Remove the event status-code badge and update tests
-- [X] Run focused frontend validation/build
-- [X] Update task memory
+# TODO
+[X] Inspect release state and PR/check status
+[X] Verify release artifacts/release workflow without rerunning tests
+[X] Merge/publish if clean and approved
+[>] Update memory and report
