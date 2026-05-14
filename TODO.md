@@ -1,5 +1,5 @@
-# TODO
-[X] Inspect release state and PR/check status
-[X] Verify release artifacts/release workflow without rerunning tests
-[X] Merge/publish if clean and approved
-[>] Update memory and report
+[X] Locate welcome/update CLI rendering
+[X] Center update warning under welcome box
+[X] Add/update tests
+[X] Run focused validation
+[X] Update memory

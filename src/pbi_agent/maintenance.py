@@ -7,6 +7,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -26,7 +27,7 @@ class MaintenanceResult:
     update_notice: str | None = None
 
 
-def run_startup_maintenance() -> MaintenanceResult:
+def run_startup_maintenance(*, render_notice: bool = True) -> MaintenanceResult:
     today = datetime.now(timezone.utc).date().isoformat()
     success = False
     claimed = False
@@ -44,7 +45,7 @@ def run_startup_maintenance() -> MaintenanceResult:
                 referenced_upload_ids=referenced_upload_ids,
             )
             notice = check_update_notice()
-            if notice:
+            if notice and render_notice:
                 render_update_notice(notice)
             success = True
             return MaintenanceResult(ran=True, update_notice=notice)
@@ -72,17 +73,21 @@ def check_update_notice() -> str | None:
     return None
 
 
-def render_update_notice(notice: str, *, console: Console | None = None) -> None:
+def render_update_notice(
+    notice: str,
+    *,
+    console: Console | None = None,
+    centered: bool = False,
+) -> None:
     active_console = console or Console(stderr=True)
     body = Text(notice.replace(". Run: ", ".\nRun: "))
-    active_console.print(
-        Panel(
-            body,
-            title="Update available",
-            border_style="yellow",
-            expand=False,
-        )
+    panel = Panel(
+        body,
+        title="Update available",
+        border_style="yellow",
+        expand=False,
     )
+    active_console.print(Align.center(panel) if centered else panel)
 
 
 def _latest_pypi_version() -> str | None:

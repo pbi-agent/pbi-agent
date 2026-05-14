@@ -606,6 +606,31 @@ def test_web_server_prints_banner_and_starts_uvicorn() -> None:
     mock_run.assert_called_once()
 
 
+def test_web_server_prints_centered_update_notice_below_banner() -> None:
+    notice = (
+        "Update available: pbi-agent 1.0.0 -> 1.2.0. "
+        "Run: uv tool install pbi-agent --upgrade"
+    )
+    server = PBIWebServer(settings=_settings(), port=9001, update_notice=notice)
+    output = StringIO()
+    server.console = Console(file=output, width=80, highlight=False, color_system=None)
+
+    with patch("pbi_agent.web.server_runtime.uvicorn.Server.run"):
+        server.serve(debug=False)
+
+    rendered = output.getvalue()
+    banner_index = rendered.index(PBI_AGENT_TAGLINE)
+    notice_index = rendered.index("Update available: pbi-agent 1.0.0 -> 1.2.0")
+    serving_index = rendered.index("Serving on")
+    notice_line = next(
+        line
+        for line in rendered.splitlines()
+        if "Update available: pbi-agent 1.0.0 -> 1.2.0" in line
+    )
+    assert banner_index < notice_index < serving_index
+    assert notice_line.startswith(" ")
+
+
 def test_built_static_app_serving_smoke() -> None:
     built_index_path = (
         Path(__file__).parents[1]
