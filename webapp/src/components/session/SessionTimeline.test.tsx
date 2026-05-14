@@ -483,6 +483,38 @@ describe("SessionTimeline", () => {
     })).toHaveTextContent("Designer1 read · 1:05completed");
   });
 
+  it("does not fall back to parent turn duration or cost on sub-agent cards", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "thinking",
+            itemId: "subagent-a-card",
+            title: "Sub-agent",
+            content: "",
+            subAgentId: "subagent-a",
+          },
+        ]}
+        subAgents={{
+          "subagent-a": { title: "Researcher", status: "completed" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: null }}
+        itemsVersion={1}
+        parentSessionId="session-1"
+        turnElapsedSeconds={65}
+        turnCostUsd={1.23}
+      />,
+    );
+
+    openWorking(0, false);
+
+    expect(screen.getByRole("button", {
+      name: "Open Researcher agent session, 1 thought, completed",
+    })).toHaveTextContent("Researcher1 thoughtcompleted");
+  });
+
   it("keeps the main Working label shimmering while a collapsed sub-agent is running", () => {
     render(
       <SessionTimeline
@@ -869,6 +901,318 @@ describe("SessionTimeline", () => {
 
     const workingButton = screen.getByRole("button", { name: "Working 1 shell · 1:05" });
     expect(workingButton).toHaveTextContent(/^Working1 shell · 1:05$/);
+  });
+
+  it("shows turn cost in the active Working header summary", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [
+              {
+                text: "pwd",
+                metadata: { tool_name: "shell", status: "completed", command: "pwd" },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: null }}
+        itemsVersion={1}
+        turnElapsedSeconds={65}
+        turnCostUsd={0.0723}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", {
+      name: /Working 1 shell · \d+:\d\d · \$0\.072/,
+    });
+    expect(workingButton).toHaveTextContent(/\$0\.072$/);
+  });
+
+  it("does not attach final plain-turn cost to an earlier Working block", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            createdAt: "2026-05-14T10:00:00.000Z",
+            updatedAt: "2026-05-14T10:00:00.000Z",
+            role: "user",
+            content: "Run a command",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            createdAt: "2026-05-14T10:00:01.000Z",
+            updatedAt: "2026-05-14T10:00:03.000Z",
+            label: "shell",
+            status: "completed",
+            items: [
+              {
+                text: "pwd",
+                metadata: { tool_name: "shell", status: "completed", command: "pwd" },
+              },
+            ],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            createdAt: "2026-05-14T10:00:04.000Z",
+            updatedAt: "2026-05-14T10:00:04.000Z",
+            role: "assistant",
+            content: "Done",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "user-2",
+            createdAt: "2026-05-14T10:01:00.000Z",
+            updatedAt: "2026-05-14T10:01:00.000Z",
+            role: "user",
+            content: "Say hi",
+            markdown: false,
+          },
+          {
+            kind: "message",
+            itemId: "assistant-2",
+            createdAt: "2026-05-14T10:01:02.000Z",
+            updatedAt: "2026-05-14T10:01:02.000Z",
+            role: "assistant",
+            content: "Hi",
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        turnCostUsd={0.045}
+      />,
+    );
+
+    expect(screen.getByRole("button", {
+      name: "Working 1 shell · 0:02",
+    })).toBeInTheDocument();
+    expect(screen.queryByRole("button", {
+      name: /Working 1 shell .* \$0\.045/,
+    })).not.toBeInTheDocument();
+    expect(screen.getByRole("note", {
+      name: "Turn summary 0:02 · $0.045",
+    })).toBeInTheDocument();
+  });
+
+  it("ticks the active Working duration in real time", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.setSystemTime(new Date("2026-05-14T10:00:00.000Z"));
+    try {
+      render(
+        <SessionTimeline
+          items={[
+            {
+              kind: "tool_group",
+              itemId: "tool-1",
+              label: "shell",
+              status: "running",
+              items: [
+                {
+                  text: "pwd",
+                  metadata: { tool_name: "shell", status: "running", command: "pwd" },
+                },
+              ],
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={{ active: true, phase: "tool_execution", message: null }}
+          itemsVersion={1}
+          turnElapsedSeconds={10}
+        />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: /Working 1 shell · 0:1[01]/ }),
+      ).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+
+      // After three 1-second ticks the live duration should have advanced.
+      expect(
+        screen.getByRole("button", { name: /Working 1 shell · 0:1[3-4]/ }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("prefers live duration for active Working blocks that have item timestamps", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.setSystemTime(new Date("2026-05-14T10:00:00.000Z"));
+    try {
+      render(
+        <SessionTimeline
+          items={[
+            {
+              kind: "tool_group",
+              itemId: "tool-1",
+              createdAt: "2026-05-14T09:59:58.000Z",
+              updatedAt: "2026-05-14T09:59:59.000Z",
+              label: "shell",
+              status: "running",
+              items: [
+                {
+                  text: "pwd",
+                  metadata: { tool_name: "shell", status: "running", command: "pwd" },
+                },
+              ],
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={{ active: true, phase: "tool_execution", message: null }}
+          itemsVersion={1}
+          turnElapsedSeconds={10}
+        />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: /Working 1 shell · 0:1[01]/ }),
+      ).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+
+      expect(
+        screen.getByRole("button", { name: /Working 1 shell · 0:1[3-4]/ }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("extends active Working timestamp duration when turn usage is unavailable", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.setSystemTime(new Date("2026-05-14T10:00:00.000Z"));
+    try {
+      render(
+        <SessionTimeline
+          items={[
+            {
+              kind: "tool_group",
+              itemId: "tool-1",
+              createdAt: "2026-05-14T09:59:58.000Z",
+              updatedAt: "2026-05-14T09:59:59.000Z",
+              label: "shell",
+              status: "running",
+              items: [
+                {
+                  text: "pwd",
+                  metadata: { tool_name: "shell", status: "running", command: "pwd" },
+                },
+              ],
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={{ active: true, phase: "tool_execution", message: null }}
+          itemsVersion={1}
+        />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: /Working 1 shell · 0:0[12]/ }),
+      ).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+
+      expect(
+        screen.getByRole("button", { name: /Working 1 shell · 0:0[45]/ }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("anchors active Working timers to the current time after an idle remount", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.setSystemTime(new Date("2026-05-14T10:00:00.000Z"));
+    try {
+      const first = render(
+        <SessionTimeline
+          items={[
+            {
+              kind: "tool_group",
+              itemId: "tool-1",
+              label: "shell",
+              status: "running",
+              items: [
+                {
+                  text: "pwd",
+                  metadata: { tool_name: "shell", status: "running", command: "pwd" },
+                },
+              ],
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={{ active: true, phase: "tool_execution", message: null }}
+          itemsVersion={1}
+          turnElapsedSeconds={10}
+        />,
+      );
+      first.unmount();
+
+      vi.setSystemTime(new Date("2026-05-14T10:02:00.000Z"));
+
+      render(
+        <SessionTimeline
+          items={[
+            {
+              kind: "tool_group",
+              itemId: "tool-2",
+              label: "shell",
+              status: "running",
+              items: [
+                {
+                  text: "pwd",
+                  metadata: { tool_name: "shell", status: "running", command: "pwd" },
+                },
+              ],
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={{ active: true, phase: "tool_execution", message: null }}
+          itemsVersion={2}
+          turnElapsedSeconds={10}
+        />,
+      );
+
+      expect(screen.getByRole("button", {
+        name: "Working 1 shell · 0:10",
+      })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows duration on each historical Working block from item timestamps", () => {

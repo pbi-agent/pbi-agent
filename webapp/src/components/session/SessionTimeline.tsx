@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
 import { Accordion as AccordionPrimitive } from "radix-ui";
@@ -51,6 +51,7 @@ type SubAgentSummary = {
   title: string;
   status: string;
   turnElapsedSeconds?: number | null;
+  turnCostUsd?: number | null;
 };
 
 type RenderUnit =
@@ -66,7 +67,97 @@ type TurnSummary = {
   key: string;
   items: CountSummaryItem[];
   durationSeconds: number | null;
+  costUsd: number | null;
 };
+
+const liveTickListeners = new Set<() => void>();
+let liveTickInterval: ReturnType<typeof setInterval> | null = null;
+let liveTickNowMs = Date.now();
+
+function ensureLiveTickInterval() {
+  if (liveTickInterval !== null) return;
+  liveTickNowMs = Date.now();
+  liveTickInterval = setInterval(() => {
+    liveTickNowMs = Date.now();
+    for (const listener of liveTickListeners) listener();
+  }, 1000);
+}
+
+function subscribeLiveTick(listener: () => void) {
+  liveTickListeners.add(listener);
+  ensureLiveTickInterval();
+  liveTickNowMs = Date.now();
+  // Notify the new subscriber so it can anchor against the current time
+  // rather than a stale module-level snapshot from previous activity.
+  listener();
+  return () => {
+    liveTickListeners.delete(listener);
+    if (liveTickListeners.size === 0 && liveTickInterval !== null) {
+      clearInterval(liveTickInterval);
+      liveTickInterval = null;
+    }
+  };
+}
+
+function useLiveNowMs(active: boolean): number {
+  const subscribe = useCallback(
+    (listener: () => void) => (active ? subscribeLiveTick(listener) : () => {}),
+    [active],
+  );
+  const getSnapshot = useCallback(() => liveTickNowMs, []);
+  const getServerSnapshot = useCallback(() => 0, []);
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
+function useLiveTurnElapsedSeconds(
+  reportedSeconds: number | null | undefined,
+  active: boolean,
+): number | null {
+  const hasReported = typeof reportedSeconds === "number"
+    && Number.isFinite(reportedSeconds);
+  const reportedValue = hasReported ? reportedSeconds : 0;
+  const subscribed = active && hasReported;
+  const nowMs = useLiveNowMs(subscribed);
+  const anchorRef = useRef<{
+    reportedValue: number;
+    subscribed: boolean;
+    anchorMs: number;
+  } | null>(null);
+  anchorRef.current ??= {
+    reportedValue,
+    subscribed: false,
+    anchorMs: Date.now(),
+  };
+
+  // Re-anchor when:
+  // - the reported value changes (a new turn_usage update arrived),
+  // - subscription toggles,
+  // - the live clock jumps backwards.
+  let anchor = anchorRef.current;
+  const subscriptionJustStarted = subscribed && !anchor.subscribed;
+  const clockJumpedBackwards = subscribed && nowMs < anchor.anchorMs;
+  const shouldResetAnchor =
+    anchor.reportedValue !== reportedValue
+    || anchor.subscribed !== subscribed
+    || subscriptionJustStarted
+    || clockJumpedBackwards;
+  if (shouldResetAnchor) {
+    anchor = {
+      reportedValue,
+      subscribed,
+      anchorMs: Date.now(),
+    };
+    anchorRef.current = anchor;
+  }
+
+  if (!hasReported) return null;
+  if (!active) return reportedValue;
+  if (!subscribed || nowMs <= anchor.anchorMs) {
+    return reportedValue;
+  }
+  const elapsed = (nowMs - anchor.anchorMs) / 1000;
+  return Math.max(0, reportedValue + elapsed);
+}
 
 const GENERIC_RETRY_MESSAGE_PATTERN = /^Retrying\.\.\. \(\d+\/\d+\)$/;
 
@@ -430,6 +521,29 @@ function workRunContextDurationSeconds(
   return secondsBetween(previousMessageEnd, nextMessageStart);
 }
 
+function activeWorkRunContextDurationSeconds(
+  renderUnits: readonly RenderUnit[],
+  index: number,
+  nowMs: number,
+): number | null {
+  const unit = renderUnits[index];
+  if (unit?.kind !== "work_run" || unit.items.length === 0) return null;
+  const range = timelineItemsRangeMs(unit.items);
+  const previousMessageEnd = previousMessageEndMs(renderUnits, index);
+  const start = range.start ?? previousMessageEnd;
+  if (start !== null && nowMs > start) return (nowMs - start) / 1000;
+  return workRunContextDurationSeconds(renderUnits, index);
+}
+
+function maxDurationSeconds(values: readonly (number | null | undefined)[]): number | null {
+  let result: number | null = null;
+  for (const value of values) {
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    result = result === null ? value : Math.max(result, value);
+  }
+  return result;
+}
+
 function buildWorkRunDurationMap(
   renderUnits: readonly RenderUnit[],
   {
@@ -437,18 +551,32 @@ function buildWorkRunDurationMap(
     latestWorkRunKey,
     sessionIsActive,
     turnElapsedSeconds,
+    activeNowMs,
   }: {
     activeWorkRunKey: string | null;
     latestWorkRunKey: string | null;
     sessionIsActive: boolean;
     turnElapsedSeconds?: number | null;
+    activeNowMs?: number | null;
   },
 ): Map<string, number | null> {
   const durations = new Map<string, number | null>();
   renderUnits.forEach((unit, index) => {
     if (unit.kind !== "work_run") return;
-    const useTurnDurationFallback = unit.key === activeWorkRunKey
-      || (!sessionIsActive && unit.key === latestWorkRunKey);
+    if (unit.key === activeWorkRunKey) {
+      const timestampLiveDuration = typeof activeNowMs === "number"
+        ? activeWorkRunContextDurationSeconds(renderUnits, index, activeNowMs)
+        : null;
+      durations.set(
+        unit.key,
+        maxDurationSeconds([turnElapsedSeconds, timestampLiveDuration])
+          ?? workRunContextDurationSeconds(renderUnits, index)
+          ?? null,
+      );
+      return;
+    }
+
+    const useTurnDurationFallback = !sessionIsActive && unit.key === latestWorkRunKey;
     durations.set(
       unit.key,
       workRunContextDurationSeconds(renderUnits, index)
@@ -456,6 +584,46 @@ function buildWorkRunDurationMap(
     );
   });
   return durations;
+}
+
+function finalTurnStartIndex(renderUnits: readonly RenderUnit[]): number {
+  for (let index = renderUnits.length - 1; index >= 0; index -= 1) {
+    const unit = renderUnits[index];
+    if (unit?.kind === "message" && unit.item.role === "user") return index;
+  }
+  return 0;
+}
+
+function workRunBelongsToFinalTurn(renderUnits: readonly RenderUnit[], index: number): boolean {
+  return index >= finalTurnStartIndex(renderUnits);
+}
+
+function buildWorkRunCostMap(
+  renderUnits: readonly RenderUnit[],
+  {
+    activeWorkRunKey,
+    latestWorkRunKey,
+    sessionIsActive,
+    turnCostUsd,
+  }: {
+    activeWorkRunKey: string | null;
+    latestWorkRunKey: string | null;
+    sessionIsActive: boolean;
+    turnCostUsd?: number | null;
+  },
+): Map<string, number | null> {
+  const costs = new Map<string, number | null>();
+  renderUnits.forEach((unit, index) => {
+    if (unit.kind !== "work_run") return;
+    const useTurnCost = unit.key === activeWorkRunKey
+      || (
+        !sessionIsActive
+        && unit.key === latestWorkRunKey
+        && workRunBelongsToFinalTurn(renderUnits, index)
+      );
+    costs.set(unit.key, useTurnCost ? turnCostUsd ?? null : null);
+  });
+  return costs;
 }
 
 function mergeRangeStart(current: number | null, next: number | null): number | null {
@@ -474,11 +642,13 @@ function buildTurnSummaries(
     showSubAgentCards,
     sessionIsActive,
     turnElapsedSeconds,
+    turnCostUsd,
     workRunDurations,
   }: {
     showSubAgentCards: boolean;
     sessionIsActive: boolean;
     turnElapsedSeconds?: number | null;
+    turnCostUsd?: number | null;
     workRunDurations: ReadonlyMap<string, number | null>;
   },
 ): Map<string, TurnSummary> {
@@ -505,12 +675,14 @@ function buildTurnSummaries(
     const durationSeconds = secondsBetween(closedTurn.startMs, closedTurn.endMs)
       ?? (closedTurn.hasWorkDuration ? closedTurn.workDurationSeconds : null)
       ?? (finalTurn && !sessionIsActive ? turnElapsedSeconds ?? null : null);
-    if (!workingSummaryText(summaryItems, durationSeconds)) return;
+    const costUsd = finalTurn && !sessionIsActive ? turnCostUsd ?? null : null;
+    if (!workingSummaryText(summaryItems, durationSeconds, costUsd)) return;
 
     summaries.set(closedTurn.lastUnitKey, {
       key: `turn-summary-${closedTurn.key}`,
       items: summaryItems,
       durationSeconds,
+      costUsd,
     });
   };
 
@@ -718,30 +890,33 @@ function SubAgentCard({
   subAgents,
   subAgentItems,
   parentSessionId,
-  durationFallbackSeconds,
 }: {
   group: Extract<WorkingGroup, { kind: "sub_agent" }>;
   subAgents: Record<string, SubAgentSummary>;
   subAgentItems: WorkItem[];
   parentSessionId?: string;
-  durationFallbackSeconds?: number | null;
 }) {
   const navigate = useNavigate();
   const agent = subAgents[group.subAgentId];
   const status = agent?.status ?? (group.running ? "running" : "completed");
   const name = subAgentDisplayName(agent?.title, group.subAgentId);
   const statusModifier = subAgentStatusModifier(status);
+  const subAgentIsActive = status === "running" || status === "starting";
   const summaryItems = useMemo(() => workRunCountItems(subAgentItems, false), [subAgentItems]);
-  const summaryDurationSeconds = useMemo(
+  const reportedDurationSeconds = useMemo(
     () => timelineItemsDurationSeconds(subAgentItems)
       ?? agent?.turnElapsedSeconds
-      ?? durationFallbackSeconds
       ?? null,
-    [agent?.turnElapsedSeconds, durationFallbackSeconds, subAgentItems],
+    [agent?.turnElapsedSeconds, subAgentItems],
   );
+  const summaryDurationSeconds = useLiveTurnElapsedSeconds(
+    reportedDurationSeconds,
+    subAgentIsActive,
+  );
+  const summaryCostUsd = agent?.turnCostUsd ?? null;
   const summaryText = useMemo(
-    () => workingSummaryText(summaryItems, summaryDurationSeconds),
-    [summaryDurationSeconds, summaryItems],
+    () => workingSummaryText(summaryItems, summaryDurationSeconds, summaryCostUsd),
+    [summaryCostUsd, summaryDurationSeconds, summaryItems],
   );
   const ariaDetail = [summaryText, status].filter(Boolean).join(", ");
   return (
@@ -762,6 +937,7 @@ function SubAgentCard({
         <WorkingSummary
           items={summaryItems}
           durationSeconds={summaryDurationSeconds}
+          costUsd={summaryCostUsd}
           className="working-items__summary working-items__sub-agent-summary"
         />
       </span>
@@ -784,7 +960,6 @@ function WorkingItemsPanel({
   parentSessionId,
   showSubAgentCards = true,
   fullExpanded = false,
-  durationSeconds,
 }: {
   items: WorkItem[];
   subAgents: Record<string, SubAgentSummary>;
@@ -793,7 +968,6 @@ function WorkingItemsPanel({
   parentSessionId?: string;
   showSubAgentCards?: boolean;
   fullExpanded?: boolean;
-  durationSeconds?: number | null;
 }) {
   const groups = useMemo(() => buildWorkingGroups(items, showSubAgentCards), [items, showSubAgentCards]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -960,7 +1134,6 @@ function WorkingItemsPanel({
                   subAgents={subAgents}
                   subAgentItems={subAgentItems[group.subAgentId] ?? group.items}
                   parentSessionId={parentSessionId}
-                  durationFallbackSeconds={durationSeconds}
                 />
               </div>
             );
@@ -1187,6 +1360,7 @@ function WorkRun({
   parentSessionId,
   showSubAgentCards,
   durationSeconds,
+  costUsd,
   subAgentItems,
 }: {
   unit: Extract<RenderUnit, { kind: "work_run" }>;
@@ -1200,6 +1374,7 @@ function WorkRun({
   parentSessionId?: string;
   showSubAgentCards?: boolean;
   durationSeconds?: number | null;
+  costUsd?: number | null;
   subAgentItems: Record<string, WorkItem[]>;
 }) {
   const hasItems = unit.items.length > 0;
@@ -1217,8 +1392,8 @@ function WorkRun({
     [showSubAgentCards, unit.items],
   );
   const workRunSummary = useMemo(
-    () => workingSummaryText(workRunSummaryItems, durationSeconds),
-    [durationSeconds, workRunSummaryItems],
+    () => workingSummaryText(workRunSummaryItems, durationSeconds, costUsd),
+    [costUsd, durationSeconds, workRunSummaryItems],
   );
   const hasRunningSubAgent = useMemo(
     () => unit.items.some((item) => {
@@ -1306,6 +1481,7 @@ function WorkRun({
               <WorkingSummary
                 items={workRunSummaryItems}
                 durationSeconds={durationSeconds}
+                costUsd={costUsd}
                 placeholder={showPlaceholderSummary ? "Preparing…" : null}
                 className={
                   showPlaceholderSummary
@@ -1327,7 +1503,6 @@ function WorkRun({
                 showSubAgentCards={showSubAgentCards}
                 fullExpanded={fullExpanded}
                 subAgentItems={subAgentItems}
-                durationSeconds={durationSeconds}
               />
               {canFullExpand ? (
                 <button
@@ -1366,11 +1541,13 @@ function WorkRun({
 function TurnSummaryBlock({
   items,
   durationSeconds,
+  costUsd,
 }: {
   items: CountSummaryItem[];
   durationSeconds?: number | null;
+  costUsd?: number | null;
 }) {
-  const summaryText = workingSummaryText(items, durationSeconds);
+  const summaryText = workingSummaryText(items, durationSeconds, costUsd);
   if (!summaryText) return null;
 
   return (
@@ -1389,6 +1566,7 @@ function TurnSummaryBlock({
           <WorkingSummary
             items={items}
             durationSeconds={durationSeconds}
+            costUsd={costUsd}
             className="working-items__summary timeline-entry__turn-summary-summary"
           />
         </span>
@@ -1403,6 +1581,7 @@ type SessionTimelineProps = {
   subAgents: Record<string, SubAgentSummary>;
   subAgentItems?: Record<string, TimelineItem[]>;
   turnElapsedSeconds?: number | null;
+  turnCostUsd?: number | null;
   connection: ConnectionState;
   waitMessage: string | null;
   processing: ProcessingState | null;
@@ -1436,7 +1615,8 @@ function subAgentSummariesEqual(
     return rightSubAgent !== undefined
       && leftSubAgent.title === rightSubAgent.title
       && leftSubAgent.status === rightSubAgent.status
-      && (leftSubAgent.turnElapsedSeconds ?? null) === (rightSubAgent.turnElapsedSeconds ?? null);
+      && (leftSubAgent.turnElapsedSeconds ?? null) === (rightSubAgent.turnElapsedSeconds ?? null)
+      && (leftSubAgent.turnCostUsd ?? null) === (rightSubAgent.turnCostUsd ?? null);
   });
 }
 
@@ -1451,6 +1631,7 @@ function areSessionTimelinePropsEqual(
     && previous.parentSessionId === next.parentSessionId
     && previous.showSubAgentCards === next.showSubAgentCards
     && previous.turnElapsedSeconds === next.turnElapsedSeconds
+    && previous.turnCostUsd === next.turnCostUsd
     && previous.subAgentItems === next.subAgentItems
     && previous.onForkMessage === next.onForkMessage
     && subAgentSummariesEqual(previous.subAgents, next.subAgents);
@@ -1461,6 +1642,7 @@ export const SessionTimeline = memo(function SessionTimeline({
   subAgents,
   subAgentItems = {},
   turnElapsedSeconds,
+  turnCostUsd,
   connection,
   waitMessage,
   processing,
@@ -1534,23 +1716,49 @@ export const SessionTimeline = memo(function SessionTimeline({
       ? latestRenderUnit.key
       : null;
   const latestWorkRunKey = [...renderUnits].reverse().find((unit) => unit.kind === "work_run")?.key ?? null;
+  const liveTurnElapsedSeconds = useLiveTurnElapsedSeconds(
+    turnElapsedSeconds ?? null,
+    sessionIsActive,
+  );
+  const activeTimestampNowMs = useLiveNowMs(
+    sessionIsActive
+      && activeWorkRunKey !== null,
+  );
   const workRunDurations = useMemo(
     () => buildWorkRunDurationMap(renderUnits, {
       activeWorkRunKey,
       latestWorkRunKey,
       sessionIsActive,
-      turnElapsedSeconds,
+      turnElapsedSeconds: liveTurnElapsedSeconds,
+      activeNowMs: activeTimestampNowMs,
     }),
-    [activeWorkRunKey, latestWorkRunKey, renderUnits, sessionIsActive, turnElapsedSeconds],
+    [activeTimestampNowMs, activeWorkRunKey, latestWorkRunKey, renderUnits, sessionIsActive, liveTurnElapsedSeconds],
+  );
+  const workRunCosts = useMemo(
+    () => buildWorkRunCostMap(renderUnits, {
+      activeWorkRunKey,
+      latestWorkRunKey,
+      sessionIsActive,
+      turnCostUsd,
+    }),
+    [activeWorkRunKey, latestWorkRunKey, renderUnits, sessionIsActive, turnCostUsd],
   );
   const turnSummaries = useMemo(
     () => buildTurnSummaries(renderUnits, {
       showSubAgentCards,
       sessionIsActive,
-      turnElapsedSeconds,
+      turnElapsedSeconds: liveTurnElapsedSeconds,
+      turnCostUsd,
       workRunDurations,
     }),
-    [renderUnits, sessionIsActive, showSubAgentCards, turnElapsedSeconds, workRunDurations],
+    [
+      renderUnits,
+      sessionIsActive,
+      showSubAgentCards,
+      liveTurnElapsedSeconds,
+      turnCostUsd,
+      workRunDurations,
+    ],
   );
   const {
     containerRef,
@@ -1791,6 +1999,7 @@ export const SessionTimeline = memo(function SessionTimeline({
               key={turnSummary.key}
               items={turnSummary.items}
               durationSeconds={turnSummary.durationSeconds}
+              costUsd={turnSummary.costUsd}
             />
           ) : null;
           if (unit.kind === "message") {
@@ -1817,6 +2026,7 @@ export const SessionTimeline = memo(function SessionTimeline({
           }
           const isActiveUnit = unit.key === activeWorkRunKey;
           const workRunDurationSeconds = workRunDurations.get(unit.key) ?? null;
+          const workRunCostUsd = workRunCosts.get(unit.key) ?? null;
           // Only the currently active WorkRun should treat user-opens as a
           // "follow the latest output" intent. An active block can be between
           // tool phases (for example model_wait/finalizing) even when none of
@@ -1837,6 +2047,7 @@ export const SessionTimeline = memo(function SessionTimeline({
                 parentSessionId={parentSessionId}
                 showSubAgentCards={showSubAgentCards}
                 durationSeconds={workRunDurationSeconds}
+                costUsd={workRunCostUsd}
                 subAgentItems={subAgentItems}
               />
               {summaryNode}

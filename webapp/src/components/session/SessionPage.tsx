@@ -74,6 +74,7 @@ type SubAgentDisplayMap = Record<string, {
   title: string;
   status: string;
   turnElapsedSeconds?: number | null;
+  turnCostUsd?: number | null;
 }>;
 
 const EMPTY_TIMELINE_ITEMS: TimelineItem[] = [];
@@ -110,6 +111,7 @@ function useSubAgentDisplayMap(
           title: selected.title,
           status: selected.status,
           turnElapsedSeconds: selected.turnUsage?.elapsedSeconds ?? null,
+          turnCostUsd: selected.turnUsage?.usage?.estimated_cost_usd ?? null,
         },
       };
     }
@@ -120,6 +122,7 @@ function useSubAgentDisplayMap(
           title: subAgent.title,
           status: subAgent.status,
           turnElapsedSeconds: subAgent.turnUsage?.elapsedSeconds ?? null,
+          turnCostUsd: subAgent.turnUsage?.usage?.estimated_cost_usd ?? null,
         },
       ]),
     );
@@ -739,6 +742,9 @@ export function SessionPage({
   const displayedTurnElapsedSeconds = isSubAgentRoute
     ? selectedSubAgent?.turnUsage?.elapsedSeconds ?? null
     : sessionState?.turnUsage?.elapsedSeconds ?? null;
+  const displayedTurnCostUsd = isSubAgentRoute
+    ? selectedSubAgent?.turnUsage?.usage?.estimated_cost_usd ?? null
+    : sessionState?.turnUsage?.usage?.estimated_cost_usd ?? null;
   const displayedUsage = isSubAgentRoute
     ? selectedSubAgent?.sessionUsage ?? selectedSubAgent?.turnUsage?.usage ?? null
     : sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null;
@@ -895,6 +901,7 @@ export function SessionPage({
               subAgents={displayedSubAgents}
               subAgentItems={subAgentItems}
               turnElapsedSeconds={displayedTurnElapsedSeconds}
+              turnCostUsd={displayedTurnCostUsd}
               connection={sessionState?.connection ?? "disconnected"}
               waitMessage={displayedWaitMessage}
               processing={displayedProcessing}

@@ -1517,7 +1517,8 @@
   white-space: pre;
 }
 
-[data-slot="working-summary-duration"] {
+[data-slot="working-summary-duration"],
+[data-slot="working-summary-cost"] {
   font-variant-numeric: tabular-nums;
 }
 

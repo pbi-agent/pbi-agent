@@ -36,13 +36,31 @@ export function formatWorkingDuration(seconds: number | null | undefined): strin
   return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+export function formatCostUsd(cost: number | null | undefined): string | null {
+  if (typeof cost !== "number" || !Number.isFinite(cost) || cost <= 0) {
+    return null;
+  }
+  if (cost < 0.01) {
+    return "<$0.01";
+  }
+  if (cost < 1) {
+    return `$${cost.toFixed(3)}`;
+  }
+  if (cost < 100) {
+    return `$${cost.toFixed(2)}`;
+  }
+  return `$${Math.round(cost).toLocaleString("en-US")}`;
+}
+
 export function workingSummaryText(
   items: CountSummaryItem[],
   durationSeconds?: number | null,
+  costUsd?: number | null,
 ): string {
   return [
     summarizeCountItems(items),
     formatWorkingDuration(durationSeconds),
+    formatCostUsd(costUsd),
   ].filter(Boolean).join(" · ");
 }
 
@@ -163,11 +181,13 @@ function ToolCountSummary({ items }: { items: CountSummaryItem[] }) {
 export function WorkingSummary({
   items,
   durationSeconds,
+  costUsd,
   placeholder,
   className,
 }: {
   items: CountSummaryItem[];
   durationSeconds?: number | null;
+  costUsd?: number | null;
   placeholder?: string | null;
   className?: string;
 }) {
@@ -181,16 +201,26 @@ export function WorkingSummary({
 
   const visible = items.filter((item) => item.count > 0);
   const durationLabel = formatWorkingDuration(durationSeconds);
-  if (visible.length === 0 && !durationLabel) return null;
+  const costLabel = formatCostUsd(costUsd);
+  if (visible.length === 0 && !durationLabel && !costLabel) return null;
+
+  const showCountsSeparator = visible.length > 0 && (durationLabel || costLabel);
+  const showDurationCostSeparator = Boolean(durationLabel && costLabel);
 
   return (
     <span data-component="working-summary" className={className}>
       <ToolCountSummary items={visible} />
-      {visible.length > 0 && durationLabel ? (
+      {showCountsSeparator ? (
         <span data-slot="working-summary-separator"> · </span>
       ) : null}
       {durationLabel ? (
         <span data-slot="working-summary-duration">{durationLabel}</span>
+      ) : null}
+      {showDurationCostSeparator ? (
+        <span data-slot="working-summary-separator"> · </span>
+      ) : null}
+      {costLabel ? (
+        <span data-slot="working-summary-cost">{costLabel}</span>
       ) : null}
     </span>
   );
