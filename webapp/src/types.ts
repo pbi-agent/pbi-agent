@@ -729,3 +729,9 @@ export type AllRunsPayload = {
   runs: AllRunsRun[];
   total_count: number;
 };
+
+export type RunFilterValuesPayload = {
+  statuses: string[];
+  providers: string[];
+  models: string[];
+};

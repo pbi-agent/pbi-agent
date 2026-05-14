@@ -1,15 +1,17 @@
 import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchAllRuns } from "../../api";
+import { fetchAllRuns, fetchRunFilterValues } from "../../api";
 import { renderWithProviders } from "../../test/render";
 import type { AllRunsRun } from "../../types";
 import { RunsTable } from "./RunsTable";
 
 vi.mock("../../api", () => ({
   fetchAllRuns: vi.fn(),
+  fetchRunFilterValues: vi.fn(),
 }));
 
 const fetchAllRunsMock = vi.mocked(fetchAllRuns);
+const fetchRunFilterValuesMock = vi.mocked(fetchRunFilterValues);
 
 function makeRun(overrides: Partial<AllRunsRun> = {}): AllRunsRun {
   return {
@@ -49,6 +51,11 @@ describe("RunsTable", () => {
       runs: [makeRun()],
       total_count: 1,
     });
+    fetchRunFilterValuesMock.mockResolvedValue({
+      statuses: ["completed", "failed", "started"],
+      providers: ["anthropic", "openai"],
+      models: ["claude-4", "gpt-4.1"],
+    });
   });
 
   it("uses the shared app status badge styling for run statuses", async () => {
@@ -61,5 +68,17 @@ describe("RunsTable", () => {
     expect(status).toHaveAttribute("data-variant", "running");
     expect(status).toHaveAttribute("data-size", "meta");
     expect(status).toHaveClass("runs-row__status");
+  });
+
+  it("loads filter options from the distinct database values endpoint", async () => {
+    renderWithProviders(<RunsTable startDate="2026-05-01" endDate="2026-05-14T23:59:59" scope="workspace" />);
+
+    expect(await screen.findByRole("option", { name: "anthropic" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "claude-4" })).toBeInTheDocument();
+    expect(fetchRunFilterValuesMock).toHaveBeenCalledWith({
+      start_date: "2026-05-01",
+      end_date: "2026-05-14T23:59:59",
+      scope: "workspace",
+    });
   });
 });

@@ -58,3 +58,4 @@
 ## Detailed Task Events
 ## 2026-05-14
 - Centered deferred web startup update notices below the welcome banner; validation passed with focused pytest, Ruff check/format check, basedpyright, and git diff check.
+- Changed dashboard run filters to use DB-distinct status/provider/model options from `GET /api/dashboard/run-filter-values`, scoped by workspace/global and date range; validation passed with focused pytest, RunsTable Vitest, API type codegen test, Ruff check/format check, Bun typecheck, and Bun lint.

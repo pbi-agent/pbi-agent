@@ -417,3 +417,9 @@ class AllRunsRunModel(RunSessionModel):
 class AllRunsResponse(BaseModel):
     runs: list[AllRunsRunModel]
     total_count: int
+
+
+class RunFilterValuesResponse(BaseModel):
+    statuses: list[str]
+    providers: list[str]
+    models: list[str]

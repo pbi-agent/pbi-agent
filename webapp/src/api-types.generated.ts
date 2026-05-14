@@ -203,6 +203,8 @@ export type QuestionAnswerRequest = { question_id: string; answer: string; selec
 
 export type ResolvedRuntimeViewModel = { provider: string; provider_id: string; profile_id: string; model: string; sub_agent_model: string | null; reasoning_effort: string; max_tokens: number; service_tier: string | null; web_search: boolean; max_tool_workers: number; max_retries: number; compact_threshold: number; compact_tail_turns: number; compact_preserve_recent_tokens: number; compact_tool_output_max_chars: number; responses_url: string; generic_api_url: string; supports_image_inputs: boolean };
 
+export type RunFilterValuesResponse = { statuses: string[]; providers: string[]; models: string[] };
+
 export type RunSessionDetailResponse = { run: RunSessionModel; events: ObservabilityEventModel[] };
 
 export type RunSessionModel = { run_session_id: string; session_id: string | null; parent_run_session_id: string | null; agent_name: string | null; agent_type: string | null; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; status: "started" | "completed" | "interrupted" | "failed" | "starting" | "running" | "waiting_for_input" | "ended" | "stale"; started_at: string; ended_at: string | null; total_duration_ms: number | null; input_tokens: number; cached_input_tokens: number; cache_write_tokens: number; cache_write_1h_tokens: number; output_tokens: number; reasoning_tokens: number; provider_total_tokens: number; estimated_cost_usd: number; total_tool_calls: number; total_api_calls: number; error_count: number; kind?: string; task_id?: string | null; project_dir?: string | null; last_event_seq?: number; snapshot?: unknown | null; exit_code?: number | null; fatal_error?: string | null; metadata: unknown | null };
@@ -380,6 +382,7 @@ export type ApiOperationResponses = {
   "GET /api/config/skills": SkillListResponse;
   "POST /api/config/skills/candidates": SkillCandidatesResponse;
   "POST /api/config/skills/install": SkillInstallResponse;
+  "GET /api/dashboard/run-filter-values": RunFilterValuesResponse;
   "GET /api/dashboard/stats": DashboardStatsResponse;
   "GET /api/events/sessions/{session_id}": unknown;
   "GET /api/events/{stream_id}": unknown;
@@ -488,6 +491,7 @@ export type ApiOperationPathParams = {
 };
 
 export type ApiOperationQueryParams = {
+  "GET /api/dashboard/run-filter-values": { start_date?: string | null; end_date?: string | null; scope?: string };
   "GET /api/dashboard/stats": { start_date?: string | null; end_date?: string | null; scope?: string };
   "GET /api/events/sessions/{session_id}": { since?: number; live_session_id?: string | null };
   "GET /api/events/{stream_id}": { since?: number };

@@ -1125,3 +1125,43 @@ def test_list_all_run_sessions_with_filters(tmp_path) -> None:
 
         # Session title is included
         assert all_runs[0]["session_title"] == "filter test"
+
+
+def test_list_run_session_filter_values_uses_distinct_db_values(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        session_id = store.create_session("/w", "openai", "gpt-5", "filter values")
+        other_session_id = store.create_session("/other", "xai", "grok", "other")
+        for provider, model, status in [
+            ("openai", "gpt-5", "completed"),
+            ("openai", "gpt-5", "completed"),
+            ("anthropic", "claude-4", "failed"),
+        ]:
+            store.create_run_session(
+                session_id=session_id,
+                agent_name="main",
+                agent_type="session_turn",
+                provider=provider,
+                provider_id=None,
+                profile_id=None,
+                model=model,
+                status=status,
+            )
+        store.create_run_session(
+            session_id=other_session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="xai",
+            provider_id=None,
+            profile_id=None,
+            model="grok",
+            status="completed",
+        )
+
+        values = store.list_run_session_filter_values(directory="/w")
+
+        assert values == {
+            "statuses": ["completed", "failed"],
+            "providers": ["anthropic", "openai"],
+            "models": ["claude-4", "gpt-5"],
+        }
