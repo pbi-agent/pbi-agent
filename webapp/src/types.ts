@@ -525,6 +525,8 @@ export type MaintenanceConfig = {
 export type TimelineMessageItem = {
   kind: "message";
   itemId: string;
+  createdAt?: string;
+  updatedAt?: string;
   messageId?: string;
   partIds?: MessagePartIds;
   role: "user" | "assistant" | "notice" | "error" | "debug";
@@ -538,6 +540,8 @@ export type TimelineMessageItem = {
 export type TimelineThinkingItem = {
   kind: "thinking";
   itemId: string;
+  createdAt?: string;
+  updatedAt?: string;
   title: string;
   content: string;
   subAgentId?: string;
@@ -583,6 +587,8 @@ export type TimelineToolGroupEntry = {
 export type TimelineToolGroupItem = {
   kind: "tool_group";
   itemId: string;
+  createdAt?: string;
+  updatedAt?: string;
   label: string;
   status?: ToolGroupStatus;
   items: TimelineToolGroupEntry[];

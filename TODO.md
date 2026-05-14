@@ -1,6 +1,5 @@
-[X] Trace Dashboard filters and data API
-[X] Add distinct filter values from DB
-[X] Update frontend to use distinct options
-[X] Add/update tests
-[X] Run focused validation
-[X] Update memory
+[X] Inspect current Working duration and summary rendering
+[X] Fix historical Working durations from timeline/snapshot data
+[X] Replace global session summary with per-turn summary blocks
+[X] Update tests/styles/static build as needed
+[X] Run focused validation and update memory

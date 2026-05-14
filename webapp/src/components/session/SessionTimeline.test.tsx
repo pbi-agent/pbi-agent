@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../ui/tooltip";
 import { SessionTimeline } from "./SessionTimeline";
+import type { TimelineItem } from "../../types";
+import { projectMainTimelineItems } from "../../sessionTimelineProjection";
 
 const EMPTY_DIFF_TEXT = "No diff content was provided for this operation.";
 
@@ -415,6 +417,72 @@ describe("SessionTimeline", () => {
     );
   });
 
+  it("shows scoped summaries and duration on sub-agent cards", () => {
+    const items: TimelineItem[] = [
+      {
+        kind: "message",
+        itemId: "user-1",
+        role: "user",
+        content: "Research this",
+        markdown: false,
+      },
+      {
+        kind: "thinking",
+        itemId: "think-a",
+        title: "Thinking",
+        content: "Researcher plan",
+        subAgentId: "subagent-a",
+      },
+      {
+        kind: "tool_group",
+        itemId: "tool-b",
+        label: "read_file",
+        status: "completed",
+        subAgentId: "subagent-b",
+        items: [{ text: "Designer inspected layout" }],
+      },
+      {
+        kind: "thinking",
+        itemId: "think-a-2",
+        title: "Thinking",
+        content: "Researcher synthesis",
+        subAgentId: "subagent-a",
+      },
+    ];
+
+    render(
+      <SessionTimeline
+        items={items}
+        subAgentItems={{
+          "subagent-a": items.filter((item) => item.subAgentId === "subagent-a"),
+          "subagent-b": items.filter((item) => item.subAgentId === "subagent-b"),
+        }}
+        subAgents={{
+          "subagent-a": { title: "Researcher", status: "completed" },
+          "subagent-b": {
+            title: "Designer",
+            status: "completed",
+            turnElapsedSeconds: 65,
+          },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        parentSessionId="session-1"
+      />,
+    );
+
+    openWorking(0, false);
+
+    expect(screen.getByRole("button", {
+      name: "Open Researcher agent session, 2 thoughts, completed",
+    })).toHaveTextContent("Researcher2 thoughtscompleted");
+    expect(screen.getByRole("button", {
+      name: "Open Designer agent session, 1 read · 1:05, completed",
+    })).toHaveTextContent("Designer1 read · 1:05completed");
+  });
+
   it("keeps the main Working label shimmering while a collapsed sub-agent is running", () => {
     render(
       <SessionTimeline
@@ -767,6 +835,331 @@ describe("SessionTimeline", () => {
 
     const workingButton = screen.getByRole("button", { name: "Working 1 read" });
     expect(workingButton).toHaveTextContent(/^Working1 read$/);
+  });
+
+  it("shows turn duration in the collapsed Working header", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [
+              {
+                text: "pwd",
+                metadata: {
+                  tool_name: "shell",
+                  status: "completed",
+                  command: "pwd",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        turnElapsedSeconds={65}
+      />,
+    );
+
+    const workingButton = screen.getByRole("button", { name: "Working 1 shell · 1:05" });
+    expect(workingButton).toHaveTextContent(/^Working1 shell · 1:05$/);
+  });
+
+  it("shows duration on each historical Working block from item timestamps", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            createdAt: "2026-05-14T10:00:00.000Z",
+            updatedAt: "2026-05-14T10:00:00.000Z",
+            role: "user",
+            content: "Do the work",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            createdAt: "2026-05-14T10:00:01.000Z",
+            updatedAt: "2026-05-14T10:00:04.000Z",
+            label: "shell",
+            status: "completed",
+            items: [{ text: "first output", metadata: { tool_name: "shell" } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            createdAt: "2026-05-14T10:00:05.000Z",
+            updatedAt: "2026-05-14T10:00:05.000Z",
+            role: "assistant",
+            content: "Continuing.",
+            markdown: true,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-2",
+            createdAt: "2026-05-14T10:00:06.000Z",
+            updatedAt: "2026-05-14T10:00:08.000Z",
+            label: "read_file",
+            status: "completed",
+            items: [{ text: "second output", metadata: { tool_name: "read_file" } }],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByRole("button", {
+      name: "Working 1 shell · 0:03",
+    })).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Working 1 read · 0:02",
+    })).toBeInTheDocument();
+  });
+
+  it("falls back to surrounding messages for intermediate Working block durations", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            createdAt: "2026-05-14T10:00:00.000Z",
+            updatedAt: "2026-05-14T10:00:00.000Z",
+            role: "user",
+            content: "Do the work",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            label: "shell",
+            status: "completed",
+            items: [{ text: "first output", metadata: { tool_name: "shell" } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-progress",
+            createdAt: "2026-05-14T10:00:05.000Z",
+            updatedAt: "2026-05-14T10:00:05.000Z",
+            role: "assistant",
+            content: "Still working.",
+            markdown: true,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-2",
+            label: "read_file",
+            status: "completed",
+            items: [{ text: "second output", metadata: { tool_name: "read_file" } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-final",
+            createdAt: "2026-05-14T10:00:12.000Z",
+            updatedAt: "2026-05-14T10:00:12.000Z",
+            role: "assistant",
+            content: "Done.",
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByRole("button", {
+      name: "Working 1 shell · 0:05",
+    })).toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Working 1 read · 0:07",
+    })).toBeInTheDocument();
+    expect(screen.getByRole("note", {
+      name: "Turn summary 1 read, 1 shell · 0:12",
+    })).toBeInTheDocument();
+  });
+
+  it("uses sub-agent item timestamps for card duration when turn usage is unavailable", () => {
+    const items: TimelineItem[] = [
+      {
+        kind: "thinking",
+        itemId: "subagent-a-card",
+        createdAt: "2026-05-14T10:00:01.000Z",
+        updatedAt: "2026-05-14T10:00:01.000Z",
+        title: "Sub-agent",
+        content: "",
+        subAgentId: "subagent-a",
+      },
+    ];
+    const subAgentItems: TimelineItem[] = [
+      {
+        kind: "tool_group",
+        itemId: "subagent-a-tool-1",
+        createdAt: "2026-05-14T10:00:01.000Z",
+        updatedAt: "2026-05-14T10:00:04.000Z",
+        label: "read_file",
+        status: "completed",
+        subAgentId: "subagent-a",
+        items: [{ text: "Read notes", metadata: { tool_name: "read_file" } }],
+      },
+    ];
+
+    render(
+      <SessionTimeline
+        items={items}
+        subAgentItems={{ "subagent-a": subAgentItems }}
+        subAgents={{
+          "subagent-a": { title: "Researcher", status: "completed" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        parentSessionId="session-1"
+      />,
+    );
+
+    openWorking(0, false);
+
+    expect(screen.getByRole("button", {
+      name: "Open Researcher agent session, 1 read · 0:03, completed",
+    })).toHaveTextContent("Researcher1 read · 0:03completed");
+  });
+
+  it("carries sub-agent timing into the collapsed main Working summary", () => {
+    const subAgentItems: TimelineItem[] = [
+      {
+        kind: "thinking",
+        itemId: "subagent-a-thinking-1",
+        createdAt: "2026-05-14T10:00:01.000Z",
+        updatedAt: "2026-05-14T10:00:01.000Z",
+        title: "Thinking",
+        content: "Planning",
+        subAgentId: "subagent-a",
+      },
+      {
+        kind: "tool_group",
+        itemId: "subagent-a-tool-1",
+        createdAt: "2026-05-14T10:00:02.000Z",
+        updatedAt: "2026-05-14T10:00:04.000Z",
+        label: "read_file",
+        status: "completed",
+        subAgentId: "subagent-a",
+        items: [{ text: "Read notes", metadata: { tool_name: "read_file" } }],
+      },
+    ];
+    const projection = projectMainTimelineItems(subAgentItems);
+
+    render(
+      <SessionTimeline
+        items={projection.items}
+        subAgentItems={{ "subagent-a": subAgentItems }}
+        subAgents={{
+          "subagent-a": { title: "Researcher", status: "completed" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={projection.signature}
+        parentSessionId="session-1"
+      />,
+    );
+
+    expect(screen.getByRole("button", {
+      name: "Working 1 agent · 0:03",
+    })).toBeInTheDocument();
+  });
+
+  it("renders turn-level summaries instead of one global session summary", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "user-1",
+            createdAt: "2026-05-14T10:00:00.000Z",
+            updatedAt: "2026-05-14T10:00:00.000Z",
+            role: "user",
+            content: "Read something",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-1",
+            createdAt: "2026-05-14T10:00:01.000Z",
+            updatedAt: "2026-05-14T10:00:04.000Z",
+            label: "read_file",
+            status: "completed",
+            items: [{ text: "Read notes", metadata: { tool_name: "read_file" } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-1",
+            createdAt: "2026-05-14T10:00:05.000Z",
+            updatedAt: "2026-05-14T10:00:05.000Z",
+            role: "assistant",
+            content: "Done",
+            markdown: true,
+          },
+          {
+            kind: "message",
+            itemId: "user-2",
+            createdAt: "2026-05-14T10:00:10.000Z",
+            updatedAt: "2026-05-14T10:00:10.000Z",
+            role: "user",
+            content: "Run a command",
+            markdown: false,
+          },
+          {
+            kind: "tool_group",
+            itemId: "tool-2",
+            createdAt: "2026-05-14T10:00:11.000Z",
+            updatedAt: "2026-05-14T10:00:13.000Z",
+            label: "shell",
+            status: "completed",
+            items: [{ text: "Command output", metadata: { tool_name: "shell" } }],
+          },
+          {
+            kind: "message",
+            itemId: "assistant-2",
+            createdAt: "2026-05-14T10:00:14.000Z",
+            updatedAt: "2026-05-14T10:00:14.000Z",
+            role: "assistant",
+            content: "Done again",
+            markdown: true,
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByRole("note", {
+      name: "Turn summary 1 read · 0:05",
+    })).toHaveTextContent("1 read · 0:05");
+    expect(screen.getByRole("note", {
+      name: "Turn summary 1 shell · 0:04",
+    })).toHaveTextContent("1 shell · 0:04");
+    expect(screen.queryByRole("note", {
+      name: /Session summary/i,
+    })).not.toBeInTheDocument();
   });
 
   it("summarizes built-in tools by category and falls back to tool classes/text", () => {

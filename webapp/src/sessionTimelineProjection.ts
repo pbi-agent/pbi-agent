@@ -22,9 +22,33 @@ function subAgentPlaceholder(source: TimelineItem, subAgentId: string): Timeline
   return {
     kind: "thinking",
     itemId: `sub-agent-card:${subAgentId}:${source.itemId}`,
+    ...(source.createdAt ? { createdAt: source.createdAt } : {}),
+    ...(source.updatedAt ? { updatedAt: source.updatedAt } : {}),
     title: "Sub-agent",
     content: "",
     subAgentId,
+  };
+}
+
+function latestTimestamp(left: string | undefined, right: string | undefined): string | undefined {
+  if (!left) return right;
+  if (!right) return left;
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  if (Number.isNaN(leftTime)) return right;
+  if (Number.isNaN(rightTime)) return left;
+  return rightTime >= leftTime ? right : left;
+}
+
+function updateSubAgentPlaceholderTiming(
+  current: TimelineItem,
+  source: TimelineItem,
+): TimelineItem {
+  const sourceEnd = source.updatedAt ?? source.createdAt;
+  const updatedAt = latestTimestamp(current.updatedAt ?? current.createdAt, sourceEnd);
+  return {
+    ...current,
+    ...(updatedAt ? { updatedAt } : {}),
   };
 }
 
@@ -34,12 +58,20 @@ function timelineItemSignature(
 ): TimelineItemSignature {
   const subAgentId = timelineItemSubAgentId(item);
   if (options.collapseSubAgentItems && subAgentId) {
-    return ["sub-agent-card", item.itemId, subAgentId];
+    return [
+      "sub-agent-card",
+      item.itemId,
+      subAgentId,
+      item.createdAt ?? "",
+      item.updatedAt ?? "",
+    ];
   }
   if (item.kind === "message") {
     return [
       item.kind,
       item.itemId,
+      item.createdAt ?? "",
+      item.updatedAt ?? "",
       item.messageId ?? "",
       item.role,
       item.content,
@@ -49,11 +81,20 @@ function timelineItemSignature(
     ];
   }
   if (item.kind === "thinking") {
-    return [item.kind, item.itemId, item.title, item.content];
+    return [
+      item.kind,
+      item.itemId,
+      item.createdAt ?? "",
+      item.updatedAt ?? "",
+      item.title,
+      item.content,
+    ];
   }
   return [
     item.kind,
     item.itemId,
+    item.createdAt ?? "",
+    item.updatedAt ?? "",
     item.label,
     item.status ?? "",
     item.items.map((entry) => [
@@ -73,21 +114,27 @@ export function projectionSignature(
 
 export function projectMainTimelineItems(items: TimelineItem[]): TimelineProjection {
   const projected: TimelineItem[] = [];
-  let subAgentsInCurrentWorkRun = new Set<string>();
+  let subAgentsInCurrentWorkRun = new Map<string, number>();
 
   for (const item of items) {
     const subAgentId = timelineItemSubAgentId(item);
     if (subAgentId) {
-      if (!subAgentsInCurrentWorkRun.has(subAgentId)) {
-        subAgentsInCurrentWorkRun.add(subAgentId);
+      const existingIndex = subAgentsInCurrentWorkRun.get(subAgentId);
+      if (existingIndex === undefined) {
+        subAgentsInCurrentWorkRun.set(subAgentId, projected.length);
         projected.push(subAgentPlaceholder(item, subAgentId));
+      } else {
+        projected[existingIndex] = updateSubAgentPlaceholderTiming(
+          projected[existingIndex],
+          item,
+        );
       }
       continue;
     }
 
     projected.push(item);
     if (item.kind === "message") {
-      subAgentsInCurrentWorkRun = new Set<string>();
+      subAgentsInCurrentWorkRun = new Map<string, number>();
     }
   }
 

@@ -374,6 +374,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
             "sub_agent_id": "completed-run:subagent-1",
             "kind": "message",
             "itemId": "completed-run:subagent-1-message-1",
+            "created_at": "2026-05-08T08:47:16Z",
+            "updated_at": "2026-05-08T08:47:16Z",
             "historical": True,
         },
         {
@@ -384,6 +386,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
             "sub_agent_id": "completed-run:subagent-1",
             "kind": "tool_group",
             "itemId": "completed-run:subagent-1-tool-group-2",
+            "created_at": "2026-05-08T08:47:17Z",
+            "updated_at": "2026-05-08T08:47:17Z",
         },
         {
             "item_id": "completed-run:subagent-1-message-3",
@@ -393,6 +397,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
             "sub_agent_id": "completed-run:subagent-1",
             "kind": "message",
             "itemId": "completed-run:subagent-1-message-3",
+            "created_at": "2026-05-08T08:47:18Z",
+            "updated_at": "2026-05-08T08:47:18Z",
             "historical": True,
         },
     ]
@@ -2976,17 +2982,19 @@ def test_sub_agent_processing_isolated_from_parent_live_snapshot(
         )
 
         snapshot = app.state.manager._serialize_live_snapshot(live_session)
-        assert snapshot["items"] == [
-            {
-                "item_id": "msg-7",
-                "role": "assistant",
-                "content": "child draft",
-                "markdown": True,
-                "sub_agent_id": "subagent-1",
-                "kind": "message",
-                "itemId": "msg-7",
-            }
-        ]
+        assert len(snapshot["items"]) == 1
+        item = dict(snapshot["items"][0])
+        assert isinstance(item.pop("created_at"), str)
+        assert isinstance(item.pop("updated_at"), str)
+        assert item == {
+            "item_id": "msg-7",
+            "role": "assistant",
+            "content": "child draft",
+            "markdown": True,
+            "sub_agent_id": "subagent-1",
+            "kind": "message",
+            "itemId": "msg-7",
+        }
 
         interrupted = app.state.manager.interrupt_live_session(live_session_id)
         assert interrupted["live_session_id"] == live_session_id

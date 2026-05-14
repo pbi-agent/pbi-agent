@@ -427,6 +427,7 @@ class EventsMixin:
                 else "tool_group"
             )
             item["itemId"] = str(payload.get("item_id") or "")
+            item = self._apply_event_item_timing(item, event)
             snapshot.items = self._upsert_snapshot_item(snapshot.items, item)
             return
         if event_type == "message_rekeyed":
@@ -439,6 +440,7 @@ class EventsMixin:
                 item["sub_agent_id"] = sub_agent_id
             item["kind"] = "message"
             item["itemId"] = str(item.get("item_id") or item.get("itemId") or "")
+            item = self._apply_event_item_timing(item, event)
             if old_item_id and old_item_id != item["itemId"]:
                 snapshot.items = [
                     existing
@@ -502,6 +504,22 @@ class EventsMixin:
                 "compact_threshold": payload.get("compact_threshold"),
             }
 
+    def _apply_event_item_timing(
+        self,
+        item: dict[str, Any],
+        event: dict[str, Any],
+    ) -> dict[str, Any]:
+        created_at = event.get("created_at")
+        if not isinstance(created_at, str):
+            return item
+        return {
+            **item,
+            "created_at": item.get("created_at")
+            if isinstance(item.get("created_at"), str)
+            else created_at,
+            "updated_at": created_at,
+        }
+
     def _upsert_snapshot_item(
         self,
         items: list[dict[str, Any]],
@@ -511,6 +529,10 @@ class EventsMixin:
         for index, item in enumerate(items):
             if str(item.get("itemId") or "") != item_id:
                 continue
+            if next_item.get("kind") != "message" and isinstance(
+                item.get("created_at"), str
+            ):
+                next_item = {**next_item, "created_at": item["created_at"]}
             updated = list(items)
             updated[index] = next_item
             return updated
