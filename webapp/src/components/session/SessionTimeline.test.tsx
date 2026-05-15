@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../ui/tooltip";
 import { SessionTimeline } from "./SessionTimeline";
-import type { TimelineItem } from "../../types";
+import type { TimelineItem, UsagePayload } from "../../types";
 import { projectMainTimelineItems } from "../../sessionTimelineProjection";
 
 const EMPTY_DIFF_TEXT = "No diff content was provided for this operation.";
@@ -903,7 +903,7 @@ describe("SessionTimeline", () => {
     expect(workingButton).toHaveTextContent(/^Working1 shell · 1:05$/);
   });
 
-  it("shows turn cost in the active Working header summary", () => {
+  it("does not show turn cost in the active Working header summary", () => {
     render(
       <SessionTimeline
         items={[
@@ -931,9 +931,12 @@ describe("SessionTimeline", () => {
     );
 
     const workingButton = screen.getByRole("button", {
-      name: /Working 1 shell · \d+:\d\d · \$0\.072/,
+      name: /Working 1 shell · \d+:\d\d/,
     });
-    expect(workingButton).toHaveTextContent(/\$0\.072$/);
+    expect(workingButton).not.toHaveTextContent("$0.072");
+    expect(screen.queryByRole("note", {
+      name: /Turn summary .* \$0\.072/,
+    })).not.toBeInTheDocument();
   });
 
   it("does not attach final plain-turn cost to an earlier Working block", () => {
@@ -1052,6 +1055,72 @@ describe("SessionTimeline", () => {
       expect(
         screen.getByRole("button", { name: /Working 1 shell · 0:1[3-4]/ }),
       ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("starts a new active turn timer from the current turn boundary", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.setSystemTime(new Date("2026-05-14T10:01:00.000Z"));
+    try {
+      render(
+        <SessionTimeline
+          items={[
+            {
+              kind: "message",
+              itemId: "user-1",
+              createdAt: "2026-05-14T10:00:00.000Z",
+              updatedAt: "2026-05-14T10:00:00.000Z",
+              role: "user",
+              content: "First turn",
+              markdown: false,
+            },
+            {
+              kind: "tool_group",
+              itemId: "tool-1",
+              createdAt: "2026-05-14T10:00:01.000Z",
+              updatedAt: "2026-05-14T10:00:05.000Z",
+              label: "shell",
+              status: "completed",
+              items: [{ text: "pwd", metadata: { tool_name: "shell" } }],
+            },
+            {
+              kind: "message",
+              itemId: "assistant-1",
+              createdAt: "2026-05-14T10:00:06.000Z",
+              updatedAt: "2026-05-14T10:00:06.000Z",
+              role: "assistant",
+              content: "Done.",
+              markdown: true,
+            },
+            {
+              kind: "message",
+              itemId: "user-2",
+              createdAt: "2026-05-14T10:01:00.000Z",
+              updatedAt: "2026-05-14T10:01:00.000Z",
+              role: "user",
+              content: "Second turn",
+              markdown: false,
+            },
+          ]}
+          subAgents={{}}
+          connection="connected"
+          waitMessage={null}
+          processing={{ active: true, phase: "model_wait", message: null }}
+          itemsVersion={4}
+          turnElapsedSeconds={120}
+        />,
+      );
+
+      expect(screen.getByRole("button", { name: "Working 0:00" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Working 2:00" })).not.toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(screen.getByRole("button", { name: "Working 0:02" })).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -1458,6 +1527,10 @@ describe("SessionTimeline", () => {
             role: "assistant",
             content: "Done",
             markdown: true,
+            turnUsage: {
+              usage: { estimated_cost_usd: 0.012 } as UsagePayload,
+              elapsedSeconds: 5,
+            },
           },
           {
             kind: "message",
@@ -1485,6 +1558,10 @@ describe("SessionTimeline", () => {
             role: "assistant",
             content: "Done again",
             markdown: true,
+            turnUsage: {
+              usage: { estimated_cost_usd: 0.045 } as UsagePayload,
+              elapsedSeconds: 4,
+            },
           },
         ]}
         subAgents={{}}
@@ -1496,11 +1573,11 @@ describe("SessionTimeline", () => {
     );
 
     expect(screen.getByRole("note", {
-      name: "Turn summary 1 read · 0:05",
-    })).toHaveTextContent("1 read · 0:05");
+      name: "Turn summary 1 read · 0:05 · $0.012",
+    })).toHaveTextContent("1 read · 0:05 · $0.012");
     expect(screen.getByRole("note", {
-      name: "Turn summary 1 shell · 0:04",
-    })).toHaveTextContent("1 shell · 0:04");
+      name: "Turn summary 1 shell · 0:04 · $0.045",
+    })).toHaveTextContent("1 shell · 0:04 · $0.045");
     expect(screen.queryByRole("note", {
       name: /Session summary/i,
     })).not.toBeInTheDocument();

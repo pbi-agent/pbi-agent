@@ -51,7 +51,6 @@ type SubAgentSummary = {
   title: string;
   status: string;
   turnElapsedSeconds?: number | null;
-  turnCostUsd?: number | null;
 };
 
 type RenderUnit =
@@ -178,6 +177,7 @@ function timelineItemChangeKey(item: TimelineItem): string {
       item.content,
       item.filePaths?.join("\0") ?? "",
       item.imageAttachments?.map((attachment) => attachment.upload_id).join("\0") ?? "",
+      JSON.stringify(item.turnUsage ?? null),
     ].join("\0");
   }
   if (item.kind === "thinking") {
@@ -527,11 +527,11 @@ function activeWorkRunContextDurationSeconds(
   nowMs: number,
 ): number | null {
   const unit = renderUnits[index];
-  if (unit?.kind !== "work_run" || unit.items.length === 0) return null;
+  if (unit?.kind !== "work_run") return null;
   const range = timelineItemsRangeMs(unit.items);
   const previousMessageEnd = previousMessageEndMs(renderUnits, index);
-  const start = range.start ?? previousMessageEnd;
-  if (start !== null && nowMs > start) return (nowMs - start) / 1000;
+  const start = previousMessageEnd ?? range.start;
+  if (start !== null && nowMs >= start) return (nowMs - start) / 1000;
   return workRunContextDurationSeconds(renderUnits, index);
 }
 
@@ -567,9 +567,12 @@ function buildWorkRunDurationMap(
       const timestampLiveDuration = typeof activeNowMs === "number"
         ? activeWorkRunContextDurationSeconds(renderUnits, index, activeNowMs)
         : null;
+      const hasTurnBoundary = previousMessageEndMs(renderUnits, index) !== null;
       durations.set(
         unit.key,
-        maxDurationSeconds([turnElapsedSeconds, timestampLiveDuration])
+        (hasTurnBoundary
+          ? timestampLiveDuration ?? turnElapsedSeconds ?? null
+          : maxDurationSeconds([turnElapsedSeconds, timestampLiveDuration]))
           ?? workRunContextDurationSeconds(renderUnits, index)
           ?? null,
       );
@@ -584,46 +587,6 @@ function buildWorkRunDurationMap(
     );
   });
   return durations;
-}
-
-function finalTurnStartIndex(renderUnits: readonly RenderUnit[]): number {
-  for (let index = renderUnits.length - 1; index >= 0; index -= 1) {
-    const unit = renderUnits[index];
-    if (unit?.kind === "message" && unit.item.role === "user") return index;
-  }
-  return 0;
-}
-
-function workRunBelongsToFinalTurn(renderUnits: readonly RenderUnit[], index: number): boolean {
-  return index >= finalTurnStartIndex(renderUnits);
-}
-
-function buildWorkRunCostMap(
-  renderUnits: readonly RenderUnit[],
-  {
-    activeWorkRunKey,
-    latestWorkRunKey,
-    sessionIsActive,
-    turnCostUsd,
-  }: {
-    activeWorkRunKey: string | null;
-    latestWorkRunKey: string | null;
-    sessionIsActive: boolean;
-    turnCostUsd?: number | null;
-  },
-): Map<string, number | null> {
-  const costs = new Map<string, number | null>();
-  renderUnits.forEach((unit, index) => {
-    if (unit.kind !== "work_run") return;
-    const useTurnCost = unit.key === activeWorkRunKey
-      || (
-        !sessionIsActive
-        && unit.key === latestWorkRunKey
-        && workRunBelongsToFinalTurn(renderUnits, index)
-      );
-    costs.set(unit.key, useTurnCost ? turnCostUsd ?? null : null);
-  });
-  return costs;
 }
 
 function mergeRangeStart(current: number | null, next: number | null): number | null {
@@ -661,6 +624,8 @@ function buildTurnSummaries(
       workItems: WorkItem[];
       workDurationSeconds: number;
       hasWorkDuration: boolean;
+      turnUsageDurationSeconds: number | null;
+      costUsd: number | null;
       lastUnitKey: string;
     }
     | null = null;
@@ -674,8 +639,10 @@ function buildTurnSummaries(
     const summaryItems = workRunCountItems(closedTurn.workItems, showSubAgentCards);
     const durationSeconds = secondsBetween(closedTurn.startMs, closedTurn.endMs)
       ?? (closedTurn.hasWorkDuration ? closedTurn.workDurationSeconds : null)
+      ?? closedTurn.turnUsageDurationSeconds
       ?? (finalTurn && !sessionIsActive ? turnElapsedSeconds ?? null : null);
-    const costUsd = finalTurn && !sessionIsActive ? turnCostUsd ?? null : null;
+    const costUsd = closedTurn.costUsd
+      ?? (finalTurn && !sessionIsActive ? turnCostUsd ?? null : null);
     if (!workingSummaryText(summaryItems, durationSeconds, costUsd)) return;
 
     summaries.set(closedTurn.lastUnitKey, {
@@ -696,6 +663,8 @@ function buildTurnSummaries(
       workItems: [],
       workDurationSeconds: 0,
       hasWorkDuration: false,
+      turnUsageDurationSeconds: null,
+      costUsd: null,
       lastUnitKey: key,
     };
   };
@@ -712,6 +681,8 @@ function buildTurnSummaries(
         workItems: [],
         workDurationSeconds: 0,
         hasWorkDuration: false,
+        turnUsageDurationSeconds: null,
+        costUsd: null,
         lastUnitKey: unitKey,
       };
       continue;
@@ -721,6 +692,16 @@ function buildTurnSummaries(
     if (!turn) continue;
     if (unit.kind === "message") {
       turn.endMs = mergeRangeEnd(turn.endMs, messageEndMs(unit.item));
+      if (unit.item.role === "assistant" && unit.item.turnUsage) {
+        const elapsedSeconds = unit.item.turnUsage.elapsedSeconds;
+        if (typeof elapsedSeconds === "number" && Number.isFinite(elapsedSeconds)) {
+          turn.turnUsageDurationSeconds = elapsedSeconds;
+        }
+        const costUsd = unit.item.turnUsage.usage?.estimated_cost_usd;
+        if (typeof costUsd === "number" && Number.isFinite(costUsd)) {
+          turn.costUsd = costUsd;
+        }
+      }
       turn.lastUnitKey = unitKey;
       continue;
     }
@@ -913,10 +894,9 @@ function SubAgentCard({
     reportedDurationSeconds,
     subAgentIsActive,
   );
-  const summaryCostUsd = agent?.turnCostUsd ?? null;
   const summaryText = useMemo(
-    () => workingSummaryText(summaryItems, summaryDurationSeconds, summaryCostUsd),
-    [summaryCostUsd, summaryDurationSeconds, summaryItems],
+    () => workingSummaryText(summaryItems, summaryDurationSeconds),
+    [summaryDurationSeconds, summaryItems],
   );
   const ariaDetail = [summaryText, status].filter(Boolean).join(", ");
   return (
@@ -937,7 +917,6 @@ function SubAgentCard({
         <WorkingSummary
           items={summaryItems}
           durationSeconds={summaryDurationSeconds}
-          costUsd={summaryCostUsd}
           className="working-items__summary working-items__sub-agent-summary"
         />
       </span>
@@ -1360,7 +1339,6 @@ function WorkRun({
   parentSessionId,
   showSubAgentCards,
   durationSeconds,
-  costUsd,
   subAgentItems,
 }: {
   unit: Extract<RenderUnit, { kind: "work_run" }>;
@@ -1374,7 +1352,6 @@ function WorkRun({
   parentSessionId?: string;
   showSubAgentCards?: boolean;
   durationSeconds?: number | null;
-  costUsd?: number | null;
   subAgentItems: Record<string, WorkItem[]>;
 }) {
   const hasItems = unit.items.length > 0;
@@ -1392,8 +1369,8 @@ function WorkRun({
     [showSubAgentCards, unit.items],
   );
   const workRunSummary = useMemo(
-    () => workingSummaryText(workRunSummaryItems, durationSeconds, costUsd),
-    [costUsd, durationSeconds, workRunSummaryItems],
+    () => workingSummaryText(workRunSummaryItems, durationSeconds),
+    [durationSeconds, workRunSummaryItems],
   );
   const hasRunningSubAgent = useMemo(
     () => unit.items.some((item) => {
@@ -1481,7 +1458,6 @@ function WorkRun({
               <WorkingSummary
                 items={workRunSummaryItems}
                 durationSeconds={durationSeconds}
-                costUsd={costUsd}
                 placeholder={showPlaceholderSummary ? "Preparing…" : null}
                 className={
                   showPlaceholderSummary
@@ -1615,8 +1591,7 @@ function subAgentSummariesEqual(
     return rightSubAgent !== undefined
       && leftSubAgent.title === rightSubAgent.title
       && leftSubAgent.status === rightSubAgent.status
-      && (leftSubAgent.turnElapsedSeconds ?? null) === (rightSubAgent.turnElapsedSeconds ?? null)
-      && (leftSubAgent.turnCostUsd ?? null) === (rightSubAgent.turnCostUsd ?? null);
+      && (leftSubAgent.turnElapsedSeconds ?? null) === (rightSubAgent.turnElapsedSeconds ?? null);
   });
 }
 
@@ -1733,15 +1708,6 @@ export const SessionTimeline = memo(function SessionTimeline({
       activeNowMs: activeTimestampNowMs,
     }),
     [activeTimestampNowMs, activeWorkRunKey, latestWorkRunKey, renderUnits, sessionIsActive, liveTurnElapsedSeconds],
-  );
-  const workRunCosts = useMemo(
-    () => buildWorkRunCostMap(renderUnits, {
-      activeWorkRunKey,
-      latestWorkRunKey,
-      sessionIsActive,
-      turnCostUsd,
-    }),
-    [activeWorkRunKey, latestWorkRunKey, renderUnits, sessionIsActive, turnCostUsd],
   );
   const turnSummaries = useMemo(
     () => buildTurnSummaries(renderUnits, {
@@ -2026,7 +1992,6 @@ export const SessionTimeline = memo(function SessionTimeline({
           }
           const isActiveUnit = unit.key === activeWorkRunKey;
           const workRunDurationSeconds = workRunDurations.get(unit.key) ?? null;
-          const workRunCostUsd = workRunCosts.get(unit.key) ?? null;
           // Only the currently active WorkRun should treat user-opens as a
           // "follow the latest output" intent. An active block can be between
           // tool phases (for example model_wait/finalizing) even when none of
@@ -2047,7 +2012,6 @@ export const SessionTimeline = memo(function SessionTimeline({
                 parentSessionId={parentSessionId}
                 showSubAgentCards={showSubAgentCards}
                 durationSeconds={workRunDurationSeconds}
-                costUsd={workRunCostUsd}
                 subAgentItems={subAgentItems}
               />
               {summaryNode}

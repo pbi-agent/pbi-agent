@@ -254,6 +254,39 @@ def _apply_event_item_timing(
     }
 
 
+def _turn_usage_from_event_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if payload.get("scope") != "turn":
+        return None
+    return {
+        "usage": payload.get("usage"),
+        "elapsed_seconds": payload.get("elapsed_seconds"),
+    }
+
+
+def _item_sub_agent_id(item: dict[str, Any]) -> str | None:
+    value = item.get("sub_agent_id")
+    return value if isinstance(value, str) else None
+
+
+def _attach_turn_usage_to_latest_assistant_message(
+    items: list[dict[str, Any]],
+    turn_usage: dict[str, Any],
+    *,
+    sub_agent_id: str | None,
+) -> list[dict[str, Any]]:
+    for index in range(len(items) - 1, -1, -1):
+        item = items[index]
+        if (
+            item.get("kind") == "message"
+            and item.get("role") == "assistant"
+            and _item_sub_agent_id(item) == sub_agent_id
+        ):
+            updated = list(items)
+            updated[index] = {**item, "turn_usage": turn_usage}
+            return updated
+    return items
+
+
 def _timeline_items_from_web_events(
     events: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -301,6 +334,15 @@ def _timeline_items_from_web_events(
             item_id = str(payload.get("item_id") or "")
             if item_id:
                 items = [item for item in items if _snapshot_item_id(item) != item_id]
+            continue
+        if event_type == "usage_updated":
+            turn_usage = _turn_usage_from_event_payload(payload)
+            if turn_usage is not None:
+                items = _attach_turn_usage_to_latest_assistant_message(
+                    items,
+                    turn_usage,
+                    sub_agent_id=sub_agent_id,
+                )
     return items
 
 

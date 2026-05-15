@@ -3028,6 +3028,71 @@ describe("SessionPage", () => {
     });
   });
 
+  it("preserves turn usage when a persisted timeline message is deduped with history", async () => {
+    const turnUsage = {
+      usage: makeUsage({ estimated_cost_usd: 0.012 }),
+      elapsed_seconds: 5.5,
+    };
+    vi.mocked(fetchSessionDetail).mockResolvedValue({
+      session: makeSessionRecord({ status: "ended", active_run_id: null }),
+      history_items: [
+        {
+          item_id: "history-1",
+          message_id: "msg-1",
+          part_ids: { content: "msg-1:content", file_paths: [], image_attachments: [] },
+          role: "assistant",
+          content: "done",
+          file_paths: [],
+          image_attachments: [],
+          markdown: true,
+          historical: true,
+          created_at: "2026-04-16T12:00:00Z",
+        },
+      ],
+      active_live_session: null,
+      active_run: null,
+      timeline: {
+        live_session_id: "ended-live-1",
+        session_id: "session-1",
+        runtime: null,
+        input_enabled: false,
+        wait_message: null,
+        processing: null,
+        session_usage: null,
+        turn_usage: null,
+        session_ended: true,
+        fatal_error: null,
+        pending_user_questions: null,
+        items: [
+          {
+            kind: "message",
+            itemId: "message-1",
+            item_id: "message-1",
+            message_id: "msg-1",
+            role: "assistant",
+            content: "done",
+            markdown: true,
+            turn_usage: turnUsage,
+          },
+        ],
+        sub_agents: {},
+        last_event_seq: 12,
+      },
+    } satisfies SessionDetailPayload);
+
+    renderSessionRoute("/sessions/session-1");
+
+    await screen.findByText("Timeline 1");
+    const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
+    expect(state?.items[0]).toEqual(expect.objectContaining({
+      itemId: "history-1",
+      turnUsage: {
+        usage: makeUsage({ estimated_cost_usd: 0.012 }),
+        elapsedSeconds: 5.5,
+      },
+    }));
+  });
+
   it("opens a responsive profile menu for long model names", async () => {
     const user = userEvent.setup();
     const baseConfig = makeConfigBootstrap();

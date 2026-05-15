@@ -723,6 +723,56 @@ describe("session store", () => {
     });
     expect(subAgentUsage.state.lastEventSeq).toBe(3);
 
+    const assistantMessage = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
+      seq: 1,
+      type: "message_added",
+      payload: { item_id: "assistant-1", role: "assistant", content: "done" },
+    }));
+    const assistantTurnUsage = reduceSessionEvent(assistantMessage.state, makeEvent({
+      seq: 2,
+      type: "usage_updated",
+      payload: {
+        scope: "turn",
+        elapsed_seconds: 4.5,
+        usage: makeUsage({ estimated_cost_usd: 0.012 }),
+      },
+    }));
+    expect(assistantTurnUsage.state.items[0]).toEqual(expect.objectContaining({
+      turnUsage: {
+        usage: makeUsage({ estimated_cost_usd: 0.012 }),
+        elapsedSeconds: 4.5,
+      },
+    }));
+
+    const newTurn = reduceSessionEvent(turnUsage.state, makeEvent({
+      seq: 3,
+      type: "message_added",
+      payload: { item_id: "user-2", role: "user", content: "next" },
+    }));
+    expect(newTurn.state.turnUsage).toBeNull();
+
+    const subAgentTurnUsage = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
+      seq: 1,
+      type: "usage_updated",
+      payload: {
+        scope: "turn",
+        sub_agent_id: "sub-1",
+        elapsed_seconds: 2.5,
+        usage: { total_tokens: 8 },
+      },
+    }));
+    const subAgentNewTurn = reduceSessionEvent(subAgentTurnUsage.state, makeEvent({
+      seq: 2,
+      type: "message_added",
+      payload: {
+        item_id: "sub-user-2",
+        role: "user",
+        content: "next child turn",
+        sub_agent_id: "sub-1",
+      },
+    }));
+    expect(subAgentNewTurn.state.subAgents["sub-1"]?.turnUsage).toBeNull();
+
     const thinking = reduceSessionEvent(createEmptySessionState("session-1"), makeEvent({
       seq: 1,
       type: "thinking_updated",

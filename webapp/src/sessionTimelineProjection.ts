@@ -78,6 +78,7 @@ function timelineItemSignature(
       item.markdown ? "1" : "0",
       item.filePaths ?? [],
       item.imageAttachments?.map((attachment) => attachment.upload_id) ?? [],
+      item.turnUsage ?? null,
     ];
   }
   if (item.kind === "thinking") {

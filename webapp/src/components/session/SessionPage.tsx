@@ -74,7 +74,6 @@ type SubAgentDisplayMap = Record<string, {
   title: string;
   status: string;
   turnElapsedSeconds?: number | null;
-  turnCostUsd?: number | null;
 }>;
 
 const EMPTY_TIMELINE_ITEMS: TimelineItem[] = [];
@@ -111,7 +110,6 @@ function useSubAgentDisplayMap(
           title: selected.title,
           status: selected.status,
           turnElapsedSeconds: selected.turnUsage?.elapsedSeconds ?? null,
-          turnCostUsd: selected.turnUsage?.usage?.estimated_cost_usd ?? null,
         },
       };
     }
@@ -122,7 +120,6 @@ function useSubAgentDisplayMap(
           title: subAgent.title,
           status: subAgent.status,
           turnElapsedSeconds: subAgent.turnUsage?.elapsedSeconds ?? null,
-          turnCostUsd: subAgent.turnUsage?.usage?.estimated_cost_usd ?? null,
         },
       ]),
     );
@@ -1009,6 +1006,23 @@ function messageSignature(item: Record<string, unknown>): string | null {
   return JSON.stringify([role, content, filePaths, imageAttachments]);
 }
 
+function snapshotTurnUsage(item: Record<string, unknown>): unknown {
+  return item.turn_usage ?? item.turnUsage ?? null;
+}
+
+function copySnapshotTurnUsageToHistory(
+  historyItems: Record<string, unknown>[],
+  historyIndex: number,
+  snapshotItem: Record<string, unknown>,
+): void {
+  const turnUsage = snapshotTurnUsage(snapshotItem);
+  if (turnUsage === null || typeof turnUsage !== "object") return;
+  historyItems[historyIndex] = {
+    ...historyItems[historyIndex],
+    turn_usage: turnUsage,
+  };
+}
+
 function persistedMessageId(item: Record<string, unknown>): string | null {
   if (item.kind !== "message") return null;
   return typeof item.message_id === "string"
@@ -1232,6 +1246,7 @@ function timelineForDisplay(
     }
     const historyIndex = matchingHistoryIndex(item, itemIndex);
     if (historyIndex >= 0) {
+      copySnapshotTurnUsageToHistory(historyItems, historyIndex, item);
       appendHistoryRange(historyIndex, pendingUnanchoredItems.length === 0);
       mergedItems.push(...pendingUnanchoredItems);
       pendingUnanchoredItems.length = 0;

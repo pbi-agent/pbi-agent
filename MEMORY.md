@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-05-14
+- Last compacted: 2026-05-15
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -19,7 +19,7 @@
 - Web `apply_patch` cards: raw V4A parsing carries per-file operation/path/diff/count and move context (`move_file old → new`); running/completed multi-op calls render one card per file and completed replacements preserve mixed tool order.
 - Project imports: top-level `skills`, `commands`, `agents`; public catalogs under `pbi-agent/{skills,commands,agents}`; local install to `.agents/...`.
 - Sub-agents: `.agents/agents/*.md`; frontmatter only `name`/`description`; child model from active profile/CLI + `sub_agent_model`.
-- Local commands: `plan` no questions; `review` Markdown and runs autonomously without reviewer sub-agent; `fix-review` stops on `No findings.`; `ship-task` branch/merge helpers; `release` needs explicit publish wording and no history rewrite after PR unless approved.
+- Local commands: `plan` no questions; `review` Markdown and runs autonomously without reviewer sub-agent; `fix-review` stops on `No findings.`; `refine-task` clarifies draft tasks with `ask_user` and forbids solutions; `ship-task` branch/merge helpers; `release` needs explicit publish wording and no history rewrite after PR unless approved.
 - Project command `/create-task` creates Kanban cards through `pbi-agent kanban create` without implementation.
 - Release docs: use `release-writing`; changelog index `docs/changelog/index.md`, files `docs/changelog/v<version>.md`, VitePress sidebar links releases; release workflow needs validation triage, publish verification, continuation gate safety.
 - Branding: public copy = local coding agent; preserve `pbi-agent`, `pbi_agent`, `PBI_AGENT_*`, `~/.pbi-agent`; logo `src/pbi_agent/web/static/logo.jpg`.
@@ -54,15 +54,12 @@
 - Shell tool timeout: default `timeout_ms` 30000, max 300000; reject non-positive/non-integer/bool before subprocess. ChatGPT shell schema is compact command-only; runtime/base schema still accepts optional overrides.
 - Sub-agent web UI: parent timeline keeps child work in stable sub-agent cards; child routes own wait/input/processing/usage; aggregate child processing/interruptability controls parent Working without child transcript churn.
 - Startup stale cleanup: orphan active turn/sub-agent run records in stale web-session intervals become stale; stale projections clear processing/wait/pending and downgrade running tool/sub-agent snapshots.
+- Working summaries: final per-turn summaries can show cost; intermediate Working headers/sub-agent cards omit cost; active durations tick timestamp-to-now and stale turn usage clears on new user turns.
 
 ## Detailed Task Events
-## 2026-05-14
-- Centered deferred web startup update notices below the welcome banner; validation passed with focused pytest, Ruff check/format check, basedpyright, and git diff check.
-- Changed dashboard run filters to use DB-distinct status/provider/model options from `GET /api/dashboard/run-filter-values`, scoped by workspace/global and date range; validation passed with focused pytest, RunsTable Vitest, API type codegen test, Ruff check/format check, Bun typecheck, and Bun lint.
-- Extracted reusable frontend `WorkingSummary`, added duration display to Working headers, and showed scoped sub-agent summaries/durations on Working sub-agent cards; validation passed with Bun typecheck, focused/full web tests, Bun lint, web build, and git diff check.
-- Tightened sub-agent Working cards into one row, added timestamp-backed durations for every Working block and sub-agent card, and added final session summary notes; validation passed with Bun typecheck/lint/full web tests/web build, Ruff check/format check, basedpyright, focused web pytest, and git diff check.
-- Replaced global session Working summary with per-turn summary notes and added surrounding-message fallback durations for historical/intermediate Working blocks; validation passed with Bun typecheck/lint/full web tests/web build and git diff check.
-- Redesigned per-turn summary as a centered minimalist divider (fading rules + check icon + scoped summary), no visible label; aria-label kept for accessibility.
-- Added cost (`estimated_cost_usd`) to shared `WorkingSummary` and made active turn duration tick every second via a module-level `setInterval` plus `useSyncExternalStore`; cost shown for active Working header, final turn summary, and sub-agent cards. Validation passed with Bun lint/typecheck/full web tests (535)/web build.
-- Fixed summary review findings: sub-agent cards no longer inherit parent turn cost/duration, live timers anchor to current time after idle remounts, and unused per-tick state was removed. Validation passed with focused/full Vitest, Bun typecheck/lint/web build, and git diff check.
-- Fixed summary review findings: active timestamped Working runs now prefer live/timestamp-to-now duration, and final-turn cost only attaches to a Working block in that turn; validation passed with focused SessionTimeline Vitest, Bun typecheck/lint/web build, and git diff check.
+## 2026-05-15
+- Added `.agents/commands/refine-task.md` as `/refine-task` to refine draft task prompts through non-mutating context gathering and `ask_user` clarification without proposing solutions; validated discovery/parsing with a focused `uv run python3` snippet.
+- Rewrote `.agents/commands/refine-task.md` to match existing command style: authoritative mode instructions, explicit non-mutating grounding, strict no-solution constraints, and `ask_user` clarification loop; validated with `uv run pbi-agent commands list`.
+- Fixed per-turn summary cost persistence by attaching turn usage to the assistant message that closes each turn in live store state and persisted web-event timeline rebuilds; deduped saved history now preserves that turn usage. Validation passed with focused SessionTimeline/SessionPage/store Vitest, full web Vitest, focused web pytest, Bun typecheck/lint/web build, Ruff check/format check, basedpyright, and git diff check.
+- Mirrored frontend turn-usage reset in backend live snapshots for user `message_added`/`message_rekeyed` events so refresh/reconnect cannot hydrate stale turn timing/cost; validated with focused `test_web_serve` pytest, Ruff checks, basedpyright, and git diff check.
+- Fixed review finding by adding message `turnUsage` to timeline projection signatures so memoized timelines rerender when historical per-turn costs hydrate; validated focused projection Vitest, Bun typecheck/lint/web build, and git diff check.

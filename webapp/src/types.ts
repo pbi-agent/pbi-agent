@@ -535,6 +535,10 @@ export type TimelineMessageItem = {
   imageAttachments?: ImageAttachment[];
   markdown: boolean;
   subAgentId?: string;
+  turnUsage?: {
+    usage: UsagePayload | null;
+    elapsedSeconds?: number | null;
+  } | null;
 };
 
 export type TimelineThinkingItem = {

@@ -394,6 +394,27 @@ function readTurnUsage(
   };
 }
 
+function attachTurnUsageToLatestAssistantMessage(
+  items: TimelineItem[],
+  turnUsage: { usage: UsagePayload | null; elapsedSeconds?: number },
+  subAgentId?: string | null,
+): TimelineItem[] {
+  const index = items.findLastIndex((item) => (
+    item.kind === "message"
+    && item.role === "assistant"
+    && ((item.subAgentId ?? null) === (subAgentId ?? null))
+  ));
+  if (index < 0) return items;
+  const item = items[index];
+  if (item?.kind !== "message") return items;
+  const nextItems = [...items];
+  nextItems[index] = {
+    ...item,
+    turnUsage,
+  };
+  return nextItems;
+}
+
 function readToolGroupItems(value: unknown): TimelineToolGroupEntry[] {
   if (!Array.isArray(value)) {
     return [];
@@ -436,6 +457,7 @@ function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
         : undefined,
       markdown: Boolean(raw.markdown),
       subAgentId: readOptionalString(raw.sub_agent_id) ?? readOptionalString(raw.subAgentId),
+      turnUsage: readTurnUsage(raw.turn_usage ?? raw.turnUsage),
     };
   }
   if (kind === "thinking") {
@@ -720,27 +742,42 @@ export function reduceSessionEvent(
     case "usage_updated": {
       const subAgentId = eventSubAgentId(event);
       if (subAgentId) {
+        const subAgentTurnUsage = event.payload.scope === "session"
+          ? null
+          : {
+              usage: event.payload.usage,
+              elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
+            };
         patch.subAgents = updateSubAgentState(
           current.subAgents,
           subAgentId,
           event.payload.scope === "session"
             ? { sessionUsage: event.payload.usage }
-            : {
-                turnUsage: {
-                  usage: event.payload.usage,
-                  elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
-                },
-              },
+            : { turnUsage: subAgentTurnUsage },
         );
+        if (subAgentTurnUsage) {
+          patch.items = attachTurnUsageToLatestAssistantMessage(
+            current.items,
+            subAgentTurnUsage,
+            subAgentId,
+          );
+          patch.itemsVersion = current.itemsVersion + 1;
+        }
         break;
       }
       if (event.payload.scope === "session") {
         patch.sessionUsage = event.payload.usage;
       } else {
-        patch.turnUsage = {
+        const turnUsage = {
           usage: event.payload.usage,
           elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
         };
+        patch.turnUsage = turnUsage;
+        patch.items = attachTurnUsageToLatestAssistantMessage(
+          current.items,
+          turnUsage,
+        );
+        patch.itemsVersion = current.itemsVersion + 1;
       }
       break;
     }
@@ -763,6 +800,15 @@ export function reduceSessionEvent(
         markdown: payload.markdown ?? false,
         subAgentId: payload.sub_agent_id ?? undefined,
       };
+      if (item.kind === "message" && item.role === "user") {
+        if (item.subAgentId) {
+          patch.subAgents = updateSubAgentState(current.subAgents, item.subAgentId, {
+            turnUsage: null,
+          });
+        } else {
+          patch.turnUsage = null;
+        }
+      }
       patch.items = upsertItem(current.items, item);
       patch.itemsVersion = current.itemsVersion + 1;
       break;
@@ -789,6 +835,15 @@ export function reduceSessionEvent(
       }
       if (!item.subAgentId) {
         patch.restoredInput = null;
+      }
+      if (item.kind === "message" && item.role === "user") {
+        if (item.subAgentId) {
+          patch.subAgents = updateSubAgentState(current.subAgents, item.subAgentId, {
+            turnUsage: null,
+          });
+        } else {
+          patch.turnUsage = null;
+        }
       }
       patch.items = rekeyItem(current.items, payload.old_item_id, item);
       patch.itemsVersion = current.itemsVersion + 1;

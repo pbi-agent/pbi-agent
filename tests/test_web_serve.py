@@ -404,6 +404,65 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
     ]
 
 
+def test_combined_timeline_attaches_turn_usage_from_persisted_events() -> None:
+    turn_usage = {
+        "usage": {"estimated_cost_usd": 0.012, "total_tokens": 42},
+        "elapsed_seconds": 5.5,
+    }
+    snapshot = _combined_timeline_snapshot(
+        [
+            _run_record(
+                "completed-run",
+                snapshot={
+                    "live_session_id": "completed-run",
+                    "session_id": "session-1",
+                    "session_ended": True,
+                    "items": [],
+                    "sub_agents": {},
+                },
+            ),
+        ],
+        persisted_events_by_run_session_id={
+            "completed-run": [
+                {
+                    "seq": 1,
+                    "type": "message_added",
+                    "payload": {
+                        "item_id": "message-1",
+                        "role": "user",
+                        "content": "Read something",
+                        "markdown": False,
+                    },
+                    "created_at": "2026-05-08T08:47:16Z",
+                },
+                {
+                    "seq": 2,
+                    "type": "message_added",
+                    "payload": {
+                        "item_id": "message-2",
+                        "role": "assistant",
+                        "content": "Done",
+                        "markdown": True,
+                    },
+                    "created_at": "2026-05-08T08:47:18Z",
+                },
+                {
+                    "seq": 3,
+                    "type": "usage_updated",
+                    "payload": {
+                        "scope": "turn",
+                        **turn_usage,
+                    },
+                    "created_at": "2026-05-08T08:47:19Z",
+                },
+            ]
+        },
+    )
+
+    assert snapshot is not None
+    assert snapshot["items"][-1]["turn_usage"] == turn_usage
+
+
 def test_web_manager_uses_host_workspace_key_in_sandbox(monkeypatch, tmp_path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -3019,6 +3078,104 @@ def test_sub_agent_processing_isolated_from_parent_live_snapshot(
                 "elapsed_seconds": 2.5,
             },
         }
+
+
+def test_live_snapshot_resets_turn_usage_for_new_user_messages(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    with TestClient(app):
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = app.state.manager.create_live_session()
+        live_session_id = created["live_session_id"]
+        live_session = app.state.manager._live_sessions[live_session_id]
+
+        parent_usage = {"estimated_cost_usd": 0.012, "total_tokens": 42}
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "turn",
+                "usage": parent_usage,
+                "elapsed_seconds": 4.0,
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["turn_usage"] == {
+            "usage": parent_usage,
+            "elapsed_seconds": 4.0,
+        }
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "message_added",
+            {
+                "item_id": "message-1",
+                "role": "user",
+                "content": "next turn",
+                "markdown": False,
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["turn_usage"] is None
+
+        child_usage = {"estimated_cost_usd": 0.004, "total_tokens": 11}
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "turn",
+                "usage": child_usage,
+                "elapsed_seconds": 2.0,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["sub_agents"]["subagent-1"]["turn_usage"] == {
+            "usage": child_usage,
+            "elapsed_seconds": 2.0,
+        }
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "message_rekeyed",
+            {
+                "old_item_id": "subagent-1-temp-user",
+                "sub_agent_id": "subagent-1",
+                "item": {
+                    "item_id": "subagent-1-message-1",
+                    "role": "user",
+                    "content": "child next turn",
+                    "markdown": False,
+                },
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["sub_agents"]["subagent-1"]["turn_usage"] is None
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        run = store.get_run_session(live_session_id)
+
+    assert run is not None
+    persisted_snapshot = json.loads(run.snapshot_json)
+    assert persisted_snapshot["turn_usage"] is None
+    assert persisted_snapshot["sub_agents"]["subagent-1"]["turn_usage"] is None
 
 
 def test_live_session_creation_rechecks_saved_session_under_registration_lock(
