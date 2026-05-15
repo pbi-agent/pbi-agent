@@ -46,6 +46,7 @@ import { cn } from "../../lib/utils";
 import {
   projectMainTimelineItems,
   projectSubAgentTimelineItems,
+  timelineItemSubAgentId,
   type TimelineProjection,
 } from "../../sessionTimelineProjection";
 import { useSessionEvents } from "../../hooks/useSessionEvents";
@@ -69,7 +70,13 @@ import { EmptyState } from "../shared/EmptyState";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
-type SubAgentDisplayMap = Record<string, { title: string; status: string }>;
+type SubAgentDisplayMap = Record<string, {
+  title: string;
+  status: string;
+  turnElapsedSeconds?: number | null;
+}>;
+
+const EMPTY_TIMELINE_ITEMS: TimelineItem[] = [];
 
 function useTimelineDisplayProjection(
   items: TimelineItem[],
@@ -102,16 +109,33 @@ function useSubAgentDisplayMap(
         [routeSubAgentId]: {
           title: selected.title,
           status: selected.status,
+          turnElapsedSeconds: selected.turnUsage?.elapsedSeconds ?? null,
         },
       };
     }
     return Object.fromEntries(
       Object.entries(subAgents).map(([subAgentId, subAgent]) => [
         subAgentId,
-        { title: subAgent.title, status: subAgent.status },
+        {
+          title: subAgent.title,
+          status: subAgent.status,
+          turnElapsedSeconds: subAgent.turnUsage?.elapsedSeconds ?? null,
+        },
       ]),
     );
   }, [routeSubAgentId, subAgents]);
+}
+
+function useSubAgentItemMap(items: TimelineItem[]): Record<string, TimelineItem[]> {
+  return useMemo(() => {
+    const subAgentItems: Record<string, TimelineItem[]> = {};
+    for (const item of items) {
+      const subAgentId = timelineItemSubAgentId(item);
+      if (!subAgentId) continue;
+      subAgentItems[subAgentId] = [...(subAgentItems[subAgentId] ?? []), item];
+    }
+    return subAgentItems;
+  }, [items]);
 }
 
 export function SessionPage({
@@ -660,13 +684,15 @@ export function SessionPage({
     ? sessionState?.subAgents[routeSubAgentId] ?? null
     : null;
   const selectedSubAgentIsRunning = selectedSubAgent?.status === "running";
+  const rawTimelineItems = sessionState?.items ?? EMPTY_TIMELINE_ITEMS;
   const {
     items: displayedItems,
     itemsVersion: displayedItemsVersion,
   } = useTimelineDisplayProjection(
-    sessionState?.items ?? [],
+    rawTimelineItems,
     isSubAgentRoute ? routeSubAgentId ?? null : null,
   );
+  const subAgentItems = useSubAgentItemMap(rawTimelineItems);
   const composerInputHistory = useMemo(
     () => {
       const history: string[] = [];
@@ -710,6 +736,12 @@ export function SessionPage({
       ? selectedSubAgent?.waitMessage ?? null
       : null
     : sessionState?.waitMessage ?? null;
+  const displayedTurnElapsedSeconds = isSubAgentRoute
+    ? selectedSubAgent?.turnUsage?.elapsedSeconds ?? null
+    : sessionState?.turnUsage?.elapsedSeconds ?? null;
+  const displayedTurnCostUsd = isSubAgentRoute
+    ? selectedSubAgent?.turnUsage?.usage?.estimated_cost_usd ?? null
+    : sessionState?.turnUsage?.usage?.estimated_cost_usd ?? null;
   const displayedUsage = isSubAgentRoute
     ? selectedSubAgent?.sessionUsage ?? selectedSubAgent?.turnUsage?.usage ?? null
     : sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null;
@@ -864,6 +896,9 @@ export function SessionPage({
               items={displayedItems}
               itemsVersion={displayedItemsVersion}
               subAgents={displayedSubAgents}
+              subAgentItems={subAgentItems}
+              turnElapsedSeconds={displayedTurnElapsedSeconds}
+              turnCostUsd={displayedTurnCostUsd}
               connection={sessionState?.connection ?? "disconnected"}
               waitMessage={displayedWaitMessage}
               processing={displayedProcessing}
@@ -934,6 +969,8 @@ function mapHistoryItem(item: HistoryItem): TimelineItem {
   return {
     kind: "message",
     itemId: item.item_id,
+    createdAt: item.created_at,
+    updatedAt: item.created_at,
     messageId: item.message_id,
     partIds: item.part_ids,
     role: item.role,
@@ -956,6 +993,7 @@ function historyItemToSnapshotItem(item: HistoryItem): Record<string, unknown> {
     image_attachments: item.image_attachments,
     markdown: item.markdown,
     created_at: item.created_at,
+    updated_at: item.created_at,
   };
 }
 
@@ -966,6 +1004,23 @@ function messageSignature(item: Record<string, unknown>): string | null {
   const filePaths = Array.isArray(item.file_paths) ? item.file_paths : [];
   const imageAttachments = Array.isArray(item.image_attachments) ? item.image_attachments : [];
   return JSON.stringify([role, content, filePaths, imageAttachments]);
+}
+
+function snapshotTurnUsage(item: Record<string, unknown>): unknown {
+  return item.turn_usage ?? item.turnUsage ?? null;
+}
+
+function copySnapshotTurnUsageToHistory(
+  historyItems: Record<string, unknown>[],
+  historyIndex: number,
+  snapshotItem: Record<string, unknown>,
+): void {
+  const turnUsage = snapshotTurnUsage(snapshotItem);
+  if (turnUsage === null || typeof turnUsage !== "object") return;
+  historyItems[historyIndex] = {
+    ...historyItems[historyIndex],
+    turn_usage: turnUsage,
+  };
 }
 
 function persistedMessageId(item: Record<string, unknown>): string | null {
@@ -1191,6 +1246,7 @@ function timelineForDisplay(
     }
     const historyIndex = matchingHistoryIndex(item, itemIndex);
     if (historyIndex >= 0) {
+      copySnapshotTurnUsageToHistory(historyItems, historyIndex, item);
       appendHistoryRange(historyIndex, pendingUnanchoredItems.length === 0);
       mergedItems.push(...pendingUnanchoredItems);
       pendingUnanchoredItems.length = 0;

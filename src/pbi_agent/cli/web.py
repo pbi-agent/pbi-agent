@@ -52,6 +52,8 @@ class WebServerWaitResult:
 def _handle_web_command(  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     args: argparse.Namespace,
     settings: Settings | ResolvedRuntime,
+    *,
+    update_notice: str | None = None,
 ) -> int:
     runtime = _coerce_runtime(settings)
     if args.port < 1 or args.port > 65535:
@@ -79,6 +81,7 @@ def _handle_web_command(  # pyright: ignore[reportUnusedFunction] - imported by 
     server = _create_web_server(
         args,
         runtime,
+        update_notice=update_notice,
     )
     try:
         server.serve(debug=args.dev)
@@ -406,6 +409,8 @@ def _powershell_single_quote(value: str) -> str:
 def _create_web_server(
     args: argparse.Namespace,
     settings: Settings | ResolvedRuntime,
+    *,
+    update_notice: str | None = None,
 ) -> _WebServer:
     from pbi_agent.web.serve import PBIWebServer
 
@@ -418,6 +423,7 @@ def _create_web_server(
         port=args.port,
         title=args.title,
         public_url=args.url,
+        update_notice=update_notice,
     )
 
 

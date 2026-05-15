@@ -170,6 +170,28 @@ def test_daily_maintenance_runs_once_and_checks_update(
     assert not old_upload.exists()
 
 
+def test_daily_maintenance_can_defer_update_notice_rendering(
+    tmp_path: Path, monkeypatch
+) -> None:
+    db_path = tmp_path / "sessions.db"
+    config_path = tmp_path / "config.json"
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(db_path))
+    monkeypatch.setenv("PBI_AGENT_INTERNAL_CONFIG_PATH", str(config_path))
+    notice = (
+        "Update available: pbi-agent 1.0.0 -> 1.2.0. "
+        "Run: uv tool install pbi-agent --upgrade"
+    )
+    with (
+        patch("pbi_agent.maintenance.check_update_notice", return_value=notice),
+        patch("sys.stderr", io.StringIO()) as stderr,
+    ):
+        result = run_startup_maintenance(render_notice=False)
+
+    assert result.ran is True
+    assert result.update_notice == notice
+    assert stderr.getvalue() == ""
+
+
 def test_update_notice_newer_version(monkeypatch) -> None:
     monkeypatch.setattr("pbi_agent.maintenance.__version__", "1.0.0")
     monkeypatch.setattr("pbi_agent.maintenance._latest_pypi_version", lambda: "1.2.0")

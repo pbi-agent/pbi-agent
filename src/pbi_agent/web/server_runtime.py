@@ -13,6 +13,7 @@ import uvicorn
 import uvicorn.server
 
 from pbi_agent.branding import startup_panel
+from pbi_agent.maintenance import render_update_notice
 from pbi_agent.config import ConfigError, ResolvedRuntime, Settings, resolve_web_runtime
 from pbi_agent.web.app_factory import create_app
 from pbi_agent.web.defaults import DEFAULT_WEB_PORT
@@ -29,6 +30,7 @@ class PBIWebServer:
         port: int = DEFAULT_WEB_PORT,
         title: str | None = None,
         public_url: str | None = None,
+        update_notice: str | None = None,
     ) -> None:
         self._settings = settings
         self._runtime_args = runtime_args
@@ -36,6 +38,7 @@ class PBIWebServer:
         self.port = port
         self.title = title
         self.public_url = public_url
+        self.update_notice = update_notice
         self.console = Console(highlight=False)
         self._startup_warning: str | None = None
 
@@ -49,6 +52,10 @@ class PBIWebServer:
         )
         target = self.public_url or f"http://{self.host}:{self.port}"
         self.console.print(startup_panel(), highlight=False)
+        if self.update_notice:
+            render_update_notice(
+                self.update_notice, console=self.console, centered=True
+            )
         self.console.print(f"  Serving on [bold]{target}[/bold]")
         self.console.print("[cyan]  Press Ctrl+C to quit[/cyan]")
         server = _GracefulUvicornServer(

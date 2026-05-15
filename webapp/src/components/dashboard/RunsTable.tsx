@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
-import { fetchAllRuns } from "../../api";
+import { fetchAllRuns, fetchRunFilterValues } from "../../api";
 import type { AllRunsRun } from "../../types";
 import { StatusPill } from "../shared/StatusPill";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
@@ -59,19 +59,6 @@ function formatTimestamp(iso: string): string {
   } catch {
     return iso;
   }
-}
-
-function uniqueSortedValues(
-  runs: AllRunsRun[],
-  getValue: (run: AllRunsRun) => string | null | undefined
-): string[] {
-  return Array.from(
-    new Set(
-      runs
-        .map((run) => getValue(run)?.trim())
-        .filter((value): value is string => Boolean(value))
-    )
-  ).sort((a, b) => a.localeCompare(b));
 }
 
 type SortKey =
@@ -143,21 +130,23 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
     staleTime: 15_000,
   });
 
+  const filterValuesQuery = useQuery({
+    queryKey: ["dashboard-run-filter-values", startDate, endDate, scope],
+    queryFn: () =>
+      fetchRunFilterValues({
+        start_date: startDate,
+        end_date: endDate,
+        scope,
+      }),
+    staleTime: 60_000,
+  });
+
   const totalCount = runsQuery.data?.total_count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const runs = useMemo(() => runsQuery.data?.runs ?? [], [runsQuery.data?.runs]);
-  const statusOptions = useMemo(
-    () => uniqueSortedValues(runs, (run) => run.status),
-    [runs]
-  );
-  const providerOptions = useMemo(
-    () => uniqueSortedValues(runs, (run) => run.provider),
-    [runs]
-  );
-  const modelOptions = useMemo(
-    () => uniqueSortedValues(runs, (run) => run.model),
-    [runs]
-  );
+  const statusOptions = filterValuesQuery.data?.statuses ?? [];
+  const providerOptions = filterValuesQuery.data?.providers ?? [];
+  const modelOptions = filterValuesQuery.data?.models ?? [];
 
   function toggleSort(key: SortKey) {
     if (sortBy === key) {

@@ -41,6 +41,7 @@ from pbi_agent.web.api.schemas.system import (
     ObservabilityEventModel,
     ProviderBreakdownModel,
     RunSessionDetailResponse,
+    RunFilterValuesResponse,
     RunSessionModel,
     SessionDetailResponse,
     SessionImageUploadResponse,
@@ -411,6 +412,21 @@ def list_all_runs(
         runs=[model_from_payload(AllRunsRunModel, item) for item in payload["runs"]],
         total_count=payload["total_count"],
     )
+
+
+@router.get("/dashboard/run-filter-values", response_model=RunFilterValuesResponse)
+def list_run_filter_values(
+    manager: SessionManagerDep,
+    start_date: Annotated[str | None, Query()] = None,
+    end_date: Annotated[str | None, Query()] = None,
+    scope: ScopeQuery = "workspace",
+) -> RunFilterValuesResponse:
+    payload = manager.list_run_filter_values(
+        start_date=start_date,
+        end_date=end_date,
+        global_scope=scope == "global",
+    )
+    return model_from_payload(RunFilterValuesResponse, payload)
 
 
 @router.delete("/sessions/{session_id}", status_code=204)

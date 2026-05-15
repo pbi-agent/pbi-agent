@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(_argv_with_default_command(parser, raw_argv))
-    run_startup_maintenance()
+    maintenance_result = run_startup_maintenance(render_notice=args.command != "web")
 
     # ---- commands that don't need settings ----
 
@@ -99,7 +99,9 @@ def main(argv: list[str] | None = None) -> int:
                 model="gpt-5.4",
                 verbose=args.verbose,
             )
-        return _handle_web_command(args, runtime)
+        return _handle_web_command(
+            args, runtime, update_notice=maintenance_result.update_notice
+        )
 
     # ---- resolve settings for commands that need a provider ----
 

@@ -43,6 +43,7 @@ import type {
   ProviderModelListPayload,
   ProviderUsageLimitsResponse,
   ProviderView,
+  RunFilterValuesPayload,
   RunSession,
   SessionDetailPayload,
   SessionRecord,
@@ -82,6 +83,9 @@ type RunDetailResponsePayload = {
   events: ObservabilityEvent[];
 };
 type DashboardStatsQuery = ApiQueryParams<"GET /api/dashboard/stats"> & {
+  scope?: "workspace" | "global";
+};
+type RunFilterValuesQuery = ApiQueryParams<"GET /api/dashboard/run-filter-values"> & {
   scope?: "workspace" | "global";
 };
 type AllRunsQuery = ApiQueryParams<"GET /api/runs"> & {
@@ -1219,5 +1223,18 @@ export async function fetchAllRuns(params: AllRunsQuery): Promise<AllRunsPayload
   return apiRequest<"GET /api/runs", AllRunsPayload>(
     "GET /api/runs",
     `/api/runs${qs}`,
+  );
+}
+
+export async function fetchRunFilterValues(
+  params: RunFilterValuesQuery,
+): Promise<RunFilterValuesPayload> {
+  const qs = queryString("GET /api/dashboard/run-filter-values", params);
+  return apiRequest<
+    "GET /api/dashboard/run-filter-values",
+    RunFilterValuesPayload
+  >(
+    "GET /api/dashboard/run-filter-values",
+    `/api/dashboard/run-filter-values${qs}`,
   );
 }

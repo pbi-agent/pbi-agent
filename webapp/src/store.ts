@@ -129,13 +129,32 @@ function runtimeFromSession(session: LiveSession): LiveSessionRuntime {
   };
 }
 
+function mergeTimelineItemTiming(
+  existing: TimelineItem | undefined,
+  nextItem: TimelineItem,
+): TimelineItem {
+  if (!existing) return nextItem;
+  const createdAt = nextItem.kind === "message"
+    ? nextItem.createdAt ?? existing.createdAt
+    : existing.createdAt ?? nextItem.createdAt;
+  const updatedAt = nextItem.updatedAt
+    ?? nextItem.createdAt
+    ?? existing.updatedAt
+    ?? createdAt;
+  return {
+    ...nextItem,
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+  };
+}
+
 function upsertItem(items: TimelineItem[], nextItem: TimelineItem): TimelineItem[] {
   const index = items.findIndex((item) => item.itemId === nextItem.itemId);
   if (index === -1) {
     return [...items, nextItem];
   }
   const updated = [...items];
-  updated[index] = nextItem;
+  updated[index] = mergeTimelineItemTiming(items[index], nextItem);
   return updated;
 }
 
@@ -181,6 +200,28 @@ function readPendingUserQuestions(value: unknown): PendingUserQuestions | null {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function readItemCreatedAt(raw: Record<string, unknown>): string | undefined {
+  return readOptionalString(raw.createdAt) ?? readOptionalString(raw.created_at);
+}
+
+function readItemUpdatedAt(raw: Record<string, unknown>): string | undefined {
+  return readOptionalString(raw.updatedAt)
+    ?? readOptionalString(raw.updated_at)
+    ?? readItemCreatedAt(raw);
+}
+
+function itemTiming(raw: Record<string, unknown>): {
+  createdAt?: string;
+  updatedAt?: string;
+} {
+  const createdAt = readItemCreatedAt(raw);
+  const updatedAt = readItemUpdatedAt(raw);
+  return {
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+  };
 }
 
 function readStringList(value: unknown): string[] {
@@ -353,6 +394,27 @@ function readTurnUsage(
   };
 }
 
+function attachTurnUsageToLatestAssistantMessage(
+  items: TimelineItem[],
+  turnUsage: { usage: UsagePayload | null; elapsedSeconds?: number },
+  subAgentId?: string | null,
+): TimelineItem[] {
+  const index = items.findLastIndex((item) => (
+    item.kind === "message"
+    && item.role === "assistant"
+    && ((item.subAgentId ?? null) === (subAgentId ?? null))
+  ));
+  if (index < 0) return items;
+  const item = items[index];
+  if (item?.kind !== "message") return items;
+  const nextItems = [...items];
+  nextItems[index] = {
+    ...item,
+    turnUsage,
+  };
+  return nextItems;
+}
+
 function readToolGroupItems(value: unknown): TimelineToolGroupEntry[] {
   if (!Array.isArray(value)) {
     return [];
@@ -382,6 +444,7 @@ function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
     return {
       kind: "message",
       itemId,
+      ...itemTiming(raw),
       messageId: readOptionalString(raw.message_id),
       partIds: readMessagePartIds(raw.part_ids),
       role: readTimelineRole(raw.role),
@@ -394,12 +457,14 @@ function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
         : undefined,
       markdown: Boolean(raw.markdown),
       subAgentId: readOptionalString(raw.sub_agent_id) ?? readOptionalString(raw.subAgentId),
+      turnUsage: readTurnUsage(raw.turn_usage ?? raw.turnUsage),
     };
   }
   if (kind === "thinking") {
     return {
       kind: "thinking",
       itemId,
+      ...itemTiming(raw),
       title: readString(raw.title, "Thinking"),
       content: readString(raw.content),
       subAgentId: readOptionalString(raw.sub_agent_id) ?? readOptionalString(raw.subAgentId),
@@ -409,6 +474,7 @@ function mapSnapshotItem(raw: Record<string, unknown>): TimelineItem | null {
     return {
       kind: "tool_group",
       itemId,
+      ...itemTiming(raw),
       label: readString(raw.label, "Tool calls"),
       status: readToolGroupStatus(raw.status),
       items: readToolGroupItems(raw.items),
@@ -676,27 +742,42 @@ export function reduceSessionEvent(
     case "usage_updated": {
       const subAgentId = eventSubAgentId(event);
       if (subAgentId) {
+        const subAgentTurnUsage = event.payload.scope === "session"
+          ? null
+          : {
+              usage: event.payload.usage,
+              elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
+            };
         patch.subAgents = updateSubAgentState(
           current.subAgents,
           subAgentId,
           event.payload.scope === "session"
             ? { sessionUsage: event.payload.usage }
-            : {
-                turnUsage: {
-                  usage: event.payload.usage,
-                  elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
-                },
-              },
+            : { turnUsage: subAgentTurnUsage },
         );
+        if (subAgentTurnUsage) {
+          patch.items = attachTurnUsageToLatestAssistantMessage(
+            current.items,
+            subAgentTurnUsage,
+            subAgentId,
+          );
+          patch.itemsVersion = current.itemsVersion + 1;
+        }
         break;
       }
       if (event.payload.scope === "session") {
         patch.sessionUsage = event.payload.usage;
       } else {
-        patch.turnUsage = {
+        const turnUsage = {
           usage: event.payload.usage,
           elapsedSeconds: event.payload.elapsed_seconds ?? undefined,
         };
+        patch.turnUsage = turnUsage;
+        patch.items = attachTurnUsageToLatestAssistantMessage(
+          current.items,
+          turnUsage,
+        );
+        patch.itemsVersion = current.itemsVersion + 1;
       }
       break;
     }
@@ -708,6 +789,8 @@ export function reduceSessionEvent(
       const item: TimelineItem = {
         kind: "message",
         itemId: payload.item_id,
+        createdAt: payload.created_at ?? event.created_at,
+        updatedAt: event.created_at,
         messageId: payload.message_id ?? undefined,
         partIds: readMessagePartIds(payload.part_ids),
         role: payload.role,
@@ -717,6 +800,15 @@ export function reduceSessionEvent(
         markdown: payload.markdown ?? false,
         subAgentId: payload.sub_agent_id ?? undefined,
       };
+      if (item.kind === "message" && item.role === "user") {
+        if (item.subAgentId) {
+          patch.subAgents = updateSubAgentState(current.subAgents, item.subAgentId, {
+            turnUsage: null,
+          });
+        } else {
+          patch.turnUsage = null;
+        }
+      }
       patch.items = upsertItem(current.items, item);
       patch.itemsVersion = current.itemsVersion + 1;
       break;
@@ -734,6 +826,8 @@ export function reduceSessionEvent(
       const item = mapSnapshotItem({
         ...rawRecord,
         kind: "message",
+        created_at: readOptionalString(rawRecord.created_at) ?? event.created_at,
+        updated_at: event.created_at,
         ...(subAgentId ? { sub_agent_id: subAgentId } : {}),
       });
       if (!item) {
@@ -741,6 +835,15 @@ export function reduceSessionEvent(
       }
       if (!item.subAgentId) {
         patch.restoredInput = null;
+      }
+      if (item.kind === "message" && item.role === "user") {
+        if (item.subAgentId) {
+          patch.subAgents = updateSubAgentState(current.subAgents, item.subAgentId, {
+            turnUsage: null,
+          });
+        } else {
+          patch.turnUsage = null;
+        }
       }
       patch.items = rekeyItem(current.items, payload.old_item_id, item);
       patch.itemsVersion = current.itemsVersion + 1;
@@ -764,6 +867,8 @@ export function reduceSessionEvent(
       const item: TimelineItem = {
         kind: "thinking",
         itemId: payload.item_id,
+        createdAt: event.created_at,
+        updatedAt: event.created_at,
         title: payload.title,
         content: payload.content,
         subAgentId: payload.sub_agent_id ?? undefined,
@@ -777,6 +882,8 @@ export function reduceSessionEvent(
       const item: TimelineItem = {
         kind: "tool_group",
         itemId: payload.item_id,
+        createdAt: event.created_at,
+        updatedAt: event.created_at,
         label: payload.label,
         status: payload.status ?? undefined,
         items: readToolGroupItems(payload.items),

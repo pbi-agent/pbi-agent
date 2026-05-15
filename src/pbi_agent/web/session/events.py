@@ -5,9 +5,11 @@ from typing import Any, Protocol, cast
 
 from pbi_agent.session_store import RunSessionRecord, SessionRecord, SessionStore
 from pbi_agent.web.session.serializers import (
+    _attach_turn_usage_to_latest_assistant_message,
     _deserialize_json_field,
     _persisted_web_run_status,
     _snapshot_item_id,
+    _turn_usage_from_event_payload,
     _web_event_from_record,
 )
 from pbi_agent.web.session.state import (
@@ -263,6 +265,22 @@ class EventsMixin:
             and processing.get("message") == "running sub-agent..."
         )
 
+    def _reset_turn_usage_for_user_message(
+        self,
+        live_session: LiveSessionState,
+        item: dict[str, Any],
+    ) -> None:
+        if item.get("kind") != "message" or item.get("role") != "user":
+            return
+        raw_sub_agent_id = item.get("sub_agent_id")
+        sub_agent_id = raw_sub_agent_id if isinstance(raw_sub_agent_id, str) else None
+        if sub_agent_id:
+            sub_agent = self._sub_agent_snapshot(live_session, sub_agent_id)
+            sub_agent["turn_usage"] = None
+            live_session.snapshot.sub_agents[sub_agent_id] = sub_agent
+            return
+        live_session.snapshot.turn_usage = None
+
     def _publish_live_event(
         self,
         live_session_id: str,
@@ -398,6 +416,13 @@ class EventsMixin:
                 snapshot.pending_user_questions = None
             return
         if event_type == "usage_updated":
+            turn_usage = _turn_usage_from_event_payload(payload)
+            if turn_usage is not None:
+                snapshot.items = _attach_turn_usage_to_latest_assistant_message(
+                    snapshot.items,
+                    turn_usage,
+                    sub_agent_id=sub_agent_id,
+                )
             if sub_agent_id:
                 sub_agent = self._sub_agent_snapshot(live_session, sub_agent_id)
                 if payload.get("scope") == "session":
@@ -427,6 +452,8 @@ class EventsMixin:
                 else "tool_group"
             )
             item["itemId"] = str(payload.get("item_id") or "")
+            item = self._apply_event_item_timing(item, event)
+            self._reset_turn_usage_for_user_message(live_session, item)
             snapshot.items = self._upsert_snapshot_item(snapshot.items, item)
             return
         if event_type == "message_rekeyed":
@@ -439,6 +466,8 @@ class EventsMixin:
                 item["sub_agent_id"] = sub_agent_id
             item["kind"] = "message"
             item["itemId"] = str(item.get("item_id") or item.get("itemId") or "")
+            item = self._apply_event_item_timing(item, event)
+            self._reset_turn_usage_for_user_message(live_session, item)
             if old_item_id and old_item_id != item["itemId"]:
                 snapshot.items = [
                     existing
@@ -502,6 +531,22 @@ class EventsMixin:
                 "compact_threshold": payload.get("compact_threshold"),
             }
 
+    def _apply_event_item_timing(
+        self,
+        item: dict[str, Any],
+        event: dict[str, Any],
+    ) -> dict[str, Any]:
+        created_at = event.get("created_at")
+        if not isinstance(created_at, str):
+            return item
+        return {
+            **item,
+            "created_at": item.get("created_at")
+            if isinstance(item.get("created_at"), str)
+            else created_at,
+            "updated_at": created_at,
+        }
+
     def _upsert_snapshot_item(
         self,
         items: list[dict[str, Any]],
@@ -511,6 +556,10 @@ class EventsMixin:
         for index, item in enumerate(items):
             if str(item.get("itemId") or "") != item_id:
                 continue
+            if next_item.get("kind") != "message" and isinstance(
+                item.get("created_at"), str
+            ):
+                next_item = {**next_item, "created_at": item["created_at"]}
             updated = list(items)
             updated[index] = next_item
             return updated

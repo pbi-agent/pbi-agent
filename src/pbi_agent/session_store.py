@@ -2081,6 +2081,50 @@ class SessionStore:
         results: list[dict[str, object]] = [dict(row) for row in rows]
         return results, total_count
 
+    def list_run_session_filter_values(
+        self,
+        *,
+        directory: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, list[str]]:
+        """Return distinct run filter values for the dashboard runs table."""
+        normalized_dir = _normalize_directory_key(directory) if directory else None
+
+        where_clauses = ["1=1", "rs.agent_type != 'web_session'"]
+        params: list[object] = []
+        if normalized_dir is not None:
+            where_clauses.append("s.directory = ?")
+            params.append(normalized_dir)
+        if start_date is not None:
+            where_clauses.append("rs.started_at >= ?")
+            params.append(start_date)
+        if end_date is not None:
+            where_clauses.append("rs.started_at <= ?")
+            params.append(end_date)
+
+        where = " AND ".join(where_clauses)
+        join = (
+            "FROM run_sessions rs LEFT JOIN sessions s ON rs.session_id = s.session_id"
+        )
+
+        def fetch_values(column: str) -> list[str]:
+            rows = self._conn.execute(
+                f"SELECT DISTINCT TRIM(rs.{column}) AS value {join} "
+                f"WHERE {where} AND rs.{column} IS NOT NULL "
+                f"AND TRIM(rs.{column}) != '' "
+                "ORDER BY value COLLATE NOCASE ASC",
+                params,
+            ).fetchall()
+            return [str(row["value"]) for row in rows]
+
+        with self._lock:
+            return {
+                "statuses": fetch_values("status"),
+                "providers": fetch_values("provider"),
+                "models": fetch_values("model"),
+            }
+
     # -- kanban tasks -----------------------------------------------------
 
     def list_kanban_stage_configs(

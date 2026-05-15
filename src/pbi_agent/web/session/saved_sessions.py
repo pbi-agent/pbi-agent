@@ -309,6 +309,21 @@ class SavedSessionsMixin:
             runs.append(run_dict)
         return {"runs": runs, "total_count": total_count}
 
+    def list_run_filter_values(
+        self,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        global_scope: bool = False,
+    ) -> dict[str, list[str]]:
+        directory = None if global_scope else self._directory_key
+        with SessionStore() as store:
+            return store.list_run_session_filter_values(
+                directory=directory,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
     def delete_session(self, session_id: str) -> None:
         with self._lock:
             if self._find_live_session_for_saved_session_locked(session_id) is not None:

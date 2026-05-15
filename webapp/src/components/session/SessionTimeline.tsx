@@ -1,6 +1,6 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { BotIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
+import { BotIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronUpIcon } from "lucide-react";
 import { Accordion as AccordionPrimitive } from "radix-ui";
 import { useAutoScroll } from "../../hooks/useAutoScroll";
 import type { ConnectionState } from "../../store";
@@ -28,6 +28,11 @@ import { MarkdownContent } from "../shared/MarkdownContent";
 import { ToolResult } from "./ToolResult";
 import { TimelineEntry } from "./TimelineEntry";
 import { SessionWelcome } from "./SessionWelcome";
+import {
+  WorkingSummary,
+  workingSummaryText,
+  type CountSummaryItem,
+} from "./WorkingSummary";
 
 const USER_MESSAGE_TOP_OFFSET = 8;
 const ASSISTANT_MESSAGE_TOP_OFFSET = 8;
@@ -42,6 +47,11 @@ const WORK_RUN_PHASE_HOLD_MS =
   WORK_RUN_PHASE_MIN_VISIBLE_MS + WORK_RUN_PHASE_TRANSITION_MS;
 
 type WorkItem = TimelineMessageItem | TimelineThinkingItem | TimelineToolGroupItem;
+type SubAgentSummary = {
+  title: string;
+  status: string;
+  turnElapsedSeconds?: number | null;
+};
 
 type RenderUnit =
   | { kind: "message"; item: TimelineMessageItem }
@@ -51,6 +61,102 @@ type RenderUnit =
       items: WorkItem[];
       running: boolean;
     };
+
+type TurnSummary = {
+  key: string;
+  items: CountSummaryItem[];
+  durationSeconds: number | null;
+  costUsd: number | null;
+};
+
+const liveTickListeners = new Set<() => void>();
+let liveTickInterval: ReturnType<typeof setInterval> | null = null;
+let liveTickNowMs = Date.now();
+
+function ensureLiveTickInterval() {
+  if (liveTickInterval !== null) return;
+  liveTickNowMs = Date.now();
+  liveTickInterval = setInterval(() => {
+    liveTickNowMs = Date.now();
+    for (const listener of liveTickListeners) listener();
+  }, 1000);
+}
+
+function subscribeLiveTick(listener: () => void) {
+  liveTickListeners.add(listener);
+  ensureLiveTickInterval();
+  liveTickNowMs = Date.now();
+  // Notify the new subscriber so it can anchor against the current time
+  // rather than a stale module-level snapshot from previous activity.
+  listener();
+  return () => {
+    liveTickListeners.delete(listener);
+    if (liveTickListeners.size === 0 && liveTickInterval !== null) {
+      clearInterval(liveTickInterval);
+      liveTickInterval = null;
+    }
+  };
+}
+
+function useLiveNowMs(active: boolean): number {
+  const subscribe = useCallback(
+    (listener: () => void) => (active ? subscribeLiveTick(listener) : () => {}),
+    [active],
+  );
+  const getSnapshot = useCallback(() => liveTickNowMs, []);
+  const getServerSnapshot = useCallback(() => 0, []);
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
+function useLiveTurnElapsedSeconds(
+  reportedSeconds: number | null | undefined,
+  active: boolean,
+): number | null {
+  const hasReported = typeof reportedSeconds === "number"
+    && Number.isFinite(reportedSeconds);
+  const reportedValue = hasReported ? reportedSeconds : 0;
+  const subscribed = active && hasReported;
+  const nowMs = useLiveNowMs(subscribed);
+  const anchorRef = useRef<{
+    reportedValue: number;
+    subscribed: boolean;
+    anchorMs: number;
+  } | null>(null);
+  anchorRef.current ??= {
+    reportedValue,
+    subscribed: false,
+    anchorMs: Date.now(),
+  };
+
+  // Re-anchor when:
+  // - the reported value changes (a new turn_usage update arrived),
+  // - subscription toggles,
+  // - the live clock jumps backwards.
+  let anchor = anchorRef.current;
+  const subscriptionJustStarted = subscribed && !anchor.subscribed;
+  const clockJumpedBackwards = subscribed && nowMs < anchor.anchorMs;
+  const shouldResetAnchor =
+    anchor.reportedValue !== reportedValue
+    || anchor.subscribed !== subscribed
+    || subscriptionJustStarted
+    || clockJumpedBackwards;
+  if (shouldResetAnchor) {
+    anchor = {
+      reportedValue,
+      subscribed,
+      anchorMs: Date.now(),
+    };
+    anchorRef.current = anchor;
+  }
+
+  if (!hasReported) return null;
+  if (!active) return reportedValue;
+  if (!subscribed || nowMs <= anchor.anchorMs) {
+    return reportedValue;
+  }
+  const elapsed = (nowMs - anchor.anchorMs) / 1000;
+  return Math.max(0, reportedValue + elapsed);
+}
 
 const GENERIC_RETRY_MESSAGE_PATTERN = /^Retrying\.\.\. \(\d+\/\d+\)$/;
 
@@ -65,18 +171,30 @@ function timelineItemChangeKey(item: TimelineItem): string {
     return [
       item.kind,
       item.itemId,
+      item.createdAt ?? "",
+      item.updatedAt ?? "",
       item.role,
       item.content,
       item.filePaths?.join("\0") ?? "",
       item.imageAttachments?.map((attachment) => attachment.upload_id).join("\0") ?? "",
+      JSON.stringify(item.turnUsage ?? null),
     ].join("\0");
   }
   if (item.kind === "thinking") {
-    return [item.kind, item.itemId, item.title, item.content].join("\0");
+    return [
+      item.kind,
+      item.itemId,
+      item.createdAt ?? "",
+      item.updatedAt ?? "",
+      item.title,
+      item.content,
+    ].join("\0");
   }
   return [
     item.kind,
     item.itemId,
+    item.createdAt ?? "",
+    item.updatedAt ?? "",
     item.label,
     item.status ?? "",
     ...item.items.map((entry) => [
@@ -240,28 +358,6 @@ function categorizeTool(toolName: string): ToolCategory {
   return "other";
 }
 
-function pluralize(count: number, singular: string, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-type CountSummaryItem = {
-  key: string;
-  count: number;
-  singular: string;
-  plural: string;
-};
-
-function summaryItemLabel(item: CountSummaryItem) {
-  return pluralize(item.count, item.singular, item.plural);
-}
-
-function summarizeCountItems(items: CountSummaryItem[]) {
-  return items
-    .filter((item) => item.count > 0)
-    .map(summaryItemLabel)
-    .join(", ");
-}
-
 function categoryCountItems(counts: Map<ToolCategory, number>): CountSummaryItem[] {
   const labels: Record<ToolCategory, { singular: string; plural: string }> = {
     read: { singular: "read", plural: "reads" },
@@ -298,10 +394,6 @@ function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
   });
 }
 
-function summarizeWorkRun(items: WorkItem[], showSubAgentCards: boolean) {
-  return summarizeCountItems(workRunCountItems(items, showSubAgentCards));
-}
-
 function workRunCountItems(items: WorkItem[], showSubAgentCards: boolean): CountSummaryItem[] {
   let thinkingCount = 0;
   const categoryCounts = new Map<ToolCategory, number>();
@@ -330,6 +422,303 @@ function workRunCountItems(items: WorkItem[], showSubAgentCards: boolean): Count
     { key: "thought", count: thinkingCount, singular: "thought", plural: "thoughts" },
     ...categoryCountItems(categoryCounts),
   ];
+}
+
+function timestampMs(value: string | undefined): number | null {
+  if (!value) return null;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? null : time;
+}
+
+function secondsBetween(start: number | null, end: number | null): number | null {
+  if (start === null || end === null || end <= start) return null;
+  return (end - start) / 1000;
+}
+
+function timelineItemsRangeMs(items: readonly TimelineItem[]): { start: number | null; end: number | null } {
+  let start: number | null = null;
+  let end: number | null = null;
+
+  for (const item of items) {
+    const itemStart = timestampMs(item.createdAt) ?? timestampMs(item.updatedAt);
+    const itemEnd = timestampMs(item.updatedAt) ?? timestampMs(item.createdAt);
+    if (itemStart !== null) {
+      start = start === null ? itemStart : Math.min(start, itemStart);
+    }
+    if (itemEnd !== null) {
+      end = end === null ? itemEnd : Math.max(end, itemEnd);
+    }
+  }
+
+  return { start, end };
+}
+
+function timelineItemsDurationSeconds(items: readonly TimelineItem[]): number | null {
+  const range = timelineItemsRangeMs(items);
+  return secondsBetween(range.start, range.end);
+}
+
+function messageStartMs(item: TimelineMessageItem): number | null {
+  return timestampMs(item.createdAt) ?? timestampMs(item.updatedAt);
+}
+
+function messageEndMs(item: TimelineMessageItem): number | null {
+  return timestampMs(item.updatedAt) ?? timestampMs(item.createdAt);
+}
+
+function renderUnitKey(unit: RenderUnit): string {
+  return unit.kind === "message" ? unit.item.itemId : unit.key;
+}
+
+function renderUnitStartMs(unit: RenderUnit): number | null {
+  if (unit.kind === "message") return messageStartMs(unit.item);
+  return timelineItemsRangeMs(unit.items).start;
+}
+
+function renderUnitEndMs(unit: RenderUnit): number | null {
+  if (unit.kind === "message") return messageEndMs(unit.item);
+  return timelineItemsRangeMs(unit.items).end;
+}
+
+function previousMessageEndMs(renderUnits: readonly RenderUnit[], index: number): number | null {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const unit = renderUnits[cursor];
+    if (unit.kind !== "message") continue;
+    return messageEndMs(unit.item);
+  }
+  return null;
+}
+
+function nextNonUserMessageStartMs(renderUnits: readonly RenderUnit[], index: number): number | null {
+  for (let cursor = index + 1; cursor < renderUnits.length; cursor += 1) {
+    const unit = renderUnits[cursor];
+    if (unit.kind !== "message") continue;
+    if (unit.item.role === "user") return null;
+    return messageStartMs(unit.item);
+  }
+  return null;
+}
+
+function workRunContextDurationSeconds(
+  renderUnits: readonly RenderUnit[],
+  index: number,
+): number | null {
+  const unit = renderUnits[index];
+  if (unit?.kind !== "work_run") return null;
+  const explicitDuration = timelineItemsDurationSeconds(unit.items);
+  if (explicitDuration !== null) return explicitDuration;
+
+  const range = timelineItemsRangeMs(unit.items);
+  const previousMessageEnd = previousMessageEndMs(renderUnits, index);
+  const nextMessageStart = nextNonUserMessageStartMs(renderUnits, index);
+
+  if (range.start !== null || range.end !== null) {
+    return secondsBetween(previousMessageEnd, range.end)
+      ?? secondsBetween(range.start, nextMessageStart)
+      ?? secondsBetween(previousMessageEnd, nextMessageStart);
+  }
+
+  return secondsBetween(previousMessageEnd, nextMessageStart);
+}
+
+function activeWorkRunContextDurationSeconds(
+  renderUnits: readonly RenderUnit[],
+  index: number,
+  nowMs: number,
+): number | null {
+  const unit = renderUnits[index];
+  if (unit?.kind !== "work_run") return null;
+  const range = timelineItemsRangeMs(unit.items);
+  const previousMessageEnd = previousMessageEndMs(renderUnits, index);
+  const start = previousMessageEnd ?? range.start;
+  if (start !== null && nowMs >= start) return (nowMs - start) / 1000;
+  return workRunContextDurationSeconds(renderUnits, index);
+}
+
+function maxDurationSeconds(values: readonly (number | null | undefined)[]): number | null {
+  let result: number | null = null;
+  for (const value of values) {
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    result = result === null ? value : Math.max(result, value);
+  }
+  return result;
+}
+
+function buildWorkRunDurationMap(
+  renderUnits: readonly RenderUnit[],
+  {
+    activeWorkRunKey,
+    latestWorkRunKey,
+    sessionIsActive,
+    turnElapsedSeconds,
+    activeNowMs,
+  }: {
+    activeWorkRunKey: string | null;
+    latestWorkRunKey: string | null;
+    sessionIsActive: boolean;
+    turnElapsedSeconds?: number | null;
+    activeNowMs?: number | null;
+  },
+): Map<string, number | null> {
+  const durations = new Map<string, number | null>();
+  renderUnits.forEach((unit, index) => {
+    if (unit.kind !== "work_run") return;
+    if (unit.key === activeWorkRunKey) {
+      const timestampLiveDuration = typeof activeNowMs === "number"
+        ? activeWorkRunContextDurationSeconds(renderUnits, index, activeNowMs)
+        : null;
+      const hasTurnBoundary = previousMessageEndMs(renderUnits, index) !== null;
+      durations.set(
+        unit.key,
+        (hasTurnBoundary
+          ? timestampLiveDuration ?? turnElapsedSeconds ?? null
+          : maxDurationSeconds([turnElapsedSeconds, timestampLiveDuration]))
+          ?? workRunContextDurationSeconds(renderUnits, index)
+          ?? null,
+      );
+      return;
+    }
+
+    const useTurnDurationFallback = !sessionIsActive && unit.key === latestWorkRunKey;
+    durations.set(
+      unit.key,
+      workRunContextDurationSeconds(renderUnits, index)
+        ?? (useTurnDurationFallback ? turnElapsedSeconds ?? null : null),
+    );
+  });
+  return durations;
+}
+
+function mergeRangeStart(current: number | null, next: number | null): number | null {
+  if (next === null) return current;
+  return current === null ? next : Math.min(current, next);
+}
+
+function mergeRangeEnd(current: number | null, next: number | null): number | null {
+  if (next === null) return current;
+  return current === null ? next : Math.max(current, next);
+}
+
+function buildTurnSummaries(
+  renderUnits: readonly RenderUnit[],
+  {
+    showSubAgentCards,
+    sessionIsActive,
+    turnElapsedSeconds,
+    turnCostUsd,
+    workRunDurations,
+  }: {
+    showSubAgentCards: boolean;
+    sessionIsActive: boolean;
+    turnElapsedSeconds?: number | null;
+    turnCostUsd?: number | null;
+    workRunDurations: ReadonlyMap<string, number | null>;
+  },
+): Map<string, TurnSummary> {
+  const summaries = new Map<string, TurnSummary>();
+  let turn:
+    | {
+      key: string;
+      startMs: number | null;
+      endMs: number | null;
+      workItems: WorkItem[];
+      workDurationSeconds: number;
+      hasWorkDuration: boolean;
+      turnUsageDurationSeconds: number | null;
+      costUsd: number | null;
+      lastUnitKey: string;
+    }
+    | null = null;
+
+  const closeTurn = (finalTurn: boolean) => {
+    if (!turn) return;
+    const closedTurn = turn;
+    turn = null;
+    if (finalTurn && sessionIsActive) return;
+
+    const summaryItems = workRunCountItems(closedTurn.workItems, showSubAgentCards);
+    const durationSeconds = secondsBetween(closedTurn.startMs, closedTurn.endMs)
+      ?? (closedTurn.hasWorkDuration ? closedTurn.workDurationSeconds : null)
+      ?? closedTurn.turnUsageDurationSeconds
+      ?? (finalTurn && !sessionIsActive ? turnElapsedSeconds ?? null : null);
+    const costUsd = closedTurn.costUsd
+      ?? (finalTurn && !sessionIsActive ? turnCostUsd ?? null : null);
+    if (!workingSummaryText(summaryItems, durationSeconds, costUsd)) return;
+
+    summaries.set(closedTurn.lastUnitKey, {
+      key: `turn-summary-${closedTurn.key}`,
+      items: summaryItems,
+      durationSeconds,
+      costUsd,
+    });
+  };
+
+  const ensureTurn = (unit: RenderUnit) => {
+    if (turn) return;
+    const key = renderUnitKey(unit);
+    turn = {
+      key,
+      startMs: renderUnitStartMs(unit),
+      endMs: renderUnitEndMs(unit),
+      workItems: [],
+      workDurationSeconds: 0,
+      hasWorkDuration: false,
+      turnUsageDurationSeconds: null,
+      costUsd: null,
+      lastUnitKey: key,
+    };
+  };
+
+  for (const unit of renderUnits) {
+    const unitKey = renderUnitKey(unit);
+    if (unit.kind === "message" && unit.item.role === "user") {
+      closeTurn(false);
+      const timestamp = messageStartMs(unit.item);
+      turn = {
+        key: unit.item.itemId,
+        startMs: timestamp,
+        endMs: timestamp,
+        workItems: [],
+        workDurationSeconds: 0,
+        hasWorkDuration: false,
+        turnUsageDurationSeconds: null,
+        costUsd: null,
+        lastUnitKey: unitKey,
+      };
+      continue;
+    }
+
+    ensureTurn(unit);
+    if (!turn) continue;
+    if (unit.kind === "message") {
+      turn.endMs = mergeRangeEnd(turn.endMs, messageEndMs(unit.item));
+      if (unit.item.role === "assistant" && unit.item.turnUsage) {
+        const elapsedSeconds = unit.item.turnUsage.elapsedSeconds;
+        if (typeof elapsedSeconds === "number" && Number.isFinite(elapsedSeconds)) {
+          turn.turnUsageDurationSeconds = elapsedSeconds;
+        }
+        const costUsd = unit.item.turnUsage.usage?.estimated_cost_usd;
+        if (typeof costUsd === "number" && Number.isFinite(costUsd)) {
+          turn.costUsd = costUsd;
+        }
+      }
+      turn.lastUnitKey = unitKey;
+      continue;
+    }
+
+    const range = timelineItemsRangeMs(unit.items);
+    turn.startMs = mergeRangeStart(turn.startMs, range.start);
+    turn.endMs = mergeRangeEnd(turn.endMs, range.end);
+    turn.workItems = [...turn.workItems, ...unit.items];
+    const durationSeconds = workRunDurations.get(unit.key);
+    if (typeof durationSeconds === "number" && Number.isFinite(durationSeconds)) {
+      turn.workDurationSeconds += durationSeconds;
+      turn.hasWorkDuration = true;
+    }
+    turn.lastUnitKey = unitKey;
+  }
+  closeTurn(true);
+  return summaries;
 }
 
 type ToolListEntry = {
@@ -446,127 +835,6 @@ function subAgentStatusModifier(status: string): "completed" | "failed" | "idle"
   return "idle";
 }
 
-const ANIMATED_NUMBER_TRACK = Array.from({ length: 30 }, (_, index) => index % 10);
-
-function normalizeDigit(value: number) {
-  return ((value % 10) + 10) % 10;
-}
-
-function digitSpin(from: number, to: number, direction: 1 | -1) {
-  if (from === to) return 0;
-  if (direction > 0) return (to - from + 10) % 10;
-  return -((from - to + 10) % 10);
-}
-
-function AnimatedNumberDigit({ value, direction }: { value: number; direction: 1 | -1 }) {
-  const [state, setState] = useState({
-    step: value + 10,
-    animating: false,
-    lastValue: value,
-    direction,
-  });
-
-  if (state.lastValue !== value || state.direction !== direction) {
-    const delta = digitSpin(state.lastValue, value, direction);
-    if (delta === 0) {
-      setState({ step: value + 10, animating: false, lastValue: value, direction });
-    } else {
-      setState({
-        step: state.step + delta,
-        animating: true,
-        lastValue: value,
-        direction,
-      });
-    }
-  }
-
-  return (
-    <span data-slot="animated-number-digit">
-      <span
-        data-slot="animated-number-strip"
-        data-animating={state.animating ? "true" : "false"}
-        onTransitionEnd={() => {
-          setState((current) => ({
-            ...current,
-            animating: false,
-            step: normalizeDigit(current.step) + 10,
-          }));
-        }}
-        style={{
-          "--animated-number-offset": state.step,
-        } as CSSProperties}
-      >
-        {ANIMATED_NUMBER_TRACK.map((digit, index) => (
-          <span key={`${digit}-${index}`} data-slot="animated-number-cell" data-digit={digit} />
-        ))}
-      </span>
-    </span>
-  );
-}
-
-function AnimatedNumber({ value }: { value: number }) {
-  const target = Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
-  const [state, setState] = useState({ displayValue: target, direction: 1 as 1 | -1 });
-
-  if (state.displayValue !== target) {
-    setState({
-      displayValue: target,
-      direction: target > state.displayValue ? 1 : -1,
-    });
-  }
-
-  const label = state.displayValue.toString();
-  const digits = Array.from(label, (char) => {
-    const digit = Number.parseInt(char, 10);
-    return Number.isNaN(digit) ? 0 : digit;
-  }).reverse();
-
-  return (
-    <span data-component="animated-number" className="animated-count-number">
-      <span className="animated-count-number__text">{label}</span>
-      <span
-        data-slot="animated-number-value"
-        aria-hidden="true"
-        style={{
-          "--animated-number-width": `${digits.length}ch`,
-        } as CSSProperties}
-      >
-        {digits.map((digit, index) => (
-          <AnimatedNumberDigit key={index} value={digit} direction={state.direction} />
-        ))}
-      </span>
-    </span>
-  );
-}
-
-function AnimatedCountSummary({
-  items,
-  className,
-}: {
-  items: CountSummaryItem[];
-  className?: string;
-}) {
-  const visible = items.filter((item) => item.count > 0);
-  if (visible.length === 0) return null;
-
-  return (
-    <span data-component="tool-count-summary" className={className}>
-      {visible.map((item, index) => (
-        <span key={item.key} data-slot="tool-count-summary-item">
-          {index > 0 ? <span data-slot="tool-count-summary-prefix">, </span> : null}
-          <span data-component="tool-count-label">
-            <AnimatedNumber value={item.count} />
-            <span data-slot="tool-count-label-space"> </span>
-            <span data-slot="tool-count-label-word">
-              {item.count === 1 ? item.singular : item.plural}
-            </span>
-          </span>
-        </span>
-      ))}
-    </span>
-  );
-}
-
 function TextShimmer({
   text,
   active = true,
@@ -601,10 +869,12 @@ function TextShimmer({
 function SubAgentCard({
   group,
   subAgents,
+  subAgentItems,
   parentSessionId,
 }: {
   group: Extract<WorkingGroup, { kind: "sub_agent" }>;
-  subAgents: Record<string, { title: string; status: string }>;
+  subAgents: Record<string, SubAgentSummary>;
+  subAgentItems: WorkItem[];
   parentSessionId?: string;
 }) {
   const navigate = useNavigate();
@@ -612,11 +882,28 @@ function SubAgentCard({
   const status = agent?.status ?? (group.running ? "running" : "completed");
   const name = subAgentDisplayName(agent?.title, group.subAgentId);
   const statusModifier = subAgentStatusModifier(status);
+  const subAgentIsActive = status === "running" || status === "starting";
+  const summaryItems = useMemo(() => workRunCountItems(subAgentItems, false), [subAgentItems]);
+  const reportedDurationSeconds = useMemo(
+    () => timelineItemsDurationSeconds(subAgentItems)
+      ?? agent?.turnElapsedSeconds
+      ?? null,
+    [agent?.turnElapsedSeconds, subAgentItems],
+  );
+  const summaryDurationSeconds = useLiveTurnElapsedSeconds(
+    reportedDurationSeconds,
+    subAgentIsActive,
+  );
+  const summaryText = useMemo(
+    () => workingSummaryText(summaryItems, summaryDurationSeconds),
+    [summaryDurationSeconds, summaryItems],
+  );
+  const ariaDetail = [summaryText, status].filter(Boolean).join(", ");
   return (
     <button
       type="button"
       className="working-items__sub-agent-card"
-      aria-label={`Open ${name} agent session`}
+      aria-label={`Open ${name} agent session${ariaDetail ? `, ${ariaDetail}` : ""}`}
       onClick={() => {
         if (parentSessionId) {
           void navigate(`/sessions/${encodeURIComponent(parentSessionId)}/sub-agents/${encodeURIComponent(group.subAgentId)}`);
@@ -624,8 +911,15 @@ function SubAgentCard({
       }}
       disabled={!parentSessionId}
     >
-      <BotIcon />
-      <span className="working-items__sub-agent-main">{name}</span>
+      <BotIcon aria-hidden="true" />
+      <span className="working-items__sub-agent-content">
+        <span className="working-items__sub-agent-main">{name}</span>
+        <WorkingSummary
+          items={summaryItems}
+          durationSeconds={summaryDurationSeconds}
+          className="working-items__summary working-items__sub-agent-summary"
+        />
+      </span>
       <Badge
         variant={statusModifier === "idle" ? "secondary" : statusModifier}
         size="meta"
@@ -640,13 +934,15 @@ function SubAgentCard({
 function WorkingItemsPanel({
   items,
   subAgents,
+  subAgentItems,
   closeSignal,
   parentSessionId,
   showSubAgentCards = true,
   fullExpanded = false,
 }: {
   items: WorkItem[];
-  subAgents: Record<string, { title: string; status: string }>;
+  subAgents: Record<string, SubAgentSummary>;
+  subAgentItems: Record<string, WorkItem[]>;
   closeSignal: string | null;
   parentSessionId?: string;
   showSubAgentCards?: boolean;
@@ -812,7 +1108,12 @@ function WorkingItemsPanel({
           if (group.kind === "sub_agent") {
             return (
               <div key={group.key} ref={setGroupRef(group.key)} className="working-items__item">
-                <SubAgentCard group={group} subAgents={subAgents} parentSessionId={parentSessionId} />
+                <SubAgentCard
+                  group={group}
+                  subAgents={subAgents}
+                  subAgentItems={subAgentItems[group.subAgentId] ?? group.items}
+                  parentSessionId={parentSessionId}
+                />
               </div>
             );
           }
@@ -1037,9 +1338,11 @@ function WorkRun({
   onUserOpen,
   parentSessionId,
   showSubAgentCards,
+  durationSeconds,
+  subAgentItems,
 }: {
   unit: Extract<RenderUnit, { kind: "work_run" }>;
-  subAgents: Record<string, { title: string; status: string }>;
+  subAgents: Record<string, SubAgentSummary>;
   active: boolean;
   phase: WorkRunPhase | null;
   open: boolean;
@@ -1048,6 +1351,8 @@ function WorkRun({
   onUserOpen?: (contentEl: HTMLElement | null) => void;
   parentSessionId?: string;
   showSubAgentCards?: boolean;
+  durationSeconds?: number | null;
+  subAgentItems: Record<string, WorkItem[]>;
 }) {
   const hasItems = unit.items.length > 0;
   const lastItemId = hasItems ? unit.items[unit.items.length - 1].itemId : undefined;
@@ -1059,13 +1364,13 @@ function WorkRun({
     ? fullExpandedState.expanded
     : false;
   const contentRef = useRef<HTMLDivElement>(null);
-  const workRunSummary = useMemo(
-    () => summarizeWorkRun(unit.items, showSubAgentCards ?? true),
-    [showSubAgentCards, unit.items],
-  );
   const workRunSummaryItems = useMemo(
     () => workRunCountItems(unit.items, showSubAgentCards ?? true),
     [showSubAgentCards, unit.items],
+  );
+  const workRunSummary = useMemo(
+    () => workingSummaryText(workRunSummaryItems, durationSeconds),
+    [durationSeconds, workRunSummaryItems],
   );
   const hasRunningSubAgent = useMemo(
     () => unit.items.some((item) => {
@@ -1075,7 +1380,7 @@ function WorkRun({
     }),
     [subAgents, unit.items],
   );
-  const hasVisibleSummary = workRunSummaryItems.some((item) => item.count > 0);
+  const hasVisibleSummary = workRunSummary.length > 0;
   const isVisiblyActive = active || unit.running || hasRunningSubAgent;
   const showPlaceholderSummary = active && !hasVisibleSummary;
   const workRunGroupCount = useMemo(
@@ -1150,13 +1455,16 @@ function WorkRun({
             >
               <ChevronRightIcon className="timeline-entry__chevron" />
               <TextShimmer text="Working" active={isVisiblyActive} className="timeline-entry__working-label" />
-              {showPlaceholderSummary ? (
-                <span className="working-items__summary working-items__summary--placeholder" aria-hidden="true">
-                  Preparing…
-                </span>
-              ) : (
-                <AnimatedCountSummary items={workRunSummaryItems} className="working-items__summary" />
-              )}
+              <WorkingSummary
+                items={workRunSummaryItems}
+                durationSeconds={durationSeconds}
+                placeholder={showPlaceholderSummary ? "Preparing…" : null}
+                className={
+                  showPlaceholderSummary
+                    ? "working-items__summary working-items__summary--placeholder"
+                    : "working-items__summary"
+                }
+              />
             </Button>
           </CollapsibleTrigger>
         </div>
@@ -1170,6 +1478,7 @@ function WorkRun({
                 parentSessionId={parentSessionId}
                 showSubAgentCards={showSubAgentCards}
                 fullExpanded={fullExpanded}
+                subAgentItems={subAgentItems}
               />
               {canFullExpand ? (
                 <button
@@ -1205,9 +1514,50 @@ function WorkRun({
   );
 }
 
+function TurnSummaryBlock({
+  items,
+  durationSeconds,
+  costUsd,
+}: {
+  items: CountSummaryItem[];
+  durationSeconds?: number | null;
+  costUsd?: number | null;
+}) {
+  const summaryText = workingSummaryText(items, durationSeconds, costUsd);
+  if (!summaryText) return null;
+
+  return (
+    <div
+      className="timeline-entry timeline-entry--turn-summary"
+      role="note"
+      aria-label={`Turn summary ${summaryText}`}
+    >
+      <div className="timeline-entry__turn-summary-divider">
+        <span className="timeline-entry__turn-summary-rule" aria-hidden="true" />
+        <span className="timeline-entry__turn-summary-card">
+          <CheckIcon
+            className="timeline-entry__turn-summary-icon"
+            aria-hidden="true"
+          />
+          <WorkingSummary
+            items={items}
+            durationSeconds={durationSeconds}
+            costUsd={costUsd}
+            className="working-items__summary timeline-entry__turn-summary-summary"
+          />
+        </span>
+        <span className="timeline-entry__turn-summary-rule" aria-hidden="true" />
+      </div>
+    </div>
+  );
+}
+
 type SessionTimelineProps = {
   items: TimelineItem[];
-  subAgents: Record<string, { title: string; status: string }>;
+  subAgents: Record<string, SubAgentSummary>;
+  subAgentItems?: Record<string, TimelineItem[]>;
+  turnElapsedSeconds?: number | null;
+  turnCostUsd?: number | null;
   connection: ConnectionState;
   waitMessage: string | null;
   processing: ProcessingState | null;
@@ -1230,8 +1580,8 @@ function processingStatesEqual(
 }
 
 function subAgentSummariesEqual(
-  left: Record<string, { title: string; status: string }>,
-  right: Record<string, { title: string; status: string }>,
+  left: Record<string, SubAgentSummary>,
+  right: Record<string, SubAgentSummary>,
 ): boolean {
   const leftEntries = Object.entries(left);
   const rightEntries = Object.entries(right);
@@ -1240,7 +1590,8 @@ function subAgentSummariesEqual(
     const rightSubAgent = right[subAgentId];
     return rightSubAgent !== undefined
       && leftSubAgent.title === rightSubAgent.title
-      && leftSubAgent.status === rightSubAgent.status;
+      && leftSubAgent.status === rightSubAgent.status
+      && (leftSubAgent.turnElapsedSeconds ?? null) === (rightSubAgent.turnElapsedSeconds ?? null);
   });
 }
 
@@ -1254,6 +1605,9 @@ function areSessionTimelinePropsEqual(
     && processingStatesEqual(previous.processing, next.processing)
     && previous.parentSessionId === next.parentSessionId
     && previous.showSubAgentCards === next.showSubAgentCards
+    && previous.turnElapsedSeconds === next.turnElapsedSeconds
+    && previous.turnCostUsd === next.turnCostUsd
+    && previous.subAgentItems === next.subAgentItems
     && previous.onForkMessage === next.onForkMessage
     && subAgentSummariesEqual(previous.subAgents, next.subAgents);
 }
@@ -1261,6 +1615,9 @@ function areSessionTimelinePropsEqual(
 export const SessionTimeline = memo(function SessionTimeline({
   items,
   subAgents,
+  subAgentItems = {},
+  turnElapsedSeconds,
+  turnCostUsd,
   connection,
   waitMessage,
   processing,
@@ -1333,6 +1690,42 @@ export const SessionTimeline = memo(function SessionTimeline({
     sessionIsActive && latestRenderUnit?.kind === "work_run"
       ? latestRenderUnit.key
       : null;
+  const latestWorkRunKey = [...renderUnits].reverse().find((unit) => unit.kind === "work_run")?.key ?? null;
+  const liveTurnElapsedSeconds = useLiveTurnElapsedSeconds(
+    turnElapsedSeconds ?? null,
+    sessionIsActive,
+  );
+  const activeTimestampNowMs = useLiveNowMs(
+    sessionIsActive
+      && activeWorkRunKey !== null,
+  );
+  const workRunDurations = useMemo(
+    () => buildWorkRunDurationMap(renderUnits, {
+      activeWorkRunKey,
+      latestWorkRunKey,
+      sessionIsActive,
+      turnElapsedSeconds: liveTurnElapsedSeconds,
+      activeNowMs: activeTimestampNowMs,
+    }),
+    [activeTimestampNowMs, activeWorkRunKey, latestWorkRunKey, renderUnits, sessionIsActive, liveTurnElapsedSeconds],
+  );
+  const turnSummaries = useMemo(
+    () => buildTurnSummaries(renderUnits, {
+      showSubAgentCards,
+      sessionIsActive,
+      turnElapsedSeconds: liveTurnElapsedSeconds,
+      turnCostUsd,
+      workRunDurations,
+    }),
+    [
+      renderUnits,
+      sessionIsActive,
+      showSubAgentCards,
+      liveTurnElapsedSeconds,
+      turnCostUsd,
+      workRunDurations,
+    ],
+  );
   const {
     containerRef,
     showNewMessages,
@@ -1565,47 +1958,64 @@ export const SessionTimeline = memo(function SessionTimeline({
     <div className="session-scroll-area" ref={containerRef}>
       <div className="timeline">
         {renderUnits.map((unit) => {
+          const unitKey = renderUnitKey(unit);
+          const turnSummary = turnSummaries.get(unitKey);
+          const summaryNode = turnSummary ? (
+            <TurnSummaryBlock
+              key={turnSummary.key}
+              items={turnSummary.items}
+              durationSeconds={turnSummary.durationSeconds}
+              costUsd={turnSummary.costUsd}
+            />
+          ) : null;
           if (unit.kind === "message") {
             return (
-              <TimelineEntry
-                key={unit.item.itemId}
-                item={unit.item}
-                subAgentTitle={
-                  unit.item.subAgentId
-                    ? subAgents[unit.item.subAgentId]?.title
-                    : undefined
-                }
-                subAgentStatus={
-                  unit.item.subAgentId
-                    ? subAgents[unit.item.subAgentId]?.status
-                    : undefined
-                }
-                closeSignal={closeCollapsiblesSignal}
-                onForkMessage={onForkMessage}
-              />
+              <Fragment key={unitKey}>
+                <TimelineEntry
+                  item={unit.item}
+                  subAgentTitle={
+                    unit.item.subAgentId
+                      ? subAgents[unit.item.subAgentId]?.title
+                      : undefined
+                  }
+                  subAgentStatus={
+                    unit.item.subAgentId
+                      ? subAgents[unit.item.subAgentId]?.status
+                      : undefined
+                  }
+                  closeSignal={closeCollapsiblesSignal}
+                  onForkMessage={onForkMessage}
+                />
+                {summaryNode}
+              </Fragment>
             );
           }
           const isActiveUnit = unit.key === activeWorkRunKey;
+          const workRunDurationSeconds = workRunDurations.get(unit.key) ?? null;
           // Only the currently active WorkRun should treat user-opens as a
           // "follow the latest output" intent. An active block can be between
           // tool phases (for example model_wait/finalizing) even when none of
           // its tool groups currently reports `running`.
           return (
-            <WorkRun
-              key={unit.key}
-              unit={unit}
-              subAgents={subAgents}
-              active={isActiveUnit}
-              phase={isActiveUnit ? visibleActivePhase : null}
-              open={openWorkRunKey === unit.key}
-              closeSignal={closeCollapsiblesSignal}
-              onOpenChange={(nextOpen) => setWorkRunOpen(unit.key, nextOpen)}
-              onUserOpen={
-                isActiveUnit ? handleUserOpenCollapsible : undefined
-              }
-              parentSessionId={parentSessionId}
-              showSubAgentCards={showSubAgentCards}
-            />
+            <Fragment key={unitKey}>
+              <WorkRun
+                unit={unit}
+                subAgents={subAgents}
+                active={isActiveUnit}
+                phase={isActiveUnit ? visibleActivePhase : null}
+                open={openWorkRunKey === unit.key}
+                closeSignal={closeCollapsiblesSignal}
+                onOpenChange={(nextOpen) => setWorkRunOpen(unit.key, nextOpen)}
+                onUserOpen={
+                  isActiveUnit ? handleUserOpenCollapsible : undefined
+                }
+                parentSessionId={parentSessionId}
+                showSubAgentCards={showSubAgentCards}
+                durationSeconds={workRunDurationSeconds}
+                subAgentItems={subAgentItems}
+              />
+              {summaryNode}
+            </Fragment>
           );
         })}
         {shouldShowNewMessages ? (

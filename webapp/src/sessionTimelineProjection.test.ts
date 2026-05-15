@@ -193,4 +193,47 @@ describe("session timeline projection", () => {
 
     expect(first).not.toBe(second);
   });
+
+  it("changes timeline signatures when message turn usage changes", () => {
+    const base = projectionSignature([
+      {
+        ...message("assistant", "Done"),
+        turnUsage: {
+          usage: null,
+          elapsedSeconds: 3,
+        },
+      },
+    ]);
+    const updated = projectionSignature([
+      {
+        ...message("assistant", "Done"),
+        turnUsage: {
+          usage: {
+            input_tokens: 10,
+            cached_input_tokens: 0,
+            cache_write_tokens: 0,
+            cache_write_1h_tokens: 0,
+            output_tokens: 5,
+            reasoning_tokens: 0,
+            provider_total_tokens: 15,
+            sub_agent_input_tokens: 0,
+            sub_agent_output_tokens: 0,
+            sub_agent_reasoning_tokens: 0,
+            sub_agent_provider_total_tokens: 0,
+            sub_agent_cost_usd: 0,
+            context_tokens: 10,
+            total_tokens: 15,
+            estimated_cost_usd: 0.0123,
+            main_agent_total_tokens: 15,
+            sub_agent_total_tokens: 0,
+            model: "test-model",
+            service_tier: "default",
+          },
+          elapsedSeconds: 3,
+        },
+      },
+    ]);
+
+    expect(base).not.toBe(updated);
+  });
 });

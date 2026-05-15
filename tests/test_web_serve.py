@@ -374,6 +374,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
             "sub_agent_id": "completed-run:subagent-1",
             "kind": "message",
             "itemId": "completed-run:subagent-1-message-1",
+            "created_at": "2026-05-08T08:47:16Z",
+            "updated_at": "2026-05-08T08:47:16Z",
             "historical": True,
         },
         {
@@ -384,6 +386,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
             "sub_agent_id": "completed-run:subagent-1",
             "kind": "tool_group",
             "itemId": "completed-run:subagent-1-tool-group-2",
+            "created_at": "2026-05-08T08:47:17Z",
+            "updated_at": "2026-05-08T08:47:17Z",
         },
         {
             "item_id": "completed-run:subagent-1-message-3",
@@ -393,9 +397,70 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
             "sub_agent_id": "completed-run:subagent-1",
             "kind": "message",
             "itemId": "completed-run:subagent-1-message-3",
+            "created_at": "2026-05-08T08:47:18Z",
+            "updated_at": "2026-05-08T08:47:18Z",
             "historical": True,
         },
     ]
+
+
+def test_combined_timeline_attaches_turn_usage_from_persisted_events() -> None:
+    turn_usage = {
+        "usage": {"estimated_cost_usd": 0.012, "total_tokens": 42},
+        "elapsed_seconds": 5.5,
+    }
+    snapshot = _combined_timeline_snapshot(
+        [
+            _run_record(
+                "completed-run",
+                snapshot={
+                    "live_session_id": "completed-run",
+                    "session_id": "session-1",
+                    "session_ended": True,
+                    "items": [],
+                    "sub_agents": {},
+                },
+            ),
+        ],
+        persisted_events_by_run_session_id={
+            "completed-run": [
+                {
+                    "seq": 1,
+                    "type": "message_added",
+                    "payload": {
+                        "item_id": "message-1",
+                        "role": "user",
+                        "content": "Read something",
+                        "markdown": False,
+                    },
+                    "created_at": "2026-05-08T08:47:16Z",
+                },
+                {
+                    "seq": 2,
+                    "type": "message_added",
+                    "payload": {
+                        "item_id": "message-2",
+                        "role": "assistant",
+                        "content": "Done",
+                        "markdown": True,
+                    },
+                    "created_at": "2026-05-08T08:47:18Z",
+                },
+                {
+                    "seq": 3,
+                    "type": "usage_updated",
+                    "payload": {
+                        "scope": "turn",
+                        **turn_usage,
+                    },
+                    "created_at": "2026-05-08T08:47:19Z",
+                },
+            ]
+        },
+    )
+
+    assert snapshot is not None
+    assert snapshot["items"][-1]["turn_usage"] == turn_usage
 
 
 def test_web_manager_uses_host_workspace_key_in_sandbox(monkeypatch, tmp_path) -> None:
@@ -604,6 +669,31 @@ def test_web_server_prints_banner_and_starts_uvicorn() -> None:
     assert f"v{__version__}" in rendered
     assert "http://127.0.0.1:9001" in rendered
     mock_run.assert_called_once()
+
+
+def test_web_server_prints_centered_update_notice_below_banner() -> None:
+    notice = (
+        "Update available: pbi-agent 1.0.0 -> 1.2.0. "
+        "Run: uv tool install pbi-agent --upgrade"
+    )
+    server = PBIWebServer(settings=_settings(), port=9001, update_notice=notice)
+    output = StringIO()
+    server.console = Console(file=output, width=80, highlight=False, color_system=None)
+
+    with patch("pbi_agent.web.server_runtime.uvicorn.Server.run"):
+        server.serve(debug=False)
+
+    rendered = output.getvalue()
+    banner_index = rendered.index(PBI_AGENT_TAGLINE)
+    notice_index = rendered.index("Update available: pbi-agent 1.0.0 -> 1.2.0")
+    serving_index = rendered.index("Serving on")
+    notice_line = next(
+        line
+        for line in rendered.splitlines()
+        if "Update available: pbi-agent 1.0.0 -> 1.2.0" in line
+    )
+    assert banner_index < notice_index < serving_index
+    assert notice_line.startswith(" ")
 
 
 def test_built_static_app_serving_smoke() -> None:
@@ -2951,17 +3041,19 @@ def test_sub_agent_processing_isolated_from_parent_live_snapshot(
         )
 
         snapshot = app.state.manager._serialize_live_snapshot(live_session)
-        assert snapshot["items"] == [
-            {
-                "item_id": "msg-7",
-                "role": "assistant",
-                "content": "child draft",
-                "markdown": True,
-                "sub_agent_id": "subagent-1",
-                "kind": "message",
-                "itemId": "msg-7",
-            }
-        ]
+        assert len(snapshot["items"]) == 1
+        item = dict(snapshot["items"][0])
+        assert isinstance(item.pop("created_at"), str)
+        assert isinstance(item.pop("updated_at"), str)
+        assert item == {
+            "item_id": "msg-7",
+            "role": "assistant",
+            "content": "child draft",
+            "markdown": True,
+            "sub_agent_id": "subagent-1",
+            "kind": "message",
+            "itemId": "msg-7",
+        }
 
         interrupted = app.state.manager.interrupt_live_session(live_session_id)
         assert interrupted["live_session_id"] == live_session_id
@@ -2986,6 +3078,104 @@ def test_sub_agent_processing_isolated_from_parent_live_snapshot(
                 "elapsed_seconds": 2.5,
             },
         }
+
+
+def test_live_snapshot_resets_turn_usage_for_new_user_messages(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    app = create_app(_settings())
+
+    class IdleThread:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def start(self) -> None:
+            return None
+
+        def join(self, timeout: float | None = None) -> None:
+            del timeout
+
+        def is_alive(self) -> bool:
+            return False
+
+    with TestClient(app):
+        with patch("pbi_agent.web.session.live_sessions.threading.Thread", IdleThread):
+            created = app.state.manager.create_live_session()
+        live_session_id = created["live_session_id"]
+        live_session = app.state.manager._live_sessions[live_session_id]
+
+        parent_usage = {"estimated_cost_usd": 0.012, "total_tokens": 42}
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "turn",
+                "usage": parent_usage,
+                "elapsed_seconds": 4.0,
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["turn_usage"] == {
+            "usage": parent_usage,
+            "elapsed_seconds": 4.0,
+        }
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "message_added",
+            {
+                "item_id": "message-1",
+                "role": "user",
+                "content": "next turn",
+                "markdown": False,
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["turn_usage"] is None
+
+        child_usage = {"estimated_cost_usd": 0.004, "total_tokens": 11}
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "usage_updated",
+            {
+                "scope": "turn",
+                "usage": child_usage,
+                "elapsed_seconds": 2.0,
+                "sub_agent_id": "subagent-1",
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["sub_agents"]["subagent-1"]["turn_usage"] == {
+            "usage": child_usage,
+            "elapsed_seconds": 2.0,
+        }
+
+        app.state.manager._publish_live_event(
+            live_session_id,
+            "message_rekeyed",
+            {
+                "old_item_id": "subagent-1-temp-user",
+                "sub_agent_id": "subagent-1",
+                "item": {
+                    "item_id": "subagent-1-message-1",
+                    "role": "user",
+                    "content": "child next turn",
+                    "markdown": False,
+                },
+            },
+        )
+        snapshot = app.state.manager._serialize_live_snapshot(live_session)
+        assert snapshot["sub_agents"]["subagent-1"]["turn_usage"] is None
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        run = store.get_run_session(live_session_id)
+
+    assert run is not None
+    persisted_snapshot = json.loads(run.snapshot_json)
+    assert persisted_snapshot["turn_usage"] is None
+    assert persisted_snapshot["sub_agents"]["subagent-1"]["turn_usage"] is None
 
 
 def test_live_session_creation_rechecks_saved_session_under_registration_lock(

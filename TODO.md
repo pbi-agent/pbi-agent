@@ -1,4 +1,2 @@
-- [X] Locate Run Detail status-code badge rendering
-- [X] Remove the event status-code badge and update tests
-- [X] Run focused frontend validation/build
-- [X] Update task memory
+[X] Compress .agents/commands/refine-task.md prose
+[X] Update task memory

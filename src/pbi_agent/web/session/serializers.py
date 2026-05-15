@@ -228,10 +228,63 @@ def _upsert_timeline_item(
     for index, item in enumerate(items):
         if _snapshot_item_id(item) != item_id:
             continue
+        if next_item.get("kind") != "message" and isinstance(
+            item.get("created_at"), str
+        ):
+            next_item = {**next_item, "created_at": item["created_at"]}
         updated = list(items)
         updated[index] = next_item
         return updated
     return [*items, next_item]
+
+
+def _apply_event_item_timing(
+    item: dict[str, Any],
+    event: dict[str, Any],
+) -> dict[str, Any]:
+    created_at = event.get("created_at")
+    if not isinstance(created_at, str):
+        return item
+    return {
+        **item,
+        "created_at": item.get("created_at")
+        if isinstance(item.get("created_at"), str)
+        else created_at,
+        "updated_at": created_at,
+    }
+
+
+def _turn_usage_from_event_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    if payload.get("scope") != "turn":
+        return None
+    return {
+        "usage": payload.get("usage"),
+        "elapsed_seconds": payload.get("elapsed_seconds"),
+    }
+
+
+def _item_sub_agent_id(item: dict[str, Any]) -> str | None:
+    value = item.get("sub_agent_id")
+    return value if isinstance(value, str) else None
+
+
+def _attach_turn_usage_to_latest_assistant_message(
+    items: list[dict[str, Any]],
+    turn_usage: dict[str, Any],
+    *,
+    sub_agent_id: str | None,
+) -> list[dict[str, Any]]:
+    for index in range(len(items) - 1, -1, -1):
+        item = items[index]
+        if (
+            item.get("kind") == "message"
+            and item.get("role") == "assistant"
+            and _item_sub_agent_id(item) == sub_agent_id
+        ):
+            updated = list(items)
+            updated[index] = {**item, "turn_usage": turn_usage}
+            return updated
+    return items
 
 
 def _timeline_items_from_web_events(
@@ -255,6 +308,7 @@ def _timeline_items_from_web_events(
                 else "tool_group"
             )
             item["itemId"] = str(payload.get("item_id") or "")
+            item = _apply_event_item_timing(item, event)
             items = _upsert_timeline_item(items, item)
             continue
         if event_type == "message_rekeyed":
@@ -266,6 +320,7 @@ def _timeline_items_from_web_events(
                 item["sub_agent_id"] = sub_agent_id
             item["kind"] = "message"
             item["itemId"] = str(item.get("item_id") or item.get("itemId") or "")
+            item = _apply_event_item_timing(item, event)
             old_item_id = str(payload.get("old_item_id") or "")
             if old_item_id and old_item_id != item["itemId"]:
                 items = [
@@ -279,6 +334,15 @@ def _timeline_items_from_web_events(
             item_id = str(payload.get("item_id") or "")
             if item_id:
                 items = [item for item in items if _snapshot_item_id(item) != item_id]
+            continue
+        if event_type == "usage_updated":
+            turn_usage = _turn_usage_from_event_payload(payload)
+            if turn_usage is not None:
+                items = _attach_turn_usage_to_latest_assistant_message(
+                    items,
+                    turn_usage,
+                    sub_agent_id=sub_agent_id,
+                )
     return items
 
 
