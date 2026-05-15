@@ -115,6 +115,10 @@ def _selected_model(settings: Settings) -> str:
     return settings.model
 
 
+def _run_reasoning_metadata(settings: Settings) -> dict[str, str]:
+    return {"reasoning_effort": settings.reasoning_effort}
+
+
 def _selected_sub_agent_model(settings: Settings) -> str:
     return settings.sub_agent_model or settings.model
 
@@ -216,6 +220,7 @@ def run_single_turn(
         profile_id=runtime.profile_id,
         model=model,
         metadata={
+            **_run_reasoning_metadata(settings),
             "single_turn_hint": single_turn_hint,
             "resumed": resume_session_id is not None,
         },
@@ -558,7 +563,10 @@ def run_session_loop(
                     provider_id=current_runtime.provider_id,
                     profile_id=current_runtime.profile_id,
                     model=_selected_model(current_runtime.settings),
-                    metadata={"resumed": resume_session_id is not None},
+                    metadata={
+                        **_run_reasoning_metadata(current_runtime.settings),
+                        "resumed": resume_session_id is not None,
+                    },
                 )
                 display.assistant_start()
                 user_message_id: int | None = None
@@ -768,7 +776,10 @@ def run_sub_agent_task(
                 provider_id=child_provider_id,
                 profile_id=child_profile_id,
                 model=_selected_model(child_settings),
-                metadata={"include_context": include_context},
+                metadata={
+                    **_run_reasoning_metadata(child_settings),
+                    "include_context": include_context,
+                },
             )
             if parent_tracer is not None
             else RunTracer.start(
@@ -1671,6 +1682,7 @@ def _compact_live_session(
         profile_id=runtime.profile_id,
         model=_selected_model(runtime.settings),
         metadata={
+            **_run_reasoning_metadata(runtime.settings),
             "reason": reason,
             "input_message_count": len(summary_input_messages),
             "tail_message_count": len(compaction_context.tail_messages),

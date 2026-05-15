@@ -3837,6 +3837,43 @@ def test_event_stream_by_live_session_id_replays_persisted_web_run_after_restart
     assert events[0]["payload"]["content"] == "Restored"
 
 
+def test_run_detail_includes_reasoning_effort_from_run_metadata(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    run_id = "reasoning-run"
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "chatgpt",
+            "gpt-5.5",
+            "Reasoning detail",
+        )
+        store.create_run_session(
+            run_session_id=run_id,
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="chatgpt",
+            provider_id="chatgpt-main",
+            profile_id="analysis",
+            model="gpt-5.5",
+            status="completed",
+            kind="session",
+            metadata={"runtime": {"reasoning_effort": "high"}},
+        )
+
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/runs/{run_id}")
+
+    assert response.status_code == 200
+    assert response.json()["run"]["reasoning_effort"] == "high"
+
+
 def test_task_creation_preserves_plain_prompt_content() -> None:
     app = create_app(_settings())
 
@@ -11285,6 +11322,7 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
                 profile_id="analysis",
                 model="gpt-5.4",
                 status="completed" if i % 2 == 0 else "failed",
+                metadata={"runtime": {"reasoning_effort": "high"}},
             )
             store.update_run_session(
                 run_id,
@@ -11299,6 +11337,7 @@ def test_list_all_runs_returns_paginated_runs(tmp_path, monkeypatch) -> None:
         assert payload["total_count"] == 5
         assert len(payload["runs"]) == 2
         assert payload["runs"][0]["session_title"] == "Paginated test"
+        assert all(run["reasoning_effort"] == "high" for run in payload["runs"])
 
         response = client.get("/api/runs?status=completed")
         assert response.status_code == 200

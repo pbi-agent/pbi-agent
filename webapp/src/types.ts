@@ -635,6 +635,7 @@ export type RunSession = {
   provider_id: string | null;
   profile_id: string | null;
   model: string | null;
+  reasoning_effort: string | null;
   status: RunSessionStatus;
   started_at: string;
   ended_at: string | null;

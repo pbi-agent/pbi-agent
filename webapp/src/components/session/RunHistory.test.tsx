@@ -26,6 +26,7 @@ function makeRun(overrides: Partial<RunSession>): RunSession {
     provider_id: "openai-main",
     profile_id: null,
     model: "gpt-5.4",
+    reasoning_effort: null,
     status: "completed",
     started_at: "2026-04-27T10:00:00Z",
     ended_at: "2026-04-27T10:00:01Z",

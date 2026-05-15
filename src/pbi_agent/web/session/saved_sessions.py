@@ -10,6 +10,7 @@ from pbi_agent.web.session.serializers import (
     _RUN_RECORD_STATUSES,
     _combined_timeline_snapshot,
     _deserialize_json_field,
+    _run_reasoning_effort,
     _serialize_history_message,
     _serialize_observability_event,
     _serialize_run_as_live_session,
@@ -298,7 +299,12 @@ class SavedSessionsMixin:
             session_title = run_dict.pop("session_title", None)
             # Deserialise metadata_json → metadata
             raw_meta = cast(str | None, run_dict.pop("metadata_json", "{}"))
-            run_dict["metadata"] = _deserialize_json_field(raw_meta)
+            metadata = _deserialize_json_field(raw_meta)
+            snapshot = _deserialize_json_field(
+                cast(str | None, run_dict.get("snapshot_json"))
+            )
+            run_dict["metadata"] = metadata
+            run_dict["reasoning_effort"] = _run_reasoning_effort(metadata, snapshot)
             if run_dict.get("status") not in _RUN_RECORD_STATUSES:
                 run_dict["status"] = (
                     "failed" if run_dict.get("fatal_error") else "started"

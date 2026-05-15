@@ -35,6 +35,7 @@ function makeRun(overrides: Partial<RunSession> = {}): RunSession {
     provider_id: "openai-main",
     profile_id: null,
     model: "gpt-5.4",
+    reasoning_effort: null,
     status: "completed",
     started_at: "2026-04-27T10:00:00Z",
     ended_at: "2026-04-27T10:00:01Z",
@@ -111,6 +112,36 @@ describe("RunDetailModal", () => {
     expect(status).toHaveClass("run-header__status");
     expect(screen.getByText("Events (2)")).toBeInTheDocument();
     expect(screen.getAllByText("gpt-5.4")).toHaveLength(1);
+  });
+
+  it("renders reasoning effort after the provider/model header segment", async () => {
+    mockFetchRunDetail.mockResolvedValue({
+      run: makeRun({
+        agent_name: "main",
+        provider: "chatgpt",
+        model: "gpt-5.5",
+        reasoning_effort: "high",
+      }),
+      events: [makeEvent({ step_index: 1 })],
+    });
+
+    renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
+
+    const header = await screen.findByLabelText("Run summary");
+    expect(header).toHaveTextContent("main·chatgpt/gpt-5.5·high");
+  });
+
+  it("omits empty or none reasoning effort from the provider/model header segment", async () => {
+    mockFetchRunDetail.mockResolvedValue({
+      run: makeRun({ reasoning_effort: "none" }),
+      events: [makeEvent({ step_index: 1 })],
+    });
+
+    renderWithProviders(<RunDetailModal runSessionId="run-1" onClose={vi.fn()} />);
+
+    const header = await screen.findByLabelText("Run summary");
+    expect(header).toHaveTextContent("Agent·openai/gpt-5.4");
+    expect(header).not.toHaveTextContent("none");
   });
 
   it("uses shared status badge variants for event success without rendering status code chips", async () => {

@@ -80,6 +80,10 @@ function RunSummary({ run }: { run: RunSession }) {
   const agentLabel = run.agent_name ?? run.agent_type ?? "--";
   const providerLabel = run.provider ?? "--";
   const modelLabel = run.model ?? "--";
+  const reasoningEffort = run.reasoning_effort?.trim();
+  const reasoningEffortLabel = reasoningEffort && reasoningEffort.toLowerCase() !== "none"
+    ? reasoningEffort
+    : null;
   const hasTimeline = Boolean(run.started_at || run.ended_at);
 
   return (
@@ -97,6 +101,12 @@ function RunSummary({ run }: { run: RunSession }) {
           <span className="run-header__sep" aria-hidden="true">/</span>
           <span className="run-header__model-name">{modelLabel}</span>
         </span>
+        {reasoningEffortLabel ? (
+          <>
+            <span className="run-header__sep" aria-hidden="true">·</span>
+            <span className="run-header__model">{reasoningEffortLabel}</span>
+          </>
+        ) : null}
         <span className="run-header__topbar-spacer" />
         <span className="run-header__kpi">
           <ClockIcon />

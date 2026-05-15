@@ -177,6 +177,28 @@ def _deserialize_json_field(raw_value: str | None) -> Any:
         return raw_value
 
 
+def _string_from_mapping(mapping: dict[str, Any], key: str) -> str | None:
+    value = mapping.get(key)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _run_reasoning_effort(metadata: Any, snapshot: Any) -> str | None:
+    if isinstance(metadata, dict):
+        runtime = metadata.get("runtime")
+        if isinstance(runtime, dict):
+            effort = _string_from_mapping(runtime, "reasoning_effort")
+            if effort is not None:
+                return effort
+        effort = _string_from_mapping(metadata, "reasoning_effort")
+        if effort is not None:
+            return effort
+    if isinstance(snapshot, dict):
+        runtime = snapshot.get("runtime")
+        if isinstance(runtime, dict):
+            return _string_from_mapping(runtime, "reasoning_effort")
+    return None
+
+
 def _web_event_from_record(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     record: ObservabilityEventRecord,
 ) -> dict[str, Any] | None:
@@ -491,6 +513,8 @@ def _session_title_for_input(  # pyright: ignore[reportUnusedFunction] - importe
 def _serialize_run_session(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     record: RunSessionRecord,
 ) -> dict[str, Any]:
+    metadata = _deserialize_json_field(record.metadata_json)
+    snapshot = _deserialize_json_field(record.snapshot_json)
     return {
         "run_session_id": record.run_session_id,
         "session_id": record.session_id,
@@ -501,6 +525,7 @@ def _serialize_run_session(  # pyright: ignore[reportUnusedFunction] - imported 
         "provider_id": record.provider_id,
         "profile_id": record.profile_id,
         "model": record.model,
+        "reasoning_effort": _run_reasoning_effort(metadata, snapshot),
         "status": _run_status_from_run(record),
         "started_at": record.started_at,
         "ended_at": record.ended_at,
@@ -520,10 +545,10 @@ def _serialize_run_session(  # pyright: ignore[reportUnusedFunction] - imported 
         "task_id": record.task_id,
         "project_dir": record.project_dir,
         "last_event_seq": record.last_event_seq,
-        "snapshot": _deserialize_json_field(record.snapshot_json),
+        "snapshot": snapshot,
         "exit_code": record.exit_code,
         "fatal_error": record.fatal_error,
-        "metadata": _deserialize_json_field(record.metadata_json),
+        "metadata": metadata,
     }
 
 

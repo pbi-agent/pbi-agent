@@ -304,6 +304,7 @@ class RunSessionModel(BaseModel):
     provider_id: str | None
     profile_id: str | None
     model: str | None
+    reasoning_effort: str | None
     status: RunSessionStatus
     started_at: str
     ended_at: str | None

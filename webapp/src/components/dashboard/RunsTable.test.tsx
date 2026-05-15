@@ -24,6 +24,7 @@ function makeRun(overrides: Partial<AllRunsRun> = {}): AllRunsRun {
     provider_id: "openai",
     profile_id: "default",
     model: "gpt-4.1",
+    reasoning_effort: null,
     status: "started",
     started_at: "2026-05-13T12:00:00Z",
     ended_at: null,
