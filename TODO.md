@@ -1,4 +1,2 @@
-# TODO
-
-[X] Implement init command and tests
-[X] Final validation, memory, handoff
+[X] Compress MEMORY.md
+[X] Review diff
