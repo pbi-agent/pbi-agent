@@ -50,6 +50,11 @@ if TYPE_CHECKING:
     from pbi_agent.observability import RunTracer
 
 _REQUEST_TIMEOUT_SECS = 3600.0
+_CHATGPT_WEBSOCKET_CONNECT_TIMEOUT_SECS = 15.0
+_CHATGPT_WEBSOCKET_IDLE_TIMEOUT_SECS = 300.0
+_CHATGPT_WEBSOCKET_REQUEST_TIMEOUT_SECS = _REQUEST_TIMEOUT_SECS
+_CHATGPT_WEBSOCKET_RETRY_BACKOFF_BASE_SECS = 0.5
+_CHATGPT_WEBSOCKET_RETRY_BACKOFF_MAX_SECS = 8.0
 _RATE_LIMIT_MAX_RETRIES = 10
 _HTTP_ERROR_TYPES = {
     429: "rate_limit_error",
@@ -699,10 +704,31 @@ class OpenAIProvider(Provider):
                 input_items=input_items,
             )
             try:
+                sanitized_request_payload = _sanitize_request_payload_for_observability(
+                    request_body
+                )
+                _trace_provider_request_start(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=sanitized_request_payload,
+                    metadata={
+                        "attempt": attempt + 1,
+                        "transport": "websocket",
+                        "status": "started",
+                        "connect_timeout_secs": _CHATGPT_WEBSOCKET_CONNECT_TIMEOUT_SECS,
+                        "idle_timeout_secs": _CHATGPT_WEBSOCKET_IDLE_TIMEOUT_SECS,
+                        "request_timeout_secs": _CHATGPT_WEBSOCKET_REQUEST_TIMEOUT_SECS,
+                    },
+                )
                 events = self._chatgpt_backend.send_websocket_request(
                     request_body=request_body,
                     headers=headers,
-                    timeout=_REQUEST_TIMEOUT_SECS,
+                    connect_timeout=_CHATGPT_WEBSOCKET_CONNECT_TIMEOUT_SECS,
+                    idle_timeout=_CHATGPT_WEBSOCKET_IDLE_TIMEOUT_SECS,
+                    request_timeout=_CHATGPT_WEBSOCKET_REQUEST_TIMEOUT_SECS,
                 )
                 try:
                     response_json = _parse_stream_events(events)
@@ -803,6 +829,22 @@ class OpenAIProvider(Provider):
                         },
                     )
                     if exc.retryable and attempt < max_retries:
+                        _trace_provider_retry(
+                            tracer=tracer,
+                            provider=self._settings.provider,
+                            model=self._settings.model,
+                            url=request_auth.request_url,
+                            request_config=self._settings.redacted(),
+                            request_payload=sanitized_request_payload,
+                            status_code=200,
+                            error_message=str(exc),
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            metadata={
+                                "semantic_error": True,
+                                "transport": "websocket",
+                            },
+                        )
                         if self._previous_response_id and not is_user_turn:
                             request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
                                 input_items=input_items,
@@ -812,6 +854,22 @@ class OpenAIProvider(Provider):
                         retry_notice_max_retries = max_retries
                         continue
                     if attempt < max_retries:
+                        _trace_provider_retry(
+                            tracer=tracer,
+                            provider=self._settings.provider,
+                            model=self._settings.model,
+                            url=request_auth.request_url,
+                            request_config=self._settings.redacted(),
+                            request_payload=sanitized_request_payload,
+                            status_code=200,
+                            error_message=str(exc),
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            metadata={
+                                "semantic_error": True,
+                                "transport": "websocket",
+                            },
+                        )
                         if self._previous_response_id and not is_user_turn:
                             request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
                                 input_items=input_items,
@@ -900,6 +958,23 @@ class OpenAIProvider(Provider):
                         raise RuntimeError(last_error_message) from exc
                     if attempt >= max_retries:
                         break
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=sanitized_request_payload,
+                        status_code=exc.status,
+                        error_message=str(exc),
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={
+                            "transport": "websocket",
+                            "retryable": True,
+                            "connection_limit": True,
+                        },
+                    )
                     if self._previous_response_id and not is_user_turn:
                         request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
                             input_items=input_items,
@@ -931,6 +1006,22 @@ class OpenAIProvider(Provider):
                 if exc.retryable:
                     if attempt >= max_retries:
                         break
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=sanitized_request_payload,
+                        status_code=exc.status,
+                        error_message=str(exc),
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={
+                            "transport": "websocket",
+                            "retryable": True,
+                        },
+                    )
                     if self._previous_response_id and not is_user_turn:
                         request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
                             input_items=input_items,
@@ -938,6 +1029,7 @@ class OpenAIProvider(Provider):
                             session_id=session_id,
                         )
                     retry_notice_max_retries = max_retries
+                    _sleep_websocket_retry_backoff(attempt)
                     continue
 
                 display.wait_stop()
@@ -1979,6 +2071,73 @@ def _trace_provider_call(
         error_message=error_message,
         metadata=metadata,
     )
+
+
+def _trace_provider_request_start(
+    *,
+    tracer,
+    provider: str,
+    model: str,
+    url: str,
+    request_config: dict[str, Any],
+    request_payload: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    if tracer is None:
+        return
+    tracer.log_event(
+        "model_call_start",
+        provider=provider,
+        model=model,
+        url=url,
+        request_config=request_config,
+        request_payload=request_payload,
+        success=None,
+        metadata=metadata,
+    )
+
+
+def _trace_provider_retry(
+    *,
+    tracer,
+    provider: str,
+    model: str,
+    url: str,
+    request_config: dict[str, Any],
+    request_payload: dict[str, Any],
+    status_code: int | None,
+    error_message: str,
+    attempt: int,
+    max_retries: int,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    if tracer is None:
+        return
+    event_metadata = {
+        "attempt": attempt,
+        "max_retries": max_retries,
+        **(metadata or {}),
+    }
+    tracer.log_event(
+        "model_call_retry",
+        provider=provider,
+        model=model,
+        url=url,
+        request_config=request_config,
+        request_payload=request_payload,
+        status_code=status_code,
+        success=False,
+        error_message=error_message,
+        metadata=event_metadata,
+    )
+
+
+def _sleep_websocket_retry_backoff(attempt: int) -> None:
+    wait_seconds = min(
+        _CHATGPT_WEBSOCKET_RETRY_BACKOFF_BASE_SECS * (2**attempt),
+        _CHATGPT_WEBSOCKET_RETRY_BACKOFF_MAX_SECS,
+    )
+    time.sleep(wait_seconds)
 
 
 def _build_reasoning_display_items(

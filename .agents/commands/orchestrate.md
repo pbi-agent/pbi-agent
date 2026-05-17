@@ -1,150 +1,169 @@
 ---
 name: orchestrate
-description: Orchestrate Mode
+description: Decompose work into sub-agent tasks with main-agent review and validation gates.
 ---
 
 # Orchestrate Mode
 
-Act as manager/operator for full task lifecycle. User invokes `/orchestrate <task or goal>` from session chat. Validate state, delegate phases to matching project sub-agent, inspect artifacts/diffs between phases, decide continue/stop, preserve unrelated workspace changes.
-
-Do not implement main task directly unless delegated phase fails in tiny mechanical way. Prefer action-named sub-agents: `planner`, `worker`, `reviewer`, `fixer`, `confidence-checker`, and `committer`.
+Decompose work into fewest accurate sub-agent tasks. Use single sub-agent when work is best as one coherent implementation. Execute in parallel only when tasks fully isolated + dependency-free; otherwise execute sequentially. Main agent owns quality.
 
 ## Core Rules
 
-- Main instance owns orchestration, phase order, quality gates, final correctness.
-- Use sub-agents as custom-instruction workers for each phase.
-- When calling sub-agent, explicitly instruct create/update relevant root artifact file for that phase.
-- Review every sub-agent result before next phase.
-- Do not trust success claims. Inspect `PLAN.md`, `REVIEW.md` when present, `git status --short`, and relevant diffs.
-- Preserve unrelated worktree changes. Identify before edits; mention in handoff.
-- Do not push, merge, open PRs, rebase, or force-push.
-- Final local commit allowed only through `committer` sub-agent after review loop + confidence gate pass.
+Own task. Sub-agents implement only.
+
+- Own scope, ordering, TODO state, memory, final correctness.
+- Default to one implementation sub-agent at a time unless safe parallel batch qualifies below.
+- Do not force multiple sub-agent steps when one bounded task clearer or more accurate.
+- Run sub-agents in parallel only when scopes completely isolated, touch different code areas, and have no ordering, data, contract, or validation dependency.
+- Review every sub-agent result before accept.
+- Do not trust sub-agent success claim. Check diff, rerun focused validation.
+- If invalid, fix directly or launch repair sub-agent with exact finding.
+- Do not move next until current task reviewed + valid.
+- Preserve unrelated worktree changes.
 
 ## Start Procedure
 
-1. Inspect workspace state with `git status --short --branch`.
-2. Identify unrelated dirty files; keep them out of phase prompts.
-3. Create or reset session `TODO.md` for orchestration tracking only. Main instance owns `TODO.md`.
-4. Record user's task/goal exactly enough for sub-agents.
+First inspect workspace state:
+- Inspect current workspace changes with available tools.
+- Identify unrelated dirty files. Do not touch.
 
-## Required Workflow
+## TODO Setup
 
-### 1. Plan
+Create or reset `TODO.md` for Orchestrate session.
 
-Call sub-agent `planner` with custom instruction:
+Use compact markers:
+- `[ ]` pending
+- `[>]` in progress
+- `[X]` accepted
+- `[!]` blocked
+- `[-]` dropped
 
-- Read user's task/goal and inspect workspace as needed.
-- Create or overwrite root `PLAN.md`.
-- `PLAN.md` must contain implementation-ready checklist with concrete items, validation expectations, assumptions, relevant scope boundaries.
-- Do not implement code changes.
+Convert findings to TODOs:
+- one reviewable fix per TODO
+- use single TODO when task cohesive and splitting would reduce correctness, context, or efficiency
+- order by severity, dependency, risk
+- keep final TODO for full validation + memory/handoff
+- only main agent edits `TODO.md`
 
-After return, verify `PLAN.md` exists and has actionable checklist. If missing/vague, re-delegate plan repair before continuing.
+## Sequential Execution Loop
 
-### 2. Execute
+For each TODO not part of safe parallel batch. If only one TODO, run this loop once:
+1. Mark the TODO `[>]`.
+2. Launch one sub-agent with a narrow implementation prompt.
+3. Wait for the sub-agent result.
+4. Inspect the diff for that task.
+5. Run focused validation yourself.
+6. Review correctness, integration, contracts, tests, and side effects.
+7. If invalid, fix directly or re-delegate a repair prompt.
+8. Rerun focused validation.
+9. Mark the TODO `[X]` only after acceptance.
 
-Call sub-agent `worker` with custom instruction:
+Prefer one sub-agent task when requested change is cohesive, has one acceptance boundary, or needs shared context to avoid inconsistent edits. Split into multiple TODOs only when work has independently reviewable fixes, separable risk, or clear ordering dependencies.
 
-- Read root `PLAN.md` first.
-- Implement unchecked checklist items in `PLAN.md`.
-- Update `PLAN.md` during work, marking completed items and noting validation done/pending.
-- Preserve unrelated workspace changes.
-- Do not edit `REVIEW.md` unless needed to avoid stale review state; do not commit.
+## Parallel Execution
 
-After return, inspect `PLAN.md`, `git status --short`, and relevant diffs. If execution clearly missed plan, re-delegate narrow execute repair.
+Parallel sub-agents allowed only for fully independent TODOs.
 
-### 3. Review/Fix Loop
+Before launching parallel batch, verify every TODO in batch:
+- touches different files or clearly separate subsystems
+- has no shared symbols, schemas, generated files, routes, persistence, tests, fixtures, or configuration
+- has no ordering dependency on another TODO in batch
+- can be reviewed and validated independently
+- cannot conflict with unrelated dirty worktree changes
 
-Repeat until review reports no findings.
+For safe parallel batch:
+1. Mark each TODO `[>]`.
+2. Launch one bounded sub-agent per TODO at the same time.
+3. Wait for all sub-agent results.
+4. Review each result separately before accepting dependent follow-up work.
+5. Inspect combined diff for conflicts, integration issues, accidental overlap.
+6. Run focused validation for each TODO plus combined validation needed by touched surfaces.
+7. If any TODO fails review, fix directly or launch repair sub-agent for that TODO only.
+8. Mark each TODO `[X]` only after own review and validation pass.
 
-#### 3a. Review
+If isolation uncertain, do not run in parallel.
 
-Call sub-agent `reviewer` with custom instruction:
+## Sub-Agent Prompt Requirements
 
-- Run `git status --short --branch`.
-- Read root `PLAN.md`.
-- Compare current implementation diff against `PLAN.md` and user goal.
-- If findings exist, create or overwrite root `REVIEW.md` with checklist of actionable findings, with enough file/line/context to fix each item.
-- If no findings exist, do not create new `REVIEW.md`; if old `REVIEW.md` exists, leave untouched and report `No findings.` clearly, or mark resolved only if needed for clarity.
-- Return normal review result and clearly include `No findings.` when none.
-- Do not fix code.
-
-Main gate:
-- If review output contains `No findings.` and overall verdict correct, break loop.
-- If findings exist, verify root `REVIEW.md` exists and contains checklist. If missing, re-delegate review file repair.
-
-#### 3b. Fix Review
-
-Call sub-agent `fixer` with custom instruction:
-
-- Read root `PLAN.md` and root `REVIEW.md`.
-- Fix only unchecked/actionable findings in `REVIEW.md`.
-- Update `REVIEW.md` as fixes complete, marking checklist items done and adding validation notes.
-- Update `PLAN.md` if fixes complete or alter plan checklist status.
-- Preserve unrelated workspace changes.
-- Do not perform new general review; do not commit.
-
-After return, inspect `REVIEW.md`, `PLAN.md`, `git status --short`, and relevant diffs. Then restart review/fix loop.
-
-### 4. Check Confidence
-
-Call sub-agent `confidence-checker` with custom instruction:
-
-- Read root `PLAN.md`, root `REVIEW.md` if present, current diffs/status, and validation evidence.
-- Assess whether implementation ready to ship.
-- Produce calibrated confidence score, remaining risks, final validation gate.
-- Do not modify files.
-
-Main gate:
-- If confidence high enough and remaining risk normal, continue to commit.
-- If confidence finds needed hardening, docs, missing validation, or small fixes, call `worker` again with custom instruction to read `PLAN.md`, perform only that hardening/fix/docs/validation, update `PLAN.md`, then return to review/fix loop before checking confidence again.
-
-### 5. Commit
-
-When review has no findings and confidence acceptable, call sub-agent `committer` with custom instruction:
-
-- Read `PLAN.md`, `REVIEW.md` if present, current status/diff, validation evidence.
-- Stage only task-scoped files.
-- Include `PLAN.md` and `REVIEW.md` only if intended task artifacts for this workflow.
-- Create one clean local commit.
-- Do not push.
-
-If commit stops due to unsafe staging, failed validation, or unclear scope, report blocker; do not bypass.
-
-## Sub-Agent Prompt Template
-
-Use this shape for each delegation:
+Every implementation sub-agent prompt concrete + bounded. Use this structure:
 
 ```text
-Agent: <planner|worker|reviewer|fixer|confidence-checker|committer>
-Lifecycle phase: <plan|execute|review|fix-review|check-confidence|commit>
+Implement TASK <n> only: <task title>.
 
-User task/goal:
-<original user request>
+Goal:
+<one sentence describing the required correctness or user-visible outcome>
 
-Manager context:
-- Unrelated dirty files to preserve: <paths or none>
-- Current phase objective: <one sentence>
-- Required artifact behavior: create/update <PLAN.md|REVIEW.md|none> exactly as described.
-- Scope boundaries: <paths/areas if known>
+Context:
+- Relevant files/symbols/routes/tests: <specific paths and names>
+- Current failure/risk: <exact bug, failing assertion, or scenario>
+- Repo conventions to preserve: <validation, contracts, no migrations, style, etc.>
 
-Instructions:
-<specific phase instructions from this command>
+Scope:
+- Allowed files/areas: <paths or subsystems>
+- Do not implement unrelated TODOs.
+- Do not edit TODO.md or MEMORY.md.
+- Do not change generated/static assets unless this task explicitly requires it.
+- Preserve unrelated worktree changes.
 
-Return:
-- Files changed or inspected
-- Artifact updates made
-- Validation run/results or why skipped
-- Blocking risks/findings
+Implementation expectations:
+- Make the smallest correct change.
+- Add or update focused tests that prove this specific bug is fixed.
+- Keep backend/frontend/API/generated contracts aligned when touched.
+- Prefer behavior-level fixes over broad rewrites.
+
+Validation to run if feasible:
+- <focused test command(s)>
+- <lint/typecheck/codegen command(s) relevant to touched surface>
+
+Return exactly:
+- Changed files
+- What changed
+- Validation commands and results
+- Residual risks or follow-up intentionally not handled
 ```
 
-## Final Handoff
+## Review Gate
 
-After commit or blocker, report concise:
+After each sub-agent, review before accept.
 
-- phase outcome
-- files/artifacts touched
-- validation evidence
-- commit hash if created
-- remaining workspace changes, especially unrelated dirty files
+Check:
+- Diff matches assigned task only.
+- No unrelated TODOs, broad cleanup, or memory edits.
+- API schemas, generated types, event parsers, persistence, frontend boundaries stay aligned.
+- Concurrency/lifecycle code adds no races, stale state, missed cleanup, or silent failure.
+- Terminal states and snapshots persist before visible lifecycle events when relevant.
+- Tests cover old failure and new expected behavior directly.
+- Focused validation passes when main agent runs it.
+- Generated/static files tracked when changed.
 
-Orchestrate Mode complete only when `PLAN.md` complete or blockers explicit, review loop has no unresolved findings, confidence gate acceptable or blocker documented, and final commit succeeded or safely stopped.
+If review fails:
+- Do not proceed.
+- State blocking issue briefly.
+- Apply minimal fix or launch repair sub-agent with exact issue.
+- Rerun focused validation + review again.
+
+## Final Validation
+
+Run validation for every touched surface.
+
+Common final checks:
+- Python: `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest -q --tb=short -x`
+- Frontend: `bun run test:web -- --maxWorkers=2`, `bun run lint`, `bun run typecheck`, `bun run web:build`
+- API/SSE contract changes: run the project codegen command and codegen tests
+- Static web assets: verify rebuilt hashed chunks are tracked
+
+If final validation reveals new failure:
+- Add or reopen a TODO.
+- Isolate the failure.
+- Fix before claiming completion.
+- Rerun focused validation, then final validation again.
+
+## Handoff
+
+At end, report concise:
+- tasks completed
+- files or areas touched
+- validation commands and results
+- remaining workspace changes
+
+Orchestrate Mode complete only when every TODO is `[X]`, `[-]`, or `[!]` with explanation, every sub-agent result reviewed, final validation passed or blockers explicit, and unrelated dirty files preserved.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import socket
 import ssl
 import urllib.request
 from unittest.mock import Mock
@@ -475,8 +476,10 @@ def test_openai_chatgpt_replays_restored_user_images_without_previous_id(
     )
     requests: list[dict[str, object]] = []
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del self, headers, timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout, idle_timeout, request_timeout
         requests.append(request_body)
         return [
             {"type": "response.created", "response": {"id": "resp_1"}},
@@ -1060,7 +1063,8 @@ def test_chatgpt_codex_websocket_protocol_headers_override_conflicts(
             "Sec-WebSocket-Key": "bad-key",
             "Sec-WebSocket-Version": "12",
         },
-        timeout=30,
+        connect_timeout=30,
+        idle_timeout=30,
     )
 
     assert len(sent_requests) == 1
@@ -1073,6 +1077,32 @@ def test_chatgpt_codex_websocket_protocol_headers_override_conflicts(
     assert "Upgrade: h2c" not in header_lines
     assert "Sec-WebSocket-Key: bad-key" not in header_lines
     assert "Sec-WebSocket-Version: 12" not in header_lines
+
+
+def test_chatgpt_codex_websocket_connect_timeout_is_retryable(monkeypatch) -> None:
+    connect_error = socket.timeout("timed out")
+
+    def fake_create_connection(address, timeout):
+        del address, timeout
+        raise connect_error
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.socket.create_connection",
+        fake_create_connection,
+    )
+
+    with pytest.raises(ChatGPTCodexWebSocketError) as exc_info:
+        ResponsesWebSocket.connect(
+            "ws://example.test/responses",
+            headers={},
+            connect_timeout=15,
+            idle_timeout=30,
+        )
+
+    error = exc_info.value
+    assert error.retryable is True
+    assert "WebSocket connect failed" in str(error)
+    assert error.__cause__ is connect_error
 
 
 def test_chatgpt_codex_websocket_sends_response_create_body_at_top_level() -> None:
@@ -1103,7 +1133,8 @@ def test_chatgpt_codex_websocket_sends_response_create_body_at_top_level() -> No
             "input": [{"role": "user", "content": "Hello"}],
             "stream": True,
         },
-        timeout=30,
+        idle_timeout=30,
+        request_timeout=30,
     )
 
     assert events == [
@@ -1129,7 +1160,8 @@ def test_chatgpt_codex_websocket_send_failure_is_retryable() -> None:
     with pytest.raises(ChatGPTCodexWebSocketError) as exc_info:
         websocket.send_response_create(
             {"model": "gpt-5", "input": [], "stream": True},
-            timeout=30,
+            idle_timeout=30,
+            request_timeout=30,
         )
 
     error = exc_info.value
@@ -1137,6 +1169,27 @@ def test_chatgpt_codex_websocket_send_failure_is_retryable() -> None:
     assert "WebSocket send failed" in str(error)
     assert error.__cause__ is send_error
     assert websocket.closed is True
+    websocket._recv_frame.assert_not_called()
+    websocket._sock.close.assert_called_once()
+
+
+def test_chatgpt_codex_websocket_request_timeout_is_retryable() -> None:
+    websocket = ResponsesWebSocket(Mock(), response_headers={})
+    websocket._send_text = Mock()
+    websocket._recv_frame = Mock()
+
+    with pytest.raises(ChatGPTCodexWebSocketError) as exc_info:
+        websocket.send_response_create(
+            {"model": "gpt-5", "input": [], "stream": True},
+            idle_timeout=30,
+            request_timeout=-1,
+        )
+
+    error = exc_info.value
+    assert error.retryable is True
+    assert "WebSocket request timed out" in str(error)
+    assert websocket.closed is True
+    websocket._send_text.assert_not_called()
     websocket._recv_frame.assert_not_called()
     websocket._sock.close.assert_called_once()
 
@@ -1151,7 +1204,8 @@ def test_chatgpt_codex_websocket_ping_pong_send_failure_is_retryable() -> None:
     with pytest.raises(ChatGPTCodexWebSocketError) as exc_info:
         websocket.send_response_create(
             {"model": "gpt-5", "input": [], "stream": True},
-            timeout=30,
+            idle_timeout=30,
+            request_timeout=30,
         )
 
     error = exc_info.value
@@ -1189,7 +1243,8 @@ def test_chatgpt_codex_websocket_reads_buffered_upgrade_frame() -> None:
 
     events = websocket.send_response_create(
         {"model": "gpt-5", "input": [], "stream": True},
-        timeout=30,
+        idle_timeout=30,
+        request_timeout=30,
     )
 
     assert events == [buffered_event]
@@ -1200,8 +1255,10 @@ def test_chatgpt_codex_websocket_reads_buffered_upgrade_frame() -> None:
 def test_openai_request_turn_uses_chatgpt_account_auth_headers(monkeypatch) -> None:
     request_details: dict[str, object] = {}
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del self, timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, connect_timeout, idle_timeout, request_timeout
         request_details["headers"] = headers
         request_details["body"] = request_body
         return [
@@ -1350,8 +1407,10 @@ def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
         ]
     )
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del connect_timeout, idle_timeout, request_timeout
         requests.append({"headers": dict(headers), "body": request_body})
         if len(requests) == 1:
             self._turn_state = "ts-1"
@@ -1534,8 +1593,10 @@ def test_openai_request_turn_retries_incomplete_response_event(
     ]
     responses = iter([incomplete_events, completed_events])
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del self, headers, timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout, idle_timeout, request_timeout
         requests.append(request_body)
         return next(responses)
 
@@ -2397,8 +2458,10 @@ def test_openai_chatgpt_websocket_uses_previous_id_for_live_followup(
         ]
     )
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del self, headers, timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout, idle_timeout, request_timeout
         requests.append(request_body)
         return next(responses)
 
@@ -2549,8 +2612,10 @@ def test_openai_chatgpt_replay_collapses_completed_tool_turns(
         ]
     )
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del self, headers, timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout, idle_timeout, request_timeout
         requests.append(request_body)
         return next(responses)
 
@@ -2619,8 +2684,10 @@ def test_openai_chatgpt_websocket_connection_limit_reconnects_and_resends(
 ) -> None:
     requests: list[dict[str, object]] = []
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del self, headers, timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout, idle_timeout, request_timeout
         requests.append(request_body)
         if len(requests) == 1:
             raise ChatGPTCodexWebSocketError(
@@ -2690,14 +2757,117 @@ def test_openai_chatgpt_websocket_connection_limit_reconnects_and_resends(
     assert display_spy.retry_notices == [(1, 1)]
 
 
+def test_openai_chatgpt_websocket_retryable_timeout_traces_start_and_retry(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+    sleeps: list[float] = []
+    tracer = Mock()
+
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers
+        requests.append(
+            {
+                "body": request_body,
+                "connect_timeout": connect_timeout,
+                "idle_timeout": idle_timeout,
+                "request_timeout": request_timeout,
+            }
+        )
+        if len(requests) == 1:
+            raise ChatGPTCodexWebSocketError(
+                "WebSocket read failed: timed out", retryable=True
+            )
+        return [
+            {"type": "response.created", "response": {"id": "resp_1"}},
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_1",
+                    "model": "gpt-5",
+                    "usage": {
+                        "input_tokens": 1,
+                        "input_tokens_details": {"cached_tokens": 0},
+                        "output_tokens": 1,
+                        "output_tokens_details": {"reasoning_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "Recovered."}],
+                        }
+                    ],
+                },
+            },
+        ]
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            max_retries=1,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+            ),
+        )
+    )
+    response = provider.request_turn(
+        user_input=UserTurnInput(text="Hello"),
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+        tracer=tracer,
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert requests[0]["connect_timeout"] == 15.0
+    assert requests[0]["idle_timeout"] == 300.0
+    assert requests[0]["request_timeout"] == 3600.0
+    assert display_spy.retry_notices == [(1, 1)]
+    assert sleeps == [0.5]
+
+    event_types = [call.args[0] for call in tracer.log_event.call_args_list]
+    assert event_types == ["model_call_start", "model_call_retry", "model_call_start"]
+    retry_metadata = tracer.log_event.call_args_list[1].kwargs["metadata"]
+    assert retry_metadata == {
+        "attempt": 1,
+        "max_retries": 1,
+        "transport": "websocket",
+        "retryable": True,
+    }
+    model_successes = [
+        call.kwargs["success"] for call in tracer.log_model_call.call_args_list
+    ]
+    assert model_successes == [False, True]
+
+
 def test_openai_chatgpt_websocket_usage_limit_429_does_not_retry(
     monkeypatch,
     display_spy,
 ) -> None:
     requests: list[dict[str, object]] = []
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del self, headers, timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout, idle_timeout, request_timeout
         requests.append(request_body)
         raise ChatGPTCodexWebSocketError(
             "usage limit",
@@ -2814,8 +2984,10 @@ def test_openai_chatgpt_previous_response_not_found_replays_active_turn(
         ]
     )
 
-    def fake_send_websocket_request(self, *, request_body, headers, timeout):
-        del self, headers, timeout
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout, idle_timeout, request_timeout
         requests.append(request_body)
         response = next(responses)
         if isinstance(response, Exception):

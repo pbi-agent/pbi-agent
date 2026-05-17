@@ -11,6 +11,7 @@ Each release has its own changelog page named with the release version. Release 
 
 ## Releases
 
+- [v0.9.2 - 2026-05-17](./v0.9.2.md)
 - [v0.9.1 - 2026-05-17](./v0.9.1.md)
 - [v0.9.0 - 2026-05-15](./v0.9.0.md)
 - [v0.8.0 - 2026-05-13](./v0.8.0.md)

@@ -1,4 +1,5 @@
-[X] Fetch source changes and inspect divergence
-[X] Merge source into local commit
-[X] Resolve conflicts and validate merge
-[X] Update memory
+[X] Inspect WebSocket provider code/tests
+[X] Implement split timeouts + wall-clock deadline
+[X] Add start/retry observability and retry backoff
+[X] Update/add tests
+[X] Run focused validation

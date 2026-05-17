@@ -6,6 +6,7 @@ import os
 import socket
 import ssl
 import struct
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -206,13 +207,23 @@ class ChatGPTCodexBackend:
         *,
         request_body: dict[str, Any],
         headers: dict[str, str],
-        timeout: float,
+        connect_timeout: float,
+        idle_timeout: float,
+        request_timeout: float,
     ) -> list[dict[str, Any]]:
         if not self._enabled:
             raise RuntimeError("ChatGPT Codex WebSocket backend is not enabled")
-        websocket = self._ensure_websocket(headers=headers, timeout=timeout)
+        websocket = self._ensure_websocket(
+            headers=headers,
+            connect_timeout=connect_timeout,
+            idle_timeout=idle_timeout,
+        )
         try:
-            return websocket.send_response_create(request_body, timeout=timeout)
+            return websocket.send_response_create(
+                request_body,
+                idle_timeout=idle_timeout,
+                request_timeout=request_timeout,
+            )
         except Exception:
             self.close_websocket()
             raise
@@ -221,13 +232,15 @@ class ChatGPTCodexBackend:
         self,
         *,
         headers: dict[str, str],
-        timeout: float,
+        connect_timeout: float,
+        idle_timeout: float,
     ) -> ResponsesWebSocket:
         if self._websocket is None or self._websocket.closed:
             self._websocket = ResponsesWebSocket.connect(
                 self.websocket_url,
                 headers=headers,
-                timeout=timeout,
+                connect_timeout=connect_timeout,
+                idle_timeout=idle_timeout,
             )
             turn_state = self._websocket.response_headers.get(CHATGPT_TURN_STATE_HEADER)
             if isinstance(turn_state, str) and turn_state:
@@ -315,7 +328,8 @@ class ResponsesWebSocket:
         url: str,
         *,
         headers: dict[str, str],
-        timeout: float,
+        connect_timeout: float,
+        idle_timeout: float,
     ) -> ResponsesWebSocket:
         parsed = urlparse(url)
         if parsed.scheme not in {"ws", "wss"}:
@@ -330,14 +344,19 @@ class ResponsesWebSocket:
         if parsed.query:
             path = f"{path}?{parsed.query}"
 
-        raw_sock = socket.create_connection((host, port), timeout=timeout)
+        try:
+            raw_sock = socket.create_connection((host, port), timeout=connect_timeout)
+        except (OSError, TimeoutError, socket.timeout) as exc:
+            raise ChatGPTCodexWebSocketError(
+                f"WebSocket connect failed: {exc}", retryable=True
+            ) from exc
         try:
             if parsed.scheme == "wss":
                 context = ssl.create_default_context()
                 sock = context.wrap_socket(raw_sock, server_hostname=host)
             else:
                 sock = raw_sock
-            sock.settimeout(timeout)
+            sock.settimeout(idle_timeout)
             key = base64.b64encode(os.urandom(16)).decode("ascii")
             request_headers = {
                 "Host": parsed.netloc,
@@ -352,8 +371,13 @@ class ResponsesWebSocket:
                 + [f"{name}: {value}" for name, value in request_headers.items()]
                 + ["", ""]
             )
-            sock.sendall(request.encode("utf-8"))
-            status, response_headers, body = _read_http_upgrade_response(sock)
+            try:
+                sock.sendall(request.encode("utf-8"))
+                status, response_headers, body = _read_http_upgrade_response(sock)
+            except (OSError, TimeoutError, socket.timeout) as exc:
+                raise ChatGPTCodexWebSocketError(
+                    f"WebSocket upgrade failed: {exc}", retryable=True
+                ) from exc
             if status != 101:
                 body_text = body.decode("utf-8", errors="replace")
                 payload = _json_object(body_text) or {"body": body_text}
@@ -364,6 +388,14 @@ class ResponsesWebSocket:
                     retryable=_is_retryable_status(status),
                 )
             return cls(sock, response_headers=response_headers, buffered=body)
+        except ChatGPTCodexWebSocketError:
+            raw_sock.close()
+            raise
+        except (OSError, TimeoutError, socket.timeout) as exc:
+            raw_sock.close()
+            raise ChatGPTCodexWebSocketError(
+                f"WebSocket connect failed: {exc}", retryable=True
+            ) from exc
         except Exception:
             raw_sock.close()
             raise
@@ -372,13 +404,15 @@ class ResponsesWebSocket:
         self,
         request_body: dict[str, Any],
         *,
-        timeout: float,
+        idle_timeout: float,
+        request_timeout: float,
     ) -> list[dict[str, Any]]:
         if self.closed:
             raise ChatGPTCodexWebSocketError(
                 "websocket connection is closed", retryable=True
             )
-        self._sock.settimeout(timeout)
+        deadline = time.monotonic() + request_timeout
+        self._set_phase_timeout(deadline, idle_timeout)
         request_payload = {"type": "response.create", **request_body}
         try:
             self._send_text(json.dumps(request_payload, separators=(",", ":")))
@@ -390,6 +424,7 @@ class ResponsesWebSocket:
         events: list[dict[str, Any]] = []
         while True:
             try:
+                self._set_phase_timeout(deadline, idle_timeout)
                 opcode, payload = self._recv_frame()
             except (OSError, TimeoutError, socket.timeout) as exc:
                 self.close()
@@ -404,6 +439,7 @@ class ResponsesWebSocket:
                 )
             if opcode == _WS_OPCODE_PING:
                 try:
+                    self._set_phase_timeout(deadline, idle_timeout)
                     self._send_frame(_WS_OPCODE_PONG, payload)
                 except (OSError, TimeoutError, socket.timeout) as exc:
                     self.close()
@@ -433,6 +469,15 @@ class ResponsesWebSocket:
                 return events
             if event.get("type") == "response.failed":
                 return events
+
+    def _set_phase_timeout(self, deadline: float, idle_timeout: float) -> None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            self.close()
+            raise ChatGPTCodexWebSocketError(
+                "WebSocket request timed out", retryable=True
+            )
+        self._sock.settimeout(min(idle_timeout, remaining))
 
     def close(self) -> None:
         if self.closed:
