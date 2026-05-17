@@ -90,6 +90,11 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(command[:2], ["docker", "run"])
         self.assertIn("--rm", command)
         self.assertIn("--init", command)
+        name_index = command.index("--name")
+        self.assertEqual(
+            command[name_index + 1],
+            cli_sandbox._sandbox_container_name(workspace),
+        )
         self.assertIn("--read-only", command)
         self.assertNotIn("--detach", command)
         self.assertIn("--cap-drop", command)
@@ -161,6 +166,20 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(
             command[image_index + 1 :],
             ["web", "--host", "0.0.0.0", "--port", "9001"],
+        )
+
+    def test_sandbox_container_name_uses_normalized_workspace_folder(self) -> None:
+        self.assertEqual(
+            cli_sandbox._sandbox_container_name(Path("/tmp/My Project")),
+            "pbi-agent-my-project",
+        )
+        self.assertEqual(
+            cli_sandbox._sandbox_container_name(Path("/tmp/Team@Repo #1")),
+            "pbi-agent-team-repo-1",
+        )
+        self.assertEqual(
+            cli_sandbox._sandbox_container_name(Path("/tmp/___")),
+            "pbi-agent-workspace",
         )
 
     def test_build_sandbox_run_command_can_detach_without_tty(self) -> None:

@@ -1,4 +1,4 @@
-[X] Fix pending pre-history work ordering review finding
-[X] Add regression coverage for non-message pre-history work
-[X] Run focused frontend validation
+[X] Fetch source changes and inspect divergence
+[X] Merge source into local commit
+[X] Resolve conflicts and validate merge
 [X] Update memory

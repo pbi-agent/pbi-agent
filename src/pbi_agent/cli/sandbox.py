@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -197,6 +198,8 @@ def _build_sandbox_run_command(
         "run",
         "--rm",
         "--init",
+        "--name",
+        _sandbox_container_name(workspace),
         "--workdir",
         container_workspace,
         "--label",
@@ -274,6 +277,12 @@ def _build_sandbox_run_command(
 
 def _sandbox_workspace_id(workspace: Path) -> str:
     return hashlib.sha256(str(workspace).encode("utf-8")).hexdigest()[:16]
+
+
+def _sandbox_container_name(workspace: Path) -> str:
+    normalized = re.sub(r"[^a-z0-9_.-]+", "-", workspace.name.lower()).strip("-_.")
+    workspace_name = normalized or "workspace"
+    return f"pbi-agent-{workspace_name}"
 
 
 def _sandbox_workspace_identity(args: argparse.Namespace, workspace: Path) -> Path:
