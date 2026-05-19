@@ -269,6 +269,50 @@ describe("ToolResult", () => {
     });
   });
 
+  describe("SearchWorkspaceToolResult", () => {
+    it("renders raw codetool-search output without generic JSON blocks", () => {
+      const { container } = render(
+        <ToolResult
+          text="search_workspace UserService done"
+          metadata={{
+            tool_name: "search_workspace",
+            call_id: "call_search_workspace",
+            status: "completed",
+            success: true,
+            arguments: {
+              pattern: "UserService",
+              root: "src",
+              regex: true,
+              target: "both",
+              path_scope: "basename",
+              mode: "snippets",
+              context_lines: 1,
+              cursor: 20,
+              glob: "*.py",
+              exclude: "tests/**",
+            },
+            result: "src/users.py\n -class UserService:\nsrc/services/user_service.py",
+          }}
+        />,
+      );
+
+      expect(container.querySelector(".tool-result-card--search-workspace")).not.toBeNull();
+      expect(screen.getByText("UserService")).toBeInTheDocument();
+      expect(screen.getByText("Content + path search · regex · root src")).toBeInTheDocument();
+      expect(screen.getByText("mode snippets")).toBeInTheDocument();
+      expect(screen.getByText("scope basename")).toBeInTheDocument();
+      expect(screen.getByText("context 1")).toBeInTheDocument();
+      expect(screen.getByText("cursor 20")).toBeInTheDocument();
+      expect(screen.getByText("glob *.py")).toBeInTheDocument();
+      expect(screen.getByText("exclude tests/**")).toBeInTheDocument();
+      expect(screen.getByText("Raw search output")).toBeInTheDocument();
+      expect(screen.getByText(/src\/users\.py/)).toBeInTheDocument();
+      expect(screen.getByText(/src\/services\/user_service\.py/)).toBeInTheDocument();
+      expect(screen.queryByText("Arguments")).not.toBeInTheDocument();
+      expect(screen.queryByText("Result")).not.toBeInTheDocument();
+    });
+  });
+
   describe("ReadFileToolResult", () => {
     beforeEach(() => {
       highlightCodeMock.mockReset();

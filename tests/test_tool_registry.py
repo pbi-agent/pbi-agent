@@ -12,6 +12,7 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "replace_in_file",
         "write_file",
         "read_file",
+        "search_workspace",
         "read_web_url",
         "ask_user",
         "sub_agent",

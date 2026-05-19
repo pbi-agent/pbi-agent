@@ -300,7 +300,6 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         arguments: Any = None,
         result: Any = None,
     ) -> None:
-        del result
         self._tool_group.update_for_function(name)
         tool_name, text = route_function_result(
             name,
@@ -309,6 +308,7 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
             status=status_markup(success=success),
             call_id=call_id,
             arguments=arguments,
+            result=result,
         )
         self._tool_group.add_item(text, classes=tool_item_class(tool_name))
 

@@ -244,16 +244,22 @@ def _execute_one_tool_call(
         is_codex_apply_patch = _is_codex_apply_patch_call(call, spec)
         if isinstance(output, ToolOutput):
             is_error = output.is_error
-            payload = {"ok": not is_error, "result": output.result}
+            result_payload = output.result
             attachments = list(output.attachments)
             display_metadata.update(output.display_metadata)
         else:
-            payload = {"ok": True, "result": output}
+            result_payload = output
             is_error = False
-        output_json = json.dumps(payload)
-        output_payload: Any = payload
+        if _uses_raw_text_output(call, result_payload, attachments, is_error):
+            if not isinstance(result_payload, str):
+                raise TypeError("raw tool output must be text")
+            output_json = result_payload
+            output_payload: Any = result_payload
+        else:
+            payload = {"ok": not is_error, "result": result_payload}
+            output_json = json.dumps(payload)
+            output_payload = payload
         if is_codex_apply_patch:
-            result_payload = payload["result"]
             is_error = _apply_patch_result_failed(result_payload)
             output_json = _format_codex_apply_patch_output(result_payload)
             output_payload = output_json
@@ -302,6 +308,20 @@ def _execute_one_tool_call(
 
 def _is_thread_start_failure(exc: RuntimeError) -> bool:
     return "can't start new thread" in str(exc)
+
+
+def _uses_raw_text_output(
+    call: ToolCall,
+    result_payload: Any,
+    attachments: list[Any],
+    is_error: bool,
+) -> bool:
+    return (
+        call.name == "search_workspace"
+        and not attachments
+        and not is_error
+        and isinstance(result_payload, str)
+    )
 
 
 class ToolThreadStartError(RuntimeError):

@@ -11,6 +11,8 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { inferShellOutputLanguage } from "@/lib/code-language";
+import { cn } from "@/lib/utils";
 import type { ToolCallMetadata } from "../../types";
 import { Badge } from "../ui/badge";
 import {
@@ -21,7 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
-import { inferShellOutputLanguage } from "@/lib/code-language";
 import { CodeBlock } from "../ui/code-block";
 import {
   FILE_EDIT_TOOL_NAMES,
@@ -57,6 +58,9 @@ export function ToolResult({ metadata, text, running = false }: ToolResultProps)
   }
   if (toolName === "read_web_url") {
     return <ReadWebUrlToolResult metadata={metadata} text={text} running={running} />;
+  }
+  if (toolName === "search_workspace") {
+    return <SearchWorkspaceToolResult metadata={metadata} text={text} running={running} />;
   }
   if (toolName === "web_search") {
     return <WebSearchToolResult metadata={metadata} text={text} running={running} />;
@@ -227,6 +231,63 @@ function ReadWebUrlToolResult({ metadata, text, running }: ToolResultProps) {
   );
 }
 
+function SearchWorkspaceToolResult({ metadata, text, running }: ToolResultProps) {
+  const args = objectValue(metadata?.arguments);
+  const pattern = stringValue(args?.pattern) ?? "Search";
+  const root = stringValue(args?.root) ?? ".";
+  const regex = args?.regex !== false;
+  const target = stringValue(args?.target) ?? "content";
+  const pathScope = stringValue(args?.path_scope) ?? "path";
+  const mode = stringValue(args?.mode) ?? "files";
+  const contextLines = numberValue(args?.context_lines);
+  const limit = numberValue(args?.limit);
+  const cursor = cursorValue(args?.cursor);
+  const glob = stringListValue(args?.glob);
+  const exclude = stringListValue(args?.exclude);
+  const rawOutput = stringValue(metadata?.result) ?? "";
+  const error = errorText(metadata?.error);
+  const description = [
+    target === "path" ? "Path search" : target === "both" ? "Content + path search" : "Content search",
+    regex ? "regex" : "literal",
+    `root ${root}`,
+  ].filter(Boolean).join(" · ");
+  const options = [
+    `mode ${mode}`,
+    target === "path" || target === "both" ? `scope ${pathScope}` : null,
+    contextLines !== undefined && contextLines > 0 ? `context ${contextLines}` : null,
+    limit !== undefined ? `limit ${limit}` : null,
+    cursor !== undefined ? `cursor ${cursor}` : null,
+    ...glob.map((value) => `glob ${value}`),
+    ...exclude.map((value) => `exclude ${value}`),
+  ].filter((value): value is string => Boolean(value));
+
+  return (
+    <ToolCard
+      metadata={metadata}
+      running={running}
+      icon={<SearchIcon />}
+      title={pattern}
+      description={description}
+      className="tool-result-card--search-workspace"
+    >
+      {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
+      {options.length > 0 ? (
+        <div className="search-workspace-result__filters" aria-label="Search options">
+          {options.map((option) => (
+            <Badge key={option} variant="outline" size="meta">{option}</Badge>
+          ))}
+        </div>
+      ) : null}
+      {rawOutput ? (
+        <OutputBlock label="Raw search output" value={rawOutput} />
+      ) : !running && !error && !text ? (
+        <ToolNotice label="No output" value="The search returned no text." />
+      ) : null}
+      {!rawOutput && text ? <OutputBlock label="Summary" value={text} /> : null}
+    </ToolCard>
+  );
+}
+
 function WebSearchToolResult({ metadata, text, running }: ToolResultProps) {
   const result = objectValue(metadata?.result);
   const args = objectValue(metadata?.arguments);
@@ -278,19 +339,20 @@ function GenericToolResult({ metadata, text, running }: ToolResultProps) {
   );
 }
 
-function ToolCard({ metadata, running, icon, title, description, statusLabel, children }: {
+function ToolCard({ metadata, running, icon, title, description, statusLabel, className, children }: {
   metadata?: ToolCallMetadata;
   running?: boolean;
   icon: ReactNode;
   title: string;
   description?: string;
   statusLabel?: string;
+  className?: string;
   children: ReactNode;
 }) {
   const failed = metadata?.success === false || metadata?.status === "failed";
   const label = statusLabel ?? (running ? "Running" : failed ? "Failed" : "Done");
   return (
-    <Card size="sm" className="tool-result-card" data-status={failed ? "failed" : running ? "running" : "done"}>
+    <Card size="sm" className={cn("tool-result-card", className)} data-status={failed ? "failed" : running ? "running" : "done"}>
       <CardHeader className="tool-result-card__header">
         <div className="tool-result-card__title-row">
           <span className="tool-result-card__icon" aria-hidden="true">{icon}</span>
@@ -417,6 +479,18 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
+}
+
+function cursorValue(value: unknown): number | string | undefined {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  return undefined;
+}
+
+function stringListValue(value: unknown): string[] {
+  if (typeof value === "string" && value.length > 0) return [value];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
 function timeoutValue(value: unknown): number | string | undefined {

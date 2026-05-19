@@ -608,6 +608,45 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
   });
 
+  it("shows search_workspace rows as Search with the search pattern in Working", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "tool_group",
+            itemId: "tools-1",
+            label: "Search workspace",
+            status: "completed",
+            items: [
+              {
+                text: "search_workspace DEFAULT_LIMIT",
+                metadata: {
+                  tool_name: "search_workspace",
+                  arguments: { pattern: "DEFAULT_LIMIT" },
+                  result: "README.md:1:DEFAULT_LIMIT",
+                },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Working 1 search" })).toBeInTheDocument();
+
+    openWorking(0, false);
+
+    const searchButton = screen.getByRole("button", { name: /Search.*DEFAULT_LIMIT/ });
+    expect(searchButton).toHaveTextContent("Search");
+    expect(searchButton).toHaveTextContent("DEFAULT_LIMIT");
+    expect(screen.queryByText("search_workspace")).not.toBeInTheDocument();
+  });
+
   it("shows long Working tool lists in a five-row scroll area and centers opened tools", async () => {
     const scrollTo = vi.fn();
     HTMLElement.prototype.scrollTo = scrollTo;
@@ -1596,6 +1635,7 @@ describe("SessionTimeline", () => {
               { text: "read_file README.md done", metadata: { tool_name: "read_file" } },
               { text: "Fetched https://example.com", classes: "tool-call-read-web-url" },
               { text: "web_search pbi-agent done", metadata: { tool_name: "web_search" } },
+              { text: "search_workspace UserService done", classes: "tool-call-search-workspace" },
               { text: "shell bun run typecheck done", metadata: { tool_name: "shell" } },
               { text: "apply_patch done", metadata: { tool_name: "apply_patch" } },
               { text: "replace_in_file done", metadata: { tool_name: "replace_in_file" } },
@@ -1615,7 +1655,7 @@ describe("SessionTimeline", () => {
     );
 
     expect(screen.getByRole("button", {
-      name: "Working 2 reads, 1 search, 1 shell, 3 edits, 1 agent, 1 question, 1 other",
+      name: "Working 2 reads, 2 searches, 1 shell, 3 edits, 1 agent, 1 question, 1 other",
     })).toBeInTheDocument();
   });
 

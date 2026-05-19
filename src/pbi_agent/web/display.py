@@ -1073,6 +1073,7 @@ class _EventDisplayBase(DisplayProtocol):
             status=status_markup(success=success),
             call_id=call_id,
             arguments=arguments,
+            result=result,
         )
         result_body = _tool_result_body(result)
         self._tool_group.upsert_item(

@@ -276,6 +276,7 @@ const KNOWN_TOOL_NAMES = new Set([
   "read_image",
   "read_web_url",
   "replace_in_file",
+  "search_workspace",
   "shell",
   "sub_agent",
   "web_search",
@@ -324,12 +325,14 @@ function friendlyToolName(toolName: string) {
     read_image: "Inspect image",
     read_web_url: "Read webpage",
     replace_in_file: "Update",
+    search_workspace: "Search",
     shell: "Command",
     sub_agent: "Ask agent",
     web_search: "Search web",
     write_file: "Write",
   };
-  return labels[toolName] ?? (
+  const normalizedToolName = normalizeToolNameCandidate(toolName);
+  return (normalizedToolName ? labels[normalizedToolName] : undefined) ?? labels[toolName] ?? (
     toolName
       .split("_")
       .filter(Boolean)
@@ -349,7 +352,7 @@ type ToolCategory = "read" | "search" | "list" | "shell" | "edit" | "sub-agent" 
 
 function categorizeTool(toolName: string): ToolCategory {
   if (["read_file", "read_image", "read_web_url"].includes(toolName)) return "read";
-  if (["web_search", "grep", "glob", "search"].includes(toolName)) return "search";
+  if (["search_workspace", "web_search", "grep", "glob", "search"].includes(toolName)) return "search";
   if (["list", "ls"].includes(toolName)) return "list";
   if (toolName === "shell") return "shell";
   if (["apply_patch", "write_file", "replace_in_file"].includes(toolName)) return "edit";
@@ -811,11 +814,20 @@ function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): Work
 
 function toolSubtitle(entry: ToolListEntry) {
   const args = objectValue(entry.entry.metadata?.arguments);
+  if (normalizeToolNameCandidate(entry.label) === "search_workspace") {
+    return (
+      stringValue(args?.pattern)
+      ?? stringValue(entry.entry.metadata?.pattern)
+      ?? null
+    );
+  }
+
   const result = objectValue(entry.entry.metadata?.result);
   return (
     stringValue(entry.entry.metadata?.path)
     ?? stringValue(result?.path)
     ?? stringValue(args?.path)
+    ?? stringValue(args?.pattern)
     ?? stringValue(entry.entry.metadata?.command)
     ?? stringValue(args?.command)
     ?? stringValue(result?.url)
@@ -1119,6 +1131,7 @@ function WorkingItemsPanel({
           }
           if (group.kind === "tool") {
             const entry = group.entry;
+            const subtitle = toolSubtitle(entry);
             return (
               <AccordionItem
                 key={group.key}
@@ -1131,7 +1144,7 @@ function WorkingItemsPanel({
                     <Button type="button" variant="ghost" size="sm" className="working-items__tool-trigger" data-timeline-item-id={entry.itemId}>
                       <ChevronRightIcon className="timeline-entry__chevron" />
                       <span className="working-items__tool-title">{entry.displayLabel}</span>
-                      <span className="working-items__tool-subtitle">{toolSubtitle(entry)}</span>
+                      {subtitle ? <span className="working-items__tool-subtitle">{subtitle}</span> : null}
                       {entry.status === "running" ? <span className="timeline-entry__running" aria-label="running" /> : null}
                     </Button>
                   </AccordionPrimitive.Trigger>

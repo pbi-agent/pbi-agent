@@ -397,7 +397,6 @@ class ConsoleDisplay(DisplayProtocol):
         arguments: Any = None,
         result: Any = None,
     ) -> None:
-        del result
         self._tool_group.update_for_function(name)
         tool_name, text = route_function_result(
             name,
@@ -406,6 +405,7 @@ class ConsoleDisplay(DisplayProtocol):
             status=status_markup(success=success),
             call_id=call_id,
             arguments=arguments,
+            result=result,
         )
         self._append_tool_line(tool_name, text)
 

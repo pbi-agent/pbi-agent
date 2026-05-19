@@ -17,6 +17,7 @@ TOOL_STYLE_MAP = {
     "apply_patch": "apply-patch",
     "read_file": "read-file",
     "read_web_url": "read-web-url",
+    "search_workspace": "search-workspace",
     "sub_agent": "sub-agent",
     "mcp": "mcp",
     "web_search": "web-search",
@@ -26,6 +27,7 @@ TOOL_ICONS: dict[str, str] = {
     "apply-patch": "\u25a0",  # ■
     "read-file": "\u2610",  # ☐
     "read-web-url": "\U0001f310",  # 🌐
+    "search-workspace": "\U0001f50e",  # 🔎
     "sub-agent": "\u25c9",  # ◉
     "mcp": "\u25a7",  # ▧
     "web-search": "\U0001f50d",  # 🔍
@@ -37,6 +39,7 @@ TOOL_BORDER_STYLES: dict[str, str] = {
     "apply-patch": "#F97316",
     "read-file": "#EAB308",
     "read-web-url": "#06B6D4",
+    "search-workspace": "#0EA5E9",
     "sub-agent": "#F59E0B",
     "mcp": "#14B8A6",
     "web-search": "#0EA5E9",
@@ -435,6 +438,62 @@ def format_read_web_url_item(
     return "\n".join(lines)
 
 
+def format_search_workspace_item(
+    pattern: str,
+    *,
+    verbose: bool = False,
+    status: str,
+    call_id: str = "",
+    root: str = ".",
+    regex: bool = True,
+    target: str = "content",
+    path_scope: str = "path",
+    mode: str = "files",
+    context_lines: int | str = 0,
+    glob: Any = None,
+    exclude: Any = None,
+    limit: int | str = 50,
+    cursor: Any = None,
+    result: Any = None,
+) -> str:
+    raw_output = _search_workspace_raw_output(result)
+    error_output = _search_workspace_error_output(result)
+
+    pattern_mode = "regex" if regex else "literal"
+    lines = [
+        f"[#0EA5E9]\U0001f50e[/#0EA5E9] "
+        f"[bold]{escape_markup_text(shorten(pattern or '<missing pattern>', 96))}[/bold]  "
+        f"{status}",
+        f"[dim]root:[/dim] {escape_markup_text(shorten(root or '.', 80))}  "
+        f"[dim]target:[/dim] {escape_markup_text(target)}  "
+        f"[dim]pattern:[/dim] {pattern_mode}",
+    ]
+    mode_parts = [f"mode={mode}"]
+    context_value = _safe_positive_int(context_lines, default=0)
+    if context_value > 0:
+        mode_parts.append(f"context={context_value}")
+    if target in {"path", "both"}:
+        mode_parts.append(f"path_scope={path_scope}")
+    limit_value = _safe_positive_int(limit, default=50)
+    if limit_value != 50:
+        mode_parts.append(f"limit={limit_value}")
+    cursor_label = _format_search_workspace_cursor(cursor)
+    if cursor_label:
+        mode_parts.append(f"cursor={cursor_label}")
+    lines.append(f"[dim]options:[/dim] {escape_markup_text('  '.join(mode_parts))}")
+    filters = _search_workspace_filter_parts(glob=glob, exclude=exclude)
+    if filters:
+        lines.append("  ".join(filters))
+    if error_output:
+        lines.append(
+            f"[red]error:[/red] {escape_markup_text(shorten(error_output, 180))}"
+        )
+    elif raw_output:
+        lines.extend(_search_workspace_output_preview(raw_output))
+    _append_verbose_call_id(lines, call_id, verbose)
+    return "\n".join(lines)
+
+
 def format_web_search_sources_item(
     sources: list[dict[str, str]],
     *,
@@ -492,6 +551,85 @@ def _safe_positive_int(value: int | str, *, default: int) -> int:
     return normalized if normalized > 0 else default
 
 
+def _search_workspace_raw_output(result: Any) -> str:
+    if isinstance(result, str):
+        return result
+    payload = to_dict(result)
+    body = payload.get("result") if "result" in payload else None
+    return body if isinstance(body, str) else ""
+
+
+def _search_workspace_error_output(result: Any) -> str:
+    payload = to_dict(result)
+    error = payload.get("error")
+    if isinstance(error, str):
+        return error
+    if isinstance(error, dict):
+        message = error.get("message")
+        if isinstance(message, str):
+            return message
+    body = payload.get("result")
+    if isinstance(body, dict):
+        body_error = body.get("error")
+        return body_error if isinstance(body_error, str) else ""
+    return ""
+
+
+def _search_workspace_output_preview(raw_output: str) -> list[str]:
+    lines = raw_output.splitlines()
+    if not lines:
+        return []
+    if len(lines) == 1:
+        return [f"[dim]output:[/dim] {escape_markup_text(shorten(lines[0], 180))}"]
+
+    preview_lines = lines[:8]
+    rendered = ["[dim]output:[/dim]"]
+    rendered.extend(escape_markup_text(shorten(line, 180)) for line in preview_lines)
+    hidden_count = len(lines) - len(preview_lines)
+    if hidden_count > 0:
+        rendered.append(
+            f"[dim]… {hidden_count} more line{'s' if hidden_count != 1 else ''}[/dim]"
+        )
+    return rendered
+
+
+def _search_workspace_filter_parts(
+    *, glob: Any = None, exclude: Any = None
+) -> list[str]:
+    parts: list[str] = []
+    glob_label = _format_search_workspace_filter_value(glob)
+    if glob_label:
+        parts.append(f"[dim]glob:[/dim] {escape_markup_text(glob_label)}")
+    exclude_label = _format_search_workspace_filter_value(exclude)
+    if exclude_label:
+        parts.append(f"[dim]exclude:[/dim] {escape_markup_text(exclude_label)}")
+    return parts
+
+
+def _format_search_workspace_filter_value(value: Any) -> str:
+    if isinstance(value, str):
+        return shorten(value, 80) if value else ""
+    if isinstance(value, list):
+        labels = [str(item) for item in value if isinstance(item, str) and item]
+        if not labels:
+            return ""
+        visible = ", ".join(shorten(label, 32) for label in labels[:3])
+        if len(labels) > 3:
+            visible += f", +{len(labels) - 3}"
+        return visible
+    return ""
+
+
+def _format_search_workspace_cursor(value: Any) -> str:
+    if isinstance(value, bool) or value is None:
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return shorten(value.strip(), 80)
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Shared function_result routing
 # ---------------------------------------------------------------------------
@@ -505,6 +643,7 @@ def route_function_result(
     status: str,
     call_id: str = "",
     arguments: Any = None,
+    result: Any = None,
 ) -> tuple[str, str]:
     """Return ``(tool_name, formatted_text)`` for a generic function result.
 
@@ -557,6 +696,25 @@ def route_function_result(
             call_id=call_id,
         )
 
+    if name == "search_workspace":
+        return name, format_search_workspace_item(
+            str(args.get("pattern", "")).strip() or "<missing pattern>",
+            verbose=verbose,
+            status=status,
+            call_id=call_id,
+            root=str(args.get("root", ".") or "."),
+            regex=args.get("regex") is not False,
+            target=str(args.get("target", "content") or "content"),
+            path_scope=str(args.get("path_scope", "path") or "path"),
+            mode=str(args.get("mode", "files") or "files"),
+            context_lines=args.get("context_lines", 0),
+            glob=args.get("glob"),
+            exclude=args.get("exclude"),
+            limit=args.get("limit", 50),
+            cursor=args.get("cursor"),
+            result=result,
+        )
+
     if name == "web_search":
         raw_sources = args.get("sources", [])
         sources = raw_sources if isinstance(raw_sources, list) else []
@@ -590,6 +748,7 @@ __all__ = [
     "format_patch_tool_item",
     "format_read_file_item",
     "format_read_web_url_item",
+    "format_search_workspace_item",
     "format_reasoning_title",
     "format_session_subtitle",
     "format_session_subtitle_parts",

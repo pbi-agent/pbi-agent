@@ -248,6 +248,20 @@ wheels = [
 ]
 
 [[package]]
+name = "codetool-search"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/44/4e/c9a28e7a15ba42aab8a65b5ba05a840811bf664522ca2c3a4f67406d7931/codetool_search-0.3.0.tar.gz", hash = "sha256:784789702341f7c3d18870c2daac6268bcaa2cc8f78a434e20594442981c07ad", size = 93207, upload-time = "2026-05-19T20:26:13.32Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/01/f21cd469e35f55649a483153be6aaa64e3a617d12b20d2f97898dc0517bc/codetool_search-0.3.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:2f002cbd82350be1b7d0c70e731fd7930f742f2f698c67160c9d5b4a7c3a0381", size = 1088784, upload-time = "2026-05-19T20:26:01.992Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/56/0bb3075a27dcfcd586839e845d5b0c0d32bc67dd29766b1f6c6cc59185e6/codetool_search-0.3.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:bfed95706f59ab8297dfd95cd7e9de047d906eb83230e2441b6e96f09978ea57", size = 1037538, upload-time = "2026-05-19T20:26:04.178Z" },
+    { url = "https://files.pythonhosted.org/packages/32/a2/a48ec3566a68c63fcb66f2c06fabd9e919f7091748485db4ca40d85003bb/codetool_search-0.3.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:23f2e1931f42b1ef58cd8a15d1400742c0cd8db24a9878e7020a01f403585859", size = 1150888, upload-time = "2026-05-19T20:26:06.822Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/ab/d87c544319442b0ed0899821a0b4622ac4282a90df6a75c530243b19ffcc/codetool_search-0.3.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:e391b4c211c107db1176d3105cb8b4e8225eddef50e88bf9cc95704c93921049", size = 1182336, upload-time = "2026-05-19T20:26:08.476Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/43/7e2422b916250b8d4b41e24889aa47f6b648c787ffda5f5c2175c31726ef/codetool_search-0.3.0-py3-none-win_amd64.whl", hash = "sha256:887491091257d657a15403e72de328e9deefb0bf0ed777aaf717a740b1c126d7", size = 916683, upload-time = "2026-05-19T20:26:10.18Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/92/8834d85b40bb671b073afd82255dec95e24044639dd1b004935db9d2adf2/codetool_search-0.3.0-py3-none-win_arm64.whl", hash = "sha256:12e62f0a066f9a506bd75a425bd58055001bc83e638fe8dec5922b94ce8f0968", size = 850691, upload-time = "2026-05-19T20:26:11.64Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -961,6 +975,7 @@ version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
+    { name = "codetool-search" },
     { name = "fastapi" },
     { name = "lark" },
     { name = "mcp" },
@@ -986,6 +1001,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = "==3.13.4" },
+    { name = "codetool-search", specifier = "==0.3.0" },
     { name = "fastapi", specifier = "==0.135.2" },
     { name = "lark", specifier = "==1.3.1" },
     { name = "mcp", specifier = "==1.26.0" },

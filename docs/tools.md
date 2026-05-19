@@ -15,6 +15,7 @@ Project-local MCP servers are discovered from `.agents/mcp.json` and their tools
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `sub_agent` | no | Delegate a scoped task to a child agent, optionally selecting a discovered project sub-agent type and inheriting parent context. |
 | `read_file` | no | Read text files with optional line ranges, summarize tabular files, and extract text from PDF and DOCX files. |
+| `search_workspace` | no | Search workspace content or paths with compact raw-text results. |
 | `read_image` | no | Read a local image file and attach it to the model context in native multimodal format. |
 | `read_web_url` | no | Fetch a public web page through markdown.new and return Markdown. |
 
@@ -129,6 +130,70 @@ Runtime behavior:
 - OpenAI and Google reuse the parent conversation checkpoint when available; other providers fall back to replaying the visible parent transcript plus the current live user turn.
 - Unknown `agent_type` values are rejected before the child session starts.
 - The child session is bounded to `100` provider requests or `1200` elapsed seconds, whichever happens first.
+
+## `search_workspace`
+
+Search workspace file contents, paths, or both. The tool wraps `codetool-search` and returns its raw token-compressed text output directly to the model, without JSON wrapping on successful searches. Search failures are reported as failed tool calls (`ok: false`).
+
+| Parameter | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `pattern` | `string` | yes | Text or regex pattern to find. |
+| `root` | `string` or `string[]` | no | Directory/file path or list of paths to search, relative to the workspace root. Defaults to `.`. |
+| `regex` | `boolean` | no | Treat `pattern` as a regular expression. Defaults to `false`; set `true` for regex search. |
+| `target` | `content`, `path`, or `both` | no | Search file contents, relative paths, or both. Defaults to `content`. Use `content` or `path` when mixed `both` output would be ambiguous. |
+| `path_scope` | `path` or `basename` | no | For path search, match the full relative path or only file basenames. Defaults to `path`. |
+| `glob` | `string` or `string[]` | no | Include only files matching the glob or globs. |
+| `exclude` | `string` or `string[]` | no | Exclude files matching the glob or globs. |
+| `mode` | `files`, `snippets`, or `count` | no | Result detail level. `files` lists matching files/paths, `snippets` includes per-match context, and `count` reports per-file match counts. Defaults to `snippets` when `context_lines > 0`; otherwise `files`. |
+| `context_lines` | `integer` | no | Nearby lines to include before and after each snippet match. Defaults to `0`; capped at `20`. |
+| `limit` | `integer` | no | Maximum matches to return. Defaults to `50`; capped at `1000`. |
+| `cursor` | `integer` or `string` | no | Cursor or result offset from a previous search response for the next page. |
+
+```json
+{
+  "pattern": "UserService",
+  "regex": false,
+  "glob": "*.py",
+  "limit": 20
+}
+```
+
+Continue from a previous page:
+
+```json
+{
+  "pattern": "UserService",
+  "regex": false,
+  "glob": "*.py",
+  "limit": 20,
+  "cursor": 20
+}
+```
+
+::: tip
+Use `target: "path"` and `mode: "files"` as a token-compact `find`/recursive `ls` replacement. To list files under a root, use `pattern: ".*"` with `regex: true`; results are files only, without directory metadata or empty directories. Use `mode: "snippets"` with `context_lines` when nearby code is needed. The tool intentionally does not expose backend, case, or result-format controls.
+:::
+
+List files recursively under a directory:
+
+```json
+{
+  "pattern": ".*",
+  "root": "src",
+  "target": "path",
+  "regex": true,
+  "mode": "files",
+  "limit": 1000
+}
+```
+
+Raw output format:
+
+- `No Match` means no result.
+- `-- more: cursor=N` means repeat the search with that `cursor` for the next page.
+- `files` mode returns matching file paths.
+- `count` mode returns `path xN`, where `N` is the match count.
+- `snippets` mode returns `path:line:text` or groups lines under file headings. Match lines use `line:text`; context lines are plain indented lines.
 
 ## `read_file`
 
