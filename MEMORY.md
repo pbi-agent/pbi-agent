@@ -63,6 +63,7 @@
 
 ## Detailed Task Events
 ## 2026-05-19
+- Compressed `src/pbi_agent/agent/system_prompt.py` `_DEFAULT_SYSTEM_PROMPT` prose while preserving tool-rule structure and inline command/tool names. Validation: `python3 -m py_compile src/pbi_agent/agent/system_prompt.py` passed.
 - Replaced `search_workspace` backend with `codetool-search`, added raw-text runtime output, content/path/both params, raw CLI/web display, docs/tests, and rebuilt web assets. Validation: focused pytest/tool runtime, full Ruff/format/basedpyright, full web tests/lint/typecheck/build, and docs build passed; Vitest act warnings and Vite chunk warnings remain existing.
 - Updated `docs/tools.md` to document the search tool as `codetool_search` and remove `search_workspace` references there. Validation: `bun run docs:build` passed.
 - Completed `search_workspace` rename cleanup: removed remaining old source/test/UI identifiers, renamed the Python tool test, fixed the CLI border style key, updated docs cursor wording, and rebuilt static web assets. Validation: full pytest, focused search/tool pytest, Ruff/format/basedpyright, full web tests/lint/typecheck/build, and docs build passed; only existing Vitest act and Vite chunk warnings appeared.

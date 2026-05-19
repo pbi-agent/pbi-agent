@@ -1,3 +1,3 @@
-[X] Exercise search_workspace combinations
-[X] Evaluate output quality and complexity
+[X] Compress _DEFAULT_SYSTEM_PROMPT
+[X] Validate import/syntax
 [X] Update memory
