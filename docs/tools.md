@@ -15,14 +15,9 @@ All built-in tools are enabled by default. Saved model profiles, `pbi-agent run`
 project command frontmatter, and project sub-agent frontmatter can replace that
 default with an allow-list.
 
-Allowed built-ins are the union of:
+The allow-list accepts only these built-in tool groups:
 
-- `allowed_builtin_tool_categories`
-- `allowed_builtin_tool_names`
-
-Categories:
-
-| Category | Built-ins |
+| Tool group | Built-ins |
 | --- | --- |
 | `read` | `read_file`, `search_workspace` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
@@ -30,9 +25,9 @@ Categories:
 | `sub-agent` | `sub_agent` |
 | `shell` | `shell` |
 
-If both settings are omitted, all built-ins remain available. If either setting
-is present, only the union is advertised and executable. MCP and extension tools
-are not affected. Provider-specific edit-tool filtering still applies: V4A
+If `allowed_tools` is omitted, all built-ins remain available. If it is present,
+only those groups are advertised and executable. MCP and extension tools are not
+affected. Provider-specific edit-tool filtering still applies: V4A
 providers use `apply_patch`, while other providers use `write_file` and
 `replace_in_file`.
 
@@ -40,33 +35,30 @@ The `ask_user` clarification tool is UI-only. It is enabled by the browser
 session's interactive mode and is not configurable through model profiles,
 command/sub-agent frontmatter, or `pbi-agent run` tool allow-lists.
 
-The `web` category controls native provider web search. Allowing the individual
-`read_web_url` tool without the `web` category exposes only that pbi-agent tool,
-not provider-native search. `--no-web-search` still disables native web search,
-but it does not by itself allow or deny other built-ins.
+The `web` group controls both `read_web_url` and native provider web search.
+Use `--no-web-search` to disable native web search while keeping the `web`
+group available.
 
 Examples:
 
 ```bash
 pbi-agent run --prompt "Inspect only" \
-  --allowed-built-in-tool-categories read
+  --allowed-tools read
 
 pbi-agent run --prompt "Fetch docs" \
-  --allowed-built-in-tool-categories read,web \
-  --allowed-built-in-tools shell
+  --allowed-tools read,web,shell
 
 pbi-agent config profiles create --name ReadOnly --provider-id openai \
-  --allowed-built-in-tool-categories read,web
+  --allowed-tools read,web
 ```
 
-Project command or sub-agent frontmatter uses the same comma-separated keys:
+Project command or sub-agent frontmatter uses the same comma-separated key:
 
 ```yaml
 ---
 name: review
 description: Review without writing files.
-allowed_builtin_tool_categories: read
-allowed_builtin_tool_names: shell
+allowed_tools: read,shell
 ---
 ```
 

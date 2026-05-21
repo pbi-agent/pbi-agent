@@ -204,7 +204,7 @@ def test_list_command_configs_parses_model_profile_frontmatter(
     assert commands[0].model_profile_id == "analysis-profile"
 
 
-def test_list_command_configs_parses_builtin_tool_frontmatter(
+def test_list_command_configs_parses_allowed_tools_frontmatter(
     tmp_path: Path,
 ) -> None:
     _write_command(
@@ -215,8 +215,7 @@ def test_list_command_configs_parses_builtin_tool_frontmatter(
                 "---",
                 "name: review",
                 "description: Review safely.",
-                "allowed_builtin_tool_categories: read, web",
-                "allowed_builtin_tool_names: shell",
+                "allowed_tools: read, web, shell",
                 "---",
                 "",
                 "Review only.",
@@ -226,11 +225,10 @@ def test_list_command_configs_parses_builtin_tool_frontmatter(
 
     command = list_command_configs(tmp_path)[0]
 
-    assert command.allowed_builtin_tool_categories == ("read", "web")
-    assert command.allowed_builtin_tool_names == ("shell",)
+    assert command.allowed_tools == ("read", "web", "shell")
 
 
-def test_list_command_configs_preserves_empty_builtin_tool_frontmatter(
+def test_list_command_configs_preserves_empty_allowed_tools_frontmatter(
     tmp_path: Path,
 ) -> None:
     _write_command(
@@ -241,8 +239,7 @@ def test_list_command_configs_preserves_empty_builtin_tool_frontmatter(
                 "---",
                 "name: review",
                 "description: Review without built-ins.",
-                "allowed_builtin_tool_categories:",
-                "allowed_builtin_tool_names:",
+                "allowed_tools:",
                 "---",
                 "",
                 "Review only.",
@@ -252,19 +249,18 @@ def test_list_command_configs_preserves_empty_builtin_tool_frontmatter(
 
     command = list_command_configs(tmp_path)[0]
 
-    assert command.allowed_builtin_tool_categories == ()
-    assert command.allowed_builtin_tool_names == ()
+    assert command.allowed_tools == ()
 
 
-def test_parse_command_markdown_rejects_unknown_builtin_tool_category() -> None:
-    with pytest.raises(CommandManifestError, match="unknown categories"):
+def test_parse_command_markdown_rejects_unknown_allowed_tool() -> None:
+    with pytest.raises(CommandManifestError, match="unknown tools"):
         parse_command_markdown(
             "\n".join(
                 [
                     "---",
                     "name: review",
                     "description: Review safely.",
-                    "allowed_builtin_tool_categories: nope",
+                    "allowed_tools: nope",
                     "---",
                     "",
                     "Review only.",
@@ -274,14 +270,14 @@ def test_parse_command_markdown_rejects_unknown_builtin_tool_category() -> None:
 
 
 def test_parse_command_markdown_rejects_ui_only_ask_user_tool() -> None:
-    with pytest.raises(CommandManifestError, match="unknown tool names: ask_user"):
+    with pytest.raises(CommandManifestError, match="unknown tools: ask_user"):
         parse_command_markdown(
             "\n".join(
                 [
                     "---",
                     "name: review",
                     "description: Review safely.",
-                    "allowed_builtin_tool_names: ask_user",
+                    "allowed_tools: ask_user",
                     "---",
                     "",
                     "Review only.",
@@ -321,8 +317,7 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
             max_tokens=4096,
             service_tier="flex",
             web_search=False,
-            allowed_builtin_tool_categories=("read", "web"),
-            allowed_builtin_tool_names=("shell",),
+            allowed_tools=("read", "web", "shell"),
             max_tool_workers=6,
             max_retries=5,
             compact_threshold=123456,
@@ -337,11 +332,7 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
     assert config.web.active_profile_id == "analysis"
     assert config.providers[0].api_key == "saved-openai-key"
     assert config.model_profiles[0].service_tier == "flex"
-    assert config.model_profiles[0].allowed_builtin_tool_categories == (
-        "read",
-        "web",
-    )
-    assert config.model_profiles[0].allowed_builtin_tool_names == ("shell",)
+    assert config.model_profiles[0].allowed_tools == ("read", "web", "shell")
 
 
 def test_find_command_config_by_alias_reads_command_files(
@@ -718,8 +709,7 @@ def test_resolve_runtime_cli_tool_availability_replaces_profile(
             name="Analysis",
             provider_id="openai-main",
             model="saved-model",
-            allowed_builtin_tool_categories=("read", "write"),
-            allowed_builtin_tool_names=("shell",),
+            allowed_tools=("read", "write"),
         )
     )
 
@@ -730,18 +720,15 @@ def test_resolve_runtime_cli_tool_availability_replaces_profile(
             "run",
             "--prompt",
             "hi",
-            "--allowed-built-in-tool-categories",
-            "web",
-            "--allowed-built-in-tools",
-            "read_file",
+            "--allowed-tools",
+            "read,web,shell",
         )
     )
 
-    assert runtime.settings.allowed_builtin_tool_categories == ("web",)
-    assert runtime.settings.allowed_builtin_tool_names == ("read_file",)
+    assert runtime.settings.allowed_tools == ("read", "web", "shell")
 
 
-def test_resolve_runtime_partial_cli_tool_availability_replaces_profile(
+def test_resolve_runtime_cli_allowed_tools_replaces_profile(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
@@ -761,8 +748,7 @@ def test_resolve_runtime_partial_cli_tool_availability_replaces_profile(
             name="Analysis",
             provider_id="openai-main",
             model="saved-model",
-            allowed_builtin_tool_categories=("read",),
-            allowed_builtin_tool_names=("shell",),
+            allowed_tools=("read",),
         )
     )
 
@@ -773,28 +759,12 @@ def test_resolve_runtime_partial_cli_tool_availability_replaces_profile(
             "run",
             "--prompt",
             "hi",
-            "--allowed-built-in-tool-categories",
+            "--allowed-tools",
             "web",
         )
     )
 
-    assert runtime.settings.allowed_builtin_tool_categories == ("web",)
-    assert runtime.settings.allowed_builtin_tool_names is None
-
-    runtime = resolve_runtime(
-        _args(
-            "--profile-id",
-            "analysis",
-            "run",
-            "--prompt",
-            "hi",
-            "--allowed-built-in-tools",
-            "read_file",
-        )
-    )
-
-    assert runtime.settings.allowed_builtin_tool_categories is None
-    assert runtime.settings.allowed_builtin_tool_names == ("read_file",)
+    assert runtime.settings.allowed_tools == ("web",)
 
 
 def test_resolve_settings_prefers_env_profile_selector_over_active_profile(

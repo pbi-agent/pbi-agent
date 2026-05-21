@@ -741,7 +741,7 @@ def test_run_sub_agent_task_preserves_parent_tool_availability_for_profiled_agen
         api_key="test-key",
         provider="openai",
         model="parent-model",
-        allowed_builtin_tool_categories=("read", "sub-agent"),
+        allowed_tools=("read", "sub-agent"),
     )
 
     def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
@@ -750,7 +750,7 @@ def test_run_sub_agent_task_preserves_parent_tool_availability_for_profiled_agen
                 api_key="test-key",
                 provider="openai",
                 model="profile-model",
-                allowed_builtin_tool_categories=("shell",),
+                allowed_tools=("shell",),
             ),
             provider_id="openai-main",
             profile_id="shell-profile",
@@ -782,8 +782,7 @@ def test_run_sub_agent_task_preserves_parent_tool_availability_for_profiled_agen
 
     assert result["status"] == "completed"
     assert opened_settings[0].model == "profile-model"
-    assert opened_settings[0].allowed_builtin_tool_categories == ("read", "sub-agent")
-    assert opened_settings[0].allowed_builtin_tool_names is None
+    assert opened_settings[0].allowed_tools == ("read", "sub-agent")
 
 
 def test_run_sub_agent_task_uses_profile_tool_availability_without_parent_override(
@@ -808,7 +807,7 @@ def test_run_sub_agent_task_uses_profile_tool_availability_without_parent_overri
         api_key="test-key",
         provider="openai",
         model="parent-model",
-        allowed_builtin_tool_categories=("read", "sub-agent"),
+        allowed_tools=("read", "sub-agent"),
     )
 
     def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
@@ -817,7 +816,7 @@ def test_run_sub_agent_task_uses_profile_tool_availability_without_parent_overri
                 api_key="test-key",
                 provider="openai",
                 model="profile-model",
-                allowed_builtin_tool_categories=("shell",),
+                allowed_tools=("shell",),
             ),
             provider_id="openai-main",
             profile_id="shell-profile",
@@ -848,8 +847,7 @@ def test_run_sub_agent_task_uses_profile_tool_availability_without_parent_overri
 
     assert result["status"] == "completed"
     assert opened_settings[0].model == "profile-model"
-    assert opened_settings[0].allowed_builtin_tool_categories == ("shell",)
-    assert opened_settings[0].allowed_builtin_tool_names is None
+    assert opened_settings[0].allowed_tools == ("shell",)
 
 
 def test_run_sub_agent_task_uses_agent_tool_availability_over_parent_for_profiled_agent(
@@ -863,7 +861,7 @@ def test_run_sub_agent_task_uses_agent_tool_availability_over_parent_for_profile
         "name: reviewer\n"
         "description: Reviews code changes.\n"
         "model_profile_id: shell-profile\n"
-        "allowed_builtin_tool_categories: web\n"
+        "allowed_tools: web\n"
         "---\n\n"
         "Review the code.\n",
         encoding="utf-8",
@@ -875,7 +873,7 @@ def test_run_sub_agent_task_uses_agent_tool_availability_over_parent_for_profile
         api_key="test-key",
         provider="openai",
         model="parent-model",
-        allowed_builtin_tool_categories=("read", "sub-agent"),
+        allowed_tools=("read", "sub-agent"),
     )
 
     def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
@@ -884,7 +882,7 @@ def test_run_sub_agent_task_uses_agent_tool_availability_over_parent_for_profile
                 api_key="test-key",
                 provider="openai",
                 model="profile-model",
-                allowed_builtin_tool_categories=("shell",),
+                allowed_tools=("shell",),
             ),
             provider_id="openai-main",
             profile_id="shell-profile",
@@ -915,8 +913,7 @@ def test_run_sub_agent_task_uses_agent_tool_availability_over_parent_for_profile
 
     assert result["status"] == "completed"
     assert opened_settings[0].model == "profile-model"
-    assert opened_settings[0].allowed_builtin_tool_categories == ("web",)
-    assert opened_settings[0].allowed_builtin_tool_names is None
+    assert opened_settings[0].allowed_tools == ("web",)
 
 
 class _SessionDisplaySpy(_DisplaySpy):
@@ -1725,7 +1722,7 @@ def test_run_session_loop_handles_reload_command_locally(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.get_system_prompt",
-        lambda: "updated prompt",
+        lambda **_: "updated prompt",
     )
 
     exit_code = run_session_loop(settings, display, on_reload=on_reload)
@@ -1977,7 +1974,7 @@ def test_open_runtime_provider_filters_default_prompt_by_tool_availability(
         Settings(
             api_key="test-key",
             provider="openai",
-            allowed_builtin_tool_categories=("read",),
+            allowed_tools=("read",),
         ),
         excluded_tools=INTERACTIVE_ONLY_TOOLS,
     ):
@@ -2630,8 +2627,7 @@ def test_run_session_loop_resolves_command_profile_before_tool_settings(
             name="Analysis",
             provider_id="openai-main",
             model="profile-model",
-            allowed_builtin_tool_categories=("web",),
-            allowed_builtin_tool_names=("shell",),
+            allowed_tools=("web", "shell"),
         )
     )
     _write_command(
@@ -2651,7 +2647,7 @@ def test_run_session_loop_resolves_command_profile_before_tool_settings(
         "name: Command Tools\n"
         "description: Override profile tools.\n"
         "model_profile_id: analysis\n"
-        "allowed_builtin_tool_categories: read\n"
+        "allowed_tools: read\n"
         "---\n\n"
         "Use command tools.",
     )
@@ -2673,10 +2669,8 @@ def test_run_session_loop_resolves_command_profile_before_tool_settings(
         "profile-model",
         "profile-model",
     ]
-    assert provider.request_settings[0].allowed_builtin_tool_categories == ("web",)
-    assert provider.request_settings[0].allowed_builtin_tool_names == ("shell",)
-    assert provider.request_settings[1].allowed_builtin_tool_categories == ("read",)
-    assert provider.request_settings[1].allowed_builtin_tool_names is None
+    assert provider.request_settings[0].allowed_tools == ("web", "shell")
+    assert provider.request_settings[1].allowed_tools == ("read",)
 
 
 def test_run_single_turn_preserves_cli_tool_overrides_for_command_profile(
@@ -2698,8 +2692,7 @@ def test_run_single_turn_preserves_cli_tool_overrides_for_command_profile(
             name="Analysis",
             provider_id="openai-main",
             model="profile-model",
-            allowed_builtin_tool_categories=("web",),
-            allowed_builtin_tool_names=("shell",),
+            allowed_tools=("web", "shell"),
         )
     )
     _write_command(
@@ -2733,7 +2726,7 @@ def test_run_single_turn_preserves_cli_tool_overrides_for_command_profile(
             settings=Settings(
                 api_key="cli-key",
                 provider="openai",
-                allowed_builtin_tool_categories=("read",),
+                allowed_tools=("read",),
             ),
             provider_id=None,
             profile_id=None,
@@ -2745,8 +2738,7 @@ def test_run_single_turn_preserves_cli_tool_overrides_for_command_profile(
     assert outcome.text == "Ack"
     assert [item.model for item in opened_settings] == ["profile-model"]
     assert provider.request_settings[0].api_key == "saved-openai-key"
-    assert provider.request_settings[0].allowed_builtin_tool_categories == ("read",)
-    assert provider.request_settings[0].allowed_builtin_tool_names is None
+    assert provider.request_settings[0].allowed_tools == ("read",)
 
 
 def test_run_session_loop_reopens_provider_for_command_profile_backend(

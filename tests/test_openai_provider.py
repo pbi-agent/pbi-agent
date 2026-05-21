@@ -641,24 +641,21 @@ def test_openai_provider_hides_native_web_search_without_web_search() -> None:
     assert {"type": "web_search"} not in provider._tools
 
 
-def test_openai_provider_hides_web_tools_when_web_category_not_allowed() -> None:
-    provider = OpenAIProvider(_make_settings(allowed_builtin_tool_categories=("read",)))
+def test_openai_provider_hides_web_tools_when_web_group_not_allowed() -> None:
+    provider = OpenAIProvider(_make_settings(allowed_tools=("read",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" not in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 
-def test_openai_provider_individual_read_web_url_does_not_enable_native_web_search() -> (
-    None
-):
-    provider = OpenAIProvider(
-        _make_settings(allowed_builtin_tool_names=("read_web_url",))
-    )
+def test_openai_provider_web_allowed_tool_includes_native_web_search() -> None:
+    provider = OpenAIProvider(_make_settings(allowed_tools=("web",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" in tool_names
-    assert {"type": "web_search"} not in provider._tools
+    assert "read_file" not in tool_names
+    assert {"type": "web_search"} in provider._tools
 
 
 def test_chatgpt_provider_advertises_v4a_tools_only() -> None:

@@ -290,12 +290,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
                 max_tokens=args.max_tokens,
                 service_tier=args.service_tier,
                 web_search=args.web_search,
-                allowed_builtin_tool_categories=parse_csv_setting(
-                    args.allowed_builtin_tool_categories
-                ),
-                allowed_builtin_tool_names=parse_csv_setting(
-                    args.allowed_builtin_tool_names
-                ),
+                allowed_tools=parse_csv_setting(args.allowed_tools),
                 max_tool_workers=args.max_tool_workers,
                 max_retries=args.max_retries,
                 compact_threshold=args.compact_threshold,
@@ -318,12 +313,7 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
             max_tokens=args.max_tokens,
             service_tier=args.service_tier,
             web_search=args.web_search,
-            allowed_builtin_tool_categories=parse_csv_setting(
-                args.allowed_builtin_tool_categories
-            ),
-            allowed_builtin_tool_names=parse_csv_setting(
-                args.allowed_builtin_tool_names
-            ),
+            allowed_tools=parse_csv_setting(args.allowed_tools),
             max_tool_workers=args.max_tool_workers,
             max_retries=args.max_retries,
             compact_threshold=args.compact_threshold,

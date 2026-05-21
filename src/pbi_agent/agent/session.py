@@ -207,31 +207,22 @@ def _turn_instructions(
 def _settings_with_tool_availability(
     settings: Settings,
     *,
-    categories: tuple[str, ...] | None,
-    names: tuple[str, ...] | None,
+    allowed_tools: tuple[str, ...] | None,
 ) -> Settings:
-    if categories is None and names is None:
+    if allowed_tools is None:
         return settings
-    return replace(
-        settings,
-        allowed_builtin_tool_categories=categories,
-        allowed_builtin_tool_names=names,
-    )
+    return replace(settings, allowed_tools=allowed_tools)
 
 
 def _command_declares_tool_availability(command: CommandConfig) -> bool:
-    return (
-        command.allowed_builtin_tool_categories is not None
-        or command.allowed_builtin_tool_names is not None
-    )
+    return command.allowed_tools is not None
 
 
 def _agent_definition_declares_tool_availability(
     agent_definition: object | None,
 ) -> bool:
     return agent_definition is not None and (
-        getattr(agent_definition, "allowed_builtin_tool_categories", None) is not None
-        or getattr(agent_definition, "allowed_builtin_tool_names", None) is not None
+        getattr(agent_definition, "allowed_tools", None) is not None
     )
 
 
@@ -253,8 +244,7 @@ def _runtime_for_active_command(
                 command_runtime,
                 settings=_settings_with_tool_availability(
                     command_runtime.settings,
-                    categories=base_runtime.settings.allowed_builtin_tool_categories,
-                    names=base_runtime.settings.allowed_builtin_tool_names,
+                    allowed_tools=base_runtime.settings.allowed_tools,
                 ),
                 tool_availability_overridden=True,
             )
@@ -263,8 +253,7 @@ def _runtime_for_active_command(
             command_runtime,
             settings=_settings_with_tool_availability(
                 command_runtime.settings,
-                categories=active_command.allowed_builtin_tool_categories,
-                names=active_command.allowed_builtin_tool_names,
+                allowed_tools=active_command.allowed_tools,
             ),
             tool_availability_overridden=True,
         )
@@ -1039,8 +1028,7 @@ def run_sub_agent_task(
             ):
                 child_settings = _settings_with_tool_availability(
                     child_settings,
-                    categories=settings.allowed_builtin_tool_categories,
-                    names=settings.allowed_builtin_tool_names,
+                    allowed_tools=settings.allowed_tools,
                 )
         else:
             child_settings = replace(
@@ -1050,10 +1038,7 @@ def run_sub_agent_task(
         if agent_declares_tool_availability:
             child_settings = _settings_with_tool_availability(
                 child_settings,
-                categories=getattr(
-                    agent_definition, "allowed_builtin_tool_categories", None
-                ),
-                names=getattr(agent_definition, "allowed_builtin_tool_names", None),
+                allowed_tools=getattr(agent_definition, "allowed_tools", None),
             )
         child_display = display.begin_sub_agent(
             task_instruction=task_instruction,

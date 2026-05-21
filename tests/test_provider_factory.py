@@ -124,7 +124,7 @@ def test_create_provider_default_prompt_uses_active_tool_availability(
                 backend="github_copilot",
                 access_token="gho_test_token",
             ),
-            allowed_builtin_tool_categories=("read",),
+            allowed_tools=("read",),
         )
     elif provider_name == "chatgpt":
         settings = Settings(
@@ -135,13 +135,13 @@ def test_create_provider_default_prompt_uses_active_tool_availability(
                 backend="openai_chatgpt",
                 access_token="access-token",
             ),
-            allowed_builtin_tool_categories=("read",),
+            allowed_tools=("read",),
         )
     else:
         settings = Settings(
             api_key="test-key",
             provider=provider_name,
-            allowed_builtin_tool_categories=("read",),
+            allowed_tools=("read",),
         )
 
     provider = create_provider(settings)

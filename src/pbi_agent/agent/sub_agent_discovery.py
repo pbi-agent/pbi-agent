@@ -20,8 +20,7 @@ class ProjectSubAgent:
     system_prompt: str
     location: Path
     model_profile_id: str | None = None
-    allowed_builtin_tool_categories: tuple[str, ...] | None = None
-    allowed_builtin_tool_names: tuple[str, ...] | None = None
+    allowed_tools: tuple[str, ...] | None = None
 
 
 def format_project_sub_agents_markdown(workspace: Path | None = None) -> str:
@@ -138,8 +137,7 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
         "name",
         "description",
         "model_profile_id",
-        "allowed_builtin_tool_categories",
-        "allowed_builtin_tool_names",
+        "allowed_tools",
     }
     unsupported_keys = sorted(set(metadata) - supported_keys)
     if unsupported_keys:
@@ -163,16 +161,12 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
     normalized_name = name.strip()
     from pbi_agent.config import ConfigError, parse_csv_setting
 
-    allowed_categories = parse_csv_setting(
-        metadata.get("allowed_builtin_tool_categories")
-    )
-    allowed_names = parse_csv_setting(metadata.get("allowed_builtin_tool_names"))
+    allowed_tools = parse_csv_setting(metadata.get("allowed_tools"))
     try:
-        from pbi_agent.config import validate_builtin_tool_availability
+        from pbi_agent.config import validate_allowed_tools
 
-        validate_builtin_tool_availability(
-            allowed_categories,
-            allowed_names,
+        validate_allowed_tools(
+            allowed_tools,
             error_prefix="Sub-agent tool availability",
         )
     except ConfigError as exc:
@@ -184,8 +178,7 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
         system_prompt=_extract_body(content).strip(),
         location=agent_path.resolve(),
         model_profile_id=normalized_model_profile_id,
-        allowed_builtin_tool_categories=allowed_categories,
-        allowed_builtin_tool_names=allowed_names,
+        allowed_tools=allowed_tools,
     )
 
 

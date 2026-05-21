@@ -239,7 +239,7 @@ def test_get_system_prompt_filters_tool_rules_by_active_availability(
     settings = Settings(
         api_key="test-key",
         provider="openai",
-        allowed_builtin_tool_categories=("read",),
+        allowed_tools=("read",),
     )
 
     prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
@@ -270,7 +270,7 @@ def test_get_system_prompt_omits_sub_agent_catalog_when_tool_disabled(
     settings = Settings(
         api_key="test-key",
         provider="openai",
-        allowed_builtin_tool_categories=("read",),
+        allowed_tools=("read",),
     )
 
     prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
@@ -280,30 +280,30 @@ def test_get_system_prompt_omits_sub_agent_catalog_when_tool_disabled(
     assert "code-reviewer" not in prompt
 
 
-def test_get_system_prompt_mentions_native_web_search_only_for_web_category(
+def test_get_system_prompt_mentions_native_web_search_only_for_web_allowed_tool(
     tmp_path, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
 
-    web_category_prompt = get_system_prompt(
+    web_allowed_prompt = get_system_prompt(
         settings=Settings(
             api_key="test-key",
             provider="openai",
-            allowed_builtin_tool_categories=("web",),
+            allowed_tools=("web",),
             web_search=True,
         )
     )
-    individual_tool_prompt = get_system_prompt(
+    read_allowed_prompt = get_system_prompt(
         settings=Settings(
             api_key="test-key",
             provider="openai",
-            allowed_builtin_tool_names=("read_web_url",),
+            allowed_tools=("read",),
             web_search=True,
         )
     )
 
-    assert "Use provider-native web search" in web_category_prompt
-    assert "Use provider-native web search" not in individual_tool_prompt
+    assert "Use provider-native web search" in web_allowed_prompt
+    assert "Use provider-native web search" not in read_allowed_prompt
 
 
 def test_get_system_prompt_keeps_ask_user_ui_only(tmp_path, monkeypatch):
@@ -357,7 +357,7 @@ def test_get_system_prompt_replaces_instructions_md_tool_rules(tmp_path, monkeyp
         settings=Settings(
             api_key="test-key",
             provider="openai",
-            allowed_builtin_tool_categories=("read",),
+            allowed_tools=("read",),
         )
     )
 

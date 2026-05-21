@@ -46,27 +46,24 @@ def effective_excluded_tool_names(
     return effective
 
 
-def allowed_builtin_tool_names(settings: Settings) -> set[str]:
-    categories = settings.allowed_builtin_tool_categories
-    names = settings.allowed_builtin_tool_names
-    if categories is None and names is None:
+def enabled_builtin_tool_names(settings: Settings) -> set[str]:
+    allowed_tools = settings.allowed_tools
+    if allowed_tools is None:
         return set(BUILTIN_TOOL_NAMES)
     allowed: set[str] = set()
-    for category in categories or ():
+    for category in allowed_tools:
         allowed.update(BUILTIN_TOOL_CATEGORIES[category])
-    allowed.update(names or ())
     return allowed
 
 
 def disabled_builtin_tool_names(settings: Settings) -> set[str]:
-    return set(BUILTIN_TOOL_NAMES) - allowed_builtin_tool_names(settings)
+    return set(BUILTIN_TOOL_NAMES) - enabled_builtin_tool_names(settings)
 
 
 def native_web_search_enabled(settings: Settings) -> bool:
     if not settings.web_search:
         return False
-    categories = settings.allowed_builtin_tool_categories
-    names = settings.allowed_builtin_tool_names
-    if categories is None and names is None:
+    allowed_tools = settings.allowed_tools
+    if allowed_tools is None:
         return True
-    return "web" in (categories or ())
+    return "web" in allowed_tools

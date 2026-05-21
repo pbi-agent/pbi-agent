@@ -83,11 +83,11 @@ def test_effective_excluded_tool_names_keeps_read_web_url_without_native_web_sea
     assert "read_web_url" not in excluded
 
 
-def test_effective_excluded_tool_names_honors_builtin_category_allowlist() -> None:
+def test_effective_excluded_tool_names_honors_allowed_tools() -> None:
     excluded = effective_excluded_tool_names(
         Settings(
             provider="openai",
-            allowed_builtin_tool_categories=("read",),
+            allowed_tools=("read",),
         )
     )
 
@@ -97,29 +97,17 @@ def test_effective_excluded_tool_names_honors_builtin_category_allowlist() -> No
     assert "read_web_url" in excluded
 
 
-def test_effective_excluded_tool_names_honors_individual_builtin_allowlist() -> None:
-    excluded = effective_excluded_tool_names(
-        Settings(
-            provider="openai",
-            allowed_builtin_tool_names=("shell", "read_web_url"),
-        )
-    )
-
-    assert "shell" not in excluded
-    assert "read_web_url" not in excluded
-    assert "read_file" in excluded
-
-
-def test_individual_read_web_url_does_not_enable_native_web_search() -> None:
+def test_web_allowed_tool_enables_fetch_tool_and_native_web_search() -> None:
     from pbi_agent.tools.availability import native_web_search_enabled
 
     settings = Settings(
         provider="openai",
-        allowed_builtin_tool_names=("read_web_url",),
+        allowed_tools=("web",),
     )
 
     assert "read_web_url" not in effective_excluded_tool_names(settings)
-    assert native_web_search_enabled(settings) is False
+    assert "read_file" in effective_excluded_tool_names(settings)
+    assert native_web_search_enabled(settings) is True
 
 
 def test_apply_patch_uses_codex_freeform_spec() -> None:

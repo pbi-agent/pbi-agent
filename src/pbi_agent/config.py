@@ -13,7 +13,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
-from pbi_agent.tools.availability import BUILTIN_TOOL_CATEGORIES, BUILTIN_TOOL_NAMES
+from pbi_agent.tools.availability import BUILTIN_TOOL_CATEGORIES
 
 from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
@@ -117,8 +117,7 @@ class Settings:
     generic_api_url: str = DEFAULT_GENERIC_API_URL
     service_tier: str | None = None
     web_search: bool = True
-    allowed_builtin_tool_categories: tuple[str, ...] | None = None
-    allowed_builtin_tool_names: tuple[str, ...] | None = None
+    allowed_tools: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if self.auth is None and self.api_key:
@@ -181,11 +180,7 @@ class Settings:
         ):
             allowed = ", ".join(OPENAI_SERVICE_TIERS)
             raise ConfigError(f"--service-tier must be one of: {allowed}.")
-        _validate_builtin_tool_availability(
-            self.allowed_builtin_tool_categories,
-            self.allowed_builtin_tool_names,
-            error_prefix="--allowed-built-in-tools",
-        )
+        _validate_allowed_tools(self.allowed_tools, error_prefix="--allowed-tools")
 
     def redacted(self) -> dict[str, str | int | bool | list[str] | None]:
         return {
@@ -207,15 +202,8 @@ class Settings:
             "generic_api_url": self.generic_api_url,
             "service_tier": self.service_tier,
             "web_search": self.web_search,
-            "allowed_builtin_tool_categories": (
-                list(self.allowed_builtin_tool_categories)
-                if self.allowed_builtin_tool_categories is not None
-                else None
-            ),
-            "allowed_builtin_tool_names": (
-                list(self.allowed_builtin_tool_names)
-                if self.allowed_builtin_tool_names is not None
-                else None
+            "allowed_tools": (
+                list(self.allowed_tools) if self.allowed_tools is not None else None
             ),
         }
 
@@ -262,8 +250,7 @@ class ModelProfileConfig:
     max_tokens: int | None = None
     service_tier: str | None = None
     web_search: bool | None = None
-    allowed_builtin_tool_categories: tuple[str, ...] | None = None
-    allowed_builtin_tool_names: tuple[str, ...] | None = None
+    allowed_tools: tuple[str, ...] | None = None
     max_tool_workers: int | None = None
     max_retries: int | None = None
     compact_threshold: int | None = None
@@ -317,9 +304,8 @@ class ModelProfileConfig:
         ):
             allowed = ", ".join(OPENAI_SERVICE_TIERS)
             raise ConfigError(f"--service-tier must be one of: {allowed}.")
-        _validate_builtin_tool_availability(
-            self.allowed_builtin_tool_categories,
-            self.allowed_builtin_tool_names,
+        _validate_allowed_tools(
+            self.allowed_tools,
             error_prefix="Model profile tool availability",
         )
 
@@ -333,8 +319,7 @@ class CommandConfig:
     instructions: str = ""
     path: str = ""
     model_profile_id: str | None = None
-    allowed_builtin_tool_categories: tuple[str, ...] | None = None
-    allowed_builtin_tool_names: tuple[str, ...] | None = None
+    allowed_tools: tuple[str, ...] | None = None
 
     def validate(self) -> None:
         self.id = slugify(self.id)
@@ -355,9 +340,8 @@ class CommandConfig:
             )
         if not self.instructions:
             raise ConfigError("Command instructions cannot be empty.")
-        _validate_builtin_tool_availability(
-            self.allowed_builtin_tool_categories,
-            self.allowed_builtin_tool_names,
+        _validate_allowed_tools(
+            self.allowed_tools,
             error_prefix="Command tool availability",
         )
 
@@ -436,39 +420,26 @@ def parse_csv_setting(value: str | None) -> tuple[str, ...] | None:
     return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
-def _validate_builtin_tool_availability(
-    categories: tuple[str, ...] | None,
-    names: tuple[str, ...] | None,
+def _validate_allowed_tools(
+    allowed_tools: tuple[str, ...] | None,
     *,
     error_prefix: str,
 ) -> None:
-    unknown_categories = sorted(set(categories or ()) - set(BUILTIN_TOOL_CATEGORIES))
-    if unknown_categories:
+    unknown_tools = sorted(set(allowed_tools or ()) - set(BUILTIN_TOOL_CATEGORIES))
+    if unknown_tools:
         allowed = ", ".join(sorted(BUILTIN_TOOL_CATEGORIES))
         raise ConfigError(
-            f"{error_prefix} has unknown categories: "
-            f"{', '.join(unknown_categories)}. Allowed categories: {allowed}."
-        )
-    unknown_names = sorted(set(names or ()) - set(BUILTIN_TOOL_NAMES))
-    if unknown_names:
-        allowed = ", ".join(sorted(BUILTIN_TOOL_NAMES))
-        raise ConfigError(
-            f"{error_prefix} has unknown tool names: "
-            f"{', '.join(unknown_names)}. Allowed built-in tools: {allowed}."
+            f"{error_prefix} has unknown tools: "
+            f"{', '.join(unknown_tools)}. Allowed tools: {allowed}."
         )
 
 
-def validate_builtin_tool_availability(
-    categories: tuple[str, ...] | None,
-    names: tuple[str, ...] | None,
+def validate_allowed_tools(
+    allowed_tools: tuple[str, ...] | None,
     *,
     error_prefix: str,
 ) -> None:
-    _validate_builtin_tool_availability(
-        categories,
-        names,
-        error_prefix=error_prefix,
-    )
+    _validate_allowed_tools(allowed_tools, error_prefix=error_prefix)
 
 
 def _config_sort_key(
@@ -517,12 +488,7 @@ def list_command_configs(workspace: Path | None = None) -> list[CommandConfig]:
             instructions=instructions,
             path=str(command_path.relative_to(root)),
             model_profile_id=metadata.get("model_profile_id"),
-            allowed_builtin_tool_categories=parse_csv_setting(
-                metadata.get("allowed_builtin_tool_categories")
-            ),
-            allowed_builtin_tool_names=parse_csv_setting(
-                metadata.get("allowed_builtin_tool_names")
-            ),
+            allowed_tools=parse_csv_setting(metadata.get("allowed_tools")),
         )
         try:
             command.validate()
@@ -556,8 +522,7 @@ def parse_command_markdown(content: str) -> tuple[str, dict[str, str]]:
                     "name",
                     "description",
                     "model_profile_id",
-                    "allowed_builtin_tool_categories",
-                    "allowed_builtin_tool_names",
+                    "allowed_tools",
                 }
             ),
         )
@@ -578,15 +543,13 @@ def parse_command_markdown(content: str) -> tuple[str, dict[str, str]]:
             metadata["model_profile_id"] = stripped_profile_id
         else:
             metadata.pop("model_profile_id", None)
-    for key in ("allowed_builtin_tool_categories", "allowed_builtin_tool_names"):
-        value = metadata.get(key)
-        if isinstance(value, str):
-            parsed = parse_csv_setting(value)
-            metadata[key] = ",".join(parsed or ())
+    value = metadata.get("allowed_tools")
+    if isinstance(value, str):
+        parsed = parse_csv_setting(value)
+        metadata["allowed_tools"] = ",".join(parsed or ())
     try:
-        _validate_builtin_tool_availability(
-            parse_csv_setting(metadata.get("allowed_builtin_tool_categories")),
-            parse_csv_setting(metadata.get("allowed_builtin_tool_names")),
+        _validate_allowed_tools(
+            parse_csv_setting(metadata.get("allowed_tools")),
             error_prefix="Command tool availability",
         )
     except ConfigError as exc:
@@ -1045,8 +1008,7 @@ def update_model_profile_config(
     max_tokens: int | None = None,
     service_tier: str | None = None,
     web_search: bool | None = None,
-    allowed_builtin_tool_categories: tuple[str, ...] | None = None,
-    allowed_builtin_tool_names: tuple[str, ...] | None = None,
+    allowed_tools: tuple[str, ...] | None = None,
     max_tool_workers: int | None = None,
     max_retries: int | None = None,
     compact_threshold: int | None = None,
@@ -1079,15 +1041,8 @@ def update_model_profile_config(
             service_tier if service_tier is not None else profile.service_tier
         ),
         web_search=web_search if web_search is not None else profile.web_search,
-        allowed_builtin_tool_categories=(
-            allowed_builtin_tool_categories
-            if allowed_builtin_tool_categories is not None
-            else profile.allowed_builtin_tool_categories
-        ),
-        allowed_builtin_tool_names=(
-            allowed_builtin_tool_names
-            if allowed_builtin_tool_names is not None
-            else profile.allowed_builtin_tool_names
+        allowed_tools=(
+            allowed_tools if allowed_tools is not None else profile.allowed_tools
         ),
         max_tool_workers=(
             max_tool_workers
@@ -1334,27 +1289,15 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         or (selected_profile.service_tier if selected_profile else None)
     )
     web_search = _resolve_web_search(args, selected_profile)
-    cli_allowed_categories = getattr(args, "allowed_builtin_tool_categories", None)
-    cli_allowed_names = getattr(args, "allowed_builtin_tool_names", None)
-    if cli_allowed_categories is not None or cli_allowed_names is not None:
+    cli_allowed_tools = getattr(args, "allowed_tools", None)
+    if cli_allowed_tools is not None:
         tool_availability_overridden = True
-        allowed_builtin_tool_categories = _resolve_builtin_tool_tuple(
-            cli_value=cli_allowed_categories,
-            profile_value=None,
-        )
-        allowed_builtin_tool_names = _resolve_builtin_tool_tuple(
-            cli_value=cli_allowed_names,
+        allowed_tools = _resolve_allowed_tools(
+            cli_value=cli_allowed_tools,
             profile_value=None,
         )
     else:
-        allowed_builtin_tool_categories = (
-            selected_profile.allowed_builtin_tool_categories
-            if selected_profile
-            else None
-        )
-        allowed_builtin_tool_names = (
-            selected_profile.allowed_builtin_tool_names if selected_profile else None
-        )
+        allowed_tools = selected_profile.allowed_tools if selected_profile else None
         tool_availability_overridden = False
     resolved_auth = resolve_runtime_auth(
         provider_kind=provider_kind,
@@ -1383,14 +1326,9 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         provider=provider_kind,
         service_tier=service_tier,
         web_search=web_search,
-        allowed_builtin_tool_categories=allowed_builtin_tool_categories,
-        allowed_builtin_tool_names=allowed_builtin_tool_names,
+        allowed_tools=allowed_tools,
     )
-    _validate_builtin_tool_availability(
-        settings.allowed_builtin_tool_categories,
-        settings.allowed_builtin_tool_names,
-        error_prefix="--allowed-built-in-tools",
-    )
+    _validate_allowed_tools(settings.allowed_tools, error_prefix="--allowed-tools")
     return ResolvedRuntime(
         settings=settings,
         provider_id=resolved_provider_id,
@@ -1456,7 +1394,7 @@ def _resolve_int_setting(
     return default
 
 
-def _resolve_builtin_tool_tuple(
+def _resolve_allowed_tools(
     *,
     cli_value: tuple[str, ...] | list[str] | str | None,
     profile_value: tuple[str, ...] | None,
@@ -1599,12 +1537,7 @@ def _settings_from_runtime_parts(
         web_search=True
         if profile is None or profile.web_search is None
         else profile.web_search,
-        allowed_builtin_tool_categories=(
-            profile.allowed_builtin_tool_categories if profile else None
-        ),
-        allowed_builtin_tool_names=(
-            profile.allowed_builtin_tool_names if profile else None
-        ),
+        allowed_tools=(profile.allowed_tools if profile else None),
     )
 
 
@@ -1686,8 +1619,7 @@ def _concrete_profile_for_saved_profile(
         max_tokens=_coalesce(profile.max_tokens, DEFAULT_MAX_TOKENS),
         service_tier=profile.service_tier,
         web_search=True if profile.web_search is None else profile.web_search,
-        allowed_builtin_tool_categories=profile.allowed_builtin_tool_categories,
-        allowed_builtin_tool_names=profile.allowed_builtin_tool_names,
+        allowed_tools=profile.allowed_tools,
         max_tool_workers=_coalesce(profile.max_tool_workers, 4),
         max_retries=_coalesce(profile.max_retries, 3),
         compact_threshold=_coalesce(profile.compact_threshold, 200000),
@@ -1718,8 +1650,7 @@ def _concrete_profile_for_settings(
         max_tokens=settings.max_tokens,
         service_tier=settings.service_tier,
         web_search=settings.web_search,
-        allowed_builtin_tool_categories=settings.allowed_builtin_tool_categories,
-        allowed_builtin_tool_names=settings.allowed_builtin_tool_names,
+        allowed_tools=settings.allowed_tools,
         max_tool_workers=settings.max_tool_workers,
         max_retries=settings.max_retries,
         compact_threshold=settings.compact_threshold,
@@ -1800,12 +1731,7 @@ def _profile_from_payload(payload: object) -> ModelProfileConfig | None:
         max_tokens=_optional_int(payload.get("max_tokens")),
         service_tier=_optional_string(payload.get("service_tier")),
         web_search=_optional_bool(payload.get("web_search")),
-        allowed_builtin_tool_categories=_optional_string_tuple(
-            payload.get("allowed_builtin_tool_categories")
-        ),
-        allowed_builtin_tool_names=_optional_string_tuple(
-            payload.get("allowed_builtin_tool_names")
-        ),
+        allowed_tools=_optional_string_tuple(payload.get("allowed_tools")),
         max_tool_workers=_optional_int(payload.get("max_tool_workers")),
         max_retries=_optional_int(payload.get("max_retries")),
         compact_threshold=_optional_int(payload.get("compact_threshold")),

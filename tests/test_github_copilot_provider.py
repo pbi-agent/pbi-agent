@@ -128,9 +128,7 @@ def test_github_copilot_provider_keeps_read_web_url_without_web_search() -> None
 def test_github_copilot_provider_forwards_runtime_settings_to_delegate() -> None:
     provider = GitHubCopilotProvider(_make_settings())
 
-    provider.set_runtime_settings(
-        _make_settings(allowed_builtin_tool_categories=("shell",))
-    )
+    provider.set_runtime_settings(_make_settings(allowed_tools=("shell",)))
 
     tool_names = {
         tool["name"]
