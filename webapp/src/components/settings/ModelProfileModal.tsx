@@ -7,15 +7,52 @@ import type {
   ProviderModelView,
   ProviderView,
 } from "../../types";
-import { cn } from "../../lib/utils";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { FormDialog } from "../ui/form-dialog";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "../ui/field";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 
-type WebSearchMode = "default" | "true" | "false";
+const TOOL_VISIBILITY_OPTIONS = [
+  {
+    id: "read",
+    label: "Read",
+    description: "Read files and search workspace content.",
+  },
+  {
+    id: "write",
+    label: "Write",
+    description: "Apply patches, replace files, and write files.",
+  },
+  {
+    id: "web",
+    label: "Web",
+    description: "Fetch URLs and provider-native web search.",
+  },
+  {
+    id: "sub-agent",
+    label: "Sub-agent",
+    description: "Delegate work to child agents.",
+  },
+  {
+    id: "shell",
+    label: "Shell",
+    description: "Run workspace shell commands.",
+  },
+] as const;
+
+type ToolCategory = (typeof TOOL_VISIBILITY_OPTIONS)[number]["id"];
+const ALL_TOOL_CATEGORIES = TOOL_VISIBILITY_OPTIONS.map((item) => item.id);
 
 interface FormState {
   name: string;
@@ -26,13 +63,10 @@ interface FormState {
   reasoning_effort: string;
   max_tokens: string;
   service_tier: string;
-  web_search: WebSearchMode;
+  allowed_tools: ToolCategory[];
   max_tool_workers: string;
   max_retries: string;
   compact_threshold: string;
-  compact_tail_turns: string;
-  compact_preserve_recent_tokens: string;
-  compact_tool_output_max_chars: string;
 }
 
 function initForm(
@@ -49,20 +83,10 @@ function initForm(
       reasoning_effort: profile.reasoning_effort ?? "",
       max_tokens: profile.max_tokens?.toString() ?? "",
       service_tier: profile.service_tier ?? "",
-      web_search:
-        profile.web_search === true
-          ? "true"
-          : profile.web_search === false
-            ? "false"
-            : "default",
+      allowed_tools: normalizeToolCategories(profile.allowed_tools),
       max_tool_workers: profile.max_tool_workers?.toString() ?? "",
       max_retries: profile.max_retries?.toString() ?? "",
       compact_threshold: profile.compact_threshold?.toString() ?? "",
-      compact_tail_turns: profile.compact_tail_turns?.toString() ?? "",
-      compact_preserve_recent_tokens:
-        profile.compact_preserve_recent_tokens?.toString() ?? "",
-      compact_tool_output_max_chars:
-        profile.compact_tool_output_max_chars?.toString() ?? "",
     };
   }
   return {
@@ -74,13 +98,10 @@ function initForm(
     reasoning_effort: "",
     max_tokens: "",
     service_tier: "",
-    web_search: "default",
+    allowed_tools: [...ALL_TOOL_CATEGORIES],
     max_tool_workers: "",
     max_retries: "",
     compact_threshold: "",
-    compact_tail_turns: "",
-    compact_preserve_recent_tokens: "",
-    compact_tool_output_max_chars: "",
   };
 }
 
@@ -93,13 +114,10 @@ export type ProfilePayload = {
   reasoning_effort?: string | null;
   max_tokens?: number | null;
   service_tier?: string | null;
-  web_search?: boolean | null;
+  allowed_tools?: ToolCategory[] | null;
   max_tool_workers?: number | null;
   max_retries?: number | null;
   compact_threshold?: number | null;
-  compact_tail_turns?: number | null;
-  compact_preserve_recent_tokens?: number | null;
-  compact_tool_output_max_chars?: number | null;
 };
 
 interface Props {
@@ -115,6 +133,27 @@ type ModelFieldMode = "select" | "custom";
 function toInt(s: string): number | null {
   const n = parseInt(s, 10);
   return isNaN(n) ? null : n;
+}
+
+function normalizeToolCategories(
+  allowedTools: string[] | null | undefined,
+): ToolCategory[] {
+  if (allowedTools === null || allowedTools === undefined) {
+    return [...ALL_TOOL_CATEGORIES];
+  }
+  const allowed = new Set(allowedTools);
+  return TOOL_VISIBILITY_OPTIONS.filter((item) => allowed.has(item.id)).map(
+    (item) => item.id,
+  );
+}
+
+function serializeToolCategories(
+  allowedTools: ToolCategory[],
+): ToolCategory[] | null {
+  const selected = TOOL_VISIBILITY_OPTIONS.filter((item) =>
+    allowedTools.includes(item.id),
+  ).map((item) => item.id);
+  return selected.length === ALL_TOOL_CATEGORIES.length ? null : selected;
 }
 
 function formatModelLabel(model: ProviderModelView): string {
@@ -198,6 +237,26 @@ export function ModelProfileModal({
 
   function set(updates: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...updates }));
+  }
+
+  function toggleToolCategory(
+    category: ToolCategory,
+    checked: boolean | "indeterminate",
+  ) {
+    setForm((prev) => {
+      const selected = new Set(prev.allowed_tools);
+      if (checked === true) {
+        selected.add(category);
+      } else {
+        selected.delete(category);
+      }
+      return {
+        ...prev,
+        allowed_tools: TOOL_VISIBILITY_OPTIONS.filter((item) =>
+          selected.has(item.id),
+        ).map((item) => item.id),
+      };
+    });
   }
 
   const selectedProvider = providers.find((p) => p.id === form.provider_id);
@@ -407,18 +466,10 @@ export function ModelProfileModal({
       service_tier: kindMeta?.supports_service_tier
         ? form.service_tier || null
         : null,
-      web_search:
-        form.web_search === "true"
-          ? true
-          : form.web_search === "false"
-            ? false
-            : null,
+      allowed_tools: serializeToolCategories(form.allowed_tools),
       max_tool_workers: toInt(form.max_tool_workers),
       max_retries: toInt(form.max_retries),
       compact_threshold: toInt(form.compact_threshold),
-      compact_tail_turns: toInt(form.compact_tail_turns),
-      compact_preserve_recent_tokens: toInt(form.compact_preserve_recent_tokens),
-      compact_tool_output_max_chars: toInt(form.compact_tool_output_max_chars),
     };
 
     if (!isEdit && form.id.trim()) {
@@ -586,52 +637,53 @@ export function ModelProfileModal({
                 </Field>
               </div>
 
-              <div className="task-form__row">
-                {kindMeta?.supports_service_tier ? (
-                  <Field>
-                    <FieldLabel>Service tier</FieldLabel>
-                    <NativeSelect
-                      name="service-tier"
-                      className="task-form__select"
-                      value={form.service_tier}
-                      onChange={(e) => set({ service_tier: e.target.value })}
-                    >
-                      <NativeSelectOption value="">
-                        Provider default
-                      </NativeSelectOption>
-                      {options.openai_service_tiers.map((t) => (
-                        <NativeSelectOption key={t} value={t}>
-                          {t}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                  </Field>
-                ) : (
-                  <Field />
-                )}
-
+              {kindMeta?.supports_service_tier && (
                 <Field>
-                  <FieldLabel>Web search</FieldLabel>
+                  <FieldLabel>Service tier</FieldLabel>
                   <NativeSelect
-                    name="web-search"
+                    name="service-tier"
                     className="task-form__select"
-                    value={form.web_search}
-                    onChange={(e) =>
-                      set({ web_search: e.target.value as WebSearchMode })
-                    }
+                    value={form.service_tier}
+                    onChange={(e) => set({ service_tier: e.target.value })}
                   >
-                    <NativeSelectOption value="default">
+                    <NativeSelectOption value="">
                       Provider default
                     </NativeSelectOption>
-                    <NativeSelectOption value="true">
-                      Enabled
-                    </NativeSelectOption>
-                    <NativeSelectOption value="false">
-                      Disabled
-                    </NativeSelectOption>
+                    {options.openai_service_tiers.map((t) => (
+                      <NativeSelectOption key={t} value={t}>
+                        {t}
+                      </NativeSelectOption>
+                    ))}
                   </NativeSelect>
                 </Field>
-              </div>
+              )}
+
+              <FieldSet>
+                <FieldLegend>Tool visibility</FieldLegend>
+                <FieldDescription>
+                  Select the built-in tool groups this profile can expose.
+                  Clear every group to hide all configurable built-in tools.
+                </FieldDescription>
+                <FieldGroup>
+                  {TOOL_VISIBILITY_OPTIONS.map((tool) => (
+                    <Field key={tool.id} orientation="horizontal">
+                      <Checkbox
+                        id={`profile-tool-${tool.id}`}
+                        checked={form.allowed_tools.includes(tool.id)}
+                        onCheckedChange={(checked) =>
+                          toggleToolCategory(tool.id, checked)
+                        }
+                      />
+                      <FieldContent>
+                        <FieldLabel htmlFor={`profile-tool-${tool.id}`}>
+                          {tool.label}
+                        </FieldLabel>
+                        <FieldDescription>{tool.description}</FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  ))}
+                </FieldGroup>
+              </FieldSet>
 
               <div className="task-form__row">
                 <Field>
@@ -675,57 +727,6 @@ export function ModelProfileModal({
                   Token count at which context is compacted.
                 </FieldDescription>
               </Field>
-              <div className={cn("grid gap-4 md:grid-cols-3")}>
-                <Field>
-                  <FieldLabel>Compact tail turns</FieldLabel>
-                  <Input
-                    name="compact-tail-turns"
-                    className="task-form__input"
-                    type="number"
-                    min="0"
-                    value={form.compact_tail_turns}
-                    onChange={(e) => set({ compact_tail_turns: e.target.value })}
-                    placeholder="Default"
-                  />
-                  <FieldDescription>
-                    Recent user turns kept verbatim after compaction.
-                  </FieldDescription>
-                </Field>
-                <Field>
-                  <FieldLabel>Tail token budget</FieldLabel>
-                  <Input
-                    name="compact-preserve-recent-tokens"
-                    className="task-form__input"
-                    type="number"
-                    min="0"
-                    value={form.compact_preserve_recent_tokens}
-                    onChange={(e) =>
-                      set({ compact_preserve_recent_tokens: e.target.value })
-                    }
-                    placeholder="Default"
-                  />
-                  <FieldDescription>
-                    Approximate token budget for preserved recent context.
-                  </FieldDescription>
-                </Field>
-                <Field>
-                  <FieldLabel>Tool output cap</FieldLabel>
-                  <Input
-                    name="compact-tool-output-max-chars"
-                    className="task-form__input"
-                    type="number"
-                    min="0"
-                    value={form.compact_tool_output_max_chars}
-                    onChange={(e) =>
-                      set({ compact_tool_output_max_chars: e.target.value })
-                    }
-                    placeholder="Default"
-                  />
-                  <FieldDescription>
-                    Max characters per tool-output string in compaction prompts.
-                  </FieldDescription>
-                </Field>
-              </div>
             </FieldGroup>
     </FormDialog>
   );

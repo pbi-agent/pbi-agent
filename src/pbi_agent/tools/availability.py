@@ -61,8 +61,6 @@ def disabled_builtin_tool_names(settings: Settings) -> set[str]:
 
 
 def native_web_search_enabled(settings: Settings) -> bool:
-    if not settings.web_search:
-        return False
     allowed_tools = settings.allowed_tools
     if allowed_tools is None:
         return True

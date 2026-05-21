@@ -1,10 +1,31 @@
 import { EditIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { ModelProfileView, ProviderView } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+
+const TOOL_VISIBILITY_LABELS: Record<string, string> = {
+  read: "Read",
+  write: "Write",
+  web: "Web",
+  "sub-agent": "Sub-agent",
+  shell: "Shell",
+};
+
+function toolVisibilityLabel(allowedTools: string[] | null): string {
+  if (allowedTools === null) {
+    return "All tools";
+  }
+  if (allowedTools.length === 0) {
+    return "No built-ins";
+  }
+  return allowedTools
+    .map((tool) => TOOL_VISIBILITY_LABELS[tool] ?? tool)
+    .join(", ");
+}
 
 function ProfileCard({
   profile,
@@ -30,6 +51,11 @@ function ProfileCard({
         <span className="settings-item__name">{profile.name}</span>
         <div className="provider-card__subtitle">
           {profile.provider.name} · {runtimeParts.join(" · ")}
+        </div>
+        <div className="settings-item__meta">
+          <Badge size="meta" variant="secondary">
+            Tools: {toolVisibilityLabel(profile.allowed_tools)}
+          </Badge>
         </div>
       </div>
       <div className="provider-card__actions">

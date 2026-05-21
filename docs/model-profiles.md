@@ -12,7 +12,7 @@ A model profile is a saved runtime preset tied to one saved provider. Providers 
 | Entity | Stores | Examples |
 | --- | --- | --- |
 | Provider | Connection settings | provider kind, API key, ChatGPT or GitHub Copilot account auth, Azure endpoint, generic API URL |
-| Model Profile | Runtime settings | model, sub-agent model, reasoning effort, max tokens, web search, retries, compaction threshold |
+| Model Profile | Runtime settings | model, sub-agent model, reasoning effort, max tokens, tool visibility, retries, compaction threshold |
 
 This separation lets you create multiple profiles for the same provider, such as `fast`, `analysis`, `review`, or `azure-prod`.
 
@@ -69,7 +69,7 @@ If no profile is selected, pbi-agent falls back to CLI flags, environment variab
 | Reasoning effort | Optional provider-level reasoning setting: `low`, `medium`, `high`, or `xhigh`. |
 | Max tokens | Provider output-token cap. Empty means the project default. |
 | Service tier | OpenAI-only service tier such as `auto`, `default`, `flex`, or `priority`. |
-| Web search | Enables or disables provider-native web search when supported. |
+| Tool visibility | Built-in tool groups exposed by the profile: read, write, web, sub-agent, and shell. |
 | Max tool workers | Maximum number of local tool calls that can execute in parallel. |
 | Max retries | Retry count for transient provider failures. |
 | Compact threshold | Context-token threshold for automatic compaction where supported. |

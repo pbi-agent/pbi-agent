@@ -671,7 +671,11 @@ def _resolved_runtime_view(  # pyright: ignore[reportUnusedFunction] - imported 
         "reasoning_effort": runtime.settings.reasoning_effort,
         "max_tokens": runtime.settings.max_tokens,
         "service_tier": runtime.settings.service_tier,
-        "web_search": runtime.settings.web_search,
+        "allowed_tools": (
+            list(runtime.settings.allowed_tools)
+            if runtime.settings.allowed_tools is not None
+            else None
+        ),
         "max_tool_workers": runtime.settings.max_tool_workers,
         "max_retries": runtime.settings.max_retries,
         "compact_threshold": runtime.settings.compact_threshold,

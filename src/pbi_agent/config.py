@@ -116,7 +116,6 @@ class Settings:
     provider: str = "openai"
     generic_api_url: str = DEFAULT_GENERIC_API_URL
     service_tier: str | None = None
-    web_search: bool = True
     allowed_tools: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -201,7 +200,6 @@ class Settings:
             "compact_tool_output_max_chars": self.compact_tool_output_max_chars,
             "generic_api_url": self.generic_api_url,
             "service_tier": self.service_tier,
-            "web_search": self.web_search,
             "allowed_tools": (
                 list(self.allowed_tools) if self.allowed_tools is not None else None
             ),
@@ -249,7 +247,6 @@ class ModelProfileConfig:
     reasoning_effort: str | None = None
     max_tokens: int | None = None
     service_tier: str | None = None
-    web_search: bool | None = None
     allowed_tools: tuple[str, ...] | None = None
     max_tool_workers: int | None = None
     max_retries: int | None = None
@@ -1007,7 +1004,6 @@ def update_model_profile_config(
     reasoning_effort: str | None = None,
     max_tokens: int | None = None,
     service_tier: str | None = None,
-    web_search: bool | None = None,
     allowed_tools: tuple[str, ...] | None = None,
     max_tool_workers: int | None = None,
     max_retries: int | None = None,
@@ -1040,7 +1036,6 @@ def update_model_profile_config(
         service_tier=(
             service_tier if service_tier is not None else profile.service_tier
         ),
-        web_search=web_search if web_search is not None else profile.web_search,
         allowed_tools=(
             allowed_tools if allowed_tools is not None else profile.allowed_tools
         ),
@@ -1288,7 +1283,6 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         or os.getenv("PBI_AGENT_SERVICE_TIER")
         or (selected_profile.service_tier if selected_profile else None)
     )
-    web_search = _resolve_web_search(args, selected_profile)
     cli_allowed_tools = getattr(args, "allowed_tools", None)
     if cli_allowed_tools is not None:
         tool_availability_overridden = True
@@ -1325,7 +1319,6 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         compact_tool_output_max_chars=compact_tool_output_max_chars,
         provider=provider_kind,
         service_tier=service_tier,
-        web_search=web_search,
         allowed_tools=allowed_tools,
     )
     _validate_allowed_tools(settings.allowed_tools, error_prefix="--allowed-tools")
@@ -1409,20 +1402,6 @@ def _resolve_allowed_tools(
 def _default_reasoning_effort(provider_kind: str) -> str:
     del provider_kind
     return "medium"
-
-
-def _resolve_web_search(
-    args: argparse.Namespace,
-    profile: ModelProfileConfig | None,
-) -> bool:
-    if getattr(args, "no_web_search", False):
-        return False
-    web_search_env = os.getenv("PBI_AGENT_WEB_SEARCH")
-    if web_search_env is not None:
-        return web_search_env.lower() not in {"0", "false", "no"}
-    if profile is not None and profile.web_search is not None:
-        return profile.web_search
-    return True
 
 
 def _resolve_secret(
@@ -1534,9 +1513,6 @@ def _settings_from_runtime_parts(
         ),
         provider=provider.kind,
         service_tier=profile.service_tier if profile else None,
-        web_search=True
-        if profile is None or profile.web_search is None
-        else profile.web_search,
         allowed_tools=(profile.allowed_tools if profile else None),
     )
 
@@ -1618,7 +1594,6 @@ def _concrete_profile_for_saved_profile(
         ),
         max_tokens=_coalesce(profile.max_tokens, DEFAULT_MAX_TOKENS),
         service_tier=profile.service_tier,
-        web_search=True if profile.web_search is None else profile.web_search,
         allowed_tools=profile.allowed_tools,
         max_tool_workers=_coalesce(profile.max_tool_workers, 4),
         max_retries=_coalesce(profile.max_retries, 3),
@@ -1649,7 +1624,6 @@ def _concrete_profile_for_settings(
         reasoning_effort=settings.reasoning_effort,
         max_tokens=settings.max_tokens,
         service_tier=settings.service_tier,
-        web_search=settings.web_search,
         allowed_tools=settings.allowed_tools,
         max_tool_workers=settings.max_tool_workers,
         max_retries=settings.max_retries,
@@ -1730,7 +1704,6 @@ def _profile_from_payload(payload: object) -> ModelProfileConfig | None:
         reasoning_effort=_optional_string(payload.get("reasoning_effort")),
         max_tokens=_optional_int(payload.get("max_tokens")),
         service_tier=_optional_string(payload.get("service_tier")),
-        web_search=_optional_bool(payload.get("web_search")),
         allowed_tools=_optional_string_tuple(payload.get("allowed_tools")),
         max_tool_workers=_optional_int(payload.get("max_tool_workers")),
         max_retries=_optional_int(payload.get("max_retries")),
@@ -1818,12 +1791,6 @@ def _optional_string(value: object) -> str | None:
 
 def _optional_int(value: object) -> int | None:
     if isinstance(value, int):
-        return value
-    return None
-
-
-def _optional_bool(value: object) -> bool | None:
-    if isinstance(value, bool):
         return value
     return None
 

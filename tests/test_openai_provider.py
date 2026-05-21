@@ -608,7 +608,7 @@ def test_openai_provider_can_exclude_sub_agent_tool() -> None:
 
 
 def test_openai_provider_advertises_v4a_tools_only() -> None:
-    provider = OpenAIProvider(_make_settings(web_search=True))
+    provider = OpenAIProvider(_make_settings())
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "apply_patch" in tool_names
@@ -633,11 +633,11 @@ def test_openai_provider_keeps_ask_user_ui_only_by_default() -> None:
     assert "ask_user" in ui_tool_names
 
 
-def test_openai_provider_hides_native_web_search_without_web_search() -> None:
-    provider = OpenAIProvider(_make_settings(web_search=False))
+def test_openai_provider_hides_native_web_search_without_web_group() -> None:
+    provider = OpenAIProvider(_make_settings(allowed_tools=("read",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
-    assert "read_web_url" in tool_names
+    assert "read_web_url" not in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 
@@ -3934,12 +3934,12 @@ def test_openai_execute_tool_calls_serializes_image_attachments(
 
 
 def test_openai_web_search_tool_included_when_enabled() -> None:
-    provider = OpenAIProvider(_make_settings(web_search=True))
+    provider = OpenAIProvider(_make_settings())
     assert {"type": "web_search"} in provider._tools
 
 
-def test_openai_web_search_tool_excluded_when_disabled() -> None:
-    provider = OpenAIProvider(_make_settings(web_search=False))
+def test_openai_web_search_tool_excluded_without_web_group() -> None:
+    provider = OpenAIProvider(_make_settings(allowed_tools=("read",)))
     assert {"type": "web_search"} not in provider._tools
 
 

@@ -443,7 +443,7 @@ export type ResolvedRuntimeView = {
   reasoning_effort: string;
   max_tokens: number;
   service_tier: string | null;
-  web_search: boolean;
+  allowed_tools: string[] | null;
   max_tool_workers: number;
   max_retries: number;
   compact_threshold: number;
@@ -465,7 +465,7 @@ export type ModelProfileView = {
   reasoning_effort: string | null;
   max_tokens: number | null;
   service_tier: string | null;
-  web_search: boolean | null;
+  allowed_tools: string[] | null;
   max_tool_workers: number | null;
   max_retries: number | null;
   compact_threshold: number | null;

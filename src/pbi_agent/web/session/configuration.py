@@ -292,7 +292,7 @@ class ConfigurationMixin:
         reasoning_effort: str | None,
         max_tokens: int | None,
         service_tier: str | None,
-        web_search: bool | None,
+        allowed_tools: tuple[str, ...] | None,
         max_tool_workers: int | None,
         max_retries: int | None,
         compact_threshold: int | None,
@@ -313,7 +313,7 @@ class ConfigurationMixin:
                 reasoning_effort=reasoning_effort,
                 max_tokens=max_tokens,
                 service_tier=service_tier,
-                web_search=web_search,
+                allowed_tools=allowed_tools,
                 max_tool_workers=max_tool_workers,
                 max_retries=max_retries,
                 compact_threshold=compact_threshold,
@@ -346,7 +346,7 @@ class ConfigurationMixin:
         reasoning_effort: str | None,
         max_tokens: int | None,
         service_tier: str | None,
-        web_search: bool | None,
+        allowed_tools: tuple[str, ...] | None,
         max_tool_workers: int | None,
         max_retries: int | None,
         compact_threshold: int | None,
@@ -389,7 +389,11 @@ class ConfigurationMixin:
             service_tier=(
                 service_tier if "service_tier" in fields_set else profile.service_tier
             ),
-            web_search=web_search if "web_search" in fields_set else profile.web_search,
+            allowed_tools=(
+                allowed_tools
+                if "allowed_tools" in fields_set
+                else profile.allowed_tools
+            ),
             max_tool_workers=(
                 max_tool_workers
                 if "max_tool_workers" in fields_set
@@ -761,7 +765,11 @@ class ConfigurationMixin:
             "reasoning_effort": profile.reasoning_effort,
             "max_tokens": profile.max_tokens,
             "service_tier": profile.service_tier,
-            "web_search": profile.web_search,
+            "allowed_tools": (
+                list(profile.allowed_tools)
+                if profile.allowed_tools is not None
+                else None
+            ),
             "max_tool_workers": profile.max_tool_workers,
             "max_retries": profile.max_retries,
             "compact_threshold": profile.compact_threshold,

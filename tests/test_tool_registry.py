@@ -43,9 +43,7 @@ def test_registry_returns_none_for_unknown_tool() -> None:
 
 
 def test_effective_excluded_tool_names_openai_uses_v4a_editing() -> None:
-    excluded = effective_excluded_tool_names(
-        Settings(provider="openai", web_search=True), None
-    )
+    excluded = effective_excluded_tool_names(Settings(provider="openai"), None)
 
     assert {"ask_user", "replace_in_file", "write_file"} <= excluded
     assert "apply_patch" not in excluded
@@ -73,14 +71,12 @@ def test_effective_excluded_tool_names_non_openai_uses_simple_editing() -> None:
     assert "write_file" not in excluded
 
 
-def test_effective_excluded_tool_names_keeps_read_web_url_without_native_web_search() -> (
-    None
-):
+def test_effective_excluded_tool_names_disables_web_tools_without_web_group() -> None:
     excluded = effective_excluded_tool_names(
-        Settings(provider="openai", web_search=False)
+        Settings(provider="openai", allowed_tools=("read",))
     )
 
-    assert "read_web_url" not in excluded
+    assert "read_web_url" in excluded
 
 
 def test_effective_excluded_tool_names_honors_allowed_tools() -> None:

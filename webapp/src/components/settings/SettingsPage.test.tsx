@@ -158,7 +158,7 @@ function makeConfigBootstrap(
         reasoning_effort: "high",
         max_tokens: null,
         service_tier: null,
-        web_search: false,
+        allowed_tools: null,
         max_tool_workers: null,
         max_retries: null,
         compact_threshold: null,
@@ -175,13 +175,13 @@ function makeConfigBootstrap(
           reasoning_effort: "high",
           max_tokens: 0,
           service_tier: null,
-          web_search: false,
+          allowed_tools: null,
           max_tool_workers: 1,
           max_retries: 1,
           compact_threshold: 1,
-      compact_tail_turns: 2,
-      compact_preserve_recent_tokens: 8000,
-      compact_tool_output_max_chars: 2000,
+          compact_tail_turns: 2,
+          compact_preserve_recent_tokens: 8000,
+          compact_tool_output_max_chars: 2000,
           responses_url: "https://api.openai.com/v1/responses",
           generic_api_url: "https://api.openai.com/v1/chat/completions",
           supports_image_inputs: true,
@@ -197,7 +197,7 @@ function makeConfigBootstrap(
         reasoning_effort: "medium",
         max_tokens: null,
         service_tier: null,
-        web_search: false,
+        allowed_tools: null,
         max_tool_workers: null,
         max_retries: null,
         compact_threshold: null,
@@ -214,13 +214,13 @@ function makeConfigBootstrap(
           reasoning_effort: "medium",
           max_tokens: 0,
           service_tier: null,
-          web_search: false,
+          allowed_tools: null,
           max_tool_workers: 1,
           max_retries: 1,
           compact_threshold: 1,
-      compact_tail_turns: 2,
-      compact_preserve_recent_tokens: 8000,
-      compact_tool_output_max_chars: 2000,
+          compact_tail_turns: 2,
+          compact_preserve_recent_tokens: 8000,
+          compact_tool_output_max_chars: 2000,
           responses_url: "https://api.openai.com/v1/responses",
           generic_api_url: "https://api.openai.com/v1/chat/completions",
           supports_image_inputs: true,
@@ -1519,6 +1519,19 @@ describe("SettingsPage", () => {
     );
   });
 
+  it("renders tool visibility metadata with standard badge styling", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+
+    const badges = await screen.findAllByText("Tools: All tools");
+    expect(badges[0]).toHaveAttribute("data-slot", "badge");
+    expect(badges[0]).toHaveAttribute("data-size", "meta");
+    expect(badges[0]).toHaveAttribute("data-variant", "secondary");
+  });
+
   it("opens the usage-limits dialog only for connected subscription providers", async () => {
     const user = userEvent.setup();
     const base = makeConfigBootstrap();
@@ -2257,6 +2270,47 @@ describe("SettingsPage", () => {
         "rev-1",
       ),
     );
+  });
+
+  it("saves custom tool visibility for model profiles", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createModelProfile).mockResolvedValue({
+      model_profile: makeConfigBootstrap().model_profiles[0],
+      config_revision: "rev-2",
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+
+    await user.type(
+      document.querySelector<HTMLInputElement>('input[name="profile-name"]')!,
+      "Read Web Shell",
+    );
+    expect(
+      screen.queryByLabelText("Show all built-in tool groups"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Web search")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Compact tail turns")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tail token budget")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tool output cap")).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText("Write"));
+    await user.click(screen.getByLabelText("Sub-agent"));
+    await user.click(screen.getByRole("button", { name: "Add Profile" }));
+
+    await waitFor(() =>
+      expect(createModelProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          allowed_tools: ["read", "web", "shell"],
+        }),
+        "rev-1",
+      ),
+    );
+    const payload = vi.mocked(createModelProfile).mock.calls.at(-1)?.[0];
+    expect(payload).not.toHaveProperty("compact_tail_turns");
+    expect(payload).not.toHaveProperty("compact_preserve_recent_tokens");
+    expect(payload).not.toHaveProperty("compact_tool_output_max_chars");
   });
 
   it("falls back to text input when provider model discovery fails", async () => {

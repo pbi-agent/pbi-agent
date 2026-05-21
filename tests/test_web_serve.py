@@ -899,6 +899,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
                 "provider_id": "openai-main",
                 "model": "gpt-5.4-2026-03-05",
                 "reasoning_effort": "xhigh",
+                "allowed_tools": ["read", "web"],
             },
         )
         assert create_profile_response.status_code == 200
@@ -916,6 +917,13 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             profile_payload["model_profile"]["resolved_runtime"]["sub_agent_model"]
             == "gpt-5.4-2026-03-05"
         )
+        assert profile_payload["model_profile"]["allowed_tools"] == ["read", "web"]
+        assert profile_payload["model_profile"]["resolved_runtime"][
+            "allowed_tools"
+        ] == [
+            "read",
+            "web",
+        ]
         revision = profile_payload["config_revision"]
 
         select_response = client.put(
@@ -9489,6 +9497,7 @@ def test_config_provider_and_profile_list_update_delete_endpoints(
                 "model": "gpt-5.4-2026-03-05",
                 "reasoning_effort": "xhigh",
                 "max_tool_workers": 6,
+                "allowed_tools": ["read", "web"],
             },
         )
         assert create_profile_response.status_code == 200
@@ -9511,14 +9520,15 @@ def test_config_provider_and_profile_list_update_delete_endpoints(
                 "name": "Analysis Updated",
                 "model": "gpt-5.4",
                 "reasoning_effort": "high",
-                "web_search": False,
+                "allowed_tools": ["shell"],
             },
         )
         assert update_profile_response.status_code == 200
         updated_profile = update_profile_response.json()["model_profile"]
         assert updated_profile["name"] == "Analysis Updated"
         assert updated_profile["resolved_runtime"]["model"] == "gpt-5.4"
-        assert updated_profile["resolved_runtime"]["web_search"] is False
+        assert updated_profile["allowed_tools"] == ["shell"]
+        assert updated_profile["resolved_runtime"]["allowed_tools"] == ["shell"]
         revision = update_profile_response.json()["config_revision"]
 
         delete_profile_response = client.delete(

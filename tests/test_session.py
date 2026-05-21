@@ -1899,12 +1899,10 @@ def test_open_compaction_provider_disables_all_tools(monkeypatch) -> None:
         _ProviderWithCatalog,
     )
 
-    with _open_compaction_provider(
-        Settings(api_key="test-key", provider="openai", web_search=True)
-    ):
+    with _open_compaction_provider(Settings(api_key="test-key", provider="openai")):
         pass
 
-    assert captured["settings"].web_search is False
+    assert captured["settings"].allowed_tools == ()
     assert captured["tool_catalog"].get_specs() == []
 
 

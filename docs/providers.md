@@ -64,7 +64,7 @@ uv run pbi-agent web
       "reasoning_effort": "xhigh",
       "max_tokens": 16384,
       "service_tier": null,
-      "web_search": true,
+      "allowed_tools": null,
       "max_tool_workers": 4,
       "max_retries": 3,
       "compact_threshold": 200000

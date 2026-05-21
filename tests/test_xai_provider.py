@@ -133,7 +133,7 @@ def _make_settings(**overrides: object) -> Settings:
 
 
 def test_xai_provider_advertises_simple_edit_tools_only() -> None:
-    provider = XAIProvider(_make_settings(web_search=True))
+    provider = XAIProvider(_make_settings())
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "apply_patch" not in tool_names
@@ -142,11 +142,11 @@ def test_xai_provider_advertises_simple_edit_tools_only() -> None:
     assert "read_web_url" in tool_names
 
 
-def test_xai_provider_hides_native_web_search_without_web_search() -> None:
-    provider = XAIProvider(_make_settings(web_search=False))
+def test_xai_provider_hides_native_web_search_without_web_group() -> None:
+    provider = XAIProvider(_make_settings(allowed_tools=("read",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
-    assert "read_web_url" in tool_names
+    assert "read_web_url" not in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 
@@ -775,12 +775,12 @@ def test_xai_request_turn_renders_web_search_block_without_sources(
 
 
 def test_xai_web_search_tool_included_when_enabled() -> None:
-    provider = XAIProvider(_make_settings(web_search=True))
+    provider = XAIProvider(_make_settings())
     assert {"type": "web_search"} in provider._tools
 
 
-def test_xai_web_search_tool_excluded_when_disabled() -> None:
-    provider = XAIProvider(_make_settings(web_search=False))
+def test_xai_web_search_tool_excluded_without_web_group() -> None:
+    provider = XAIProvider(_make_settings(allowed_tools=("read",)))
     assert {"type": "web_search"} not in provider._tools
 
 

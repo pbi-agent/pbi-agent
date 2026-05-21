@@ -28,7 +28,6 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--responses-url` | `PBI_AGENT_RESPONSES_URL` | provider-specific | Override the Responses or Interactions endpoint for OpenAI API, ChatGPT, GitHub Copilot, Azure, xAI, or Google. Ignored by Anthropic and Generic. |
 | `--generic-api-url` | `PBI_AGENT_GENERIC_API_URL` | `https://openrouter.ai/api/v1/chat/completions` | Override the OpenAI-compatible Chat Completions endpoint used by the Generic backend. |
 | `--service-tier` | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier for request processing: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |
-| `--no-web-search` | none | `false` | Disable the provider's native web search tool when that backend supports it. |
 | `--verbose` | none | `false` | Enable verbose logging. |
 | `--mcp` | none | `false` | List discovered project MCP servers from `.agents/mcp.json` and exit. |
 | `--agents` | none | `false` | List discovered project sub-agents from `.agents/agents/*.md` and exit. |
@@ -256,7 +255,7 @@ Stored model profiles hold runnable model and runtime settings tied to one saved
 | `pbi-agent config profiles delete ID` | Delete a model profile by ID. |
 | `pbi-agent config profiles select ID` | Set the active model profile used when `--profile-id` and `PBI_AGENT_PROFILE_ID` are absent. |
 
-Profile options: `--model`, `--sub-agent-model`, `--reasoning-effort`, `--max-tokens`, `--service-tier`, `--web-search`, `--no-web-search`, `--max-tool-workers`, `--max-retries`, and `--compact-threshold`.
+Profile options: `--model`, `--sub-agent-model`, `--reasoning-effort`, `--max-tokens`, `--service-tier`, `--allowed-tools`, `--max-tool-workers`, `--max-retries`, and `--compact-threshold`.
 
 ## `pbi-agent web` (default)
 

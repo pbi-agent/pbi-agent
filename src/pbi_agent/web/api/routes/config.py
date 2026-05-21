@@ -235,7 +235,11 @@ def create_model_profile(
             reasoning_effort=request.reasoning_effort,
             max_tokens=request.max_tokens,
             service_tier=request.service_tier,
-            web_search=request.web_search,
+            allowed_tools=(
+                tuple(request.allowed_tools)
+                if request.allowed_tools is not None
+                else None
+            ),
             max_tool_workers=request.max_tool_workers,
             max_retries=request.max_retries,
             compact_threshold=request.compact_threshold,
@@ -271,7 +275,11 @@ def update_model_profile(
             reasoning_effort=request.reasoning_effort,
             max_tokens=request.max_tokens,
             service_tier=request.service_tier,
-            web_search=request.web_search,
+            allowed_tools=(
+                tuple(request.allowed_tools)
+                if request.allowed_tools is not None
+                else None
+            ),
             max_tool_workers=request.max_tool_workers,
             max_retries=request.max_retries,
             compact_threshold=request.compact_threshold,

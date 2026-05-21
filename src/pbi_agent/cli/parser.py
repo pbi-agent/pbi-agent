@@ -160,14 +160,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="OpenAI service tier: auto, default, flex, or priority.",
     )
-    model_group.add_argument(
-        "--no-web-search",
-        dest="no_web_search",
-        action="store_true",
-        default=False,
-        help="Disable the provider's native web search tool.",
-    )
-
     runtime_group = parser.add_argument_group("Runtime and resilience")
     runtime_group.add_argument(
         "--max-tool-workers",
@@ -920,20 +912,6 @@ def build_parser() -> argparse.ArgumentParser:
             default=None,
             help="OpenAI service tier.",
         )
-        web_search_group = target.add_mutually_exclusive_group()
-        web_search_group.add_argument(
-            "--web-search",
-            dest="web_search",
-            action="store_true",
-            default=None,
-            help="Enable native web search for this profile.",
-        )
-        web_search_group.add_argument(
-            "--no-web-search",
-            dest="web_search",
-            action="store_false",
-            help="Disable native web search for this profile.",
-        )
         target.add_argument(
             "--allowed-tools",
             dest="allowed_tools",
@@ -1074,7 +1052,7 @@ def _web_runtime_flags_in_args(raw_argv: list[str]) -> list[str]:  # pyright: ig
         "--max-tokens",
         "--reasoning-effort",
         "--service-tier",
-        "--no-web-search",
+        "--allowed-tools",
         "--max-tool-workers",
         "--max-retries",
         "--compact-threshold",

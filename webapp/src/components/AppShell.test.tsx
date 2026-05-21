@@ -93,7 +93,7 @@ function makeConfigBootstrap(
         reasoning_effort: "medium",
         max_tokens: null,
         service_tier: null,
-        web_search: null,
+        allowed_tools: null,
         max_tool_workers: null,
         max_retries: null,
         compact_threshold: null,

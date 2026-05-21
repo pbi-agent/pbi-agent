@@ -31,7 +31,7 @@ def _make_settings(**overrides: object) -> Settings:
 
 
 def test_generic_provider_advertises_simple_edit_tools_only() -> None:
-    provider = GenericProvider(_make_settings(web_search=True))
+    provider = GenericProvider(_make_settings())
 
     tool_names = {tool["function"]["name"] for tool in provider._tools}
     assert "apply_patch" not in tool_names
@@ -40,8 +40,8 @@ def test_generic_provider_advertises_simple_edit_tools_only() -> None:
     assert "read_web_url" in tool_names
 
 
-def test_generic_provider_keeps_read_web_url_without_web_search() -> None:
-    provider = GenericProvider(_make_settings(web_search=False))
+def test_generic_provider_includes_read_web_url_with_web_group() -> None:
+    provider = GenericProvider(_make_settings(allowed_tools=("web",)))
 
     tool_names = {tool["function"]["name"] for tool in provider._tools}
     assert "read_web_url" in tool_names

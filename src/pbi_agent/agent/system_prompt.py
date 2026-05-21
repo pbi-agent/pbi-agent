@@ -92,7 +92,6 @@ def _tool_usage_rules(
 
     lines = [
         "<tool_usage_rules>",
-        "Use only tools available in this turn's tool catalog.",
     ]
     if "shell" in active_names and (
         active_names & _READ_TOOL_NAMES or active_names & _WRITE_TOOL_NAMES

@@ -1303,7 +1303,7 @@ def _open_runtime_provider(
 
 @contextmanager
 def _open_compaction_provider(settings: Settings):
-    compact_settings = replace(settings, web_search=False)
+    compact_settings = replace(settings, allowed_tools=())
     with _open_runtime_provider(
         compact_settings,
         system_prompt=COMPACTION_PROMPT,

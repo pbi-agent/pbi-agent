@@ -38,7 +38,7 @@ def _make_settings(**overrides: object) -> Settings:
 
 
 def test_anthropic_provider_advertises_simple_edit_tools_only() -> None:
-    provider = AnthropicProvider(_make_settings(web_search=True))
+    provider = AnthropicProvider(_make_settings())
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "apply_patch" not in tool_names
@@ -47,11 +47,11 @@ def test_anthropic_provider_advertises_simple_edit_tools_only() -> None:
     assert "read_web_url" in tool_names
 
 
-def test_anthropic_provider_hides_native_web_search_without_web_search() -> None:
-    provider = AnthropicProvider(_make_settings(web_search=False))
+def test_anthropic_provider_hides_native_web_search_without_web_group() -> None:
+    provider = AnthropicProvider(_make_settings(allowed_tools=("read",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
-    assert "read_web_url" in tool_names
+    assert "read_web_url" not in tool_names
     assert not any(
         tool.get("type") == "web_search_20250305" for tool in provider._tools
     )
@@ -818,15 +818,13 @@ def test_anthropic_execute_tool_calls_serializes_image_attachments(
 
 
 def test_anthropic_web_search_tool_included_when_enabled() -> None:
-    provider = AnthropicProvider(_make_settings(web_search=True))
+    provider = AnthropicProvider(_make_settings())
     web_tool = {"type": "web_search_20260209", "name": "web_search"}
     assert web_tool in provider._tools
 
 
 def test_anthropic_web_search_tool_uses_direct_callers_for_haiku_models() -> None:
-    provider = AnthropicProvider(
-        _make_settings(web_search=True, model="claude-haiku-4-5")
-    )
+    provider = AnthropicProvider(_make_settings(model="claude-haiku-4-5"))
     assert {
         "type": "web_search_20260209",
         "name": "web_search",
@@ -834,8 +832,8 @@ def test_anthropic_web_search_tool_uses_direct_callers_for_haiku_models() -> Non
     } in provider._tools
 
 
-def test_anthropic_web_search_tool_excluded_when_disabled() -> None:
-    provider = AnthropicProvider(_make_settings(web_search=False))
+def test_anthropic_web_search_tool_excluded_without_web_group() -> None:
+    provider = AnthropicProvider(_make_settings(allowed_tools=("read",)))
     tool_types = [t.get("type") for t in provider._tools]
     assert "web_search_20260209" not in tool_types
 

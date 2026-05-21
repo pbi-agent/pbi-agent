@@ -15,6 +15,9 @@ All built-in tools are enabled by default. Saved model profiles, `pbi-agent run`
 project command frontmatter, and project sub-agent frontmatter can replace that
 default with an allow-list.
 
+In the browser app, edit a model profile in **Settings → Model Profiles** and
+use **Tool visibility** to select these same groups for that profile.
+
 The allow-list accepts only these built-in tool groups:
 
 | Tool group | Built-ins |
@@ -36,8 +39,7 @@ session's interactive mode and is not configurable through model profiles,
 command/sub-agent frontmatter, or `pbi-agent run` tool allow-lists.
 
 The `web` group controls both `read_web_url` and native provider web search.
-Use `--no-web-search` to disable native web search while keeping the `web`
-group available.
+Omit `web` from `allowed_tools` to disable both.
 
 Examples:
 

@@ -230,7 +230,7 @@ class ResolvedRuntimeViewModel(BaseModel):
     reasoning_effort: str
     max_tokens: int
     service_tier: str | None
-    web_search: bool
+    allowed_tools: list[str] | None
     max_tool_workers: int
     max_retries: int
     compact_threshold: int
@@ -252,7 +252,7 @@ class ModelProfileViewModel(BaseModel):
     reasoning_effort: str | None
     max_tokens: int | None
     service_tier: str | None
-    web_search: bool | None
+    allowed_tools: list[str] | None
     max_tool_workers: int | None
     max_retries: int | None
     compact_threshold: int | None
@@ -272,7 +272,7 @@ class ModelProfileMutationRequest(BaseModel):
     reasoning_effort: str | None = None
     max_tokens: int | None = Field(default=None, ge=1)
     service_tier: str | None = None
-    web_search: bool | None = None
+    allowed_tools: list[str] | None = None
     max_tool_workers: int | None = Field(default=None, ge=1)
     max_retries: int | None = Field(default=None, ge=0)
     compact_threshold: int | None = Field(default=None, ge=1)
@@ -289,7 +289,7 @@ class ModelProfileUpdateRequest(BaseModel):
     reasoning_effort: str | None = None
     max_tokens: int | None = Field(default=None, ge=1)
     service_tier: str | None = None
-    web_search: bool | None = None
+    allowed_tools: list[str] | None = None
     max_tool_workers: int | None = Field(default=None, ge=1)
     max_retries: int | None = Field(default=None, ge=0)
     compact_threshold: int | None = Field(default=None, ge=1)

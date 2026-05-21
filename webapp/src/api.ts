@@ -1060,7 +1060,7 @@ export async function createModelProfile(
     reasoning_effort?: string | null;
     max_tokens?: number | null;
     service_tier?: string | null;
-    web_search?: boolean | null;
+    allowed_tools?: string[] | null;
     max_tool_workers?: number | null;
     max_retries?: number | null;
     compact_threshold?: number | null;
@@ -1094,7 +1094,7 @@ export async function updateModelProfile(
     reasoning_effort: string | null;
     max_tokens: number | null;
     service_tier: string | null;
-    web_search: boolean | null;
+    allowed_tools: string[] | null;
     max_tool_workers: number | null;
     max_retries: number | null;
     compact_threshold: number | null;

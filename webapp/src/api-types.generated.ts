@@ -135,15 +135,15 @@ export type MessageRemovedSseEventPayloadModel = { live_session_id?: string | nu
 
 export type ModelProfileListResponse = { model_profiles: ModelProfileViewModel[]; active_profile_id: string | null; config_revision: string };
 
-export type ModelProfileMutationRequest = { id?: string | null; name: string; provider_id: string; model?: string | null; sub_agent_model?: string | null; reasoning_effort?: string | null; max_tokens?: number | null; service_tier?: string | null; web_search?: boolean | null; max_tool_workers?: number | null; max_retries?: number | null; compact_threshold?: number | null; compact_tail_turns?: number | null; compact_preserve_recent_tokens?: number | null; compact_tool_output_max_chars?: number | null };
+export type ModelProfileMutationRequest = { id?: string | null; name: string; provider_id: string; model?: string | null; sub_agent_model?: string | null; reasoning_effort?: string | null; max_tokens?: number | null; service_tier?: string | null; allowed_tools?: string[] | null; max_tool_workers?: number | null; max_retries?: number | null; compact_threshold?: number | null; compact_tail_turns?: number | null; compact_preserve_recent_tokens?: number | null; compact_tool_output_max_chars?: number | null };
 
 export type ModelProfileProviderModel = { id: string; name: string; kind: string };
 
 export type ModelProfileResponse = { model_profile: ModelProfileViewModel; config_revision: string };
 
-export type ModelProfileUpdateRequest = { name?: string | null; provider_id?: string | null; model?: string | null; sub_agent_model?: string | null; reasoning_effort?: string | null; max_tokens?: number | null; service_tier?: string | null; web_search?: boolean | null; max_tool_workers?: number | null; max_retries?: number | null; compact_threshold?: number | null; compact_tail_turns?: number | null; compact_preserve_recent_tokens?: number | null; compact_tool_output_max_chars?: number | null };
+export type ModelProfileUpdateRequest = { name?: string | null; provider_id?: string | null; model?: string | null; sub_agent_model?: string | null; reasoning_effort?: string | null; max_tokens?: number | null; service_tier?: string | null; allowed_tools?: string[] | null; max_tool_workers?: number | null; max_retries?: number | null; compact_threshold?: number | null; compact_tail_turns?: number | null; compact_preserve_recent_tokens?: number | null; compact_tool_output_max_chars?: number | null };
 
-export type ModelProfileViewModel = { id: string; name: string; provider_id: string; provider: ModelProfileProviderModel; model: string | null; sub_agent_model: string | null; reasoning_effort: string | null; max_tokens: number | null; service_tier: string | null; web_search: boolean | null; max_tool_workers: number | null; max_retries: number | null; compact_threshold: number | null; compact_tail_turns: number | null; compact_preserve_recent_tokens: number | null; compact_tool_output_max_chars: number | null; is_active_default: boolean; resolved_runtime: ResolvedRuntimeViewModel };
+export type ModelProfileViewModel = { id: string; name: string; provider_id: string; provider: ModelProfileProviderModel; model: string | null; sub_agent_model: string | null; reasoning_effort: string | null; max_tokens: number | null; service_tier: string | null; allowed_tools: string[] | null; max_tool_workers: number | null; max_retries: number | null; compact_threshold: number | null; compact_tail_turns: number | null; compact_preserve_recent_tokens: number | null; compact_tool_output_max_chars: number | null; is_active_default: boolean; resolved_runtime: ResolvedRuntimeViewModel };
 
 export type NewSessionRequest = { profile_id?: string | null };
 
@@ -201,7 +201,7 @@ export type ProviderViewModel = { id: string; name: string; kind: string; auth_m
 
 export type QuestionAnswerRequest = { question_id: string; answer: string; selected_suggestion_index?: number | null; custom?: boolean; custom_note?: string | null };
 
-export type ResolvedRuntimeViewModel = { provider: string; provider_id: string; profile_id: string; model: string; sub_agent_model: string | null; reasoning_effort: string; max_tokens: number; service_tier: string | null; web_search: boolean; max_tool_workers: number; max_retries: number; compact_threshold: number; compact_tail_turns: number; compact_preserve_recent_tokens: number; compact_tool_output_max_chars: number; responses_url: string; generic_api_url: string; supports_image_inputs: boolean };
+export type ResolvedRuntimeViewModel = { provider: string; provider_id: string; profile_id: string; model: string; sub_agent_model: string | null; reasoning_effort: string; max_tokens: number; service_tier: string | null; allowed_tools: string[] | null; max_tool_workers: number; max_retries: number; compact_threshold: number; compact_tail_turns: number; compact_preserve_recent_tokens: number; compact_tool_output_max_chars: number; responses_url: string; generic_api_url: string; supports_image_inputs: boolean };
 
 export type RunFilterValuesResponse = { statuses: string[]; providers: string[]; models: string[] };
 

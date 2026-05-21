@@ -82,7 +82,6 @@ class DefaultWebCommandTests(unittest.TestCase):
             "PBI_AGENT_COMPACT_THRESHOLD",
             "PBI_AGENT_MAX_TOKENS",
             "PBI_AGENT_SERVICE_TIER",
-            "PBI_AGENT_WEB_SEARCH",
         ]
         previous_env = {name: os.environ.get(name) for name in env_clear}
         try:

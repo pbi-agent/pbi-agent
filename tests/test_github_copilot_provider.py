@@ -101,7 +101,7 @@ def _make_settings(**overrides: object) -> Settings:
 
 
 def test_github_copilot_responses_provider_advertises_simple_edit_tools_only() -> None:
-    provider = GitHubCopilotProvider(_make_settings(web_search=True))
+    provider = GitHubCopilotProvider(_make_settings())
 
     tool_names = {
         tool["name"]
@@ -114,8 +114,8 @@ def test_github_copilot_responses_provider_advertises_simple_edit_tools_only() -
     assert "read_web_url" in tool_names
 
 
-def test_github_copilot_provider_keeps_read_web_url_without_web_search() -> None:
-    provider = GitHubCopilotProvider(_make_settings(web_search=False))
+def test_github_copilot_provider_includes_read_web_url_with_web_group() -> None:
+    provider = GitHubCopilotProvider(_make_settings(allowed_tools=("web",)))
 
     tool_names = {
         tool["name"]

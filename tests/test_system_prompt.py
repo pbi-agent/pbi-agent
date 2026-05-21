@@ -290,7 +290,6 @@ def test_get_system_prompt_mentions_native_web_search_only_for_web_allowed_tool(
             api_key="test-key",
             provider="openai",
             allowed_tools=("web",),
-            web_search=True,
         )
     )
     read_allowed_prompt = get_system_prompt(
@@ -298,7 +297,6 @@ def test_get_system_prompt_mentions_native_web_search_only_for_web_allowed_tool(
             api_key="test-key",
             provider="openai",
             allowed_tools=("read",),
-            web_search=True,
         )
     )
 

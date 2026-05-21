@@ -188,7 +188,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--service-tier", default=None)
-    parser.add_argument("--no-web-search", action="store_true", default=False)
     return parser.parse_args(argv)
 
 
@@ -224,7 +223,6 @@ def default_settings_namespace() -> argparse.Namespace:
         reasoning_effort=None,
         compact_threshold=None,
         service_tier=None,
-        no_web_search=False,
     )
 
 

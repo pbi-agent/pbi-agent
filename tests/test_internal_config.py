@@ -61,7 +61,6 @@ def _clear_runtime_env(monkeypatch) -> None:
         "PBI_AGENT_COMPACT_THRESHOLD",
         "PBI_AGENT_MAX_TOKENS",
         "PBI_AGENT_SERVICE_TIER",
-        "PBI_AGENT_WEB_SEARCH",
         "PBI_AGENT_PROFILE_ID",
         "OPENAI_API_KEY",
         "XAI_API_KEY",
@@ -316,7 +315,6 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
             reasoning_effort="xhigh",
             max_tokens=4096,
             service_tier="flex",
-            web_search=False,
             allowed_tools=("read", "web", "shell"),
             max_tool_workers=6,
             max_retries=5,
@@ -464,7 +462,7 @@ def test_resolve_web_runtime_uses_selected_web_profile(monkeypatch) -> None:
             max_tool_workers=6,
             max_retries=5,
             compact_threshold=123456,
-            web_search=False,
+            allowed_tools=("read",),
         )
     )
     select_active_model_profile("analysis")
@@ -479,7 +477,7 @@ def test_resolve_web_runtime_uses_selected_web_profile(monkeypatch) -> None:
     assert settings.max_tool_workers == 6
     assert settings.max_retries == 5
     assert settings.compact_threshold == 123456
-    assert settings.web_search is False
+    assert settings.allowed_tools == ("read",)
     assert runtime.profile_id == "analysis"
 
 
@@ -668,7 +666,7 @@ def test_resolve_runtime_uses_active_profile_for_run_when_no_profile_selector(
             max_tool_workers=6,
             max_retries=5,
             compact_threshold=123456,
-            web_search=False,
+            allowed_tools=("read",),
         )
     )
     select_active_model_profile("analysis")
@@ -686,7 +684,7 @@ def test_resolve_runtime_uses_active_profile_for_run_when_no_profile_selector(
     assert runtime.settings.max_tool_workers == 6
     assert runtime.settings.max_retries == 5
     assert runtime.settings.compact_threshold == 123456
-    assert runtime.settings.web_search is False
+    assert runtime.settings.allowed_tools == ("read",)
 
 
 def test_resolve_runtime_cli_tool_availability_replaces_profile(

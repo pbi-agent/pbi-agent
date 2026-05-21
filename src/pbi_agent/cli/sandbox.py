@@ -400,8 +400,6 @@ def _sandbox_cli_env_overrides(args: argparse.Namespace) -> dict[str, str]:
         if value is None:
             continue
         overrides[env_name] = str(value)
-    if getattr(args, "no_web_search", False):
-        overrides["PBI_AGENT_WEB_SEARCH"] = "false"
     return overrides
 
 
