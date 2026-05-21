@@ -35,8 +35,11 @@ _ROOT_SCHEMA: dict[str, Any] = {
 SPEC = ToolSpec(
     name="search_workspace",
     description=(
-        "Search workspace content/paths. Find/list files: target=path, mode=files; "
-        "pattern=.* + regex=true returns recursive file paths only."
+        "Search workspace content/paths. drop-in replacement for `find`/`grep`/`ls` for exploration and file finding."
+    ),
+    prompt_usage=(
+        "Use `search_workspace` to find files, paths, or text in the workspace "
+        "when exploring."
     ),
     parameters_schema={
         "type": "object",

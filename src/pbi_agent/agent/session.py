@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 import json
 import logging
@@ -22,6 +22,7 @@ from pbi_agent.agent.sub_agent_discovery import (
 )
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.config import (
+    CommandConfig,
     ResolvedRuntime,
     Settings,
     find_command_config_by_alias,
@@ -48,6 +49,9 @@ from pbi_agent.models.messages import (
 from pbi_agent.observability import RunTracer
 from pbi_agent.providers import create_provider
 from pbi_agent.providers.base import Provider
+from pbi_agent.providers.github_copilot_backend import (
+    github_copilot_backend_for_model,
+)
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.tools.types import ParentContextSnapshot
@@ -173,7 +177,7 @@ def _runtime_from_provider(provider: Provider) -> ResolvedRuntime:
     return _runtime_from_settings(provider.settings)
 
 
-def _extract_active_command_instructions(value: str) -> str | None:
+def _extract_active_command(value: str) -> CommandConfig | None:
     stripped = value.strip()
     if not stripped.startswith("/"):
         return None
@@ -182,15 +186,133 @@ def _extract_active_command_instructions(value: str) -> str | None:
         command = find_command_config_by_alias(head)
     except Exception:
         return None
-    if command is None:
-        return None
-    return command.instructions
+    return command
 
 
-def _turn_instructions(active_command_instructions: str | None) -> str | None:
+def _turn_instructions(
+    active_command_instructions: str | None,
+    *,
+    settings: Settings,
+    excluded_tools: set[str] | None = None,
+) -> str | None:
     if active_command_instructions is None:
         return None
-    return get_system_prompt(active_command_instructions=active_command_instructions)
+    return get_system_prompt(
+        active_command_instructions=active_command_instructions,
+        settings=settings,
+        excluded_tools=excluded_tools,
+    )
+
+
+def _settings_with_tool_availability(
+    settings: Settings,
+    *,
+    categories: tuple[str, ...] | None,
+    names: tuple[str, ...] | None,
+) -> Settings:
+    if categories is None and names is None:
+        return settings
+    return replace(
+        settings,
+        allowed_builtin_tool_categories=categories,
+        allowed_builtin_tool_names=names,
+    )
+
+
+def _command_declares_tool_availability(command: CommandConfig) -> bool:
+    return (
+        command.allowed_builtin_tool_categories is not None
+        or command.allowed_builtin_tool_names is not None
+    )
+
+
+def _agent_definition_declares_tool_availability(
+    agent_definition: object | None,
+) -> bool:
+    return agent_definition is not None and (
+        getattr(agent_definition, "allowed_builtin_tool_categories", None) is not None
+        or getattr(agent_definition, "allowed_builtin_tool_names", None) is not None
+    )
+
+
+def _runtime_for_active_command(
+    base_runtime: ResolvedRuntime,
+    active_command: CommandConfig,
+) -> ResolvedRuntime:
+    command_runtime = base_runtime
+    if active_command.model_profile_id:
+        command_runtime = resolve_runtime_for_profile_id(
+            active_command.model_profile_id,
+            verbose=base_runtime.settings.verbose,
+        )
+        if (
+            base_runtime.tool_availability_overridden
+            and not _command_declares_tool_availability(active_command)
+        ):
+            command_runtime = replace(
+                command_runtime,
+                settings=_settings_with_tool_availability(
+                    command_runtime.settings,
+                    categories=base_runtime.settings.allowed_builtin_tool_categories,
+                    names=base_runtime.settings.allowed_builtin_tool_names,
+                ),
+                tool_availability_overridden=True,
+            )
+    if _command_declares_tool_availability(active_command):
+        command_runtime = replace(
+            command_runtime,
+            settings=_settings_with_tool_availability(
+                command_runtime.settings,
+                categories=active_command.allowed_builtin_tool_categories,
+                names=active_command.allowed_builtin_tool_names,
+            ),
+            tool_availability_overridden=True,
+        )
+    return command_runtime
+
+
+def _set_provider_tool_availability_overridden(
+    provider: Provider, overridden: bool
+) -> None:
+    setter = getattr(provider, "set_tool_availability_overridden", None)
+    if callable(setter):
+        setter(overridden)
+
+
+def _set_provider_runtime_settings(
+    provider: Provider,
+    settings: Settings,
+    *,
+    tool_availability_overridden: bool | None = None,
+) -> None:
+    if tool_availability_overridden is not None:
+        _set_provider_tool_availability_overridden(
+            provider, tool_availability_overridden
+        )
+    setter = getattr(provider, "set_runtime_settings", None)
+    if callable(setter):
+        setter(settings)
+
+
+def _requires_provider_reopen(
+    current_settings: Settings, turn_settings: Settings
+) -> bool:
+    if (
+        current_settings.provider.lower(),
+        current_settings.responses_url.strip(),
+        current_settings.generic_api_url.strip(),
+    ) != (
+        turn_settings.provider.lower(),
+        turn_settings.responses_url.strip(),
+        turn_settings.generic_api_url.strip(),
+    ):
+        return True
+    if current_settings.provider.lower() == "github_copilot":
+        return (
+            github_copilot_backend_for_model(current_settings.model).mode
+            != github_copilot_backend_for_model(turn_settings.model).mode
+        )
+    return False
 
 
 def run_single_turn(
@@ -208,6 +330,20 @@ def run_single_turn(
     runtime = _coerce_runtime(settings)
     store = _open_store(runtime.settings)
     settings = runtime.settings
+    session_start = time.monotonic()
+    prompt_text = prompt
+    active_command = _extract_active_command(prompt)
+    if active_command is not None:
+        runtime = _runtime_for_active_command(runtime, active_command)
+        settings = runtime.settings
+    active_command_instructions = (
+        active_command.instructions if active_command is not None else None
+    )
+    turn_instructions = _turn_instructions(
+        active_command_instructions,
+        settings=settings,
+        excluded_tools=INTERACTIVE_ONLY_TOOLS,
+    )
     display.welcome(
         interactive=False,
         model=_selected_model(settings),
@@ -218,11 +354,7 @@ def run_single_turn(
     _tier = settings.service_tier or ""
     session_usage = TokenUsage(model=model, service_tier=_tier)
     display.session_usage(session_usage)
-    session_start = time.monotonic()
     turn_usage = TokenUsage(model=model, service_tier=_tier)
-    prompt_text = prompt
-    active_command_instructions = _extract_active_command_instructions(prompt)
-    turn_instructions = _turn_instructions(active_command_instructions)
 
     user_input = _build_user_turn_input(
         text=prompt_text,
@@ -256,6 +388,7 @@ def run_single_turn(
         with _open_runtime_provider(
             settings,
             excluded_tools=INTERACTIVE_ONLY_TOOLS,
+            tool_availability_overridden=runtime.tool_availability_overridden,
         ) as provider:
             display.assistant_start()
             _resume_session(
@@ -413,6 +546,7 @@ def run_session_loop(
         with _open_runtime_provider(
             current_runtime.settings,
             excluded_tools=_turn_excluded_tools(interactive_mode=False),
+            tool_availability_overridden=(current_runtime.tool_availability_overridden),
         ) as provider:
             if resume_session_to_restore is not None:
                 _resume_session(
@@ -568,23 +702,39 @@ def run_session_loop(
                     )
                     display.session_usage(session_usage)
                     continue
-                active_command_instructions = _extract_active_command_instructions(
-                    user_input
+                active_command = _extract_active_command(user_input)
+                active_command_instructions = (
+                    active_command.instructions if active_command is not None else None
                 )
-                turn_instructions = _turn_instructions(active_command_instructions)
-                if (
-                    not user_input
-                    and not image_paths
-                    and not queued_images
-                    and turn_instructions is None
-                ):
+                if not user_input and not image_paths and not queued_images:
                     continue
 
+                turn_runtime = current_runtime
+                if active_command is not None:
+                    turn_runtime = _runtime_for_active_command(
+                        current_runtime, active_command
+                    )
+                    turn_settings = turn_runtime.settings
+                else:
+                    turn_settings = turn_runtime.settings
+                turn_excluded_tools = _turn_excluded_tools(
+                    interactive_mode=turn_interactive_mode
+                )
+                turn_instructions = _turn_instructions(
+                    active_command_instructions,
+                    settings=turn_settings,
+                    excluded_tools=turn_excluded_tools,
+                )
+                if turn_instructions is None and turn_interactive_mode:
+                    turn_instructions = get_system_prompt(
+                        settings=turn_settings,
+                        excluded_tools=turn_excluded_tools,
+                    )
                 turn_input = _build_user_turn_input(
                     text=user_input,
                     image_paths=image_paths,
                     images=queued_images,
-                    settings=current_runtime.settings,
+                    settings=turn_settings,
                 )
                 turn_history_text = _user_turn_history_text(turn_input)
 
@@ -606,8 +756,8 @@ def run_session_loop(
 
                 turn_start = time.monotonic()
                 turn_usage = TokenUsage(
-                    model=_selected_model(current_runtime.settings),
-                    service_tier=current_runtime.settings.service_tier or "",
+                    model=_selected_model(turn_settings),
+                    service_tier=turn_settings.service_tier or "",
                 )
                 turn_tracer = RunTracer.start(
                     store=store,
@@ -615,96 +765,137 @@ def run_session_loop(
                     session_id=session_id,
                     agent_name="main",
                     agent_type="session_turn",
-                    provider=current_runtime.settings.provider,
-                    provider_id=current_runtime.provider_id,
-                    profile_id=current_runtime.profile_id,
-                    model=_selected_model(current_runtime.settings),
+                    provider=turn_settings.provider,
+                    provider_id=turn_runtime.provider_id,
+                    profile_id=turn_runtime.profile_id,
+                    model=_selected_model(turn_settings),
                     metadata={
-                        **_run_reasoning_metadata(current_runtime.settings),
+                        **_run_reasoning_metadata(turn_settings),
                         "resumed": resume_session_id is not None,
                     },
                 )
                 display.assistant_start()
                 user_message_id: int | None = None
+                turn_provider = provider
+                reset_provider_settings = False
                 try:
                     _raise_if_interrupted(display)
-                    provider.set_excluded_tools(
-                        _turn_excluded_tools(interactive_mode=turn_interactive_mode)
-                    )
-                    user_message_id = _add_message(
-                        store,
-                        session_id,
-                        current_runtime,
-                        "user",
-                        turn_history_text,
-                        file_paths=file_paths,
-                        image_attachments=message_image_attachments,
-                    )
-                    _publish_persisted_message(
-                        display,
-                        store,
-                        user_message_id,
-                        previous_item_id=queued_item_id,
-                    )
-                    turn_tracer.log_event(
-                        "agent_step_start",
-                        metadata={"step": "initial_model_request"},
-                    )
-                    response = _request_user_turn(
-                        provider=provider,
-                        user_input=turn_input,
-                        session_id=session_id,
-                        instructions=turn_instructions,
-                        display=display,
-                        session_usage=session_usage,
-                        turn_usage=turn_usage,
-                        tracer=turn_tracer,
-                    )
-                    _raise_if_interrupted(display)
-                    turn_tracer.log_event(
-                        "agent_step_end",
-                        metadata={"step": "initial_model_request"},
-                    )
-                    response, loop_had_errors, _ = _run_tool_iterations(
-                        provider=provider,
-                        response=response,
-                        max_workers=current_runtime.settings.max_tool_workers,
-                        display=display,
-                        session_usage=session_usage,
-                        turn_usage=turn_usage,
-                        store=store,
-                        session_id=session_id,
-                        current_user_turn_text=turn_history_text,
-                        instructions=turn_instructions,
-                        tracer=turn_tracer,
-                        current_turn_tool_exchanges=[],
-                    )
-                    _raise_if_interrupted(display)
+                    with ExitStack() as turn_provider_stack:
+                        if _requires_provider_reopen(
+                            current_runtime.settings,
+                            turn_settings,
+                        ):
+                            turn_provider = turn_provider_stack.enter_context(
+                                _open_runtime_provider(
+                                    turn_settings,
+                                    excluded_tools=turn_excluded_tools,
+                                    tool_availability_overridden=(
+                                        turn_runtime.tool_availability_overridden
+                                    ),
+                                )
+                            )
+                            _refresh_provider_history_from_store(
+                                turn_provider,
+                                store,
+                                session_id,
+                                reason="command profile",
+                            )
+                        else:
+                            provider.set_excluded_tools(turn_excluded_tools)
+                            if (
+                                turn_settings != current_runtime.settings
+                                or turn_runtime.tool_availability_overridden
+                                != current_runtime.tool_availability_overridden
+                            ):
+                                _set_provider_runtime_settings(
+                                    provider,
+                                    turn_settings,
+                                    tool_availability_overridden=(
+                                        turn_runtime.tool_availability_overridden
+                                    ),
+                                )
+                                reset_provider_settings = True
+                        user_message_id = _add_message(
+                            store,
+                            session_id,
+                            turn_runtime,
+                            "user",
+                            turn_history_text,
+                            file_paths=file_paths,
+                            image_attachments=message_image_attachments,
+                        )
+                        _publish_persisted_message(
+                            display,
+                            store,
+                            user_message_id,
+                            previous_item_id=queued_item_id,
+                        )
+                        turn_tracer.log_event(
+                            "agent_step_start",
+                            metadata={"step": "initial_model_request"},
+                        )
+                        response = _request_user_turn(
+                            provider=turn_provider,
+                            user_input=turn_input,
+                            session_id=session_id,
+                            instructions=turn_instructions,
+                            display=display,
+                            session_usage=session_usage,
+                            turn_usage=turn_usage,
+                            tracer=turn_tracer,
+                        )
+                        _raise_if_interrupted(display)
+                        turn_tracer.log_event(
+                            "agent_step_end",
+                            metadata={"step": "initial_model_request"},
+                        )
+                        response, loop_had_errors, _ = _run_tool_iterations(
+                            provider=turn_provider,
+                            response=response,
+                            max_workers=turn_settings.max_tool_workers,
+                            display=display,
+                            session_usage=session_usage,
+                            turn_usage=turn_usage,
+                            store=store,
+                            session_id=session_id,
+                            current_user_turn_text=turn_history_text,
+                            instructions=turn_instructions,
+                            tracer=turn_tracer,
+                            current_turn_tool_exchanges=[],
+                        )
+                        _raise_if_interrupted(display)
 
-                    assistant_message_id = _add_message(
-                        store,
-                        session_id,
-                        current_runtime,
-                        "assistant",
-                        response.text,
-                    )
-                    _publish_persisted_message(
-                        display,
-                        store,
-                        assistant_message_id,
-                    )
-                    _update_session_after_turn(
-                        store,
-                        session_id,
-                        saved_session_runtime,
-                        session_usage,
-                    )
-                    _refresh_provider_history_from_store(
-                        provider,
-                        store,
-                        session_id,
-                        reason="turn",
-                    )
+                        assistant_message_id = _add_message(
+                            store,
+                            session_id,
+                            turn_runtime,
+                            "assistant",
+                            response.text,
+                        )
+                        _publish_persisted_message(
+                            display,
+                            store,
+                            assistant_message_id,
+                        )
+                        _update_session_after_turn(
+                            store,
+                            session_id,
+                            saved_session_runtime,
+                            session_usage,
+                        )
+                        _refresh_provider_history_from_store(
+                            turn_provider,
+                            store,
+                            session_id,
+                            reason="turn",
+                        )
+                        if turn_provider is not provider:
+                            _refresh_provider_history_from_store(
+                                provider,
+                                store,
+                                session_id,
+                                reason="turn",
+                            )
                     had_tool_errors = had_tool_errors or loop_had_errors
                     display.assistant_stop()
                     elapsed = time.monotonic() - turn_start
@@ -715,7 +906,23 @@ def run_session_loop(
                         usage=turn_usage,
                         metadata={"tool_errors": loop_had_errors},
                     )
+                    if reset_provider_settings:
+                        _set_provider_runtime_settings(
+                            provider,
+                            current_runtime.settings,
+                            tool_availability_overridden=(
+                                current_runtime.tool_availability_overridden
+                            ),
+                        )
                 except SessionTurnInterrupted:
+                    if reset_provider_settings:
+                        _set_provider_runtime_settings(
+                            provider,
+                            current_runtime.settings,
+                            tool_availability_overridden=(
+                                current_runtime.tool_availability_overridden
+                            ),
+                        )
                     display.assistant_stop()
                     turn_tracer.log_event(
                         "turn_interrupted",
@@ -726,16 +933,31 @@ def run_session_loop(
                         usage=turn_usage,
                     )
                     _discard_interrupted_turn(
-                        provider=provider,
+                        provider=turn_provider,
                         store=store,
                         session_id=session_id,
                         user_message_id=user_message_id,
                     )
+                    if turn_provider is not provider:
+                        _refresh_provider_history_from_store(
+                            provider,
+                            store,
+                            session_id,
+                            reason="interrupt",
+                        )
                     clear_interrupt = getattr(display, "clear_interrupt", None)
                     if callable(clear_interrupt):
                         clear_interrupt()
                     continue
                 except Exception as exc:
+                    if reset_provider_settings:
+                        _set_provider_runtime_settings(
+                            provider,
+                            current_runtime.settings,
+                            tool_availability_overridden=(
+                                current_runtime.tool_availability_overridden
+                            ),
+                        )
                     display.assistant_stop()
                     turn_tracer.log_error(
                         str(exc), metadata={"phase": "run_session_loop"}
@@ -764,6 +986,7 @@ def run_sub_agent_task(
     tool_catalog: "ToolCatalog | None" = None,
     agent_type: str | None = None,
     include_context: bool = False,
+    parent_tool_availability_overridden: bool = False,
     parent_context: ParentContextSnapshot | None = None,
     parent_tracer: RunTracer | None = None,
 ) -> dict[str, Any]:
@@ -783,6 +1006,9 @@ def run_sub_agent_task(
         getattr(agent_definition, "model_profile_id", None)
         if agent_definition is not None
         else None
+    )
+    agent_declares_tool_availability = _agent_definition_declares_tool_availability(
+        agent_definition
     )
     from pbi_agent.agent.names import pick_deity_name
 
@@ -807,10 +1033,27 @@ def run_sub_agent_task(
             child_settings = child_runtime.settings
             child_provider_id = child_runtime.provider_id
             child_profile_id = child_runtime.profile_id
+            if (
+                parent_tool_availability_overridden
+                and not agent_declares_tool_availability
+            ):
+                child_settings = _settings_with_tool_availability(
+                    child_settings,
+                    categories=settings.allowed_builtin_tool_categories,
+                    names=settings.allowed_builtin_tool_names,
+                )
         else:
             child_settings = replace(
                 settings,
                 model=_selected_sub_agent_model(settings),
+            )
+        if agent_declares_tool_availability:
+            child_settings = _settings_with_tool_availability(
+                child_settings,
+                categories=getattr(
+                    agent_definition, "allowed_builtin_tool_categories", None
+                ),
+                names=getattr(agent_definition, "allowed_builtin_tool_names", None),
             )
         child_display = display.begin_sub_agent(
             task_instruction=task_instruction,
@@ -858,7 +1101,9 @@ def run_sub_agent_task(
                     agent_definition.system_prompt
                     if agent_definition is not None
                     else None
-                )
+                ),
+                settings=child_settings,
+                excluded_tools=SUB_AGENT_DISABLED_TOOLS,
             ),
             excluded_tools=SUB_AGENT_DISABLED_TOOLS,
             tool_catalog=tool_catalog,
@@ -995,20 +1240,35 @@ def run_sub_agent_task(
 
 @contextmanager
 def _open_runtime_provider(
-    settings: Settings,
+    settings: Settings | ResolvedRuntime,
     *,
     system_prompt: str | None = None,
     excluded_tools: set[str] | None = None,
     tool_catalog: "ToolCatalog | None" = None,
+    tool_availability_overridden: bool | None = None,
 ):
     from pbi_agent.mcp import McpServerPool
 
+    runtime = _coerce_runtime(settings)
+    runtime_settings = runtime.settings
+    active_system_prompt = system_prompt or get_system_prompt(
+        settings=runtime_settings,
+        excluded_tools=excluded_tools,
+    )
+    effective_tool_availability_overridden = (
+        runtime.tool_availability_overridden
+        if tool_availability_overridden is None
+        else tool_availability_overridden
+    )
     if tool_catalog is not None:
         provider = create_provider(
-            settings,
-            system_prompt=system_prompt,
+            runtime_settings,
+            system_prompt=active_system_prompt,
             excluded_tools=excluded_tools,
             tool_catalog=tool_catalog,
+        )
+        _set_provider_tool_availability_overridden(
+            provider, effective_tool_availability_overridden
         )
         with provider:
             yield provider
@@ -1031,10 +1291,13 @@ def _open_runtime_provider(
             )
             try:
                 provider = create_provider(
-                    settings,
-                    system_prompt=system_prompt,
+                    runtime_settings,
+                    system_prompt=active_system_prompt,
                     excluded_tools=excluded_tools,
                     tool_catalog=tool_catalog,
+                )
+                _set_provider_tool_availability_overridden(
+                    provider, effective_tool_availability_overridden
                 )
                 with provider:
                     yield provider
@@ -2293,7 +2556,7 @@ def _reserved_slash_extension_names() -> set[str]:
 
 
 def _reload_provider_initialization(provider: Provider) -> None:
-    provider.set_system_prompt(get_system_prompt())
+    provider.set_system_prompt(get_system_prompt(settings=provider.settings))
     provider.refresh_tools()
 
 

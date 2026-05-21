@@ -188,6 +188,21 @@ def _execute_one_tool_call(
     start = time.monotonic()
     tracer = context.tracer if context is not None else None
     _log.debug("Starting tool call %s (%s)", call.call_id, call.name)
+    if context is not None and call.name in context.disabled_tool_names:
+        result = _error_result(
+            call,
+            "disabled_tool",
+            f"Tool '{call.name}' is disabled for this run.",
+        )
+        _log_tool_call(
+            tracer=tracer,
+            call=call,
+            output_payload=json.loads(result.output_json),
+            duration_ms=_duration_ms(start),
+            success=False,
+            error_message=f"Tool '{call.name}' is disabled for this run.",
+        )
+        return result
     handler = (
         tool_catalog.get_handler(call.name) if tool_catalog is not None else None
     ) or get_tool_handler(call.name)

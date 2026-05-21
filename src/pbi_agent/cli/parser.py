@@ -258,6 +258,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--session-id",
         help="Resume a previous session by ID to continue the conversation.",
     )
+    run_parser.add_argument(
+        "--allowed-built-in-tool-categories",
+        dest="allowed_builtin_tool_categories",
+        default=None,
+        help=(
+            "Comma-separated built-in tool categories to allow for this run "
+            "(read, write, web, sub-agent, shell)."
+        ),
+    )
+    run_parser.add_argument(
+        "--allowed-built-in-tools",
+        dest="allowed_builtin_tool_names",
+        default=None,
+        help="Comma-separated individual built-in tool names to allow for this run.",
+    )
 
     init_parser = add_command_parser(
         "init",
@@ -924,6 +939,21 @@ def build_parser() -> argparse.ArgumentParser:
             dest="web_search",
             action="store_false",
             help="Disable native web search for this profile.",
+        )
+        target.add_argument(
+            "--allowed-built-in-tool-categories",
+            dest="allowed_builtin_tool_categories",
+            default=None,
+            help=(
+                "Comma-separated built-in tool categories to allow "
+                "(default: all built-ins)."
+            ),
+        )
+        target.add_argument(
+            "--allowed-built-in-tools",
+            dest="allowed_builtin_tool_names",
+            default=None,
+            help="Comma-separated individual built-in tool names to allow.",
         )
         target.add_argument("--max-tool-workers", type=int, default=None)
         target.add_argument("--max-retries", type=int, default=None)

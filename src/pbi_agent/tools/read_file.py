@@ -44,6 +44,10 @@ SPEC = ToolSpec(
         "Read a file. Supports text (with line ranges), "
         "tabular data (CSV/Excel/Parquet), PDF, DOCX, and images."
     ),
+    prompt_usage=(
+        "Use `read_file` to read file content, including supported tabular, "
+        "document, and image files."
+    ),
     parameters_schema={
         "type": "object",
         "properties": {

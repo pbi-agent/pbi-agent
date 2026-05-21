@@ -6,6 +6,7 @@ import time
 import pytest
 
 from pbi_agent.display.protocol import PendingUserQuestion, UserQuestionAnswer
+from pbi_agent.tools.availability import BUILTIN_TOOL_CATEGORIES, BUILTIN_TOOL_NAMES
 from pbi_agent.tools.ask_user import handle
 from pbi_agent.tools.registry import get_tool_specs
 from pbi_agent.tools.types import ToolContext
@@ -17,6 +18,11 @@ def test_ask_user_tool_is_registered_but_excludable() -> None:
     assert all(
         spec.name != "ask_user" for spec in get_tool_specs(excluded_names={"ask_user"})
     )
+
+
+def test_ask_user_tool_is_ui_only_not_configurable_availability() -> None:
+    assert "ask_user" not in BUILTIN_TOOL_NAMES
+    assert "interactive" not in BUILTIN_TOOL_CATEGORIES
 
 
 def test_ask_user_tool_returns_answers_without_selected_suggestion_index() -> None:

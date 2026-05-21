@@ -12,7 +12,6 @@ import pytest
 from pbi_agent.cli import build_parser
 from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
-from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import (
     DEFAULT_MAX_TOKENS,
@@ -623,11 +622,42 @@ def test_openai_provider_advertises_v4a_tools_only() -> None:
     assert "read_web_url" in tool_names
 
 
-def test_openai_provider_hides_read_web_url_without_web_search() -> None:
+def test_openai_provider_keeps_ask_user_ui_only_by_default() -> None:
+    provider = OpenAIProvider(_make_settings())
+
+    default_tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    provider.set_excluded_tools(set())
+    ui_tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+
+    assert "ask_user" not in default_tool_names
+    assert "ask_user" in ui_tool_names
+
+
+def test_openai_provider_hides_native_web_search_without_web_search() -> None:
     provider = OpenAIProvider(_make_settings(web_search=False))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "read_web_url" in tool_names
+    assert {"type": "web_search"} not in provider._tools
+
+
+def test_openai_provider_hides_web_tools_when_web_category_not_allowed() -> None:
+    provider = OpenAIProvider(_make_settings(allowed_builtin_tool_categories=("read",)))
+
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" not in tool_names
+    assert {"type": "web_search"} not in provider._tools
+
+
+def test_openai_provider_individual_read_web_url_does_not_enable_native_web_search() -> (
+    None
+):
+    provider = OpenAIProvider(
+        _make_settings(allowed_builtin_tool_names=("read_web_url",))
+    )
+
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "read_web_url" in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 
@@ -952,12 +982,12 @@ def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     assert requests[0]["input"] == [
         {"role": "user", "content": "What is the temperature in San Francisco?"},
     ]
-    assert requests[0]["instructions"] == get_system_prompt()
+    assert requests[0]["instructions"] == provider._instructions
     assert requests[0]["stream"] is False
     assert requests[0]["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert "previous_response_id" not in requests[0]
     assert requests[1]["previous_response_id"] == "resp_1"
-    assert requests[1]["instructions"] == get_system_prompt()
+    assert requests[1]["instructions"] == provider._instructions
     assert requests[1]["input"] == [
         {
             "type": "function_call_output",
@@ -1214,6 +1244,43 @@ def test_chatgpt_codex_websocket_ping_pong_send_failure_is_retryable() -> None:
     assert error.__cause__ is send_error
     assert websocket.closed is True
     websocket._send_frame.assert_any_call(_WS_OPCODE_PONG, b"ping")
+    websocket._sock.close.assert_called_once()
+
+
+def test_chatgpt_codex_websocket_server_error_without_status_is_retryable() -> None:
+    websocket = ResponsesWebSocket(Mock(), response_headers={})
+    websocket._send_text = Mock()
+    websocket._recv_frame = Mock(
+        return_value=(
+            _WS_OPCODE_TEXT,
+            json.dumps(
+                {
+                    "type": "error",
+                    "sequence_number": 48,
+                    "error": {
+                        "code": None,
+                        "message": "Sorry, something went wrong.",
+                        "param": None,
+                        "type": "server_error",
+                    },
+                }
+            ).encode("utf-8"),
+        )
+    )
+
+    with pytest.raises(ChatGPTCodexWebSocketError) as exc_info:
+        websocket.send_response_create(
+            {"model": "gpt-5", "input": [], "stream": True},
+            idle_timeout=30,
+            request_timeout=30,
+        )
+
+    error = exc_info.value
+    assert str(error) == "Sorry, something went wrong."
+    assert error.status is None
+    assert error.retryable is True
+    assert error.payload["error"]["type"] == "server_error"
+    assert websocket.closed is True
     websocket._sock.close.assert_called_once()
 
 
@@ -2856,6 +2923,103 @@ def test_openai_chatgpt_websocket_retryable_timeout_traces_start_and_retry(
         call.kwargs["success"] for call in tracer.log_model_call.call_args_list
     ]
     assert model_successes == [False, True]
+
+
+def test_openai_chatgpt_websocket_server_error_event_retries(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+    sleeps: list[float] = []
+
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout
+        requests.append(request_body)
+        if len(requests) == 1:
+            websocket = ResponsesWebSocket(Mock(), response_headers={})
+            websocket._send_text = Mock()
+            websocket._recv_frame = Mock(
+                return_value=(
+                    _WS_OPCODE_TEXT,
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "sequence_number": 48,
+                            "error": {
+                                "code": None,
+                                "message": "Sorry, something went wrong.",
+                                "param": None,
+                                "type": "server_error",
+                            },
+                        }
+                    ).encode("utf-8"),
+                )
+            )
+            return websocket.send_response_create(
+                request_body,
+                idle_timeout=idle_timeout,
+                request_timeout=request_timeout,
+            )
+        return [
+            {"type": "response.created", "response": {"id": "resp_1"}},
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_1",
+                    "model": "gpt-5",
+                    "usage": {
+                        "input_tokens": 1,
+                        "input_tokens_details": {"cached_tokens": 0},
+                        "output_tokens": 1,
+                        "output_tokens_details": {"reasoning_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "Recovered."}],
+                        }
+                    ],
+                },
+            },
+        ]
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            max_retries=1,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+            ),
+        )
+    )
+    response = provider.request_turn(
+        user_input=UserTurnInput(text="Hello"),
+        session_id="session-123",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert requests[0] == requests[1]
+    assert display_spy.retry_notices == [(1, 1)]
+    assert sleeps == [0.5]
 
 
 def test_openai_chatgpt_websocket_usage_limit_429_does_not_retry(

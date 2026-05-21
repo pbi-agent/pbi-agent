@@ -23,6 +23,15 @@ CHATGPT_TURN_STATE_HEADER = "x-codex-turn-state"
 CHATGPT_WEBSOCKET_BETA_HEADER = "responses_websockets=2026-02-06"
 WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE = "websocket_connection_limit_reached"
 PREVIOUS_RESPONSE_NOT_FOUND_CODE = "previous_response_not_found"
+_RETRYABLE_WEBSOCKET_ERROR_MARKERS = {
+    "api_error",
+    "internal",
+    "server_error",
+    "server_is_overloaded",
+    "service_unavailable",
+    "unavailable",
+    "overloaded_error",
+}
 
 _WS_OPCODE_CONTINUATION = 0x0
 _WS_OPCODE_TEXT = 0x1
@@ -614,9 +623,15 @@ def _websocket_error_from_payload(
     error: WebSocketErrorPayload,
 ) -> ChatGPTCodexWebSocketError:
     code = _error_code(error.payload)
+    error_type = _error_type(error.payload)
     message = _error_message(error.payload) or "WebSocket error"
     connection_limit = code == WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE
     previous_response_not_found = code == PREVIOUS_RESPONSE_NOT_FOUND_CODE
+    # Some ChatGPT websocket error events carry no HTTP status but do carry a
+    # transient nested error marker, e.g. {"error": {"type": "server_error"}}.
+    retryable_error_marker = error.status is None and (
+        _is_retryable_error_marker(code) or _is_retryable_error_marker(error_type)
+    )
     return ChatGPTCodexWebSocketError(
         message,
         status=error.status,
@@ -624,6 +639,7 @@ def _websocket_error_from_payload(
         retryable=(
             connection_limit
             or previous_response_not_found
+            or retryable_error_marker
             or _is_retryable_status(error.status)
         ),
         connection_limit=connection_limit,
@@ -659,12 +675,28 @@ def _is_retryable_status(status: int | None) -> bool:
     return status == 503 or (status is not None and status >= 500)
 
 
+def _is_retryable_error_marker(value: str | None) -> bool:
+    return (
+        value is not None
+        and value.strip().lower() in _RETRYABLE_WEBSOCKET_ERROR_MARKERS
+    )
+
+
 def _error_code(payload: dict[str, Any]) -> str | None:
     error = payload.get("error")
     if isinstance(error, dict):
         code = error.get("code")
         if isinstance(code, str):
             return code
+    return None
+
+
+def _error_type(payload: dict[str, Any]) -> str | None:
+    error = payload.get("error")
+    if isinstance(error, dict):
+        error_type = error.get("type")
+        if isinstance(error_type, str):
+            return error_type
     return None
 
 

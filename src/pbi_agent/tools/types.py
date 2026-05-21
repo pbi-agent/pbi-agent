@@ -21,6 +21,7 @@ class ToolSpec:
     parameters_schema: dict[str, Any] = field(default_factory=dict)
     is_destructive: bool = False
     freeform_format: dict[str, str] | None = None
+    prompt_usage: str | None = None
 
     @property
     def is_freeform(self) -> bool:
@@ -49,6 +50,8 @@ class ToolContext:
     turn_usage: TokenUsage | None = None
     sub_agent_depth: int = 0
     tool_catalog: ToolCatalog | None = None
+    disabled_tool_names: set[str] = field(default_factory=set)
+    tool_availability_overridden: bool = False
     parent_context: ParentContextSnapshot | None = None
     tracer: RunTracer | None = None
     display_metadata: dict[str, Any] = field(default_factory=dict)

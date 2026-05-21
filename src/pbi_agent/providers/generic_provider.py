@@ -32,7 +32,10 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
-from pbi_agent.tools.availability import effective_excluded_tool_names
+from pbi_agent.tools.availability import (
+    default_excluded_tool_names,
+    effective_excluded_tool_names,
+)
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext, ToolResult
 from pbi_agent.display.protocol import DisplayProtocol
@@ -56,10 +59,13 @@ class GenericProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
-        self._excluded_tools = set(excluded_tools or set())
+        self._excluded_tools = default_excluded_tool_names(excluded_tools)
         self._tools: list[dict[str, Any]] = []
         self.refresh_tools()
-        self._system_prompt = system_prompt or get_system_prompt()
+        self._system_prompt = system_prompt or get_system_prompt(
+            settings=self._settings,
+            excluded_tools=self._excluded_tools,
+        )
         self._messages: list[dict[str, Any]] = []
 
     @property
@@ -175,6 +181,12 @@ class GenericProvider(Provider):
                     turn_usage=turn_usage,
                     sub_agent_depth=sub_agent_depth,
                     tool_catalog=self._tool_catalog,
+                    disabled_tool_names=effective_excluded_tool_names(
+                        self._settings, self._excluded_tools
+                    ),
+                    tool_availability_overridden=getattr(
+                        self, "_tool_availability_overridden", False
+                    ),
                     parent_context=parent_context,
                     tracer=tracer,
                 ),

@@ -220,6 +220,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         tool_catalog: ToolCatalog | None = None,
         agent_type: str | None = None,
         include_context: bool = False,
+        parent_tool_availability_overridden: bool = False,
         parent_context: ParentContextSnapshot | None = None,
         parent_tracer=None,
     ) -> dict[str, object]:
@@ -235,6 +236,9 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         captured["tool_catalog"] = tool_catalog
         captured["agent_type"] = agent_type
         captured["include_context"] = include_context
+        captured["parent_tool_availability_overridden"] = (
+            parent_tool_availability_overridden
+        )
         captured["parent_context"] = parent_context
         return {"status": "completed", "final_output": "done"}
 
@@ -254,6 +258,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
             session_usage=TokenUsage(model="gpt-5"),
             turn_usage=TokenUsage(model="gpt-5"),
             tool_catalog=ToolCatalog.from_builtin_registry(),
+            tool_availability_overridden=True,
             parent_context=ParentContextSnapshot(
                 provider="openai",
                 continuation_id="resp_parent",
@@ -267,6 +272,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         "tool_catalog": ANY,
         "agent_type": "code-reviewer",
         "include_context": True,
+        "parent_tool_availability_overridden": True,
         "parent_context": ParentContextSnapshot(
             provider="openai",
             continuation_id="resp_parent",
@@ -288,6 +294,7 @@ def test_sub_agent_tool_maps_default_agent_type_to_generalist(monkeypatch) -> No
         tool_catalog: ToolCatalog | None = None,
         agent_type: str | None = None,
         include_context: bool = False,
+        parent_tool_availability_overridden: bool = False,
         parent_context: ParentContextSnapshot | None = None,
         parent_tracer=None,
     ) -> dict[str, object]:
@@ -300,6 +307,7 @@ def test_sub_agent_tool_maps_default_agent_type_to_generalist(monkeypatch) -> No
             sub_agent_depth,
             tool_catalog,
             include_context,
+            parent_tool_availability_overridden,
             parent_context,
             parent_tracer,
         )

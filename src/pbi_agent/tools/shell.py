@@ -28,6 +28,10 @@ SHELL_EXECUTABLE_ENV = "PBI_AGENT_SHELL_EXECUTABLE"
 SPEC = ToolSpec(
     name="shell",
     description=("Run a shell command. Returns stdout, stderr, and exit code."),
+    prompt_usage=(
+        "Use `shell` for command execution, including git commands; byte-cap "
+        "commands with unknown or potentially large output."
+    ),
     parameters_schema={
         "type": "object",
         "properties": {

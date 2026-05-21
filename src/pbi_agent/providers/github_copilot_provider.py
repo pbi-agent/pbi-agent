@@ -144,6 +144,12 @@ class GitHubCopilotProvider(Provider):
     def set_excluded_tools(self, excluded_tools: set[str]) -> None:
         self._delegate.set_excluded_tools(excluded_tools)
 
+    def set_tool_availability_overridden(self, overridden: bool) -> None:
+        self._delegate.set_tool_availability_overridden(overridden)
+
+    def set_runtime_settings(self, settings: Settings) -> None:
+        self._delegate.set_runtime_settings(settings)
+
 
 class _GitHubCopilotResponsesProvider(OpenAIProvider):
     def __init__(

@@ -6,7 +6,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import (
     DEFAULT_ANTHROPIC_MODEL,
@@ -48,11 +47,11 @@ def test_anthropic_provider_advertises_simple_edit_tools_only() -> None:
     assert "read_web_url" in tool_names
 
 
-def test_anthropic_provider_hides_read_web_url_without_web_search() -> None:
+def test_anthropic_provider_hides_native_web_search_without_web_search() -> None:
     provider = AnthropicProvider(_make_settings(web_search=False))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
-    assert "read_web_url" not in tool_names
+    assert "read_web_url" in tool_names
     assert not any(
         tool.get("type") == "web_search_20250305" for tool in provider._tools
     )
@@ -226,7 +225,7 @@ def test_anthropic_request_turn_preserves_history_and_wraps_tool_results(
     assert requests[0]["max_tokens"] == DEFAULT_MAX_TOKENS
     assert requests[0]["thinking"] == {"type": "adaptive"}
     assert requests[0]["output_config"] == {"effort": "max"}
-    assert requests[0]["system"] == get_system_prompt()
+    assert requests[0]["system"] == provider._system_prompt
     assert requests[0]["messages"] == [
         {
             "role": "user",

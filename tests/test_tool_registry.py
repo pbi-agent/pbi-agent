@@ -44,12 +44,18 @@ def test_registry_returns_none_for_unknown_tool() -> None:
 
 def test_effective_excluded_tool_names_openai_uses_v4a_editing() -> None:
     excluded = effective_excluded_tool_names(
-        Settings(provider="openai", web_search=True), {"ask_user"}
+        Settings(provider="openai", web_search=True), None
     )
 
     assert {"ask_user", "replace_in_file", "write_file"} <= excluded
     assert "apply_patch" not in excluded
     assert "read_web_url" not in excluded
+
+
+def test_effective_excluded_tool_names_explicit_empty_allows_ui_only_tools() -> None:
+    excluded = effective_excluded_tool_names(Settings(provider="openai"), set())
+
+    assert "ask_user" not in excluded
 
 
 def test_effective_excluded_tool_names_chatgpt_uses_v4a_editing() -> None:
@@ -67,12 +73,53 @@ def test_effective_excluded_tool_names_non_openai_uses_simple_editing() -> None:
     assert "write_file" not in excluded
 
 
-def test_effective_excluded_tool_names_hides_read_web_url_without_web_search() -> None:
+def test_effective_excluded_tool_names_keeps_read_web_url_without_native_web_search() -> (
+    None
+):
     excluded = effective_excluded_tool_names(
         Settings(provider="openai", web_search=False)
     )
 
+    assert "read_web_url" not in excluded
+
+
+def test_effective_excluded_tool_names_honors_builtin_category_allowlist() -> None:
+    excluded = effective_excluded_tool_names(
+        Settings(
+            provider="openai",
+            allowed_builtin_tool_categories=("read",),
+        )
+    )
+
+    assert "read_file" not in excluded
+    assert "search_workspace" not in excluded
+    assert "shell" in excluded
     assert "read_web_url" in excluded
+
+
+def test_effective_excluded_tool_names_honors_individual_builtin_allowlist() -> None:
+    excluded = effective_excluded_tool_names(
+        Settings(
+            provider="openai",
+            allowed_builtin_tool_names=("shell", "read_web_url"),
+        )
+    )
+
+    assert "shell" not in excluded
+    assert "read_web_url" not in excluded
+    assert "read_file" in excluded
+
+
+def test_individual_read_web_url_does_not_enable_native_web_search() -> None:
+    from pbi_agent.tools.availability import native_web_search_enabled
+
+    settings = Settings(
+        provider="openai",
+        allowed_builtin_tool_names=("read_web_url",),
+    )
+
+    assert "read_web_url" not in effective_excluded_tool_names(settings)
+    assert native_web_search_enabled(settings) is False
 
 
 def test_apply_patch_uses_codex_freeform_spec() -> None:

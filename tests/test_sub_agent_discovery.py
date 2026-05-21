@@ -68,6 +68,68 @@ def test_discovers_model_profile_id(tmp_path: Path) -> None:
     assert agents[0].system_prompt == "Review prompt."
 
 
+def test_discovers_builtin_tool_availability(tmp_path: Path) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "reviewer.md",
+        (
+            "---\n"
+            "name: reviewer\n"
+            "description: Reviews code changes.\n"
+            "allowed_builtin_tool_categories: read, web\n"
+            "allowed_builtin_tool_names: shell\n"
+            "---\n\n"
+            "Review prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert len(agents) == 1
+    assert agents[0].allowed_builtin_tool_categories == ("read", "web")
+    assert agents[0].allowed_builtin_tool_names == ("shell",)
+
+
+def test_skips_unknown_builtin_tool_availability(tmp_path: Path, capsys) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "reviewer.md",
+        (
+            "---\n"
+            "name: reviewer\n"
+            "description: Reviews code changes.\n"
+            "allowed_builtin_tool_categories: nope\n"
+            "---\n\n"
+            "Review prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert agents == []
+    assert "unknown categories" in capsys.readouterr().err
+
+
+def test_skips_ui_only_ask_user_tool_availability(tmp_path: Path, capsys) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "reviewer.md",
+        (
+            "---\n"
+            "name: reviewer\n"
+            "description: Reviews code changes.\n"
+            "allowed_builtin_tool_names: ask_user\n"
+            "---\n\n"
+            "Review prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert agents == []
+    assert "unknown tool names: ask_user" in capsys.readouterr().err
+
+
 def test_skips_missing_description(tmp_path: Path, capsys) -> None:
     _write_sub_agent(
         tmp_path,

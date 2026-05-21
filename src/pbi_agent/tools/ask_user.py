@@ -11,6 +11,10 @@ if TYPE_CHECKING:
 SPEC = ToolSpec(
     name="ask_user",
     description=("Request user input for one to three short questions."),
+    prompt_usage=(
+        "Use `ask_user` only in interactive sessions when essential "
+        "clarification is needed."
+    ),
     parameters_schema={
         "type": "object",
         "additionalProperties": False,

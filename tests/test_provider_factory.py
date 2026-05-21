@@ -14,6 +14,17 @@ from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.providers.xai_provider import XAIProvider
 
 
+def _provider_default_prompt(provider: object) -> str:
+    if isinstance(provider, GitHubCopilotProvider):
+        return _provider_default_prompt(provider._delegate)
+    prompt = getattr(provider, "_instructions", None)
+    if isinstance(prompt, str):
+        return prompt
+    prompt = getattr(provider, "_system_prompt")
+    assert isinstance(prompt, str)
+    return prompt
+
+
 @pytest.mark.parametrize(
     ("provider_name", "expected_type"),
     [
@@ -83,3 +94,65 @@ def test_azure_routes_by_endpoint_url(url: str, expected_type: type) -> None:
     )
 
     assert isinstance(provider, expected_type)
+
+
+@pytest.mark.parametrize(
+    "provider_name",
+    [
+        "openai",
+        "chatgpt",
+        "github_copilot",
+        "xai",
+        "google",
+        "anthropic",
+        "generic",
+    ],
+)
+def test_create_provider_default_prompt_uses_active_tool_availability(
+    provider_name: str,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    if provider_name == "github_copilot":
+        settings = Settings(
+            api_key="",
+            provider=provider_name,
+            responses_url=GITHUB_COPILOT_RESPONSES_URL,
+            auth=OAuthSessionAuth(
+                provider_id="copilot-main",
+                backend="github_copilot",
+                access_token="gho_test_token",
+            ),
+            allowed_builtin_tool_categories=("read",),
+        )
+    elif provider_name == "chatgpt":
+        settings = Settings(
+            api_key="",
+            provider=provider_name,
+            auth=OAuthSessionAuth(
+                provider_id="chatgpt-main",
+                backend="openai_chatgpt",
+                access_token="access-token",
+            ),
+            allowed_builtin_tool_categories=("read",),
+        )
+    else:
+        settings = Settings(
+            api_key="test-key",
+            provider=provider_name,
+            allowed_builtin_tool_categories=("read",),
+        )
+
+    provider = create_provider(settings)
+    prompt = _provider_default_prompt(provider)
+
+    assert "Use `read_file`" in prompt
+    assert "Use `search_workspace`" in prompt
+    assert "Use `shell`" not in prompt
+    assert "Use `apply_patch`" not in prompt
+    assert "Use `replace_in_file`" not in prompt
+    assert "Use `write_file`" not in prompt
+    assert "Use `sub_agent`" not in prompt
+    assert "Use `ask_user`" not in prompt
+    assert "Use provider-native web search" not in prompt

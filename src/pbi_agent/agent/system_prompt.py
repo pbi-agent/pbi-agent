@@ -1,24 +1,29 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 from pbi_agent.agent.skill_discovery import discover_project_skills
+from pbi_agent.tools.availability import (
+    default_excluded_tool_names,
+    effective_excluded_tool_names,
+    native_web_search_enabled,
+)
+from pbi_agent.tools.registry import get_tool_specs
 
-_DEFAULT_SYSTEM_PROMPT = """
-You are task assistant. Treat every user task/question as workspace-related: inspect context, read files, run commands, edit code, write files to achieve outcome.
+if TYPE_CHECKING:
+    from pbi_agent.config import Settings
+
+_DEFAULT_SYSTEM_PROMPT_PREAMBLE = """
+You are task assistant. Treat every user task/question as workspace-related: inspect context and use available tools to achieve the outcome.
 Run through Python CLI as `pbi-agent`; check help with `pbi-agent -h` when needed.
-
-<tool_usage_rules>
-Use tools for intended purpose; prefer file tools for file ops, shell only for command execution.
-- Use `read_file` to read file content.
-- Use `write_file`, `replace_in_file`, or `apply_patch` to create/overwrite files with specified content.
-- Use `shell` for command execution, including git commands; not for file ops doable with file tools.
-- Use `search_workspace` to find files/content when exploring workspace.
-- Use `sub_agent` to delegate to specialized sub-agents for complex/multi-step tasks that benefit from isolation/focus (ONLY IF USER REQUESTS).
-</tool_usage_rules>
 """.strip()
+
+_READ_TOOL_NAMES = frozenset({"read_file", "search_workspace"})
+_WRITE_TOOL_NAMES = frozenset({"apply_patch", "replace_in_file", "write_file"})
 
 _SUB_AGENT_PROMPT = """
 <persona>
@@ -67,6 +72,86 @@ def _load_file(name: str, cwd: Path | None = None) -> str | None:
     return content
 
 
+def _active_tool_excluded_names(
+    settings: "Settings | None",
+    excluded_tools: Iterable[str] | None,
+) -> set[str]:
+    if settings is None:
+        return default_excluded_tool_names(excluded_tools)
+    return effective_excluded_tool_names(settings, excluded_tools)
+
+
+def _tool_usage_rules(
+    *,
+    settings: "Settings | None" = None,
+    excluded_tools: Iterable[str] | None = None,
+) -> str:
+    excluded_names = _active_tool_excluded_names(settings, excluded_tools)
+    specs = get_tool_specs(excluded_names=excluded_names)
+    active_names = {spec.name for spec in specs}
+
+    lines = [
+        "<tool_usage_rules>",
+        "Use only tools available in this turn's tool catalog.",
+    ]
+    if "shell" in active_names and (
+        active_names & _READ_TOOL_NAMES or active_names & _WRITE_TOOL_NAMES
+    ):
+        lines.append(
+            "Prefer file tools for file operations; use `shell` only for "
+            "command execution."
+        )
+
+    usage_lines = [
+        f"- {spec.prompt_usage}" for spec in specs if spec.prompt_usage is not None
+    ]
+    if settings is not None and native_web_search_enabled(settings):
+        usage_lines.append(
+            "- Use provider-native web search when supported by the active "
+            "provider and current web information is needed."
+        )
+
+    if usage_lines:
+        lines.extend(usage_lines)
+    else:
+        lines.append(
+            "No built-in workspace tools are available in this turn. Do not call "
+            "disabled built-in tools."
+        )
+    lines.append("</tool_usage_rules>")
+    return "\n".join(lines)
+
+
+def _default_system_prompt(
+    *,
+    settings: "Settings | None" = None,
+    excluded_tools: Iterable[str] | None = None,
+) -> str:
+    return (
+        f"{_DEFAULT_SYSTEM_PROMPT_PREAMBLE}\n\n"
+        f"{_tool_usage_rules(settings=settings, excluded_tools=excluded_tools)}"
+    )
+
+
+_DEFAULT_SYSTEM_PROMPT = _default_system_prompt()
+
+
+def _inject_tool_usage_rules(base_prompt: str, tool_usage_rules: str) -> str:
+    start_tag = "<tool_usage_rules>"
+    end_tag = "</tool_usage_rules>"
+    start_index = base_prompt.find(start_tag)
+    if start_index < 0:
+        return f"{base_prompt}\n\n{tool_usage_rules}"
+    end_index = base_prompt.find(end_tag, start_index)
+    if end_index < 0:
+        return f"{base_prompt}\n\n{tool_usage_rules}"
+    return (
+        f"{base_prompt[:start_index].rstrip()}\n\n"
+        f"{tool_usage_rules}"
+        f"{base_prompt[end_index + len(end_tag) :]}"
+    )
+
+
 def load_instructions(cwd: Path | None = None) -> str | None:
     """Read an optional ``INSTRUCTIONS.md`` from *cwd* (default: CWD)."""
     return _load_file("INSTRUCTIONS.md", cwd)
@@ -81,12 +166,20 @@ def load_project_rules(cwd: Path | None = None) -> str | None:
     return _load_file("AGENTS.md", cwd)
 
 
-def _resolve_base_prompt() -> str:
+def _resolve_base_prompt(
+    *,
+    settings: "Settings | None" = None,
+    excluded_tools: Iterable[str] | None = None,
+) -> str:
     """Return the base system prompt — custom instructions or the built-in default."""
+    tool_usage_rules = _tool_usage_rules(
+        settings=settings,
+        excluded_tools=excluded_tools,
+    )
     custom = load_instructions()
     if custom is not None:
-        return custom
-    return _DEFAULT_SYSTEM_PROMPT
+        return _inject_tool_usage_rules(custom, tool_usage_rules)
+    return f"{_DEFAULT_SYSTEM_PROMPT_PREAMBLE}\n\n{tool_usage_rules}"
 
 
 def _append_project_rules(base_prompt: str) -> str:
@@ -173,13 +266,43 @@ def _append_active_command(
     return f"{base_prompt}\n\n<active_command>\n{instructions}\n</active_command>"
 
 
-def get_system_prompt(active_command_instructions: str | None = None) -> str:
-    prompt = _append_available_skills(_append_project_rules(_resolve_base_prompt()))
-    prompt = _append_available_sub_agents(prompt)
+def get_system_prompt(
+    active_command_instructions: str | None = None,
+    *,
+    settings: "Settings | None" = None,
+    excluded_tools: Iterable[str] | None = None,
+) -> str:
+    excluded_names = _active_tool_excluded_names(settings, excluded_tools)
+    active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
+    prompt = _append_project_rules(
+        _resolve_base_prompt(settings=settings, excluded_tools=excluded_tools)
+    )
+    if "read_file" in active_names:
+        prompt = _append_available_skills(prompt)
+    if "sub_agent" in active_names:
+        prompt = _append_available_sub_agents(prompt)
     return _append_active_command(prompt, active_command_instructions)
 
 
-def get_sub_agent_system_prompt(agent_prompt_override: str | None = None) -> str:
-    base = agent_prompt_override or _resolve_base_prompt()
+def get_sub_agent_system_prompt(
+    agent_prompt_override: str | None = None,
+    *,
+    settings: "Settings | None" = None,
+    excluded_tools: Iterable[str] | None = None,
+) -> str:
+    if agent_prompt_override:
+        base = _inject_tool_usage_rules(
+            agent_prompt_override,
+            _tool_usage_rules(settings=settings, excluded_tools=excluded_tools),
+        )
+    else:
+        base = _resolve_base_prompt(
+            settings=settings,
+            excluded_tools=excluded_tools,
+        )
     prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}")
+    excluded_names = _active_tool_excluded_names(settings, excluded_tools)
+    active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
+    if "read_file" not in active_names:
+        return prompt
     return _append_available_skills(prompt)

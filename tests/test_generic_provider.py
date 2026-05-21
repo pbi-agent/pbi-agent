@@ -4,7 +4,6 @@ import json
 import urllib.request
 from unittest.mock import Mock
 
-from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.config import DEFAULT_GENERIC_API_URL, DEFAULT_MAX_TOKENS, Settings
 from pbi_agent.models.messages import (
@@ -41,11 +40,11 @@ def test_generic_provider_advertises_simple_edit_tools_only() -> None:
     assert "read_web_url" in tool_names
 
 
-def test_generic_provider_hides_read_web_url_without_web_search() -> None:
+def test_generic_provider_keeps_read_web_url_without_web_search() -> None:
     provider = GenericProvider(_make_settings(web_search=False))
 
     tool_names = {tool["function"]["name"] for tool in provider._tools}
-    assert "read_web_url" not in tool_names
+    assert "read_web_url" in tool_names
 
 
 def test_azure_chat_completions_uses_api_key_header_and_endpoint(
@@ -317,7 +316,7 @@ def test_generic_request_turn_preserves_history_and_tool_results(
     ]
     assert requests[0] == {
         "messages": [
-            {"role": "system", "content": get_system_prompt()},
+            {"role": "system", "content": provider._system_prompt},
             {"role": "user", "content": "Where am I?"},
         ],
         "max_tokens": DEFAULT_MAX_TOKENS,
@@ -326,7 +325,7 @@ def test_generic_request_turn_preserves_history_and_tool_results(
     }
     assert requests[1] == {
         "messages": [
-            {"role": "system", "content": get_system_prompt()},
+            {"role": "system", "content": provider._system_prompt},
             {"role": "user", "content": "Where am I?"},
             {
                 "role": "assistant",
@@ -423,7 +422,7 @@ def test_generic_restore_messages_reuses_persisted_history(
 
     assert requests[0] == {
         "messages": [
-            {"role": "system", "content": get_system_prompt()},
+            {"role": "system", "content": provider._system_prompt},
             {"role": "user", "content": "Original question"},
             {"role": "assistant", "content": "Original answer"},
             {"role": "user", "content": "Follow-up question"},

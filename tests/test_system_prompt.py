@@ -7,6 +7,7 @@ import stat
 
 import pytest
 
+from pbi_agent.config import Settings
 from pbi_agent.agent.system_prompt import (
     _DEFAULT_SYSTEM_PROMPT,
     _MAX_FILE_BYTES,
@@ -225,12 +226,97 @@ def test_get_system_prompt_with_project_sub_agents(tmp_path, monkeypatch):
     assert "call `sub_agent` with `agent_type`" in prompt
 
 
+def test_get_system_prompt_filters_tool_rules_by_active_availability(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        allowed_builtin_tool_categories=("read",),
+    )
+
+    prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
+
+    assert "Use `read_file`" in prompt
+    assert "Use `search_workspace`" in prompt
+    assert "Use `shell`" not in prompt
+    assert "Use `apply_patch`" not in prompt
+    assert "Use `write_file`" not in prompt
+    assert "Use `replace_in_file`" not in prompt
+    assert "Use `sub_agent`" not in prompt
+    assert "Provider-native web search" not in prompt
+
+
+def test_get_system_prompt_omits_sub_agent_catalog_when_tool_disabled(
+    tmp_path, monkeypatch
+):
+    (tmp_path / ".agents" / "agents").mkdir(parents=True)
+    (tmp_path / ".agents" / "agents" / "code-reviewer.md").write_text(
+        "---\n"
+        "name: code-reviewer\n"
+        "description: Review code changes before merging.\n"
+        "---\n\n"
+        "You are a code reviewer.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        allowed_builtin_tool_categories=("read",),
+    )
+
+    prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
+
+    assert "<available_sub_agents>" not in prompt
+    assert "<sub_agent_loading_rules>" not in prompt
+    assert "code-reviewer" not in prompt
+
+
+def test_get_system_prompt_mentions_native_web_search_only_for_web_category(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+
+    web_category_prompt = get_system_prompt(
+        settings=Settings(
+            api_key="test-key",
+            provider="openai",
+            allowed_builtin_tool_categories=("web",),
+            web_search=True,
+        )
+    )
+    individual_tool_prompt = get_system_prompt(
+        settings=Settings(
+            api_key="test-key",
+            provider="openai",
+            allowed_builtin_tool_names=("read_web_url",),
+            web_search=True,
+        )
+    )
+
+    assert "Use provider-native web search" in web_category_prompt
+    assert "Use provider-native web search" not in individual_tool_prompt
+
+
+def test_get_system_prompt_keeps_ask_user_ui_only(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    default_prompt = get_system_prompt()
+    ui_prompt = get_system_prompt(excluded_tools=set())
+
+    assert "Use `ask_user`" not in default_prompt
+    assert "Use `ask_user`" in ui_prompt
+
+
 def test_get_sub_agent_system_prompt_uses_agent_override(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     prompt = get_sub_agent_system_prompt(agent_prompt_override="You are custom.")
 
     assert "You are custom." in prompt
+    assert "<tool_usage_rules>" in prompt
     assert "<persona>" in prompt
     assert _DEFAULT_SYSTEM_PROMPT not in prompt
 
@@ -246,8 +332,33 @@ def test_get_system_prompt_uses_instructions_md(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(tmp_path)
     prompt = get_system_prompt()
-    assert prompt == "You are a code review bot."
+    assert prompt.startswith("You are a code review bot.")
+    assert "<tool_usage_rules>" in prompt
+    assert "Use `read_file`" in prompt
     assert "Power BI" not in prompt
+
+
+def test_get_system_prompt_replaces_instructions_md_tool_rules(tmp_path, monkeypatch):
+    (tmp_path / "INSTRUCTIONS.md").write_text(
+        "Custom.\n\n"
+        "<tool_usage_rules>\n"
+        "- Use `shell` for everything.\n"
+        "</tool_usage_rules>\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    prompt = get_system_prompt(
+        settings=Settings(
+            api_key="test-key",
+            provider="openai",
+            allowed_builtin_tool_categories=("read",),
+        )
+    )
+
+    assert prompt.startswith("Custom.")
+    assert "Use `read_file`" in prompt
+    assert "Use `search_workspace`" in prompt
+    assert "Use `shell` for everything" not in prompt
 
 
 def test_instructions_md_combined_with_agents_md(tmp_path, monkeypatch):

@@ -40,7 +40,11 @@ from pbi_agent.providers.chatgpt_codex_backend import (
 )
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
-from pbi_agent.tools.availability import effective_excluded_tool_names
+from pbi_agent.tools.availability import (
+    default_excluded_tool_names,
+    effective_excluded_tool_names,
+    native_web_search_enabled,
+)
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolContext, ToolResult
 from pbi_agent.web.uploads import load_uploaded_image
@@ -108,13 +112,16 @@ class OpenAIProvider(Provider):
     ) -> None:
         self._settings = settings
         self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
-        self._excluded_tools = set(excluded_tools or set())
+        self._excluded_tools = default_excluded_tool_names(excluded_tools)
         self._tools: list[dict[str, Any]] = []
         self._chatgpt_backend = ChatGPTCodexBackend(
             responses_url=self._settings.responses_url
         )
         self.refresh_tools()
-        self._instructions = system_prompt or get_system_prompt()
+        self._instructions = system_prompt or get_system_prompt(
+            settings=self._settings,
+            excluded_tools=self._excluded_tools,
+        )
         self._previous_response_id: str | None = None
         self._branch_response_id: str | None = None
         self._restored_input_items: list[dict[str, Any]] = []
@@ -158,7 +165,7 @@ class OpenAIProvider(Provider):
             excluded_names=excluded_tools
         )
         self._tools = self._chatgpt_backend.serialize_tools(base_tools)
-        if self._settings.web_search:
+        if native_web_search_enabled(self._settings):
             self._tools.append({"type": "web_search"})
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
@@ -296,6 +303,12 @@ class OpenAIProvider(Provider):
                     turn_usage=turn_usage,
                     sub_agent_depth=sub_agent_depth,
                     tool_catalog=self._tool_catalog,
+                    disabled_tool_names=effective_excluded_tool_names(
+                        self._settings, self._excluded_tools
+                    ),
+                    tool_availability_overridden=getattr(
+                        self, "_tool_availability_overridden", False
+                    ),
                     parent_context=parent_context,
                     tracer=tracer,
                 ),

@@ -19,6 +19,10 @@ SPEC = ToolSpec(
         "Write complete text content to one file, creating parent directories as needed. "
         "Best for new files, generated files, or small full-file rewrites."
     ),
+    prompt_usage=(
+        "Use `write_file` to create a file or replace a whole text file with "
+        "complete content."
+    ),
     parameters_schema={
         "type": "object",
         "properties": {

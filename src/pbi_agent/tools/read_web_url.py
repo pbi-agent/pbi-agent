@@ -17,6 +17,7 @@ _REQUEST_TIMEOUT_SECS = 120.0
 SPEC = ToolSpec(
     name="read_web_url",
     description="Fetch a public web page and return it as Markdown.",
+    prompt_usage="Use `read_web_url` to fetch a public web page as Markdown.",
     parameters_schema={
         "type": "object",
         "properties": {

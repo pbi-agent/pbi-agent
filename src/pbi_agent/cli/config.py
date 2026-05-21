@@ -36,6 +36,7 @@ from pbi_agent.config import (
     list_model_profile_configs,
     load_internal_config,
     list_provider_configs,
+    parse_csv_setting,
     select_active_model_profile,
     slugify,
     update_maintenance_config,
@@ -289,6 +290,12 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
                 max_tokens=args.max_tokens,
                 service_tier=args.service_tier,
                 web_search=args.web_search,
+                allowed_builtin_tool_categories=parse_csv_setting(
+                    args.allowed_builtin_tool_categories
+                ),
+                allowed_builtin_tool_names=parse_csv_setting(
+                    args.allowed_builtin_tool_names
+                ),
                 max_tool_workers=args.max_tool_workers,
                 max_retries=args.max_retries,
                 compact_threshold=args.compact_threshold,
@@ -311,6 +318,12 @@ def _handle_config_profiles_command(args: argparse.Namespace) -> int:
             max_tokens=args.max_tokens,
             service_tier=args.service_tier,
             web_search=args.web_search,
+            allowed_builtin_tool_categories=parse_csv_setting(
+                args.allowed_builtin_tool_categories
+            ),
+            allowed_builtin_tool_names=parse_csv_setting(
+                args.allowed_builtin_tool_names
+            ),
             max_tool_workers=args.max_tool_workers,
             max_retries=args.max_retries,
             compact_threshold=args.compact_threshold,

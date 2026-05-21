@@ -4,10 +4,13 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+from typing import cast
 import urllib.request
 
 import pytest
 
+from pbi_agent.auth.models import AUTH_MODE_COPILOT_ACCOUNT
+from pbi_agent.auth.providers.github_copilot import GITHUB_COPILOT_RESPONSES_URL
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.agent import session as session_module
 from pbi_agent.agent.compaction_prompt import COMPACTION_PROMPT
@@ -18,7 +21,9 @@ from pbi_agent.agent.session import (
     COMPACT_COMMAND,
     COMPACTION_MARKER,
     INIT_COMMAND,
+    INTERACTIVE_ONLY_TOOLS,
     _open_compaction_provider,
+    _open_runtime_provider,
     NEW_SESSION_SENTINEL,
     RELOAD_COMMAND,
     _resume_session,
@@ -35,6 +40,10 @@ from pbi_agent.config import (
     DEFAULT_MODEL,
     ResolvedRuntime,
     Settings,
+    ModelProfileConfig,
+    ProviderConfig,
+    create_model_profile_config,
+    create_provider_config,
 )
 from pbi_agent.models.messages import (
     CompletedResponse,
@@ -44,11 +53,14 @@ from pbi_agent.models.messages import (
     UserTurnInput,
 )
 from pbi_agent.observability import RunTracer
+from pbi_agent.providers.github_copilot_backend import (
+    github_copilot_backend_for_model,
+)
 from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.session_store import SessionStore
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.display.protocol import QueuedInput, QueuedRuntimeChange
+from pbi_agent.display.protocol import DisplayProtocol, QueuedInput, QueuedRuntimeChange
 from pbi_agent.workspace_context import WORKSPACE_KEY_ENV
 
 
@@ -707,6 +719,206 @@ def test_run_sub_agent_task_reports_missing_model_profile_as_sub_agent_failure(
     assert display.sub_agent_finish_statuses == ["failed"]
 
 
+def test_run_sub_agent_task_preserves_parent_tool_availability_for_profiled_agent(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Reviews code changes.\n"
+        "model_profile_id: shell-profile\n"
+        "---\n\n"
+        "Review the code.\n",
+        encoding="utf-8",
+    )
+    display = _DisplaySpy()
+    provider = _ProviderStub()
+    opened_settings: list[Settings] = []
+    parent_settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        model="parent-model",
+        allowed_builtin_tool_categories=("read", "sub-agent"),
+    )
+
+    def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
+        return ResolvedRuntime(
+            settings=Settings(
+                api_key="test-key",
+                provider="openai",
+                model="profile-model",
+                allowed_builtin_tool_categories=("shell",),
+            ),
+            provider_id="openai-main",
+            profile_id="shell-profile",
+        )
+
+    @contextmanager
+    def _open_runtime_provider(settings: Settings, **_: object):
+        opened_settings.append(settings)
+        yield provider
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.resolve_runtime_for_profile_id",
+        _resolve_profile,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _open_runtime_provider,
+    )
+
+    result = run_sub_agent_task(
+        "Review this change",
+        parent_settings,
+        cast(DisplayProtocol, display),
+        parent_session_usage=TokenUsage(model="parent-model"),
+        parent_turn_usage=TokenUsage(model="parent-model"),
+        agent_type="reviewer",
+        parent_tool_availability_overridden=True,
+    )
+
+    assert result["status"] == "completed"
+    assert opened_settings[0].model == "profile-model"
+    assert opened_settings[0].allowed_builtin_tool_categories == ("read", "sub-agent")
+    assert opened_settings[0].allowed_builtin_tool_names is None
+
+
+def test_run_sub_agent_task_uses_profile_tool_availability_without_parent_override(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Reviews code changes.\n"
+        "model_profile_id: shell-profile\n"
+        "---\n\n"
+        "Review the code.\n",
+        encoding="utf-8",
+    )
+    display = _DisplaySpy()
+    provider = _ProviderStub()
+    opened_settings: list[Settings] = []
+    parent_settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        model="parent-model",
+        allowed_builtin_tool_categories=("read", "sub-agent"),
+    )
+
+    def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
+        return ResolvedRuntime(
+            settings=Settings(
+                api_key="test-key",
+                provider="openai",
+                model="profile-model",
+                allowed_builtin_tool_categories=("shell",),
+            ),
+            provider_id="openai-main",
+            profile_id="shell-profile",
+        )
+
+    @contextmanager
+    def _open_runtime_provider(settings: Settings, **_: object):
+        opened_settings.append(settings)
+        yield provider
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.resolve_runtime_for_profile_id",
+        _resolve_profile,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _open_runtime_provider,
+    )
+
+    result = run_sub_agent_task(
+        "Review this change",
+        parent_settings,
+        cast(DisplayProtocol, display),
+        parent_session_usage=TokenUsage(model="parent-model"),
+        parent_turn_usage=TokenUsage(model="parent-model"),
+        agent_type="reviewer",
+    )
+
+    assert result["status"] == "completed"
+    assert opened_settings[0].model == "profile-model"
+    assert opened_settings[0].allowed_builtin_tool_categories == ("shell",)
+    assert opened_settings[0].allowed_builtin_tool_names is None
+
+
+def test_run_sub_agent_task_uses_agent_tool_availability_over_parent_for_profiled_agent(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Reviews code changes.\n"
+        "model_profile_id: shell-profile\n"
+        "allowed_builtin_tool_categories: web\n"
+        "---\n\n"
+        "Review the code.\n",
+        encoding="utf-8",
+    )
+    display = _DisplaySpy()
+    provider = _ProviderStub()
+    opened_settings: list[Settings] = []
+    parent_settings = Settings(
+        api_key="test-key",
+        provider="openai",
+        model="parent-model",
+        allowed_builtin_tool_categories=("read", "sub-agent"),
+    )
+
+    def _resolve_profile(*_: object, **__: object) -> ResolvedRuntime:
+        return ResolvedRuntime(
+            settings=Settings(
+                api_key="test-key",
+                provider="openai",
+                model="profile-model",
+                allowed_builtin_tool_categories=("shell",),
+            ),
+            provider_id="openai-main",
+            profile_id="shell-profile",
+        )
+
+    @contextmanager
+    def _open_runtime_provider(settings: Settings, **_: object):
+        opened_settings.append(settings)
+        yield provider
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.resolve_runtime_for_profile_id",
+        _resolve_profile,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _open_runtime_provider,
+    )
+
+    result = run_sub_agent_task(
+        "Review this change",
+        parent_settings,
+        cast(DisplayProtocol, display),
+        parent_session_usage=TokenUsage(model="parent-model"),
+        parent_turn_usage=TokenUsage(model="parent-model"),
+        agent_type="reviewer",
+    )
+
+    assert result["status"] == "completed"
+    assert opened_settings[0].model == "profile-model"
+    assert opened_settings[0].allowed_builtin_tool_categories == ("web",)
+    assert opened_settings[0].allowed_builtin_tool_names is None
+
+
 class _SessionDisplaySpy(_DisplaySpy):
     def __init__(self, prompts: list[str | QueuedInput | QueuedRuntimeChange]) -> None:
         super().__init__()
@@ -882,6 +1094,26 @@ class _ChatProviderStub:
         turn_usage.add(response.usage)
         self.previous_response_id = response.response_id
         return response
+
+
+class _RuntimeSettingsChatProviderStub(_ChatProviderStub):
+    def __init__(self) -> None:
+        super().__init__()
+        self._settings = Settings(api_key="test-key", provider="openai")
+        self.request_settings: list[Settings] = []
+        self.runtime_settings_calls: list[Settings] = []
+
+    @property
+    def settings(self) -> Settings:
+        return self._settings
+
+    def set_runtime_settings(self, settings: Settings) -> None:
+        self._settings = settings
+        self.runtime_settings_calls.append(settings)
+
+    def request_turn(self, **kwargs) -> CompletedResponse:
+        self.request_settings.append(self.settings)
+        return super().request_turn(**kwargs)
 
 
 class _CompactProviderStub(_ChatProviderStub):
@@ -1130,6 +1362,32 @@ def test_run_session_loop_resets_welcome_and_usage_on_new_session(monkeypatch) -
     assert [usage.total_tokens for usage in display.session_usage_calls] == [0, 3, 0, 3]
     assert display.reset_session_calls == 1
     assert display.assistant_start_calls == 2
+
+
+def test_run_session_loop_interactive_mode_injects_ask_user_prompt_rules(
+    monkeypatch,
+) -> None:
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy(
+        [QueuedInput(text="clarify", interactive_mode=True), "quit"]
+    )
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    monotonic_values = iter([5.0, 6.5])
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.excluded_tools == set()
+    assert provider.request_instructions
+    assert "Use `ask_user`" in str(provider.request_instructions[0])
 
 
 def test_run_session_loop_persists_per_turn_usage_in_run_sessions(
@@ -1686,6 +1944,51 @@ def test_open_compaction_provider_uses_compaction_prompt_as_system_prompt(
 
     assert captured["system_prompt"] == COMPACTION_PROMPT
     assert captured["system_prompt"] != get_system_prompt()
+
+
+def test_open_runtime_provider_filters_default_prompt_by_tool_availability(
+    monkeypatch,
+) -> None:
+    captured = {}
+
+    class _ProviderWithSystemPrompt:
+        def __init__(self, settings, *args, **kwargs) -> None:
+            del args, settings
+            captured["system_prompt"] = kwargs.get("system_prompt")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def connect(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.openai_provider.OpenAIProvider",
+        _ProviderWithSystemPrompt,
+    )
+
+    with _open_runtime_provider(
+        Settings(
+            api_key="test-key",
+            provider="openai",
+            allowed_builtin_tool_categories=("read",),
+        ),
+        excluded_tools=INTERACTIVE_ONLY_TOOLS,
+    ):
+        pass
+
+    system_prompt = captured["system_prompt"]
+    assert "Use `read_file`" in system_prompt
+    assert "Use `search_workspace`" in system_prompt
+    assert "Use `shell`" not in system_prompt
+    assert "Use `apply_patch`" not in system_prompt
+    assert "Use `sub_agent`" not in system_prompt
 
 
 def test_run_session_loop_restores_only_active_context_after_compaction(
@@ -2306,6 +2609,272 @@ def test_run_session_loop_keeps_command_alias_and_uses_turn_specific_instruction
     assert "<active_command>\nPlan before coding.\n</active_command>" in str(
         provider.request_instructions[0]
     )
+
+
+def test_run_session_loop_resolves_command_profile_before_tool_settings(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="saved-openai-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-main",
+            model="profile-model",
+            allowed_builtin_tool_categories=("web",),
+            allowed_builtin_tool_names=("shell",),
+        )
+    )
+    _write_command(
+        tmp_path,
+        "profile-tools",
+        "---\n"
+        "name: Profile Tools\n"
+        "description: Use profile tools.\n"
+        "model_profile_id: analysis\n"
+        "---\n\n"
+        "Use the profile.",
+    )
+    _write_command(
+        tmp_path,
+        "command-tools",
+        "---\n"
+        "name: Command Tools\n"
+        "description: Override profile tools.\n"
+        "model_profile_id: analysis\n"
+        "allowed_builtin_tool_categories: read\n"
+        "---\n\n"
+        "Use command tools.",
+    )
+    provider = _RuntimeSettingsChatProviderStub()
+    display = _SessionDisplaySpy(
+        ["/profile-tools inspect", "/command-tools inspect", "quit"]
+    )
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert [item.model for item in provider.request_settings] == [
+        "profile-model",
+        "profile-model",
+    ]
+    assert provider.request_settings[0].allowed_builtin_tool_categories == ("web",)
+    assert provider.request_settings[0].allowed_builtin_tool_names == ("shell",)
+    assert provider.request_settings[1].allowed_builtin_tool_categories == ("read",)
+    assert provider.request_settings[1].allowed_builtin_tool_names is None
+
+
+def test_run_single_turn_preserves_cli_tool_overrides_for_command_profile(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="saved-openai-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-main",
+            model="profile-model",
+            allowed_builtin_tool_categories=("web",),
+            allowed_builtin_tool_names=("shell",),
+        )
+    )
+    _write_command(
+        tmp_path,
+        "profile-tools",
+        "---\n"
+        "name: Profile Tools\n"
+        "description: Use profile tools.\n"
+        "model_profile_id: analysis\n"
+        "---\n\n"
+        "Use the profile.",
+    )
+    provider = _RuntimeSettingsChatProviderStub()
+    opened_settings: list[Settings] = []
+
+    @contextmanager
+    def _open_runtime_provider(settings: Settings, **kwargs):
+        del kwargs
+        opened_settings.append(settings)
+        provider._settings = settings
+        yield provider
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _open_runtime_provider,
+    )
+
+    outcome = run_single_turn(
+        "/profile-tools inspect",
+        ResolvedRuntime(
+            settings=Settings(
+                api_key="cli-key",
+                provider="openai",
+                allowed_builtin_tool_categories=("read",),
+            ),
+            provider_id=None,
+            profile_id=None,
+            tool_availability_overridden=True,
+        ),
+        _DisplaySpy(),
+    )
+
+    assert outcome.text == "Ack"
+    assert [item.model for item in opened_settings] == ["profile-model"]
+    assert provider.request_settings[0].api_key == "saved-openai-key"
+    assert provider.request_settings[0].allowed_builtin_tool_categories == ("read",)
+    assert provider.request_settings[0].allowed_builtin_tool_names is None
+
+
+def test_run_session_loop_reopens_provider_for_command_profile_backend(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    create_provider_config(
+        ProviderConfig(
+            id="google-main",
+            name="Google Main",
+            kind="google",
+            api_key="saved-google-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="google-main",
+            model=DEFAULT_GOOGLE_MODEL,
+        )
+    )
+    _write_command(
+        tmp_path,
+        "profile-backend",
+        "---\n"
+        "name: Profile Backend\n"
+        "description: Use profile backend.\n"
+        "model_profile_id: analysis\n"
+        "---\n\n"
+        "Use the profile backend.",
+    )
+    openai_provider = _RuntimeSettingsChatProviderStub()
+    google_provider = _RuntimeSettingsChatProviderStub()
+    opened_providers: list[str] = []
+
+    @contextmanager
+    def _open_runtime_provider(settings: Settings, **kwargs):
+        del kwargs
+        opened_providers.append(settings.provider)
+        provider = google_provider if settings.provider == "google" else openai_provider
+        provider._settings = settings
+        yield provider
+
+    display = _SessionDisplaySpy(["/profile-backend inspect", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _open_runtime_provider,
+    )
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert opened_providers == ["openai", "google"]
+    assert openai_provider.request_messages == []
+    assert google_provider.request_messages == ["/profile-backend inspect"]
+    assert google_provider.request_settings[0].provider == "google"
+    assert google_provider.request_settings[0].model == DEFAULT_GOOGLE_MODEL
+
+
+def test_run_session_loop_reopens_copilot_provider_for_delegate_mode_change(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    create_provider_config(
+        ProviderConfig(
+            id="copilot-main",
+            name="Copilot Main",
+            kind="github_copilot",
+            auth_mode=AUTH_MODE_COPILOT_ACCOUNT,
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="copilot-chat",
+            name="Copilot Chat",
+            provider_id="copilot-main",
+            model="claude-sonnet-4",
+        )
+    )
+    _write_command(
+        tmp_path,
+        "copilot-chat",
+        "---\n"
+        "name: Copilot Chat\n"
+        "description: Use Copilot chat completions.\n"
+        "model_profile_id: copilot-chat\n"
+        "---\n\n"
+        "Use the Copilot chat delegate.",
+    )
+    responses_provider = _RuntimeSettingsChatProviderStub()
+    chat_provider = _RuntimeSettingsChatProviderStub()
+    opened_modes: list[str] = []
+
+    @contextmanager
+    def _open_runtime_provider(settings: Settings, **kwargs):
+        del kwargs
+        mode = github_copilot_backend_for_model(settings.model).mode
+        opened_modes.append(mode)
+        provider = chat_provider if mode == "chat_completions" else responses_provider
+        provider._settings = settings
+        yield provider
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _open_runtime_provider,
+    )
+
+    exit_code = run_session_loop(
+        Settings(
+            api_key="",
+            provider="github_copilot",
+            responses_url=GITHUB_COPILOT_RESPONSES_URL,
+            model="gpt-5.4",
+            max_tool_workers=2,
+        ),
+        _SessionDisplaySpy(["/copilot-chat inspect", "quit"]),
+    )
+
+    assert exit_code == 0
+    assert opened_modes == ["responses", "chat_completions"]
+    assert responses_provider.request_messages == []
+    assert chat_provider.request_messages == ["/copilot-chat inspect"]
+    assert chat_provider.request_settings[0].model == "claude-sonnet-4"
 
 
 def test_run_session_loop_uses_command_instructions_when_body_starts_on_next_line(

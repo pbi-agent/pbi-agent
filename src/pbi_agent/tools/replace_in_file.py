@@ -20,6 +20,10 @@ SPEC = ToolSpec(
         "Replace a unique text block in one file. Use after read_file for targeted edits; "
         "include enough old_string context to make the match unique."
     ),
+    prompt_usage=(
+        "Use `replace_in_file` for targeted text edits after reading enough "
+        "context to make the match unique."
+    ),
     parameters_schema={
         "type": "object",
         "properties": {

@@ -44,6 +44,24 @@ def test_execute_tool_calls_reports_unknown_tool_error(monkeypatch) -> None:
     }
 
 
+def test_execute_tool_calls_rejects_disabled_builtin_tool() -> None:
+    batch = tool_runtime.execute_tool_calls(
+        [ToolCall(call_id="call_1", name="shell", arguments={})],
+        max_workers=1,
+        context=ToolContext(disabled_tool_names={"shell"}),
+    )
+
+    assert batch.had_errors is True
+    assert json.loads(batch.results[0].output_json) == {
+        "ok": False,
+        "error": {
+            "type": "disabled_tool",
+            "message": "Tool 'shell' is disabled for this run.",
+        },
+        "tool": "shell",
+    }
+
+
 def test_execute_tool_calls_preserves_tool_output_error_state() -> None:
     catalog = ToolCatalog(
         {

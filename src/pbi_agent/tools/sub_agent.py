@@ -20,6 +20,10 @@ def build_spec() -> ToolSpec:
             "Delegate a scoped task to a child agent with the same tools. "
             "Set `include_context` to inherit the parent conversation context."
         ),
+        prompt_usage=(
+            "Use `sub_agent` only when the user requests delegation or a task "
+            "benefits from isolated specialist work."
+        ),
         parameters_schema={
             "type": "object",
             "properties": {
@@ -144,6 +148,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         tool_catalog=tool_catalog,
         agent_type=agent_type,
         include_context=include_context,
+        parent_tool_availability_overridden=context.tool_availability_overridden,
         parent_context=parent_context,
         parent_tracer=parent_tracer,
     )

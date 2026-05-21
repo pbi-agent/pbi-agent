@@ -6,7 +6,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
@@ -143,11 +142,11 @@ def test_xai_provider_advertises_simple_edit_tools_only() -> None:
     assert "read_web_url" in tool_names
 
 
-def test_xai_provider_hides_read_web_url_without_web_search() -> None:
+def test_xai_provider_hides_native_web_search_without_web_search() -> None:
     provider = XAIProvider(_make_settings(web_search=False))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
-    assert "read_web_url" not in tool_names
+    assert "read_web_url" in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 
@@ -363,7 +362,7 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     assert first.response_id == "resp_1"
     assert second.response_id == "resp_2"
     assert requests[0]["input"] == [
-        {"role": "system", "content": get_system_prompt()},
+        {"role": "system", "content": provider._instructions},
         {"role": "user", "content": "What is the temperature in San Francisco?"},
     ]
     assert "instructions" not in requests[0]

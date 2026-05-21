@@ -20,6 +20,8 @@ class ProjectSubAgent:
     system_prompt: str
     location: Path
     model_profile_id: str | None = None
+    allowed_builtin_tool_categories: tuple[str, ...] | None = None
+    allowed_builtin_tool_names: tuple[str, ...] | None = None
 
 
 def format_project_sub_agents_markdown(workspace: Path | None = None) -> str:
@@ -132,9 +134,14 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
     if not isinstance(description, str) or not description.strip():
         _warn(f"Skipping sub-agent at {agent_path}: missing non-empty 'description'.")
         return None
-    unsupported_keys = sorted(
-        set(metadata) - {"name", "description", "model_profile_id"}
-    )
+    supported_keys = {
+        "name",
+        "description",
+        "model_profile_id",
+        "allowed_builtin_tool_categories",
+        "allowed_builtin_tool_names",
+    }
+    unsupported_keys = sorted(set(metadata) - supported_keys)
     if unsupported_keys:
         _warn(
             f"Skipping sub-agent at {agent_path}: unsupported frontmatter keys: "
@@ -154,12 +161,31 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
             return None
 
     normalized_name = name.strip()
+    from pbi_agent.config import ConfigError, parse_csv_setting
+
+    allowed_categories = parse_csv_setting(
+        metadata.get("allowed_builtin_tool_categories")
+    )
+    allowed_names = parse_csv_setting(metadata.get("allowed_builtin_tool_names"))
+    try:
+        from pbi_agent.config import validate_builtin_tool_availability
+
+        validate_builtin_tool_availability(
+            allowed_categories,
+            allowed_names,
+            error_prefix="Sub-agent tool availability",
+        )
+    except ConfigError as exc:
+        _warn(f"Skipping sub-agent at {agent_path}: {exc}")
+        return None
     return ProjectSubAgent(
         name=normalized_name,
         description=description.strip(),
         system_prompt=_extract_body(content).strip(),
         location=agent_path.resolve(),
         model_profile_id=normalized_model_profile_id,
+        allowed_builtin_tool_categories=allowed_categories,
+        allowed_builtin_tool_names=allowed_names,
     )
 
 

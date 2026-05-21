@@ -6,7 +6,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
@@ -69,11 +68,11 @@ def test_google_provider_advertises_simple_edit_tools_only() -> None:
     assert "read_web_url" in tool_names
 
 
-def test_google_provider_hides_read_web_url_without_web_search() -> None:
+def test_google_provider_hides_native_web_search_without_web_search() -> None:
     provider = GoogleProvider(_make_settings(web_search=False))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
-    assert "read_web_url" not in tool_names
+    assert "read_web_url" in tool_names
     assert {"type": "google_search"} not in provider._tools
 
 
@@ -352,7 +351,7 @@ def test_google_request_turn_reuses_previous_interaction_id(monkeypatch) -> None
     assert first.response_id == "int_1"
     assert second.response_id == "int_2"
     assert requests[0]["input"] == "What is the temperature in San Francisco?"
-    assert requests[0]["system_instruction"] == get_system_prompt()
+    assert requests[0]["system_instruction"] == provider._instructions
     assert requests[0]["generation_config"] == {
         "thinking_level": "high",
         "thinking_summaries": "auto",
@@ -360,7 +359,7 @@ def test_google_request_turn_reuses_previous_interaction_id(monkeypatch) -> None
     }
     assert "previous_interaction_id" not in requests[0]
     assert requests[1]["previous_interaction_id"] == "int_1"
-    assert requests[1]["system_instruction"] == get_system_prompt()
+    assert requests[1]["system_instruction"] == provider._instructions
     assert requests[1]["input"] == [
         {
             "type": "function_result",

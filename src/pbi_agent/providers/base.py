@@ -23,6 +23,8 @@ class Provider(ABC):
     - Tool execution and result formatting
     """
 
+    _tool_availability_overridden: bool = False
+
     @abstractmethod
     def connect(self) -> None:
         """Establish the connection / session."""
@@ -105,6 +107,17 @@ class Provider(ABC):
         if getattr(self, "_excluded_tools", set()) == excluded_tools:
             return
         self._excluded_tools = set(excluded_tools)
+        self.refresh_tools()
+
+    def set_tool_availability_overridden(self, overridden: bool) -> None:
+        """Record whether the active runtime has explicit tool overrides."""
+        self._tool_availability_overridden = overridden
+
+    def set_runtime_settings(self, settings: Settings) -> None:
+        """Replace runtime settings and rebuild definitions."""
+        if getattr(self, "_settings", None) == settings:
+            return
+        self._settings = settings
         self.refresh_tools()
 
     # -- context manager convenience ----------------------------------------

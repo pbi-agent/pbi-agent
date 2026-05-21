@@ -114,7 +114,7 @@ def test_github_copilot_responses_provider_advertises_simple_edit_tools_only() -
     assert "read_web_url" in tool_names
 
 
-def test_github_copilot_provider_hides_read_web_url_without_web_search() -> None:
+def test_github_copilot_provider_keeps_read_web_url_without_web_search() -> None:
     provider = GitHubCopilotProvider(_make_settings(web_search=False))
 
     tool_names = {
@@ -122,7 +122,23 @@ def test_github_copilot_provider_hides_read_web_url_without_web_search() -> None
         for tool in provider._delegate._tools
         if "name" in tool  # type: ignore[attr-defined]
     }
-    assert "read_web_url" not in tool_names
+    assert "read_web_url" in tool_names
+
+
+def test_github_copilot_provider_forwards_runtime_settings_to_delegate() -> None:
+    provider = GitHubCopilotProvider(_make_settings())
+
+    provider.set_runtime_settings(
+        _make_settings(allowed_builtin_tool_categories=("shell",))
+    )
+
+    tool_names = {
+        tool["name"]
+        for tool in provider._delegate._tools
+        if "name" in tool  # type: ignore[attr-defined]
+    }
+    assert "shell" in tool_names
+    assert "read_file" not in tool_names
 
 
 def test_github_copilot_chat_provider_advertises_simple_edit_tools_only() -> None:

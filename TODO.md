@@ -1,3 +1,2 @@
-[X] Compress _DEFAULT_SYSTEM_PROMPT
-[X] Validate import/syntax
-[X] Update memory
+[X] Remove stale `read_image` docs entry.
+[X] Run focused docs validation.

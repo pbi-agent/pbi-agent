@@ -32,7 +32,7 @@ def create_provider(
     - ``"generic"``          → OpenAI-compatible Chat Completions HTTP provider
     """
     name = settings.provider.lower()
-    effective_excluded_tools = set(excluded_tools or set())
+    effective_excluded_tools = None if excluded_tools is None else set(excluded_tools)
 
     if name == "azure":
         from pbi_agent.providers.anthropic_provider import AnthropicProvider
