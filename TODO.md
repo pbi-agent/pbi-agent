@@ -1,2 +1,4 @@
-[X] Remove stale `read_image` docs entry.
-[X] Run focused docs validation.
+[X] Remove unused default system prompt constant.
+[X] Update affected system prompt tests.
+[X] Run focused validation.
+[X] Update task memory.

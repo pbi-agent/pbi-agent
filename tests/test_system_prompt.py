@@ -9,13 +9,18 @@ import pytest
 
 from pbi_agent.config import Settings
 from pbi_agent.agent.system_prompt import (
-    _DEFAULT_SYSTEM_PROMPT,
     _MAX_FILE_BYTES,
     get_sub_agent_system_prompt,
     get_system_prompt,
     load_instructions,
     load_project_rules,
 )
+
+
+def _assert_builtin_prompt_base(prompt: str) -> None:
+    assert prompt.startswith("You are task assistant.")
+    assert "<tool_usage_rules>" in prompt
+    assert "</tool_usage_rules>" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +134,8 @@ def test_instructions_truncates_large_file(tmp_path, capsys):
 def test_get_system_prompt_without_agents_md(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     prompt = get_system_prompt()
-    assert prompt == _DEFAULT_SYSTEM_PROMPT
+    _assert_builtin_prompt_base(prompt)
+    assert prompt.endswith("</tool_usage_rules>")
     assert "<project_rules>" not in prompt
     assert "<available_skills>" not in prompt
 
@@ -138,7 +144,7 @@ def test_get_system_prompt_with_agents_md(tmp_path, monkeypatch):
     (tmp_path / "AGENTS.md").write_text("Always use pytest.", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     prompt = get_system_prompt()
-    assert prompt.startswith(_DEFAULT_SYSTEM_PROMPT)
+    _assert_builtin_prompt_base(prompt)
     assert "<project_rules>\nAlways use pytest.\n</project_rules>" in prompt
 
 
@@ -170,7 +176,7 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     prompt = get_system_prompt()
 
-    assert prompt.startswith(_DEFAULT_SYSTEM_PROMPT)
+    _assert_builtin_prompt_base(prompt)
     assert "<available_skills>" in prompt
     assert "<name>code-review</name>" in prompt
     assert (
@@ -318,7 +324,7 @@ def test_get_sub_agent_system_prompt_uses_agent_override(tmp_path, monkeypatch):
     assert "You are custom." in prompt
     assert "<tool_usage_rules>" in prompt
     assert "<persona>" in prompt
-    assert _DEFAULT_SYSTEM_PROMPT not in prompt
+    assert "You are task assistant." not in prompt
 
 
 # ---------------------------------------------------------------------------

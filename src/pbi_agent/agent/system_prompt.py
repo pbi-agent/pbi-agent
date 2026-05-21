@@ -122,20 +122,6 @@ def _tool_usage_rules(
     return "\n".join(lines)
 
 
-def _default_system_prompt(
-    *,
-    settings: "Settings | None" = None,
-    excluded_tools: Iterable[str] | None = None,
-) -> str:
-    return (
-        f"{_DEFAULT_SYSTEM_PROMPT_PREAMBLE}\n\n"
-        f"{_tool_usage_rules(settings=settings, excluded_tools=excluded_tools)}"
-    )
-
-
-_DEFAULT_SYSTEM_PROMPT = _default_system_prompt()
-
-
 def _inject_tool_usage_rules(base_prompt: str, tool_usage_rules: str) -> str:
     start_tag = "<tool_usage_rules>"
     end_tag = "</tool_usage_rules>"
