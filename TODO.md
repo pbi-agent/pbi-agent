@@ -1,5 +1,3 @@
-[X] Trace web turn-based include-tool-history flow.
-[X] Patch live-session reuse/startup state handling.
-[X] Add regression tests for toggling after first turn.
+[X] Fix sandbox run return path.
+[X] Preserve grouped parallel tool calls in restored fallback history.
 [X] Run focused validation.
-[X] Update memory and summarize.

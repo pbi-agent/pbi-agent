@@ -448,6 +448,82 @@ def test_generic_restore_messages_reuses_persisted_history(
     assert display_spy.markdown_calls == ["Follow-up answer."]
 
 
+def test_generic_restore_history_groups_parallel_tool_calls() -> None:
+    provider = GenericProvider(_make_settings())
+
+    provider.restore_history_items(
+        [
+            {
+                "type": "tool_call_group",
+                "calls": [
+                    {
+                        "type": "tool_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "arguments": {"command": "pwd"},
+                    },
+                    {
+                        "type": "tool_call",
+                        "call_id": "call_2",
+                        "name": "shell",
+                        "arguments": {"command": "git status"},
+                    },
+                ],
+            },
+            {
+                "type": "tool_result_group",
+                "results": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "call_1",
+                        "output": {"ok": True, "result": "/workspace"},
+                    },
+                    {
+                        "type": "tool_result",
+                        "call_id": "call_2",
+                        "output": {"ok": True, "result": "clean"},
+                    },
+                ],
+            },
+        ]
+    )
+
+    assert provider._messages == [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "shell",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                },
+                {
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {
+                        "name": "shell",
+                        "arguments": '{"command": "git status"}',
+                    },
+                },
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": '{"ok": true, "result": "/workspace"}',
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_2",
+            "content": '{"ok": true, "result": "clean"}',
+        },
+    ]
+
+
 def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
     monkeypatch,
     display_spy,

@@ -197,7 +197,7 @@ class ChatGPTCodexBackend:
             include_context_management=True,
             stream=True,
             tool_choice="auto",
-            include=[],
+            include=["reasoning.encrypted_content"],
             use_session_prompt_cache_key=True,
         )
 

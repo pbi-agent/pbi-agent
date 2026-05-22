@@ -217,6 +217,48 @@ def test_explore_workspace_supports_multiple_search_roots(
     assert set(result.splitlines()) == {"src/service.py", "tests/test_service.py"}
 
 
+def test_explore_workspace_splits_space_separated_search_root_string(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "src" / "pbi_agent").mkdir(parents=True)
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "src" / "pbi_agent" / "service.py").write_text(
+        "needle\n", encoding="utf-8"
+    )
+    (tmp_path / "tests" / "test_service.py").write_text("needle\n", encoding="utf-8")
+
+    result = explore_workspace_tool.handle(
+        {"pattern": "needle", "root": "tests src/pbi_agent", "regex": False},
+        ToolContext(),
+    )
+
+    assert isinstance(result, str)
+    assert set(result.splitlines()) == {
+        "src/pbi_agent/service.py",
+        "tests/test_service.py",
+    }
+
+
+def test_explore_workspace_preserves_existing_search_root_with_spaces(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "my docs").mkdir()
+    (tmp_path / "my").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "my docs" / "service.py").write_text("needle\n", encoding="utf-8")
+    (tmp_path / "my" / "ignored.py").write_text("needle\n", encoding="utf-8")
+    (tmp_path / "docs" / "ignored.py").write_text("needle\n", encoding="utf-8")
+
+    result = explore_workspace_tool.handle(
+        {"pattern": "needle", "root": "my docs", "regex": False},
+        ToolContext(),
+    )
+
+    assert result == "service.py"
+
+
 def test_explore_workspace_rejects_read_list_multi_root(
     tmp_path: Path, monkeypatch
 ) -> None:

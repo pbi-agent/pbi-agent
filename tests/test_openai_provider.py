@@ -299,7 +299,7 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
     assert body["store"] is False
     assert body["parallel_tool_calls"] is True
     assert body["tool_choice"] == "auto"
-    assert body["include"] == []
+    assert body["include"] == ["reasoning.encrypted_content"]
     assert body["prompt_cache_key"] == "session-123"
     assert body["reasoning"] == {"effort": "xhigh", "summary": "auto"}
     assert body["input"] == [{"role": "user", "content": "hello"}]
@@ -344,7 +344,7 @@ def test_openai_build_request_body_omits_chatgpt_prompt_cache_key_without_sessio
     )
 
     assert body["tool_choice"] == "auto"
-    assert body["include"] == []
+    assert body["include"] == ["reasoning.encrypted_content"]
     assert "prompt_cache_key" not in body
 
 
@@ -398,6 +398,102 @@ def test_openai_build_request_body_replays_restored_history_without_previous_res
         {"role": "user", "content": "continue"},
     ]
     assert "previous_response_id" not in body
+
+
+def test_openai_build_request_body_replays_restored_response_items() -> None:
+    provider = OpenAIProvider(_make_settings())
+    restored_items = [
+        {"role": "user", "content": "hello"},
+        {"type": "reasoning", "id": "rs_1", "summary": []},
+        {
+            "type": "message",
+            "id": "msg_1",
+            "role": "assistant",
+            "status": "completed",
+            "phase": "commentary",
+            "content": [{"type": "output_text", "text": "hi"}],
+        },
+    ]
+    expected_items = [
+        {"role": "user", "content": "hello"},
+        {"type": "reasoning", "summary": []},
+        {
+            "type": "message",
+            "role": "assistant",
+            "status": "completed",
+            "phase": "commentary",
+            "content": [{"type": "output_text", "text": "hi"}],
+        },
+    ]
+    provider.restore_history_items(
+        [
+            {
+                "type": "provider_input_item",
+                "format": "openai_responses",
+                "item": item,
+            }
+            for item in restored_items
+        ]
+    )
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "continue"}],
+        instructions="be concise",
+    )
+
+    assert body["input"] == [
+        *expected_items,
+        {"role": "user", "content": "continue"},
+    ]
+
+
+def test_openai_chatgpt_build_request_body_replays_restored_response_items() -> None:
+    provider = OpenAIProvider(
+        _make_settings(responses_url=OPENAI_CHATGPT_RESPONSES_URL)
+    )
+    restored_items = [
+        {"role": "user", "content": "hello"},
+        {"type": "reasoning", "id": "rs_1", "summary": []},
+        {
+            "type": "message",
+            "id": "msg_1",
+            "role": "assistant",
+            "status": "completed",
+            "phase": "commentary",
+            "content": [{"type": "output_text", "text": "hi"}],
+        },
+    ]
+    expected_items = [
+        {"role": "user", "content": "hello"},
+        {"type": "reasoning", "summary": []},
+        {
+            "type": "message",
+            "role": "assistant",
+            "status": "completed",
+            "phase": "commentary",
+            "content": [{"type": "output_text", "text": "hi"}],
+        },
+    ]
+    provider.restore_history_items(
+        [
+            {
+                "type": "provider_input_item",
+                "format": "openai_responses",
+                "item": item,
+            }
+            for item in restored_items
+        ]
+    )
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "continue"}],
+        instructions="be concise",
+    )
+
+    assert body["input"] == [
+        *expected_items,
+        {"role": "user", "content": "continue"},
+    ]
 
 
 def test_openai_build_request_body_replays_restored_user_images_without_previous_response_id(

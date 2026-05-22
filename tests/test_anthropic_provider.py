@@ -370,6 +370,82 @@ def test_anthropic_restore_messages_reuses_persisted_history(
     ]
 
 
+def test_anthropic_restore_history_groups_parallel_tool_calls() -> None:
+    provider = AnthropicProvider(_make_settings())
+
+    provider.restore_history_items(
+        [
+            {
+                "type": "tool_call_group",
+                "calls": [
+                    {
+                        "type": "tool_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "arguments": {"command": "pwd"},
+                    },
+                    {
+                        "type": "tool_call",
+                        "call_id": "call_2",
+                        "name": "shell",
+                        "arguments": {"command": "git status"},
+                    },
+                ],
+            },
+            {
+                "type": "tool_result_group",
+                "results": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "call_1",
+                        "output": {"ok": True, "result": "/workspace"},
+                    },
+                    {
+                        "type": "tool_result",
+                        "call_id": "call_2",
+                        "output": {"ok": True, "result": "clean"},
+                    },
+                ],
+            },
+        ]
+    )
+
+    assert provider._messages == [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "call_1",
+                    "name": "shell",
+                    "input": {"command": "pwd"},
+                },
+                {
+                    "type": "tool_use",
+                    "id": "call_2",
+                    "name": "shell",
+                    "input": {"command": "git status"},
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "call_1",
+                    "content": '{"ok": true, "result": "/workspace"}',
+                },
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "call_2",
+                    "content": '{"ok": true, "result": "clean"}',
+                },
+            ],
+        },
+    ]
+
+
 def test_anthropic_restore_messages_replays_restored_user_images(
     monkeypatch,
     tmp_path,

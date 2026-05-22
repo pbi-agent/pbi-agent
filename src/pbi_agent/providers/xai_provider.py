@@ -147,11 +147,7 @@ class XAIProvider(Provider):
         ]
 
     def restore_history_items(self, items: list[dict[str, Any]]) -> None:
-        self._restored_input_items = [
-            restored
-            for item in items
-            if (restored := _history_item_to_input_item(item)) is not None
-        ]
+        self._restored_input_items = _history_items_to_input_items(items)
 
     def request_turn(
         self,
@@ -637,8 +633,38 @@ def _build_user_input_item(prompt: str) -> dict[str, Any]:
     return {"role": "user", "content": prompt}
 
 
+def _history_items_to_input_items(
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    restored_items: list[dict[str, Any]] = []
+    for item in items:
+        if item.get("type") == "tool_call_group":
+            child_items = item.get("calls", [])
+        elif item.get("type") == "tool_result_group":
+            child_items = item.get("results", [])
+        else:
+            child_items = None
+
+        if child_items is not None:
+            for child in child_items:
+                if (
+                    isinstance(child, dict)
+                    and (restored := _history_item_to_input_item(child)) is not None
+                ):
+                    restored_items.append(restored)
+            continue
+        if (restored := _history_item_to_input_item(item)) is not None:
+            restored_items.append(restored)
+    return restored_items
+
+
 def _history_item_to_input_item(item: dict[str, Any]) -> dict[str, Any] | None:
     item_type = item.get("type")
+    if item_type == "provider_input_item":
+        raw_item = item.get("item")
+        if item.get("format") == "openai_responses" and isinstance(raw_item, dict):
+            return _response_history_item_for_input(raw_item)
+        return None
     if item_type == "message":
         message = item.get("message")
         if (
@@ -677,6 +703,22 @@ def _history_item_to_input_item(item: dict[str, Any]) -> dict[str, Any] | None:
 
 def _build_system_input_item(prompt: str) -> dict[str, Any]:
     return {"role": "system", "content": prompt}
+
+
+def _response_history_item_for_input(item: dict[str, Any]) -> dict[str, Any]:
+    return _strip_provider_item_ids(json.loads(json.dumps(item)))
+
+
+def _strip_provider_item_ids(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _strip_provider_item_ids(inner)
+            for key, inner in value.items()
+            if key != "id"
+        }
+    if isinstance(value, list):
+        return [_strip_provider_item_ids(item) for item in value]
+    return value
 
 
 def _extract_reasoning_summary_texts(raw_summary: Any) -> list[str]:

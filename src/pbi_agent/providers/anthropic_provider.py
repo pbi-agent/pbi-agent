@@ -712,20 +712,60 @@ def _history_item_to_message(item: dict[str, Any]) -> dict[str, Any] | None:
                 }
             ],
         }
+    if item_type == "tool_call_group":
+        tool_use_blocks: list[dict[str, Any]] = []
+        for call in item.get("calls", []):
+            if not isinstance(call, dict):
+                continue
+            call_id = str(call.get("call_id") or "")
+            name = str(call.get("name") or "")
+            if not call_id or not name:
+                continue
+            tool_use_blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": call_id,
+                    "name": name,
+                    "input": call.get("arguments") or {},
+                }
+            )
+        if not tool_use_blocks:
+            return None
+        return {"role": "assistant", "content": tool_use_blocks}
     if item_type == "tool_result":
         call_id = str(item.get("call_id") or "")
         if not call_id:
             return None
         output = item.get("output")
-        content = output if isinstance(output, str) else json.dumps(output)
-        result: dict[str, Any] = {
+        result_content = output if isinstance(output, str) else json.dumps(output)
+        result_block: dict[str, Any] = {
             "type": "tool_result",
             "tool_use_id": call_id,
-            "content": content,
+            "content": result_content,
         }
         if item.get("is_error"):
-            result["is_error"] = True
-        return {"role": "user", "content": [result]}
+            result_block["is_error"] = True
+        return {"role": "user", "content": [result_block]}
+    if item_type == "tool_result_group":
+        result_blocks: list[dict[str, Any]] = []
+        for result_item in item.get("results", []):
+            if not isinstance(result_item, dict):
+                continue
+            call_id = str(result_item.get("call_id") or "")
+            if not call_id:
+                continue
+            output = result_item.get("output")
+            grouped_result_block: dict[str, Any] = {
+                "type": "tool_result",
+                "tool_use_id": call_id,
+                "content": output if isinstance(output, str) else json.dumps(output),
+            }
+            if result_item.get("is_error"):
+                grouped_result_block["is_error"] = True
+            result_blocks.append(grouped_result_block)
+        if not result_blocks:
+            return None
+        return {"role": "user", "content": result_blocks}
     return None
 
 

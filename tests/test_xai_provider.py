@@ -211,6 +211,50 @@ def test_xai_build_request_body_maps_grok_3_mini_reasoning_effort() -> None:
     assert body["include"] == ["web_search_call.action.sources"]
 
 
+def test_xai_build_request_body_replays_restored_response_items() -> None:
+    provider = XAIProvider(_make_settings())
+    restored_items = [
+        {"role": "user", "content": "hello"},
+        {"type": "reasoning", "id": "rs_1", "summary": []},
+        {
+            "type": "message",
+            "id": "msg_1",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "hi"}],
+        },
+    ]
+    expected_items = [
+        {"role": "user", "content": "hello"},
+        {"type": "reasoning", "summary": []},
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "hi"}],
+        },
+    ]
+    provider.restore_history_items(
+        [
+            {
+                "type": "provider_input_item",
+                "format": "openai_responses",
+                "item": item,
+            }
+            for item in restored_items
+        ]
+    )
+
+    body = provider._build_request_body(
+        input_items=[{"role": "user", "content": "continue"}],
+        instructions="be concise",
+    )
+
+    assert body["input"] == [
+        {"role": "system", "content": "be concise"},
+        *expected_items,
+        {"role": "user", "content": "continue"},
+    ]
+
+
 def test_xai_parse_response_extracts_function_calls_and_encrypted_reasoning() -> None:
     provider = XAIProvider(_make_settings())
 

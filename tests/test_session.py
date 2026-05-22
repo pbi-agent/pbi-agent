@@ -430,12 +430,174 @@ def test_run_single_turn_restores_tool_history_when_enabled(
             provider_id=None,
             profile_id=None,
             model=DEFAULT_MODEL,
+            status="completed",
         )
         store.add_observability_event(
             run_session_id=run_id,
             session_id=session_id,
             step_index=0,
             event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "previous user"}],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_1",
+                        "summary": [
+                            {
+                                "type": "summary_text",
+                                "text": "Need to inspect cwd.",
+                            }
+                        ],
+                    },
+                    {
+                        "type": "function_call",
+                        "id": "fc_1",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "status": "completed",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_1",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=2,
+            event_type="model_call",
+            request_payload={
+                "input": [
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_1",
+                        "output": '{"ok": true, "result": "/workspace"}',
+                    }
+                ],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_2",
+                        "summary": [],
+                    },
+                    {
+                        "type": "message",
+                        "id": "msg_1",
+                        "role": "assistant",
+                        "status": "completed",
+                        "phase": "commentary",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "previous assistant",
+                            }
+                        ],
+                    },
+                ]
+            },
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    outcome = run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert outcome.session_id == session_id
+    assert provider.restored_history_items is not None
+    assert [item["type"] for item in provider.restored_history_items] == [
+        "provider_input_item",
+        "provider_input_item",
+        "provider_input_item",
+        "provider_input_item",
+        "provider_input_item",
+        "provider_input_item",
+    ]
+    restored_items = [item["item"] for item in provider.restored_history_items]
+    assert [item.get("type", item.get("role")) for item in restored_items] == [
+        "user",
+        "reasoning",
+        "function_call",
+        "function_call_output",
+        "reasoning",
+        "message",
+    ]
+    assert restored_items[1] == {
+        "type": "reasoning",
+        "summary": [{"type": "summary_text", "text": "Need to inspect cwd."}],
+    }
+    assert restored_items[2] == {
+        "type": "function_call",
+        "call_id": "call_1",
+        "name": "shell",
+        "status": "completed",
+        "arguments": '{"command": "pwd"}',
+    }
+    assert restored_items[3]["output"] == '{"ok": true, "result": "/workspace"}'
+    assert restored_items[5]["content"] == [
+        {"type": "output_text", "text": "previous assistant"}
+    ]
+    assert [message.content for message in display.replayed_history] == [
+        "previous user",
+        "previous assistant",
+    ]
+
+
+def test_run_single_turn_falls_back_to_tool_history_when_response_history_incomplete(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub()
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "previous user")
+        store.add_message(session_id, "assistant", "previous assistant")
+        run_id = store.create_run_session(
+            run_session_id="run-1",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "previous user"}],
+            },
             response_payload={
                 "output": [
                     {
@@ -481,20 +643,115 @@ def test_run_single_turn_restores_tool_history_when_enabled(
         "tool_result",
         "message",
     ]
-    assert provider.restored_history_items[1] == {
-        "type": "tool_call",
-        "call_id": "call_1",
-        "name": "shell",
-        "arguments": {"command": "pwd"},
-        "kind": "function",
-    }
+    assert provider.restored_history_items[1]["call_id"] == "call_1"
     assert provider.restored_history_items[2]["output"] == {
         "ok": True,
         "result": "/workspace",
     }
-    assert [message.content for message in display.replayed_history] == [
-        "previous user",
-        "previous assistant",
+
+
+def test_run_single_turn_groups_parallel_tool_history_when_response_history_incomplete(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub()
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "previous user")
+        store.add_message(session_id, "assistant", "previous assistant")
+        run_id = store.create_run_session(
+            run_session_id="run-1",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "previous user"}],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_2",
+                        "name": "shell",
+                        "arguments": '{"command": "git status"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_1",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=2,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_2",
+            tool_input={"command": "git status"},
+            tool_output={"ok": True, "result": "clean"},
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    outcome = run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert outcome.session_id == session_id
+    assert provider.restored_history_items is not None
+    assert [item["type"] for item in provider.restored_history_items[:4]] == [
+        "message",
+        "tool_call_group",
+        "tool_result_group",
+        "message",
+    ]
+    tool_call_group = provider.restored_history_items[1]
+    assert [call["call_id"] for call in tool_call_group["calls"]] == [
+        "call_1",
+        "call_2",
+    ]
+    tool_result_group = provider.restored_history_items[2]
+    assert [result["call_id"] for result in tool_result_group["results"]] == [
+        "call_1",
+        "call_2",
     ]
 
 
@@ -1563,30 +1820,63 @@ def test_run_session_loop_honors_per_turn_tool_history_preference(
             kwargs["session_usage"].add(response.usage)
             kwargs["turn_usage"].add(response.usage)
             tracer = kwargs.get("tracer")
-            if tracer is not None and response.function_calls:
-                tracer.log_model_call(
-                    provider="openai",
-                    model=DEFAULT_MODEL,
-                    url="https://example.test/responses",
-                    request_config={"provider": "openai"},
-                    request_payload={"input": user_message},
-                    response_payload={
-                        "output": [
-                            {
-                                "type": "function_call",
-                                "call_id": "call_1",
-                                "name": "shell",
-                                "arguments": '{"command": "pwd"}',
-                            }
-                        ]
-                    },
-                    duration_ms=1,
-                    prompt_tokens=response.usage.input_tokens,
-                    completion_tokens=response.usage.output_tokens,
-                    total_tokens=response.usage.total_tokens,
-                    status_code=200,
-                    success=True,
-                )
+            if tracer is not None:
+                if response.function_calls:
+                    tracer.log_model_call(
+                        provider="openai",
+                        model=DEFAULT_MODEL,
+                        url="https://example.test/responses",
+                        request_config={"provider": "openai"},
+                        request_payload={
+                            "input": [{"role": "user", "content": user_message}]
+                        },
+                        response_payload={
+                            "output": [
+                                {
+                                    "type": "function_call",
+                                    "call_id": "call_1",
+                                    "name": "shell",
+                                    "arguments": '{"command": "pwd"}',
+                                }
+                            ]
+                        },
+                        duration_ms=1,
+                        prompt_tokens=response.usage.input_tokens,
+                        completion_tokens=response.usage.output_tokens,
+                        total_tokens=response.usage.total_tokens,
+                        status_code=200,
+                        success=True,
+                    )
+                elif user_message is None:
+                    tracer.log_model_call(
+                        provider="openai",
+                        model=DEFAULT_MODEL,
+                        url="https://example.test/responses",
+                        request_config={"provider": "openai"},
+                        request_payload={
+                            "input": kwargs.get("tool_result_items") or [],
+                        },
+                        response_payload={
+                            "output": [
+                                {
+                                    "type": "message",
+                                    "role": "assistant",
+                                    "content": [
+                                        {
+                                            "type": "output_text",
+                                            "text": response.text,
+                                        }
+                                    ],
+                                }
+                            ]
+                        },
+                        duration_ms=1,
+                        prompt_tokens=response.usage.input_tokens,
+                        completion_tokens=response.usage.output_tokens,
+                        total_tokens=response.usage.total_tokens,
+                        status_code=200,
+                        success=True,
+                    )
             return response
 
         def execute_tool_calls(
@@ -1656,16 +1946,23 @@ def test_run_session_loop_honors_per_turn_tool_history_preference(
     second_request_history = provider.history_items_at_user_requests[1]
     assert second_request_history is not None
     assert [item["type"] for item in second_request_history[:4]] == [
-        "message",
-        "tool_call",
-        "tool_result",
+        "provider_input_item",
+        "provider_input_item",
+        "provider_input_item",
+        "provider_input_item",
+    ]
+    restored_items = [item["item"] for item in second_request_history[:4]]
+    assert [item.get("type", item.get("role")) for item in restored_items] == [
+        "user",
+        "function_call",
+        "function_call_output",
         "message",
     ]
-    assert second_request_history[1]["call_id"] == "call_1"
-    assert second_request_history[2]["output"] == {
-        "ok": True,
-        "result": "/workspace",
-    }
+    assert restored_items[1]["call_id"] == "call_1"
+    assert restored_items[2]["output"] == '{"ok": true, "result": "/workspace"}'
+    assert restored_items[3]["content"] == [
+        {"type": "output_text", "text": "First done."}
+    ]
 
 
 def test_run_session_loop_persists_per_turn_usage_in_run_sessions(

@@ -201,6 +201,91 @@ def test_google_build_request_body_replays_restored_user_images_without_previous
     assert "previous_interaction_id" not in body
 
 
+def test_google_restore_history_groups_parallel_tool_calls() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    provider.restore_history_items(
+        [
+            {
+                "type": "tool_call_group",
+                "calls": [
+                    {
+                        "type": "tool_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "arguments": {"command": "pwd"},
+                    },
+                    {
+                        "type": "tool_call",
+                        "call_id": "call_2",
+                        "name": "shell",
+                        "arguments": {"command": "git status"},
+                    },
+                ],
+            },
+            {
+                "type": "tool_result_group",
+                "results": [
+                    {
+                        "type": "tool_result",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "output": {"ok": True, "result": "/workspace"},
+                    },
+                    {
+                        "type": "tool_result",
+                        "call_id": "call_2",
+                        "name": "shell",
+                        "output": {"ok": True, "result": "clean"},
+                    },
+                ],
+            },
+        ]
+    )
+
+    body = provider._build_request_body(
+        input_value="continue",
+        instructions="be concise",
+    )
+
+    assert body["input"][:2] == [
+        {
+            "role": "model",
+            "content": [
+                {
+                    "type": "function_call",
+                    "id": "call_1",
+                    "name": "shell",
+                    "arguments": {"command": "pwd"},
+                },
+                {
+                    "type": "function_call",
+                    "id": "call_2",
+                    "name": "shell",
+                    "arguments": {"command": "git status"},
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "function_result",
+                    "name": "shell",
+                    "call_id": "call_1",
+                    "result": '{"ok": true, "result": "/workspace"}',
+                },
+                {
+                    "type": "function_result",
+                    "name": "shell",
+                    "call_id": "call_2",
+                    "result": '{"ok": true, "result": "clean"}',
+                },
+            ],
+        },
+    ]
+
+
 def test_google_provider_exposes_shell_required_schema() -> None:
     provider = GoogleProvider(_make_settings())
 

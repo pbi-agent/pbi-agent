@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,7 @@ SPEC = ToolSpec(
     prompt_usage=(
         "Use `explore_workspace` for workspace search/read/list: "
         'content `{pattern:"UserService",regex:false}`, '
+        'multi-root `{pattern:"UserService",root:["tests","src/pbi_agent"]}`, '
         'path `{pattern:"service",target:"path",glob:"*.py",regex:false}`, '
         'read `{pattern:"src/app.py",target:"read",start_line:20,limit:80}`, '
         'list `{pattern:"src",target:"list",limit:100}`.'
@@ -242,6 +244,10 @@ def _resolve_search_root(workspace_root: Path, raw_root: Any) -> Path | list[Pat
                 raise ValueError("'root' array items must be non-empty strings.")
             roots.append(_resolve_single_workspace_root(workspace_root, item))
         return roots
+    if isinstance(raw_root, str):
+        split_roots = _resolve_space_separated_search_roots(workspace_root, raw_root)
+        if split_roots is not None:
+            return split_roots
     return _resolve_single_workspace_root(workspace_root, raw_root)
 
 
@@ -249,6 +255,43 @@ def _resolve_single_read_list_root(workspace_root: Path, raw_root: Any) -> Path:
     if isinstance(raw_root, (list, tuple)):
         raise ValueError("'root' must be a single path for read/list targets.")
     return _resolve_single_workspace_root(workspace_root, raw_root)
+
+
+def _resolve_space_separated_search_roots(
+    workspace_root: Path,
+    raw_root: str,
+) -> list[Path] | None:
+    if not raw_root.strip() or not any(char.isspace() for char in raw_root):
+        return None
+    exact_root = resolve_safe_path(workspace_root, raw_root, default=".").resolve(
+        strict=False
+    )
+    _ensure_inside(
+        exact_root, workspace_root, message="'root' must resolve inside the workspace."
+    )
+    if exact_root.exists():
+        return None
+    try:
+        parts = [
+            _strip_matching_quotes(part) for part in shlex.split(raw_root, posix=False)
+        ]
+    except ValueError:
+        return None
+    if len(parts) < 2 or not all(part.strip() for part in parts):
+        return None
+    roots: list[Path] = []
+    for part in parts:
+        try:
+            roots.append(_resolve_single_workspace_root(workspace_root, part))
+        except ValueError:
+            return None
+    return roots
+
+
+def _strip_matching_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
 
 
 def _resolve_single_workspace_root(workspace_root: Path, raw_root: Any) -> Path:

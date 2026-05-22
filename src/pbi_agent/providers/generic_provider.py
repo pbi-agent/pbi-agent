@@ -104,11 +104,7 @@ class GenericProvider(Provider):
         ]
 
     def restore_history_items(self, items: list[dict[str, Any]]) -> None:
-        self._messages = [
-            restored
-            for item in items
-            if (restored := _history_item_to_message(item)) is not None
-        ]
+        self._messages = _history_items_to_messages(items)
 
     def request_turn(
         self,
@@ -419,6 +415,22 @@ def _generic_tool_result_item(result: ToolResult) -> dict[str, Any]:
     }
 
 
+def _history_items_to_messages(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    for item in items:
+        if item.get("type") == "tool_result_group":
+            for result in item.get("results", []):
+                if (
+                    isinstance(result, dict)
+                    and (restored := _history_item_to_message(result)) is not None
+                ):
+                    messages.append(restored)
+            continue
+        if (restored := _history_item_to_message(item)) is not None:
+            messages.append(restored)
+    return messages
+
+
 def _history_item_to_message(item: dict[str, Any]) -> dict[str, Any] | None:
     item_type = item.get("type")
     if item_type == "message":
@@ -454,6 +466,33 @@ def _history_item_to_message(item: dict[str, Any]) -> dict[str, Any] | None:
                 }
             ],
         }
+    if item_type == "tool_call_group":
+        tool_calls: list[dict[str, Any]] = []
+        for call in item.get("calls", []):
+            if not isinstance(call, dict):
+                continue
+            call_id = str(call.get("call_id") or "")
+            name = str(call.get("name") or "")
+            if not call_id or not name:
+                continue
+            arguments = call.get("arguments")
+            tool_calls.append(
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": (
+                            arguments
+                            if isinstance(arguments, str)
+                            else json.dumps(arguments or {})
+                        ),
+                    },
+                }
+            )
+        if not tool_calls:
+            return None
+        return {"role": "assistant", "content": "", "tool_calls": tool_calls}
     if item_type == "tool_result":
         call_id = str(item.get("call_id") or "")
         if not call_id:
