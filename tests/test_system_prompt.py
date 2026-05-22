@@ -188,7 +188,10 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
     assert "the user explicitly names it" in prompt
     assert "Treat `$<skill-name>` in user input as an explicit request" in prompt
     assert "strip the `$` and match `<skill-name>`" in prompt
-    assert "load its SKILL.md with read_file using the listed location" in prompt
+    assert (
+        'load its SKILL.md with `explore_workspace` target="read" using the listed location'
+        in prompt
+    )
 
 
 def test_get_sub_agent_system_prompt_with_project_skills(tmp_path, monkeypatch):
@@ -244,8 +247,7 @@ def test_get_system_prompt_filters_tool_rules_by_active_availability(
 
     prompt = get_system_prompt(settings=settings, excluded_tools={"ask_user"})
 
-    assert "Use `read_file`" in prompt
-    assert "Use `search_workspace`" in prompt
+    assert "Use `explore_workspace`" in prompt
     assert "Use `shell`" not in prompt
     assert "Use `apply_patch`" not in prompt
     assert "Use `write_file`" not in prompt
@@ -338,7 +340,7 @@ def test_get_system_prompt_uses_instructions_md(tmp_path, monkeypatch):
     prompt = get_system_prompt()
     assert prompt.startswith("You are a code review bot.")
     assert "<tool_usage_rules>" in prompt
-    assert "Use `read_file`" in prompt
+    assert "Use `explore_workspace`" in prompt
     assert "Power BI" not in prompt
 
 
@@ -360,8 +362,7 @@ def test_get_system_prompt_replaces_instructions_md_tool_rules(tmp_path, monkeyp
     )
 
     assert prompt.startswith("Custom.")
-    assert "Use `read_file`" in prompt
-    assert "Use `search_workspace`" in prompt
+    assert "Use `explore_workspace`" in prompt
     assert "Use `shell` for everything" not in prompt
 
 

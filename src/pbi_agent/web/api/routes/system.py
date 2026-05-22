@@ -444,7 +444,7 @@ def delete_session(
 
 
 @router.get("/files/search", response_model=FileMentionSearchResponse)
-def search_workspace_files(
+def search_file_mentions(
     manager: SessionManagerDep,
     q: MentionQuery = "",
     limit: MentionLimitQuery = 8,

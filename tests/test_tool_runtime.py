@@ -13,7 +13,6 @@ from pbi_agent.agent import tool_runtime
 from pbi_agent.agent.tool_display import display_tool_results
 from pbi_agent.models.messages import ToolCall
 from pbi_agent.tools import apply_patch as apply_patch_tool
-from pbi_agent.tools import read_file as read_file_tool
 from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.output import MAX_OUTPUT_CHARS
 from pbi_agent.tools.catalog import ToolCatalog, ToolCatalogEntry
@@ -597,41 +596,6 @@ def test_execute_tool_calls_formats_apply_patch_freeform_failure(
     assert batch.had_errors is True
     assert batch.results[0].is_error is True
     assert batch.results[0].output_json == "patch must start with '*** Begin Patch'."
-
-
-def test_execute_tool_calls_serializes_tabular_read_file_output(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "dataset.csv").write_text(
-        "ordered_at,value\n2025-01-01,1\n2025-01-02,2\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        tool_runtime,
-        "get_tool_handler",
-        lambda name: read_file_tool.handle if name == "read_file" else None,
-    )
-
-    batch = tool_runtime.execute_tool_calls(
-        [
-            ToolCall(
-                call_id="call_1",
-                name="read_file",
-                arguments={"path": "dataset.csv"},
-            )
-        ],
-        max_workers=1,
-    )
-
-    payload = json.loads(batch.results[0].output_json)
-
-    assert payload["ok"] is True
-    assert payload["result"]["shape"] == {"rows": 2, "columns": 2}
-    assert (
-        payload["result"]["preview"] == "ordered_at,value\n2025-01-01,1\n2025-01-02,2\n"
-    )
 
 
 def test_execute_tool_calls_passes_runtime_context_to_handler(monkeypatch) -> None:

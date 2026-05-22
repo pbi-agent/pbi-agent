@@ -790,7 +790,7 @@ def test_install_project_skill_ignores_indentless_sequence_fields(
                 "name: compress\n"
                 "description: Compress markdown-heavy notes.\n"
                 "tools:\n"
-                "- read_file\n"
+                "- explore_workspace\n"
                 "- apply_patch\n"
                 "---\n\n"
                 "# Compress\n"

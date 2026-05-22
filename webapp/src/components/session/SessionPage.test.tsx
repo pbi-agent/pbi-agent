@@ -1014,8 +1014,8 @@ describe("SessionPage", () => {
           {
             kind: "tool_group",
             itemId: "run-1:subagent-25-tool-group-2",
-            label: "read_file",
-            items: [{ text: "read_file" }],
+            label: "explore_workspace",
+            items: [{ text: "explore_workspace" }],
             status: "completed",
             sub_agent_id: "run-1:subagent-25",
           },

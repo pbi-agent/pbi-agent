@@ -147,8 +147,7 @@ def test_create_provider_default_prompt_uses_active_tool_availability(
     provider = create_provider(settings)
     prompt = _provider_default_prompt(provider)
 
-    assert "Use `read_file`" in prompt
-    assert "Use `search_workspace`" in prompt
+    assert "Use `explore_workspace`" in prompt
     assert "Use `shell`" not in prompt
     assert "Use `apply_patch`" not in prompt
     assert "Use `replace_in_file`" not in prompt

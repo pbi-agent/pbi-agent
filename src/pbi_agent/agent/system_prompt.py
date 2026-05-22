@@ -22,7 +22,7 @@ You are task assistant. Treat every user task/question as workspace-related: ins
 Run through Python CLI as `pbi-agent`; check help with `pbi-agent -h` when needed.
 """.strip()
 
-_READ_TOOL_NAMES = frozenset({"read_file", "search_workspace"})
+_READ_TOOL_NAMES = frozenset({"explore_workspace"})
 _WRITE_TOOL_NAMES = frozenset({"apply_patch", "replace_in_file", "write_file"})
 
 _SUB_AGENT_PROMPT = """
@@ -199,7 +199,7 @@ def _append_available_skills(base_prompt: str) -> str:
 Project skills use progressive disclosure: the catalog contains only each skill's name, description, and SKILL.md location.
 - Use a skill when the user's task matches its description or the user explicitly names it.
 - Treat `$<skill-name>` in user input as an explicit request to use that skill; strip the `$` and match `<skill-name>` against catalogued skill names.
-- Before applying a matched skill, load its SKILL.md with read_file using the listed location.
+- Before applying a matched skill, load its SKILL.md with `explore_workspace` target="read" using the listed location.
 - Treat loaded skill instructions as task guidance for the current session.
 - Resolve relative paths against the skill directory, which is the parent directory of SKILL.md.
 - Load referenced resources only when needed.
@@ -262,7 +262,7 @@ def get_system_prompt(
     prompt = _append_project_rules(
         _resolve_base_prompt(settings=settings, excluded_tools=excluded_tools)
     )
-    if "read_file" in active_names:
+    if "explore_workspace" in active_names:
         prompt = _append_available_skills(prompt)
     if "sub_agent" in active_names:
         prompt = _append_available_sub_agents(prompt)
@@ -288,6 +288,6 @@ def get_sub_agent_system_prompt(
     prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}")
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
-    if "read_file" not in active_names:
+    if "explore_workspace" not in active_names:
         return prompt
     return _append_available_skills(prompt)

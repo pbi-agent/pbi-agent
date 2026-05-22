@@ -7,7 +7,7 @@ description: 'Interactive web session commands, composer shortcuts, file mention
 
 Session commands are input shortcuts handled by the interactive browser session. Some run locally without a model request, while others transform the next user turn before it is sent to the model.
 
-This page is separate from the [CLI Reference](/cli) and the [Built-in Tools](/tools): CLI commands are terminal entry points such as `pbi-agent run`, and built-in tools are model-callable functions such as `shell` and `read_file`.
+This page is separate from the [CLI Reference](/cli) and the [Built-in Tools](/tools): CLI commands are terminal entry points such as `pbi-agent run`, and built-in tools are model-callable functions such as `shell` and `explore_workspace`.
 
 ## Quick reference
 

@@ -17,8 +17,8 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 SPEC = ToolSpec(
     name="replace_in_file",
     description=(
-        "Replace a unique text block in one file. Use after read_file for targeted edits; "
-        "include enough old_string context to make the match unique."
+        "Replace a unique text block in one file. Use after explore_workspace read "
+        "for targeted edits; include enough old_string context to make the match unique."
     ),
     prompt_usage=(
         "Use `replace_in_file` for targeted text edits after reading enough "

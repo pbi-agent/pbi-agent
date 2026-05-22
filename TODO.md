@@ -1,5 +1,5 @@
-[X] Inspect web_search settings/plumbing and allowed_tools native search gates.
-[X] Remove stale web_search management paths in favor of allowed_tools.
-[X] Update tests/docs/types/static bundle.
-[X] Run focused validation.
-[X] Update MEMORY.md.
+[X] Inspect current workspace/read tool implementation and references.
+[X] Implement explore_workspace backend/tool registry/allowed group changes.
+[X] Update tests, docs, UI labels/references.
+[X] Run focused validation and fix failures.
+[X] Update MEMORY.md with outcome.

@@ -247,7 +247,7 @@ Level-1 row contents:
   - Running: **Working**, **Exploring**, or **Running tools** depending on phase/category.
   - Done: **Worked**, **Explored**, or **Tools**.
 - Summary counts:
-  - `read_file` / `read_image` / `read_web_url` -> `read` / `reads` or split web as `fetch` if clearer.
+  - `explore_workspace` read / `read_image` / `read_web_url` -> `read` / `reads` or split web as `fetch` if clearer.
   - `shell` -> `shell`.
   - `apply_patch` and edit-like metadata -> `edit` / `edits`.
   - `web_search` -> `search` / `searches`.
@@ -290,7 +290,7 @@ Suggested detail extraction:
 | Tool | Title | Subtitle | Args |
 | --- | --- | --- | --- |
 | `shell` | Shell | command, truncated | cwd, timeout |
-| `read_file` | Read | path | line range, shape/windowed |
+| `explore_workspace` | Read/Search/List | path or pattern | target, line range, cursor |
 | `read_image` | Image | path | mime/size |
 | `read_web_url` | Fetch | URL hostname/path | markdown/truncated |
 | `web_search` | Search | query | source count |
@@ -592,7 +592,7 @@ Initial mapping for pbi-agent:
 
 ```ts
 const TOOL_CATEGORY_BY_NAME = {
-  read_file: "read",
+  explore_workspace: "read/search/list by target",
   read_image: "read",
   read_web_url: "web",
   web_search: "search",

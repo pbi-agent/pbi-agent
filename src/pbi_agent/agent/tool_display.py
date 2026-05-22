@@ -73,7 +73,7 @@ def _display_function_result(
     result: ToolResult,
 ) -> None:
     payload = _output_payload(result.output_json)
-    if call is not None and call.name == "search_workspace" and not payload:
+    if call is not None and call.name == "explore_workspace" and not payload:
         payload = {"result": result.output_json}
     display.function_result(
         name=call.name if call else "unknown",

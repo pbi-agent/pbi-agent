@@ -2090,11 +2090,11 @@
   border-color: color-mix(in srgb, var(--color-info) 34%, var(--color-border));
 }
 
-.tool-result-card--search-workspace {
+.tool-result-card--explore-workspace {
   border-color: color-mix(in srgb, var(--color-info) 30%, var(--color-border));
 }
 
-.tool-result-card--search-workspace .tool-result-card__icon {
+.tool-result-card--explore-workspace .tool-result-card__icon {
   background: color-mix(in srgb, var(--color-info) 14%, transparent);
   color: var(--color-info);
 }
@@ -2313,14 +2313,14 @@
   color: var(--color-info);
 }
 
-.search-workspace-result__filters {
+.explore-workspace-result__filters {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2);
 }
 
-.tool-result-card--search-workspace .tool-result__pre {
+.tool-result-card--explore-workspace .tool-result__pre {
   border-color: color-mix(in srgb, var(--color-info) 22%, var(--color-border-subtle));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--color-info) 5%, transparent), transparent 42%),

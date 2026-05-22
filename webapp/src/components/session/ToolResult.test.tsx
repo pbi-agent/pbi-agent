@@ -269,21 +269,21 @@ describe("ToolResult", () => {
     });
   });
 
-  describe("SearchWorkspaceToolResult", () => {
-    it("renders raw codetool-search output without generic JSON blocks", () => {
+  describe("ExploreWorkspaceToolResult", () => {
+    it("renders raw codetool-explore output without generic JSON blocks", () => {
       const { container } = render(
         <ToolResult
-          text="search_workspace UserService done"
+          text="explore_workspace UserService done"
           metadata={{
-            tool_name: "search_workspace",
-            call_id: "call_search_workspace",
+            tool_name: "explore_workspace",
+            call_id: "call_explore_workspace",
             status: "completed",
             success: true,
             arguments: {
               pattern: "UserService",
               root: "src",
               regex: true,
-              target: "both",
+              target: "path",
               path_scope: "basename",
               mode: "snippets",
               context_lines: 1,
@@ -296,16 +296,16 @@ describe("ToolResult", () => {
         />,
       );
 
-      expect(container.querySelector(".tool-result-card--search-workspace")).not.toBeNull();
+      expect(container.querySelector(".tool-result-card--explore-workspace")).not.toBeNull();
       expect(screen.getByText("UserService")).toBeInTheDocument();
-      expect(screen.getByText("Content + path search · regex · root src")).toBeInTheDocument();
+      expect(screen.getByText("Path search · regex · root src")).toBeInTheDocument();
       expect(screen.getByText("mode snippets")).toBeInTheDocument();
       expect(screen.getByText("scope basename")).toBeInTheDocument();
       expect(screen.getByText("context 1")).toBeInTheDocument();
       expect(screen.getByText("cursor 20")).toBeInTheDocument();
       expect(screen.getByText("glob *.py")).toBeInTheDocument();
       expect(screen.getByText("exclude tests/**")).toBeInTheDocument();
-      expect(screen.getByText("Raw search output")).toBeInTheDocument();
+      expect(screen.getByText("Raw output")).toBeInTheDocument();
       expect(screen.getByText(/src\/users\.py/)).toBeInTheDocument();
       expect(screen.getByText(/src\/services\/user_service\.py/)).toBeInTheDocument();
       expect(screen.queryByText("Arguments")).not.toBeInTheDocument();
@@ -313,7 +313,7 @@ describe("ToolResult", () => {
     });
   });
 
-  describe("ReadFileToolResult", () => {
+  describe("ExploreWorkspaceToolResult read", () => {
     beforeEach(() => {
       highlightCodeMock.mockReset();
       highlightCodeMock.mockResolvedValue(null);
@@ -324,12 +324,12 @@ describe("ToolResult", () => {
         <ToolResult
           text=""
           metadata={{
-            tool_name: "read_file",
+            tool_name: "explore_workspace",
             call_id: "call_read_py",
             status: "completed",
             success: true,
-            arguments: { path: "src/main.py" },
-            result: { path: "src/main.py", content: "print('hi')\n" },
+            arguments: { pattern: "src/main.py", target: "read" },
+            result: "print('hi')\n",
           }}
         />,
       );
@@ -353,12 +353,12 @@ describe("ToolResult", () => {
         <ToolResult
           text=""
           metadata={{
-            tool_name: "read_file",
+            tool_name: "explore_workspace",
             call_id: "call_read_txt",
             status: "completed",
             success: true,
-            arguments: { path: "notes.unknownext" },
-            result: { path: "notes.unknownext", content: "hello" },
+            arguments: { pattern: "notes.unknownext", target: "read" },
+            result: "hello",
           }}
         />,
       );
@@ -369,39 +369,6 @@ describe("ToolResult", () => {
       );
       expect(pre?.textContent).toBe("hello");
       expect(pre?.getAttribute("data-highlighted")).toBe("false");
-    });
-
-    it("highlights tabular schema as markdown", async () => {
-      render(
-        <ToolResult
-          text=""
-          metadata={{
-            tool_name: "read_file",
-            call_id: "call_read_csv",
-            status: "completed",
-            success: true,
-            arguments: { path: "data.csv" },
-            result: {
-              path: "data.csv",
-              schema: "- column_a: int64\n- column_b: object",
-              preview: "| column_a | column_b |\n| --- | --- |\n| 1 | x |",
-              rows: 100,
-              columns: 2,
-            },
-          }}
-        />,
-      );
-
-      await waitFor(() => {
-        expect(highlightCodeMock).toHaveBeenCalledWith(
-          "- column_a: int64\n- column_b: object",
-          "markdown",
-        );
-        expect(highlightCodeMock).toHaveBeenCalledWith(
-          "| column_a | column_b |\n| --- | --- |\n| 1 | x |",
-          "markdown",
-        );
-      });
     });
   });
 });

@@ -7,15 +7,15 @@ from pbi_agent.display.formatting import (
 )
 
 
-def test_search_workspace_routes_to_dedicated_cli_display() -> None:
+def test_explore_workspace_routes_to_dedicated_cli_display() -> None:
     tool_name, text = route_function_result(
-        "search_workspace",
+        "explore_workspace",
         status="[green]done[/green]",
         arguments={
             "pattern": "UserService",
             "root": "src",
             "regex": True,
-            "target": "both",
+            "target": "path",
             "path_scope": "basename",
             "mode": "snippets",
             "context_lines": 1,
@@ -28,14 +28,14 @@ def test_search_workspace_routes_to_dedicated_cli_display() -> None:
         },
     )
 
-    assert tool_name == "search_workspace"
-    assert tool_group_class("search_workspace") == "tool-group-search-workspace"
-    assert tool_item_class("search_workspace") == "tool-call-search-workspace"
+    assert tool_name == "explore_workspace"
+    assert tool_group_class("explore_workspace") == "tool-group-explore-workspace"
+    assert tool_item_class("explore_workspace") == "tool-call-explore-workspace"
     assert "UserService" in text
     assert "root:" in text
     assert "src" in text
     assert "target:" in text
-    assert "both" in text
+    assert "path search" in text
     assert "pattern:" in text
     assert "regex" in text
     assert "options:" in text
@@ -50,12 +50,12 @@ def test_search_workspace_routes_to_dedicated_cli_display() -> None:
     assert "output:" in text
     assert "src/service.py" in text
     assert "class UserService" in text
-    assert "search_workspace()" not in text
+    assert "explore_workspace()" not in text
 
 
-def test_search_workspace_cli_display_shows_error_detail() -> None:
+def test_explore_workspace_cli_display_shows_error_detail() -> None:
     _, text = route_function_result(
-        "search_workspace",
+        "explore_workspace",
         status="[red]failed[/red]",
         arguments={"pattern": "[", "regex": True},
         result={

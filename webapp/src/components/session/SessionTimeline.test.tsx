@@ -353,7 +353,7 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-b",
-            label: "read_file",
+            label: "explore_workspace",
             status: "completed",
             subAgentId: "subagent-b",
             items: [{ text: "Designer inspected layout" }],
@@ -436,10 +436,18 @@ describe("SessionTimeline", () => {
       {
         kind: "tool_group",
         itemId: "tool-b",
-        label: "read_file",
+        label: "explore_workspace",
         status: "completed",
         subAgentId: "subagent-b",
-        items: [{ text: "Designer inspected layout" }],
+        items: [
+          {
+            text: "Designer inspected layout",
+            metadata: {
+              tool_name: "explore_workspace",
+              arguments: { pattern: "layout.md", target: "read" },
+            },
+          },
+        ],
       },
       {
         kind: "thinking",
@@ -569,7 +577,7 @@ describe("SessionTimeline", () => {
             items: [
               {
                 text: "file contents",
-                metadata: { tool_name: "read_file", arguments: { path: "README.md" }, result: { path: "README.md", content: "file contents" } },
+                metadata: { tool_name: "explore_workspace", arguments: { pattern: "README.md", target: "read" }, result: "file contents" },
               },
               {
                 text: "command output",
@@ -599,7 +607,7 @@ describe("SessionTimeline", () => {
     expect(screen.getByRole("button", { name: /Command.*bun run typecheck/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Activity/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /In motion/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /read_file/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /explore_workspace/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /shell.*bun run typecheck/i })).not.toBeInTheDocument();
     expect(screen.queryByText("file contents")).not.toBeInTheDocument();
 
@@ -608,20 +616,20 @@ describe("SessionTimeline", () => {
     expect(screen.queryByText("ok")).not.toBeInTheDocument();
   });
 
-  it("shows search_workspace rows as Search with the search pattern in Working", () => {
+  it("shows explore_workspace rows as Explore with the pattern in Working", () => {
     render(
       <SessionTimeline
         items={[
           {
             kind: "tool_group",
             itemId: "tools-1",
-            label: "Search workspace",
+            label: "Explore workspace",
             status: "completed",
             items: [
               {
-                text: "search_workspace DEFAULT_LIMIT",
+                text: "explore_workspace DEFAULT_LIMIT",
                 metadata: {
-                  tool_name: "search_workspace",
+                  tool_name: "explore_workspace",
                   arguments: { pattern: "DEFAULT_LIMIT" },
                   result: "README.md:1:DEFAULT_LIMIT",
                 },
@@ -644,7 +652,7 @@ describe("SessionTimeline", () => {
     const searchButton = screen.getByRole("button", { name: /Search.*DEFAULT_LIMIT/ });
     expect(searchButton).toHaveTextContent("Search");
     expect(searchButton).toHaveTextContent("DEFAULT_LIMIT");
-    expect(screen.queryByText("search_workspace")).not.toBeInTheDocument();
+    expect(screen.queryByText("explore_workspace")).not.toBeInTheDocument();
   });
 
   it("shows long Working tool lists in a five-row scroll area and centers opened tools", async () => {
@@ -665,9 +673,9 @@ describe("SessionTimeline", () => {
             items: Array.from({ length: 7 }, (_, index) => ({
               text: `file ${index + 1}`,
               metadata: {
-                tool_name: "read_file",
-                arguments: { path: `file-${index + 1}.txt` },
-                result: { path: `file-${index + 1}.txt`, content: `file ${index + 1}` },
+                tool_name: "explore_workspace",
+                arguments: { pattern: `file-${index + 1}.txt`, target: "read" },
+                result: `file ${index + 1}`,
               },
             })),
           },
@@ -745,9 +753,9 @@ describe("SessionTimeline", () => {
             items: Array.from({ length: 7 }, (_, index) => ({
               text: `file ${index + 1}`,
               metadata: {
-                tool_name: "read_file",
-                arguments: { path: `file-${index + 1}.txt` },
-                result: { path: `file-${index + 1}.txt`, content: `file ${index + 1}` },
+                tool_name: "explore_workspace",
+                arguments: { pattern: `file-${index + 1}.txt`, target: "read" },
+                result: `file ${index + 1}`,
               },
             })),
           },
@@ -792,9 +800,9 @@ describe("SessionTimeline", () => {
             items: Array.from({ length: 7 }, (_, index) => ({
               text: `file ${index + 1}`,
               metadata: {
-                tool_name: "read_file",
-                arguments: { path: `file-${index + 1}.txt` },
-                result: { path: `file-${index + 1}.txt`, content: `file ${index + 1}` },
+                tool_name: "explore_workspace",
+                arguments: { pattern: `file-${index + 1}.txt`, target: "read" },
+                result: `file ${index + 1}`,
               },
             })),
           },
@@ -833,19 +841,19 @@ describe("SessionTimeline", () => {
             status: "completed",
             items: [
               {
-                text: "read_file alpha.txt",
+                text: "explore_workspace alpha.txt",
                 metadata: {
-                  tool_name: "read_file",
-                  arguments: { path: "alpha.txt" },
-                  result: { path: "alpha.txt", content: "ALPHA_CONTENT" },
+                  tool_name: "explore_workspace",
+                  arguments: { pattern: "alpha.txt", target: "read" },
+                  result: "ALPHA_CONTENT",
                 },
               },
               {
-                text: "read_file beta.txt",
+                text: "explore_workspace beta.txt",
                 metadata: {
-                  tool_name: "read_file",
-                  arguments: { path: "beta.txt" },
-                  result: { path: "beta.txt", content: "BETA_CONTENT" },
+                  tool_name: "explore_workspace",
+                  arguments: { pattern: "beta.txt", target: "read" },
+                  result: "BETA_CONTENT",
                 },
               },
             ],
@@ -1359,9 +1367,9 @@ describe("SessionTimeline", () => {
             itemId: "tool-2",
             createdAt: "2026-05-14T10:00:06.000Z",
             updatedAt: "2026-05-14T10:00:08.000Z",
-            label: "read_file",
+            label: "explore_workspace",
             status: "completed",
-            items: [{ text: "second output", metadata: { tool_name: "read_file" } }],
+            items: [{ text: "second output", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
           },
         ]}
         subAgents={{}}
@@ -1412,9 +1420,9 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-2",
-            label: "read_file",
+            label: "explore_workspace",
             status: "completed",
-            items: [{ text: "second output", metadata: { tool_name: "read_file" } }],
+            items: [{ text: "second output", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
           },
           {
             kind: "message",
@@ -1463,10 +1471,10 @@ describe("SessionTimeline", () => {
         itemId: "subagent-a-tool-1",
         createdAt: "2026-05-14T10:00:01.000Z",
         updatedAt: "2026-05-14T10:00:04.000Z",
-        label: "read_file",
+        label: "explore_workspace",
         status: "completed",
         subAgentId: "subagent-a",
-        items: [{ text: "Read notes", metadata: { tool_name: "read_file" } }],
+        items: [{ text: "Read notes", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
       },
     ];
 
@@ -1508,10 +1516,10 @@ describe("SessionTimeline", () => {
         itemId: "subagent-a-tool-1",
         createdAt: "2026-05-14T10:00:02.000Z",
         updatedAt: "2026-05-14T10:00:04.000Z",
-        label: "read_file",
+        label: "explore_workspace",
         status: "completed",
         subAgentId: "subagent-a",
-        items: [{ text: "Read notes", metadata: { tool_name: "read_file" } }],
+        items: [{ text: "Read notes", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
       },
     ];
     const projection = projectMainTimelineItems(subAgentItems);
@@ -1554,9 +1562,9 @@ describe("SessionTimeline", () => {
             itemId: "tool-1",
             createdAt: "2026-05-14T10:00:01.000Z",
             updatedAt: "2026-05-14T10:00:04.000Z",
-            label: "read_file",
+            label: "explore_workspace",
             status: "completed",
-            items: [{ text: "Read notes", metadata: { tool_name: "read_file" } }],
+            items: [{ text: "Read notes", metadata: { tool_name: "explore_workspace", arguments: { pattern: "notes.md", target: "read" } } }],
           },
           {
             kind: "message",
@@ -1632,10 +1640,10 @@ describe("SessionTimeline", () => {
             label: "Tool calls",
             status: "completed",
             items: [
-              { text: "read_file README.md done", metadata: { tool_name: "read_file" } },
+              { text: "explore_workspace README.md done", metadata: { tool_name: "explore_workspace", arguments: { pattern: "README.md", target: "read" } } },
               { text: "Fetched https://example.com", classes: "tool-call-read-web-url" },
               { text: "web_search pbi-agent done", metadata: { tool_name: "web_search" } },
-              { text: "search_workspace UserService done", classes: "tool-call-search-workspace" },
+              { text: "explore_workspace UserService done", classes: "tool-call-explore-workspace" },
               { text: "shell bun run typecheck done", metadata: { tool_name: "shell" } },
               { text: "apply_patch done", metadata: { tool_name: "apply_patch" } },
               { text: "replace_in_file done", metadata: { tool_name: "replace_in_file" } },
@@ -1673,7 +1681,7 @@ describe("SessionTimeline", () => {
           {
             kind: "tool_group",
             itemId: "tool-1",
-            label: "read_file",
+            label: "explore_workspace",
             status: "completed",
             subAgentId: "subagent-researcher",
             items: [{ text: "Read notes" }],
@@ -1708,7 +1716,7 @@ describe("SessionTimeline", () => {
         items: [
           {
             text: "first read",
-            metadata: { tool_name: "read_file", arguments: { path: "README.md" } },
+            metadata: { tool_name: "explore_workspace", arguments: { pattern: "README.md", target: "read" } },
           },
         ],
       },
@@ -1742,7 +1750,7 @@ describe("SessionTimeline", () => {
               ...baseItems[0].items,
               {
                 text: "second read",
-                metadata: { tool_name: "read_file", arguments: { path: "package.json" } },
+                metadata: { tool_name: "explore_workspace", arguments: { pattern: "package.json", target: "read" } },
               },
             ],
           },
@@ -2170,29 +2178,23 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     expect(screen.getByText("call_shell_1")).toBeInTheDocument();
   });
 
-  it("renders read_file tool output as a file preview card", () => {
+  it("renders explore_workspace read output as a file preview card", () => {
     render(
       <SessionTimeline
         items={[
           {
             kind: "tool_group",
-            itemId: "tool-read-file",
-            label: "read_file",
+            itemId: "tool-explore-workspace",
+            label: "explore_workspace",
             items: [
               {
-                text: "read_file TODO.md done",
+                text: "explore_workspace TODO.md done",
                 metadata: {
-                  tool_name: "read_file",
+                  tool_name: "explore_workspace",
                   status: "completed",
                   success: true,
-                  arguments: { path: "TODO.md" },
-                  result: {
-                    path: "TODO.md",
-                    start_line: 1,
-                    end_line: 2,
-                    total_lines: 2,
-                    content: "# TODO\n[X] Done",
-                  },
+                  arguments: { pattern: "TODO.md", target: "read" },
+                  result: "# TODO\n[X] Done",
                 },
               },
             ],
@@ -2209,7 +2211,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
     openWorking();
 
     expect(screen.getAllByText("TODO.md")[0]).toBeInTheDocument();
-    expect(screen.getByText("lines 1-2 of 2")).toBeInTheDocument();
+    expect(screen.getByText("Read file · root .")).toBeInTheDocument();
     expect(screen.getByText(/\[X\] Done/)).toBeInTheDocument();
   });
 
@@ -4025,7 +4027,7 @@ expect(screen.getAllByText("echo hello")[0]).toBeInTheDocument();
           {
             kind: "tool_group",
             itemId: "tool-2",
-            label: "read_file",
+            label: "explore_workspace",
             status: "completed",
             items: [{ text: "second output" }],
           },

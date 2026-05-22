@@ -479,8 +479,8 @@ def test_anthropic_execute_tool_calls_returns_tool_result_blocks(
                 {
                     "type": "tool_use",
                     "id": "toolu_2",
-                    "name": "read_file",
-                    "input": {"path": "README.md"},
+                    "name": "explore_workspace",
+                    "input": {"pattern": "README.md", "target": "read"},
                 },
             ]
         },
@@ -549,10 +549,10 @@ def test_anthropic_execute_tool_calls_returns_tool_result_blocks(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "read_file",
+            "name": "explore_workspace",
             "success": False,
             "call_id": "toolu_2",
-            "arguments": {"path": "README.md"},
+            "arguments": {"pattern": "README.md", "target": "read"},
         },
     ]
     assert display_spy.tool_group_end_count == 1
@@ -751,8 +751,8 @@ def test_anthropic_execute_tool_calls_serializes_image_attachments(
                 {
                     "type": "tool_use",
                     "id": "toolu_1",
-                    "name": "read_file",
-                    "input": {"path": "chart.png"},
+                    "name": "explore_workspace",
+                    "input": {"pattern": "chart.png", "target": "read"},
                 }
             ]
         },

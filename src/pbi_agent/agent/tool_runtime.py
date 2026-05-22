@@ -332,7 +332,7 @@ def _uses_raw_text_output(
     is_error: bool,
 ) -> bool:
     return (
-        call.name == "search_workspace"
+        call.name == "explore_workspace"
         and not attachments
         and not is_error
         and isinstance(result_payload, str)

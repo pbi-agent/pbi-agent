@@ -122,8 +122,11 @@ def test_azure_chat_completions_uses_api_key_header_and_endpoint(
                                 "id": "call_2",
                                 "type": "function",
                                 "function": {
-                                    "name": "read_file",
-                                    "arguments": {"path": "README.md"},
+                                    "name": "explore_workspace",
+                                    "arguments": {
+                                        "pattern": "README.md",
+                                        "target": "read",
+                                    },
                                 },
                             },
                         ],
@@ -137,7 +140,11 @@ def test_azure_chat_completions_uses_api_key_header_and_endpoint(
     assert result.text == "First line. Second line."
     assert result.function_calls == [
         ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
-        ToolCall(call_id="call_2", name="read_file", arguments={"path": "README.md"}),
+        ToolCall(
+            call_id="call_2",
+            name="explore_workspace",
+            arguments={"pattern": "README.md", "target": "read"},
+        ),
     ]
     assert result.usage.input_tokens == 21
     assert result.usage.output_tokens == 8
@@ -159,7 +166,8 @@ def test_azure_chat_completions_uses_api_key_header_and_endpoint(
         "command": "pwd"
     }
     assert json.loads(assistant_message["tool_calls"][1]["function"]["arguments"]) == {
-        "path": "README.md"
+        "pattern": "README.md",
+        "target": "read",
     }
 
 
@@ -188,8 +196,10 @@ def test_generic_parse_response_merges_split_choice_text_and_tool_calls() -> Non
                                 "id": "toolu_1",
                                 "type": "function",
                                 "function": {
-                                    "name": "read_file",
-                                    "arguments": '{"path":"src/app.py"}',
+                                    "name": "explore_workspace",
+                                    "arguments": (
+                                        '{"pattern":"src/app.py","target":"read"}'
+                                    ),
                                 },
                             }
                         ],
@@ -201,7 +211,11 @@ def test_generic_parse_response_merges_split_choice_text_and_tool_calls() -> Non
 
     assert result.text == "Let me inspect the file first."
     assert result.function_calls == [
-        ToolCall(call_id="toolu_1", name="read_file", arguments={"path": "src/app.py"})
+        ToolCall(
+            call_id="toolu_1",
+            name="explore_workspace",
+            arguments={"pattern": "src/app.py", "target": "read"},
+        )
     ]
     assert result.has_tool_calls is True
     assert result.provider_data["assistant_message"] == {
@@ -212,8 +226,8 @@ def test_generic_parse_response_merges_split_choice_text_and_tool_calls() -> Non
                 "id": "toolu_1",
                 "type": "function",
                 "function": {
-                    "name": "read_file",
-                    "arguments": '{"path":"src/app.py"}',
+                    "name": "explore_workspace",
+                    "arguments": '{"pattern":"src/app.py","target":"read"}',
                 },
             }
         ],
@@ -445,7 +459,9 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
-                call_id="call_2", name="read_file", arguments={"path": "README.md"}
+                call_id="call_2",
+                name="explore_workspace",
+                arguments={"pattern": "README.md", "target": "read"},
             ),
         ],
     )
@@ -512,10 +528,10 @@ def test_generic_execute_tool_calls_returns_chat_completion_tool_messages(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "read_file",
+            "name": "explore_workspace",
             "success": False,
             "call_id": "call_2",
-            "arguments": {"path": "README.md"},
+            "arguments": {"pattern": "README.md", "target": "read"},
         },
     ]
     assert display_spy.tool_group_end_count == 1
@@ -533,8 +549,8 @@ def test_generic_execute_tool_calls_serializes_image_attachments(
         function_calls=[
             ToolCall(
                 call_id="call_image",
-                name="read_file",
-                arguments={"path": "chart"},
+                name="explore_workspace",
+                arguments={"pattern": "chart", "target": "read"},
             )
         ],
     )

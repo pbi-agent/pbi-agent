@@ -12,7 +12,7 @@ _TOOLS_EXCLUDED_FOR_NON_V4A_PROVIDERS = {"apply_patch"}
 _WEB_FETCH_TOOL = "read_web_url"
 UI_ONLY_TOOL_NAMES = frozenset({"ask_user"})
 BUILTIN_TOOL_CATEGORIES: dict[str, frozenset[str]] = {
-    "read": frozenset({"read_file", "search_workspace"}),
+    "read": frozenset({"explore_workspace"}),
     "write": frozenset({"apply_patch", "replace_in_file", "write_file"}),
     "web": frozenset({_WEB_FETCH_TOOL}),
     "sub-agent": frozenset({"sub_agent"}),

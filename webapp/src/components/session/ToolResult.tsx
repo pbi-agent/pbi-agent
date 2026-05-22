@@ -50,17 +50,14 @@ export function ToolResult({ metadata, text, running = false }: ToolResultProps)
   if (toolName === "shell") {
     return <ShellToolResult metadata={metadata} text={text} running={running} />;
   }
-  if (toolName === "read_file") {
-    return <ReadFileToolResult metadata={metadata} text={text} running={running} />;
-  }
   if (toolName === "read_image") {
     return <ReadImageToolResult metadata={metadata} text={text} running={running} />;
   }
   if (toolName === "read_web_url") {
     return <ReadWebUrlToolResult metadata={metadata} text={text} running={running} />;
   }
-  if (toolName === "search_workspace") {
-    return <SearchWorkspaceToolResult metadata={metadata} text={text} running={running} />;
+  if (toolName === "explore_workspace") {
+    return <ExploreWorkspaceToolResult metadata={metadata} text={text} running={running} />;
   }
   if (toolName === "web_search") {
     return <WebSearchToolResult metadata={metadata} text={text} running={running} />;
@@ -136,67 +133,6 @@ function ShellToolResult({ metadata, running }: ToolResultProps) {
   );
 }
 
-function ReadFileToolResult({ metadata, text, running }: ToolResultProps) {
-  const result = objectValue(metadata?.result);
-  const args = objectValue(metadata?.arguments);
-  const path = stringValue(result?.path) ?? stringValue(args?.path) ?? "Unknown file";
-  const content = stringValue(result?.content);
-  const sheets = arrayValue(result?.sheets);
-  const schema = stringValue(result?.schema);
-  const preview = stringValue(result?.preview) ?? stringValue(result?.markdown);
-  const lineRange = lineRangeLabel(result);
-  const description = [lineRange, shapeLabel(result), result?.windowed ? "windowed" : null]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <ToolCard metadata={metadata} running={running} icon={<FileTextIcon />} title={path} description={description || "Read file"}>
-      {metadata?.error || result?.error ? <ToolNotice tone="error" label="Error" value={errorText(metadata?.error ?? result?.error)} /> : null}
-      {content ? (
-        <CodeOutputBlock
-          label="Content"
-          value={content}
-          truncated={Boolean(result?.content_truncated)}
-          path={path}
-        />
-      ) : null}
-      {schema ? (
-        <CodeOutputBlock
-          label="Schema"
-          value={schema}
-          truncated={Boolean(result?.schema_truncated)}
-          language="markdown"
-        />
-      ) : null}
-      {preview ? (
-        <CodeOutputBlock
-          label="Preview"
-          value={preview}
-          truncated={Boolean(result?.preview_truncated)}
-          language={previewLanguage(preview)}
-        />
-      ) : null}
-      {sheets.length > 0 ? (
-        <div className="tool-result__section">
-          <span className="tool-result__section-label">Sheets</span>
-          <div className="tool-result__list">
-            {sheets.slice(0, 6).map((sheet, index) => {
-              const sheetRecord = objectValue(sheet);
-              return (
-                <div key={`${stringValue(sheetRecord?.name) ?? "sheet"}-${index}`} className="tool-result__list-item">
-                  <strong>{stringValue(sheetRecord?.name) ?? `Sheet ${index + 1}`}</strong>
-                  <span>{shapeLabel(sheetRecord) || "tabular preview"}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-      {!content && !schema && !preview && sheets.length === 0 && text ? <OutputBlock label="Summary" value={text} /> : null}
-    </ToolCard>
-  );
-}
-
 function ReadImageToolResult({ metadata, text, running }: ToolResultProps) {
   const result = objectValue(metadata?.result);
   const args = objectValue(metadata?.arguments);
@@ -231,10 +167,11 @@ function ReadWebUrlToolResult({ metadata, text, running }: ToolResultProps) {
   );
 }
 
-function SearchWorkspaceToolResult({ metadata, text, running }: ToolResultProps) {
+function ExploreWorkspaceToolResult({ metadata, text, running }: ToolResultProps) {
   const args = objectValue(metadata?.arguments);
-  const pattern = stringValue(args?.pattern) ?? "Search";
-  const root = stringValue(args?.root) ?? ".";
+  const result = objectValue(metadata?.result);
+  const pattern = stringValue(args?.pattern) ?? "Explore";
+  const root = rootLabel(args?.root);
   const regex = args?.regex !== false;
   const target = stringValue(args?.target) ?? "content";
   const pathScope = stringValue(args?.path_scope) ?? "path";
@@ -245,15 +182,17 @@ function SearchWorkspaceToolResult({ metadata, text, running }: ToolResultProps)
   const glob = stringListValue(args?.glob);
   const exclude = stringListValue(args?.exclude);
   const rawOutput = stringValue(metadata?.result) ?? "";
-  const error = errorText(metadata?.error);
+  const error = errorText(metadata?.error ?? result?.error);
+  const isImageRead = target === "read" && stringValue(result?.mime_type);
+  const title = stringValue(result?.path) ?? pattern;
   const description = [
-    target === "path" ? "Path search" : target === "both" ? "Content + path search" : "Content search",
-    regex ? "regex" : "literal",
+    target === "read" ? (isImageRead ? "Inspect image" : "Read file") : target === "list" ? "List" : target === "path" ? "Path search" : "Content search",
+    target === "content" || target === "path" ? (regex ? "regex" : "literal") : null,
     `root ${root}`,
   ].filter(Boolean).join(" · ");
   const options = [
-    `mode ${mode}`,
-    target === "path" || target === "both" ? `scope ${pathScope}` : null,
+    target === "content" || target === "path" ? `mode ${mode}` : null,
+    target === "path" ? `scope ${pathScope}` : null,
     contextLines !== undefined && contextLines > 0 ? `context ${contextLines}` : null,
     limit !== undefined ? `limit ${limit}` : null,
     cursor !== undefined ? `cursor ${cursor}` : null,
@@ -265,23 +204,35 @@ function SearchWorkspaceToolResult({ metadata, text, running }: ToolResultProps)
     <ToolCard
       metadata={metadata}
       running={running}
-      icon={<SearchIcon />}
-      title={pattern}
+      icon={isImageRead ? <FileImageIcon /> : target === "read" ? <FileTextIcon /> : <SearchIcon />}
+      title={title}
       description={description}
-      className="tool-result-card--search-workspace"
+      className="tool-result-card--explore-workspace"
     >
       {error ? <ToolNotice tone="error" label="Error" value={error} /> : null}
+      {isImageRead ? (
+        <div className="tool-result__kv">
+          <span>Attachment</span>
+          <strong>{metadata?.success === false ? "Failed" : "Ready for model context"}</strong>
+          {stringValue(result?.mime_type) ? <span>{stringValue(result?.mime_type)}</span> : null}
+          {numberValue(result?.byte_count) ? <span>{formatBytes(numberValue(result?.byte_count))}</span> : null}
+        </div>
+      ) : null}
       {options.length > 0 ? (
-        <div className="search-workspace-result__filters" aria-label="Search options">
+        <div className="explore-workspace-result__filters" aria-label="Explore options">
           {options.map((option) => (
             <Badge key={option} variant="outline" size="meta">{option}</Badge>
           ))}
         </div>
       ) : null}
-      {rawOutput ? (
-        <OutputBlock label="Raw search output" value={rawOutput} />
+      {rawOutput && !isImageRead ? (
+        target === "read" ? (
+          <CodeOutputBlock label="Content" value={rawOutput} path={pattern} />
+        ) : (
+          <OutputBlock label={target === "list" ? "Listing" : "Raw output"} value={rawOutput} />
+        )
       ) : !running && !error && !text ? (
-        <ToolNotice label="No output" value="The search returned no text." />
+        <ToolNotice label="No output" value="The operation returned no text." />
       ) : null}
       {!rawOutput && text ? <OutputBlock label="Summary" value={text} /> : null}
     </ToolCard>
@@ -427,21 +378,6 @@ function CodeOutputBlock({
   );
 }
 
-/**
- * Heuristically pick a language for the tabular preview block. The Python
- * `read_file` tool emits markdown bullet lists for some shapes and CSV-style
- * snippets for others; we highlight markdown when we see clear markdown
- * structure and otherwise fall back to plain text.
- */
-function previewLanguage(preview: string): string | undefined {
-  const trimmed = preview.trimStart();
-  if (!trimmed) return undefined;
-  if (trimmed.startsWith("|") || trimmed.startsWith("- ") || trimmed.startsWith("# ")) {
-    return "markdown";
-  }
-  return undefined;
-}
-
 function ToolNotice({ label, value, tone }: { label: string; value: string; tone?: "error" }) {
   if (!value) return null;
   return (
@@ -493,6 +429,15 @@ function stringListValue(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
+function rootLabel(value: unknown): string {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (Array.isArray(value)) {
+    const items = value.filter((item): item is string => typeof item === "string" && item.length > 0);
+    if (items.length > 0) return items.join(", ");
+  }
+  return ".";
+}
+
 function timeoutValue(value: unknown): number | string | undefined {
   return typeof value === "number" || typeof value === "string" ? value : undefined;
 }
@@ -516,25 +461,6 @@ function formatJson(value: unknown): string {
   } catch {
     return String(value);
   }
-}
-
-function lineRangeLabel(result: Record<string, unknown> | undefined): string {
-  if (!result) return "";
-  const start = numberValue(result.start_line);
-  const end = numberValue(result.end_line);
-  const total = numberValue(result.total_lines);
-  if (start && end && total) return `lines ${start}-${end} of ${total}`;
-  if (start && end) return `lines ${start}-${end}`;
-  return "";
-}
-
-function shapeLabel(result: Record<string, unknown> | undefined): string {
-  if (!result) return "";
-  const rows = numberValue(result.rows) ?? numberValue(result.row_count);
-  const columns = numberValue(result.columns) ?? numberValue(result.column_count);
-  if (rows !== undefined && columns !== undefined) return `${rows} rows × ${columns} columns`;
-  if (rows !== undefined) return `${rows} rows`;
-  return "";
 }
 
 function formatBytes(value: number | undefined): string {

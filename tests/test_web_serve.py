@@ -302,7 +302,7 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
                         {
                             "kind": "tool_group",
                             "itemId": "subagent-1-tool-group-2",
-                            "label": "read_file",
+                            "label": "explore_workspace",
                             "items": [],
                             "sub_agent_id": "subagent-1",
                         },
@@ -335,8 +335,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
                     "type": "tool_group_added",
                     "payload": {
                         "item_id": "subagent-1-tool-group-2",
-                        "label": "read_file",
-                        "items": [{"text": "read_file"}],
+                        "label": "explore_workspace",
+                        "items": [{"text": "explore_workspace"}],
                         "status": "completed",
                         "sub_agent_id": "subagent-1",
                     },
@@ -380,8 +380,8 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
         },
         {
             "item_id": "completed-run:subagent-1-tool-group-2",
-            "label": "read_file",
-            "items": [{"text": "read_file"}],
+            "label": "explore_workspace",
+            "items": [{"text": "explore_workspace"}],
             "status": "completed",
             "sub_agent_id": "completed-run:subagent-1",
             "kind": "tool_group",

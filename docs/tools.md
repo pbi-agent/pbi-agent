@@ -5,7 +5,7 @@ description: 'The provider-agnostic function tools available to the pbi-agent ru
 
 # Built-in Tools
 
-Most built-in tools are exposed through the shared tool registry across providers. Image files are read through `read_file` on providers that support multimodal image input in this build.
+Most built-in tools are exposed through the shared tool registry across providers. Image files are read through `explore_workspace` with `target: "read"` on providers that support multimodal image input in this build.
 
 Project-local MCP servers are discovered from `.agents/mcp.json` and their tools are merged into the same runtime catalog at startup. Those tools are exposed to the model as ordinary function tools with per-server namespacing, so a tool named `say_hi` from the `echo` server is sent to the model as `echo__say_hi`.
 
@@ -22,7 +22,7 @@ The allow-list accepts only these built-in tool groups:
 
 | Tool group | Built-ins |
 | --- | --- |
-| `read` | `read_file`, `search_workspace` |
+| `read` | `explore_workspace` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
 | `web` | `read_web_url` and provider-native web search |
 | `sub-agent` | `sub_agent` |
@@ -73,8 +73,7 @@ that turn/run. When absent, the selected profile settings apply.
 | `shell` | yes | Run a shell command in the workspace and return stdout, stderr, and exit code. |
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `sub_agent` | no | Delegate a scoped task to a child agent, optionally selecting a discovered project sub-agent type and inheriting parent context. |
-| `read_file` | no | Read text files with optional line ranges, summarize tabular files, extract text from PDF and DOCX files, and attach supported image files to the model context. |
-| `search_workspace` | no | Search workspace content or paths with compact raw-text results. |
+| `explore_workspace` | no | Search workspace content/paths, read text files, list one directory level, and attach supported image files to the model context. |
 | `read_web_url` | no | Fetch a public web page through markdown.new and return Markdown. |
 
 ## MCP Tools
@@ -189,23 +188,24 @@ Runtime behavior:
 - Unknown `agent_type` values are rejected before the child session starts.
 - The child session is bounded to `100` provider requests or `1200` elapsed seconds, whichever happens first.
 
-## `search_workspace`
+## `explore_workspace`
 
-Search workspace file contents, paths, or both. The tool wraps `codetool-search` and returns its raw token-compressed text output directly to the model, without JSON wrapping on successful searches. Search failures are reported as failed tool calls (`ok: false`).
+Search workspace contents/paths, read one text file, or list one directory level. The tool wraps `codetool-explore` and returns compact text directly to the model, without JSON wrapping on successful non-image calls. Failures are reported as failed tool calls (`ok: false`).
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `pattern` | `string` | yes | Text or regex pattern to find. |
-| `root` | `string` or `string[]` | no | Directory/file path or list of paths to search, relative to the workspace root. Defaults to `.`. |
-| `regex` | `boolean` | no | Treat `pattern` as a regular expression. Defaults to `false`; set `true` for regex search. |
-| `target` | `content`, `path`, or `both` | no | Search file contents, relative paths, or both. Defaults to `content`. Use `content` or `path` when mixed `both` output would be ambiguous. |
+| `pattern` | `string` | yes | Search pattern; for `read`/`list`, the file or directory path. |
+| `root` | `string` or `string[]` | no | Workspace-relative file/dir root. Search accepts multiple roots; `read`/`list` require a single root. Defaults to `.`. |
+| `target` | `content`, `path`, `read`, or `list` | no | Operation. Defaults to content search. |
+| `regex` | `boolean` | no | Treat search `pattern` as a regular expression. Defaults to `true`; set `false` for literal search. |
 | `path_scope` | `path` or `basename` | no | For path search, match the full relative path or only file basenames. Defaults to `path`. |
 | `glob` | `string` or `string[]` | no | Include only files matching the glob or globs. |
 | `exclude` | `string` or `string[]` | no | Exclude files matching the glob or globs. |
-| `mode` | `files`, `snippets`, or `count` | no | Result detail level. `files` lists matching files/paths, `snippets` includes per-match context, and `count` reports per-file match counts. Defaults to `snippets` when `context_lines > 0`; otherwise `files`. |
+| `mode` | `files`, `snippets`, or `count` | no | Search detail level. Defaults to `snippets` when `context_lines > 0`; otherwise `files`. |
 | `context_lines` | `integer` | no | Nearby lines to include before and after each snippet match. Defaults to `0`; capped at `20`. |
-| `limit` | `integer` | no | Maximum matches to return. Defaults to `50`; capped at `1000`. |
-| `cursor` | `integer` or `string` | no | Cursor or result offset from a previous search response for the next page. |
+| `limit` | `integer` | no | Maximum matches/list entries/read lines. Defaults to `50`; capped at `1000`. |
+| `cursor` | `integer` or `string` | no | Cursor from a previous truncated search/list result. |
+| `start_line` | `integer` | no | First line for `target: "read"`. Defaults to `1`. |
 
 ```json
 {
@@ -216,65 +216,44 @@ Search workspace file contents, paths, or both. The tool wraps `codetool-search`
 }
 ```
 
-Continue from a previous page:
+Read a text file:
 
 ```json
 {
-  "pattern": "UserService",
-  "regex": false,
-  "glob": "*.py",
-  "limit": 20,
-  "cursor": 20
+  "pattern": "src/app.py",
+  "target": "read",
+  "start_line": 20,
+  "limit": 80
+}
+```
+
+List one directory level:
+
+```json
+{
+  "pattern": "src",
+  "target": "list",
+  "limit": 100
 }
 ```
 
 ::: tip
-Use `target: "path"` and `mode: "files"` as a token-compact `find`/recursive `ls` replacement. To list files under a root, use `pattern: ".*"` with `regex: true`; results are files only, without directory metadata or empty directories. Use `mode: "snippets"` with `context_lines` when nearby code is needed. The tool intentionally does not expose backend, case, or result-format controls.
+Use `target: "path"` for filename/path discovery and `target: "list"` for one-level directory inspection. Use `mode: "snippets"` with `context_lines` when nearby code is needed. The tool intentionally does not expose mixed `content_or_path`, backend, case, or result-format controls.
 :::
 
-List files recursively under a directory:
-
-```json
-{
-  "pattern": ".*",
-  "root": "src",
-  "target": "path",
-  "regex": true,
-  "mode": "files",
-  "limit": 1000
-}
-```
-
-Raw output format:
+Text output format:
 
 - `No Match` means no result.
-- `-- more: cursor=N` means repeat the search with that `cursor` for the next page.
-- `files` mode returns matching file paths.
-- `count` mode returns `path xN`, where `N` is the match count.
-- `snippets` mode returns `path:line:text` or groups lines under file headings. Match lines use `line:text`; context lines are plain indented lines.
+- `-- more: cursor=N` means repeat with that `cursor` for the next page.
+- Search `files` mode returns matching file paths.
+- Search `count` mode returns `path xN`, where `N` is the match count.
+- Search `snippets` mode returns `path:line:text` or groups context under file headings.
+- Read mode returns plain text without line-number prefixes.
+- List mode returns compact one-level entries; directories end with `/`.
 
-## `read_file`
+Project skill activation also uses `explore_workspace` with `target: "read"` to load discovered `.agents/skills/*/SKILL.md` files.
 
-Read workspace files safely, with line-range support for text files, compact summaries for tabular files, extraction for formats such as PDF and DOCX, and native multimodal attachment for supported image files.
-
-`read_file` is also the activation path for project-local `SKILL.md` files discovered from `.agents/skills/`. When the prompt catalog lists a skill, the model should load that `SKILL.md` with `read_file` first, then inspect any referenced project-local resources with `read_file` or bounded shell commands.
-
-| Parameter | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `path` | `string` | yes | File path relative to the workspace root, or absolute path that still resolves within the workspace. |
-| `start_line` | `integer` | no | 1-based starting line for text files. Defaults to `1`. |
-| `max_lines` | `integer` | no | Maximum text lines to return. Defaults to `200`. |
-| `encoding` | `string` | no | Text encoding override. Defaults to automatic detection. |
-
-```json
-{
-  "path": ".agents/skills/repo-skill/SKILL.md",
-  "start_line": 1,
-  "max_lines": 200
-}
-```
-
-Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`. For those files, `read_file` returns a compact metadata summary to the transcript and keeps the image payload in provider-native multimodal content blocks instead of embedding it into plain text.
+Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`. For those files, `explore_workspace` read returns compact metadata to the transcript and keeps the image payload in provider-native multimodal content blocks instead of embedding it into plain text.
 
 ## `read_web_url`
 

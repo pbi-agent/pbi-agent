@@ -381,7 +381,9 @@ def test_google_execute_tool_calls_returns_function_results(
         function_calls=[
             ToolCall(call_id="call_1", name="shell", arguments={"command": "pwd"}),
             ToolCall(
-                call_id="call_2", name="read_file", arguments={"path": "README.md"}
+                call_id="call_2",
+                name="explore_workspace",
+                arguments={"pattern": "README.md", "target": "read"},
             ),
         ],
     )
@@ -433,7 +435,7 @@ def test_google_execute_tool_calls_returns_function_results(
         },
         {
             "type": "function_result",
-            "name": "read_file",
+            "name": "explore_workspace",
             "call_id": "call_2",
             "result": (
                 '{"ok": false, "error": {"type": "tool_execution_failed", '
@@ -451,10 +453,10 @@ def test_google_execute_tool_calls_returns_function_results(
             "arguments": {"command": "pwd"},
         },
         {
-            "name": "read_file",
+            "name": "explore_workspace",
             "success": False,
             "call_id": "call_2",
-            "arguments": {"path": "README.md"},
+            "arguments": {"pattern": "README.md", "target": "read"},
         },
     ]
     assert display_spy.tool_group_end_count == 1
@@ -845,7 +847,9 @@ def test_google_execute_tool_calls_serializes_image_attachments(
         text="",
         function_calls=[
             ToolCall(
-                call_id="call_1", name="read_file", arguments={"path": "chart.png"}
+                call_id="call_1",
+                name="explore_workspace",
+                arguments={"pattern": "chart.png", "target": "read"},
             )
         ],
     )
@@ -890,7 +894,7 @@ def test_google_execute_tool_calls_serializes_image_attachments(
     assert tool_result_items == [
         {
             "type": "function_result",
-            "name": "read_file",
+            "name": "explore_workspace",
             "call_id": "call_1",
             "result": [
                 {

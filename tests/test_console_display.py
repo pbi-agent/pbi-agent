@@ -99,25 +99,25 @@ def test_patch_result_keeps_apply_patch_group_label_and_diff() -> None:
     assert "+[X] New" in output
 
 
-def test_read_file_tool_summary_tolerates_invalid_line_arguments() -> None:
+def test_explore_workspace_read_summary_tolerates_invalid_line_arguments() -> None:
     display, stdout, _ = _display()
 
     display.function_start(1)
     display.function_result(
-        "read_file",
+        "explore_workspace",
         False,
         arguments={
-            "path": "notes.txt",
+            "pattern": "notes.txt",
+            "target": "read",
             "start_line": "oops",
-            "max_lines": None,
+            "limit": None,
         },
     )
     display.tool_group_end()
 
     output = stdout.getvalue()
     assert "notes.txt" in output
-    assert "1–200" in output
-    assert "encoding:" not in output
+    assert "read" in output
     assert "FAILED" in output
 
 

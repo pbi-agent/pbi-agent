@@ -11,8 +11,7 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "apply_patch",
         "replace_in_file",
         "write_file",
-        "read_file",
-        "search_workspace",
+        "explore_workspace",
         "read_web_url",
         "ask_user",
         "sub_agent",
@@ -87,8 +86,7 @@ def test_effective_excluded_tool_names_honors_allowed_tools() -> None:
         )
     )
 
-    assert "read_file" not in excluded
-    assert "search_workspace" not in excluded
+    assert "explore_workspace" not in excluded
     assert "shell" in excluded
     assert "read_web_url" in excluded
 
@@ -102,7 +100,7 @@ def test_web_allowed_tool_enables_fetch_tool_and_native_web_search() -> None:
     )
 
     assert "read_web_url" not in effective_excluded_tool_names(settings)
-    assert "read_file" in effective_excluded_tool_names(settings)
+    assert "explore_workspace" in effective_excluded_tool_names(settings)
     assert native_web_search_enabled(settings) is True
 
 

@@ -272,11 +272,10 @@ function stringValue(value: unknown): string | undefined {
 const KNOWN_TOOL_NAMES = new Set([
   "apply_patch",
   "ask_user",
-  "read_file",
+  "explore_workspace",
   "read_image",
   "read_web_url",
   "replace_in_file",
-  "search_workspace",
   "shell",
   "sub_agent",
   "web_search",
@@ -321,11 +320,10 @@ function friendlyToolName(toolName: string) {
   const labels: Record<string, string> = {
     apply_patch: "Edit",
     ask_user: "Ask user",
-    read_file: "Read",
+    explore_workspace: "Explore",
     read_image: "Inspect image",
     read_web_url: "Read webpage",
     replace_in_file: "Update",
-    search_workspace: "Search",
     shell: "Command",
     sub_agent: "Ask agent",
     web_search: "Search web",
@@ -341,6 +339,23 @@ function friendlyToolName(toolName: string) {
   );
 }
 
+function exploreWorkspaceTarget(entry: TimelineToolGroupEntry): string {
+  const args = objectValue(entry.metadata?.arguments);
+  return stringValue(args?.target) ?? "content";
+}
+
+function friendlyToolEntryName(toolName: string, entry: TimelineToolGroupEntry) {
+  if (toolName === "explore_workspace") {
+    const target = exploreWorkspaceTarget(entry);
+    const result = objectValue(entry.metadata?.result);
+    if (target === "read" && stringValue(result?.mime_type)) return "Inspect image";
+    if (target === "read") return "Read";
+    if (target === "list") return "List";
+    return "Search";
+  }
+  return friendlyToolName(toolName);
+}
+
 function toolItemStatus(toolItem: TimelineToolGroupEntry): string | null {
   if (toolItem.metadata?.status) return toolItem.metadata.status;
   if (toolItem.metadata?.success === true) return "completed";
@@ -351,14 +366,27 @@ function toolItemStatus(toolItem: TimelineToolGroupEntry): string | null {
 type ToolCategory = "read" | "search" | "list" | "shell" | "edit" | "sub-agent" | "question" | "other";
 
 function categorizeTool(toolName: string): ToolCategory {
-  if (["read_file", "read_image", "read_web_url"].includes(toolName)) return "read";
-  if (["search_workspace", "web_search", "grep", "glob", "search"].includes(toolName)) return "search";
+  if (["read_image", "read_web_url"].includes(toolName)) return "read";
+  if (["explore_workspace", "web_search", "grep", "glob", "search"].includes(toolName)) return "search";
   if (["list", "ls"].includes(toolName)) return "list";
   if (toolName === "shell") return "shell";
   if (["apply_patch", "write_file", "replace_in_file"].includes(toolName)) return "edit";
   if (toolName === "sub_agent") return "sub-agent";
   if (toolName === "ask_user") return "question";
   return "other";
+}
+
+function categorizeToolEntry(
+  toolName: string,
+  entry: TimelineToolGroupEntry,
+): ToolCategory {
+  if (toolName === "explore_workspace") {
+    const target = exploreWorkspaceTarget(entry);
+    if (target === "read") return "read";
+    if (target === "list") return "list";
+    return "search";
+  }
+  return categorizeTool(toolName);
 }
 
 function categoryCountItems(counts: Map<ToolCategory, number>): CountSummaryItem[] {
@@ -384,12 +412,12 @@ function toolEntriesForGroup(item: TimelineToolGroupItem): ToolListEntry[] {
   return item.items.map((entry, index) => {
     const label = toolNameFor(entry, item.label);
     const status = toolItemStatus(entry) ?? item.status ?? null;
-    const category = categorizeTool(label);
+    const category = categorizeToolEntry(label, entry);
     return {
       key: `${item.itemId}-${index}`,
       itemId: item.itemId,
       label,
-      displayLabel: friendlyToolName(label),
+      displayLabel: friendlyToolEntryName(label, entry),
       entry,
       category,
       status,
@@ -814,7 +842,7 @@ function buildWorkingGroups(items: WorkItem[], showSubAgentCards: boolean): Work
 
 function toolSubtitle(entry: ToolListEntry) {
   const args = objectValue(entry.entry.metadata?.arguments);
-  if (normalizeToolNameCandidate(entry.label) === "search_workspace") {
+  if (normalizeToolNameCandidate(entry.label) === "explore_workspace") {
     return (
       stringValue(args?.pattern)
       ?? stringValue(entry.entry.metadata?.pattern)

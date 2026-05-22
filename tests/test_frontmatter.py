@@ -69,7 +69,7 @@ def test_include_keys_ignores_indentless_sequence_values() -> None:
             "description: Compression skill.\n"
             "tools:\n"
             "- shell\n"
-            "- read_file\n"
+            "- explore_workspace\n"
         ),
         block_scalar_keys=frozenset({"description"}),
         include_keys=frozenset({"name", "description"}),

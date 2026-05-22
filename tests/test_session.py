@@ -1979,8 +1979,7 @@ def test_open_runtime_provider_filters_default_prompt_by_tool_availability(
         pass
 
     system_prompt = captured["system_prompt"]
-    assert "Use `read_file`" in system_prompt
-    assert "Use `search_workspace`" in system_prompt
+    assert "Use `explore_workspace`" in system_prompt
     assert "Use `shell`" not in system_prompt
     assert "Use `apply_patch`" not in system_prompt
     assert "Use `sub_agent`" not in system_prompt
@@ -3258,8 +3257,8 @@ def test_run_session_loop_interruption_resets_provider_to_persisted_history(
                     function_calls=[
                         ToolCall(
                             call_id="call_missing",
-                            name="read_file",
-                            arguments={"path": "README.md"},
+                            name="explore_workspace",
+                            arguments={"pattern": "README.md", "target": "read"},
                         )
                     ],
                 )
@@ -3958,10 +3957,10 @@ def test_run_session_loop_interrupted_openai_tool_call_does_not_poison_next_turn
                     },
                     "output": [
                         {
-                            "arguments": '{"path":"README.md"}',
+                            "arguments": '{"pattern":"README.md","target":"read"}',
                             "call_id": "call_1",
                             "id": "fc_1",
-                            "name": "read_file",
+                            "name": "explore_workspace",
                             "status": "completed",
                             "type": "function_call",
                         }
