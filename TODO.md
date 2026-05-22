@@ -1,4 +1,4 @@
-[X] Move session refactor files into a dedicated `agent/session/` package
-[X] Replace dynamic star-import coupling with explicit package-internal imports
-[X] Run basedpyright/Pylance-equivalent validation on each session package file
-[X] Run focused/full regression tests and update memory
+[X] Diagnose session topbar small-screen wrapping
+[X] Fix responsive topbar layout
+[X] Run focused frontend validation
+[X] Update memory

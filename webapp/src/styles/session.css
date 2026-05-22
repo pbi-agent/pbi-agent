@@ -3509,6 +3509,22 @@
     padding-inline: var(--sp-4);
   }
 
+  .git-diff-result__header {
+    grid-template-columns: 1fr;
+  }
+
+  .git-diff-result__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    justify-self: start;
+    flex-wrap: wrap;
+  }
+}
+
+/* The topbar controls usually still fit in one row below the general tablet
+ * breakpoint. Only stack them at phone widths; otherwise the collapsed-sidebar
+ * workspace badge is unnecessarily split into three rows. */
+@media (max-width: 560px) {
   .session-topbar {
     align-items: stretch;
     flex-direction: column;
@@ -3543,7 +3559,6 @@
     max-width: 100%;
   }
 
-
   .profile-selector {
     width: 100%;
   }
@@ -3552,18 +3567,6 @@
     max-width: 100%;
     min-width: 0;
   }
-
-  .git-diff-result__header {
-    grid-template-columns: 1fr;
-  }
-
-  .git-diff-result__actions {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-    justify-self: start;
-    flex-wrap: wrap;
-  }
-
 }
 
 @media (hover: none), (pointer: coarse) {
