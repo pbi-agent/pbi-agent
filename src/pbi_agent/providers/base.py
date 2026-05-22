@@ -96,6 +96,16 @@ class Provider(ABC):
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         """Restore persisted conversation messages for client-side history providers."""
 
+    def restore_history_items(self, items: list[dict[str, Any]]) -> None:
+        """Restore persisted messages and tool exchanges for resumed sessions."""
+        messages = [
+            item["message"]
+            for item in items
+            if item.get("type") == "message"
+            and isinstance(item.get("message"), MessageRecord)
+        ]
+        self.restore_messages(messages)
+
     def set_system_prompt(self, system_prompt: str) -> None:
         """Replace the provider-level system prompt for future turns. No-op by default."""
 

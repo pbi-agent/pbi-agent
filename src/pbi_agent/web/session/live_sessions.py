@@ -90,6 +90,7 @@ class LiveSessionsMixin:
         live_session_id: str | None = None,
         profile_id: str | None = None,
         reuse_existing: bool = True,
+        include_tool_history: bool = False,
     ) -> dict[str, Any]:
         runtime = self._resolve_runtime(profile_id)
         bound_session_id = session_id
@@ -154,6 +155,7 @@ class LiveSessionsMixin:
                 runtime=runtime,
                 bound_session_id=bound_session_id,
                 created_at=_now_iso(),
+                include_tool_history=include_tool_history,
             )
             self._live_sessions[new_live_session_id] = live_session
             self._create_live_run_projection(live_session)
@@ -263,6 +265,7 @@ class LiveSessionsMixin:
         image_upload_ids: list[str] | None = None,
         profile_id: str | None = None,
         interactive_mode: bool = False,
+        include_tool_history: bool = False,
     ) -> dict[str, Any]:
         live_session = self._require_live_session(live_session_id)
         if live_session.status == "ended":
@@ -370,6 +373,7 @@ class LiveSessionsMixin:
             images=resolved_images or None,
             image_attachments=message_image_attachments or None,
             interactive_mode=interactive_mode,
+            include_tool_history=include_tool_history,
             item_id=optimistic_item_id,
         )
         if should_restore_runtime:
@@ -392,6 +396,7 @@ class LiveSessionsMixin:
         image_upload_ids: list[str] | None = None,
         profile_id: str | None = None,
         interactive_mode: bool = False,
+        include_tool_history: bool = False,
     ) -> dict[str, Any]:
         self._ensure_saved_session_title(session_id, text)
         live_session = self._find_live_session_for_saved_session(session_id)
@@ -412,6 +417,7 @@ class LiveSessionsMixin:
                 session_id=session_id,
                 profile_id=profile_id,
                 reuse_existing=reuse_existing,
+                include_tool_history=include_tool_history,
             )
             live_session_id = str(created["live_session_id"])
         else:
@@ -424,6 +430,7 @@ class LiveSessionsMixin:
             image_upload_ids=image_upload_ids,
             profile_id=profile_id,
             interactive_mode=interactive_mode,
+            include_tool_history=include_tool_history,
         )
 
     def _command_profile_id_for_submission(

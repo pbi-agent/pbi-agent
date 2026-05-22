@@ -334,7 +334,7 @@ pbi-agent sandbox --env-file .env.sandbox --read-only-repo run --prompt "Review 
 
 With `--detach`, Docker prints the started container id and the CLI returns after the host browser launch check. Stop the detached container with `docker stop <container-id>`.
 
-`sandbox run` accepts the normal one-shot run options: `--prompt`, `--image`, `--project-dir`, and `--session-id`.
+`sandbox run` accepts the normal one-shot run options: `--prompt`, `--image`, `--project-dir`, `--session-id`, and `--include-tool-history`.
 
 See [Docker Sandbox](/sandbox) for setup, storage, and security details.
 
@@ -353,7 +353,17 @@ pbi-agent run --prompt "Read the text in this image." --image ./general_ocr_002.
 | --- | --- | --- |
 | `--prompt` | required | User prompt to send to the agent. |
 | `--image` | repeatable, none by default | Attach a local workspace image to the prompt. Paths must stay inside the workspace. |
+| `--session-id ID` | none | Resume a previous saved session by ID. |
+| `--include-tool-history` | `false` | With `--session-id`, also include prior tool calls, tool arguments, tool results, and useful tool errors in the resumed model context. |
 | `--allowed-tools GROUPS` | profile/default | Comma-separated built-in tool groups for this run: `read`, `write`, `web`, `sub-agent`, and `shell`. Replaces the selected profile's tool visibility for the run. |
+
+By default, resumed CLI runs include prior user and assistant messages only. Use
+`--include-tool-history` when the next prompt depends on previous tool-assisted
+work:
+
+```bash
+pbi-agent run --session-id SESSION_ID --include-tool-history --prompt "Continue from the files you inspected."
+```
 
 ## Image Input Support
 

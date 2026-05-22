@@ -251,6 +251,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Resume a previous session by ID to continue the conversation.",
     )
     run_parser.add_argument(
+        "--include-tool-history",
+        action="store_true",
+        help="Include prior tool calls and results when resuming a session.",
+    )
+    run_parser.add_argument(
         "--allowed-tools",
         dest="allowed_tools",
         default=None,
@@ -416,6 +421,11 @@ def build_parser() -> argparse.ArgumentParser:
     sandbox_run_parser.add_argument(
         "--session-id",
         help="Resume a previous session by ID to continue the conversation.",
+    )
+    sandbox_run_parser.add_argument(
+        "--include-tool-history",
+        action="store_true",
+        help="Include prior tool calls and results when resuming a session.",
     )
 
     sessions_parser = add_command_parser(

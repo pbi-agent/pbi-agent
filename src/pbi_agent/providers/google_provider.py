@@ -148,6 +148,13 @@ class GoogleProvider(Provider):
             )
         self._restored_input = restored_input
 
+    def restore_history_items(self, items: list[dict[str, Any]]) -> None:
+        self._restored_input = [
+            restored
+            for item in items
+            if (restored := _history_item_to_input_item(item)) is not None
+        ]
+
     def request_turn(
         self,
         *,
@@ -830,6 +837,51 @@ def _google_message_record_content(
             )
         )
     return message.content
+
+
+def _history_item_to_input_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    item_type = item.get("type")
+    if item_type == "message":
+        message = item.get("message")
+        if isinstance(message, MessageRecord) and _google_message_record_can_restore(
+            message
+        ):
+            return {
+                "role": "model" if message.role == "assistant" else "user",
+                "content": _google_message_record_content(message),
+            }
+        return None
+    if item_type == "tool_call":
+        call_id = str(item.get("call_id") or "")
+        name = str(item.get("name") or "")
+        if not call_id or not name:
+            return None
+        return {
+            "role": "model",
+            "content": [
+                {
+                    "type": "function_call",
+                    "id": call_id,
+                    "name": name,
+                    "arguments": item.get("arguments") or {},
+                }
+            ],
+        }
+    if item_type == "tool_result":
+        call_id = str(item.get("call_id") or "")
+        if not call_id:
+            return None
+        output = item.get("output")
+        result: dict[str, Any] = {
+            "type": "function_result",
+            "name": str(item.get("name") or ""),
+            "call_id": call_id,
+            "result": output if isinstance(output, str) else json.dumps(output),
+        }
+        if item.get("is_error"):
+            result["is_error"] = True
+        return {"role": "user", "content": [result]}
+    return None
 
 
 def _google_function_result_value(result) -> str | list[dict[str, Any]]:

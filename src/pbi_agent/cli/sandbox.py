@@ -424,5 +424,7 @@ def _sandbox_inner_command(args: argparse.Namespace) -> list[str]:
         command.extend(["--project-dir", str(args.project_dir)])
         if args.session_id:
             command.extend(["--session-id", args.session_id])
+    if args.include_tool_history:
+        command.append("--include-tool-history")
         return command
     raise ConfigError(f"Unknown sandbox command '{sandbox_command}'.")

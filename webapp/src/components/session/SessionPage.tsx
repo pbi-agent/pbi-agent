@@ -8,6 +8,7 @@ import {
   ChevronDownIcon,
   CpuIcon,
   MessageCircleQuestionMark,
+  WrenchIcon,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
@@ -157,6 +158,9 @@ export function SessionPage({
   const [interactiveMode, setInteractiveMode] = useState(() =>
     window.localStorage.getItem("pbi-agent.interactive-mode") === "true",
   );
+  const [includeToolHistory, setIncludeToolHistory] = useState(() =>
+    window.localStorage.getItem("pbi-agent.include-tool-history") === "true",
+  );
   const composerRef = useRef<ComposerHandle>(null);
   const submitInFlightRef = useRef(false);
   const [directSubmitPending, setDirectSubmitPending] = useState(false);
@@ -235,6 +239,7 @@ export function SessionPage({
       image_upload_ids: string[];
       profile_id?: string | null;
       interactive_mode?: boolean;
+      include_tool_history?: boolean;
     }) => {
       const sessionId = routeSessionId ?? sessionState?.sessionId;
       if (!sessionId) throw new Error("No session available.");
@@ -342,6 +347,13 @@ export function SessionPage({
   useEffect(() => {
     window.localStorage.setItem("pbi-agent.interactive-mode", String(interactiveMode));
   }, [interactiveMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "pbi-agent.include-tool-history",
+      String(includeToolHistory),
+    );
+  }, [includeToolHistory]);
 
   useEffect(() => {
     if (isSubAgentRoute) return undefined;
@@ -595,6 +607,7 @@ export function SessionPage({
           image_upload_ids: uploadedImageIds,
           profile_id: selectedSavedProfileId,
           interactive_mode: interactiveMode,
+          include_tool_history: includeToolHistory,
         });
         attachLiveSession(getSavedSessionKey(sessionId), session, {
           preserveItems: true,
@@ -619,6 +632,7 @@ export function SessionPage({
         image_upload_ids: uploadedImageIds,
         profile_id: selectedSavedProfileId,
         interactive_mode: interactiveMode,
+        include_tool_history: includeToolHistory,
       });
       attachLiveSession(getSavedSessionKey(sessionId), session, {
         preserveItems: true,
@@ -781,6 +795,32 @@ export function SessionPage({
             </div>
           ) : null}
           <div className="session-topbar__actions">
+            {!isSubAgentRoute ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="session-topbar-control session-tool-history-toggle"
+                    pressed={includeToolHistory}
+                    aria-label={
+                      includeToolHistory
+                        ? "Disable tool history"
+                        : "Enable tool history"
+                    }
+                    onPressedChange={setIncludeToolHistory}
+                  >
+                    <WrenchIcon aria-hidden="true" />
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end">
+                  {includeToolHistory
+                    ? "Prior tool calls and results will be included when continuing saved sessions."
+                    : "Include prior tool calls and results when continuing saved sessions."}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
             {!isSubAgentRoute ? (
               <Tooltip>
                 <TooltipTrigger asChild>

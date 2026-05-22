@@ -146,6 +146,13 @@ class XAIProvider(Provider):
             if message.role in {"user", "assistant"} and message.content
         ]
 
+    def restore_history_items(self, items: list[dict[str, Any]]) -> None:
+        self._restored_input_items = [
+            restored
+            for item in items
+            if (restored := _history_item_to_input_item(item)) is not None
+        ]
+
     def request_turn(
         self,
         *,
@@ -628,6 +635,44 @@ class XAIProvider(Provider):
 
 def _build_user_input_item(prompt: str) -> dict[str, Any]:
     return {"role": "user", "content": prompt}
+
+
+def _history_item_to_input_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    item_type = item.get("type")
+    if item_type == "message":
+        message = item.get("message")
+        if (
+            isinstance(message, MessageRecord)
+            and message.role in {"user", "assistant"}
+            and message.content
+        ):
+            return {"role": message.role, "content": message.content}
+        return None
+    if item_type == "tool_call":
+        call_id = str(item.get("call_id") or "")
+        name = str(item.get("name") or "")
+        if not call_id or not name:
+            return None
+        arguments = item.get("arguments")
+        return {
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": (
+                arguments if isinstance(arguments, str) else json.dumps(arguments or {})
+            ),
+        }
+    if item_type == "tool_result":
+        call_id = str(item.get("call_id") or "")
+        if not call_id:
+            return None
+        output = item.get("output")
+        return {
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": output if isinstance(output, str) else json.dumps(output),
+        }
+    return None
 
 
 def _build_system_input_item(prompt: str) -> dict[str, Any]:

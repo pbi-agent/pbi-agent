@@ -587,6 +587,7 @@ class _EventDisplayBase(DisplayProtocol):
         images=None,
         image_attachments=None,
         interactive_mode: bool = False,
+        include_tool_history: bool = False,
         item_id: str | None = None,
     ) -> None:
         del (
@@ -596,6 +597,7 @@ class _EventDisplayBase(DisplayProtocol):
             images,
             image_attachments,
             interactive_mode,
+            include_tool_history,
             item_id,
         )
         return None
@@ -1435,6 +1437,7 @@ class WebDisplay(_EventDisplayBase):
         images=None,
         image_attachments=None,
         interactive_mode: bool = False,
+        include_tool_history: bool = False,
         item_id: str | None = None,
     ) -> None:
         self.clear_interrupt()
@@ -1445,6 +1448,7 @@ class WebDisplay(_EventDisplayBase):
             images=list(images or []),
             image_attachments=list(image_attachments or []),
             interactive_mode=interactive_mode,
+            include_tool_history=include_tool_history,
             item_id=item_id,
         )
         self._put_input_activity(queued)

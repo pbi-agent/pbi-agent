@@ -216,6 +216,7 @@ class LiveSessionState:
     runtime: ResolvedRuntime
     bound_session_id: str | None
     created_at: str
+    include_tool_history: bool = False
     kind: str = "session"
     task_id: str | None = None
     project_dir: str = "."

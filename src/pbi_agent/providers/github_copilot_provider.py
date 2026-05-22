@@ -135,6 +135,9 @@ class GitHubCopilotProvider(Provider):
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         self._delegate.restore_messages(messages)
 
+    def restore_history_items(self, items: list[dict[str, Any]]) -> None:
+        self._delegate.restore_history_items(items)
+
     def set_system_prompt(self, system_prompt: str) -> None:
         self._delegate.set_system_prompt(system_prompt)
 
@@ -182,6 +185,10 @@ class _GitHubCopilotResponsesProvider(OpenAIProvider):
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         super().restore_messages(messages)
+        self._conversation.restore(self._restored_input_items)
+
+    def restore_history_items(self, items: list[dict[str, Any]]) -> None:
+        super().restore_history_items(items)
         self._conversation.restore(self._restored_input_items)
 
     def _build_request_body(

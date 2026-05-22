@@ -32,6 +32,10 @@ Session features include:
 
 - A session sidebar for saved and active sessions.
 - A model-profile selector for choosing the runtime profile before a turn.
+- An **Include tool history** toggle in the session topbar. It is off by
+  default and remembered globally. When enabled before continuing a saved
+  session, pbi-agent includes prior tool calls, tool arguments, tool results, and
+  useful tool errors in the resumed model context.
 - `@file` mention autocomplete for workspace files.
 - Slash-command autocomplete for built-in and project commands.
 - Image uploads from the `+` action menu or clipboard when the provider supports images.
@@ -44,6 +48,12 @@ See [Session Commands](/session-commands) for the full composer syntax reference
 ## Saved sessions and resume behavior
 
 Saved sessions appear in the Sessions sidebar. Reopening a session restores the provider checkpoint when possible; otherwise pbi-agent replays the visible history needed to continue. The session timeline shows user turns, assistant turns, local tool activity, image attachments, shell output, and run metadata.
+
+By default, saved-session continuation sends prior user and assistant messages
+without previous tool-call exchanges. Turn on **Include tool history** before
+submitting the next message if the agent should see previous tool calls/results
+as model context. The toggle affects the new saved-session run that starts from
+that submission; already-active live runs keep their current in-memory context.
 
 Starting a new session resets the provider conversation state while keeping the current runtime settings.
 

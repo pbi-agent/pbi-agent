@@ -48,6 +48,7 @@ class QueuedInput:
     images: list[ImageAttachment] = field(default_factory=list)
     image_attachments: list[MessageImageAttachment] = field(default_factory=list)
     interactive_mode: bool = False
+    include_tool_history: bool = False
     item_id: str | None = None
 
 
@@ -161,6 +162,7 @@ class DisplayProtocol(Protocol):
         images: list[ImageAttachment] | None = None,
         image_attachments: list[MessageImageAttachment] | None = None,
         interactive_mode: bool = False,
+        include_tool_history: bool = False,
         item_id: str | None = None,
     ) -> None: ...
 

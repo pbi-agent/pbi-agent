@@ -315,6 +315,7 @@ def run_single_turn(
     images: list[ImageAttachment] | None = None,
     persisted_user_message_id: int | None = None,
     replay_history: bool = True,
+    include_tool_history: bool = False,
 ) -> AgentOutcome:
     runtime = _coerce_runtime(settings)
     store = _open_store(runtime.settings)
@@ -388,6 +389,7 @@ def run_single_turn(
                 display=display,
                 before_message_id=persisted_user_message_id,
                 replay_history=replay_history,
+                include_tool_history=include_tool_history,
             )
             if persisted_user_message_id is None:
                 user_message_id = _add_message(
@@ -449,6 +451,7 @@ def run_single_turn(
                 store,
                 session_id,
                 reason="turn",
+                include_tool_history=include_tool_history,
             )
             display.assistant_stop()
             elapsed = time.monotonic() - session_start
@@ -486,6 +489,7 @@ def run_session_loop(
     run_session_id: str | None = None,
     on_reload: Callable[[], None] | None = None,
     excluded_tools: set[str] | None = None,
+    include_tool_history: bool = False,
 ) -> int:
     current_runtime = _coerce_runtime(settings)
     saved_session_runtime = current_runtime
@@ -494,6 +498,7 @@ def run_session_loop(
     title_set = bool(resume_session_id)
     resume_session_to_restore = resume_session_id
     replay_history_on_restore = resume_session_id is not None
+    provider_history_include_tool_history: bool | None = None
     should_exit = False
     base_excluded_tools = set(excluded_tools) if excluded_tools is not None else set()
 
@@ -545,9 +550,11 @@ def run_session_loop(
                     session_usage=session_usage,
                     display=display,
                     replay_history=replay_history_on_restore,
+                    include_tool_history=include_tool_history,
                 )
                 resume_session_to_restore = None
                 replay_history_on_restore = False
+                provider_history_include_tool_history = include_tool_history
             while True:
                 queued_input = display.user_prompt()
                 file_paths: list[str] = []
@@ -571,6 +578,7 @@ def run_session_loop(
                     if session_id is not None:
                         resume_session_to_restore = session_id
                         replay_history_on_restore = False
+                        provider_history_include_tool_history = None
                         _bind_session(display, session_id)
                     break
                 if isinstance(queued_input, QueuedInput):
@@ -580,10 +588,12 @@ def run_session_loop(
                     queued_images = queued_input.images
                     message_image_attachments = queued_input.image_attachments
                     turn_interactive_mode = queued_input.interactive_mode
+                    turn_include_tool_history = queued_input.include_tool_history
                     queued_item_id = queued_input.item_id
                 else:
                     user_input = queued_input.strip()
                     turn_interactive_mode = False
+                    turn_include_tool_history = include_tool_history
                     queued_item_id = None
                 if user_input == NEW_SESSION_SENTINEL:
                     provider.reset_conversation()
@@ -594,6 +604,7 @@ def run_session_loop(
                     had_tool_errors = False
                     session_id = None
                     title_set = False
+                    provider_history_include_tool_history = None
                     _bind_session(display, session_id)
                     continue
                 if user_input.startswith(RESUME_SESSION_PREFIX):
@@ -612,6 +623,7 @@ def run_session_loop(
                         _bind_session(display, session_id)
                         resume_session_to_restore = resume_id
                         replay_history_on_restore = True
+                        provider_history_include_tool_history = None
                         break
                     else:
                         _bind_session(display, session_id)
@@ -690,6 +702,7 @@ def run_session_loop(
                         reason="manual",
                     )
                     display.session_usage(session_usage)
+                    provider_history_include_tool_history = False
                     continue
                 active_command = _extract_active_command(user_input)
                 active_command_instructions = (
@@ -788,6 +801,7 @@ def run_session_loop(
                                 store,
                                 session_id,
                                 reason="command profile",
+                                include_tool_history=turn_include_tool_history,
                             )
                         else:
                             provider.set_excluded_tools(turn_excluded_tools)
@@ -804,6 +818,21 @@ def run_session_loop(
                                     ),
                                 )
                                 reset_provider_settings = True
+                            if (
+                                provider_history_include_tool_history is not None
+                                and provider_history_include_tool_history
+                                != turn_include_tool_history
+                            ):
+                                _refresh_provider_history_from_store(
+                                    provider,
+                                    store,
+                                    session_id,
+                                    reason="turn preferences",
+                                    include_tool_history=turn_include_tool_history,
+                                )
+                                provider_history_include_tool_history = (
+                                    turn_include_tool_history
+                                )
                         user_message_id = _add_message(
                             store,
                             session_id,
@@ -877,13 +906,22 @@ def run_session_loop(
                             store,
                             session_id,
                             reason="turn",
+                            include_tool_history=turn_include_tool_history,
                         )
+                        if turn_provider is provider:
+                            provider_history_include_tool_history = (
+                                turn_include_tool_history
+                            )
                         if turn_provider is not provider:
                             _refresh_provider_history_from_store(
                                 provider,
                                 store,
                                 session_id,
                                 reason="turn",
+                                include_tool_history=turn_include_tool_history,
+                            )
+                            provider_history_include_tool_history = (
+                                turn_include_tool_history
                             )
                     had_tool_errors = had_tool_errors or loop_had_errors
                     display.assistant_stop()
@@ -926,13 +964,22 @@ def run_session_loop(
                         store=store,
                         session_id=session_id,
                         user_message_id=user_message_id,
+                        include_tool_history=turn_include_tool_history,
                     )
+                    if turn_provider is provider:
+                        provider_history_include_tool_history = (
+                            turn_include_tool_history
+                        )
                     if turn_provider is not provider:
                         _refresh_provider_history_from_store(
                             provider,
                             store,
                             session_id,
                             reason="interrupt",
+                            include_tool_history=turn_include_tool_history,
+                        )
+                        provider_history_include_tool_history = (
+                            turn_include_tool_history
                         )
                     clear_interrupt = getattr(display, "clear_interrupt", None)
                     if callable(clear_interrupt):
@@ -1591,15 +1638,24 @@ def _refresh_provider_history_from_store(
     session_id: str | None,
     *,
     reason: str,
+    include_tool_history: bool = False,
 ) -> None:
     reset_conversation = getattr(provider, "reset_conversation", None)
     restore_messages = getattr(provider, "restore_messages", None)
+    restore_history_items = getattr(provider, "restore_history_items", None)
     if not callable(reset_conversation) or not callable(restore_messages):
         return
     try:
         messages = []
+        history_items = []
         if store is not None and session_id is not None:
             messages = _messages_for_provider_restore(store.list_messages(session_id))
+            if include_tool_history:
+                history_items = _history_items_for_provider_restore(
+                    store,
+                    session_id,
+                    messages,
+                )
     except Exception:
         _log.warning(
             "Failed to load provider history after %s",
@@ -1609,7 +1665,10 @@ def _refresh_provider_history_from_store(
         return
     try:
         reset_conversation()
-        restore_messages(messages)
+        if include_tool_history and callable(restore_history_items):
+            restore_history_items(history_items)
+        else:
+            restore_messages(messages)
     except Exception:
         _log.warning(
             "Failed to refresh provider history after %s",
@@ -1696,6 +1755,7 @@ def _discard_interrupted_turn(
     store: SessionStore | None,
     session_id: str | None,
     user_message_id: int | None,
+    include_tool_history: bool = False,
 ) -> None:
     _delete_message(store, user_message_id)
     _refresh_provider_history_from_store(
@@ -1703,6 +1763,7 @@ def _discard_interrupted_turn(
         store,
         session_id,
         reason="interrupt",
+        include_tool_history=include_tool_history,
     )
 
 
@@ -1715,6 +1776,7 @@ def _resume_session(
     display: DisplayProtocol,
     replay_history: bool = True,
     before_message_id: int | None = None,
+    include_tool_history: bool = False,
 ) -> None:
     if store is None or session_id is None:
         return
@@ -1747,7 +1809,19 @@ def _resume_session(
     if messages:
         provider_messages = _messages_for_provider_restore(messages)
         try:
-            if provider_messages:
+            if include_tool_history:
+                restore_history_items = getattr(provider, "restore_history_items", None)
+                if callable(restore_history_items):
+                    restore_history_items(
+                        _history_items_for_provider_restore(
+                            store,
+                            session_id,
+                            provider_messages,
+                        )
+                    )
+                elif provider_messages:
+                    provider.restore_messages(provider_messages)
+            elif provider_messages:
                 provider.restore_messages(provider_messages)
             if replay_history:
                 display.replay_history(messages)
@@ -1774,6 +1848,144 @@ def _messages_for_provider_restore(
     while restored and restored[-1].role == "user":
         restored.pop()
     return restored
+
+
+def _history_items_for_provider_restore(
+    store: SessionStore,
+    session_id: str,
+    messages: list[MessageRecord],
+) -> list[dict[str, Any]]:
+    history_items: list[dict[str, Any]] = []
+    run_tool_histories = _tool_history_by_run(store, session_id)
+    run_index = 0
+    pending_user = False
+    for message in messages:
+        history_items.append({"type": "message", "message": message})
+        if message.role == "user":
+            pending_user = True
+        elif message.role == "assistant" and pending_user:
+            if run_index < len(run_tool_histories):
+                history_items[-1:-1] = run_tool_histories[run_index]
+                run_index += 1
+            pending_user = False
+    return history_items
+
+
+def _tool_history_by_run(
+    store: SessionStore,
+    session_id: str,
+) -> list[list[dict[str, Any]]]:
+    histories: list[list[dict[str, Any]]] = []
+    for run in store.list_run_sessions(session_id):
+        if run.parent_run_session_id or run.agent_name not in {None, "main"}:
+            continue
+        run_items: list[dict[str, Any]] = []
+        seen_calls: dict[str, dict[str, Any]] = {}
+        for event in store.list_observability_events(run_session_id=run.run_session_id):
+            if event.event_type == "model_call":
+                for call in _tool_calls_from_response_payload(
+                    _json_field(event.response_payload_json)
+                ):
+                    seen_calls[call["call_id"]] = call
+                    run_items.append(call)
+            elif event.event_type == "tool_call" and event.tool_call_id:
+                if event.tool_call_id not in seen_calls:
+                    call = {
+                        "type": "tool_call",
+                        "call_id": event.tool_call_id,
+                        "name": event.tool_name or "",
+                        "arguments": _json_field(event.tool_input_json),
+                        "kind": "function",
+                    }
+                    seen_calls[event.tool_call_id] = call
+                    run_items.append(call)
+                run_items.append(
+                    {
+                        "type": "tool_result",
+                        "call_id": event.tool_call_id,
+                        "name": event.tool_name or "",
+                        "output": _json_field(event.tool_output_json),
+                        "is_error": event.success == 0,
+                        "error_message": event.error_message,
+                        "kind": seen_calls[event.tool_call_id].get(
+                            "kind",
+                            "function",
+                        ),
+                    }
+                )
+        if run_items:
+            histories.append(run_items)
+    return histories
+
+
+def _tool_calls_from_response_payload(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    calls: list[dict[str, Any]] = []
+    for item in _response_output_items(payload):
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        if item_type == "function" and isinstance(item.get("function"), dict):
+            function = item["function"]
+            item = {
+                "type": "function_call",
+                "call_id": item.get("id"),
+                "name": function.get("name"),
+                "arguments": function.get("arguments"),
+            }
+            item_type = "function_call"
+        if item_type in {"function_call", "custom_tool_call"}:
+            call_id = item.get("call_id") or item.get("id")
+            name = item.get("name")
+            arguments = item.get("arguments", item.get("input"))
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    pass
+            if isinstance(call_id, str) and call_id:
+                calls.append(
+                    {
+                        "type": "tool_call",
+                        "call_id": call_id,
+                        "name": name if isinstance(name, str) else "",
+                        "arguments": arguments,
+                        "kind": (
+                            "custom" if item_type == "custom_tool_call" else "function"
+                        ),
+                    }
+                )
+    return calls
+
+
+def _response_output_items(payload: dict[str, Any]) -> list[Any]:
+    output = payload.get("output")
+    if isinstance(output, list):
+        return output
+    outputs = payload.get("outputs")
+    if isinstance(outputs, list):
+        return outputs
+    choices = payload.get("choices")
+    if not isinstance(choices, list):
+        return []
+    items: list[Any] = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        message = choice.get("message")
+        if isinstance(message, dict):
+            items.extend(message.get("tool_calls", []) or [])
+    return items
+
+
+def _json_field(value: str | None) -> Any:
+    if value is None:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
 
 
 def _active_context_messages(

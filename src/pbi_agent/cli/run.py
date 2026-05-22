@@ -40,6 +40,7 @@ def _handle_run_command(  # pyright: ignore[reportUnusedFunction] - imported by 
             settings=runtime,
             image_paths=list(args.images or []),
             resume_session_id=args.session_id,
+            include_tool_history=bool(args.include_tool_history),
         )
     finally:
         os.chdir(original_cwd)
@@ -52,6 +53,7 @@ def _run_single_turn_command(
     single_turn_hint: str | None = None,
     image_paths: list[str] | None = None,
     resume_session_id: str | None = None,
+    include_tool_history: bool = False,
 ) -> int:
     from pbi_agent.agent.error_formatting import format_user_facing_error
     from pbi_agent.agent.session import run_single_turn
@@ -71,6 +73,7 @@ def _run_single_turn_command(
             single_turn_hint=single_turn_hint,
             image_paths=image_paths,
             resume_session_id=resume_session_id,
+            include_tool_history=include_tool_history,
         )
     except KeyboardInterrupt:
         return 130

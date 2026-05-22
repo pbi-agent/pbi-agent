@@ -1,5 +1,5 @@
-[X] Inspect current customization docs and docs navigation.
-[X] Split Customization modules into subpage files.
-[X] Document `allowed_tools` in command, sub-agent, and model-profile docs.
-[X] Run docs validation.
+[X] Trace web turn-based include-tool-history flow.
+[X] Patch live-session reuse/startup state handling.
+[X] Add regression tests for toggling after first turn.
+[X] Run focused validation.
 [X] Update memory and summarize.

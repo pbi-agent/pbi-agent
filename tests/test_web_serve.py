@@ -7272,9 +7272,9 @@ def test_live_session_worker_refreshes_mentions_on_reload_and_end() -> None:
     observed: dict[str, object] = {}
 
     def fake_run_session_loop(
-        _settings, _display, *, resume_session_id=None, on_reload=None
+        _settings, _display, *, resume_session_id=None, on_reload=None, **kwargs
     ):
-        del _settings, _display, resume_session_id
+        del _settings, _display, resume_session_id, kwargs
         observed["on_reload_callable"] = callable(on_reload)
         if on_reload is not None:
             on_reload()
@@ -7324,8 +7324,9 @@ def test_temporary_slash_command_web_events_are_live_only(
         resume_session_id=None,
         on_reload=None,
         run_session_id=None,
+        **kwargs,
     ):
-        del _settings, resume_session_id, on_reload, run_session_id
+        del _settings, resume_session_id, on_reload, run_session_id, kwargs
         for _ in range(2):
             queued = display.user_prompt()
             text = getattr(queued, "text", queued).strip()
@@ -7432,8 +7433,9 @@ def test_saved_session_shell_command_reenables_input_after_output(
         resume_session_id=None,
         on_reload=None,
         run_session_id=None,
+        **kwargs,
     ):
-        del _settings, resume_session_id, on_reload, run_session_id
+        del _settings, resume_session_id, on_reload, run_session_id, kwargs
         while True:
             if display.user_prompt() == "exit":
                 return 0
@@ -7524,8 +7526,9 @@ def test_web_session_worker_records_turn_run_separately_from_live_projection(
         resume_session_id=None,
         on_reload=None,
         run_session_id=None,
+        **kwargs,
     ):
-        del _settings, _display, on_reload
+        del _settings, _display, on_reload, kwargs
         observed_run_session_ids.append(run_session_id)
         with SessionStore(db_path=tmp_path / "sessions.db") as store:
             turn_run_id = store.create_run_session(
@@ -7591,8 +7594,9 @@ def test_web_session_worker_persists_failed_projection_on_fatal_error(
         *,
         resume_session_id=None,
         on_reload=None,
+        **kwargs,
     ):
-        del _settings, _display, resume_session_id, on_reload
+        del _settings, _display, resume_session_id, on_reload, kwargs
         raise RuntimeError("boom")
 
     manager = WebSessionManager(_settings())
@@ -7627,9 +7631,9 @@ def test_saved_session_first_message_sets_blank_title(tmp_path, monkeypatch) -> 
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
 
     def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
+        _settings, display, *, resume_session_id=None, on_reload=None, **kwargs
     ):
-        del _settings, resume_session_id, on_reload
+        del _settings, resume_session_id, on_reload, kwargs
         display.user_prompt()
         return 0
 
@@ -7663,6 +7667,67 @@ def test_saved_session_first_message_sets_blank_title(tmp_path, monkeypatch) -> 
 
     assert updated is not None
     assert updated.title == "Summarize the first part of this request and keep going."
+
+
+def test_saved_session_input_queues_per_turn_tool_history_preference(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    queued_preferences: list[tuple[str, bool]] = []
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        session_id = store.create_session(
+            str(tmp_path),
+            "openai",
+            "gpt-5.4",
+            "Saved session",
+        )
+
+    def fake_run_session_loop(
+        _settings,
+        display,
+        *,
+        resume_session_id=None,
+        on_reload=None,
+        **kwargs,
+    ):
+        del _settings, resume_session_id, on_reload, kwargs
+        for _ in range(2):
+            queued = display.user_prompt()
+            assert isinstance(queued, QueuedInput)
+            queued_preferences.append((queued.text, queued.include_tool_history))
+        return 0
+
+    manager = WebSessionManager(_settings())
+    try:
+        manager.start()
+        with patch(
+            "pbi_agent.web.session.workers.run_session_loop", fake_run_session_loop
+        ):
+            created = manager.create_live_session(session_id=session_id)
+            live_session_id = str(created["live_session_id"])
+            manager.submit_saved_session_input(
+                session_id,
+                text="First turn",
+                include_tool_history=False,
+            )
+            manager.submit_saved_session_input(
+                session_id,
+                text="Second turn",
+                include_tool_history=True,
+            )
+            worker = manager._live_sessions[live_session_id].worker
+            assert worker is not None
+            worker.join(timeout=2)
+    finally:
+        manager.shutdown()
+
+    assert queued_preferences == [
+        ("First turn", False),
+        ("Second turn", True),
+    ]
 
 
 def test_project_command_model_profile_overrides_submitted_profile(
@@ -7709,9 +7774,9 @@ def test_project_command_model_profile_overrides_submitted_profile(
     queued_inputs: list[str] = []
 
     def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
+        _settings, display, *, resume_session_id=None, on_reload=None, **kwargs
     ):
-        del _settings, resume_session_id, on_reload
+        del _settings, resume_session_id, on_reload, kwargs
         for _ in range(3):
             queued = display.user_prompt()
             if isinstance(queued, QueuedRuntimeChange):
@@ -7795,9 +7860,9 @@ def test_saved_project_command_model_profile_does_not_persist_override(
         )
 
     def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
+        _settings, display, *, resume_session_id=None, on_reload=None, **kwargs
     ):
-        del _settings, resume_session_id, on_reload
+        del _settings, resume_session_id, on_reload, kwargs
         for _ in range(3):
             display.user_prompt()
         return 0
@@ -7888,9 +7953,9 @@ def test_existing_saved_project_command_restores_submitted_profile(
     queued_inputs: list[str] = []
 
     def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
+        _settings, display, *, resume_session_id=None, on_reload=None, **kwargs
     ):
-        del _settings, resume_session_id, on_reload
+        del _settings, resume_session_id, on_reload, kwargs
         for _ in range(3):
             queued = display.user_prompt()
             if isinstance(queued, QueuedRuntimeChange):
@@ -7971,9 +8036,9 @@ def test_project_command_model_profile_does_not_override_local_compact(
     queued_values: list[object] = []
 
     def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
+        _settings, display, *, resume_session_id=None, on_reload=None, **kwargs
     ):
-        del _settings, resume_session_id, on_reload
+        del _settings, resume_session_id, on_reload, kwargs
         queued_values.append(display.user_prompt())
         return 0
 
@@ -8007,9 +8072,9 @@ def test_saved_session_first_message_keeps_existing_title(
     monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
 
     def fake_run_session_loop(
-        _settings, display, *, resume_session_id=None, on_reload=None
+        _settings, display, *, resume_session_id=None, on_reload=None, **kwargs
     ):
-        del _settings, resume_session_id, on_reload
+        del _settings, resume_session_id, on_reload, kwargs
         display.user_prompt()
         return 0
 

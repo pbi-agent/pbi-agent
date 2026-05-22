@@ -140,6 +140,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 "single_turn_hint": None,
                 "image_paths": [],
                 "resume_session_id": None,
+                "include_tool_history": False,
             },
         )
 
@@ -170,6 +171,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                 single_turn_hint: str | None = None,
                 image_paths: list[str] | None = None,
                 resume_session_id: str | None = None,
+                include_tool_history: bool = False,
             ) -> object:
                 del (
                     prompt,
@@ -178,6 +180,7 @@ class DefaultWebCommandTests(unittest.TestCase):
                     single_turn_hint,
                     image_paths,
                     resume_session_id,
+                    include_tool_history,
                 )
                 seen_cwds.append(Path.cwd())
                 return Mock(tool_errors=False)
@@ -202,6 +205,35 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertEqual(Path.cwd(), original_cwd)
         mock_display_cls.assert_called_once_with(verbose=False)
         mock_run.assert_called_once()
+
+    def test_handle_run_command_passes_include_tool_history(self) -> None:
+        parser = cli.build_parser()
+        args = parser.parse_args(
+            [
+                "run",
+                "--prompt",
+                "Continue",
+                "--session-id",
+                "session-1",
+                "--include-tool-history",
+            ]
+        )
+        settings = self._settings()
+
+        with (
+            patch(
+                "pbi_agent.agent.session.run_single_turn",
+                return_value=Mock(tool_errors=False, session_id="session-1"),
+            ) as mock_run,
+            patch("pbi_agent.display.console_display.ConsoleDisplay"),
+        ):
+            rc = cli_run._handle_run_command(args, settings)
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(mock_run.call_args.kwargs["resume_session_id"], "session-1")
+        self.assertIs(mock_run.call_args.kwargs["include_tool_history"], True)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["run", "--prompt", "x", "--full-history"])
 
     def test_handle_run_command_rejects_missing_project_dir(self) -> None:
         parser = cli.build_parser()

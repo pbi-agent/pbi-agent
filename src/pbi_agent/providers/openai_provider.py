@@ -176,6 +176,14 @@ class OpenAIProvider(Provider):
         ]
         self._chatgpt_backend.restore_conversation(self._restored_input_items)
 
+    def restore_history_items(self, items: list[dict[str, Any]]) -> None:
+        self._restored_input_items = [
+            restored
+            for item in items
+            if (restored := _history_item_to_input_item(item)) is not None
+        ]
+        self._chatgpt_backend.restore_conversation(self._restored_input_items)
+
     def request_turn(
         self,
         *,
@@ -1370,6 +1378,53 @@ def _message_record_to_input_item(message: MessageRecord) -> dict[str, Any]:
             )
         )
     return {"role": message.role, "content": message.content}
+
+
+def _history_item_to_input_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    item_type = item.get("type")
+    if item_type == "message":
+        message = item.get("message")
+        if isinstance(message, MessageRecord) and _message_record_can_restore(message):
+            return _message_record_to_input_item(message)
+        return None
+    if item_type == "tool_call":
+        call_id = str(item.get("call_id") or "")
+        name = str(item.get("name") or "")
+        if not call_id or not name:
+            return None
+        arguments = item.get("arguments")
+        if item.get("kind") == "custom":
+            return {
+                "type": "custom_tool_call",
+                "call_id": call_id,
+                "name": name,
+                "input": arguments
+                if isinstance(arguments, str)
+                else json.dumps(arguments),
+            }
+        return {
+            "type": "function_call",
+            "call_id": call_id,
+            "name": name,
+            "arguments": (
+                arguments if isinstance(arguments, str) else json.dumps(arguments or {})
+            ),
+        }
+    if item_type == "tool_result":
+        call_id = str(item.get("call_id") or "")
+        if not call_id:
+            return None
+        output = item.get("output")
+        return {
+            "type": (
+                "custom_tool_call_output"
+                if item.get("kind") == "custom"
+                else "function_call_output"
+            ),
+            "call_id": call_id,
+            "output": output if isinstance(output, str) else json.dumps(output),
+        }
+    return None
 
 
 def _decode_responses_body(raw_body: str, *, streamed: bool) -> dict[str, Any]:

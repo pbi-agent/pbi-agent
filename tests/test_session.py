@@ -177,6 +177,7 @@ class _ProviderStub:
         self.conversation_checkpoint = "resp_current"
         self.settings = Settings(api_key="test-key", provider="openai")
         self.tool_name = tool_name
+        self.restored_history_items = None
 
     def __enter__(self) -> _ProviderStub:
         self.connect()
@@ -199,6 +200,9 @@ class _ProviderStub:
 
     def restore_messages(self, messages) -> None:
         self.restored_messages = list(messages)
+
+    def restore_history_items(self, items) -> None:
+        self.restored_history_items = list(items)
 
     def request_turn(
         self,
@@ -398,6 +402,96 @@ def test_run_single_turn_replays_resumed_history_by_default(
         "previous user",
         "previous assistant",
     ]
+    assert [message.content for message in display.replayed_history] == [
+        "previous user",
+        "previous assistant",
+    ]
+    assert provider.restored_history_items is None
+
+
+def test_run_single_turn_restores_tool_history_when_enabled(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub()
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "previous user")
+        store.add_message(session_id, "assistant", "previous assistant")
+        run_id = store.create_run_session(
+            run_session_id="run-1",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            response_payload={
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "arguments": '{"command": "pwd"}',
+                    }
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_1",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    outcome = run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert outcome.session_id == session_id
+    assert provider.restored_history_items is not None
+    assert [item["type"] for item in provider.restored_history_items[:4]] == [
+        "message",
+        "tool_call",
+        "tool_result",
+        "message",
+    ]
+    assert provider.restored_history_items[1] == {
+        "type": "tool_call",
+        "call_id": "call_1",
+        "name": "shell",
+        "arguments": {"command": "pwd"},
+        "kind": "function",
+    }
+    assert provider.restored_history_items[2]["output"] == {
+        "ok": True,
+        "result": "/workspace",
+    }
     assert [message.content for message in display.replayed_history] == [
         "previous user",
         "previous assistant",
@@ -1385,6 +1479,193 @@ def test_run_session_loop_interactive_mode_injects_ask_user_prompt_rules(
     assert provider.excluded_tools == set()
     assert provider.request_instructions
     assert "Use `ask_user`" in str(provider.request_instructions[0])
+
+
+def test_run_session_loop_honors_per_turn_tool_history_preference(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    class _ToolHistoryTurnProvider(_ChatProviderStub):
+        def __init__(self) -> None:
+            super().__init__()
+            self.restored_messages = []
+            self.restored_history_items: list[dict[str, object]] | None = None
+            self.history_items_at_user_requests: list[
+                list[dict[str, object]] | None
+            ] = []
+
+        @property
+        def settings(self) -> Settings:
+            return Settings(
+                api_key="test-key",
+                provider="openai",
+                max_tool_workers=2,
+            )
+
+        def restore_messages(self, messages) -> None:
+            self.restored_messages = list(messages)
+            self.restored_history_items = None
+
+        def restore_history_items(self, items) -> None:
+            self.restored_history_items = list(items)
+
+        def request_turn(self, **kwargs) -> CompletedResponse:
+            user_input = kwargs.get("user_input")
+            user_message = kwargs.get("user_message")
+            if user_input is not None and user_message is None:
+                user_message = user_input.text
+            if user_message is not None:
+                self.history_items_at_user_requests.append(
+                    (
+                        list(self.restored_history_items)
+                        if self.restored_history_items is not None
+                        else None
+                    )
+                )
+                self.request_messages.append(user_message)
+                if user_message == "first":
+                    response = CompletedResponse(
+                        response_id="resp_tool",
+                        text="",
+                        usage=TokenUsage(
+                            input_tokens=2,
+                            output_tokens=1,
+                            model=DEFAULT_MODEL,
+                        ),
+                        function_calls=[
+                            ToolCall(
+                                call_id="call_1",
+                                name="shell",
+                                arguments={"command": "pwd"},
+                            )
+                        ],
+                    )
+                else:
+                    response = CompletedResponse(
+                        response_id="resp_done",
+                        text="Second done.",
+                        usage=TokenUsage(
+                            input_tokens=2,
+                            output_tokens=1,
+                            model=DEFAULT_MODEL,
+                        ),
+                    )
+            else:
+                response = CompletedResponse(
+                    response_id="resp_tool_done",
+                    text="First done.",
+                    usage=TokenUsage(
+                        input_tokens=2,
+                        output_tokens=1,
+                        model=DEFAULT_MODEL,
+                    ),
+                )
+            kwargs["session_usage"].add(response.usage)
+            kwargs["turn_usage"].add(response.usage)
+            tracer = kwargs.get("tracer")
+            if tracer is not None and response.function_calls:
+                tracer.log_model_call(
+                    provider="openai",
+                    model=DEFAULT_MODEL,
+                    url="https://example.test/responses",
+                    request_config={"provider": "openai"},
+                    request_payload={"input": user_message},
+                    response_payload={
+                        "output": [
+                            {
+                                "type": "function_call",
+                                "call_id": "call_1",
+                                "name": "shell",
+                                "arguments": '{"command": "pwd"}',
+                            }
+                        ]
+                    },
+                    duration_ms=1,
+                    prompt_tokens=response.usage.input_tokens,
+                    completion_tokens=response.usage.output_tokens,
+                    total_tokens=response.usage.total_tokens,
+                    status_code=200,
+                    success=True,
+                )
+            return response
+
+        def execute_tool_calls(
+            self,
+            response: CompletedResponse,
+            *,
+            max_workers: int,
+            display,
+            session_usage: TokenUsage,
+            turn_usage: TokenUsage,
+            sub_agent_depth: int = 0,
+            parent_context=None,
+            tracer=None,
+        ) -> tuple[list[dict[str, object]], bool]:
+            del (
+                response,
+                max_workers,
+                display,
+                session_usage,
+                turn_usage,
+                sub_agent_depth,
+                parent_context,
+            )
+            output = {"ok": True, "result": "/workspace"}
+            if tracer is not None:
+                tracer.log_tool_call(
+                    tool_name="shell",
+                    tool_call_id="call_1",
+                    tool_input={"command": "pwd"},
+                    tool_output=output,
+                    duration_ms=1,
+                    success=True,
+                )
+            return (
+                [
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_1",
+                        "output": json.dumps(output),
+                    }
+                ],
+                False,
+            )
+
+    provider = _ToolHistoryTurnProvider()
+    display = _SessionDisplaySpy(
+        [
+            QueuedInput(text="first", include_tool_history=False),
+            QueuedInput(text="second", include_tool_history=True),
+            "quit",
+        ]
+    )
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_session_loop(settings, display, include_tool_history=False)
+
+    assert exit_code == 0
+    assert provider.request_messages == ["first", "second"]
+    assert provider.history_items_at_user_requests[0] is None
+    second_request_history = provider.history_items_at_user_requests[1]
+    assert second_request_history is not None
+    assert [item["type"] for item in second_request_history[:4]] == [
+        "message",
+        "tool_call",
+        "tool_result",
+        "message",
+    ]
+    assert second_request_history[1]["call_id"] == "call_1"
+    assert second_request_history[2]["output"] == {
+        "ok": True,
+        "result": "/workspace",
+    }
 
 
 def test_run_session_loop_persists_per_turn_usage_in_run_sessions(

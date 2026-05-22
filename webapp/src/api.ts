@@ -503,6 +503,7 @@ export type SessionInputPayload = LiveSessionInputRequest & {
   image_upload_ids: string[];
   profile_id?: string | null;
   interactive_mode?: boolean;
+  include_tool_history?: boolean;
 };
 
 export async function submitSessionInput(

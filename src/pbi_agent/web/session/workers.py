@@ -155,6 +155,7 @@ class WorkersMixin:
                 live_session.display,
                 resume_session_id=live_session.bound_session_id,
                 on_reload=self.refresh_file_mentions_cache,
+                include_tool_history=live_session.include_tool_history,
             )
             if live_session.terminal_status is None:
                 live_session.exit_code = exit_code

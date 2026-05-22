@@ -149,6 +149,13 @@ class AnthropicProvider(Provider):
             if _anthropic_message_record_can_restore(message)
         ]
 
+    def restore_history_items(self, items: list[dict[str, Any]]) -> None:
+        self._messages = [
+            restored
+            for item in items
+            if (restored := _history_item_to_message(item)) is not None
+        ]
+
     # -- request_turn --------------------------------------------------------
 
     def request_turn(
@@ -678,6 +685,48 @@ def _anthropic_message_record_to_message(
         "role": message.role,
         "content": [{"type": "text", "text": message.content}],
     }
+
+
+def _history_item_to_message(item: dict[str, Any]) -> dict[str, Any] | None:
+    item_type = item.get("type")
+    if item_type == "message":
+        message = item.get("message")
+        if isinstance(message, MessageRecord) and _anthropic_message_record_can_restore(
+            message
+        ):
+            return _anthropic_message_record_to_message(message)
+        return None
+    if item_type == "tool_call":
+        call_id = str(item.get("call_id") or "")
+        name = str(item.get("name") or "")
+        if not call_id or not name:
+            return None
+        return {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": call_id,
+                    "name": name,
+                    "input": item.get("arguments") or {},
+                }
+            ],
+        }
+    if item_type == "tool_result":
+        call_id = str(item.get("call_id") or "")
+        if not call_id:
+            return None
+        output = item.get("output")
+        content = output if isinstance(output, str) else json.dumps(output)
+        result: dict[str, Any] = {
+            "type": "tool_result",
+            "tool_use_id": call_id,
+            "content": content,
+        }
+        if item.get("is_error"):
+            result["is_error"] = True
+        return {"role": "user", "content": [result]}
+    return None
 
 
 def _anthropic_tool_result_content(result) -> str | list[dict[str, Any]]:

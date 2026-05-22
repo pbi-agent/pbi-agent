@@ -103,6 +103,13 @@ class GenericProvider(Provider):
             if message.role in {"user", "assistant"} and message.content
         ]
 
+    def restore_history_items(self, items: list[dict[str, Any]]) -> None:
+        self._messages = [
+            restored
+            for item in items
+            if (restored := _history_item_to_message(item)) is not None
+        ]
+
     def request_turn(
         self,
         *,
@@ -410,6 +417,54 @@ def _generic_tool_result_item(result: ToolResult) -> dict[str, Any]:
         "tool_call_id": result.call_id,
         "content": content,
     }
+
+
+def _history_item_to_message(item: dict[str, Any]) -> dict[str, Any] | None:
+    item_type = item.get("type")
+    if item_type == "message":
+        message = item.get("message")
+        if (
+            isinstance(message, MessageRecord)
+            and message.role in {"user", "assistant"}
+            and message.content
+        ):
+            return {"role": message.role, "content": message.content}
+        return None
+    if item_type == "tool_call":
+        call_id = str(item.get("call_id") or "")
+        name = str(item.get("name") or "")
+        if not call_id or not name:
+            return None
+        arguments = item.get("arguments")
+        return {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": (
+                            arguments
+                            if isinstance(arguments, str)
+                            else json.dumps(arguments or {})
+                        ),
+                    },
+                }
+            ],
+        }
+    if item_type == "tool_result":
+        call_id = str(item.get("call_id") or "")
+        if not call_id:
+            return None
+        output = item.get("output")
+        return {
+            "role": "tool",
+            "tool_call_id": call_id,
+            "content": output if isinstance(output, str) else json.dumps(output),
+        }
+    return None
 
 
 def _extract_choice_messages(choices: Any) -> list[dict[str, Any]]:

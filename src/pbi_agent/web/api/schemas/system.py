@@ -243,6 +243,7 @@ class LiveSessionInputRequest(BaseModel):
     image_upload_ids: list[str] = Field(default_factory=list)
     profile_id: str | None = None
     interactive_mode: bool = False
+    include_tool_history: bool = False
 
 
 class LiveSessionShellCommandRequest(BaseModel):

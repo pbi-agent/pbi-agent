@@ -88,6 +88,7 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
         images=None,
         image_attachments=None,
         interactive_mode: bool = False,
+        include_tool_history: bool = False,
         item_id: str | None = None,
     ) -> None:
         del (
@@ -97,6 +98,7 @@ class ConsoleSubAgentDisplay(DisplayProtocol):
             images,
             image_attachments,
             interactive_mode,
+            include_tool_history,
             item_id,
         )
 

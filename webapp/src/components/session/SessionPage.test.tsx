@@ -1164,6 +1164,7 @@ describe("SessionPage", () => {
       image_upload_ids: ["saved-upload-1"],
       profile_id: "analysis",
       interactive_mode: true,
+      include_tool_history: false,
     });
     await waitFor(() => {
       const state = useSessionStore.getState().sessionsByKey[getSavedSessionKey("session-1")];
@@ -1194,7 +1195,34 @@ describe("SessionPage", () => {
       image_upload_ids: ["saved-upload-1"],
       profile_id: "analysis",
       interactive_mode: false,
+      include_tool_history: false,
     });
+  });
+
+  it("persists and sends the include tool history preference", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Enable tool history" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle).toHaveClass("session-topbar-control");
+    expect(toggle).toHaveClass("session-tool-history-toggle");
+
+    await user.click(toggle);
+    const enabledToggle = await screen.findByRole("button", { name: "Disable tool history" });
+    expect(enabledToggle).toHaveAttribute("aria-pressed", "true");
+    expect(enabledToggle).toHaveClass("session-topbar-control");
+    expect(enabledToggle).toHaveClass("session-tool-history-toggle");
+    expect(window.localStorage.getItem("pbi-agent.include-tool-history")).toBe("true");
+    await user.click(screen.getByRole("button", { name: "Submit Slash" }));
+
+    await waitFor(() => expect(sendSessionMessage).toHaveBeenCalledTimes(1));
+    expect(sendSessionMessage).toHaveBeenCalledWith(
+      "session-1",
+      expect.objectContaining({ include_tool_history: true }),
+    );
   });
 
   it("submits bang-prefixed input through the shell-command endpoint", async () => {
@@ -3132,6 +3160,7 @@ describe("SessionPage", () => {
       image_upload_ids: ["saved-upload-1"],
       profile_id: "analysis",
       interactive_mode: false,
+      include_tool_history: false,
     });
   });
 

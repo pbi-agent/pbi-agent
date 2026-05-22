@@ -179,6 +179,7 @@ def submit_session_message(
             image_upload_ids=request.image_upload_ids,
             profile_id=request.profile_id,
             interactive_mode=request.interactive_mode,
+            include_tool_history=request.include_tool_history,
         )
     except KeyError as exc:
         raise not_found("Session not found.") from exc
@@ -202,6 +203,7 @@ def start_session_run(
             image_upload_ids=request.image_upload_ids,
             profile_id=request.profile_id,
             interactive_mode=request.interactive_mode,
+            include_tool_history=request.include_tool_history,
         )
     except KeyError as exc:
         raise not_found("Session not found.") from exc

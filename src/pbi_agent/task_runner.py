@@ -20,6 +20,7 @@ def run_single_turn_in_directory(
     images: list[ImageAttachment] | None = None,
     persisted_user_message_id: int | None = None,
     replay_history: bool = True,
+    include_tool_history: bool = False,
 ):
     from pbi_agent.agent.session import run_single_turn
 
@@ -55,4 +56,5 @@ def run_single_turn_in_directory(
         images=images,
         persisted_user_message_id=persisted_user_message_id,
         replay_history=replay_history,
+        include_tool_history=include_tool_history,
     )

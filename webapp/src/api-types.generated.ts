@@ -99,7 +99,7 @@ export type LiveSessionBoundSseEventModel = { seq: number; created_at: string; t
 
 export type LiveSessionEndedSseEventModel = { seq: number; created_at: string; type: "live_session_ended"; payload: LiveSessionLifecycleSseEventPayloadModel };
 
-export type LiveSessionInputRequest = { text?: string; file_paths?: string[]; image_paths?: string[]; image_upload_ids?: string[]; profile_id?: string | null; interactive_mode?: boolean };
+export type LiveSessionInputRequest = { text?: string; file_paths?: string[]; image_paths?: string[]; image_upload_ids?: string[]; profile_id?: string | null; interactive_mode?: boolean; include_tool_history?: boolean };
 
 export type LiveSessionLifecycleSseEventPayloadModel = { live_session: LiveSessionModel };
 
