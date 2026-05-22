@@ -140,4 +140,4 @@ Session pages also show a per-session run history, which is useful when you want
 - [Web UI](/web-ui)
 - [Model Profiles](/model-profiles)
 - [Session Commands](/session-commands)
-- [Customization](/customization#project-command-files)
+- [Project Commands](/customization/commands)

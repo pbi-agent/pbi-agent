@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-05-21
+- Last compacted: 2026-05-22
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -70,13 +70,4 @@
 
 ## 2026-05-22
 - Settings model-profile Tool visibility switch visibility root cause: `webapp/src/styles/reset.css` has unlayered `button, input, textarea, select { background: none; ... }`, which beats Tailwind v4 layered utility backgrounds on shadcn primitives. Fix pattern used: add scoped unlayered `[data-slot="switch"]` background rules in `webapp/src/styles/overlays.css`; broader optional fix is moving the reset into `@layer base` but with wider blast radius.
-
-## 2026-05-21
-- Removed unused default system prompt constant from `src/pbi_agent/agent/system_prompt.py` and updated system prompt tests to assert behavior directly. Validation: focused system prompt pytest, Ruff check/format check on touched files, basedpyright on touched files, and diff check passed.
-- Simplified built-in tool availability to category-only `allowed_tools` with CLI `--allowed-tools` and frontmatter `allowed_tools`; removed exact built-in-name allow-lists from config/session/sub-agent plumbing and docs. Validation: `pbi-agent run -h`, profile create help, focused pytest for tool/config/session/providers, full pytest, Ruff check/format check, basedpyright, docs build passed. Next: no backward compatibility for old allow-list keys/flags.
-- Added model-profile Tool visibility controls in web Settings, exposed `allowed_tools` through config profile API/resolved runtime, regenerated API types/static app, and documented the UI path. Validation: focused web config/API type pytest, Ruff check/format check, basedpyright, frontend lint/typecheck/full Vitest, web build, docs build, diff check passed. Next: existing React act warnings remain in web tests.
-- Simplified the Settings model-profile modal: removed the Web search dropdown, always shows direct tool group checkboxes, and removed compact tail/budget/tool-output cap fields from the form payload. Validation: SettingsPage focused Vitest, full `bun run test:web`, frontend lint/typecheck, web build, docs build passed; existing React act warnings remain.
-- Restyled the model-profile Tool visibility badge to use standard compact metadata Badge styling (`size="meta"`, `variant="secondary"`) and added a Settings test for badge attributes. Validation: focused SettingsPage Vitest, frontend lint/typecheck, web build, and diff check passed.
-- Fixed hidden native-web-search state by removing the separate `web_search` settings/profile/API/CLI plumbing; provider-native search now follows only the `web` `allowed_tools` group, compaction disables tools with `allowed_tools=()`, and docs/tests/API types/static app were updated. Validation: focused pytest/API type codegen, focused SettingsPage Vitest, Ruff check/format check, basedpyright, frontend lint/typecheck, web build, docs build, CLI help checks, and diff check passed.
-- Traced `search_workspace` multi-pattern false negative: `regex:false` treats `A|B|C` as one literal needle, matching `rg -F` single-pattern behavior; `regex:true`, individual literals, or `rg -F -e ...` find the expected lines. Validation: reproduced with tool, `rg`, and `codetool_explore`; no source changes.
-- Replaced public `read_file`/`search_workspace` tools with `explore_workspace` backed by `codetool-explore`, updated registry/availability, prompts/display/UI/docs/tests/static bundle, and preserved image-read attachments. Validation: full pytest, Ruff check/format check, basedpyright, frontend typecheck/lint/full Vitest/web build, and docs build passed; existing React act warnings remain.
+- Refactored `docs/customization.md` into `docs/customization/` module subpages and sidebar children; documented `allowed_tools` for project commands, project sub-agents, model profiles, CLI/run, session commands, and tool reference. Validation: `bun run docs:build` passed.

@@ -121,7 +121,20 @@ export default defineConfig({
         text: 'Customizing',
         collapsed: false,
         items: [
-          { text: 'Customization', link: '/customization' },
+          {
+            text: 'Customization',
+            link: '/customization/',
+            items: [
+              { text: 'Custom System Prompt', link: '/customization/instructions' },
+              { text: 'Project Rules', link: '/customization/project-rules' },
+              { text: 'Project Skills', link: '/customization/skills' },
+              { text: 'Project Commands', link: '/customization/commands' },
+              { text: 'Project Sub-agents', link: '/customization/sub-agents' },
+              { text: 'Workspace Reload', link: '/customization/reload' },
+              { text: 'MCP Servers', link: '/customization/mcp' },
+              { text: 'File Constraints', link: '/customization/file-constraints' }
+            ]
+          },
           { text: 'Built-in Tools', link: '/tools' },
           { text: 'Python Extensions', link: '/extensions' },
           { text: 'Environment Variables', link: '/environment' }

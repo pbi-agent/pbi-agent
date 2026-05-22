@@ -125,7 +125,18 @@ Installs a command preset from the official catalog, a local path, or a GitHub r
 | `--list` | `false` | List candidate commands from the selected source without installing anything. |
 | `--force` | `false` | Replace an existing local install under `.agents/commands/<command-name>.md`. |
 
-Public command catalogs are discovered from `commands/*.md` by default. Command files require `name` and `description` frontmatter; the normalized `name` becomes the slash alias and install filename. If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
+Public command catalogs are discovered from `commands/*.md` by default. Command files require `name` and `description` frontmatter; the normalized `name` becomes the slash alias and install filename. They may also set `model_profile_id` for that command turn and `allowed_tools` to replace the selected profile's built-in tool visibility:
+
+```yaml
+---
+name: review
+description: Review code without editing files.
+model_profile_id: analysis
+allowed_tools: read,shell
+---
+```
+
+`allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. See [Project Commands](/customization/commands#command-tool-visibility). If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
 
 ## `pbi-agent agents`
 
@@ -160,7 +171,18 @@ Installs an agent definition from the official catalog, a local path, or a GitHu
 | `--list` | `false` | List candidate agents from the selected source without installing anything. |
 | `--force` | `false` | Replace an existing local install under `.agents/agents/<agent-name>.md`. |
 
-Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
+Agent files require `name` and `description` frontmatter. They may also set `model_profile_id` for that child run and `allowed_tools` to replace inherited/profile built-in tool visibility:
+
+```yaml
+---
+name: code-reviewer
+description: Review code changes without applying patches.
+model_profile_id: analysis
+allowed_tools: read,shell
+---
+```
+
+`allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. See [Project Sub-agents](/customization/sub-agents#sub-agent-tool-visibility). Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
 
 ## `pbi-agent kanban`
 
@@ -257,6 +279,8 @@ Stored model profiles hold runnable model and runtime settings tied to one saved
 
 Profile options: `--model`, `--sub-agent-model`, `--reasoning-effort`, `--max-tokens`, `--service-tier`, `--allowed-tools`, `--max-tool-workers`, `--max-retries`, and `--compact-threshold`.
 
+`--allowed-tools` accepts comma-separated built-in tool groups (`read`, `write`, `web`, `sub-agent`, and `shell`) and stores the profile's tool visibility. When unset, all built-ins are available for the profile; when set, only the listed groups are advertised and executable. See [Model Profiles](/model-profiles#profile-tool-visibility).
+
 ## `pbi-agent web` (default)
 
 Serve the browser-based UI through the FastAPI web server.
@@ -329,6 +353,7 @@ pbi-agent run --prompt "Read the text in this image." --image ./general_ocr_002.
 | --- | --- | --- |
 | `--prompt` | required | User prompt to send to the agent. |
 | `--image` | repeatable, none by default | Attach a local workspace image to the prompt. Paths must stay inside the workspace. |
+| `--allowed-tools GROUPS` | profile/default | Comma-separated built-in tool groups for this run: `read`, `write`, `web`, `sub-agent`, and `shell`. Replaces the selected profile's tool visibility for the run. |
 
 ## Image Input Support
 

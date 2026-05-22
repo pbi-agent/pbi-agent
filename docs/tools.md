@@ -163,7 +163,10 @@ Tool output is capped to a bounded result that preserves both the beginning and 
 
 ## `sub_agent`
 
-Delegate a focused task to a child agent that runs with the same provider and tool catalog as the parent session.
+Delegate a focused task to a child agent. The built-in `default` child uses the
+parent provider/runtime with the configured sub-agent model. A project sub-agent
+can set `model_profile_id` and `allowed_tools` in `.agents/agents/*.md` to
+override the child runtime and built-in tool visibility for that delegated run.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -182,11 +185,16 @@ Delegate a focused task to a child agent that runs with the same provider and to
 Runtime behavior:
 
 - Child runs are isolated by default. Set `include_context` to `true` to inherit parent context.
-- The child uses `PBI_AGENT_SUB_AGENT_MODEL` or `--sub-agent-model` by default. Project sub-agent files do not override model or reasoning settings.
-- The child inherits the parent provider and tool catalog, but `sub_agent` itself is disabled inside the child, so nested sub-agent calls fail fast.
+- The default child uses `PBI_AGENT_SUB_AGENT_MODEL` or `--sub-agent-model` by default.
+- A project sub-agent with `model_profile_id` uses that saved profile for the child run. Without it, the child inherits the parent runtime and switches to the configured sub-agent model.
+- A project sub-agent with `allowed_tools` replaces the inherited/profile built-in tool allow-list for the child run. Without it, the effective parent/profile tool visibility applies.
+- The child inherits the parent tool catalog, but `sub_agent` itself is disabled inside the child, so nested sub-agent calls fail fast even if `sub-agent` is included in `allowed_tools`.
 - OpenAI and Google reuse the parent conversation checkpoint when available; other providers fall back to replaying the visible parent transcript plus the current live user turn.
 - Unknown `agent_type` values are rejected before the child session starts.
-- The child session is bounded to `100` provider requests or `1200` elapsed seconds, whichever happens first.
+- The child session is bounded to `200` provider requests or `1200` elapsed seconds, whichever happens first.
+
+See [Project Sub-agents](/customization/sub-agents#sub-agent-tool-visibility)
+for sub-agent `allowed_tools` frontmatter.
 
 ## `explore_workspace`
 

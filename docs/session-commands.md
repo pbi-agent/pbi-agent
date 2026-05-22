@@ -131,6 +131,7 @@ Each command file requires YAML frontmatter with the same `name` and `descriptio
 name: fastapi
 description: FastAPI best practices and conventions. Use when working with FastAPI APIs and Pydantic models for them.
 model_profile_id: analysis
+allowed_tools: read,web,shell
 ---
 
 # FastAPI mode
@@ -153,6 +154,13 @@ When the user starts a turn with a project command alias, the command file conte
 ```
 
 Use optional `model_profile_id` to force a specific saved model profile whenever the command is submitted from the web UI. The profile id is normalized the same way as saved profile ids. If the command sets `model_profile_id`, the command turn uses that profile instead of the profile currently selected in the session header. The selected default/profile is not changed for future non-command turns.
+
+Use optional `allowed_tools` to replace the selected profile's built-in tool
+visibility for that command turn. It accepts the same comma-separated groups as
+model profiles and `pbi-agent run`: `read`, `write`, `web`, `sub-agent`, and
+`shell`. For example, `allowed_tools: read,shell` permits workspace inspection
+and shell commands but disables file edits, web access, and sub-agent
+delegation for that command turn.
 
 Project slash commands are model turns, unlike built-in local commands such as `/skills` and `/compact`.
 
@@ -178,4 +186,4 @@ Image uploads cannot be combined with `!` shell command mode.
 
 - [CLI Reference](/cli) for terminal commands and flags.
 - [Built-in Tools](/tools) for model-callable function tools.
-- [Customization](/customization) for `INSTRUCTIONS.md`, `AGENTS.md`, project skills, project commands, sub-agents, and MCP setup.
+- [Customization](/customization/) for `INSTRUCTIONS.md`, `AGENTS.md`, project skills, project commands, sub-agents, and MCP setup.

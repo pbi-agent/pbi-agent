@@ -43,6 +43,7 @@ pbi-agent config profiles create \
   --model gpt-5.4 \
   --sub-agent-model gpt-5.4-mini \
   --reasoning-effort xhigh \
+  --allowed-tools read,web,shell \
   --max-tool-workers 4
 
 pbi-agent config profiles select analysis
@@ -73,6 +74,40 @@ If no profile is selected, pbi-agent falls back to CLI flags, environment variab
 | Max tool workers | Maximum number of local tool calls that can execute in parallel. |
 | Max retries | Retry count for transient provider failures. |
 | Compact threshold | Context-token threshold for automatic compaction where supported. |
+
+## Profile tool visibility
+
+Profiles can limit which built-in tool groups are exposed to model turns that
+use that profile. In the web UI, edit a profile and set **Tool visibility**. In
+the CLI, use `--allowed-tools` when creating or updating a profile:
+
+```bash
+pbi-agent config profiles update analysis --allowed-tools read,web,shell
+pbi-agent config profiles update readonly --allowed-tools read
+```
+
+Allowed groups:
+
+| Tool group | Built-ins |
+| --- | --- |
+| `read` | `explore_workspace` |
+| `write` | `apply_patch`, `replace_in_file`, `write_file` |
+| `web` | `read_web_url` and provider-native web search |
+| `sub-agent` | `sub_agent` |
+| `shell` | `shell` |
+
+When the field is unset, all built-ins are available. When it is set, only the
+listed groups are advertised and executable. An empty allow-list disables all
+configurable built-ins for that profile.
+
+Tool visibility is replacement-based. A `pbi-agent run --allowed-tools ...`
+flag, project command `allowed_tools`, or project sub-agent `allowed_tools`
+replaces the profile allow-list for that run, command turn, or child run only.
+MCP and extension tools are not affected, and the UI-only `ask_user` tool is not
+configured through profiles.
+
+Omit `write` for read-only profiles. Omit `web` to disable both `read_web_url`
+and native provider web search.
 
 ## Model discovery and custom values
 

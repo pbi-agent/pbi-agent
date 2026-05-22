@@ -89,7 +89,7 @@ pbi-agent --api-key "$OPENAI_API_KEY"
 | [Model Profiles](/model-profiles) | Saved runtime presets and profile resolution |
 | [Session Commands](/session-commands) | Interactive `@file`, `!shell`, slash commands, and `/compact` behavior |
 | [CLI](/cli) | Terminal commands, flags, and runtime defaults |
-| [Customization](/customization) | `INSTRUCTIONS.md`, `AGENTS.md`, project skills, sub-agents, and MCP discovery |
+| [Customization](/customization/) | `INSTRUCTIONS.md`, `AGENTS.md`, project skills, commands, sub-agents, and MCP discovery |
 | [Built-in Tools](/tools) | The function tools available to the model |
 | [Environment Variables](/environment) | `PBI_AGENT_*` settings and provider-specific key fallbacks |
 
