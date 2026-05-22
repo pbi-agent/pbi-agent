@@ -41,6 +41,7 @@
 - Session compaction: clear completed `previous_id`; resume restores persisted user/assistant history; include unanswered trailing user turns and same-turn tool exchanges.
 - Saved-session fork: `POST /api/sessions/{session_id}/fork` duplicates messages/uploads through target message ids, resets usage/previous_id, stores fork metadata/title `Fork-{original-title}`, cleans copied uploads on failure.
 - Web UI: prefer shadcn tokens/components; overlays use readable spacing; large modals need safe gutters + inner scroll; clamp edge-adjacent tooltips on both axes.
+- Web shadcn styling: unlayered reset in `webapp/src/styles/reset.css` (`button, input, textarea, select { background: none; ... }`) beats Tailwind v4 layered utilities, hiding primitive backgrounds (e.g. Switch). Fix with scoped unlayered overrides in `webapp/src/styles/overlays.css`, or move reset into `@layer base` only if wider blast radius is acceptable.
 - Web timeline/composer UX: Composer highlights `@file` and `$skill`; `$skill` completions use `/api/skills/search`; user/assistant timelines support copy/fork; fenced code uses Shiki `CodeBlock`; shared `WorkingSummary` categorizes read/search/shell/edit/sub-agent/question/other counts + duration; Working durations prefer item timestamps then surrounding turn message timestamps.
 - Timeline: work runs coalesce thinking/tool activity between chat messages; stable active placeholder keys; historical expansion must not reset auto-follow; expanded Working activity scroll follows latest and centers opened tool cards; one shadcn Accordion closes other tool cards.
 - Session follow UX: image user-message updates/rekeys force bottom follow and clear stale new-message badges; active last Working first-open follows after layout settles with composer-edge gutter; Working blocks single-open at outer level.
@@ -66,6 +67,9 @@
 - `explore_workspace`: built-in wraps `codetool-explore==0.5.0` (`codetool_explore.explore`); read group only this tool; schema targets content/path/read/list (no content_or_path/both); regex defaults true; search returns raw text (`result_format="text"`), read/list return plain/tree text, and image reads return attachments; read/list single-root only and workspace-confined.
 
 ## Detailed Task Events
+
+## 2026-05-22
+- Settings model-profile Tool visibility switch visibility root cause: `webapp/src/styles/reset.css` has unlayered `button, input, textarea, select { background: none; ... }`, which beats Tailwind v4 layered utility backgrounds on shadcn primitives. Fix pattern used: add scoped unlayered `[data-slot="switch"]` background rules in `webapp/src/styles/overlays.css`; broader optional fix is moving the reset into `@layer base` but with wider blast radius.
 
 ## 2026-05-21
 - Removed unused default system prompt constant from `src/pbi_agent/agent/system_prompt.py` and updated system prompt tests to assert behavior directly. Validation: focused system prompt pytest, Ruff check/format check on touched files, basedpyright on touched files, and diff check passed.

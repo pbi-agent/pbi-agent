@@ -71,3 +71,23 @@
 [data-app-tooltip] > * {
   text-align: inherit;
 }
+
+/*
+ * Radix Switch primitive. The global `button { background: none }` reset is
+ * unlayered, so it wins over Tailwind's `data-checked:bg-primary` /
+ * `data-unchecked:bg-input` utilities (which live in `@layer utilities`).
+ * Restore the track fills here so the switch is visible everywhere.
+ */
+[data-slot="switch"] {
+  background: var(--input);
+}
+
+[data-slot="switch"][data-state="checked"] {
+  background: var(--primary);
+}
+
+[data-slot="switch"][data-disabled],
+[data-slot="switch"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

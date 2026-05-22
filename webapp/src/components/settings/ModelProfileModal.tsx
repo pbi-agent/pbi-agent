@@ -9,7 +9,6 @@ import type {
 } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
 import { FormDialog } from "../ui/form-dialog";
 import {
   Field,
@@ -22,6 +21,7 @@ import {
 } from "../ui/field";
 import { Input } from "../ui/input";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import { Switch } from "../ui/switch";
 
 const TOOL_VISIBILITY_OPTIONS = [
   {
@@ -239,13 +239,10 @@ export function ModelProfileModal({
     setForm((prev) => ({ ...prev, ...updates }));
   }
 
-  function toggleToolCategory(
-    category: ToolCategory,
-    checked: boolean | "indeterminate",
-  ) {
+  function toggleToolCategory(category: ToolCategory, checked: boolean) {
     setForm((prev) => {
       const selected = new Set(prev.allowed_tools);
-      if (checked === true) {
+      if (checked) {
         selected.add(category);
       } else {
         selected.delete(category);
@@ -667,19 +664,19 @@ export function ModelProfileModal({
                 <FieldGroup>
                   {TOOL_VISIBILITY_OPTIONS.map((tool) => (
                     <Field key={tool.id} orientation="horizontal">
-                      <Checkbox
-                        id={`profile-tool-${tool.id}`}
-                        checked={form.allowed_tools.includes(tool.id)}
-                        onCheckedChange={(checked) =>
-                          toggleToolCategory(tool.id, checked)
-                        }
-                      />
                       <FieldContent>
                         <FieldLabel htmlFor={`profile-tool-${tool.id}`}>
                           {tool.label}
                         </FieldLabel>
                         <FieldDescription>{tool.description}</FieldDescription>
                       </FieldContent>
+                      <Switch
+                        id={`profile-tool-${tool.id}`}
+                        checked={form.allowed_tools.includes(tool.id)}
+                        onCheckedChange={(checked) =>
+                          toggleToolCategory(tool.id, checked)
+                        }
+                      />
                     </Field>
                   ))}
                 </FieldGroup>
