@@ -34,15 +34,15 @@ function makeStage(overrides: Partial<BoardStage> = {}): BoardStage {
     id: "review",
     name: "Review",
     position: 1,
-    profile_id: "very-long-profile-name-that-should-wrap-not-overlap",
-    command_id: "very-long-command-name-that-should-wrap-not-overlap-the-count-badge",
+    profile_id: "some-profile",
+    command_id: "some-command",
     auto_start: true,
     ...overrides,
   };
 }
 
 describe("StageColumn", () => {
-  it("keeps long metadata badges in a capped wrapping header area", () => {
+  it("renders the stage name and count without metadata badges in the header", () => {
     const { container } = renderWithProviders(
       <StageColumn
         stage={makeStage()}
@@ -53,15 +53,10 @@ describe("StageColumn", () => {
       />,
     );
 
-    expect(
-      screen.getByText("command:very-long-command-name-that-should-wrap-not-overlap-the-count-badge"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("profile:very-long-profile-name-that-should-wrap-not-overlap"),
-    ).toBeInTheDocument();
-
-    const meta = container.querySelector(".board-column__meta");
-    expect(meta).toBeInTheDocument();
-    expect(meta).toHaveClass("board-column__meta");
+    expect(screen.getByText("Review")).toBeInTheDocument();
+    expect(screen.queryByText("auto-start")).not.toBeInTheDocument();
+    expect(screen.queryByText("command:some-command")).not.toBeInTheDocument();
+    expect(screen.queryByText("profile:some-profile")).not.toBeInTheDocument();
+    expect(container.querySelector(".board-column__meta")).toBeNull();
   });
 });

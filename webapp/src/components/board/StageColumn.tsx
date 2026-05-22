@@ -64,17 +64,6 @@ export function StageColumn({
         </div>
         <div className="board-column__heading">
           <CardTitle className="board-column__name">{stage.name}</CardTitle>
-          <div className="board-column__meta">
-            {stage.auto_start ? (
-              <Badge variant="secondary" className="board-column__label">auto-start</Badge>
-            ) : null}
-            {stage.command_id ? (
-              <Badge variant="outline" className="board-column__label">command:{stage.command_id}</Badge>
-            ) : null}
-            {stage.profile_id ? (
-              <Badge variant="outline" className="board-column__label">profile:{stage.profile_id}</Badge>
-            ) : null}
-          </div>
         </div>
         <Badge variant="outline" className="board-column__count">{tasks.length}</Badge>
       </CardHeader>
