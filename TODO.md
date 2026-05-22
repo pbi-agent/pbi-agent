@@ -1,4 +1,2 @@
-[X] Diagnose session topbar small-screen wrapping
-[X] Fix responsive topbar layout
-[X] Run focused frontend validation
-[X] Update memory
+[X] Fix sandbox /tmp tmpfs exec option and tests
+[X] Run validation and update memory/handoff

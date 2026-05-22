@@ -109,8 +109,16 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("pbi-agent.sandbox=1", command)
         self.assertIn(f"pbi-agent.workspace={workspace}", command)
         self.assertIn(f"pbi-agent.workspace-key={workspace}", command)
-        self.assertIn("--tmpfs", command)
-        self.assertIn("/tmp:rw,noexec,nosuid,size=256m", command)
+        tmpfs_entries = [
+            command[index + 1]
+            for index, value in enumerate(command)
+            if value == "--tmpfs"
+        ]
+        self.assertIn("/tmp:rw,exec,nosuid,nodev,mode=1777,size=256m", tmpfs_entries)
+        tmp_mount = next(entry for entry in tmpfs_entries if entry.startswith("/tmp:"))
+        tmp_options = tmp_mount.split(":", maxsplit=1)[1].split(",")
+        self.assertIn("exec", tmp_options)
+        self.assertNotIn("noexec", tmp_options)
         self.assertNotIn(f"{cli.SANDBOX_HOME}/.cache:rw", command)
         self.assertIn("--env-file", command)
         self.assertIn(str((Path(tmpdir) / ".env.sandbox").resolve()), command)

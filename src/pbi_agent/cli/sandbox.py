@@ -228,7 +228,7 @@ def _build_sandbox_run_command(
         "4g",
         "--read-only",
         "--tmpfs",
-        "/tmp:rw,noexec,nosuid,size=256m",
+        "/tmp:rw,exec,nosuid,nodev,mode=1777,size=256m",
     ]
     for mount in _sandbox_host_git_mounts():
         command.extend(["--mount", mount])

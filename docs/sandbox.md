@@ -120,7 +120,7 @@ The image filesystem is read-only, but the sandbox backs the container user home
 
 The container process `PATH` includes the standard user-local executable directories, `/home/pbi/.local/bin` and `/home/pbi/bin`. Before `pbi-agent` starts, the sandbox entrypoint sources a generic bootstrap that reads user profile files under `/home/pbi`, adds common user-tool locations, and discovers `bin` or `.bin` directories under the persistent home volume. Shell tool commands use a dedicated Bash wrapper for the same bootstrap without replacing Alpine's normal `/bin/sh`, and fresh interactive Bash shells source it through the default profile files. The bootstrap also refreshes discovered paths when Bash sees a missing command, so install-and-run commands can pick up newly created tool directories. This makes tools installed into locations such as `.bun/bin`, `.cargo/bin`, or workspace `node_modules/.bin` visible to the agent and to non-login shell commands.
 
-The sandbox still provides temporary storage for `/tmp`. Home-directory caches remain in the project-scoped `/home/pbi` volume so package managers and installers can reuse them across sandbox restarts.
+The sandbox still provides writable executable temporary storage for `/tmp`, so temporary virtualenv console scripts can run. Home-directory caches remain in the project-scoped `/home/pbi` volume so package managers and installers can reuse them across sandbox restarts.
 
 For example, inside a sandbox session an agent shell command can install and use uv with:
 
