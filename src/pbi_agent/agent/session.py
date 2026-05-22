@@ -1995,6 +1995,7 @@ def _response_history_items_for_run(
 ) -> list[dict[str, Any]]:
     history_items: list[dict[str, Any]] = []
     turn_items: list[dict[str, Any]] = []
+    item_batches: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]] = []
     first_model_call = True
     saw_assistant_message_output = False
 
@@ -2009,7 +2010,6 @@ def _response_history_items_for_run(
             delta_items = _new_input_delta(request_items, turn_items)
         if _contains_redacted_inline_image(delta_items):
             return []
-        history_items.extend(_provider_input_history_items(delta_items))
         turn_items.extend(_clone_json_dict(item) for item in delta_items)
 
         response_items = _provider_response_output_items(
@@ -2018,9 +2018,27 @@ def _response_history_items_for_run(
         saw_assistant_message_output = saw_assistant_message_output or any(
             _is_assistant_message_output_item(item) for item in response_items
         )
-        history_items.extend(_provider_input_history_items(response_items))
         turn_items.extend(_clone_json_dict(item) for item in response_items)
+        item_batches.append((delta_items, response_items))
 
+    completed_call_ids = _completed_response_tool_call_ids(item_batches)
+    for delta_items, response_items in item_batches:
+        history_items.extend(
+            _provider_input_history_items(
+                _filter_incomplete_response_tool_items(
+                    delta_items,
+                    completed_call_ids,
+                )
+            )
+        )
+        history_items.extend(
+            _provider_input_history_items(
+                _filter_incomplete_response_tool_items(
+                    response_items,
+                    completed_call_ids,
+                )
+            )
+        )
     return history_items if saw_assistant_message_output else []
 
 
@@ -2154,6 +2172,58 @@ def _provider_input_history_items(
     ]
 
 
+def _completed_response_tool_call_ids(
+    item_batches: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]],
+) -> set[str]:
+    call_ids: set[str] = set()
+    output_ids: set[str] = set()
+    for delta_items, response_items in item_batches:
+        for item in delta_items:
+            if call_id := _response_tool_output_call_id(item):
+                output_ids.add(call_id)
+        for item in response_items:
+            if call_id := _response_tool_input_call_id(item):
+                call_ids.add(call_id)
+    return call_ids & output_ids
+
+
+def _filter_incomplete_response_tool_items(
+    items: list[dict[str, Any]],
+    completed_call_ids: set[str],
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        call_id = _response_tool_input_call_id(item)
+        if call_id is not None:
+            if call_id in completed_call_ids:
+                filtered.append(item)
+            continue
+        call_id = _response_tool_output_call_id(item)
+        if call_id is not None:
+            if call_id in completed_call_ids:
+                filtered.append(item)
+            continue
+        filtered.append(item)
+    return filtered
+
+
+def _response_tool_input_call_id(item: dict[str, Any]) -> str | None:
+    if item.get("type") not in {"function_call", "custom_tool_call"}:
+        return None
+    call_id = item.get("call_id")
+    return call_id if isinstance(call_id, str) and call_id else None
+
+
+def _response_tool_output_call_id(item: dict[str, Any]) -> str | None:
+    if item.get("type") not in {
+        "function_call_output",
+        "custom_tool_call_output",
+    }:
+        return None
+    call_id = item.get("call_id")
+    return call_id if isinstance(call_id, str) and call_id else None
+
+
 def _response_history_item_for_input(item: dict[str, Any]) -> dict[str, Any]:
     return _strip_provider_item_ids(_clone_json_dict(item))
 
@@ -2238,9 +2308,54 @@ def _tool_history_by_run(
                         ),
                     }
                 )
+        run_items = _filter_incomplete_tool_exchange_items(run_items)
         if run_items:
             histories.append(_group_parallel_tool_results(run_items))
     return histories
+
+
+def _filter_incomplete_tool_exchange_items(
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    completed_call_ids = _completed_tool_exchange_call_ids(items)
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        item_type = item.get("type")
+        if item_type == "tool_call":
+            if item.get("call_id") in completed_call_ids:
+                filtered.append(item)
+        elif item_type == "tool_call_group":
+            calls = [
+                call
+                for call in item.get("calls", [])
+                if isinstance(call, dict) and call.get("call_id") in completed_call_ids
+            ]
+            if calls:
+                filtered.append({**item, "calls": calls})
+        elif item_type == "tool_result":
+            if item.get("call_id") in completed_call_ids:
+                filtered.append(item)
+        else:
+            filtered.append(item)
+    return filtered
+
+
+def _completed_tool_exchange_call_ids(items: list[dict[str, Any]]) -> set[str]:
+    call_ids: set[str] = set()
+    result_ids: set[str] = set()
+    for item in items:
+        item_type = item.get("type")
+        if item_type == "tool_call":
+            if call_id := item.get("call_id"):
+                call_ids.add(str(call_id))
+        elif item_type == "tool_call_group":
+            for call in item.get("calls", []):
+                if isinstance(call, dict) and (call_id := call.get("call_id")):
+                    call_ids.add(str(call_id))
+        elif item_type == "tool_result":
+            if call_id := item.get("call_id"):
+                result_ids.add(str(call_id))
+    return call_ids & result_ids
 
 
 def _group_parallel_tool_results(

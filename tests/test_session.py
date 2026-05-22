@@ -650,6 +650,222 @@ def test_run_single_turn_falls_back_to_tool_history_when_response_history_incomp
     }
 
 
+def test_run_single_turn_drops_response_tool_calls_without_outputs(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub()
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "previous user")
+        store.add_message(session_id, "assistant", "previous assistant")
+        run_id = store.create_run_session(
+            run_session_id="run-1",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "previous user"}],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_1",
+                        "summary": [],
+                    },
+                    {
+                        "type": "function_call",
+                        "id": "fc_1",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "status": "completed",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                    {
+                        "type": "function_call",
+                        "id": "fc_2",
+                        "call_id": "call_2",
+                        "name": "shell",
+                        "status": "completed",
+                        "arguments": '{"command": "git status"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_1",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=2,
+            event_type="model_call",
+            request_payload={
+                "input": [
+                    {
+                        "type": "function_call_output",
+                        "call_id": "call_1",
+                        "output": '{"ok": true, "result": "/workspace"}',
+                    }
+                ],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "message",
+                        "id": "msg_1",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "previous assistant",
+                            }
+                        ],
+                    },
+                ]
+            },
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert provider.restored_history_items is not None
+    restored_items = [item["item"] for item in provider.restored_history_items]
+    assert [item.get("type", item.get("role")) for item in restored_items] == [
+        "user",
+        "reasoning",
+        "function_call",
+        "function_call_output",
+        "message",
+    ]
+    assert restored_items[2]["call_id"] == "call_1"
+    assert all(item.get("call_id") != "call_2" for item in restored_items)
+
+
+def test_run_single_turn_fallback_drops_tool_calls_without_outputs(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub()
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "previous user")
+        store.add_message(session_id, "assistant", "previous assistant")
+        run_id = store.create_run_session(
+            run_session_id="run-1",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model=DEFAULT_MODEL,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "previous user"}],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_2",
+                        "name": "shell",
+                        "arguments": '{"command": "git status"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_1",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert provider.restored_history_items is not None
+    tool_history = [
+        item
+        for item in provider.restored_history_items
+        if item["type"] in {"tool_call", "tool_call_group", "tool_result"}
+    ]
+    assert [item["type"] for item in tool_history] == [
+        "tool_call_group",
+        "tool_result",
+    ]
+    assert [call["call_id"] for call in tool_history[0]["calls"]] == ["call_1"]
+    assert tool_history[1]["call_id"] == "call_1"
+
+
 def test_run_single_turn_groups_parallel_tool_history_when_response_history_incomplete(
     monkeypatch,
     tmp_path,
