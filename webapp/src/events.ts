@@ -30,6 +30,7 @@ const EVENT_TYPES = new Set([
   "live_session_updated",
   "live_session_bound",
   "live_session_ended",
+  "workspace_switched",
 ]);
 
 const MESSAGE_ROLES = new Set(["user", "assistant", "notice", "error", "debug"]);

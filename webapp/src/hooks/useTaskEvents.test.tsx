@@ -2,6 +2,11 @@ import type { PropsWithChildren, ReactElement } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { useTaskEvents } from "./useTaskEvents";
+import {
+  createEmptySessionState,
+  getSavedSessionKey,
+  useSessionStore,
+} from "../store";
 
 class MockEventSource {
   static instances: MockEventSource[] = [];
@@ -281,5 +286,45 @@ describe("useTaskEvents", () => {
     expect(MockEventSource.instances).toHaveLength(2);
     expect(MockEventSource.instances[1].url).toContain("/api/events/app");
     expect(MockEventSource.instances[1].url).not.toContain("since=");
+  });
+
+  it("clears workspace-scoped client state after workspace-switched events", () => {
+    const queryClient = new QueryClient();
+    const onWorkspaceSwitched = vi.fn();
+    const sessionKey = getSavedSessionKey("old-session");
+    queryClient.setQueryData(["bootstrap"], { workspace_key: "old" });
+    queryClient.setQueryData(["session", "old-session"], { session_id: "old-session" });
+    queryClient.setQueryData(["dashboard-runs", "old"], [{ run_session_id: "run-1" }]);
+    useSessionStore.setState({
+      activeSessionKey: sessionKey,
+      sessionsByKey: {
+        [sessionKey]: createEmptySessionState("old-session"),
+      },
+      liveSessionIndex: {},
+      sessionIndex: {
+        "old-session": sessionKey,
+      },
+    });
+
+    renderHook(() => useTaskEvents("old", onWorkspaceSwitched), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const source = MockEventSource.instances[0];
+    act(() => {
+      emitAppEvent(source, {
+        type: "workspace_switched",
+        payload: { workspace_key: "new" },
+        seq: 1,
+      });
+    });
+
+    expect(useSessionStore.getState().activeSessionKey).toBeNull();
+    expect(useSessionStore.getState().sessionsByKey).toEqual({});
+    expect(queryClient.getQueryData(["bootstrap"])).toBeUndefined();
+    expect(queryClient.getQueryData(["session", "old-session"])).toBeUndefined();
+    expect(queryClient.getQueryData(["dashboard-runs", "old"])).toBeUndefined();
+    expect(onWorkspaceSwitched).toHaveBeenCalledOnce();
+    expect(source.close).toHaveBeenCalledTimes(1);
   });
 });

@@ -54,13 +54,14 @@ def _create_session(
     runtime: ResolvedRuntime,
     *,
     title: str = "",
+    directory_key: str | None = None,
 ) -> str | None:
     if store is None:
         return None
     try:
         settings = runtime.settings
         return store.create_session(
-            directory=current_workspace_context().directory_key,
+            directory=directory_key or current_workspace_context().directory_key,
             provider=settings.provider,
             provider_id=runtime.provider_id or None,
             model=settings.model,

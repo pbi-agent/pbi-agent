@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchBootstrap, fetchConfigBootstrap } from "../api";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
@@ -27,8 +27,7 @@ const DashboardPage = lazy(() =>
 export function AppShell() {
   // Global Cmd/Ctrl+B sidebar toggle, available on every route.
   useSidebarShortcut();
-
-  const liveSessionEvents = useTaskEvents();
+  const navigate = useNavigate();
 
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap"],
@@ -44,6 +43,13 @@ export function AppShell() {
 
   const bootstrap = bootstrapQuery.data;
   const configBootstrap = configBootstrapQuery.data;
+  const handleWorkspaceSwitched = useCallback(() => {
+    void navigate("/sessions");
+  }, [navigate]);
+  const liveSessionEvents = useTaskEvents(
+    bootstrap?.workspace_key,
+    handleWorkspaceSwitched,
+  );
 
   const requiresOnboarding = configBootstrap
     ? configBootstrap.model_profiles.length === 0

@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { fetchBootstrap } from "../api";
 import { MetaBadge } from "./MetaBadge";
+import { WorkspaceSwitcherDialog } from "./WorkspaceSwitcherDialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type WorkspaceBadgeProps = {
@@ -16,6 +18,7 @@ export function WorkspaceBadge({
   tooltipSide = "right",
   tooltipAlign = "center",
 }: WorkspaceBadgeProps) {
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const bootstrapQuery = useQuery({
     queryKey: ["bootstrap"],
     queryFn: fetchBootstrap,
@@ -34,17 +37,34 @@ export function WorkspaceBadge({
   if (!workspaceBadgeLabel) return null;
 
   const workspaceBadge = (
-    <MetaBadge truncate className={className} labelClassName={textClassName}>
-      {workspaceBadgeLabel}
-    </MetaBadge>
+    <button
+      type="button"
+      className="min-w-0 rounded-full text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      onClick={() => setSwitcherOpen(true)}
+      aria-label="Switch workspace"
+    >
+      <MetaBadge truncate className={className} labelClassName={textClassName}>
+        {workspaceBadgeLabel}
+      </MetaBadge>
+    </button>
   );
 
-  return workspaceDisplayPath ? (
-    <Tooltip>
-      <TooltipTrigger asChild>{workspaceBadge}</TooltipTrigger>
-      <TooltipContent side={tooltipSide} align={tooltipAlign}>
-        {workspaceDisplayPath}
-      </TooltipContent>
-    </Tooltip>
-  ) : workspaceBadge;
+  return (
+    <>
+      {workspaceDisplayPath ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{workspaceBadge}</TooltipTrigger>
+          <TooltipContent side={tooltipSide} align={tooltipAlign}>
+            {workspaceDisplayPath}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        workspaceBadge
+      )}
+      <WorkspaceSwitcherDialog
+        open={switcherOpen}
+        onOpenChange={setSwitcherOpen}
+      />
+    </>
+  );
 }

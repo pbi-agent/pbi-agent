@@ -80,6 +80,7 @@ type SessionStore = {
     preserveItems?: boolean;
     preserveLiveSession?: boolean;
   }) => void;
+  resetAllSessions: () => void;
   applyEvent: (
     sessionKey: string,
     event: WebEvent,
@@ -951,6 +952,12 @@ export const useSessionStore = create<SessionStore>((set) => ({
   liveSessionIndex: {},
   sessionIndex: {},
   setActiveSession: (sessionKey) => set({ activeSessionKey: sessionKey }),
+  resetAllSessions: () => set({
+    activeSessionKey: null,
+    sessionsByKey: {},
+    liveSessionIndex: {},
+    sessionIndex: {},
+  }),
   hydrateSavedSession: (sessionId, items = [], lastEventSeq) =>
     set((state) => {
       const sessionKey = getSavedSessionKey(sessionId);

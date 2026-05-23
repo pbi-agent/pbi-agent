@@ -75,7 +75,9 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if not isinstance(replace_all, bool):
         return {"error": "'replace_all' must be a boolean."}
 
-    root = Path.cwd().resolve()
+    root = (
+        context.workspace_root if context.workspace_root is not None else Path.cwd()
+    ).resolve()
 
     try:
         target_path = resolve_safe_path(root, path_value)

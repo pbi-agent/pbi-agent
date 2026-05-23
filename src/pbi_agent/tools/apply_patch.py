@@ -124,7 +124,9 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if not isinstance(patch, str) or not patch.strip():
         return {"error": "'patch' must be a non-empty string."}
 
-    root = Path.cwd().resolve()
+    root = (
+        context.workspace_root if context.workspace_root is not None else Path.cwd()
+    ).resolve()
 
     try:
         operations = _parse_patch(patch)

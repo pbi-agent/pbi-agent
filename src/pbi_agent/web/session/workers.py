@@ -156,6 +156,8 @@ class WorkersMixin:
                 resume_session_id=live_session.bound_session_id,
                 on_reload=self.refresh_file_mentions_cache,
                 include_tool_history=live_session.include_tool_history,
+                workspace_root=self._workspace_root,
+                workspace_directory_key=self._directory_key,
             )
             if live_session.terminal_status is None:
                 live_session.exit_code = exit_code
@@ -277,6 +279,7 @@ class WorkersMixin:
                     ),
                     project_dir=record.project_dir,
                     workspace_root=self._workspace_root,
+                    workspace_directory_key=self._directory_key,
                     resume_session_id=record.session_id,
                     images=turn_images or None,
                     persisted_user_message_id=current_user_message_id,

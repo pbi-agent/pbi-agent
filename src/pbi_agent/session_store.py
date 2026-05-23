@@ -201,6 +201,16 @@ CREATE TABLE IF NOT EXISTS web_manager_leases (
     updated_at    TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS recent_workspaces (
+    directory_key  TEXT PRIMARY KEY,
+    root_path      TEXT NOT NULL,
+    display_path   TEXT NOT NULL,
+    is_sandbox     INTEGER NOT NULL DEFAULT 0,
+    last_opened_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recent_workspaces_last_opened
+    ON recent_workspaces(last_opened_at DESC);
+
 CREATE TABLE IF NOT EXISTS maintenance_state (
     name             TEXT PRIMARY KEY,
     last_run_date    TEXT NOT NULL,
@@ -366,6 +376,15 @@ class KanbanStageConfigRecord:
     auto_start: bool
     created_at: str
     updated_at: str
+
+
+@dataclass(slots=True)
+class RecentWorkspaceRecord:
+    directory_key: str
+    root_path: str
+    display_path: str
+    is_sandbox: bool
+    last_opened_at: str
 
 
 _KANBAN_FIXED_STAGE_NAMES = {
@@ -871,7 +890,85 @@ class SessionStore:
             "UPDATE web_manager_leases SET directory = LOWER(directory) "
             "WHERE directory != LOWER(directory)"
         )
+        self._conn.execute(
+            "UPDATE recent_workspaces SET directory_key = LOWER(directory_key) "
+            "WHERE directory_key != LOWER(directory_key)"
+        )
         self._conn.commit()
+
+    def record_recent_workspace(
+        self,
+        *,
+        directory_key: str,
+        root_path: str,
+        display_path: str,
+        is_sandbox: bool,
+    ) -> RecentWorkspaceRecord:
+        normalized_directory = _normalize_directory_key(directory_key)
+        now = _now_iso()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO recent_workspaces "
+                "(directory_key, root_path, display_path, is_sandbox, last_opened_at) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(directory_key) DO UPDATE SET "
+                "root_path = excluded.root_path, "
+                "display_path = excluded.display_path, "
+                "is_sandbox = excluded.is_sandbox, "
+                "last_opened_at = excluded.last_opened_at",
+                (
+                    normalized_directory,
+                    root_path,
+                    display_path,
+                    1 if is_sandbox else 0,
+                    now,
+                ),
+            )
+            self._conn.commit()
+        return RecentWorkspaceRecord(
+            directory_key=normalized_directory,
+            root_path=root_path,
+            display_path=display_path,
+            is_sandbox=is_sandbox,
+            last_opened_at=now,
+        )
+
+    def list_recent_workspaces(self, *, limit: int = 20) -> list[RecentWorkspaceRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM recent_workspaces ORDER BY last_opened_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            RecentWorkspaceRecord(
+                directory_key=str(row["directory_key"]),
+                root_path=str(row["root_path"]),
+                display_path=str(row["display_path"]),
+                is_sandbox=bool(row["is_sandbox"]),
+                last_opened_at=str(row["last_opened_at"]),
+            )
+            for row in rows
+        ]
+
+    def get_recent_workspace(
+        self,
+        directory_key: str,
+    ) -> RecentWorkspaceRecord | None:
+        normalized_directory = _normalize_directory_key(directory_key)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM recent_workspaces WHERE directory_key = ?",
+                (normalized_directory,),
+            ).fetchone()
+        if row is None:
+            return None
+        return RecentWorkspaceRecord(
+            directory_key=str(row["directory_key"]),
+            root_path=str(row["root_path"]),
+            display_path=str(row["display_path"]),
+            is_sandbox=bool(row["is_sandbox"]),
+            last_opened_at=str(row["last_opened_at"]),
+        )
 
     def claim_daily_maintenance(self, run_date: str) -> bool:
         now = _now_iso()

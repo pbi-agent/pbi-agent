@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { eventStreamUrl } from "../api";
 import { parseSseEvent } from "../events";
+import { resetWorkspaceScopedClientState } from "../workspaceState";
 import type {
   LiveSession,
   LiveSessionLifecycleEvent,
@@ -65,17 +66,22 @@ function invalidateAppSnapshotQueries(client: ReturnType<typeof useQueryClient>)
   void client.invalidateQueries({ queryKey: ["dashboard-runs"] });
 }
 
-export function useTaskEvents(): LiveSessionLifecycleEvent[] {
+export function useTaskEvents(
+  workspaceKey?: string,
+  onWorkspaceSwitched?: () => void,
+): LiveSessionLifecycleEvent[] {
   const client = useQueryClient();
   const retryDelay = useRef(INITIAL_DELAY);
   const startedAtMs = useRef<number | null>(null);
   const latestHandledSeq = useRef(0);
-  const [liveSessionEvents, setLiveSessionEvents] = useState<LiveSessionLifecycleEvent[]>([]);
+  const [liveSessionEvents, setLiveSessionEvents] = useState<{
+    workspaceKey?: string;
+    events: LiveSessionLifecycleEvent[];
+  }>({ workspaceKey, events: [] });
 
   useEffect(() => {
-    if (startedAtMs.current === null) {
-      startedAtMs.current = Date.now();
-    }
+    startedAtMs.current = Date.now();
+    latestHandledSeq.current = 0;
     const hookStartedAtMs = startedAtMs.current;
     let source: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -93,6 +99,15 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
     function recoverAppSnapshot(currentSource: EventSource) {
       latestHandledSeq.current = 0;
       invalidateAppSnapshotQueries(client);
+      currentSource.close();
+      scheduleReconnect(currentSource);
+    }
+
+    function recoverWorkspaceSwitch(currentSource: EventSource) {
+      latestHandledSeq.current = 0;
+      setLiveSessionEvents({ workspaceKey, events: [] });
+      resetWorkspaceScopedClientState(client);
+      onWorkspaceSwitched?.();
       currentSource.close();
       scheduleReconnect(currentSource);
     }
@@ -127,6 +142,10 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
           if (event.seq > 0) {
             latestHandledSeq.current = Math.max(latestHandledSeq.current, event.seq);
           }
+          return;
+        }
+        if (event.type === "workspace_switched") {
+          recoverWorkspaceSwitch(currentSource);
           return;
         }
         const latestSeq = latestHandledSeq.current;
@@ -173,10 +192,18 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
           }
           const lifecycleEvent = lifecycleEventFromWebEvent(event);
           if (lifecycleEvent) {
-            setLiveSessionEvents((previous) => [
-              ...previous,
-              lifecycleEvent,
-            ].slice(-MAX_LIVE_SESSION_EVENT_HISTORY));
+            setLiveSessionEvents((previous) => {
+              const previousEvents = previous.workspaceKey === workspaceKey
+                ? previous.events
+                : [];
+              return {
+                workspaceKey,
+                events: [
+                  ...previousEvents,
+                  lifecycleEvent,
+                ].slice(-MAX_LIVE_SESSION_EVENT_HISTORY),
+              };
+            });
           }
         }
       };
@@ -195,7 +222,9 @@ export function useTaskEvents(): LiveSessionLifecycleEvent[] {
       if (retryTimer) clearTimeout(retryTimer);
       source?.close();
     };
-  }, [client]);
+  }, [client, onWorkspaceSwitched, workspaceKey]);
 
-  return liveSessionEvents;
+  return liveSessionEvents.workspaceKey === workspaceKey
+    ? liveSessionEvents.events
+    : [];
 }

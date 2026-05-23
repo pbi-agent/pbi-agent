@@ -134,6 +134,37 @@ class BootstrapResponse(BaseModel):
     board_stages: list[BoardStageModel]
 
 
+class WorkspaceRecordModel(BaseModel):
+    directory_key: str
+    root_path: str
+    display_path: str
+    is_sandbox: bool
+    last_opened_at: str
+    is_current: bool = False
+
+
+class WorkspaceListResponse(BaseModel):
+    workspaces: list[WorkspaceRecordModel]
+    picker_available: bool
+
+
+class WorkspaceSwitchRequest(BaseModel):
+    directory_key: NonEmptyString
+
+
+class WorkspaceSwitchResponse(BaseModel):
+    bootstrap: BootstrapResponse
+
+
+WorkspacePickerStatus = Literal["switched", "unavailable", "canceled", "error"]
+
+
+class WorkspacePickerResponse(BaseModel):
+    status: WorkspacePickerStatus
+    message: str | None = None
+    bootstrap: BootstrapResponse | None = None
+
+
 ProcessingPhase = Literal[
     "starting",
     "model_wait",

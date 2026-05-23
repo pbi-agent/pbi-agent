@@ -52,6 +52,9 @@ import type {
   SkillListPayload,
   SlashCommandItem,
   TaskRecord,
+  WorkspaceListPayload,
+  WorkspacePickerPayload,
+  WorkspaceSwitchPayload,
 } from "./types";
 
 type SessionListResponsePayload = { sessions: SessionRecord[] };
@@ -181,6 +184,26 @@ export async function fetchBootstrap(): Promise<BootstrapPayload> {
     "GET /api/bootstrap",
     "/api/bootstrap",
   );
+}
+
+export async function fetchRecentWorkspaces(): Promise<WorkspaceListPayload> {
+  return requestJson<WorkspaceListPayload>("/api/workspaces/recent");
+}
+
+export async function switchWorkspace(
+  directoryKey: string,
+): Promise<WorkspaceSwitchPayload> {
+  return requestJson<WorkspaceSwitchPayload>("/api/workspaces/switch", {
+    method: "POST",
+    body: JSON.stringify({ directory_key: directoryKey }),
+  });
+}
+
+export async function pickWorkspace(): Promise<WorkspacePickerPayload> {
+  return requestJson<WorkspacePickerPayload>("/api/workspaces/pick", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 export async function fetchConfigBootstrap(): Promise<ConfigBootstrapPayload> {

@@ -121,14 +121,15 @@ SPEC = ToolSpec(
 
 
 def handle(arguments: dict[str, Any], context: ToolContext) -> ToolOutput | str:
-    del context
     pattern = arguments.get("pattern")
     if not isinstance(pattern, str) or not pattern:
         return _error_output("'pattern' must be a non-empty string.")
 
     try:
         target = _normalize_target(arguments.get("target"))
-        workspace_root = Path.cwd().resolve()
+        workspace_root = (
+            context.workspace_root if context.workspace_root is not None else Path.cwd()
+        ).resolve()
         if target in _SEARCH_TARGETS:
             result = _handle_search(pattern, arguments, workspace_root, target=target)
         else:

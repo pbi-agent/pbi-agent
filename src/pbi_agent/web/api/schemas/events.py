@@ -369,6 +369,15 @@ class LiveSessionEndedSseEventModel(SseEventBaseModel):
     payload: LiveSessionLifecycleSseEventPayloadModel
 
 
+class WorkspaceSwitchedSseEventPayloadModel(BaseModel):
+    workspace_key: str
+
+
+class WorkspaceSwitchedSseEventModel(SseEventBaseModel):
+    type: Literal["workspace_switched"]
+    payload: WorkspaceSwitchedSseEventPayloadModel
+
+
 CONTROL_SSE_EVENT_MODELS = [
     ServerConnectedSseEventModel,
     ServerHeartbeatSseEventModel,
@@ -405,6 +414,7 @@ APP_SSE_EVENT_MODELS = [
     LiveSessionUpdatedSseEventModel,
     LiveSessionBoundSseEventModel,
     LiveSessionEndedSseEventModel,
+    WorkspaceSwitchedSseEventModel,
 ]
 
 EXTRA_API_TYPE_MODELS = [

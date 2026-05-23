@@ -20,7 +20,7 @@ from pbi_agent.web.api import (
     system_router,
     tasks_router,
 )
-from pbi_agent.web.session_manager import APP_EVENT_STREAM_ID, WebSessionManager
+from pbi_agent.web.session_manager import APP_EVENT_STREAM_ID, WebWorkspaceCoordinator
 
 WEB_DIR = Path(__file__).resolve().parent
 APP_STATIC_DIR = WEB_DIR / "static" / "app"
@@ -35,7 +35,7 @@ def create_app(
     title: str | None = None,
     public_url: str | None = None,
 ) -> FastAPI:
-    manager = WebSessionManager(settings, runtime_args=runtime_args)
+    manager = WebWorkspaceCoordinator(settings, runtime_args=runtime_args)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from pbi_agent.tools.types import ToolHandler, ToolSpec
 
-_REGISTRY: dict[str, tuple[ToolSpec | Callable[[], ToolSpec], ToolHandler]] = {}
+ToolSpecFactory = Callable[[Path | None], ToolSpec]
+
+_REGISTRY: dict[str, tuple[ToolSpec | ToolSpecFactory, ToolHandler]] = {}
 
 # --- built-in function tools -----------------------------------------------
 from pbi_agent.tools.shell import SPEC as _sh_spec, handle as _sh_handle  # noqa: E402
@@ -28,18 +31,26 @@ _REGISTRY["sub_agent"] = (_sa_build_spec, _sa_handle)
 
 
 def _resolve_spec(
-    entry: tuple[ToolSpec | Callable[[], ToolSpec], ToolHandler],
+    entry: tuple[ToolSpec | ToolSpecFactory, ToolHandler],
+    *,
+    workspace: Path | None = None,
 ) -> ToolSpec:
     spec_or_factory, _handler = entry
     if callable(spec_or_factory):
-        return spec_or_factory()
+        return spec_or_factory(workspace)
     return spec_or_factory
 
 
-def get_tool_specs(*, excluded_names: set[str] | None = None) -> list[ToolSpec]:
+def get_tool_specs(
+    *,
+    excluded_names: set[str] | None = None,
+    workspace: Path | None = None,
+) -> list[ToolSpec]:
     excluded = excluded_names or set()
     return [
-        _resolve_spec(item) for name, item in _REGISTRY.items() if name not in excluded
+        _resolve_spec(item, workspace=workspace)
+        for name, item in _REGISTRY.items()
+        if name not in excluded
     ]
 
 
@@ -50,11 +61,11 @@ def get_tool_handler(name: str) -> ToolHandler | None:
     return entry[1]
 
 
-def get_tool_spec(name: str) -> ToolSpec | None:
+def get_tool_spec(name: str, *, workspace: Path | None = None) -> ToolSpec | None:
     entry = _REGISTRY.get(name)
     if entry is None:
         return None
-    return _resolve_spec(entry)
+    return _resolve_spec(entry, workspace=workspace)
 
 
 def get_openai_tool_definitions(

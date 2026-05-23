@@ -67,7 +67,9 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if not isinstance(command, str) or not command.strip():
         return {"error": "'command' must be a non-empty string."}
 
-    root = Path.cwd().resolve()
+    root = (
+        context.workspace_root if context.workspace_root is not None else Path.cwd()
+    ).resolve()
     working_directory = _resolve_working_directory(
         root, arguments.get("working_directory")
     )

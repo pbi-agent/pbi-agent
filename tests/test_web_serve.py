@@ -504,6 +504,153 @@ def test_web_manager_uses_host_workspace_key_in_sandbox(monkeypatch, tmp_path) -
         manager.shutdown()
 
 
+def test_web_api_switches_active_workspace(monkeypatch, tmp_path) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    workspace_a.mkdir()
+    workspace_b.mkdir()
+    monkeypatch.chdir(workspace_a)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        create_a = client.post("/api/sessions", json={"title": "A"})
+        assert create_a.status_code == 200
+
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            store.record_recent_workspace(
+                directory_key=str(workspace_b),
+                root_path=str(workspace_b),
+                display_path=str(workspace_b),
+                is_sandbox=False,
+            )
+            session_b = store.create_session(
+                str(workspace_b),
+                "openai",
+                "gpt-5.4",
+                "B",
+            )
+
+        recent = client.get("/api/workspaces/recent")
+        assert recent.status_code == 200
+        assert {item["directory_key"] for item in recent.json()["workspaces"]} == {
+            str(workspace_a).lower(),
+            str(workspace_b).lower(),
+        }
+
+        switch_response = client.post(
+            "/api/workspaces/switch",
+            json={"directory_key": str(workspace_b).lower()},
+        )
+        assert switch_response.status_code == 200
+        switched = switch_response.json()["bootstrap"]
+        assert switched["workspace_root"] == str(workspace_b)
+        assert [item["session_id"] for item in switched["sessions"]] == [session_b]
+
+        sessions_b = client.get("/api/sessions").json()["sessions"]
+        assert [item["session_id"] for item in sessions_b] == [session_b]
+
+        switch_back = client.post(
+            "/api/workspaces/switch",
+            json={"directory_key": str(workspace_a).lower()},
+        )
+        assert switch_back.status_code == 200
+        assert switch_back.json()["bootstrap"]["workspace_root"] == str(workspace_a)
+        sessions_a = client.get("/api/sessions").json()["sessions"]
+        assert [item["title"] for item in sessions_a] == ["A"]
+
+
+def test_web_api_switch_to_recent_workspace_preserves_directory_key(
+    monkeypatch, tmp_path
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    workspace_a.mkdir()
+    workspace_b.mkdir()
+    monkeypatch.chdir(workspace_a)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            store.record_recent_workspace(
+                directory_key="custom-workspace-key",
+                root_path=str(workspace_b),
+                display_path="Custom Display",
+                is_sandbox=False,
+            )
+            session_b = store.create_session(
+                "custom-workspace-key",
+                "openai",
+                "gpt-5.4",
+                "B",
+            )
+
+        switch_response = client.post(
+            "/api/workspaces/switch",
+            json={"directory_key": "custom-workspace-key"},
+        )
+        assert switch_response.status_code == 200
+        switched = switch_response.json()["bootstrap"]
+        assert switched["workspace_root"] == str(workspace_b)
+        assert switched["workspace_key"] == "custom-workspace-key"
+        assert switched["workspace_display_path"] == "Custom Display"
+        assert [item["session_id"] for item in switched["sessions"]] == [session_b]
+
+
+def test_switched_session_worker_runs_in_selected_workspace(
+    monkeypatch, tmp_path
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    workspace_a.mkdir()
+    workspace_b.mkdir()
+    monkeypatch.chdir(workspace_a)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    captured: dict[str, Path | None] = {}
+    worker_started = threading.Event()
+
+    def fake_run_session_loop(*args, **kwargs) -> int:
+        del args
+        captured["workspace_root"] = kwargs.get("workspace_root")
+        worker_started.set()
+        return 0
+
+    monkeypatch.setattr(
+        "pbi_agent.web.session.workers.run_session_loop",
+        fake_run_session_loop,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            store.record_recent_workspace(
+                directory_key=str(workspace_b),
+                root_path=str(workspace_b),
+                display_path=str(workspace_b),
+                is_sandbox=False,
+            )
+
+        switch_response = client.post(
+            "/api/workspaces/switch",
+            json={"directory_key": str(workspace_b).lower()},
+        )
+        assert switch_response.status_code == 200
+        create_response = client.post("/api/sessions", json={"title": "B"})
+        assert create_response.status_code == 200
+        session_id = create_response.json()["session"]["session_id"]
+
+        message_response = client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"text": "hello from B"},
+        )
+        assert message_response.status_code == 200
+        assert worker_started.wait(timeout=2)
+
+    assert captured["workspace_root"] == workspace_b.resolve()
+    assert Path.cwd().resolve() == workspace_a.resolve()
+
+
 def _write_default_commands(root: Path) -> None:
     _write_command(
         root, "implement", "# Implementation command\n\nImplement the change."

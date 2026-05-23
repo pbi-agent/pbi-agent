@@ -41,6 +41,45 @@ def test_create_and_get_session(tmp_path) -> None:
     assert rec.created_at == rec.updated_at
 
 
+def test_recent_workspaces_record_and_list(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    first = tmp_path / "First"
+    second = tmp_path / "Second"
+    with SessionStore(db_path=db) as store:
+        store.record_recent_workspace(
+            directory_key=str(first),
+            root_path=str(first),
+            display_path=str(first),
+            is_sandbox=False,
+        )
+        time.sleep(0.001)
+        updated = store.record_recent_workspace(
+            directory_key=str(first),
+            root_path=str(first),
+            display_path="/display/First",
+            is_sandbox=True,
+        )
+        time.sleep(0.001)
+        store.record_recent_workspace(
+            directory_key=str(second),
+            root_path=str(second),
+            display_path=str(second),
+            is_sandbox=False,
+        )
+
+        records = store.list_recent_workspaces()
+        fetched = store.get_recent_workspace(str(first).lower())
+
+    assert updated.directory_key == str(first).lower()
+    assert [record.directory_key for record in records] == [
+        str(second).lower(),
+        str(first).lower(),
+    ]
+    assert fetched is not None
+    assert fetched.display_path == "/display/First"
+    assert fetched.is_sandbox is True
+
+
 def test_update_previous_id_and_title(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

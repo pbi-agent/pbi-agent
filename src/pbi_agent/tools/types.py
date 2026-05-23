@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol, TYPE_CHECKING
 
 from pbi_agent.models.messages import ImageAttachment
@@ -54,6 +55,7 @@ class ToolContext:
     tool_availability_overridden: bool = False
     parent_context: ParentContextSnapshot | None = None
     tracer: RunTracer | None = None
+    workspace_root: Path | None = None
     display_metadata: dict[str, Any] = field(default_factory=dict)
 
 

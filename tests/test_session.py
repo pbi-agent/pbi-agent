@@ -2351,7 +2351,7 @@ def test_run_session_loop_handles_skills_command_locally(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_skills_markdown",
-        lambda: "### Project Skills\n\n- `repo-skill`: Demo skill",
+        lambda workspace=None: "### Project Skills\n\n- `repo-skill`: Demo skill",
     )
 
     exit_code = run_session_loop(settings, display)
@@ -2375,7 +2375,7 @@ def test_run_session_loop_handles_mcp_command_locally(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_mcp_servers_markdown",
-        lambda: "### MCP Servers\n\n- `echo`: `uv run server.py`",
+        lambda workspace=None: "### MCP Servers\n\n- `echo`: `uv run server.py`",
     )
 
     exit_code = run_session_loop(settings, display)
@@ -2397,7 +2397,7 @@ def test_run_session_loop_handles_agents_command_locally(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_sub_agents_markdown",
-        lambda: "### Sub-Agents\n\n- `reviewer`: Reviews code",
+        lambda workspace=None: "### Sub-Agents\n\n- `reviewer`: Reviews code",
     )
 
     exit_code = run_session_loop(settings, display)
@@ -2549,15 +2549,15 @@ def test_run_session_loop_uses_transient_renderer_for_temporary_commands(
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_skills_markdown",
-        lambda: "skills output",
+        lambda workspace=None: "skills output",
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_mcp_servers_markdown",
-        lambda: "mcp output",
+        lambda workspace=None: "mcp output",
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_sub_agents_markdown",
-        lambda: "agents output",
+        lambda workspace=None: "agents output",
     )
 
     exit_code = run_session_loop(settings, display)
@@ -3717,7 +3717,7 @@ def test_run_session_loop_keeps_local_command_precedence_over_command_files(
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_skills_markdown",
-        lambda: "### Project Skills\n\n- `repo-skill`: Demo skill",
+        lambda workspace=None: "### Project Skills\n\n- `repo-skill`: Demo skill",
     )
 
     exit_code = run_session_loop(settings, display)

@@ -159,6 +159,7 @@ def _turn_instructions(
     *,
     settings: Settings,
     excluded_tools: set[str] | None = None,
+    cwd: Path | None = None,
 ) -> str | None:
     if active_command_instructions is None:
         return None
@@ -166,6 +167,7 @@ def _turn_instructions(
         active_command_instructions=active_command_instructions,
         settings=settings,
         excluded_tools=excluded_tools,
+        cwd=cwd,
     )
 
 

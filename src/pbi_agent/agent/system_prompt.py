@@ -155,28 +155,29 @@ def _resolve_base_prompt(
     *,
     settings: "Settings | None" = None,
     excluded_tools: Iterable[str] | None = None,
+    cwd: Path | None = None,
 ) -> str:
     """Return the base system prompt — custom instructions or the built-in default."""
     tool_usage_rules = _tool_usage_rules(
         settings=settings,
         excluded_tools=excluded_tools,
     )
-    custom = load_instructions()
+    custom = load_instructions(cwd)
     if custom is not None:
         return _inject_tool_usage_rules(custom, tool_usage_rules)
     return f"{_DEFAULT_SYSTEM_PROMPT_PREAMBLE}\n\n{tool_usage_rules}"
 
 
-def _append_project_rules(base_prompt: str) -> str:
+def _append_project_rules(base_prompt: str, cwd: Path | None = None) -> str:
     """Append ``<project_rules>`` section if ``AGENTS.md`` is present."""
-    rules = load_project_rules()
+    rules = load_project_rules(cwd)
     if rules is None:
         return base_prompt
     return f"{base_prompt}\n\n<project_rules>\n{rules}\n</project_rules>"
 
 
-def _append_available_skills(base_prompt: str) -> str:
-    skills = discover_project_skills()
+def _append_available_skills(base_prompt: str, cwd: Path | None = None) -> str:
+    skills = discover_project_skills(cwd)
     if not skills:
         return base_prompt
 
@@ -209,8 +210,8 @@ Project skills use progressive disclosure: the catalog contains only each skill'
     return f"{base_prompt}\n\n{instructions}\n{catalog}"
 
 
-def _append_available_sub_agents(base_prompt: str) -> str:
-    agents = discover_project_sub_agents()
+def _append_available_sub_agents(base_prompt: str, cwd: Path | None = None) -> str:
+    agents = discover_project_sub_agents(cwd)
     if not agents:
         return base_prompt
 
@@ -256,16 +257,22 @@ def get_system_prompt(
     *,
     settings: "Settings | None" = None,
     excluded_tools: Iterable[str] | None = None,
+    cwd: Path | None = None,
 ) -> str:
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
     prompt = _append_project_rules(
-        _resolve_base_prompt(settings=settings, excluded_tools=excluded_tools)
+        _resolve_base_prompt(
+            settings=settings,
+            excluded_tools=excluded_tools,
+            cwd=cwd,
+        ),
+        cwd,
     )
     if "explore_workspace" in active_names:
-        prompt = _append_available_skills(prompt)
+        prompt = _append_available_skills(prompt, cwd)
     if "sub_agent" in active_names:
-        prompt = _append_available_sub_agents(prompt)
+        prompt = _append_available_sub_agents(prompt, cwd)
     return _append_active_command(prompt, active_command_instructions)
 
 
@@ -274,6 +281,7 @@ def get_sub_agent_system_prompt(
     *,
     settings: "Settings | None" = None,
     excluded_tools: Iterable[str] | None = None,
+    cwd: Path | None = None,
 ) -> str:
     if agent_prompt_override:
         base = _inject_tool_usage_rules(
@@ -284,10 +292,11 @@ def get_sub_agent_system_prompt(
         base = _resolve_base_prompt(
             settings=settings,
             excluded_tools=excluded_tools,
+            cwd=cwd,
         )
-    prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}")
+    prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}", cwd)
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
     if "explore_workspace" not in active_names:
         return prompt
-    return _append_available_skills(prompt)
+    return _append_available_skills(prompt, cwd)

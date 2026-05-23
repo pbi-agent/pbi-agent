@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from pbi_agent.tools import registry
@@ -30,9 +31,9 @@ class ToolCatalog:
         return list(self._entries)
 
     @classmethod
-    def from_builtin_registry(cls) -> "ToolCatalog":
+    def from_builtin_registry(cls, workspace: Path | None = None) -> "ToolCatalog":
         entries: dict[str, ToolCatalogEntry] = {}
-        for spec in registry.get_tool_specs():
+        for spec in registry.get_tool_specs(workspace=workspace):
             handler = registry.get_tool_handler(spec.name)
             if handler is None:
                 continue
@@ -63,7 +64,7 @@ class ToolCatalog:
         for name, entry in self._entries.items():
             if name in excluded:
                 continue
-            specs.append(registry.get_tool_spec(name) or entry.spec)
+            specs.append(entry.spec)
         return specs
 
     def get_handler(self, name: str) -> ToolHandler | None:
@@ -76,7 +77,7 @@ class ToolCatalog:
         entry = self._entries.get(name)
         if entry is None:
             return None
-        return registry.get_tool_spec(name) or entry.spec
+        return entry.spec
 
     def get_openai_tool_definitions(
         self,

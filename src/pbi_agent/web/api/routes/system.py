@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, Response, UploadFile
@@ -54,6 +55,11 @@ from pbi_agent.web.api.schemas.system import (
     SlashCommandItemModel,
     SubmitQuestionResponseRequest,
     SlashCommandSearchResponse,
+    WorkspaceListResponse,
+    WorkspacePickerResponse,
+    WorkspaceRecordModel,
+    WorkspaceSwitchRequest,
+    WorkspaceSwitchResponse,
     UpdateSessionRequest,
 )
 from pbi_agent.web.input_mentions import expand_input_mentions
@@ -65,6 +71,61 @@ router = APIRouter(prefix="/api", tags=["system"])
 @router.get("/bootstrap", response_model=BootstrapResponse)
 def bootstrap(manager: SessionManagerDep) -> BootstrapResponse:
     return model_from_payload(BootstrapResponse, manager.bootstrap())
+
+
+@router.get("/workspaces/recent", response_model=WorkspaceListResponse)
+def list_recent_workspaces(manager: SessionManagerDep) -> WorkspaceListResponse:
+    workspace_manager = manager  # coordinator-only methods are exposed at runtime.
+    return WorkspaceListResponse(
+        workspaces=[
+            model_from_payload(WorkspaceRecordModel, item)
+            for item in workspace_manager.list_recent_workspaces()  # pyright: ignore[reportAttributeAccessIssue]
+        ],
+        picker_available=_native_folder_picker_available(),
+    )
+
+
+@router.post("/workspaces/switch", response_model=WorkspaceSwitchResponse)
+def switch_workspace(
+    request: WorkspaceSwitchRequest,
+    manager: SessionManagerDep,
+) -> WorkspaceSwitchResponse:
+    try:
+        bootstrap_payload = manager.switch_to_recent_workspace(request.directory_key)  # pyright: ignore[reportAttributeAccessIssue]
+    except KeyError as exc:
+        raise not_found("Recent workspace not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return WorkspaceSwitchResponse(
+        bootstrap=model_from_payload(BootstrapResponse, bootstrap_payload)
+    )
+
+
+@router.post("/workspaces/pick", response_model=WorkspacePickerResponse)
+def pick_workspace(manager: SessionManagerDep) -> WorkspacePickerResponse:
+    try:
+        payload = manager.choose_folder_and_switch()  # pyright: ignore[reportAttributeAccessIssue]
+    except Exception as exc:
+        return WorkspacePickerResponse(status="error", message=str(exc), bootstrap=None)
+    return WorkspacePickerResponse(
+        status=payload["status"],
+        message=payload.get("message"),
+        bootstrap=(
+            model_from_payload(BootstrapResponse, payload["bootstrap"])
+            if payload.get("bootstrap") is not None
+            else None
+        ),
+    )
+
+
+def _native_folder_picker_available() -> bool:
+    try:
+        return (
+            importlib.util.find_spec("tkinter") is not None
+            and importlib.util.find_spec("tkinter.filedialog") is not None
+        )
+    except ModuleNotFoundError:
+        return False
 
 
 @router.get("/sessions", response_model=SessionsResponse)

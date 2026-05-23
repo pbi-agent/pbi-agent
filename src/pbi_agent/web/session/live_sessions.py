@@ -617,7 +617,9 @@ class LiveSessionsMixin:
             result = shell_tool.handle(
                 {"command": normalized_command},
                 ToolContext(
-                    settings=live_session.runtime.settings, display=live_session.display
+                    settings=live_session.runtime.settings,
+                    display=live_session.display,
+                    workspace_root=self._workspace_root,
                 ),
             )
             exit_code = result.get("exit_code") if isinstance(result, dict) else 1

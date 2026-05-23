@@ -44,6 +44,24 @@ def current_workspace_context() -> WorkspaceContext:
     return resolve_workspace_context(environ=os.environ)
 
 
+def workspace_context_from_root(
+    root: Path,
+    *,
+    key: str | None = None,
+    display_path: str | None = None,
+    is_sandbox: bool = False,
+) -> WorkspaceContext:
+    execution_root = root.expanduser().resolve()
+    workspace_key = key or str(execution_root)
+    return WorkspaceContext(
+        execution_root=execution_root,
+        key=workspace_key,
+        directory_key=workspace_key.lower(),
+        display_path=display_path or workspace_key,
+        is_sandbox=is_sandbox,
+    )
+
+
 def current_workspace_directory_key() -> str:
     return current_workspace_context().directory_key
 

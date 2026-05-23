@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
@@ -10,9 +11,11 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 _DEFAULT_AGENT_TYPE = "default"
 
 
-def build_spec() -> ToolSpec:
+def build_spec(workspace: Path | None = None) -> ToolSpec:
     agent_type_values = [_DEFAULT_AGENT_TYPE]
-    agent_type_values.extend(agent.name for agent in discover_project_sub_agents())
+    agent_type_values.extend(
+        agent.name for agent in discover_project_sub_agents(workspace)
+    )
 
     return ToolSpec(
         name="sub_agent",
@@ -151,4 +154,5 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         parent_tool_availability_overridden=context.tool_availability_overridden,
         parent_context=parent_context,
         parent_tracer=parent_tracer,
+        workspace_root=context.workspace_root,
     )

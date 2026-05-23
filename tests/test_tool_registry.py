@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+from typing import Any
+
+from pbi_agent.agent.session.runtime import _open_runtime_provider
 from pbi_agent.config import Settings
 from pbi_agent.tools import registry
 from pbi_agent.tools.availability import effective_excluded_tool_names
+from pbi_agent.tools.catalog import ToolCatalog
+
+
+class _ProviderContextStub:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def __enter__(self) -> "_ProviderContextStub":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
 
 
 def test_registry_exposes_expected_built_in_tools() -> None:
@@ -165,3 +180,76 @@ def test_registry_sub_agent_schema_uses_project_agent_enum(
         "default",
         "reviewer",
     ]
+
+
+def test_builtin_tool_catalog_sub_agent_schema_uses_explicit_workspace(
+    tmp_path, monkeypatch
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    (workspace_a / ".agents" / "agents").mkdir(parents=True)
+    (workspace_b / ".agents" / "agents").mkdir(parents=True)
+    (workspace_a / ".agents" / "agents" / "alpha.md").write_text(
+        "---\nname: alpha\ndescription: Alpha agent.\n---\n\nAlpha prompt.\n",
+        encoding="utf-8",
+    )
+    (workspace_b / ".agents" / "agents" / "bravo.md").write_text(
+        "---\nname: bravo\ndescription: Bravo agent.\n---\n\nBravo prompt.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace_a)
+
+    catalog = ToolCatalog.from_builtin_registry(workspace_b)
+    spec = catalog.get_spec("sub_agent")
+
+    assert spec is not None
+    assert spec.parameters_schema["properties"]["agent_type"]["enum"] == [
+        "default",
+        "bravo",
+    ]
+
+
+def test_runtime_provider_sub_agent_schema_uses_explicit_workspace(
+    tmp_path, monkeypatch
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    (workspace_a / ".agents" / "agents").mkdir(parents=True)
+    (workspace_b / ".agents" / "agents").mkdir(parents=True)
+    (workspace_a / ".agents" / "agents" / "alpha.md").write_text(
+        "---\nname: alpha\ndescription: Alpha agent.\n---\n\nAlpha prompt.\n",
+        encoding="utf-8",
+    )
+    (workspace_b / ".agents" / "agents" / "bravo.md").write_text(
+        "---\nname: bravo\ndescription: Bravo agent.\n---\n\nBravo prompt.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace_a)
+    captured: dict[str, Any] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
+    ) -> _ProviderContextStub:
+        del system_prompt, excluded_tools
+        assert tool_catalog is not None
+        spec = tool_catalog.get_spec("sub_agent")
+        assert spec is not None
+        captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        return _ProviderContextStub(settings)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.runtime.create_provider",
+        fake_create_provider,
+    )
+
+    with _open_runtime_provider(
+        Settings(api_key="test-key", provider="openai"),
+        workspace_root=workspace_b,
+    ):
+        pass
+
+    assert captured["enum"] == ["default", "bravo"]

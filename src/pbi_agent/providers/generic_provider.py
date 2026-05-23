@@ -192,6 +192,7 @@ class GenericProvider(Provider):
                     ),
                     parent_context=parent_context,
                     tracer=tracer,
+                    workspace_root=getattr(self, "_workspace_root", None),
                 ),
                 on_result=build_tool_result_callback(display),
             )

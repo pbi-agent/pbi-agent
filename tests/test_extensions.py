@@ -9,6 +9,7 @@ from typing import Any, Callable, cast
 
 from pbi_agent import extensions
 from pbi_agent.agent import session as session_module
+from pbi_agent.agent.session.commands import reserved_slash_extension_names
 from pbi_agent.config import Settings
 from pbi_agent.extensions import (
     discover_extensions,
@@ -358,7 +359,7 @@ def test_tool_catalog_with_extensions_refreshes_callable_reserved_names(
 def test_reserved_slash_extension_names_include_compact(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
 
-    names = session_module._reserved_slash_extension_names()
+    names = reserved_slash_extension_names()
 
     assert "compact" in names
 
@@ -433,6 +434,71 @@ def test_open_runtime_provider_passes_command_reservations(
         )
 
 
+def test_open_runtime_provider_binds_command_reservations_to_workspace(
+    tmp_path, monkeypatch
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    workspace_a.mkdir()
+    workspace_b.mkdir()
+    monkeypatch.chdir(workspace_a)
+    _write_command(workspace_a, "from-a")
+    _write_command(workspace_b, "from-b")
+    captured: dict[str, object] = {}
+
+    class _McpPoolStub:
+        def __init__(self, workspace: Path) -> None:
+            self.workspace = workspace
+
+        def __enter__(self) -> _McpPoolStub:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def to_tool_catalog(self) -> ToolCatalog:
+            return ToolCatalog()
+
+    class _ProviderStub:
+        def __enter__(self) -> _ProviderStub:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    def _tool_catalog_with_extensions(
+        base: ToolCatalog,
+        workspace: Path,
+        *,
+        reserved_names: object = None,
+    ) -> tuple[ToolCatalog, list[object]]:
+        captured["workspace"] = workspace
+        captured["reserved_names"] = reserved_names
+        return base, []
+
+    monkeypatch.setattr("pbi_agent.mcp.McpServerPool", _McpPoolStub)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.tool_catalog_with_extensions",
+        _tool_catalog_with_extensions,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.create_provider",
+        lambda *args, **kwargs: _ProviderStub(),
+    )
+
+    with session_module._open_runtime_provider(
+        Settings(api_key="test-key", provider="openai"),
+        workspace_root=workspace_b,
+    ):
+        assert captured["workspace"] == workspace_b.resolve()
+        reserved_names = captured["reserved_names"]
+        assert callable(reserved_names)
+        get_reserved_names = cast(Callable[[], set[str]], reserved_names)
+        reserved = get_reserved_names()
+        assert "from-b" in reserved
+        assert "from-a" not in reserved
+
+
 def test_reserved_slash_extension_names_include_active_mcp_tools(
     tmp_path, monkeypatch
 ) -> None:
@@ -480,7 +546,7 @@ def test_reserved_slash_extension_names_include_active_mcp_tools(
     with session_module._open_runtime_provider(
         Settings(api_key="test-key", provider="openai")
     ):
-        reserved = session_module._reserved_slash_extension_names()
+        reserved = reserved_slash_extension_names()
         assert "mcp-foo" in reserved
         assert (
             find_extension_for_slash(

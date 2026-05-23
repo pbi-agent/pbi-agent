@@ -117,7 +117,7 @@ class McpServerPool:
                     handler=_McpToolHandler(self, binding),
                 )
             )
-        return ToolCatalog.from_builtin_registry().merged(extra_entries)
+        return ToolCatalog.from_builtin_registry(self._workspace).merged(extra_entries)
 
     def call_tool(
         self, binding: McpToolBinding, arguments: dict[str, Any]

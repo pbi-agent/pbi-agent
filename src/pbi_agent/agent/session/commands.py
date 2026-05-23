@@ -46,10 +46,11 @@ def _build_user_turn_input(
     image_paths: list[str],
     images: list[ImageAttachment] | None,
     settings: Settings,
+    workspace_root: Path | None = None,
 ) -> UserTurnInput:
     resolved_images = list(images or [])
     if image_paths:
-        root = Path.cwd().resolve()
+        root = (workspace_root or Path.cwd()).resolve()
         resolved_images.extend(load_workspace_image(root, path) for path in image_paths)
     return UserTurnInput(text=text, images=resolved_images)
 
@@ -99,19 +100,24 @@ def _remove_active_mcp_tool_names(
     return tuple(remaining)
 
 
-def _reserved_slash_extension_names() -> set[str]:
+def _reserved_slash_extension_names(workspace: Path | None = None) -> set[str]:
+    root = (workspace or Path.cwd()).resolve()
     reserved = {
         command.lstrip("/") for command in TEMPORARY_LOCAL_COMMANDS | {COMPACT_COMMAND}
     }
     reserved.update(ToolCatalog.from_builtin_registry().names())
-    reserved.update(_ACTIVE_MCP_TOOL_NAMES.get())
-    for command in list_command_configs(Path.cwd()):
+    reserved.update(active_mcp_tool_names(root))
+    for command in list_command_configs(root):
         reserved.add(command.slash_alias.lstrip("/"))
     return reserved
 
 
-def _reload_provider_initialization(provider: Provider) -> None:
-    provider.set_system_prompt(get_system_prompt(settings=provider.settings))
+def _reload_provider_initialization(
+    provider: Provider, workspace: Path | None = None
+) -> None:
+    provider.set_system_prompt(
+        get_system_prompt(settings=provider.settings, cwd=workspace)
+    )
     provider.refresh_tools()
 
 

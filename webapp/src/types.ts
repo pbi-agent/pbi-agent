@@ -271,6 +271,27 @@ export type BootstrapPayload = {
   board_stages: BoardStage[];
 };
 
+export type WorkspaceRecord = {
+  directory_key: string;
+  root_path: string;
+  display_path: string;
+  is_sandbox: boolean;
+  last_opened_at: string;
+  is_current: boolean;
+};
+export type WorkspaceListPayload = {
+  workspaces: WorkspaceRecord[];
+  picker_available: boolean;
+};
+export type WorkspaceSwitchPayload = {
+  bootstrap: BootstrapPayload;
+};
+export type WorkspacePickerPayload = {
+  status: "switched" | "unavailable" | "canceled" | "error";
+  message: string | null;
+  bootstrap: BootstrapPayload | null;
+};
+
 export type ProviderAuthStatus = {
   auth_mode: string;
   backend: string | null;

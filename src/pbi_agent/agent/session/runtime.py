@@ -129,6 +129,8 @@ def run_single_turn(
     persisted_user_message_id: int | None = None,
     replay_history: bool = True,
     include_tool_history: bool = False,
+    workspace_root: Path | None = None,
+    workspace_directory_key: str | None = None,
 ) -> AgentOutcome:
     runtime = _coerce_runtime(settings)
     store = _open_store(runtime.settings)
@@ -142,10 +144,12 @@ def run_single_turn(
     active_command_instructions = (
         active_command.instructions if active_command is not None else None
     )
+    workspace = (workspace_root or Path.cwd()).resolve()
     turn_instructions = _turn_instructions(
         active_command_instructions,
         settings=settings,
         excluded_tools=INTERACTIVE_ONLY_TOOLS,
+        cwd=workspace,
     )
     display.welcome(
         interactive=False,
@@ -164,12 +168,14 @@ def run_single_turn(
         image_paths=image_paths or [],
         images=images,
         settings=settings,
+        workspace_root=workspace,
     )
     user_turn_history_text = _user_turn_history_text(user_input)
     session_id = resume_session_id or _create_session(
         store,
         runtime,
         title=_session_title_for_user_turn(user_input),
+        directory_key=workspace_directory_key,
     )
     tracer = RunTracer.start(
         store=store,
@@ -192,6 +198,7 @@ def run_single_turn(
             settings,
             excluded_tools=INTERACTIVE_ONLY_TOOLS,
             tool_availability_overridden=runtime.tool_availability_overridden,
+            workspace_root=workspace,
         ) as provider:
             display.assistant_start()
             _resume_session(
@@ -303,8 +310,11 @@ def run_session_loop(
     on_reload: Callable[[], None] | None = None,
     excluded_tools: set[str] | None = None,
     include_tool_history: bool = False,
+    workspace_root: Path | None = None,
+    workspace_directory_key: str | None = None,
 ) -> int:
     current_runtime = _coerce_runtime(settings)
+    workspace = (workspace_root or Path.cwd()).resolve()
     saved_session_runtime = current_runtime
     store = _open_store(current_runtime.settings)
     session_id: str | None = resume_session_id
@@ -354,6 +364,7 @@ def run_session_loop(
             current_runtime.settings,
             excluded_tools=_turn_excluded_tools(interactive_mode=False),
             tool_availability_overridden=(current_runtime.tool_availability_overridden),
+            workspace_root=workspace,
         ) as provider:
             if resume_session_to_restore is not None:
                 _resume_session(
@@ -446,34 +457,37 @@ def run_session_loop(
                     break
                 normalized_command = _normalize_user_command(user_input)
                 if normalized_command == SKILLS_COMMAND:
-                    _render_temporary_command_markdown(format_project_skills_markdown())
+                    _render_temporary_command_markdown(
+                        format_project_skills_markdown(workspace)
+                    )
                     continue
                 if normalized_command == MCP_COMMAND:
                     _render_temporary_command_markdown(
-                        format_project_mcp_servers_markdown()
+                        format_project_mcp_servers_markdown(workspace)
                     )
                     continue
                 if normalized_command == AGENTS_COMMAND:
                     _render_temporary_command_markdown(
-                        format_project_sub_agents_markdown()
+                        format_project_sub_agents_markdown(workspace)
                     )
                     continue
                 if normalized_command == EXTENSIONS_COMMAND:
                     _render_temporary_command_markdown(
                         format_extensions_markdown(
-                            reserved_names=_reserved_slash_extension_names()
+                            workspace,
+                            reserved_names=_reserved_slash_extension_names(workspace),
                         )
                     )
                     continue
                 init_force = _parse_init_command_force(user_input)
                 if init_force is not None:
-                    result = init_agents_file(force=init_force)
+                    result = init_agents_file(workspace=workspace, force=init_force)
                     _render_temporary_command_markdown(
                         format_init_agents_result(result)
                     )
                     continue
                 if normalized_command == RELOAD_COMMAND:
-                    _reload_provider_initialization(provider)
+                    _reload_provider_initialization(provider, workspace)
                     if on_reload is not None:
                         on_reload()
                     _render_temporary_command_markdown(
@@ -487,13 +501,15 @@ def run_session_loop(
                 if normalized_command:
                     extension = find_extension_for_slash(
                         normalized_command.split(maxsplit=1)[0],
-                        reserved_names=_reserved_slash_extension_names(),
+                        workspace,
+                        reserved_names=_reserved_slash_extension_names(workspace),
                     )
                 if extension is not None:
                     parts = user_input.split(maxsplit=1)
                     result = run_extension(
                         extension,
                         {"text": parts[1] if len(parts) > 1 else ""},
+                        workspace=workspace,
                     )
                     _render_temporary_command_markdown(
                         _format_extension_run_markdown(extension.name, result)
@@ -539,17 +555,20 @@ def run_session_loop(
                     active_command_instructions,
                     settings=turn_settings,
                     excluded_tools=turn_excluded_tools,
+                    cwd=workspace,
                 )
                 if turn_instructions is None and turn_interactive_mode:
                     turn_instructions = get_system_prompt(
                         settings=turn_settings,
                         excluded_tools=turn_excluded_tools,
+                        cwd=workspace,
                     )
                 turn_input = _build_user_turn_input(
                     text=user_input,
                     image_paths=image_paths,
                     images=queued_images,
                     settings=turn_settings,
+                    workspace_root=workspace,
                 )
                 turn_history_text = _user_turn_history_text(turn_input)
 
@@ -558,6 +577,7 @@ def run_session_loop(
                         store,
                         saved_session_runtime,
                         title=_session_title_for_user_turn(turn_input),
+                        directory_key=workspace_directory_key,
                     )
                     title_set = True
                     _bind_session(display, session_id)
@@ -607,6 +627,7 @@ def run_session_loop(
                                     tool_availability_overridden=(
                                         turn_runtime.tool_availability_overridden
                                     ),
+                                    workspace_root=workspace,
                                 )
                             )
                             _refresh_provider_history_from_store(
@@ -838,10 +859,12 @@ def run_sub_agent_task(
     parent_tool_availability_overridden: bool = False,
     parent_context: ParentContextSnapshot | None = None,
     parent_tracer: RunTracer | None = None,
+    workspace_root: Path | None = None,
 ) -> dict[str, Any]:
+    workspace = (workspace_root or Path.cwd()).resolve()
     agent_definition = None
     if agent_type is not None:
-        agent_definition = get_project_sub_agent_by_name(agent_type)
+        agent_definition = get_project_sub_agent_by_name(agent_type, workspace)
         if agent_definition is None:
             return {
                 "status": "failed",
@@ -949,9 +972,11 @@ def run_sub_agent_task(
                 ),
                 settings=child_settings,
                 excluded_tools=SUB_AGENT_DISABLED_TOOLS,
+                cwd=workspace,
             ),
             excluded_tools=SUB_AGENT_DISABLED_TOOLS,
             tool_catalog=tool_catalog,
+            workspace_root=workspace,
         ) as provider:
             _apply_sub_agent_parent_context(
                 provider=provider,
@@ -1091,14 +1116,17 @@ def _open_runtime_provider(
     excluded_tools: set[str] | None = None,
     tool_catalog: "ToolCatalog | None" = None,
     tool_availability_overridden: bool | None = None,
+    workspace_root: Path | None = None,
 ):
     from pbi_agent.mcp import McpServerPool
 
     runtime = _coerce_runtime(settings)
     runtime_settings = runtime.settings
+    workspace = (workspace_root or Path.cwd()).resolve()
     active_system_prompt = system_prompt or get_system_prompt(
         settings=runtime_settings,
         excluded_tools=excluded_tools,
+        cwd=workspace,
     )
     effective_tool_availability_overridden = (
         runtime.tool_availability_overridden
@@ -1112,13 +1140,13 @@ def _open_runtime_provider(
             excluded_tools=excluded_tools,
             tool_catalog=tool_catalog,
         )
+        setattr(provider, "_workspace_root", workspace)
         _set_provider_tool_availability_overridden(
             provider, effective_tool_availability_overridden
         )
         with provider:
             yield provider
     else:
-        workspace = Path.cwd()
         with McpServerPool(workspace) as mcp_pool:
             mcp_tool_catalog = mcp_pool.to_tool_catalog()
             mcp_tool_names = frozenset(mcp_tool_catalog.names())
@@ -1132,7 +1160,7 @@ def _open_runtime_provider(
             tool_catalog, _extension_diagnostics = tool_catalog_with_extensions(
                 mcp_tool_catalog,
                 workspace,
-                reserved_names=_reserved_slash_extension_names,
+                reserved_names=lambda: _reserved_slash_extension_names(workspace),
             )
             try:
                 provider = create_provider(
@@ -1141,6 +1169,7 @@ def _open_runtime_provider(
                     excluded_tools=excluded_tools,
                     tool_catalog=tool_catalog,
                 )
+                setattr(provider, "_workspace_root", workspace)
                 _set_provider_tool_availability_overridden(
                     provider, effective_tool_availability_overridden
                 )

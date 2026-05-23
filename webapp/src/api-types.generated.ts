@@ -349,13 +349,27 @@ export type WelcomeSseEventModel = { seq: number; created_at: string; type: "wel
 
 export type WelcomeSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; interactive: boolean; model?: string | null; reasoning_effort?: string | null; single_turn_hint?: string | null };
 
-export type AppSseEventModel = SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel;
+export type WorkspaceListResponse = { workspaces: WorkspaceRecordModel[]; picker_available: boolean };
+
+export type WorkspacePickerResponse = { status: "switched" | "unavailable" | "canceled" | "error"; message?: string | null; bootstrap?: BootstrapResponse | null };
+
+export type WorkspaceRecordModel = { directory_key: string; root_path: string; display_path: string; is_sandbox: boolean; last_opened_at: string; is_current?: boolean };
+
+export type WorkspaceSwitchRequest = { directory_key: string };
+
+export type WorkspaceSwitchResponse = { bootstrap: BootstrapResponse };
+
+export type WorkspaceSwitchedSseEventModel = { seq: number; created_at: string; type: "workspace_switched"; payload: WorkspaceSwitchedSseEventPayloadModel };
+
+export type WorkspaceSwitchedSseEventPayloadModel = { workspace_key: string };
+
+export type AppSseEventModel = SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
 
 export type SessionSseEventModel = SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel;
 
 export type SseControlEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel;
 
-export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel;
+export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
 
 export type ApiOperationResponses = {
   "GET /api/board/stages": BoardStagesResponse;
@@ -422,6 +436,9 @@ export type ApiOperationResponses = {
   "PATCH /api/tasks/{task_id}": TaskResponse;
   "POST /api/tasks/{task_id}/run": TaskResponse;
   "GET /api/uploads/{upload_id}": unknown;
+  "POST /api/workspaces/pick": WorkspacePickerResponse;
+  "GET /api/workspaces/recent": WorkspaceListResponse;
+  "POST /api/workspaces/switch": WorkspaceSwitchResponse;
 };
 
 export type ApiJsonRequestBodies = {
@@ -452,6 +469,7 @@ export type ApiJsonRequestBodies = {
   "POST /api/sessions/{session_id}/shell-command": LiveSessionShellCommandRequest;
   "POST /api/tasks": CreateTaskRequest;
   "PATCH /api/tasks/{task_id}": UpdateTaskRequest;
+  "POST /api/workspaces/switch": WorkspaceSwitchRequest;
 };
 
 export type ApiOperationPathParams = {
