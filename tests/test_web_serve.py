@@ -4107,6 +4107,62 @@ def test_run_task_advances_to_next_configured_stage(monkeypatch, tmp_path) -> No
     assert task_payload["session_id"] == "session-123"
 
 
+def test_run_task_with_recoverable_tool_errors_still_advances(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _write_default_commands(tmp_path)
+    app = create_app(_settings())
+
+    with patch(
+        "pbi_agent.web.session.workers.run_single_turn_in_directory",
+        return_value=SimpleNamespace(
+            tool_errors=True,
+            text="Planned despite a recovered tool error.",
+            session_id="session-123",
+        ),
+    ):
+        with TestClient(app) as client:
+            client.put(
+                "/api/board/stages",
+                json={
+                    "board_stages": [
+                        {"id": "backlog", "name": "Backlog"},
+                        {"id": "plan", "name": "Plan", "command_id": "plan"},
+                        {"id": "review", "name": "Review", "command_id": "review"},
+                    ]
+                },
+            )
+            create_response = client.post(
+                "/api/tasks",
+                json={"title": "Task A", "prompt": "Investigate", "stage": "plan"},
+            )
+            assert create_response.status_code == 200
+            task_id = create_response.json()["task"]["task_id"]
+
+            run_response = client.post(f"/api/tasks/{task_id}/run")
+            assert run_response.status_code == 200
+
+            deadline = time.monotonic() + 2
+            while True:
+                task_payload = client.get("/api/tasks").json()["tasks"][0]
+                if (
+                    task_payload["stage"] == "review"
+                    and task_payload["run_status"] == "completed"
+                ):
+                    break
+                if time.monotonic() > deadline:
+                    raise AssertionError("task run did not finish in time")
+                time.sleep(0.01)
+
+    assert task_payload["stage"] == "review"
+    assert task_payload["run_status"] == "completed"
+    assert (
+        task_payload["last_result_summary"] == "Planned despite a recovered tool error."
+    )
+    assert task_payload["session_id"] == "session-123"
+
+
 def test_run_task_exposes_live_session_before_completion(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     app = create_app(_settings())

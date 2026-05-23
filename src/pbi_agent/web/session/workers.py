@@ -291,15 +291,8 @@ class WorkersMixin:
                         live_session.live_session_id,
                         outcome.session_id,
                     )
-                if outcome.tool_errors:
-                    status = KANBAN_RUN_STATUS_FAILED
-                    summary = shorten(
-                        (outcome.text or "Completed with tool errors.").strip(),
-                        200,
-                    )
-                else:
-                    status = KANBAN_RUN_STATUS_COMPLETED
-                    summary = shorten((outcome.text or "Completed.").strip(), 200)
+                status = KANBAN_RUN_STATUS_COMPLETED
+                summary = shorten((outcome.text or "Completed.").strip(), 200)
 
                 with SessionStore() as store:
                     updated = store.set_kanban_task_result(
