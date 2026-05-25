@@ -319,7 +319,7 @@ def _resolve_read_list_target(
 ) -> Path:
     if root.is_file():
         root_target = root.resolve(strict=False)
-        if raw_pattern.strip() == ".":
+        if target == "read" or raw_pattern.strip() == ".":
             target_path = root_target
         else:
             target_path = resolve_safe_path(root_target.parent, raw_pattern).resolve(

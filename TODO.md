@@ -1,4 +1,5 @@
-[X] Inspect warning snapshot/CSS alignment
-[X] Fix alert icon/text vertical alignment
-[X] Run focused frontend validation
+[X] Inspect explore_workspace read/list validation
+[X] Add focused regression coverage
+[X] Patch file-root read behavior
+[X] Run focused validation
 [X] Update memory and summarize

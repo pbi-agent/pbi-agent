@@ -152,6 +152,31 @@ def test_explore_workspace_reads_text_window(tmp_path: Path, monkeypatch) -> Non
     assert result == "-- more: cursor=4\ntwo\nthree"
 
 
+def test_explore_workspace_reads_file_root_with_search_hint_pattern(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    styles = tmp_path / "webapp" / "src" / "styles"
+    styles.mkdir(parents=True)
+    (styles / "modal.css").write_text(
+        "one\n.task-form-dialog {}\nthree\n",
+        encoding="utf-8",
+    )
+
+    result = explore_workspace_tool.handle(
+        {
+            "pattern": "task-form-dialog",
+            "root": "webapp/src/styles/modal.css",
+            "target": "read",
+            "start_line": 2,
+            "limit": 2,
+        },
+        ToolContext(),
+    )
+
+    assert result == ".task-form-dialog {}\nthree"
+
+
 def test_explore_workspace_passes_search_options(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     (tmp_path / "pkg").mkdir()

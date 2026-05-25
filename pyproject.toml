@@ -17,7 +17,7 @@ dependencies = [
     "python-docx==1.2.0",
     "rich==14.3.3",
     "uvicorn[standard]==0.43.0",
-    "codetool-explore==0.6.0",
+    "codetool-explore==0.7.0",
 ]
 
 [project.scripts]
