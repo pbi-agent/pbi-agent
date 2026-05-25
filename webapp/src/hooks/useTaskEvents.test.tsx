@@ -288,11 +288,15 @@ describe("useTaskEvents", () => {
     expect(MockEventSource.instances[1].url).not.toContain("since=");
   });
 
-  it("clears workspace-scoped client state after workspace-switched events", () => {
+  it("clears workspace state without blanking shell data after workspace-switched events", () => {
     const queryClient = new QueryClient();
+    const invalidateQueries = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
     const onWorkspaceSwitched = vi.fn();
     const sessionKey = getSavedSessionKey("old-session");
     queryClient.setQueryData(["bootstrap"], { workspace_key: "old" });
+    queryClient.setQueryData(["config-bootstrap"], { config_revision: "old" });
     queryClient.setQueryData(["session", "old-session"], { session_id: "old-session" });
     queryClient.setQueryData(["dashboard-runs", "old"], [{ run_session_id: "run-1" }]);
     useSessionStore.setState({
@@ -315,16 +319,79 @@ describe("useTaskEvents", () => {
       emitAppEvent(source, {
         type: "workspace_switched",
         payload: { workspace_key: "new" },
-        seq: 1,
+        seq: 0,
       });
     });
 
     expect(useSessionStore.getState().activeSessionKey).toBeNull();
     expect(useSessionStore.getState().sessionsByKey).toEqual({});
-    expect(queryClient.getQueryData(["bootstrap"])).toBeUndefined();
+    expect(queryClient.getQueryData(["bootstrap"])).toEqual({ workspace_key: "old" });
+    expect(queryClient.getQueryData(["config-bootstrap"])).toEqual({
+      config_revision: "old",
+    });
     expect(queryClient.getQueryData(["session", "old-session"])).toBeUndefined();
     expect(queryClient.getQueryData(["dashboard-runs", "old"])).toBeUndefined();
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["bootstrap"] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["config-bootstrap"] });
     expect(onWorkspaceSwitched).toHaveBeenCalledOnce();
     expect(source.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores replayed workspace-switched events for the current workspace", () => {
+    const queryClient = new QueryClient();
+    const onWorkspaceSwitched = vi.fn();
+
+    renderHook(() => useTaskEvents("new", onWorkspaceSwitched), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const source = MockEventSource.instances[0];
+    act(() => {
+      emitAppEvent(source, {
+        type: "workspace_switched",
+        payload: { workspace_key: "new" },
+        seq: 4,
+      });
+    });
+
+    expect(onWorkspaceSwitched).not.toHaveBeenCalled();
+    expect(source.close).not.toHaveBeenCalled();
+
+    source.onerror?.();
+    vi.advanceTimersByTime(1000);
+
+    expect(MockEventSource.instances[1].url).toContain("since=4");
+  });
+
+  it("does not re-handle the same workspace-switched target before bootstrap updates", () => {
+    const queryClient = new QueryClient();
+    const onWorkspaceSwitched = vi.fn();
+
+    renderHook(() => useTaskEvents("old", onWorkspaceSwitched), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const firstSource = MockEventSource.instances[0];
+    act(() => {
+      emitAppEvent(firstSource, {
+        type: "workspace_switched",
+        payload: { workspace_key: "new" },
+        seq: 1,
+      });
+    });
+    vi.advanceTimersByTime(1000);
+
+    const secondSource = MockEventSource.instances[1];
+    act(() => {
+      emitAppEvent(secondSource, {
+        type: "workspace_switched",
+        payload: { workspace_key: "new" },
+        seq: 1,
+      });
+    });
+
+    expect(onWorkspaceSwitched).toHaveBeenCalledOnce();
+    expect(firstSource.close).toHaveBeenCalledTimes(1);
+    expect(secondSource.close).not.toHaveBeenCalled();
   });
 });

@@ -80,6 +80,20 @@ class EventStream:
         self.deliver(deliver_event)
         return deliver_event
 
+    def deliver_transient(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        event = {
+            "seq": 0,
+            "type": event_type,
+            "payload": {**payload, "transient": True},
+            "created_at": _now_iso(),
+        }
+        self.deliver(event)
+        return event
+
     def deliver(self, event: dict[str, Any]) -> None:
         with self._lock:
             subscribers = [

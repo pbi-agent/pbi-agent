@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import os
+import shutil
+import subprocess
 import threading
 import time
 import uuid
@@ -37,6 +41,41 @@ from pbi_agent.workspace_context import (
 _WEB_MANAGER_LEASE_STALE_SECS = 30.0
 _WEB_MANAGER_LEASE_BUSY_RETRY_SECS = 2.0
 _WEB_MANAGER_LEASE_BUSY_RETRY_DELAY_SECS = 0.1
+_WINDOWS_FOLDER_PICKER_TIMEOUT_SECS = 600.0
+_WSLPATH_TIMEOUT_SECS = 5.0
+_WINDOWS_FOLDER_PICKER_INITIAL_ENV = "PBI_AGENT_PICKER_INITIAL_DIR"
+_WINDOWS_FOLDER_PICKER_SCRIPT = r"""
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.Application]::EnableVisualStyles()
+$owner = New-Object System.Windows.Forms.Form
+$owner.ShowInTaskbar = $false
+$owner.StartPosition = "CenterScreen"
+$owner.Width = 1
+$owner.Height = 1
+$owner.Opacity = 0
+$owner.TopMost = $true
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = "Choose pbi-agent workspace"
+$dialog.ShowNewFolderButton = $true
+$initial = [Environment]::GetEnvironmentVariable("PBI_AGENT_PICKER_INITIAL_DIR")
+if ($initial -and [System.IO.Directory]::Exists($initial)) {
+    $dialog.SelectedPath = $initial
+}
+try {
+    $owner.Show()
+    $owner.Activate()
+    $result = $dialog.ShowDialog($owner)
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        [Console]::Out.WriteLine($dialog.SelectedPath)
+        exit 0
+    }
+    exit 2
+}
+finally {
+    $dialog.Dispose()
+    $owner.Dispose()
+}
+"""
 
 __all__ = [
     "APP_EVENT_STREAM_ID",
@@ -44,7 +83,233 @@ __all__ = [
     "WebManagerStartupError",
     "WebSessionManager",
     "WebWorkspaceCoordinator",
+    "workspace_picker_available",
 ]
+
+
+class _FolderPickerUnavailable(RuntimeError):
+    """Raised when the native folder picker cannot be used."""
+
+
+class _FolderPickerFailed(RuntimeError):
+    """Raised when the native folder picker fails after it is available."""
+
+
+def workspace_picker_available() -> bool:
+    return _wsl_windows_folder_picker_available() or _native_folder_picker_available()
+
+
+def _wsl_windows_folder_picker_available() -> bool:
+    return (
+        _is_wsl_environment()
+        and shutil.which("powershell.exe") is not None
+        and shutil.which("wslpath") is not None
+    )
+
+
+def _native_folder_picker_available() -> bool:
+    try:
+        return (
+            importlib.util.find_spec("tkinter") is not None
+            and importlib.util.find_spec("tkinter.filedialog") is not None
+        )
+    except ModuleNotFoundError:
+        return False
+
+
+def _choose_native_workspace_folder() -> str | None:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception as exc:
+        raise _FolderPickerUnavailable(
+            f"Native folder picker is unavailable: {exc}"
+        ) from exc
+
+    root: Any | None = None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        selected = filedialog.askdirectory(title="Choose pbi-agent workspace")
+    except Exception as exc:
+        raise _FolderPickerFailed(f"Native folder picker failed: {exc}") from exc
+    finally:
+        if root is not None:
+            root.destroy()
+    return str(selected) if selected else None
+
+
+def _choose_workspace_folder(*, initial_folder: Path | None = None) -> str | None:
+    if _wsl_windows_folder_picker_available():
+        return _choose_wsl_windows_workspace_folder(initial_folder=initial_folder)
+
+    if _native_folder_picker_available():
+        return _choose_native_workspace_folder()
+
+    if _is_wsl_environment():
+        raise _FolderPickerUnavailable(
+            "Windows folder picker is unavailable from WSL. Ensure WSL interop is "
+            "enabled and powershell.exe and wslpath are available."
+        )
+
+    return _choose_native_workspace_folder()
+
+
+def _choose_wsl_windows_workspace_folder(
+    *,
+    initial_folder: Path | None = None,
+) -> str | None:
+    initial_windows_path = (
+        _wsl_to_windows_path(initial_folder) if initial_folder is not None else None
+    )
+    env = os.environ.copy()
+    if initial_windows_path:
+        env[_WINDOWS_FOLDER_PICKER_INITIAL_ENV] = initial_windows_path
+
+    try:
+        completed = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-STA",
+                "-Command",
+                _WINDOWS_FOLDER_PICKER_SCRIPT,
+            ],
+            check=False,
+            env=env,
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+            timeout=_WINDOWS_FOLDER_PICKER_TIMEOUT_SECS,
+        )
+    except FileNotFoundError as exc:
+        raise _FolderPickerUnavailable(
+            "Windows folder picker is unavailable from WSL: powershell.exe was not "
+            "found."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise _FolderPickerFailed("Windows folder picker timed out.") from exc
+    except OSError as exc:
+        raise _FolderPickerUnavailable(
+            f"Windows folder picker is unavailable from WSL: {exc}"
+        ) from exc
+
+    if completed.returncode == 2:
+        return None
+    if completed.returncode != 0:
+        details = _short_process_error(completed.stderr)
+        message = "Windows folder picker failed"
+        if details:
+            message = f"{message}: {details}"
+        raise _FolderPickerFailed(message)
+
+    windows_path = completed.stdout.strip()
+    if not windows_path:
+        return None
+    return _windows_to_wsl_path(windows_path)
+
+
+def _wsl_to_windows_path(path: Path) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["wslpath", "-w", str(path)],
+            check=False,
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+            timeout=_WSLPATH_TIMEOUT_SECS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    selected = completed.stdout.strip()
+    if completed.returncode != 0 or not selected:
+        return None
+    return selected
+
+
+def _windows_to_wsl_path(windows_path: str) -> str:
+    if windows_path.startswith("/"):
+        return windows_path
+
+    unc_path = _wsl_unc_to_linux_path(windows_path)
+    if unc_path is not None:
+        return unc_path
+
+    try:
+        completed = subprocess.run(
+            ["wslpath", "-u", windows_path],
+            check=False,
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+            timeout=_WSLPATH_TIMEOUT_SECS,
+        )
+    except FileNotFoundError as exc:
+        raise _FolderPickerUnavailable(
+            "Windows folder picker is unavailable from WSL: wslpath was not found."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise _FolderPickerFailed(
+            "Windows folder picker selected a path that timed out while mapping into "
+            "WSL."
+        ) from exc
+    except OSError as exc:
+        raise _FolderPickerFailed(
+            f"Windows folder picker selected a path that cannot be mapped into WSL: "
+            f"{exc}"
+        ) from exc
+
+    selected = completed.stdout.strip()
+    if completed.returncode != 0 or not selected:
+        details = _short_process_error(completed.stderr)
+        message = "Windows folder picker selected a path that cannot be mapped into WSL"
+        if details:
+            message = f"{message}: {details}"
+        raise _FolderPickerFailed(message)
+    return selected
+
+
+def _wsl_unc_to_linux_path(windows_path: str) -> str | None:
+    distro = os.environ.get("WSL_DISTRO_NAME")
+    if not distro:
+        return None
+
+    normalized = windows_path.replace("/", "\\")
+    prefixes = (
+        f"\\\\wsl.localhost\\{distro}",
+        f"\\\\wsl$\\{distro}",
+    )
+    normalized_lower = normalized.lower()
+    for prefix in prefixes:
+        prefix_lower = prefix.lower()
+        if normalized_lower == prefix_lower:
+            return "/"
+        prefix_with_separator = f"{prefix}\\"
+        if normalized_lower.startswith(prefix_with_separator.lower()):
+            remainder = normalized[len(prefix_with_separator) :]
+            return "/" + remainder.replace("\\", "/")
+    return None
+
+
+def _short_process_error(value: str) -> str | None:
+    details = " ".join(line.strip() for line in value.splitlines() if line.strip())
+    if not details:
+        return None
+    return details[:300]
+
+
+def _is_wsl_environment() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+
+    try:
+        return (
+            "microsoft"
+            in Path("/proc/sys/kernel/osrelease").read_text(encoding="utf-8").lower()
+        )
+    except OSError:
+        return False
 
 
 class WebManagerStartupError(RuntimeError):
@@ -280,27 +545,11 @@ class WebWorkspaceCoordinator:
 
     def choose_folder_and_switch(self) -> dict[str, Any]:
         try:
-            import tkinter as tk
-            from tkinter import filedialog
-        except Exception as exc:
-            return {
-                "status": "unavailable",
-                "message": f"Native folder picker is unavailable: {exc}",
-                "bootstrap": None,
-            }
-
-        try:
-            root = tk.Tk()
-            root.withdraw()
-            root.attributes("-topmost", True)
-            selected = filedialog.askdirectory(title="Choose pbi-agent workspace")
-            root.destroy()
-        except Exception as exc:
-            return {
-                "status": "error",
-                "message": f"Native folder picker failed: {exc}",
-                "bootstrap": None,
-            }
+            selected = _choose_workspace_folder(initial_folder=self.workspace_root)
+        except _FolderPickerUnavailable as exc:
+            return {"status": "unavailable", "message": str(exc), "bootstrap": None}
+        except _FolderPickerFailed as exc:
+            return {"status": "error", "message": str(exc), "bootstrap": None}
         if not selected:
             return {
                 "status": "canceled",
@@ -329,14 +578,14 @@ class WebWorkspaceCoordinator:
         self._record_recent_workspace(manager)
         bootstrap = manager.bootstrap()
         if previous_manager is not manager:
-            previous_manager._app_stream.publish(
+            manager._app_stream.publish(
                 "workspace_switched",
                 {"workspace_key": manager.workspace_key},
             )
-        manager._app_stream.publish(
-            "workspace_switched",
-            {"workspace_key": manager.workspace_key},
-        )
+            previous_manager._app_stream.deliver_transient(
+                "workspace_switched",
+                {"workspace_key": manager.workspace_key},
+            )
         return bootstrap
 
     def _record_recent_workspace(self, manager: WebSessionManager) -> None:

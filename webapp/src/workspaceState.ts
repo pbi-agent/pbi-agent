@@ -4,7 +4,6 @@ import { useSessionStore } from "./store";
 import type { BootstrapPayload } from "./types";
 
 const WORKSPACE_SCOPED_QUERY_PREFIXES = [
-  "bootstrap",
   "sessions",
   "session",
   "session-runs",
@@ -17,7 +16,6 @@ const WORKSPACE_SCOPED_QUERY_PREFIXES = [
   "file-mentions",
   "skill-mentions",
   "slash-commands",
-  "config-bootstrap",
 ];
 
 export function resetWorkspaceScopedClientState(
@@ -34,9 +32,8 @@ export function resetWorkspaceScopedClientState(
   });
   if (bootstrap) {
     client.setQueryData(["bootstrap"], bootstrap);
-  } else {
-    client.setQueryData(["bootstrap"], undefined);
   }
   void client.invalidateQueries({ queryKey: ["bootstrap"] });
+  void client.invalidateQueries({ queryKey: ["config-bootstrap"] });
   void client.invalidateQueries({ queryKey: ["workspaces", "recent"] });
 }

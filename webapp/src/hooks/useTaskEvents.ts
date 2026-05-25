@@ -86,6 +86,7 @@ export function useTaskEvents(
     let source: EventSource | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let disposed = false;
+    let handledWorkspaceSwitchKey: string | null = null;
 
     function scheduleReconnect(currentSource: EventSource) {
       if (disposed || source !== currentSource || retryTimer) return;
@@ -145,6 +146,18 @@ export function useTaskEvents(
           return;
         }
         if (event.type === "workspace_switched") {
+          const nextWorkspaceKey = event.payload.workspace_key;
+          if (
+            !workspaceKey
+            || nextWorkspaceKey === workspaceKey
+            || nextWorkspaceKey === handledWorkspaceSwitchKey
+          ) {
+            if (event.seq > 0) {
+              latestHandledSeq.current = Math.max(latestHandledSeq.current, event.seq);
+            }
+            return;
+          }
+          handledWorkspaceSwitchKey = nextWorkspaceKey;
           recoverWorkspaceSwitch(currentSource);
           return;
         }

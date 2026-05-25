@@ -107,7 +107,7 @@ describe("WorkspaceBadge", () => {
     const warning = screen.getByRole("alert");
     expect(warning).toHaveClass("workspace-switcher-dialog__warning");
     expect(warning).toHaveTextContent(
-      "Native folder picking is not available in this environment.",
+      "Folder picking is not available in this environment.",
     );
     expect(screen.getByRole("button", { name: /Choose folder/ })).toBeEnabled();
   });

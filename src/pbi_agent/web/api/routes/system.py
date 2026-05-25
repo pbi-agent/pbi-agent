@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, Response, UploadFile
@@ -63,6 +62,7 @@ from pbi_agent.web.api.schemas.system import (
     UpdateSessionRequest,
 )
 from pbi_agent.web.input_mentions import expand_input_mentions
+from pbi_agent.web.session_manager import workspace_picker_available
 from pbi_agent.web.uploads import load_uploaded_image_record, uploaded_image_path
 
 router = APIRouter(prefix="/api", tags=["system"])
@@ -81,7 +81,7 @@ def list_recent_workspaces(manager: SessionManagerDep) -> WorkspaceListResponse:
             model_from_payload(WorkspaceRecordModel, item)
             for item in workspace_manager.list_recent_workspaces()  # pyright: ignore[reportAttributeAccessIssue]
         ],
-        picker_available=_native_folder_picker_available(),
+        picker_available=workspace_picker_available(),
     )
 
 
@@ -116,16 +116,6 @@ def pick_workspace(manager: SessionManagerDep) -> WorkspacePickerResponse:
             else None
         ),
     )
-
-
-def _native_folder_picker_available() -> bool:
-    try:
-        return (
-            importlib.util.find_spec("tkinter") is not None
-            and importlib.util.find_spec("tkinter.filedialog") is not None
-        )
-    except ModuleNotFoundError:
-        return False
 
 
 @router.get("/sessions", response_model=SessionsResponse)

@@ -60,6 +60,7 @@ from pbi_agent.session_store import (
 )
 from pbi_agent.web.display import WebDisplay
 from pbi_agent.web.api.routes.events import _iter_sse_events, _resolve_since
+import pbi_agent.web.session_manager as session_manager_module
 from pbi_agent.web.server_runtime import (
     _ExpectedStartupFailureFilter,
     _startup_error_message_from_traceback,
@@ -546,6 +547,13 @@ def test_web_api_switches_active_workspace(monkeypatch, tmp_path) -> None:
         switched = switch_response.json()["bootstrap"]
         assert switched["workspace_root"] == str(workspace_b)
         assert [item["session_id"] for item in switched["sessions"]] == [session_b]
+        active_events = app.state.manager.active_manager.get_event_stream(
+            "app"
+        ).snapshot()
+        assert active_events[-1]["type"] == "workspace_switched"
+        assert active_events[-1]["payload"] == {
+            "workspace_key": switched["workspace_key"]
+        }
 
         sessions_b = client.get("/api/sessions").json()["sessions"]
         assert [item["session_id"] for item in sessions_b] == [session_b]
@@ -556,6 +564,13 @@ def test_web_api_switches_active_workspace(monkeypatch, tmp_path) -> None:
         )
         assert switch_back.status_code == 200
         assert switch_back.json()["bootstrap"]["workspace_root"] == str(workspace_a)
+        active_events = app.state.manager.active_manager.get_event_stream(
+            "app"
+        ).snapshot()
+        assert active_events[-1]["type"] == "workspace_switched"
+        assert active_events[-1]["payload"] == {
+            "workspace_key": switch_back.json()["bootstrap"]["workspace_key"]
+        }
         sessions_a = client.get("/api/sessions").json()["sessions"]
         assert [item["title"] for item in sessions_a] == ["A"]
 
@@ -596,6 +611,101 @@ def test_web_api_switch_to_recent_workspace_preserves_directory_key(
         assert switched["workspace_key"] == "custom-workspace-key"
         assert switched["workspace_display_path"] == "Custom Display"
         assert [item["session_id"] for item in switched["sessions"]] == [session_b]
+
+
+def test_web_api_pick_workspace_uses_windows_picker_in_wsl_when_tkinter_unavailable(
+    monkeypatch, tmp_path
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    workspace_a.mkdir()
+    workspace_b.mkdir()
+    monkeypatch.chdir(workspace_a)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    monkeypatch.setattr(
+        session_manager_module,
+        "_native_folder_picker_available",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        session_manager_module,
+        "_wsl_windows_folder_picker_available",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        session_manager_module,
+        "_choose_wsl_windows_workspace_folder",
+        lambda *, initial_folder: str(workspace_b),
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        recent = client.get("/api/workspaces/recent")
+        assert recent.status_code == 200
+        assert recent.json()["picker_available"] is True
+
+        pick_response = client.post("/api/workspaces/pick")
+        assert pick_response.status_code == 200
+        payload = pick_response.json()
+        assert payload["status"] == "switched"
+        assert payload["message"] is None
+        assert payload["bootstrap"]["workspace_root"] == str(workspace_b)
+
+
+def test_web_api_pick_workspace_reports_unavailable_without_native_or_windows_picker(
+    monkeypatch, tmp_path
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_a.mkdir()
+    monkeypatch.chdir(workspace_a)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    monkeypatch.setattr(
+        session_manager_module,
+        "_is_wsl_environment",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        session_manager_module,
+        "_native_folder_picker_available",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        session_manager_module,
+        "_wsl_windows_folder_picker_available",
+        lambda: False,
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        recent = client.get("/api/workspaces/recent")
+        assert recent.status_code == 200
+        assert recent.json()["picker_available"] is False
+
+        pick_response = client.post("/api/workspaces/pick")
+        assert pick_response.status_code == 200
+        payload = pick_response.json()
+        assert payload["status"] == "unavailable"
+        assert payload["bootstrap"] is None
+        assert "Windows folder picker is unavailable from WSL" in payload["message"]
+
+
+def test_wsl_unc_path_conversion_uses_current_distro(monkeypatch) -> None:
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+
+    assert (
+        session_manager_module._wsl_unc_to_linux_path(  # noqa: SLF001
+            r"\\wsl.localhost\Ubuntu\home\user\project"
+        )
+        == "/home/user/project"
+    )
+    assert (
+        session_manager_module._wsl_unc_to_linux_path(  # noqa: SLF001
+            r"\\wsl$\Ubuntu\home\user\project"
+        )
+        == "/home/user/project"
+    )
 
 
 def test_switched_session_worker_runs_in_selected_workspace(
@@ -2396,6 +2506,32 @@ def test_event_stream_transient_replay_until_durable_cursor_passes() -> None:
         "durable-1",
         "durable-2",
     ]
+
+
+def test_event_stream_deliver_transient_is_not_replayed_or_counted() -> None:
+    stream = EventStream()
+
+    async def deliver_with_subscriber() -> tuple[dict[str, object], dict[str, object]]:
+        subscriber_id, queue = stream.subscribe()
+        try:
+            delivered = stream.deliver_transient(
+                "workspace_switched",
+                {"workspace_key": "new"},
+            )
+            await asyncio.sleep(0)
+            queued = queue.get_nowait()
+            return delivered, queued
+        finally:
+            stream.unsubscribe(subscriber_id)
+
+    delivered_event, queued_event = asyncio.run(deliver_with_subscriber())
+
+    assert queued_event == delivered_event
+    assert delivered_event["seq"] == 0
+    assert delivered_event["payload"] == {"workspace_key": "new", "transient": True}
+    assert stream.snapshot() == []
+    assert stream.bounds() == (None, 0)
+    assert stream.replay_snapshot(include_transient_since=0) == []
 
 
 def test_event_stream_replays_no_subscriber_transient_once_even_at_latest_cursor() -> (

@@ -64,7 +64,7 @@ export function WorkspaceSwitcherDialog({
   const pickerUnavailableMessage =
     pickerMessage ??
     (recentQuery.data?.picker_available === false
-      ? "Native folder picking is not available in this environment."
+      ? "Folder picking is not available in this environment."
       : null);
   const mutationError =
     switchMutation.error instanceof Error

@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-05-23
+- Last compacted: 2026-05-25
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -25,11 +25,13 @@
 - Sub-agents: `.agents/agents/*.md`; frontmatter supports `name`, `description`, `model_profile_id`, and `allowed_tools`; child model defaults from active profile/CLI + `sub_agent_model`.
 - Local commands: `plan` no questions; `review` Markdown and autonomous; `fix-review` stops on `No findings.`; `refine-task` clarifies draft tasks with `ask_user` and forbids solutions; `ship-task` branch/merge helpers; `release` needs explicit publish wording and no history rewrite after PR unless approved.
 - Project command `/create-task` creates Kanban cards through `pbi-agent kanban create`; no implementation.
+- Kanban worker outcomes: returned task outcomes complete even with recoverable tool errors; fatal exceptions/interrupts still fail.
 - Release docs: use `release-writing`; changelog index `docs/changelog/index.md`, files `docs/changelog/v<version>.md`, VitePress sidebar links releases; release workflow needs validation triage, publish verification, continuation-gate safety.
 - Branding: public copy = local coding agent; preserve `pbi-agent`, `pbi_agent`, `PBI_AGENT_*`, `~/.pbi-agent`; logo `src/pbi_agent/web/static/logo.jpg`.
 - Providers: OpenAI Responses use `instructions` + `previous_response_id`; ChatGPT subscription prepends system prompt; Codex transport WebSocket-only (`chatgpt_codex_backend.py`), no unsupported compression.
 - ChatGPT Codex WebSocket: split connect/idle/request timeouts; retryable connect/upgrade/send/read/request timeout failures and `error.type=server_error` without HTTP status; provider emits `model_call_start`/`model_call_retry`; retry backoff covered in OpenAI provider tests.
 - Web/session: saved sessions use session-scoped APIs; no user-facing `/api/live-sessions/*` or `/sessions/live/:id`. Blank/saved sessions can start/continue without active live id; completed Kanban-bound runs detach live ids without ending saved conversation.
+- Web workspace switching: workspace APIs/picker switch managers/runs by explicit workspace root/directory key across web/session/task/sub-agent/tool/extension/MCP contexts; `workspace_switched` SSE clears workspace-scoped UI/query/session state and redirects other tabs to Sessions. In WSL, the folder picker prefers a Windows folder dialog via `powershell.exe` and maps the selected path back with `wslpath`.
 - Web session manager: `src/pbi_agent/web/session_manager.py` thin facade; mixins under `src/pbi_agent/web/session/`. Patch worker/auth globals in `pbi_agent.web.session.workers` and `pbi_agent.web.session.provider_auth`.
 - Web events: app/session streams use SSE `GET /api/events/{stream}` and `/api/events/sessions/{session_id}` with `server.connected`/heartbeat and `since`/`Last-Event-ID`; WebSocket event routes/helpers removed. Frontend keeps defensive `parseSseEvent()` validation.
 - Web message identity: saved history/live replay use canonical persisted ids `msg-<messages.id>` + stable part ids; optimistic/display-local live items rekey via `message_rekeyed`.
@@ -70,16 +72,8 @@
 
 ## Detailed Task Events
 
-## 2026-05-23
-- Created Kanban task `40b3524dcc4e4a3bab0ba3e34b51bb95` in Backlog for switching active workspace from the web UI. Validation: `pbi-agent kanban create --json` succeeded. Next: implement when scheduled.
-- Diagnosed task `40b3524dcc4e4a3bab0ba3e34b51bb95` / session `2aaf1bf88af446d2aca1663a14ccd52e`: Kanban plan stage failed because `AgentOutcome.tool_errors=True` from two failed `explore_workspace` calls, even though the run record/session completed and produced a plan. Potential fix: decide whether Kanban should fail on recoverable tool errors.
-- Fixed Kanban worker to mark returned task outcomes completed despite recoverable tool errors; fatal exceptions/interrupts still fail. Validation: Ruff check/format, basedpyright, focused web task tests.
-- Implemented web workspace switching: coordinator retains per-workspace managers/runs, recent workspace APIs/picker, clickable workspace switcher UI, cache/session reset, SSE reconnect, generated API types/static bundle. Validation: Ruff check/format, basedpyright, full pytest, full web tests, lint/typecheck, web build.
-- Fixed workspace-switch review findings: recent switches now preserve stored directory keys; web/session/task/sub-agent/tool execution carries explicit workspace root/directory key instead of relying on process CWD. Validation: focused pytest for session/extensions/web/sub-agent/provider surfaces, Ruff check/format, source basedpyright.
-- Fixed follow-up workspace-switch review finding: sub-agent tool schemas now resolve project-local agent enums from the active workspace catalog instead of process CWD; MCP/runtime provider catalog construction preserves workspace-specific specs. Validation: focused tool/sub-agent pytest, Ruff check/format, basedpyright for touched files.
-- Fixed workspace-switch review findings: `workspace_switched` SSE now clears workspace-scoped query/session state and redirects other tabs to Sessions; extension reserved slash names are bound to the active workspace instead of process CWD. Validation: focused extensions pytest, focused web hook/AppShell tests, Ruff check/format, basedpyright, web lint/typecheck.
-- Polished workspace switcher UI: task-form dialog chrome, padded recent rows/empty state, explicit hover/focus styling, full-width folder picker button enabled to surface unavailable state, rebuilt static app. Validation: focused WorkspaceBadge test, web lint/typecheck/build.
-- Restyled workspace switcher picker-unavailable warning as a compact warning Alert with icon/badge-like colors, removed duplicate plain warning text, and rebuilt static app. Validation: focused WorkspaceBadge test, web lint/typecheck/build.
-- Aligned workspace switcher picker warning icon/text with flex layout and badge-style medium warning copy; rebuilt static app. Validation: focused WorkspaceBadge test, web lint/typecheck/build.
-- Fixed workspace switcher warning vertical alignment leak from shadcn Alert/Tailwind SVG `translate-y-0.5`: warning icon now resets Tailwind translate vars, is block-level, and the description flex-centers to the same axis; rebuilt static app. Validation: focused WorkspaceBadge test, web lint/typecheck/build.
-- Fixed `explore_workspace` read-mode file roots to ignore accidental search-hint patterns and read the root file directly. Validation: focused tool pytest, Ruff check/format, basedpyright, and exact pbi-agent-style call passed.
+## 2026-05-25
+- Added web workspace picker fallback that prompts in the pbi-agent terminal for a WSL path when native tkinter picking is unavailable/failed; picker availability now includes interactive CLI prompt support. Validation: focused web workspace pytest, targeted Ruff check/format, targeted basedpyright.
+- Replaced the WSL terminal path prompt with a Windows folder dialog picker launched from WSL via PowerShell; selected Windows/WSL UNC paths are converted back into WSL paths. Validation: focused web workspace pytest, Ruff check/format, basedpyright, full web tests/lint/typecheck/build.
+- Fixed workspace-switch UI reload flashing by making `workspace_switched` a live-only SSE notification instead of a replayed app-stream event, and by preserving bootstrap/config shell query data while refetching the new workspace. Validation: focused workspace/transient pytest, full web tests/lint/typecheck/build, Ruff check/format, targeted basedpyright on changed src files; basedpyright on all of `test_web_serve.py` still reports existing test-file typing issues.
+- Fixed review finding for reconnecting tabs during workspace switch: publish a durable switch event on the new active app stream while keeping transient live delivery on the previous stream; frontend ignores current/same-target replays to avoid loops. Validation: focused workspace pytest, useTaskEvents Vitest, Ruff check/format, basedpyright on session_manager, web lint/typecheck/build, diff check.
