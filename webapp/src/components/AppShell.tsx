@@ -86,6 +86,7 @@ export function AppShell() {
             element={
               <SessionPage
                 workspaceRoot={bootstrap?.workspace_root}
+                workspaceKey={bootstrap?.workspace_key}
                 supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
               />
             }
@@ -95,6 +96,7 @@ export function AppShell() {
             element={
               <SessionPage
                 workspaceRoot={bootstrap?.workspace_root}
+                workspaceKey={bootstrap?.workspace_key}
                 supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
               />
             }
@@ -104,6 +106,7 @@ export function AppShell() {
             element={
               <SessionPage
                 workspaceRoot={bootstrap?.workspace_root}
+                workspaceKey={bootstrap?.workspace_key}
                 supportsImageInputs={bootstrap?.supports_image_inputs ?? false}
               />
             }

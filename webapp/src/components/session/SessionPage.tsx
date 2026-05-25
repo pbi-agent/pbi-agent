@@ -7,6 +7,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CpuIcon,
+  FileIcon,
   MessageCircleQuestionMark,
   WrenchIcon,
 } from "lucide-react";
@@ -25,6 +26,7 @@ import {
   setActiveModelProfile,
   setSessionProfile,
   submitSessionQuestionResponse,
+  refreshWorkspaceFileTree,
   uploadSavedSessionImages,
 } from "../../api";
 import type {
@@ -57,9 +59,18 @@ import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
 import { UserQuestionsPanel } from "./UserQuestionsPanel";
 import { Composer, type ComposerHandle } from "./Composer";
+import {
+  WorkspaceFileTreePanel,
+  workspaceFileTreeQueryKey,
+} from "./WorkspaceFileTreePanel";
 import { WorkspaceBadge } from "../WorkspaceBadge";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "../ui/resizable";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -141,9 +152,11 @@ function useSubAgentItemMap(items: TimelineItem[]): Record<string, TimelineItem[
 
 export function SessionPage({
   workspaceRoot,
+  workspaceKey,
   supportsImageInputs,
 }: {
   workspaceRoot: string | undefined;
+  workspaceKey?: string | undefined;
   supportsImageInputs: boolean;
 }) {
   const client = useQueryClient();
@@ -164,7 +177,10 @@ export function SessionPage({
   const composerRef = useRef<ComposerHandle>(null);
   const submitInFlightRef = useRef(false);
   const [directSubmitPending, setDirectSubmitPending] = useState(false);
+  const [fileTreeOpen, setFileTreeOpen] = useState(false);
+  const refreshedEndedLiveSessionsRef = useRef<Set<string>>(new Set());
   const isSidebarOpen = useSidebarStore((state) => state.isOpen);
+  const workspaceQueryKey = workspaceKey ?? workspaceRoot ?? null;
 
   const routeSessionKey = routeSessionId
     ? getSavedSessionKey(routeSessionId)
@@ -509,6 +525,31 @@ export function SessionPage({
     sessionState?.liveSessionId ?? null,
   );
 
+  useEffect(() => {
+    const liveSessionId = sessionState?.liveSessionId;
+    if (!liveSessionId || !sessionState?.sessionEnded) return;
+    if (refreshedEndedLiveSessionsRef.current.has(liveSessionId)) return;
+    refreshedEndedLiveSessionsRef.current.add(liveSessionId);
+    const treeQueryKey = workspaceFileTreeQueryKey(workspaceQueryKey);
+    if (fileTreeOpen) {
+      void refreshWorkspaceFileTree()
+        .then((payload) => {
+          client.setQueryData(treeQueryKey, payload);
+        })
+        .catch(() => {
+          void client.invalidateQueries({ queryKey: treeQueryKey });
+        });
+      return;
+    }
+    void client.invalidateQueries({ queryKey: treeQueryKey });
+  }, [
+    client,
+    fileTreeOpen,
+    sessionState?.liveSessionId,
+    sessionState?.sessionEnded,
+    workspaceQueryKey,
+  ]);
+
   const activeSessionRecord = useMemo(() => {
     if (!routeSessionId) return null;
     return (
@@ -760,6 +801,258 @@ export function SessionPage({
     ? selectedSubAgent?.sessionUsage ?? selectedSubAgent?.turnUsage?.usage ?? null
     : sessionState?.sessionUsage ?? sessionState?.turnUsage?.usage ?? null;
 
+  const sessionPanel = (
+    <div className="session-panel">
+      <div
+        className={cn(
+          "session-topbar",
+          !isSidebarOpen && "session-topbar--with-workspace",
+        )}
+      >
+        <div className="session-topbar__leading">
+          <ConnectionBadge connection={topbarConnection} />
+          <ProfileSelector
+            selectedProfileId={selectedProfileId}
+            modelProfiles={modelProfiles}
+            isLoading={configQuery.isPending}
+            disabled={profileSelectorDisabled}
+            onChange={(id) => {
+              void handleProfileChange(id);
+            }}
+          />
+        </div>
+        {!isSidebarOpen ? (
+          <div className="session-topbar__workspace" aria-label="Current workspace">
+            <WorkspaceBadge tooltipSide="bottom" />
+          </div>
+        ) : null}
+        <div className="session-topbar__actions">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Toggle
+                type="button"
+                variant="outline"
+                size="sm"
+                className="session-topbar-control session-file-tree-toggle"
+                pressed={fileTreeOpen}
+                aria-label={fileTreeOpen ? "Close file tree" : "Open file tree"}
+                aria-expanded={fileTreeOpen}
+                aria-controls="workspace-file-tree-panel"
+                onPressedChange={setFileTreeOpen}
+              >
+                <FileIcon aria-hidden="true" />
+              </Toggle>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="end">
+              {fileTreeOpen ? "Close workspace file tree." : "Open workspace file tree."}
+            </TooltipContent>
+          </Tooltip>
+          {!isSubAgentRoute ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Toggle
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="session-topbar-control session-tool-history-toggle"
+                  pressed={includeToolHistory}
+                  aria-label={
+                    includeToolHistory
+                      ? "Disable tool history"
+                      : "Enable tool history"
+                  }
+                  onPressedChange={setIncludeToolHistory}
+                >
+                  <WrenchIcon aria-hidden="true" />
+                </Toggle>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
+                {includeToolHistory
+                  ? "Prior tool calls and results will be included when continuing saved sessions."
+                  : "Include prior tool calls and results when continuing saved sessions."}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+          {!isSubAgentRoute ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Toggle
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="session-topbar-control session-interactive-toggle"
+                  pressed={interactiveMode}
+                  aria-label={
+                    interactiveMode ? "Disable interactive mode" : "Enable interactive mode"
+                  }
+                  onPressedChange={setInteractiveMode}
+                >
+                  <MessageCircleQuestionMark aria-hidden="true" />
+                </Toggle>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end">
+                {interactiveMode
+                  ? "Interactive mode enabled. Press Maj+Tab / Shift+Tab to disable."
+                  : "Let the agent ask questions and offer choices. Press Maj+Tab / Shift+Tab to enable."}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+          {routeSessionId && !isSubAgentRoute ? (
+            <RunHistory sessionId={routeSessionId} />
+          ) : null}
+          <UsageBar
+            compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
+            usage={displayedUsage}
+          />
+        </div>
+      </div>
+
+      {inputWarnings.length > 0 ? (
+        <Alert className="banner banner--notice">
+          <AlertTriangleIcon />
+          <AlertDescription>{inputWarnings.join(" ")}</AlertDescription>
+        </Alert>
+      ) : null}
+      {recoveryNotice ? (
+        <Alert className="banner banner--notice">
+          <AlertTriangleIcon />
+          <AlertDescription>{recoveryNotice}</AlertDescription>
+        </Alert>
+      ) : null}
+      {recoveryFailed ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{recoveryFailed}</AlertDescription>
+        </Alert>
+      ) : null}
+      {sessionState?.fatalError ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{sessionState.fatalError}</AlertDescription>
+        </Alert>
+      ) : null}
+      {createSessionMutation.error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{createSessionMutation.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {setSessionProfileMutation.error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{setSessionProfileMutation.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {forkSessionMutation.error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{forkSessionMutation.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {setActiveProfileMutation.error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{setActiveProfileMutation.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {!isSubAgentRoute && interruptMutation.error ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{interruptMutation.error.message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {sessionDetailLoadError ? (
+        <Alert variant="destructive" className="banner banner--error">
+          <AlertTriangleIcon />
+          <AlertDescription>{sessionDetailLoadError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {sessionNotFound ? (
+        <EmptyState
+          title="Session not found"
+          description={
+            sessionDetailError instanceof Error
+              ? sessionDetailError.message
+              : "This session does not exist in the current workspace."
+          }
+          action={
+            <Button type="button" onClick={handleNewSession}>
+              Start new session
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          <SessionTimeline
+            items={displayedItems}
+            itemsVersion={displayedItemsVersion}
+            subAgents={displayedSubAgents}
+            subAgentItems={subAgentItems}
+            turnElapsedSeconds={displayedTurnElapsedSeconds}
+            turnCostUsd={displayedTurnCostUsd}
+            connection={sessionState?.connection ?? "disconnected"}
+            waitMessage={displayedWaitMessage}
+            processing={displayedProcessing}
+            parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
+            showSubAgentCards={!isSubAgentRoute}
+            onForkMessage={!isSubAgentRoute ? handleForkMessage : undefined}
+          />
+          {!isSubAgentRoute && sessionState?.pendingUserQuestions ? (
+            <UserQuestionsPanel
+              prompt={sessionState.pendingUserQuestions}
+              isSubmitting={questionResponseMutation.isPending}
+              errorMessage={questionResponseMutation.error?.message ?? null}
+              onSubmit={async (answers) => {
+                await questionResponseMutation.mutateAsync(answers);
+              }}
+            />
+          ) : null}
+          {isSubAgentRoute && routeSessionId ? (
+            <div className="session-readonly-footer">
+              <Button
+                type="button"
+                variant="outline"
+                className="session-readonly-footer__button"
+                asChild
+              >
+                <Link to={`/sessions/${encodeURIComponent(routeSessionId)}`}>
+                  <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
+                  Back to main session
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <Composer
+              ref={composerRef}
+              inputEnabled={composerInputEnabled}
+              sessionEnded={sessionState?.sessionEnded ?? false}
+              liveSessionId={sessionState?.liveSessionId ?? null}
+              inputHistory={composerInputHistory}
+              canCreateSession={composerCanStartRun}
+              supportsImageInputs={providerSupportsImages}
+              interactiveMode={interactiveMode}
+              isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
+              isProcessing={composerIsProcessing}
+              onSubmit={handleSubmit}
+              canInterrupt={canInterruptActiveTurn}
+              isInterrupting={interruptMutation.isPending}
+              restoredInput={sessionState?.restoredInput ?? null}
+              onRestoredInputConsumed={() => {
+                if (selectedRouteSessionKey) {
+                  consumeRestoredInput(selectedRouteSessionKey);
+                }
+              }}
+              onInterrupt={() => {
+                interruptMutation.mutate();
+              }}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <AppSidebarLayout>
       <section
@@ -770,236 +1063,33 @@ export function SessionPage({
         data-debug-event-cursor={sessionState?.lastEventSeq ?? undefined}
         data-debug-connection={sessionState?.connection ?? undefined}
       >
-        <div className="session-panel">
-        <div
-          className={cn(
-            "session-topbar",
-            !isSidebarOpen && "session-topbar--with-workspace",
-          )}
-        >
-          <div className="session-topbar__leading">
-            <ConnectionBadge connection={topbarConnection} />
-            <ProfileSelector
-              selectedProfileId={selectedProfileId}
-              modelProfiles={modelProfiles}
-              isLoading={configQuery.isPending}
-              disabled={profileSelectorDisabled}
-              onChange={(id) => {
-                void handleProfileChange(id);
-              }}
+        {fileTreeOpen ? (
+          <ResizablePanelGroup
+            direction="horizontal"
+            className="session-file-split"
+          >
+            <ResizablePanel
+              id="session-main"
+              defaultSize="50%"
+              minSize="30%"
+              className="session-file-split__main"
+            >
+              {sessionPanel}
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel
+              id="session-files"
+              defaultSize="50%"
+              minSize="25%"
+              className="session-file-split__files"
+            >
+            <WorkspaceFileTreePanel
+              workspaceKey={workspaceQueryKey}
+              onClose={() => setFileTreeOpen(false)}
             />
-          </div>
-          {!isSidebarOpen ? (
-            <div className="session-topbar__workspace" aria-label="Current workspace">
-              <WorkspaceBadge tooltipSide="bottom" />
-            </div>
-          ) : null}
-          <div className="session-topbar__actions">
-            {!isSubAgentRoute ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Toggle
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="session-topbar-control session-tool-history-toggle"
-                    pressed={includeToolHistory}
-                    aria-label={
-                      includeToolHistory
-                        ? "Disable tool history"
-                        : "Enable tool history"
-                    }
-                    onPressedChange={setIncludeToolHistory}
-                  >
-                    <WrenchIcon aria-hidden="true" />
-                  </Toggle>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="end">
-                  {includeToolHistory
-                    ? "Prior tool calls and results will be included when continuing saved sessions."
-                    : "Include prior tool calls and results when continuing saved sessions."}
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
-            {!isSubAgentRoute ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Toggle
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="session-topbar-control session-interactive-toggle"
-                    pressed={interactiveMode}
-                    aria-label={
-                      interactiveMode ? "Disable interactive mode" : "Enable interactive mode"
-                    }
-                    onPressedChange={setInteractiveMode}
-                  >
-                    <MessageCircleQuestionMark aria-hidden="true" />
-                  </Toggle>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" align="end">
-                  {interactiveMode
-                    ? "Interactive mode enabled. Press Maj+Tab / Shift+Tab to disable."
-                    : "Let the agent ask questions and offer choices. Press Maj+Tab / Shift+Tab to enable."}
-                </TooltipContent>
-              </Tooltip>
-            ) : null}
-            {routeSessionId && !isSubAgentRoute ? (
-              <RunHistory sessionId={routeSessionId} />
-            ) : null}
-            <UsageBar
-              compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
-              usage={displayedUsage}
-            />
-          </div>
-        </div>
-
-        {inputWarnings.length > 0 ? (
-          <Alert className="banner banner--notice">
-            <AlertTriangleIcon />
-            <AlertDescription>{inputWarnings.join(" ")}</AlertDescription>
-          </Alert>
-        ) : null}
-        {recoveryNotice ? (
-          <Alert className="banner banner--notice">
-            <AlertTriangleIcon />
-            <AlertDescription>{recoveryNotice}</AlertDescription>
-          </Alert>
-        ) : null}
-        {recoveryFailed ? (
-          <Alert variant="destructive" className="banner banner--error">
-            <AlertTriangleIcon />
-            <AlertDescription>{recoveryFailed}</AlertDescription>
-          </Alert>
-        ) : null}
-        {sessionState?.fatalError ? (
-          <Alert variant="destructive" className="banner banner--error">
-            <AlertTriangleIcon />
-            <AlertDescription>{sessionState.fatalError}</AlertDescription>
-          </Alert>
-        ) : null}
-        {createSessionMutation.error ? (
-          <Alert variant="destructive" className="banner banner--error">
-            <AlertTriangleIcon />
-            <AlertDescription>{createSessionMutation.error.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {setSessionProfileMutation.error ? (
-          <Alert variant="destructive" className="banner banner--error">
-            <AlertTriangleIcon />
-            <AlertDescription>{setSessionProfileMutation.error.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {forkSessionMutation.error ? (
-          <Alert variant="destructive" className="banner banner--error">
-            <AlertTriangleIcon />
-            <AlertDescription>{forkSessionMutation.error.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {setActiveProfileMutation.error ? (
-          <Alert variant="destructive" className="banner banner--error">
-            <AlertTriangleIcon />
-            <AlertDescription>{setActiveProfileMutation.error.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {!isSubAgentRoute && interruptMutation.error ? (
-          <Alert variant="destructive" className="banner banner--error">
-            <AlertTriangleIcon />
-            <AlertDescription>{interruptMutation.error.message}</AlertDescription>
-          </Alert>
-        ) : null}
-        {sessionDetailLoadError ? (
-          <Alert variant="destructive" className="banner banner--error">
-            <AlertTriangleIcon />
-            <AlertDescription>{sessionDetailLoadError}</AlertDescription>
-          </Alert>
-        ) : null}
-
-        {sessionNotFound ? (
-          <EmptyState
-            title="Session not found"
-            description={
-              sessionDetailError instanceof Error
-                ? sessionDetailError.message
-                : "This session does not exist in the current workspace."
-            }
-            action={
-              <Button type="button" onClick={handleNewSession}>
-                Start new session
-              </Button>
-            }
-          />
-        ) : (
-          <>
-            <SessionTimeline
-              items={displayedItems}
-              itemsVersion={displayedItemsVersion}
-              subAgents={displayedSubAgents}
-              subAgentItems={subAgentItems}
-              turnElapsedSeconds={displayedTurnElapsedSeconds}
-              turnCostUsd={displayedTurnCostUsd}
-              connection={sessionState?.connection ?? "disconnected"}
-              waitMessage={displayedWaitMessage}
-              processing={displayedProcessing}
-              parentSessionId={routeSessionId ?? sessionState?.sessionId ?? undefined}
-              showSubAgentCards={!isSubAgentRoute}
-              onForkMessage={!isSubAgentRoute ? handleForkMessage : undefined}
-            />
-            {!isSubAgentRoute && sessionState?.pendingUserQuestions ? (
-              <UserQuestionsPanel
-                prompt={sessionState.pendingUserQuestions}
-                isSubmitting={questionResponseMutation.isPending}
-                errorMessage={questionResponseMutation.error?.message ?? null}
-                onSubmit={async (answers) => {
-                  await questionResponseMutation.mutateAsync(answers);
-                }}
-              />
-            ) : null}
-            {isSubAgentRoute && routeSessionId ? (
-              <div className="session-readonly-footer">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="session-readonly-footer__button"
-                  asChild
-                >
-                  <Link to={`/sessions/${encodeURIComponent(routeSessionId)}`}>
-                    <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
-                    Back to main session
-                  </Link>
-                </Button>
-              </div>
-            ) : (
-              <Composer
-                ref={composerRef}
-                inputEnabled={composerInputEnabled}
-                sessionEnded={sessionState?.sessionEnded ?? false}
-                liveSessionId={sessionState?.liveSessionId ?? null}
-                inputHistory={composerInputHistory}
-                canCreateSession={composerCanStartRun}
-                supportsImageInputs={providerSupportsImages}
-                interactiveMode={interactiveMode}
-                isSubmitting={directSubmitPending || sendInputMutation.isPending || shellCommandMutation.isPending}
-                isProcessing={composerIsProcessing}
-                onSubmit={handleSubmit}
-                canInterrupt={canInterruptActiveTurn}
-                isInterrupting={interruptMutation.isPending}
-                restoredInput={sessionState?.restoredInput ?? null}
-                onRestoredInputConsumed={() => {
-                  if (selectedRouteSessionKey) {
-                    consumeRestoredInput(selectedRouteSessionKey);
-                  }
-                }}
-                onInterrupt={() => {
-                  interruptMutation.mutate();
-                }}
-              />
-            )}
-          </>
-        )}
-      </div>
-
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : sessionPanel}
       </section>
     </AppSidebarLayout>
   );

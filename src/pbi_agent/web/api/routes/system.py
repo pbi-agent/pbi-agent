@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, Response, UploadFile
@@ -55,6 +56,8 @@ from pbi_agent.web.api.schemas.system import (
     SubmitQuestionResponseRequest,
     SlashCommandSearchResponse,
     WorkspaceListResponse,
+    WorkspaceFilePreviewResponse,
+    WorkspaceFileTreeResponse,
     WorkspacePickerResponse,
     WorkspaceRecordModel,
     WorkspaceSwitchRequest,
@@ -66,6 +69,8 @@ from pbi_agent.web.session_manager import workspace_picker_available
 from pbi_agent.web.uploads import load_uploaded_image_record, uploaded_image_path
 
 router = APIRouter(prefix="/api", tags=["system"])
+
+_FILE_PREVIEW_MAX_BYTES = 256 * 1024
 
 
 @router.get("/bootstrap", response_model=BootstrapResponse)
@@ -512,6 +517,90 @@ def search_file_mentions(
         is_stale=payload.is_stale,
         file_count=payload.file_count,
         error=payload.error,
+    )
+
+
+@router.get("/files/tree", response_model=WorkspaceFileTreeResponse)
+def workspace_file_tree(manager: SessionManagerDep) -> WorkspaceFileTreeResponse:
+    payload = manager.workspace_file_tree()
+    return WorkspaceFileTreeResponse(
+        items=[
+            FileMentionItemModel(path=item.path, kind=item.kind)
+            for item in payload.items
+        ],
+        scan_status=payload.scan_status,
+        is_stale=payload.is_stale,
+        file_count=payload.file_count,
+        truncated=payload.truncated,
+        error=payload.error,
+    )
+
+
+@router.post("/files/tree/refresh", response_model=WorkspaceFileTreeResponse)
+def refresh_workspace_file_tree(
+    manager: SessionManagerDep,
+) -> WorkspaceFileTreeResponse:
+    payload = manager.refresh_workspace_file_tree()
+    return WorkspaceFileTreeResponse(
+        items=[
+            FileMentionItemModel(path=item.path, kind=item.kind)
+            for item in payload.items
+        ],
+        scan_status=payload.scan_status,
+        is_stale=payload.is_stale,
+        file_count=payload.file_count,
+        truncated=payload.truncated,
+        error=payload.error,
+    )
+
+
+@router.get("/files/preview", response_model=WorkspaceFilePreviewResponse)
+def preview_workspace_file(
+    manager: SessionManagerDep,
+    path: Annotated[str, Query(min_length=1, max_length=4096)],
+) -> WorkspaceFilePreviewResponse:
+    clean_path = path.strip().replace("\\", "/")
+    try:
+        relative = Path(clean_path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError
+        target = (manager.workspace_root / relative).resolve()
+        target.relative_to(manager.workspace_root)
+    except (OSError, ValueError):
+        return WorkspaceFilePreviewResponse(path=clean_path, error="outside_workspace")
+
+    if not target.exists() or not target.is_file():
+        return WorkspaceFilePreviewResponse(path=clean_path, error="not_found")
+    try:
+        size_bytes = target.stat().st_size
+        if size_bytes > _FILE_PREVIEW_MAX_BYTES:
+            return WorkspaceFilePreviewResponse(
+                path=clean_path,
+                size_bytes=size_bytes,
+                truncated=True,
+                error="too_large",
+            )
+        raw = target.read_bytes()
+    except OSError:
+        return WorkspaceFilePreviewResponse(path=clean_path, error="read_failed")
+    if b"\0" in raw:
+        return WorkspaceFilePreviewResponse(
+            path=clean_path,
+            size_bytes=len(raw),
+            error="binary",
+        )
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return WorkspaceFilePreviewResponse(
+            path=clean_path,
+            size_bytes=len(raw),
+            error="binary",
+        )
+    return WorkspaceFilePreviewResponse(
+        path=clean_path,
+        content=content,
+        size_bytes=len(raw),
     )
 
 

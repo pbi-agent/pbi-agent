@@ -137,6 +137,9 @@ def test_generated_api_types_include_operation_contracts() -> None:
     assert '"GET /api/runs/{run_session_id}": { run_session_id: string }' in generated
     assert "export type ApiOperationQueryParams =" in generated
     assert '"GET /api/files/search": { q?: string; limit?: number }' in generated
+    assert '"GET /api/files/preview": { path: string }' in generated
+    assert '"GET /api/files/tree": WorkspaceFileTreeResponse' in generated
+    assert '"POST /api/files/tree/refresh": WorkspaceFileTreeResponse' in generated
 
 
 def test_generated_api_unknown_responses_are_limited_to_streams_and_files() -> None:

@@ -14,6 +14,8 @@ const WORKSPACE_SCOPED_QUERY_PREFIXES = [
   "dashboard-run-filter-values",
   "run-detail",
   "file-mentions",
+  "workspace-file-tree",
+  "workspace-file-preview",
   "skill-mentions",
   "slash-commands",
 ];

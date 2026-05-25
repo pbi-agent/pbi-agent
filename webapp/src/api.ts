@@ -30,6 +30,8 @@ import type {
   DashboardStatsPayload,
   ExpandedSessionInput,
   FileMentionSearchPayload,
+  WorkspaceFilePreviewPayload,
+  WorkspaceFileTreePayload,
   ImageAttachment,
   SkillMentionSearchPayload,
   LiveSession,
@@ -61,6 +63,8 @@ type SessionListResponsePayload = { sessions: SessionRecord[] };
 type SessionResponsePayload = { session: SessionRecord };
 type LiveSessionResponsePayload = { session: LiveSession };
 type FileMentionSearchResponsePayload = FileMentionSearchPayload;
+type WorkspaceFileTreeResponsePayload = WorkspaceFileTreePayload;
+type WorkspaceFilePreviewResponsePayload = WorkspaceFilePreviewPayload;
 type SkillMentionSearchResponsePayload = SkillMentionSearchPayload;
 type SlashCommandSearchResponsePayload = { items: SlashCommandItem[] };
 type ImageUploadResponsePayload = { uploads: ImageAttachment[] };
@@ -395,6 +399,31 @@ export async function searchFileMentions(
     init,
   );
   return result;
+}
+
+export async function fetchWorkspaceFileTree(): Promise<WorkspaceFileTreePayload> {
+  return apiRequest<"GET /api/files/tree", WorkspaceFileTreeResponsePayload>(
+    "GET /api/files/tree",
+    "/api/files/tree",
+  );
+}
+
+export async function refreshWorkspaceFileTree(): Promise<WorkspaceFileTreePayload> {
+  return apiRequest<"POST /api/files/tree/refresh", WorkspaceFileTreeResponsePayload>(
+    "POST /api/files/tree/refresh",
+    "/api/files/tree/refresh",
+    { method: "POST", body: "{}" },
+  );
+}
+
+export async function fetchWorkspaceFilePreview(
+  path: string,
+): Promise<WorkspaceFilePreviewPayload> {
+  const params = queryString("GET /api/files/preview", { path });
+  return apiRequest<"GET /api/files/preview", WorkspaceFilePreviewResponsePayload>(
+    "GET /api/files/preview",
+    `/api/files/preview${params}`,
+  );
 }
 
 export async function searchSkillMentions(

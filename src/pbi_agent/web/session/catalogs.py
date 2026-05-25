@@ -11,7 +11,11 @@ from pbi_agent.web.command_registry import (
     list_slash_commands,
     search_slash_command_tuples,
 )
-from pbi_agent.web.input_mentions import MentionSearchPayload, WorkspaceFileIndex
+from pbi_agent.web.input_mentions import (
+    MentionSearchPayload,
+    WorkspaceFileIndex,
+    WorkspaceFileTreePayload,
+)
 from pbi_agent.web.session.state import LiveSessionState
 from pbi_agent.web.skill_mentions import search_skill_mentions
 from pbi_agent.workspace_context import WorkspaceContext
@@ -57,6 +61,15 @@ class CatalogsMixin:
         limit: int = 20,
     ) -> MentionSearchPayload:
         return self._catalogs_manager()._mention_index.search(query, limit=limit)
+
+    def workspace_file_tree(self) -> WorkspaceFileTreePayload:
+        return self._catalogs_manager()._mention_index.tree_snapshot()
+
+    def refresh_workspace_file_tree(self) -> WorkspaceFileTreePayload:
+        index = self._catalogs_manager()._mention_index
+        index.refresh_cache()
+        index.wait_for_refresh(timeout=5)
+        return index.tree_snapshot()
 
     def bootstrap(self) -> dict[str, Any]:
         manager = self._catalogs_manager()

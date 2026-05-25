@@ -40,6 +40,32 @@ class FileMentionSearchResponse(BaseModel):
     error: str | None = None
 
 
+class WorkspaceFileTreeResponse(BaseModel):
+    items: list[FileMentionItemModel]
+    scan_status: ScanStatus
+    is_stale: bool
+    file_count: int
+    truncated: bool = False
+    error: str | None = None
+
+
+PreviewError = Literal[
+    "not_found",
+    "binary",
+    "too_large",
+    "outside_workspace",
+    "read_failed",
+]
+
+
+class WorkspaceFilePreviewResponse(BaseModel):
+    path: str
+    content: str | None = None
+    size_bytes: int | None = None
+    truncated: bool = False
+    error: PreviewError | None = None
+
+
 class SlashCommandItemModel(BaseModel):
     name: str
     description: str

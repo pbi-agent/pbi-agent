@@ -223,6 +223,18 @@ export type FileMentionSearchPayload = {
   error: string | null;
 };
 
+export type WorkspaceFileTreePayload = FileMentionSearchPayload & {
+  truncated: boolean;
+};
+
+export type WorkspaceFilePreviewPayload = {
+  path: string;
+  content: string | null;
+  size_bytes: number | null;
+  truncated: boolean;
+  error: "not_found" | "binary" | "too_large" | "outside_workspace" | "read_failed" | null;
+};
+
 export type SkillMentionItem = {
   name: string;
   description: string;

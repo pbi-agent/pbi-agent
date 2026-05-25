@@ -349,6 +349,10 @@ export type WelcomeSseEventModel = { seq: number; created_at: string; type: "wel
 
 export type WelcomeSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; interactive: boolean; model?: string | null; reasoning_effort?: string | null; single_turn_hint?: string | null };
 
+export type WorkspaceFilePreviewResponse = { path: string; content?: string | null; size_bytes?: number | null; truncated?: boolean; error?: "not_found" | "binary" | "too_large" | "outside_workspace" | "read_failed" | null };
+
+export type WorkspaceFileTreeResponse = { items: FileMentionItemModel[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; truncated?: boolean; error?: string | null };
+
 export type WorkspaceListResponse = { workspaces: WorkspaceRecordModel[]; picker_available: boolean };
 
 export type WorkspacePickerResponse = { status: "switched" | "unavailable" | "canceled" | "error"; message?: string | null; bootstrap?: BootstrapResponse | null };
@@ -400,7 +404,10 @@ export type ApiOperationResponses = {
   "GET /api/dashboard/stats": DashboardStatsResponse;
   "GET /api/events/sessions/{session_id}": unknown;
   "GET /api/events/{stream_id}": unknown;
+  "GET /api/files/preview": WorkspaceFilePreviewResponse;
   "GET /api/files/search": FileMentionSearchResponse;
+  "GET /api/files/tree": WorkspaceFileTreeResponse;
+  "POST /api/files/tree/refresh": WorkspaceFileTreeResponse;
   "DELETE /api/provider-auth/{provider_id}": ProviderAuthLogoutResponse;
   "GET /api/provider-auth/{provider_id}": ProviderAuthResponse;
   "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowResponse;
@@ -513,6 +520,7 @@ export type ApiOperationQueryParams = {
   "GET /api/dashboard/stats": { start_date?: string | null; end_date?: string | null; scope?: string };
   "GET /api/events/sessions/{session_id}": { since?: number; live_session_id?: string | null };
   "GET /api/events/{stream_id}": { since?: number };
+  "GET /api/files/preview": { path: string };
   "GET /api/files/search": { q?: string; limit?: number };
   "GET /api/runs": { limit?: number; offset?: number; status?: string | null; provider?: string | null; model?: string | null; start_date?: string | null; end_date?: string | null; sort_by?: string; sort_dir?: string; scope?: string };
   "GET /api/runs/{run_session_id}": { scope?: string };

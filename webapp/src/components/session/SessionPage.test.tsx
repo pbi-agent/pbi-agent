@@ -11,7 +11,10 @@ import {
   fetchConfigBootstrap,
   fetchSessionDetail,
   fetchSessions,
+  fetchWorkspaceFilePreview,
+  fetchWorkspaceFileTree,
   interruptSession,
+  refreshWorkspaceFileTree,
   runSessionShellCommand,
   sendSessionMessage,
   setActiveModelProfile,
@@ -226,7 +229,10 @@ vi.mock("../../api", async (importOriginal) => {
     fetchConfigBootstrap: vi.fn(),
     fetchSessionDetail: vi.fn(),
     fetchSessions: vi.fn(),
+    fetchWorkspaceFilePreview: vi.fn(),
+    fetchWorkspaceFileTree: vi.fn(),
     interruptSession: vi.fn(),
+    refreshWorkspaceFileTree: vi.fn(),
     runSessionShellCommand: vi.fn(),
     sendSessionMessage: vi.fn(),
     setActiveModelProfile: vi.fn(),
@@ -484,15 +490,15 @@ function renderSessionRoute(route: string) {
     <Routes>
       <Route
         path="/sessions"
-        element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
+        element={<SessionPage workspaceRoot="/workspace" workspaceKey="/workspace" supportsImageInputs />}
       />
       <Route
         path="/sessions/:sessionId/sub-agents/:subAgentId"
-        element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
+        element={<SessionPage workspaceRoot="/workspace" workspaceKey="/workspace" supportsImageInputs />}
       />
       <Route
         path="/sessions/:sessionId"
-        element={<SessionPage workspaceRoot="/workspace" supportsImageInputs />}
+        element={<SessionPage workspaceRoot="/workspace" workspaceKey="/workspace" supportsImageInputs />}
       />
     </Routes>,
     { route },
@@ -560,6 +566,32 @@ describe("SessionPage", () => {
       makeLiveSession({ live_session_id: "live-question", session_id: "session-1" }),
     );
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
+    vi.mocked(fetchWorkspaceFileTree).mockResolvedValue({
+      items: [
+        { path: "src/app.ts", kind: "file" },
+        { path: "README.md", kind: "file" },
+      ],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 2,
+      truncated: false,
+      error: null,
+    });
+    vi.mocked(refreshWorkspaceFileTree).mockResolvedValue({
+      items: [{ path: "src/app.ts", kind: "file" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      truncated: false,
+      error: null,
+    });
+    vi.mocked(fetchWorkspaceFilePreview).mockResolvedValue({
+      path: "src/app.ts",
+      content: "console.log('hello');\n",
+      size_bytes: 22,
+      truncated: false,
+      error: null,
+    });
   });
 
   it("shows the workspace badge in the session topbar when the sidebar is collapsed", async () => {
@@ -590,6 +622,125 @@ describe("SessionPage", () => {
     expect(workspaceLabels).toHaveLength(1);
     expect(within(sidebar).getByText("workspace/demo")).toBeInTheDocument();
     expect(within(topbar).queryByText("workspace/demo")).not.toBeInTheDocument();
+  });
+
+  it("keeps the file tree closed by default and toggles the sidebar", async () => {
+    const user = userEvent.setup();
+    renderSessionRoute("/sessions/session-1");
+
+    const toggle = await screen.findByRole("button", { name: "Open file tree" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("complementary", { name: "Workspace file tree" })).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(await screen.findByRole("complementary", { name: "Workspace file tree" })).toBeInTheDocument();
+    expect(screen.getByRole("separator", { name: "Resize file tree and preview" })).toBeInTheDocument();
+    expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Close file tree" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("refreshes and previews files from the file tree", async () => {
+    const user = userEvent.setup();
+    renderSessionRoute("/sessions/session-1");
+
+    await user.click(await screen.findByRole("button", { name: "Open file tree" }));
+    await user.click(await screen.findByRole("button", { name: "Refresh file tree" }));
+
+    expect(refreshWorkspaceFileTree).toHaveBeenCalledTimes(1);
+    const srcFolder = await screen.findByRole("button", { name: "src" });
+    expect(screen.queryByRole("button", { name: "app.ts" })).not.toBeInTheDocument();
+
+    await user.click(srcFolder);
+    await user.click(await screen.findByRole("button", { name: "app.ts" }));
+
+    await waitFor(() => {
+      expect(fetchWorkspaceFilePreview).toHaveBeenCalledWith("src/app.ts");
+    });
+    expect(await screen.findByText("src/app.ts")).toBeInTheDocument();
+  });
+
+  it("refetches the file tree while the workspace scan is still running", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchWorkspaceFileTree)
+      .mockResolvedValueOnce({
+        items: [],
+        scan_status: "scanning",
+        is_stale: false,
+        file_count: 0,
+        truncated: false,
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        items: [{ path: "src/app.ts", kind: "file" }],
+        scan_status: "ready",
+        is_stale: false,
+        file_count: 1,
+        truncated: false,
+        error: null,
+      });
+    renderSessionRoute("/sessions/session-1");
+
+    await user.click(await screen.findByRole("button", { name: "Open file tree" }));
+    expect(await screen.findByLabelText("Loading files")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(2);
+    }, { timeout: 2500 });
+    expect(await screen.findByRole("button", { name: "src" })).toBeInTheDocument();
+  });
+
+  it("refreshes the open file tree once when the active session ends", async () => {
+    const user = userEvent.setup();
+    const { queryClient } = renderSessionRoute("/sessions/session-1");
+
+    await user.click(await screen.findByRole("button", { name: "Open file tree" }));
+    vi.mocked(refreshWorkspaceFileTree).mockClear();
+
+    act(() => {
+      useSessionStore.setState((state) => {
+        const session = state.sessionsByKey["session:session-1"];
+        return {
+          sessionsByKey: {
+            ...state.sessionsByKey,
+            "session:session-1": {
+              ...session,
+              liveSessionId: "live-ended",
+              sessionEnded: true,
+            },
+          },
+        };
+      });
+    });
+
+    await waitFor(() => {
+      expect(refreshWorkspaceFileTree).toHaveBeenCalledTimes(1);
+    });
+    expect(queryClient.getQueryData(["workspace-file-tree", "/workspace"])).toEqual({
+      items: [{ path: "src/app.ts", kind: "file" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      truncated: false,
+      error: null,
+    });
+
+    act(() => {
+      useSessionStore.setState((state) => ({
+        sessionsByKey: {
+          ...state.sessionsByKey,
+          "session:session-1": {
+            ...state.sessionsByKey["session:session-1"],
+            sessionEnded: true,
+          },
+        },
+      }));
+    });
+
+    expect(refreshWorkspaceFileTree).toHaveBeenCalledTimes(1);
   });
 
   it("passes only non-empty main-session user messages to the composer history", async () => {

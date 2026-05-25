@@ -613,6 +613,78 @@ def test_web_api_switch_to_recent_workspace_preserves_directory_key(
         assert [item["session_id"] for item in switched["sessions"]] == [session_b]
 
 
+def test_workspace_file_tree_refresh_and_preview(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "src").mkdir()
+    (workspace / "src" / "app.py").write_text("print('hello')\n", encoding="utf-8")
+    (workspace / ".gitignore").write_text("ignored.txt\n", encoding="utf-8")
+    (workspace / "ignored.txt").write_text("secret\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "init"], cwd=workspace, check=True, stdout=subprocess.DEVNULL
+    )
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        response = client.post("/api/files/tree/refresh")
+        assert response.status_code == 200
+        payload = response.json()
+        paths = {item["path"] for item in payload["items"]}
+        assert "src/app.py" in paths
+        assert "ignored.txt" not in paths
+        assert payload["scan_status"] == "ready"
+        assert payload["file_count"] == len(payload["items"])
+
+        preview = client.get("/api/files/preview", params={"path": "src/app.py"})
+        assert preview.status_code == 200
+        assert preview.json()["content"] == "print('hello')\n"
+
+        (workspace / "new.txt").write_text("new\n", encoding="utf-8")
+        refreshed = client.post("/api/files/tree/refresh")
+        assert refreshed.status_code == 200
+        assert "new.txt" in {item["path"] for item in refreshed.json()["items"]}
+
+
+def test_workspace_file_preview_safety_errors(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "binary.bin").write_bytes(b"a\0b")
+    (workspace / "large.txt").write_bytes(b"x" * (256 * 1024 + 1))
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        assert (
+            client.get(
+                "/api/files/preview",
+                params={"path": "../outside.txt"},
+            ).json()["error"]
+            == "outside_workspace"
+        )
+        assert (
+            client.get(
+                "/api/files/preview",
+                params={"path": "missing.txt"},
+            ).json()["error"]
+            == "not_found"
+        )
+        assert (
+            client.get(
+                "/api/files/preview",
+                params={"path": "binary.bin"},
+            ).json()["error"]
+            == "binary"
+        )
+        too_large = client.get(
+            "/api/files/preview", params={"path": "large.txt"}
+        ).json()
+        assert too_large["error"] == "too_large"
+        assert too_large["truncated"] is True
+
+
 def test_web_api_pick_workspace_uses_windows_picker_in_wsl_when_tkinter_unavailable(
     monkeypatch, tmp_path
 ) -> None:

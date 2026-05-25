@@ -55,6 +55,16 @@ class MentionSearchPayload:
     error: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class WorkspaceFileTreePayload:
+    items: list[MentionSearchResult]
+    scan_status: ScanStatus
+    is_stale: bool
+    file_count: int
+    truncated: bool
+    error: str | None = None
+
+
 class WorkspaceFileIndex:
     """In-memory workspace file snapshot used by mention autocomplete."""
 
@@ -113,6 +123,29 @@ class WorkspaceFileIndex:
             scan_status=status,
             is_stale=is_stale,
             file_count=len(file_list),
+            error=error,
+        )
+
+    def tree_snapshot(self) -> WorkspaceFileTreePayload:
+        files, status, error, is_stale = self._snapshot()
+        if files is None:
+            self.start_refresh()
+            files, status, error, is_stale = self._snapshot()
+        file_list = files or []
+        return WorkspaceFileTreePayload(
+            items=[
+                MentionSearchResult(
+                    path=path,
+                    kind="image"
+                    if Path(path).suffix.lower() in IMAGE_FILE_SUFFIXES
+                    else "file",
+                )
+                for path in file_list
+            ],
+            scan_status=status,
+            is_stale=is_stale,
+            file_count=len(file_list),
+            truncated=len(file_list) >= self._max_files,
             error=error,
         )
 

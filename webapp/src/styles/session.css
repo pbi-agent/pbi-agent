@@ -16,6 +16,28 @@
   overflow: hidden;
 }
 
+.session-file-split {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-file-split__main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.session-file-split__files {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* ── Session Context Sidebar (sessions list, rendered inside AppSidebar context slot) ── */
 .session-sidebar {
   display: flex;
@@ -378,6 +400,260 @@
     background var(--duration-fast) var(--ease),
     color var(--duration-fast) var(--ease),
     border-color var(--duration-fast) var(--ease);
+}
+
+/* ── Workspace File Tree ── */
+.workspace-file-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.workspace-file-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  block-size: var(--topbar-height);
+  min-block-size: var(--topbar-height);
+  padding: 0 var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar);
+}
+
+.workspace-file-panel__heading {
+  min-width: 0;
+}
+
+.workspace-file-panel__heading h2,
+.workspace-file-panel__heading p {
+  margin: 0;
+}
+
+.workspace-file-panel__heading h2 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.workspace-file-panel__heading p {
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
+.workspace-file-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.workspace-file-panel__action {
+  color: var(--muted-foreground);
+  background: transparent;
+  box-shadow: none;
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.workspace-file-panel__action svg {
+  opacity: 0.72;
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.workspace-file-panel__action:not(:disabled):hover,
+.workspace-file-panel__action:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.workspace-file-panel__action:not(:disabled):hover svg,
+.workspace-file-panel__action:not(:disabled):focus-visible svg {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+.workspace-file-panel__close {
+  color: var(--color-text-tertiary);
+}
+
+.workspace-file-panel__body {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-file-panel__tree-panel,
+.workspace-file-panel__preview-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-file-panel__tree,
+.workspace-file-panel__preview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.workspace-file-panel__tree {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-file-panel__search {
+  flex-shrink: 0;
+  padding: var(--sp-3);
+}
+
+.workspace-file-panel__tree-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-file-panel__preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--sp-3);
+}
+
+.workspace-file-panel__preview-heading {
+  flex-shrink: 0;
+  margin-bottom: var(--sp-2);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+.workspace-file-panel__preview .workspace-file-panel__code {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.workspace-file-panel__preview .workspace-file-panel__code .shiki {
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+.workspace-file-panel__alert {
+  margin: var(--sp-3);
+}
+
+.workspace-file-panel__empty {
+  margin: 0;
+  padding: var(--sp-3);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.workspace-file-panel__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+}
+
+.workspace-file-panel__skeleton [data-slot="skeleton"] {
+  height: 1.75rem;
+}
+
+.workspace-tree,
+.workspace-tree__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  list-style: none;
+}
+
+.workspace-tree {
+  min-width: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-3);
+}
+
+.workspace-tree__group {
+  padding: 0 0 0 var(--sp-4);
+}
+
+.workspace-tree__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+  min-width: 0;
+  height: 1.75rem;
+  padding: 0 var(--sp-2) 0 var(--sp-1);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--foreground);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: left;
+}
+
+.workspace-tree__row:hover,
+.workspace-tree__row:focus-visible {
+  background: var(--muted);
+}
+
+.workspace-tree__row:focus-visible {
+  outline: 1px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.workspace-tree__row[data-selected="true"] {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--foreground);
+}
+
+.workspace-tree__row svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.workspace-tree__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.workspace-tree__row span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-topbar-control:hover:not(:disabled),
