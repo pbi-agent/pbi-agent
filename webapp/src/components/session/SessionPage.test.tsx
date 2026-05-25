@@ -634,7 +634,11 @@ describe("SessionPage", () => {
 
     await user.click(toggle);
 
-    expect(await screen.findByRole("complementary", { name: "Workspace file tree" })).toBeInTheDocument();
+    const fileTreePanel = await screen.findByRole("complementary", { name: "Workspace file tree" });
+    expect(fileTreePanel).toBeInTheDocument();
+    const fileTreeHeader = fileTreePanel.querySelector(".workspace-file-panel__header");
+    expect(fileTreeHeader).not.toBeNull();
+    expect(within(fileTreeHeader as HTMLElement).getByRole("searchbox", { name: "Search files" })).toBeInTheDocument();
     expect(screen.getByRole("separator", { name: "Resize file tree and preview" })).toBeInTheDocument();
     expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Close file tree" })).toHaveAttribute(
@@ -661,6 +665,30 @@ describe("SessionPage", () => {
       expect(fetchWorkspaceFilePreview).toHaveBeenCalledWith("src/app.ts");
     });
     expect(await screen.findByText("src/app.ts")).toBeInTheDocument();
+  });
+
+  it("renders markdown file previews as markdown", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchWorkspaceFilePreview).mockResolvedValueOnce({
+      path: "README.md",
+      content: "# Project title\n\n- First item\n\n`inline code`\n",
+      size_bytes: 44,
+      truncated: false,
+      error: null,
+    });
+    renderSessionRoute("/sessions/session-1");
+
+    await user.click(await screen.findByRole("button", { name: "Open file tree" }));
+    await user.click(await screen.findByRole("button", { name: "README.md" }));
+
+    await waitFor(() => {
+      expect(fetchWorkspaceFilePreview).toHaveBeenCalledWith("README.md");
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Project title", level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("First item")).toBeInTheDocument();
+    expect(screen.queryByText("# Project title")).not.toBeInTheDocument();
   });
 
   it("refetches the file tree while the workspace scan is still running", async () => {

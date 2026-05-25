@@ -15,6 +15,7 @@ import {
   refreshWorkspaceFileTree,
 } from "../../api";
 import type { FileMentionItem } from "../../types";
+import { MarkdownContent } from "../shared/MarkdownContent";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { CodeBlock } from "../ui/code-block";
@@ -127,6 +128,15 @@ export function WorkspaceFileTreePanel({
             {treeQuery.data?.is_stale ? " · refreshing" : ""}
           </p>
         </div>
+        <div className="workspace-file-panel__header-search">
+          <Input
+            type="search"
+            aria-label="Search files"
+            placeholder="Search files..."
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
         <div className="workspace-file-panel__actions">
           <Button
             type="button"
@@ -174,15 +184,6 @@ export function WorkspaceFileTreePanel({
           className="workspace-file-panel__tree-panel"
         >
           <div className="workspace-file-panel__tree">
-            <div className="workspace-file-panel__search">
-              <Input
-                type="search"
-                aria-label="Search files"
-                placeholder="Search files..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-            </div>
             <ScrollArea className="workspace-file-panel__tree-scroll" type="auto">
               {treeQuery.isPending || showInitialScan ? (
                 <div className="workspace-file-panel__skeleton" aria-label="Loading files">
@@ -242,10 +243,9 @@ export function WorkspaceFileTreePanel({
                 <div className="workspace-file-panel__preview-heading">
                   {selectedPath}
                 </div>
-                <CodeBlock
-                  value={previewQuery.data?.content ?? ""}
+                <FilePreviewContent
+                  content={previewQuery.data?.content ?? ""}
                   path={selectedPath}
-                  className="workspace-file-panel__code"
                 />
               </>
             )}
@@ -254,6 +254,37 @@ export function WorkspaceFileTreePanel({
       </ResizablePanelGroup>
     </aside>
   );
+}
+
+function FilePreviewContent({
+  content,
+  path,
+}: {
+  content: string;
+  path: string;
+}) {
+  if (isMarkdownPath(path)) {
+    return (
+      <div className="workspace-file-panel__markdown timeline-entry timeline-entry--assistant">
+        <div className="timeline-entry__content workspace-file-panel__markdown-content">
+          <MarkdownContent content={content} copyable />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <CodeBlock
+      value={content}
+      path={path}
+      className="workspace-file-panel__code"
+    />
+  );
+}
+
+function isMarkdownPath(path: string): boolean {
+  const normalizedPath = path.toLowerCase();
+  return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".markdown");
 }
 
 function TreeNodeView({
