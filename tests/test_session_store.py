@@ -230,6 +230,59 @@ def test_limit_respected(tmp_path) -> None:
     assert len(sessions) == 3
 
 
+def test_search_sessions_matches_title_and_message_content(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        title_match = store.create_session("/w", "openai", "gpt-5", "Roadmap plan")
+        body_match = store.create_session("/w", "openai", "gpt-5", "Notes")
+        no_match = store.create_session("/w", "openai", "gpt-5", "Other")
+        store.add_message(body_match, "user", "Please help with the roadmap")
+        store.add_message(no_match, "user", "Unrelated")
+
+        sessions = store.list_sessions("/w", search="roadmap")
+
+    assert {session.session_id for session in sessions} == {title_match, body_match}
+
+
+def test_search_sessions_is_directory_scoped_and_respects_order_and_limit(
+    tmp_path,
+) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        older = store.create_session("/w", "openai", "gpt-5", "Target older")
+        other_workspace = store.create_session(
+            "/other", "openai", "gpt-5", "Target outside"
+        )
+        store.create_session("/w", "openai", "gpt-5", "Target newer")
+        store.update_session(older, title="Target older refreshed")
+
+        sessions = store.list_sessions("/w", search="target", limit=1)
+
+    assert [session.session_id for session in sessions] == [older]
+    assert other_workspace not in {session.session_id for session in sessions}
+
+
+def test_blank_search_uses_default_session_listing(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        session_id = store.create_session("/w", "openai", "gpt-5", "Any title")
+
+        sessions = store.list_sessions("/w", search="   ")
+
+    assert [session.session_id for session in sessions] == [session_id]
+
+
+def test_search_sessions_treats_like_wildcards_as_literals(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        literal_match = store.create_session("/w", "openai", "gpt-5", "100% ready")
+        store.create_session("/w", "openai", "gpt-5", "100x ready")
+
+        sessions = store.list_sessions("/w", search="100%")
+
+    assert [session.session_id for session in sessions] == [literal_match]
+
+
 def test_nonexistent_session_returns_none(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

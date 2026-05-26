@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteSession, fetchSessions, updateSession } from "../api";
@@ -23,10 +23,14 @@ export function AppSessionsContextPanel() {
   const { sessionId: routeSessionId } = useParams<{ sessionId?: string }>();
   const closeSidebar = useSidebarStore((state) => state.close);
   const [pendingDeleteSession, setPendingDeleteSession] = useState<SessionRecord | null>(null);
+  const [sessionSearchQuery, setSessionSearchQuery] = useState("");
+  const deferredSessionSearchQuery = useDeferredValue(sessionSearchQuery);
+  const trimmedSessionSearchQuery = deferredSessionSearchQuery.trim();
+  const sessionsQueryKey = ["sessions", { query: trimmedSessionSearchQuery }] as const;
 
   const sessionsQuery = useQuery({
-    queryKey: ["sessions"],
-    queryFn: fetchSessions,
+    queryKey: sessionsQueryKey,
+    queryFn: () => fetchSessions({ query: trimmedSessionSearchQuery }),
     refetchInterval: 12_000,
   });
 
@@ -38,7 +42,7 @@ export function AppSessionsContextPanel() {
     mutationFn: ({ sessionId, title }: { sessionId: string; title: string }) =>
       updateSession(sessionId, { title }),
     onSuccess: (updatedSession) => {
-      client.setQueryData<SessionRecord[] | undefined>(["sessions"], (sessions) =>
+      client.setQueriesData<SessionRecord[] | undefined>({ queryKey: ["sessions"] }, (sessions) =>
         (sessions ?? []).map((session) =>
           session.session_id === updatedSession.session_id ? updatedSession : session,
         ),
@@ -74,7 +78,7 @@ export function AppSessionsContextPanel() {
     const deletingActive = pendingDeleteSession.session_id === routeSessionId;
     await deleteSessionMutation.mutateAsync(pendingDeleteSession.session_id);
     forgetLastOpenedSessionId(pendingDeleteSession.session_id);
-    client.setQueryData<SessionRecord[] | undefined>(["sessions"], (sessions) =>
+    client.setQueriesData<SessionRecord[] | undefined>({ queryKey: ["sessions"] }, (sessions) =>
       (sessions ?? []).filter(
         (session) => session.session_id !== pendingDeleteSession.session_id,
       ),
@@ -101,6 +105,8 @@ export function AppSessionsContextPanel() {
           deleteSessionMutation.reset();
           setPendingDeleteSession(session);
         }}
+        searchQuery={sessionSearchQuery}
+        onSearchQueryChange={setSessionSearchQuery}
       />
       {pendingDeleteSession ? (
         <DeleteSessionModal

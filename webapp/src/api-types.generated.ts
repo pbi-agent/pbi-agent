@@ -537,7 +537,7 @@ export type ApiOperationQueryParams = {
   "GET /api/files/search": { q?: string; limit?: number };
   "GET /api/runs": { limit?: number; offset?: number; status?: string | null; provider?: string | null; model?: string | null; start_date?: string | null; end_date?: string | null; sort_by?: string; sort_dir?: string; scope?: string };
   "GET /api/runs/{run_session_id}": { scope?: string };
-  "GET /api/sessions": { limit?: number };
+  "GET /api/sessions": { limit?: number; q?: string | null };
   "GET /api/skills/search": { q?: string; limit?: number };
   "GET /api/slash-commands/search": { q?: string; limit?: number };
 };

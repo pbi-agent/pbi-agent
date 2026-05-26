@@ -343,11 +343,15 @@ export async function installAgent(
   });
 }
 
-export async function fetchSessions(): Promise<SessionRecord[]> {
+export async function fetchSessions(options: { query?: string } = {}): Promise<SessionRecord[]> {
+  const query = options.query?.trim() ?? "";
+  const params = queryString("GET /api/sessions", {
+    q: query || undefined,
+  });
   const result = await apiRequest<
     "GET /api/sessions",
     SessionListResponsePayload
-  >("GET /api/sessions", "/api/sessions");
+  >("GET /api/sessions", `/api/sessions${params}`);
   return result.sessions;
 }
 

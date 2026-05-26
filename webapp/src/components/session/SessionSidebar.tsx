@@ -4,6 +4,7 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
+  SearchIcon,
   Trash2Icon,
 } from "lucide-react";
 import type { SessionRecord } from "../../types";
@@ -58,6 +59,8 @@ export type SessionSidebarProps = {
   onResumeSession: (sessionId: string) => void;
   onUpdateSession: (session: SessionRecord, title: string) => Promise<void>;
   onDeleteSession: (session: SessionRecord) => void;
+  searchQuery?: string;
+  onSearchQueryChange?: (query: string) => void;
 };
 
 /**
@@ -74,6 +77,8 @@ export function SessionSidebar({
   onResumeSession,
   onUpdateSession,
   onDeleteSession,
+  searchQuery = "",
+  onSearchQueryChange,
 }: SessionSidebarProps) {
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -128,6 +133,18 @@ export function SessionSidebar({
         </Button>
       </div>
 
+      <div className="session-sidebar__search">
+        <SearchIcon className="session-sidebar__search-icon" aria-hidden="true" />
+        <Input
+          type="search"
+          className="session-sidebar__search-input"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange?.(event.target.value)}
+          placeholder="Search sessions"
+          aria-label="Search sessions"
+        />
+      </div>
+
       <div className="session-sidebar__list">
         {isLoading ? (
           <>
@@ -137,8 +154,12 @@ export function SessionSidebar({
           </>
         ) : sessions.length === 0 ? (
           <EmptyState
-            title="No sessions"
-            description="Start a new session to begin"
+            title={searchQuery.trim() ? "No matching sessions" : "No sessions"}
+            description={
+              searchQuery.trim()
+                ? "Try a different search term"
+                : "Start a new session to begin"
+            }
           />
         ) : (
           sessions.map((session) => {

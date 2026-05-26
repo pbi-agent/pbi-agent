@@ -505,6 +505,54 @@ def test_web_manager_uses_host_workspace_key_in_sandbox(monkeypatch, tmp_path) -
         manager.shutdown()
 
 
+def test_web_api_searches_sessions_with_q(monkeypatch, tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            title_match = store.create_session(
+                str(workspace), "openai", "gpt-5.4", "Roadmap"
+            )
+            body_match = store.create_session(
+                str(workspace), "openai", "gpt-5.4", "Notes"
+            )
+            store.add_message(body_match, "user", "Discuss roadmap details")
+            store.create_session(str(workspace), "openai", "gpt-5.4", "Other")
+
+        response = client.get("/api/sessions", params={"q": "roadmap"})
+        assert response.status_code == 200
+        assert {item["session_id"] for item in response.json()["sessions"]} == {
+            title_match,
+            body_match,
+        }
+
+
+def test_web_api_blank_session_search_uses_default_listing(
+    monkeypatch, tmp_path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            session_id = store.create_session(
+                str(workspace), "openai", "gpt-5.4", "Any"
+            )
+
+        response = client.get("/api/sessions", params={"q": "   "})
+        assert response.status_code == 200
+        assert [item["session_id"] for item in response.json()["sessions"]] == [
+            session_id
+        ]
+
+
 def test_web_api_switches_active_workspace(monkeypatch, tmp_path) -> None:
     workspace_a = tmp_path / "workspace-a"
     workspace_b = tmp_path / "workspace-b"

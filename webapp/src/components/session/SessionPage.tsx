@@ -209,7 +209,7 @@ export function SessionPage({
 
   const sessionsQuery = useQuery({
     queryKey: ["sessions"],
-    queryFn: fetchSessions,
+    queryFn: () => fetchSessions(),
     refetchInterval: 12_000,
   });
 

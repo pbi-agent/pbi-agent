@@ -60,11 +60,16 @@ class SavedSessionsMixin:
             live_session: LiveSessionState,
         ) -> dict[str, Any]: ...
 
-    def list_sessions(self, limit: int = 30) -> list[dict[str, Any]]:
+    def list_sessions(
+        self,
+        limit: int = 30,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
         with SessionStore() as store:
             sessions = store.list_sessions(
                 self._directory_key,
                 limit=limit,
+                search=search,
             )
             active_runs = {
                 session.session_id: store.get_latest_session_run(

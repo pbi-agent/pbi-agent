@@ -105,6 +105,30 @@
   transform: scale(1.06);
 }
 
+
+.session-sidebar__search {
+  position: relative;
+  flex-shrink: 0;
+  padding: 0 var(--sp-2);
+}
+
+.session-sidebar__search-icon {
+  position: absolute;
+  left: calc(var(--sp-2) + var(--sp-2));
+  top: 50%;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.session-sidebar__search-input {
+  height: 2rem;
+  padding-left: 1.85rem;
+  font-size: var(--text-xs);
+}
+
 .session-sidebar__list {
   flex: 1;
   overflow-y: auto;

@@ -1494,14 +1494,36 @@ class SessionStore:
         directory: str,
         limit: int = 20,
         provider: str | None = None,
+        search: str | None = None,
     ) -> list[SessionRecord]:
         normalized_directory = _normalize_directory_key(directory)
+        clauses = ["s.directory = ?"]
+        params: list[object] = [normalized_directory]
         if provider:
-            sql = "SELECT * FROM sessions WHERE directory = ? AND provider = ? ORDER BY updated_at DESC LIMIT ?"
-            params: tuple[object, ...] = (normalized_directory, provider, limit)
-        else:
-            sql = "SELECT * FROM sessions WHERE directory = ? ORDER BY updated_at DESC LIMIT ?"
-            params = (normalized_directory, limit)
+            clauses.append("s.provider = ?")
+            params.append(provider)
+        normalized_search = search.strip() if search else ""
+        if normalized_search:
+            clauses.append(
+                "(s.title LIKE ? ESCAPE '\\' COLLATE NOCASE OR EXISTS ("
+                "SELECT 1 FROM messages m "
+                "WHERE m.session_id = s.session_id "
+                "AND m.content LIKE ? ESCAPE '\\' COLLATE NOCASE"
+                "))"
+            )
+            escaped_search = (
+                normalized_search.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            pattern = f"%{escaped_search}%"
+            params.extend([pattern, pattern])
+        params.append(limit)
+        sql = (
+            "SELECT s.* FROM sessions s "
+            f"WHERE {' AND '.join(clauses)} "
+            "ORDER BY s.updated_at DESC LIMIT ?"
+        )
         with self._lock:
             rows = self._conn.execute(sql, params).fetchall()
         return [SessionRecord(**dict(r)) for r in rows]

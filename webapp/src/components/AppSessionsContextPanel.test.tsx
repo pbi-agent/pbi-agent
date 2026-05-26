@@ -76,6 +76,21 @@ describe("AppSessionsContextPanel", () => {
     await screen.findByText("Planning session");
   });
 
+  it("refetches sessions with the typed search query", async () => {
+    const user = userEvent.setup();
+    mocks.fetchSessions.mockImplementation(({ query } = {}) =>
+      Promise.resolve(query ? [] : [makeSession()]),
+    );
+    renderPanel();
+
+    await user.type(await screen.findByRole("searchbox", { name: "Search sessions" }), "roadmap");
+
+    await waitFor(() => {
+      expect(mocks.fetchSessions).toHaveBeenCalledWith({ query: "roadmap" });
+    });
+    expect(await screen.findByText("No matching sessions")).toBeInTheDocument();
+  });
+
   it("renames a session through the inline edit form", async () => {
     const user = userEvent.setup();
     renderPanel();

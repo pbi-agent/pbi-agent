@@ -47,6 +47,38 @@ describe("api helpers", () => {
     );
   });
 
+  it("requests sessions with a search query", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ sessions: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchSessions({ query: "roadmap plan" })).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions?q=roadmap+plan",
+      expect.anything(),
+    );
+  });
+
+  it("omits blank session search queries", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ sessions: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchSessions({ query: "   " })).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions",
+      expect.anything(),
+    );
+  });
+
   it("uploads task images as form data", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ uploads: [] }), {

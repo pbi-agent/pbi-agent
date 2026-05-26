@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { TooltipProvider } from "../ui/tooltip";
 import { SessionSidebar } from "./SessionSidebar";
@@ -34,6 +34,8 @@ function renderSidebar(overrides: Partial<Parameters<typeof SessionSidebar>[0]> 
     onResumeSession: vi.fn(),
     onUpdateSession: vi.fn().mockResolvedValue(undefined),
     onDeleteSession: vi.fn(),
+    searchQuery: "",
+    onSearchQueryChange: vi.fn(),
     ...overrides,
   };
   render(
@@ -55,6 +57,22 @@ describe("SessionSidebar", () => {
     const newButton = screen.getByRole("button", { name: /new/i });
     await user.click(newButton);
     expect(props.onNewSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a session search box and forwards edits", () => {
+    const props = renderSidebar();
+
+    const search = screen.getByRole("searchbox", { name: "Search sessions" });
+    fireEvent.change(search, { target: { value: "roadmap" } });
+
+    expect(props.onSearchQueryChange).toHaveBeenCalledWith("roadmap");
+  });
+
+  it("renders a searched empty state", () => {
+    renderSidebar({ sessions: [], searchQuery: "missing" });
+
+    expect(screen.getByText("No matching sessions")).toBeInTheDocument();
+    expect(screen.getByText("Try a different search term")).toBeInTheDocument();
   });
 
   it("does not render primary navigation links (those live in the shared app sidebar)", () => {

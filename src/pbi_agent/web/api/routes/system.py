@@ -130,11 +130,13 @@ def pick_workspace(manager: SessionManagerDep) -> WorkspacePickerResponse:
 def list_sessions(
     manager: SessionManagerDep,
     limit: LimitQuery = 30,
+    q: Annotated[str | None, Query(max_length=200)] = None,
 ) -> SessionsResponse:
+    search = q.strip() if q else None
     return SessionsResponse(
         sessions=[
             model_from_payload(SessionRecordModel, item)
-            for item in manager.list_sessions(limit=limit)
+            for item in manager.list_sessions(limit=limit, search=search)
         ]
     )
 
