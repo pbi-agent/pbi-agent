@@ -9,6 +9,7 @@ from pathlib import Path
 from pbi_agent.agent.system_prompt import (
     get_system_prompt,
 )
+from pbi_agent.agent.skill_discovery import extract_explicit_skill_names
 from pbi_agent.config import (
     CommandConfig,
     ResolvedRuntime,
@@ -160,6 +161,8 @@ def _turn_instructions(
     settings: Settings,
     excluded_tools: set[str] | None = None,
     cwd: Path | None = None,
+    user_input: str | None = None,
+    workspace_directory_key: str | None = None,
 ) -> str | None:
     if active_command_instructions is None:
         return None
@@ -168,6 +171,8 @@ def _turn_instructions(
         settings=settings,
         excluded_tools=excluded_tools,
         cwd=cwd,
+        explicit_skill_names=extract_explicit_skill_names(user_input),
+        workspace_directory_key=workspace_directory_key,
     )
 
 

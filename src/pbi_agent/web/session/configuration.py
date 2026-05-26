@@ -66,6 +66,11 @@ from pbi_agent.skills.project_catalog import (
     ProjectSkillManifest,
     discover_installed_project_skills,
 )
+from pbi_agent.skills.state import (
+    set_all_skills_enabled,
+    set_skill_enabled,
+    skill_enabled_map,
+)
 from pbi_agent.skills.project_installer import (
     ProjectSkillInstallResult,
     RemoteSkillCandidateSummary,
@@ -508,6 +513,41 @@ class ConfigurationMixin:
             "config_revision": revision,
         }
 
+    def set_project_skill_enabled(
+        self,
+        *,
+        skill_name: str,
+        enabled: bool,
+    ) -> dict[str, Any]:
+        skills = discover_installed_project_skills(workspace=self._workspace_root)
+        if not any(skill.name.casefold() == skill_name.casefold() for skill in skills):
+            raise KeyError(skill_name)
+        set_skill_enabled(
+            skill_name,
+            enabled,
+            workspace=self._workspace_root,
+            directory_key=self._directory_key,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "skills": self._installed_skill_views(),
+            "config_revision": revision,
+        }
+
+    def set_all_project_skills_enabled(self, *, enabled: bool) -> dict[str, Any]:
+        skills = discover_installed_project_skills(workspace=self._workspace_root)
+        set_all_skills_enabled(
+            [skill.name for skill in skills],
+            enabled,
+            workspace=self._workspace_root,
+            directory_key=self._directory_key,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "skills": self._installed_skill_views(),
+            "config_revision": revision,
+        }
+
     def list_project_skill_candidates(
         self,
         *,
@@ -825,21 +865,33 @@ class ConfigurationMixin:
         }
 
     def _installed_skill_views(self) -> list[dict[str, Any]]:
+        skills = sorted(
+            discover_installed_project_skills(workspace=self._workspace_root),
+            key=lambda item: (item.name.casefold(), item.location.as_posix()),
+        )
+        enabled = skill_enabled_map(
+            [skill.name for skill in skills],
+            workspace=self._workspace_root,
+            directory_key=self._directory_key,
+        )
         return [
-            self._skill_view(skill)
-            for skill in sorted(
-                discover_installed_project_skills(workspace=self._workspace_root),
-                key=lambda item: (item.name.casefold(), item.location.as_posix()),
-            )
+            self._skill_view(skill, enabled=enabled.get(skill.name, True))
+            for skill in skills
         ]
 
-    def _skill_view(self, skill: ProjectSkillManifest) -> dict[str, Any]:
+    def _skill_view(
+        self,
+        skill: ProjectSkillManifest,
+        *,
+        enabled: bool,
+    ) -> dict[str, Any]:
         return {
             "id": skill.name,
             "name": skill.name,
             "description": skill.description,
             "instructions": skill.instructions,
             "path": self._relative_workspace_path(skill.location),
+            "enabled": enabled,
         }
 
     def _skill_candidate_view(

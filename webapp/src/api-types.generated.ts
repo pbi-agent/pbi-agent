@@ -259,6 +259,8 @@ export type SkillCandidateViewModel = { name: string; description: string; subpa
 
 export type SkillCandidatesResponse = { source: string; ref: string | null; candidates: SkillCandidateViewModel[] };
 
+export type SkillEnabledRequest = { enabled: boolean };
+
 export type SkillInstallRequest = { source?: string | null; skill_name: string; force?: boolean };
 
 export type SkillInstallResponse = { installed: SkillInstallResultViewModel; skills: SkillViewModel[]; config_revision: string };
@@ -267,11 +269,11 @@ export type SkillInstallResultViewModel = { name: string; install_path: string; 
 
 export type SkillListResponse = { skills: SkillViewModel[]; config_revision: string };
 
-export type SkillMentionItemModel = { name: string; description: string; path: string };
+export type SkillMentionItemModel = { name: string; description: string; path: string; enabled: boolean };
 
 export type SkillMentionSearchResponse = { items: SkillMentionItemModel[] };
 
-export type SkillViewModel = { id: string; name: string; description: string; instructions: string; path: string };
+export type SkillViewModel = { id: string; name: string; description: string; instructions: string; path: string; enabled: boolean };
 
 export type SlashCommandItemModel = { name: string; description: string; kind: "local_command" | "command" | "extension" };
 
@@ -403,7 +405,9 @@ export type ApiOperationResponses = {
   "GET /api/config/providers/{provider_id}/models": ProviderModelListResponse;
   "GET /api/config/skills": SkillListResponse;
   "POST /api/config/skills/candidates": SkillCandidatesResponse;
+  "POST /api/config/skills/enabled": SkillListResponse;
   "POST /api/config/skills/install": SkillInstallResponse;
+  "POST /api/config/skills/{skill_name}/enabled": SkillListResponse;
   "GET /api/dashboard/run-filter-values": RunFilterValuesResponse;
   "GET /api/dashboard/stats": DashboardStatsResponse;
   "GET /api/events/sessions/{session_id}": unknown;
@@ -466,7 +470,9 @@ export type ApiJsonRequestBodies = {
   "POST /api/config/providers": ProviderMutationRequest;
   "PATCH /api/config/providers/{provider_id}": ProviderUpdateRequest;
   "POST /api/config/skills/candidates": SkillCandidateRequest;
+  "POST /api/config/skills/enabled": SkillEnabledRequest;
   "POST /api/config/skills/install": SkillInstallRequest;
+  "POST /api/config/skills/{skill_name}/enabled": SkillEnabledRequest;
   "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowStartRequest;
   "POST /api/provider-auth/{provider_id}/import": ProviderAuthImportRequest;
   "POST /api/sessions": CreateSessionRequest;
@@ -490,6 +496,7 @@ export type ApiOperationPathParams = {
   "DELETE /api/config/providers/{provider_id}": { provider_id: string };
   "PATCH /api/config/providers/{provider_id}": { provider_id: string };
   "GET /api/config/providers/{provider_id}/models": { provider_id: string };
+  "POST /api/config/skills/{skill_name}/enabled": { skill_name: string };
   "GET /api/events/sessions/{session_id}": { session_id: string };
   "GET /api/events/{stream_id}": { stream_id: string };
   "DELETE /api/provider-auth/{provider_id}": { provider_id: string };

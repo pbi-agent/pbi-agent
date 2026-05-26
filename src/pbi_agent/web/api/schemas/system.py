@@ -101,6 +101,7 @@ class SkillMentionItemModel(BaseModel):
     name: str
     description: str
     path: str
+    enabled: bool
 
 
 class SkillMentionSearchResponse(BaseModel):

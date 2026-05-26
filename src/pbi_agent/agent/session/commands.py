@@ -113,10 +113,17 @@ def _reserved_slash_extension_names(workspace: Path | None = None) -> set[str]:
 
 
 def _reload_provider_initialization(
-    provider: Provider, workspace: Path | None = None
+    provider: Provider,
+    workspace: Path | None = None,
+    *,
+    workspace_directory_key: str | None = None,
 ) -> None:
     provider.set_system_prompt(
-        get_system_prompt(settings=provider.settings, cwd=workspace)
+        get_system_prompt(
+            settings=provider.settings,
+            cwd=workspace,
+            workspace_directory_key=workspace_directory_key,
+        )
     )
     provider.refresh_tools()
 

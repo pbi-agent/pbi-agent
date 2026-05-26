@@ -11,7 +11,7 @@ from pbi_agent.web.api.deps import (
     SessionManagerDep,
     model_from_payload,
 )
-from pbi_agent.web.api.errors import config_http_error
+from pbi_agent.web.api.errors import config_http_error, not_found
 from pbi_agent.web.api.schemas.config import (
     ActiveProfileRequest,
     ActiveProfileResponse,
@@ -45,6 +45,7 @@ from pbi_agent.web.api.schemas.config import (
     ProviderViewModel,
     SkillCandidateRequest,
     SkillCandidatesResponse,
+    SkillEnabledRequest,
     SkillInstallRequest,
     SkillInstallResponse,
     SkillListResponse,
@@ -379,6 +380,37 @@ def install_command(
 @router.get("/skills", response_model=SkillListResponse)
 def list_skills(manager: SessionManagerDep) -> SkillListResponse:
     payload = manager.list_project_skills()
+    return SkillListResponse(
+        skills=[model_from_payload(SkillViewModel, item) for item in payload["skills"]],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@router.post("/skills/{skill_name}/enabled", response_model=SkillListResponse)
+def set_skill_enabled_state(
+    skill_name: str,
+    request: SkillEnabledRequest,
+    manager: SessionManagerDep,
+) -> SkillListResponse:
+    try:
+        payload = manager.set_project_skill_enabled(
+            skill_name=skill_name,
+            enabled=request.enabled,
+        )
+    except KeyError as exc:
+        raise not_found("Skill not found.") from exc
+    return SkillListResponse(
+        skills=[model_from_payload(SkillViewModel, item) for item in payload["skills"]],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@router.post("/skills/enabled", response_model=SkillListResponse)
+def set_all_skills_enabled_state(
+    request: SkillEnabledRequest,
+    manager: SessionManagerDep,
+) -> SkillListResponse:
+    payload = manager.set_all_project_skills_enabled(enabled=request.enabled)
     return SkillListResponse(
         skills=[model_from_payload(SkillViewModel, item) for item in payload["skills"]],
         config_revision=str(payload["config_revision"]),

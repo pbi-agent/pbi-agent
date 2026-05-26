@@ -1036,7 +1036,32 @@
 .settings-panel__actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--sp-3);
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.settings-panel__heading {
+  min-width: 0;
+}
+
+.settings-panel__bulk-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 2px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.settings-panel__bulk-toggle-button {
+  border-radius: calc(var(--radius-md) - 2px);
+}
+
+.settings-panel__bulk-toggle-divider {
+  margin: 4px 0;
+  background: var(--color-border);
 }
 
 .command-hint__path {

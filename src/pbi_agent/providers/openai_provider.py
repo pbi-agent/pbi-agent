@@ -316,6 +316,9 @@ class OpenAIProvider(Provider):
                     parent_context=parent_context,
                     tracer=tracer,
                     workspace_root=getattr(self, "_workspace_root", None),
+                    workspace_directory_key=getattr(
+                        self, "_workspace_directory_key", None
+                    ),
                 ),
                 on_result=build_tool_result_callback(display),
             )

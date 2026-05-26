@@ -155,4 +155,5 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         parent_context=parent_context,
         parent_tracer=parent_tracer,
         workspace_root=context.workspace_root,
+        workspace_directory_key=context.workspace_directory_key,
     )

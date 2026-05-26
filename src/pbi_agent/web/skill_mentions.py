@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pbi_agent.skills.project_catalog import discover_installed_project_skills
+from pbi_agent.skills.state import skill_enabled_map
 
 
 @dataclass(slots=True, frozen=True)
@@ -13,6 +14,7 @@ class SkillMentionItem:
     name: str
     description: str
     path: str
+    enabled: bool
 
 
 def search_skill_mentions(
@@ -20,16 +22,24 @@ def search_skill_mentions(
     *,
     root: Path,
     limit: int = 20,
+    directory_key: str | None = None,
 ) -> list[SkillMentionItem]:
     """Return installed project skills matching ``query`` for composer completions."""
     normalized_query = query.strip().casefold()
+    manifests = discover_installed_project_skills(workspace=root)
+    enabled = skill_enabled_map(
+        [skill.name for skill in manifests],
+        workspace=root,
+        directory_key=directory_key,
+    )
     skills = [
         SkillMentionItem(
             name=skill.name,
             description=skill.description,
             path=_display_path(skill.location, root=root),
+            enabled=enabled.get(skill.name, True),
         )
-        for skill in discover_installed_project_skills(workspace=root)
+        for skill in manifests
     ]
     if not normalized_query:
         return sorted(

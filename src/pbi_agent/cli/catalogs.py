@@ -10,6 +10,10 @@ from .shared import _workspace_directory_for_args
 def _handle_skills_command(args: argparse.Namespace) -> int:  # pyright: ignore[reportUnusedFunction] - imported by CLI entrypoint
     if args.skills_action == "list":
         return _handle_skills_list_command(args)
+    if args.skills_action == "enable":
+        return _handle_skills_enabled_command(args, enabled=True)
+    if args.skills_action == "disable":
+        return _handle_skills_enabled_command(args, enabled=False)
     if args.skills_action == "add":
         return _handle_skills_add_command(args)
     print(f"Error: unknown skills action {args.skills_action!r}", file=sys.stderr)
@@ -20,6 +24,40 @@ def _handle_skills_list_command(args: argparse.Namespace) -> int:
     from pbi_agent.skills.project_catalog import render_installed_project_skills
 
     return render_installed_project_skills(workspace=Path.cwd().resolve())
+
+
+def _handle_skills_enabled_command(
+    args: argparse.Namespace,
+    *,
+    enabled: bool,
+) -> int:
+    from pbi_agent.skills.project_catalog import discover_installed_project_skills
+    from pbi_agent.skills.state import set_all_skills_enabled, set_skill_enabled
+
+    workspace = Path.cwd().resolve()
+    skills = discover_installed_project_skills(workspace=workspace)
+    action = "Enabled" if enabled else "Disabled"
+
+    if args.all:
+        set_all_skills_enabled(
+            [skill.name for skill in skills],
+            enabled,
+            workspace=workspace,
+        )
+        print(f"{action} {len(skills)} skill(s).")
+        return 0
+
+    if args.skill is None:
+        print("Error: provide a skill name or --all.", file=sys.stderr)
+        return 2
+
+    if not any(skill.name.casefold() == args.skill.casefold() for skill in skills):
+        print(f"Error: unknown skill '{args.skill}'.", file=sys.stderr)
+        return 2
+
+    set_skill_enabled(args.skill, enabled, workspace=workspace)
+    print(f"{action} skill '{args.skill}'.")
+    return 0
 
 
 def _handle_skills_add_command(args: argparse.Namespace) -> int:

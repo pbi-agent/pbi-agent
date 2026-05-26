@@ -6,8 +6,13 @@ from pathlib import Path
 import re
 
 from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
+from pbi_agent.skills.state import skill_enabled_map
 
 _DISCOVERY_ROOT = Path(".agents/skills")
+_SKILL_TAG_BOUNDARY_CHARS = r"\s()[\]{}'\"`,;"
+_SKILL_TAG_RE = re.compile(
+    rf"(?:^|(?<=[{_SKILL_TAG_BOUNDARY_CHARS}]))\$([A-Za-z][A-Za-z0-9_-]*)"
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -17,8 +22,12 @@ class ProjectSkill:
     location: Path
 
 
-def format_project_skills_markdown(workspace: Path | None = None) -> str:
-    skills = discover_project_skills(workspace)
+def format_project_skills_markdown(
+    workspace: Path | None = None,
+    *,
+    directory_key: str | None = None,
+) -> str:
+    skills = discover_project_skills(workspace, directory_key=directory_key)
     if not skills:
         return (
             "### Project Skills\n\n"
@@ -35,7 +44,27 @@ def _warn(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def discover_project_skills(workspace: Path | None = None) -> list[ProjectSkill]:
+def discover_project_skills(
+    workspace: Path | None = None,
+    *,
+    explicit_skill_names: set[str] | None = None,
+    directory_key: str | None = None,
+) -> list[ProjectSkill]:
+    explicit_names = {name.casefold() for name in explicit_skill_names or set()}
+    discovered = discover_all_project_skills(workspace)
+    enabled = skill_enabled_map(
+        [skill.name for skill in discovered],
+        workspace=workspace,
+        directory_key=directory_key,
+    )
+    return [
+        skill
+        for skill in discovered
+        if enabled.get(skill.name, True) or skill.name.casefold() in explicit_names
+    ]
+
+
+def discover_all_project_skills(workspace: Path | None = None) -> list[ProjectSkill]:
     root = (workspace or Path.cwd()).resolve()
     skills_root = root / _DISCOVERY_ROOT
     if not skills_root.is_dir():
@@ -57,6 +86,12 @@ def discover_project_skills(workspace: Path | None = None) -> list[ProjectSkill]
             discovered.append(skill)
 
     return discovered
+
+
+def extract_explicit_skill_names(text: str | None) -> set[str]:
+    if not text:
+        return set()
+    return {match.group(1) for match in _SKILL_TAG_RE.finditer(text)}
 
 
 def _load_project_skill(skill_path: Path) -> ProjectSkill | None:

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
+from pbi_agent.skills.state import skill_enabled_map
 
 from rich.console import Console
 from rich.table import Table
@@ -42,9 +43,18 @@ def render_installed_project_skills(
 
     table = Table(title="Project Skills", title_style="bold cyan")
     table.add_column("Name", style="green")
+    table.add_column("Status", style="yellow")
     table.add_column("Description")
+    enabled = skill_enabled_map(
+        [skill.name for skill in project_skills],
+        workspace=workspace,
+    )
     for skill in project_skills:
-        table.add_row(skill.name, skill.description)
+        table.add_row(
+            skill.name,
+            "enabled" if enabled.get(skill.name, True) else "disabled",
+            skill.description,
+        )
     active_console.print(table)
     return 0
 

@@ -56,6 +56,7 @@ class ToolContext:
     parent_context: ParentContextSnapshot | None = None
     tracer: RunTracer | None = None
     workspace_root: Path | None = None
+    workspace_directory_key: str | None = None
     display_metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import stat
 
 import pytest
@@ -192,6 +193,67 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
         'load its SKILL.md with `explore_workspace` target="read" using the listed location'
         in prompt
     )
+
+
+def test_disabled_project_skill_is_hidden_unless_explicitly_tagged(
+    tmp_path,
+):
+    from pbi_agent.skills.state import set_skill_enabled
+
+    skill_dir = tmp_path / ".agents" / "skills" / "quiet-skill"
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    original_content = (
+        "---\n"
+        "name: quiet-skill\n"
+        "description: Quietly assist when explicitly requested.\n"
+        "---\n\n# Quiet Skill\n"
+    )
+    skill_path.write_text(original_content, encoding="utf-8")
+    set_skill_enabled("quiet-skill", False, workspace=tmp_path)
+
+    prompt = get_system_prompt(cwd=tmp_path)
+    explicit_prompt = get_system_prompt(
+        cwd=tmp_path,
+        explicit_skill_names={"quiet-skill"},
+    )
+
+    assert "<name>quiet-skill</name>" not in prompt
+    assert "<name>quiet-skill</name>" in explicit_prompt
+    assert skill_path.read_text(encoding="utf-8") == original_content
+    assert not (tmp_path / ".agents" / "skills" / ".skill-state.json").exists()
+    assert Path(os.environ["PBI_AGENT_SESSION_DB_PATH"]).is_file()
+
+
+def test_disabled_project_skill_uses_explicit_workspace_directory_key(
+    tmp_path,
+    monkeypatch,
+):
+    from pbi_agent.skills.state import set_skill_enabled
+
+    monkeypatch.setenv("PBI_AGENT_WORKSPACE_KEY", "env-workspace-key")
+    skill_dir = tmp_path / ".agents" / "skills" / "active-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: active-skill\n"
+        "description: Active workspace scoped skill.\n"
+        "---\n\n# Active Skill\n",
+        encoding="utf-8",
+    )
+    set_skill_enabled(
+        "active-skill",
+        False,
+        workspace=tmp_path,
+        directory_key="active-workspace-key",
+    )
+
+    prompt = get_system_prompt(
+        cwd=tmp_path,
+        workspace_directory_key="active-workspace-key",
+    )
+
+    assert "<name>active-skill</name>" not in prompt
 
 
 def test_get_sub_agent_system_prompt_with_project_skills(tmp_path, monkeypatch):

@@ -388,11 +388,16 @@ class SkillViewModel(BaseModel):
     description: str
     instructions: str
     path: str
+    enabled: bool
 
 
 class SkillListResponse(BaseModel):
     skills: list[SkillViewModel]
     config_revision: str
+
+
+class SkillEnabledRequest(BaseModel):
+    enabled: bool
 
 
 class SkillCandidateRequest(BaseModel):

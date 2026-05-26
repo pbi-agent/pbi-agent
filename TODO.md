@@ -1,4 +1,4 @@
-[X] Fix leading **/ gitignore fallback matching
+[X] Thread active directory key through /skills output
 [X] Add focused regression coverage
 [X] Run focused validation
-[X] Update memory
+[X] Update MEMORY.md

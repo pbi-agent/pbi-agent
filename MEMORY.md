@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-05-25
+- Last compacted: 2026-05-26
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -85,3 +85,10 @@
 - Made workspace file preview auto-resize expand immediately to the maximum configured preview height and let diff cards fill the preview pane. Validation: focused `WorkspaceFileTreePanel` test, `bun run lint`, `bun run typecheck`, full `bun run test:web`, `bun run web:build`.
 - Made workspace file indexing exclude paths matching Git ignore rules even when tracked/statused, and added a stdlib `.gitignore` fallback for non-git workspaces. Validation: focused scan/input/web pytest, Ruff check/format, basedpyright, `git diff --check`.
 - Fixed review finding in stdlib `.gitignore` fallback so leading `**/` patterns also match root-level paths; added scan regression coverage. Validation: `uv run pytest -q --tb=short -x tests/test_scan.py`, focused Ruff check/format, `uv run basedpyright`.
+- Added workspace-scoped internal project skill enablement stored outside workspaces (`~/.pbi-agent/skill_state.json`), with CLI/web toggles, Settings UI switches/bulk actions, disabled autocomplete status, and explicit `$skill-name` per-turn prompt override. Validation: focused pytest/web tests, API type codegen test, Ruff check/format, basedpyright, `bun run lint`, `bun run typecheck`, `bun run web:build`.
+- Refactored project skill enablement state from `~/.pbi-agent/skill_state.json` into the existing `sessions.db` via `disabled_project_skills`; no JSON state file remains. Validation: full `tests/test_session_store.py`, `tests/test_skill_mentions.py`, `tests/test_system_prompt.py`, focused web endpoint pytest, Ruff check/format, basedpyright.
+- Compressed `MEMORY.md` to keep only durable repo facts plus the current-day task log. Validation: manual review of existing content; no code changes.
+- Fixed disabled `$skill` explicit tag handling for long-lived session turns by generating per-turn instructions when a plain user message names a skill; diagnosed session `37c0b50ca3e24c3c84cc050629ae148e` missing `<available_skills>` despite `$compress`. Validation: focused session/system/mention pytest, Ruff check/format, basedpyright, local `uv run pbi-agent run --prompt '$compress MEMORY.md'` generic-provider smoke.
+- Fixed review finding by aligning backend explicit `$skill` extraction with composer token boundaries, so quoted/bracketed/comma/semicolon tags trigger disabled skill loading. Validation: focused skill/session pytest, Ruff check/format, basedpyright, `git diff --check`.
+- Fixed review finding so skill enabled/disabled state uses the active workspace directory key after web workspace switches instead of falling back to `PBI_AGENT_WORKSPACE_KEY`; propagated the explicit key through skill lists/search/system prompts/sub-agents. Validation: focused web/system/session/mention/sub-agent pytest, Ruff check/format, basedpyright, `git diff --check`.
+- Fixed review finding by threading the active workspace directory key through `/skills` markdown output, with regression coverage for env-key mismatch after workspace switch. Validation: focused `/skills` session pytest, Ruff check/format, basedpyright, `git diff --check`.

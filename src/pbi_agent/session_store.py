@@ -211,6 +211,13 @@ CREATE TABLE IF NOT EXISTS recent_workspaces (
 CREATE INDEX IF NOT EXISTS idx_recent_workspaces_last_opened
     ON recent_workspaces(last_opened_at DESC);
 
+CREATE TABLE IF NOT EXISTS disabled_project_skills (
+    directory  TEXT NOT NULL,
+    skill_name TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (directory, skill_name)
+);
+
 CREATE TABLE IF NOT EXISTS maintenance_state (
     name             TEXT PRIMARY KEY,
     last_run_date    TEXT NOT NULL,
@@ -467,6 +474,13 @@ def _db_path() -> Path:
 
 def _normalize_directory_key(directory: str) -> str:
     return directory.lower()
+
+
+def _normalize_project_skill_name(skill_name: str) -> str:
+    normalized = skill_name.strip().casefold()
+    if not normalized:
+        raise ValueError("skill name cannot be empty")
+    return normalized
 
 
 def _now_iso() -> str:
@@ -894,6 +908,11 @@ class SessionStore:
             "UPDATE recent_workspaces SET directory_key = LOWER(directory_key) "
             "WHERE directory_key != LOWER(directory_key)"
         )
+        self._conn.execute(
+            "UPDATE disabled_project_skills SET directory = LOWER(directory), "
+            "skill_name = LOWER(skill_name) "
+            "WHERE directory != LOWER(directory) OR skill_name != LOWER(skill_name)"
+        )
         self._conn.commit()
 
     def record_recent_workspace(
@@ -969,6 +988,71 @@ class SessionStore:
             is_sandbox=bool(row["is_sandbox"]),
             last_opened_at=str(row["last_opened_at"]),
         )
+
+    def list_disabled_project_skills(self, directory: str) -> list[str]:
+        normalized_directory = _normalize_directory_key(directory)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT skill_name FROM disabled_project_skills "
+                "WHERE directory = ? ORDER BY skill_name COLLATE NOCASE ASC",
+                (normalized_directory,),
+            ).fetchall()
+        return [str(row["skill_name"]) for row in rows]
+
+    def set_project_skill_enabled(
+        self,
+        directory: str,
+        skill_name: str,
+        *,
+        enabled: bool,
+    ) -> None:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_skill = _normalize_project_skill_name(skill_name)
+        now = _now_iso()
+        with self._lock:
+            if enabled:
+                self._conn.execute(
+                    "DELETE FROM disabled_project_skills "
+                    "WHERE directory = ? AND skill_name = ?",
+                    (normalized_directory, normalized_skill),
+                )
+            else:
+                self._conn.execute(
+                    "INSERT INTO disabled_project_skills "
+                    "(directory, skill_name, updated_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(directory, skill_name) DO UPDATE SET "
+                    "updated_at = excluded.updated_at",
+                    (normalized_directory, normalized_skill, now),
+                )
+            self._conn.commit()
+
+    def set_project_skills_enabled(
+        self,
+        directory: str,
+        skill_names: list[str],
+        *,
+        enabled: bool,
+    ) -> None:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_skills = sorted(
+            {_normalize_project_skill_name(name) for name in skill_names}
+        )
+        now = _now_iso()
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM disabled_project_skills WHERE directory = ?",
+                (normalized_directory,),
+            )
+            if not enabled:
+                self._conn.executemany(
+                    "INSERT INTO disabled_project_skills "
+                    "(directory, skill_name, updated_at) VALUES (?, ?, ?)",
+                    [
+                        (normalized_directory, skill_name, now)
+                        for skill_name in normalized_skills
+                    ],
+                )
+            self._conn.commit()
 
     def claim_daily_maintenance(self, run_date: str) -> bool:
         now = _now_iso()

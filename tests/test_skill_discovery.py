@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from pbi_agent.agent.skill_discovery import ProjectSkill, discover_project_skills
+from pbi_agent.agent.skill_discovery import (
+    ProjectSkill,
+    discover_project_skills,
+    extract_explicit_skill_names,
+)
 
 
 def _write_skill(
@@ -43,6 +47,29 @@ def test_discovers_valid_skill_from_agents_directory(tmp_path: Path) -> None:
             location=skill_path.resolve(),
         )
     ]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("$compress MEMORY.md", {"compress"}),
+        ('Use "$compress"', {"compress"}),
+        ("Use ($compress)", {"compress"}),
+        ("Use [$compress]", {"compress"}),
+        ("Use {$compress}", {"compress"}),
+        ("Use `$compress`", {"compress"}),
+        ("Use,$compress", {"compress"}),
+        ("Use;$compress", {"compress"}),
+        ("Use foo$compress", set()),
+        ("Use $1compress", set()),
+        ("Use $compress.md", {"compress"}),
+    ],
+)
+def test_extract_explicit_skill_names_matches_composer_boundaries(
+    text: str,
+    expected: set[str],
+) -> None:
+    assert extract_explicit_skill_names(text) == expected
 
 
 def test_missing_description_skips_skill(tmp_path: Path, capsys) -> None:

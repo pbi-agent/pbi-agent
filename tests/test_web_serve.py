@@ -613,6 +613,63 @@ def test_web_api_switch_to_recent_workspace_preserves_directory_key(
         assert [item["session_id"] for item in switched["sessions"]] == [session_b]
 
 
+def test_skill_state_uses_active_workspace_after_switch_with_env_key(
+    monkeypatch, tmp_path
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    workspace_a.mkdir()
+    workspace_b.mkdir()
+    _write_skill(
+        workspace_b / ".agents" / "skills",
+        "focus",
+        "Keep implementation focused.",
+    )
+    monkeypatch.chdir(workspace_a)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    monkeypatch.setenv(WORKSPACE_KEY_ENV, "initial-workspace-key")
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            store.record_recent_workspace(
+                directory_key="custom-workspace-key",
+                root_path=str(workspace_b),
+                display_path="Custom Display",
+                is_sandbox=False,
+            )
+            store.set_project_skill_enabled(
+                "custom-workspace-key",
+                "focus",
+                enabled=False,
+            )
+
+        switch_response = client.post(
+            "/api/workspaces/switch",
+            json={"directory_key": "custom-workspace-key"},
+        )
+        assert switch_response.status_code == 200
+
+        skills_response = client.get("/api/config/skills")
+        assert skills_response.status_code == 200
+        assert skills_response.json()["skills"][0]["enabled"] is False
+
+        search_response = client.get("/api/skills/search")
+        assert search_response.status_code == 200
+        assert search_response.json()["items"][0]["enabled"] is False
+
+        enable_response = client.post(
+            "/api/config/skills/focus/enabled",
+            json={"enabled": True},
+        )
+        assert enable_response.status_code == 200
+        assert enable_response.json()["skills"][0]["enabled"] is True
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        assert store.list_disabled_project_skills("custom-workspace-key") == []
+        assert store.list_disabled_project_skills("initial-workspace-key") == []
+
+
 def test_workspace_file_tree_refresh_and_preview(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1670,6 +1727,7 @@ def test_skill_bootstrap_and_list_endpoint_return_installed_project_skills(
                 "description": "Keep implementation focused.",
                 "instructions": "# focus",
                 "path": ".agents/skills/focus/SKILL.md",
+                "enabled": True,
             }
         ]
 
@@ -1679,6 +1737,43 @@ def test_skill_bootstrap_and_list_endpoint_return_installed_project_skills(
             "skills": bootstrap_payload["skills"],
             "config_revision": bootstrap_payload["config_revision"],
         }
+
+
+def test_skill_enabled_endpoint_toggles_internal_state(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    skill_path = _write_skill(
+        tmp_path / ".agents" / "skills",
+        "focus",
+        "Keep implementation focused.",
+    )
+    original_content = skill_path.joinpath("SKILL.md").read_text(encoding="utf-8")
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/config/skills/focus/enabled",
+            json={"enabled": False},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["skills"][0]["enabled"] is False
+
+        response = client.get("/api/skills/search")
+        assert response.status_code == 200
+        assert response.json()["items"][0]["enabled"] is False
+
+        response = client.post("/api/config/skills/enabled", json={"enabled": True})
+        assert response.status_code == 200
+        assert response.json()["skills"][0]["enabled"] is True
+
+    assert (
+        skill_path.joinpath("SKILL.md").read_text(encoding="utf-8") == original_content
+    )
+    assert (tmp_path / "sessions.db").is_file()
+    assert not (tmp_path / "skill_state.json").exists()
+    assert not (tmp_path / ".agents" / "skills" / ".skill-state.json").exists()
 
 
 def test_skill_candidates_endpoint_uses_local_and_default_sources(

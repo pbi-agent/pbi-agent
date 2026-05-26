@@ -261,6 +261,7 @@ export type SkillMentionItem = {
   name: string;
   description: string;
   path: string;
+  enabled?: boolean;
 };
 
 export type SkillMentionSearchPayload = {

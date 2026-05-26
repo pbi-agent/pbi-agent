@@ -1954,6 +1954,46 @@ def test_run_session_loop_interactive_mode_injects_ask_user_prompt_rules(
     assert "Use `ask_user`" in str(provider.request_instructions[0])
 
 
+def test_run_session_loop_explicit_disabled_skill_includes_skill_catalog(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    skill_dir = tmp_path / ".agents" / "skills" / "compress"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: compress\ndescription: Compress memory files.\n---\n\n# Compress\n",
+        encoding="utf-8",
+    )
+    with SessionStore() as store:
+        store.set_project_skill_enabled(str(tmp_path), "compress", enabled=False)
+
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy(["$compress MEMORY.md", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    monotonic_values = iter([5.0, 6.5])
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == ["$compress MEMORY.md"]
+    assert provider.request_instructions
+    instructions = provider.request_instructions[0]
+    assert instructions is not None
+    assert "<available_skills>" in instructions
+    assert "<name>compress</name>" in instructions
+    assert "<location>" in instructions
+
+
 def test_run_session_loop_honors_per_turn_tool_history_preference(
     monkeypatch,
     tmp_path,
@@ -2351,7 +2391,9 @@ def test_run_session_loop_handles_skills_command_locally(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_skills_markdown",
-        lambda workspace=None: "### Project Skills\n\n- `repo-skill`: Demo skill",
+        lambda workspace=None, *, directory_key=None: (
+            "### Project Skills\n\n- `repo-skill`: Demo skill"
+        ),
     )
 
     exit_code = run_session_loop(settings, display)
@@ -2362,6 +2404,44 @@ def test_run_session_loop_handles_skills_command_locally(monkeypatch) -> None:
         "### Project Skills\n\n- `repo-skill`: Demo skill"
     ]
     assert display.assistant_start_calls == 0
+
+
+def test_run_session_loop_skills_command_uses_active_workspace_key(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    monkeypatch.setenv("PBI_AGENT_WORKSPACE_KEY", "env-workspace-key")
+    skill_dir = tmp_path / ".agents" / "skills" / "focus"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: focus\ndescription: Focus active work.\n---\n\n# Focus\n",
+        encoding="utf-8",
+    )
+    with SessionStore() as store:
+        store.set_project_skill_enabled("active-workspace-key", "focus", enabled=False)
+
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy([SKILLS_COMMAND, "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_session_loop(
+        settings,
+        display,
+        workspace_root=tmp_path,
+        workspace_directory_key="active-workspace-key",
+    )
+
+    assert exit_code == 0
+    assert provider.request_messages == []
+    assert display.markdown_calls == [
+        "### Project Skills\n\nNo project skills discovered under `.agents/skills/`."
+    ]
 
 
 def test_run_session_loop_handles_mcp_command_locally(monkeypatch) -> None:
@@ -2549,7 +2629,7 @@ def test_run_session_loop_uses_transient_renderer_for_temporary_commands(
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_skills_markdown",
-        lambda workspace=None: "skills output",
+        lambda workspace=None, *, directory_key=None: "skills output",
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_mcp_servers_markdown",

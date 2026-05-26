@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pbi_agent.skills.state import set_skill_enabled
 from pbi_agent.web.skill_mentions import search_skill_mentions
 
 
@@ -26,6 +27,7 @@ def test_search_skill_mentions_returns_empty_query_sorted_by_name(
         ("alpha", ".agents/skills/alpha/SKILL.md"),
         ("zeta", ".agents/skills/zeta/SKILL.md"),
     ]
+    assert [item.enabled for item in results] == [True, True]
 
 
 def test_search_skill_mentions_ranks_name_matches_before_descriptions(
@@ -53,3 +55,14 @@ def test_search_skill_mentions_skips_invalid_skills(tmp_path: Path) -> None:
     results = search_skill_mentions("", root=tmp_path, limit=10)
 
     assert [item.name for item in results] == ["valid"]
+
+
+def test_search_skill_mentions_includes_disabled_status(tmp_path: Path) -> None:
+    _write_skill(tmp_path, "disabled-skill", "Explicit only")
+    set_skill_enabled("disabled-skill", False, workspace=tmp_path)
+
+    results = search_skill_mentions("", root=tmp_path, limit=10)
+
+    assert [(item.name, item.enabled) for item in results] == [
+        ("disabled-skill", False)
+    ]

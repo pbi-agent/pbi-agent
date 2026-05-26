@@ -287,6 +287,28 @@ export async function installSkill(
   });
 }
 
+export async function setSkillEnabled(
+  skillName: string,
+  enabled: boolean,
+): Promise<SkillListPayload> {
+  return requestJson<SkillListPayload>(
+    `/api/config/skills/${encodeURIComponent(skillName)}/enabled`,
+    {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    },
+  );
+}
+
+export async function setAllSkillsEnabled(
+  enabled: boolean,
+): Promise<SkillListPayload> {
+  return requestJson<SkillListPayload>("/api/config/skills/enabled", {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 export async function fetchAgents(): Promise<AgentListPayload> {
   return apiRequest<"GET /api/config/agents", AgentListPayload>(
     "GET /api/config/agents",
@@ -446,11 +468,7 @@ export async function searchSkillMentions(
     q: query,
     limit,
   });
-  return apiRequest<
-    "GET /api/skills/search",
-    SkillMentionSearchResponsePayload
-  >(
-    "GET /api/skills/search",
+  return requestJson<SkillMentionSearchResponsePayload>(
     `/api/skills/search${params}`,
   );
 }

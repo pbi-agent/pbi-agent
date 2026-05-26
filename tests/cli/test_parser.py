@@ -192,6 +192,21 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertTrue(args.list)
         self.assertTrue(args.force)
 
+    def test_parser_accepts_skills_enable_disable_commands(self) -> None:
+        parser = cli.build_parser()
+
+        enable_args = parser.parse_args(["skills", "enable", "repo-skill"])
+        disable_args = parser.parse_args(["skills", "disable", "--all"])
+
+        self.assertEqual(enable_args.command, "skills")
+        self.assertEqual(enable_args.skills_action, "enable")
+        self.assertEqual(enable_args.skill, "repo-skill")
+        self.assertFalse(enable_args.all)
+        self.assertEqual(disable_args.command, "skills")
+        self.assertEqual(disable_args.skills_action, "disable")
+        self.assertIsNone(disable_args.skill)
+        self.assertTrue(disable_args.all)
+
     def test_parser_accepts_skills_add_without_source(self) -> None:
         parser = cli.build_parser()
 

@@ -7,6 +7,7 @@ import time
 from typing import Any, Callable
 
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
+from pbi_agent.agent.skill_discovery import extract_explicit_skill_names
 from pbi_agent.agent.sub_agent_discovery import (
     format_project_sub_agents_markdown,
     get_project_sub_agent_by_name,
@@ -145,11 +146,14 @@ def run_single_turn(
         active_command.instructions if active_command is not None else None
     )
     workspace = (workspace_root or Path.cwd()).resolve()
+    explicit_skill_names = extract_explicit_skill_names(prompt_text)
     turn_instructions = _turn_instructions(
         active_command_instructions,
         settings=settings,
         excluded_tools=INTERACTIVE_ONLY_TOOLS,
         cwd=workspace,
+        user_input=prompt_text,
+        workspace_directory_key=workspace_directory_key,
     )
     display.welcome(
         interactive=False,
@@ -196,9 +200,17 @@ def run_single_turn(
     try:
         with _open_runtime_provider(
             settings,
+            system_prompt=get_system_prompt(
+                settings=settings,
+                excluded_tools=INTERACTIVE_ONLY_TOOLS,
+                cwd=workspace,
+                explicit_skill_names=explicit_skill_names,
+                workspace_directory_key=workspace_directory_key,
+            ),
             excluded_tools=INTERACTIVE_ONLY_TOOLS,
             tool_availability_overridden=runtime.tool_availability_overridden,
             workspace_root=workspace,
+            workspace_directory_key=workspace_directory_key,
         ) as provider:
             display.assistant_start()
             _resume_session(
@@ -362,9 +374,16 @@ def run_session_loop(
     while not should_exit:
         with _open_runtime_provider(
             current_runtime.settings,
+            system_prompt=get_system_prompt(
+                settings=current_runtime.settings,
+                excluded_tools=_turn_excluded_tools(interactive_mode=False),
+                cwd=workspace,
+                workspace_directory_key=workspace_directory_key,
+            ),
             excluded_tools=_turn_excluded_tools(interactive_mode=False),
             tool_availability_overridden=(current_runtime.tool_availability_overridden),
             workspace_root=workspace,
+            workspace_directory_key=workspace_directory_key,
         ) as provider:
             if resume_session_to_restore is not None:
                 _resume_session(
@@ -458,7 +477,10 @@ def run_session_loop(
                 normalized_command = _normalize_user_command(user_input)
                 if normalized_command == SKILLS_COMMAND:
                     _render_temporary_command_markdown(
-                        format_project_skills_markdown(workspace)
+                        format_project_skills_markdown(
+                            workspace,
+                            directory_key=workspace_directory_key,
+                        )
                     )
                     continue
                 if normalized_command == MCP_COMMAND:
@@ -487,7 +509,11 @@ def run_session_loop(
                     )
                     continue
                 if normalized_command == RELOAD_COMMAND:
-                    _reload_provider_initialization(provider, workspace)
+                    _reload_provider_initialization(
+                        provider,
+                        workspace,
+                        workspace_directory_key=workspace_directory_key,
+                    )
                     if on_reload is not None:
                         on_reload()
                     _render_temporary_command_markdown(
@@ -551,17 +577,30 @@ def run_session_loop(
                 turn_excluded_tools = _turn_excluded_tools(
                     interactive_mode=turn_interactive_mode
                 )
+                explicit_skill_names = extract_explicit_skill_names(user_input)
                 turn_instructions = _turn_instructions(
                     active_command_instructions,
                     settings=turn_settings,
                     excluded_tools=turn_excluded_tools,
                     cwd=workspace,
+                    user_input=user_input,
+                    workspace_directory_key=workspace_directory_key,
                 )
+                if turn_instructions is None and explicit_skill_names:
+                    turn_instructions = get_system_prompt(
+                        settings=turn_settings,
+                        excluded_tools=turn_excluded_tools,
+                        cwd=workspace,
+                        explicit_skill_names=explicit_skill_names,
+                        workspace_directory_key=workspace_directory_key,
+                    )
                 if turn_instructions is None and turn_interactive_mode:
                     turn_instructions = get_system_prompt(
                         settings=turn_settings,
                         excluded_tools=turn_excluded_tools,
                         cwd=workspace,
+                        explicit_skill_names=explicit_skill_names,
+                        workspace_directory_key=workspace_directory_key,
                     )
                 turn_input = _build_user_turn_input(
                     text=user_input,
@@ -628,6 +667,7 @@ def run_session_loop(
                                         turn_runtime.tool_availability_overridden
                                     ),
                                     workspace_root=workspace,
+                                    workspace_directory_key=workspace_directory_key,
                                 )
                             )
                             _refresh_provider_history_from_store(
@@ -860,6 +900,7 @@ def run_sub_agent_task(
     parent_context: ParentContextSnapshot | None = None,
     parent_tracer: RunTracer | None = None,
     workspace_root: Path | None = None,
+    workspace_directory_key: str | None = None,
 ) -> dict[str, Any]:
     workspace = (workspace_root or Path.cwd()).resolve()
     agent_definition = None
@@ -973,10 +1014,13 @@ def run_sub_agent_task(
                 settings=child_settings,
                 excluded_tools=SUB_AGENT_DISABLED_TOOLS,
                 cwd=workspace,
+                explicit_skill_names=extract_explicit_skill_names(task_instruction),
+                workspace_directory_key=workspace_directory_key,
             ),
             excluded_tools=SUB_AGENT_DISABLED_TOOLS,
             tool_catalog=tool_catalog,
             workspace_root=workspace,
+            workspace_directory_key=workspace_directory_key,
         ) as provider:
             _apply_sub_agent_parent_context(
                 provider=provider,
@@ -1117,6 +1161,7 @@ def _open_runtime_provider(
     tool_catalog: "ToolCatalog | None" = None,
     tool_availability_overridden: bool | None = None,
     workspace_root: Path | None = None,
+    workspace_directory_key: str | None = None,
 ):
     from pbi_agent.mcp import McpServerPool
 
@@ -1127,6 +1172,7 @@ def _open_runtime_provider(
         settings=runtime_settings,
         excluded_tools=excluded_tools,
         cwd=workspace,
+        workspace_directory_key=workspace_directory_key,
     )
     effective_tool_availability_overridden = (
         runtime.tool_availability_overridden
@@ -1141,6 +1187,7 @@ def _open_runtime_provider(
             tool_catalog=tool_catalog,
         )
         setattr(provider, "_workspace_root", workspace)
+        setattr(provider, "_workspace_directory_key", workspace_directory_key)
         _set_provider_tool_availability_overridden(
             provider, effective_tool_availability_overridden
         )
@@ -1170,6 +1217,7 @@ def _open_runtime_provider(
                     tool_catalog=tool_catalog,
                 )
                 setattr(provider, "_workspace_root", workspace)
+                setattr(provider, "_workspace_directory_key", workspace_directory_key)
                 _set_provider_tool_availability_overridden(
                     provider, effective_tool_availability_overridden
                 )

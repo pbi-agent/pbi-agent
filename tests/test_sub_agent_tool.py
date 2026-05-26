@@ -224,6 +224,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
         parent_context: ParentContextSnapshot | None = None,
         parent_tracer=None,
         workspace_root=None,
+        workspace_directory_key=None,
     ) -> dict[str, object]:
         del (
             settings,
@@ -233,6 +234,7 @@ def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
             sub_agent_depth,
             parent_tracer,
             workspace_root,
+            workspace_directory_key,
         )
         captured["task_instruction"] = task_instruction
         captured["tool_catalog"] = tool_catalog
@@ -300,6 +302,7 @@ def test_sub_agent_tool_maps_default_agent_type_to_generalist(monkeypatch) -> No
         parent_context: ParentContextSnapshot | None = None,
         parent_tracer=None,
         workspace_root=None,
+        workspace_directory_key=None,
     ) -> dict[str, object]:
         del (
             task_instruction,
@@ -314,6 +317,7 @@ def test_sub_agent_tool_maps_default_agent_type_to_generalist(monkeypatch) -> No
             parent_context,
             parent_tracer,
             workspace_root,
+            workspace_directory_key,
         )
         captured["agent_type"] = agent_type
         return {"status": "completed", "final_output": "done"}

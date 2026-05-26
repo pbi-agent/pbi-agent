@@ -533,6 +533,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="List installed project skills.",
         formatter_class=CleanHelpFormatter,
     )
+    skills_enable_parser = skills_subparsers.add_parser(
+        "enable",
+        prog="pbi-agent skills enable",
+        description="Enable one or all installed project skills.",
+        help="Enable installed project skills.",
+        formatter_class=CleanHelpFormatter,
+    )
+    skills_enable_parser.add_argument("skill", nargs="?", default=None)
+    skills_enable_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Enable all currently installed project skills.",
+    )
+    skills_disable_parser = skills_subparsers.add_parser(
+        "disable",
+        prog="pbi-agent skills disable",
+        description="Disable one or all installed project skills.",
+        help="Disable installed project skills.",
+        formatter_class=CleanHelpFormatter,
+    )
+    skills_disable_parser.add_argument("skill", nargs="?", default=None)
+    skills_disable_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Disable all currently installed project skills.",
+    )
     skills_add_parser = skills_subparsers.add_parser(
         "add",
         prog="pbi-agent skills add",

@@ -1305,7 +1305,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   </span>
                 ) : item.kind === "skill" ? (
                   <span className="composer__completion-kind composer__completion-kind--skill">
-                    skill
+                    {item.skill.enabled === false ? "disabled skill" : "skill"}
                   </span>
                 ) : null}
               </Button>

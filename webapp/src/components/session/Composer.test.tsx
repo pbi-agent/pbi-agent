@@ -304,6 +304,25 @@ describe("Composer", () => {
     expect(textbox).toHaveValue("$w");
   });
 
+  it("marks disabled skill suggestions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchSkillMentions).mockResolvedValue({
+      items: [
+        {
+          name: "writer",
+          description: "Write prose",
+          path: ".agents/skills/writer/SKILL.md",
+          enabled: false,
+        },
+      ],
+    });
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "$w");
+
+    expect(await screen.findByText("disabled skill")).toBeInTheDocument();
+  });
+
   it("does not override normal multiline ArrowUp navigation below the first line", () => {
     renderComposer({ inputHistory: ["latest request"] });
     const textbox = screen.getByRole("textbox", { name: "Message" });

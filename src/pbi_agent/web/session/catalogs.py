@@ -26,6 +26,7 @@ class _CatalogsManager(Protocol):
     _mention_index: WorkspaceFileIndex
     _workspace_context: WorkspaceContext
     _workspace_root: Path
+    _directory_key: str
 
     def _resolve_runtime_optional(
         self,
@@ -107,17 +108,19 @@ class CatalogsMixin:
         query: str,
         *,
         limit: int = 10,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, object]]:
         return [
             {
                 "name": item.name,
                 "description": item.description,
                 "path": item.path,
+                "enabled": item.enabled,
             }
             for item in search_skill_mentions(
                 query,
                 root=self._catalogs_manager()._workspace_root,
                 limit=limit,
+                directory_key=self._catalogs_manager()._directory_key,
             )
         ]
 

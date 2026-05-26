@@ -176,8 +176,18 @@ def _append_project_rules(base_prompt: str, cwd: Path | None = None) -> str:
     return f"{base_prompt}\n\n<project_rules>\n{rules}\n</project_rules>"
 
 
-def _append_available_skills(base_prompt: str, cwd: Path | None = None) -> str:
-    skills = discover_project_skills(cwd)
+def _append_available_skills(
+    base_prompt: str,
+    cwd: Path | None = None,
+    *,
+    explicit_skill_names: set[str] | None = None,
+    workspace_directory_key: str | None = None,
+) -> str:
+    skills = discover_project_skills(
+        cwd,
+        explicit_skill_names=explicit_skill_names,
+        directory_key=workspace_directory_key,
+    )
     if not skills:
         return base_prompt
 
@@ -258,6 +268,8 @@ def get_system_prompt(
     settings: "Settings | None" = None,
     excluded_tools: Iterable[str] | None = None,
     cwd: Path | None = None,
+    explicit_skill_names: set[str] | None = None,
+    workspace_directory_key: str | None = None,
 ) -> str:
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
@@ -270,7 +282,12 @@ def get_system_prompt(
         cwd,
     )
     if "explore_workspace" in active_names:
-        prompt = _append_available_skills(prompt, cwd)
+        prompt = _append_available_skills(
+            prompt,
+            cwd,
+            explicit_skill_names=explicit_skill_names,
+            workspace_directory_key=workspace_directory_key,
+        )
     if "sub_agent" in active_names:
         prompt = _append_available_sub_agents(prompt, cwd)
     return _append_active_command(prompt, active_command_instructions)
@@ -282,6 +299,8 @@ def get_sub_agent_system_prompt(
     settings: "Settings | None" = None,
     excluded_tools: Iterable[str] | None = None,
     cwd: Path | None = None,
+    explicit_skill_names: set[str] | None = None,
+    workspace_directory_key: str | None = None,
 ) -> str:
     if agent_prompt_override:
         base = _inject_tool_usage_rules(
@@ -299,4 +318,9 @@ def get_sub_agent_system_prompt(
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
     if "explore_workspace" not in active_names:
         return prompt
-    return _append_available_skills(prompt, cwd)
+    return _append_available_skills(
+        prompt,
+        cwd,
+        explicit_skill_names=explicit_skill_names,
+        workspace_directory_key=workspace_directory_key,
+    )

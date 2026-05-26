@@ -20,7 +20,9 @@ import {
   installSkill,
   logoutProviderAuth,
   refreshProviderAuth,
+  setAllSkillsEnabled,
   setActiveModelProfile,
+  setSkillEnabled,
   startProviderAuthFlow,
   updateMaintenanceConfig,
 } from "../../api";
@@ -88,6 +90,8 @@ vi.mock("../../api", async (importOriginal) => {
     installCommand: vi.fn(),
     fetchSkillCandidates: vi.fn(),
     installSkill: vi.fn(),
+    setSkillEnabled: vi.fn(),
+    setAllSkillsEnabled: vi.fn(),
     refreshProviderAuth: vi.fn(),
     logoutProviderAuth: vi.fn(),
     updateMaintenanceConfig: vi.fn(),
@@ -537,6 +541,7 @@ describe("SettingsPage", () => {
           description: "Review repository changes",
           instructions: "# repo-review\n\nReview repository changes.",
           path: ".agents/skills/repo-review/SKILL.md",
+          enabled: true,
         },
       ],
       config_revision: "rev-2",
@@ -1275,6 +1280,7 @@ describe("SettingsPage", () => {
             description: "Keep implementation focused",
             instructions: "# Focus Skill\n\nKeep implementation focused.\n\n- Scope\n- Verify",
             path: ".agents/skills/focus/SKILL.md",
+            enabled: true,
           },
         ],
       }),
@@ -1293,6 +1299,58 @@ describe("SettingsPage", () => {
     expect(within(dialog).getByRole("heading", { name: "Focus Skill" })).toBeInTheDocument();
     expect(within(dialog).getByText("Keep implementation focused.")).toBeInTheDocument();
     expect(within(dialog).getByText("Scope")).toBeInTheDocument();
+  });
+
+  it("toggles individual and all skill enabled state", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        skills: [
+          {
+            id: "focus",
+            name: "focus",
+            description: "Keep implementation focused",
+            instructions: "# Focus Skill",
+            path: ".agents/skills/focus/SKILL.md",
+            enabled: true,
+          },
+        ],
+      }),
+    );
+    vi.mocked(setSkillEnabled).mockResolvedValue({
+      skills: [
+        {
+          id: "focus",
+          name: "focus",
+          description: "Keep implementation focused",
+          instructions: "# Focus Skill",
+          path: ".agents/skills/focus/SKILL.md",
+          enabled: false,
+        },
+      ],
+      config_revision: "rev-2",
+    });
+    vi.mocked(setAllSkillsEnabled).mockResolvedValue({
+      skills: [
+        {
+          id: "focus",
+          name: "focus",
+          description: "Keep implementation focused",
+          instructions: "# Focus Skill",
+          path: ".agents/skills/focus/SKILL.md",
+          enabled: true,
+        },
+      ],
+      config_revision: "rev-3",
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Skills");
+    await user.click(await screen.findByRole("switch", { name: "Disable focus" }));
+    await waitFor(() => expect(setSkillEnabled).toHaveBeenCalledWith("focus", false));
+    await user.click(screen.getByRole("button", { name: "Enable all" }));
+    await waitFor(() => expect(setAllSkillsEnabled).toHaveBeenCalledWith(true));
   });
 
   it("does not fetch skill candidates until the add skill dialog opens", async () => {
@@ -1337,6 +1395,7 @@ describe("SettingsPage", () => {
               description: "Review repository changes",
               instructions: "# repo-review\n\nReview repository changes.",
               path: ".agents/skills/repo-review/SKILL.md",
+              enabled: true,
             },
           ],
         }),
@@ -1383,6 +1442,7 @@ describe("SettingsPage", () => {
             description: "Review repository changes",
             instructions: "# repo-review\n\nReview repository changes.",
             path: ".agents/skills/repo-review/SKILL.md",
+            enabled: true,
           },
         ],
         config_revision: "rev-2",

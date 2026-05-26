@@ -80,6 +80,39 @@ def test_recent_workspaces_record_and_list(tmp_path) -> None:
     assert fetched.is_sandbox is True
 
 
+def test_project_skill_state_is_directory_scoped(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        store.set_project_skill_enabled("/Project-A", "Review-Skill", enabled=False)
+        store.set_project_skill_enabled("/project-b", "Plan-Skill", enabled=False)
+
+        assert store.list_disabled_project_skills("/project-a") == ["review-skill"]
+        assert store.list_disabled_project_skills("/PROJECT-B") == ["plan-skill"]
+
+        store.set_project_skill_enabled("/project-a", "review-skill", enabled=True)
+        assert store.list_disabled_project_skills("/project-a") == []
+        assert store.list_disabled_project_skills("/project-b") == ["plan-skill"]
+
+
+def test_project_skill_bulk_state_replaces_disabled_set(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        store.set_project_skill_enabled("/w", "stale-skill", enabled=False)
+        store.set_project_skills_enabled(
+            "/w",
+            ["Review-Skill", "plan-skill", "review-skill"],
+            enabled=False,
+        )
+
+        assert store.list_disabled_project_skills("/w") == [
+            "plan-skill",
+            "review-skill",
+        ]
+
+        store.set_project_skills_enabled("/w", [], enabled=True)
+        assert store.list_disabled_project_skills("/w") == []
+
+
 def test_update_previous_id_and_title(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

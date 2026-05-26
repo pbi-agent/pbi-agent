@@ -14,6 +14,8 @@ import {
   ApiError,
   fetchSkillCandidates,
   installSkill,
+  setAllSkillsEnabled,
+  setSkillEnabled,
 } from "../../api";
 import type {
   ConfigBootstrapPayload,
@@ -50,18 +52,30 @@ import {
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
+import { Switch } from "../ui/switch";
 
 function SkillCard({
   skill,
   onPreview,
+  onToggle,
+  toggling,
 }: {
   skill: SkillView;
   onPreview: () => void;
+  onToggle: (enabled: boolean) => void;
+  toggling: boolean;
 }) {
   return (
     <Card className="settings-item settings-item--provider skill-card">
       <div className="provider-card__info">
-        <span className="settings-item__name">{skill.name}</span>
+        <span className="settings-item__name">
+          {skill.name}
+          {skill.enabled === false ? (
+            <Badge size="meta" variant="secondary" className="ml-2">
+              disabled
+            </Badge>
+          ) : null}
+        </span>
         {skill.description ? (
           <div className="settings-item__summary skill-card__description">
             {skill.description}
@@ -70,6 +84,16 @@ function SkillCard({
         <div className="provider-card__subtitle">{skill.path}</div>
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
+        <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <Switch
+            size="sm"
+            checked={skill.enabled !== false}
+            disabled={toggling}
+            onCheckedChange={onToggle}
+            aria-label={`${skill.enabled !== false ? "Disable" : "Enable"} ${skill.name}`}
+          />
+          {skill.enabled !== false ? "Enabled" : "Disabled"}
+        </label>
         <Button
           type="button"
           variant="ghost"
@@ -162,6 +186,8 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
     skillName: string;
   } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
+  const [togglingAll, setTogglingAll] = useState(false);
 
   function resetDialogState() {
     setCustomSource("");
@@ -225,6 +251,59 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
     ]);
   }
 
+  async function applySkillListResponse(response: {
+    skills: SkillView[];
+    config_revision: string;
+  }) {
+    queryClient.setQueryData<ConfigBootstrapPayload>(
+      ["config-bootstrap"],
+      (current) =>
+        current
+          ? {
+              ...current,
+              skills: response.skills,
+              config_revision: response.config_revision,
+            }
+          : current,
+    );
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["config-bootstrap"] }),
+      queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
+    ]);
+  }
+
+  async function handleToggleSkill(skill: SkillView, enabled: boolean) {
+    setTogglingSkill(skill.name);
+    setSuccessMessage(null);
+    try {
+      const response = await setSkillEnabled(skill.name, enabled);
+      await applySkillListResponse(response);
+      setSuccessMessage(
+        `${enabled ? "Enabled" : "Disabled"} ${skill.name}. New sessions use the updated skill catalog immediately; active sessions can run /reload.`,
+      );
+    } catch (err) {
+      setSuccessMessage((err as Error).message);
+    } finally {
+      setTogglingSkill(null);
+    }
+  }
+
+  async function handleToggleAll(enabled: boolean) {
+    setTogglingAll(true);
+    setSuccessMessage(null);
+    try {
+      const response = await setAllSkillsEnabled(enabled);
+      await applySkillListResponse(response);
+      setSuccessMessage(
+        `${enabled ? "Enabled" : "Disabled"} all installed skills. Active sessions can run /reload.`,
+      );
+    } catch (err) {
+      setSuccessMessage((err as Error).message);
+    } finally {
+      setTogglingAll(false);
+    }
+  }
+
   async function handleInstall(
     candidate: SkillCandidateView,
     force = false,
@@ -283,22 +362,56 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
 
       <Card className="settings-panel">
         <CardHeader className="settings-panel__header">
-          <div>
+          <div className="settings-panel__heading">
             <CardTitle className="settings-panel__title">Project Skills</CardTitle>
             <div className="settings-panel__subtitle">
               Installed Agent Skills from .agents/skills
             </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="settings-action-button"
-            onClick={openAddDialog}
-          >
-            <PlusIcon data-icon="inline-start" />
-            Add Skill
-          </Button>
+          <div className="settings-panel__actions">
+            {skills.length > 0 ? (
+              <div
+                className="settings-panel__bulk-toggle"
+                role="group"
+                aria-label="Toggle all skills"
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="settings-action-button settings-panel__bulk-toggle-button"
+                  onClick={() => void handleToggleAll(true)}
+                  disabled={togglingAll}
+                >
+                  Enable all
+                </Button>
+                <Separator
+                  orientation="vertical"
+                  className="settings-panel__bulk-toggle-divider"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="settings-action-button settings-panel__bulk-toggle-button"
+                  onClick={() => void handleToggleAll(false)}
+                  disabled={togglingAll}
+                >
+                  Disable all
+                </Button>
+              </div>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="settings-action-button"
+              onClick={openAddDialog}
+            >
+              <PlusIcon data-icon="inline-start" />
+              Add Skill
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="settings-panel__body">
           {skills.length === 0 ? (
@@ -312,6 +425,8 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
                 key={skill.id}
                 skill={skill}
                 onPreview={() => setPreviewSkill(skill)}
+                onToggle={(enabled) => void handleToggleSkill(skill, enabled)}
+                toggling={togglingSkill === skill.name}
               />
             ))
           )}
