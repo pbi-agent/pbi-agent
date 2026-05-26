@@ -1,5 +1,5 @@
-[X] Inspect file preview implementation
-[X] Add markdown rendering for `.md` previews
-[X] Update/extend tests
-[X] Run focused frontend validation
-[X] Update task memory
+[X] Inspect current workspace tree and icon package shape
+[X] Add VS Code-style icon dependency and resolver
+[X] Render icons in session file tree and style them
+[X] Add/update tests
+[X] Run frontend validation and update memory

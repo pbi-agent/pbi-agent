@@ -661,6 +661,13 @@
   color: var(--muted-foreground);
 }
 
+.workspace-tree__icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
 .workspace-tree__chevron {
   display: inline-flex;
   align-items: center;

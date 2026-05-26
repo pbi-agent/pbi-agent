@@ -3,9 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  FileTextIcon,
-  FolderIcon,
-  ImageIcon,
   RefreshCwIcon,
   XIcon,
 } from "lucide-react";
@@ -15,6 +12,15 @@ import {
   refreshWorkspaceFileTree,
 } from "../../api";
 import type { FileMentionItem } from "../../types";
+import {
+  getWorkspaceFileIcon,
+  getWorkspaceFolderIcon,
+  type WorkspaceTreeIcon,
+} from "../../lib/workspaceFileIcons";
+import {
+  workspaceFilePreviewQueryKey,
+  workspaceFileTreeQueryKey,
+} from "./workspaceFileTreeQueries";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -34,17 +40,6 @@ type TreeNode = {
   children: TreeNode[];
   item: FileMentionItem | null;
 };
-
-export function workspaceFileTreeQueryKey(workspaceKey: string | null | undefined) {
-  return ["workspace-file-tree", workspaceKey ?? null] as const;
-}
-
-export function workspaceFilePreviewQueryKey(
-  workspaceKey: string | null | undefined,
-  path: string | null,
-) {
-  return ["workspace-file-preview", workspaceKey ?? null, path] as const;
-}
 
 export function WorkspaceFileTreePanel({
   workspaceKey,
@@ -303,7 +298,10 @@ function TreeNodeView({
   onSelect: (path: string) => void;
 }) {
   if (node.item) {
-    const Icon = node.item.kind === "image" ? ImageIcon : FileTextIcon;
+    const icon = getWorkspaceFileIcon(
+      node.path,
+      node.item.kind === "image" ? "image" : undefined,
+    );
     return (
       <li role="treeitem" aria-selected={node.path === selectedPath}>
         <button
@@ -314,13 +312,14 @@ function TreeNodeView({
           onClick={() => onSelect(node.path)}
         >
           <span className="workspace-tree__chevron" aria-hidden="true" />
-          <Icon aria-hidden="true" />
+          <WorkspaceIcon icon={icon} />
           <span>{node.name}</span>
         </button>
       </li>
     );
   }
   const expanded = forceExpanded || expandedPaths.has(node.path);
+  const icon = getWorkspaceFolderIcon(node.path, expanded);
   return (
     <li role="treeitem" aria-expanded={expanded}>
       <button
@@ -332,7 +331,7 @@ function TreeNodeView({
         <span className="workspace-tree__chevron" aria-hidden="true">
           {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
         </span>
-        <FolderIcon aria-hidden="true" />
+        <WorkspaceIcon icon={icon} />
         <span>{node.name}</span>
       </button>
       {expanded && node.children.length > 0 ? (
@@ -351,6 +350,19 @@ function TreeNodeView({
         </ul>
       ) : null}
     </li>
+  );
+}
+
+function WorkspaceIcon({ icon }: { icon: WorkspaceTreeIcon }) {
+  return (
+    <img
+      className="workspace-tree__icon"
+      src={icon.url}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      data-icon-name={icon.iconName}
+    />
   );
 }
 

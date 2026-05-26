@@ -59,10 +59,8 @@ import { SessionTimeline } from "./SessionTimeline";
 import { UsageBar } from "./UsageBar";
 import { UserQuestionsPanel } from "./UserQuestionsPanel";
 import { Composer, type ComposerHandle } from "./Composer";
-import {
-  WorkspaceFileTreePanel,
-  workspaceFileTreeQueryKey,
-} from "./WorkspaceFileTreePanel";
+import { WorkspaceFileTreePanel } from "./WorkspaceFileTreePanel";
+import { workspaceFileTreeQueryKey } from "./workspaceFileTreeQueries";
 import { WorkspaceBadge } from "../WorkspaceBadge";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -1083,10 +1081,10 @@ export function SessionPage({
               minSize="25%"
               className="session-file-split__files"
             >
-            <WorkspaceFileTreePanel
-              workspaceKey={workspaceQueryKey}
-              onClose={() => setFileTreeOpen(false)}
-            />
+              <WorkspaceFileTreePanel
+                workspaceKey={workspaceQueryKey}
+                onClose={() => setFileTreeOpen(false)}
+              />
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : sessionPanel}

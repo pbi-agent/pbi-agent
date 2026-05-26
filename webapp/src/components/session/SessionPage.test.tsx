@@ -639,6 +639,10 @@ describe("SessionPage", () => {
     const fileTreeHeader = fileTreePanel.querySelector(".workspace-file-panel__header");
     expect(fileTreeHeader).not.toBeNull();
     expect(within(fileTreeHeader as HTMLElement).getByRole("searchbox", { name: "Search files" })).toBeInTheDocument();
+    const srcFolder = await screen.findByRole("button", { name: "src" });
+    const readmeFile = await screen.findByRole("button", { name: "README.md" });
+    expect(srcFolder.querySelector('img[data-icon-name="folder-src"]')).toBeInTheDocument();
+    expect(readmeFile.querySelector('img[data-icon-name="readme"]')).toBeInTheDocument();
     expect(screen.getByRole("separator", { name: "Resize file tree and preview" })).toBeInTheDocument();
     expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Close file tree" })).toHaveAttribute(
@@ -657,9 +661,13 @@ describe("SessionPage", () => {
     expect(refreshWorkspaceFileTree).toHaveBeenCalledTimes(1);
     const srcFolder = await screen.findByRole("button", { name: "src" });
     expect(screen.queryByRole("button", { name: "app.ts" })).not.toBeInTheDocument();
+    expect(srcFolder.querySelector('img[data-icon-name="folder-src"]')).toBeInTheDocument();
 
     await user.click(srcFolder);
-    await user.click(await screen.findByRole("button", { name: "app.ts" }));
+    expect(srcFolder.querySelector('img[data-icon-name="folder-src-open"]')).toBeInTheDocument();
+    const appFile = await screen.findByRole("button", { name: "app.ts" });
+    expect(appFile.querySelector('img[data-icon-name="typescript"]')).toBeInTheDocument();
+    await user.click(appFile);
 
     await waitFor(() => {
       expect(fetchWorkspaceFilePreview).toHaveBeenCalledWith("src/app.ts");
