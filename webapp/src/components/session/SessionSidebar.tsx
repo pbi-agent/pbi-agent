@@ -4,7 +4,6 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
-  SearchIcon,
   Trash2Icon,
 } from "lucide-react";
 import type { SessionRecord } from "../../types";
@@ -20,6 +19,7 @@ import {
 import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../shared/EmptyState";
+import { SidebarSearchField } from "./SidebarSearchField";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -133,17 +133,12 @@ export function SessionSidebar({
         </Button>
       </div>
 
-      <div className="session-sidebar__search">
-        <SearchIcon className="session-sidebar__search-icon" aria-hidden="true" />
-        <Input
-          type="search"
-          className="session-sidebar__search-input"
-          value={searchQuery}
-          onChange={(event) => onSearchQueryChange?.(event.target.value)}
-          placeholder="Search sessions"
-          aria-label="Search sessions"
-        />
-      </div>
+      <SidebarSearchField
+        value={searchQuery}
+        onChange={(nextQuery) => onSearchQueryChange?.(nextQuery)}
+        placeholder="Search sessions"
+        ariaLabel="Search sessions"
+      />
 
       <div className="session-sidebar__list">
         {isLoading ? (

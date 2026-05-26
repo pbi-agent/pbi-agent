@@ -483,11 +483,6 @@
   min-width: 0;
 }
 
-.workspace-file-panel__header-search [data-slot="input"] {
-  block-size: 2rem;
-  background: var(--background);
-}
-
 .workspace-file-panel__filters {
   display: flex;
   align-items: center;

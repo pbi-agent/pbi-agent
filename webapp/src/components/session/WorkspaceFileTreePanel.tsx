@@ -27,7 +27,6 @@ import { MarkdownContent } from "../shared/MarkdownContent";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { CodeBlock } from "../ui/code-block";
-import { Input } from "../ui/input";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -37,6 +36,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { Skeleton } from "../ui/skeleton";
 import { Toggle } from "../ui/toggle";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
+import { SidebarSearchField } from "./SidebarSearchField";
 
 type TreeNode = {
   name: string;
@@ -255,15 +255,13 @@ export function WorkspaceFileTreePanel({
             {treeQuery.data?.is_stale ? " · refreshing" : ""}
           </p>
         </div>
-        <div className="workspace-file-panel__header-search">
-          <Input
-            type="search"
-            aria-label="Search files"
-            placeholder="Search files..."
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-          />
-        </div>
+        <SidebarSearchField
+          className="workspace-file-panel__header-search"
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search files"
+          ariaLabel="Search files"
+        />
         <div className="workspace-file-panel__filters">
           <Toggle
             type="button"
