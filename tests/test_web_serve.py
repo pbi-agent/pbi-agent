@@ -647,6 +647,73 @@ def test_workspace_file_tree_refresh_and_preview(monkeypatch, tmp_path: Path) ->
         assert "new.txt" in {item["path"] for item in refreshed.json()["items"]}
 
 
+def test_workspace_file_tree_git_status_and_diff(monkeypatch, tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "tracked.txt").write_text("old\n", encoding="utf-8")
+    (workspace / "deleted.txt").write_text("bye\n", encoding="utf-8")
+    (workspace / "src").mkdir()
+    (workspace / "src" / "nested.txt").write_text("nested\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "init"],
+        cwd=workspace,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    subprocess.run(["git", "add", "."], cwd=workspace, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-m",
+            "initial",
+        ],
+        cwd=workspace,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    (workspace / "tracked.txt").write_text("new\n", encoding="utf-8")
+    (workspace / "deleted.txt").unlink()
+    (workspace / "src" / "untracked.txt").write_text("fresh\n", encoding="utf-8")
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        payload = client.post("/api/files/tree/refresh").json()
+        statuses = {item["path"]: item["git_status"] for item in payload["items"]}
+        assert payload["git_repository"] is True
+        assert payload["git_status_version"]
+        assert statuses["tracked.txt"] == "M"
+        assert statuses["deleted.txt"] == "D"
+        assert statuses["src/untracked.txt"] == "?"
+        first_version = payload["git_status_version"]
+
+        modified_diff = client.get(
+            "/api/files/diff",
+            params={"path": "tracked.txt"},
+        ).json()
+        assert modified_diff["error"] is None
+        assert "-old" in modified_diff["diff"]
+        assert "+new" in modified_diff["diff"]
+
+        untracked_diff = client.get(
+            "/api/files/diff",
+            params={"path": "src/untracked.txt"},
+        ).json()
+        assert untracked_diff["error"] is None
+        assert "--- /dev/null" in untracked_diff["diff"]
+        assert "+fresh" in untracked_diff["diff"]
+
+        (workspace / "tracked.txt").write_text("newer\n", encoding="utf-8")
+        changed_payload = client.post("/api/files/tree/refresh").json()
+        assert changed_payload["git_status_version"] != first_version
+
+
 def test_workspace_file_preview_safety_errors(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

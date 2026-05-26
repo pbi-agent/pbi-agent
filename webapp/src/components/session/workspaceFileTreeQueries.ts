@@ -8,3 +8,16 @@ export function workspaceFilePreviewQueryKey(
 ) {
   return ["workspace-file-preview", workspaceKey ?? null, path] as const;
 }
+
+export function workspaceFileDiffQueryKey(
+  workspaceKey: string | null | undefined,
+  path: string | null,
+  gitStatusVersion: string | null | undefined,
+) {
+  return [
+    "workspace-file-diff",
+    workspaceKey ?? null,
+    path,
+    gitStatusVersion ?? null,
+  ] as const;
+}

@@ -57,6 +57,8 @@ from pbi_agent.web.api.schemas.system import (
     SlashCommandSearchResponse,
     WorkspaceListResponse,
     WorkspaceFilePreviewResponse,
+    WorkspaceFileDiffResponse,
+    WorkspaceFileTreeItemModel,
     WorkspaceFileTreeResponse,
     WorkspacePickerResponse,
     WorkspaceRecordModel,
@@ -64,7 +66,8 @@ from pbi_agent.web.api.schemas.system import (
     WorkspaceSwitchResponse,
     UpdateSessionRequest,
 )
-from pbi_agent.web.input_mentions import expand_input_mentions
+from pbi_agent.web.git_files import workspace_git_diff, workspace_git_status
+from pbi_agent.web.input_mentions import WorkspaceFileTreePayload, expand_input_mentions
 from pbi_agent.web.session_manager import workspace_picker_available
 from pbi_agent.web.uploads import load_uploaded_image_record, uploaded_image_path
 
@@ -523,17 +526,7 @@ def search_file_mentions(
 @router.get("/files/tree", response_model=WorkspaceFileTreeResponse)
 def workspace_file_tree(manager: SessionManagerDep) -> WorkspaceFileTreeResponse:
     payload = manager.workspace_file_tree()
-    return WorkspaceFileTreeResponse(
-        items=[
-            FileMentionItemModel(path=item.path, kind=item.kind)
-            for item in payload.items
-        ],
-        scan_status=payload.scan_status,
-        is_stale=payload.is_stale,
-        file_count=payload.file_count,
-        truncated=payload.truncated,
-        error=payload.error,
-    )
+    return _workspace_file_tree_response(manager, payload)
 
 
 @router.post("/files/tree/refresh", response_model=WorkspaceFileTreeResponse)
@@ -541,17 +534,49 @@ def refresh_workspace_file_tree(
     manager: SessionManagerDep,
 ) -> WorkspaceFileTreeResponse:
     payload = manager.refresh_workspace_file_tree()
+    return _workspace_file_tree_response(manager, payload)
+
+
+def _workspace_file_tree_response(
+    manager: SessionManagerDep,
+    payload: WorkspaceFileTreePayload,
+) -> WorkspaceFileTreeResponse:
+    git_status = workspace_git_status(manager.workspace_root)
+    items_by_path = {
+        item.path: WorkspaceFileTreeItemModel(
+            path=item.path,
+            kind=item.kind,
+            git_status=git_status.statuses.get(item.path),
+        )
+        for item in payload.items
+    }
+    for path, status in git_status.statuses.items():
+        if path not in items_by_path:
+            items_by_path[path] = WorkspaceFileTreeItemModel(
+                path=path,
+                kind="file",
+                git_status=status,
+            )
     return WorkspaceFileTreeResponse(
-        items=[
-            FileMentionItemModel(path=item.path, kind=item.kind)
-            for item in payload.items
-        ],
+        items=sorted(items_by_path.values(), key=lambda item: item.path.lower()),
         scan_status=payload.scan_status,
         is_stale=payload.is_stale,
         file_count=payload.file_count,
         truncated=payload.truncated,
         error=payload.error,
+        git_repository=git_status.is_repository,
+        git_status_version=git_status.version,
+        git_status_error=git_status.error,
     )
+
+
+@router.get("/files/diff", response_model=WorkspaceFileDiffResponse)
+def diff_workspace_file(
+    manager: SessionManagerDep,
+    path: Annotated[str, Query(min_length=1, max_length=4096)],
+) -> WorkspaceFileDiffResponse:
+    diff = workspace_git_diff(manager.workspace_root, path)
+    return WorkspaceFileDiffResponse(path=diff.path, diff=diff.diff, error=diff.error)
 
 
 @router.get("/files/preview", response_model=WorkspaceFilePreviewResponse)

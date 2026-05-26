@@ -651,14 +651,13 @@ describe("SessionPage", () => {
     );
   });
 
-  it("refreshes and previews files from the file tree", async () => {
+  it("previews files from the auto-refreshing file tree", async () => {
     const user = userEvent.setup();
     renderSessionRoute("/sessions/session-1");
 
     await user.click(await screen.findByRole("button", { name: "Open file tree" }));
-    await user.click(await screen.findByRole("button", { name: "Refresh file tree" }));
 
-    expect(refreshWorkspaceFileTree).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Refresh file tree" })).not.toBeInTheDocument();
     const srcFolder = await screen.findByRole("button", { name: "src" });
     expect(screen.queryByRole("button", { name: "app.ts" })).not.toBeInTheDocument();
     expect(srcFolder.querySelector('img[data-icon-name="folder-src"]')).toBeInTheDocument();

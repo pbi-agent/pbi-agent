@@ -215,6 +215,12 @@ export type FileMentionItem = {
   kind: "file" | "image";
 };
 
+export type GitFileStatus = "M" | "A" | "D" | "R" | "U" | "?";
+
+export type WorkspaceFileTreeItem = FileMentionItem & {
+  git_status?: GitFileStatus | null;
+};
+
 export type FileMentionSearchPayload = {
   items: FileMentionItem[];
   scan_status: "idle" | "scanning" | "ready" | "failed";
@@ -223,8 +229,12 @@ export type FileMentionSearchPayload = {
   error: string | null;
 };
 
-export type WorkspaceFileTreePayload = FileMentionSearchPayload & {
+export type WorkspaceFileTreePayload = Omit<FileMentionSearchPayload, "items"> & {
+  items: WorkspaceFileTreeItem[];
   truncated: boolean;
+  git_repository?: boolean;
+  git_status_version?: string | null;
+  git_status_error?: string | null;
 };
 
 export type WorkspaceFilePreviewPayload = {
@@ -233,6 +243,18 @@ export type WorkspaceFilePreviewPayload = {
   size_bytes: number | null;
   truncated: boolean;
   error: "not_found" | "binary" | "too_large" | "outside_workspace" | "read_failed" | null;
+};
+
+export type WorkspaceFileDiffPayload = {
+  path: string;
+  diff: string | null;
+  error:
+    | "not_git_repository"
+    | "not_found"
+    | "binary"
+    | "outside_workspace"
+    | "git_failed"
+    | null;
 };
 
 export type SkillMentionItem = {

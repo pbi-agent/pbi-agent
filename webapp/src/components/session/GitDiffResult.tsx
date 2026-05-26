@@ -306,6 +306,11 @@ function parseV4aDiff(
     const metadataLineNumber = lineNumbers?.[index];
     if (rawLine.startsWith("@@")) {
       hunks += 1;
+      const hunkMatch = rawLine.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/);
+      if (hunkMatch) {
+        oldNumber = Number(hunkMatch[1]);
+        newNumber = Number(hunkMatch[2]);
+      }
       const anchor = rawLine.slice(2).trim();
       return {
         key,
@@ -315,7 +320,19 @@ function parseV4aDiff(
         newNumber: null,
       };
     }
-    if (rawLine.startsWith("***")) {
+    if (
+      rawLine.startsWith("***")
+      || rawLine.startsWith("diff --git ")
+      || rawLine.startsWith("index ")
+      || rawLine.startsWith("new file mode ")
+      || rawLine.startsWith("deleted file mode ")
+      || rawLine.startsWith("similarity index ")
+      || rawLine.startsWith("rename from ")
+      || rawLine.startsWith("rename to ")
+      || rawLine.startsWith("Binary files ")
+      || rawLine.startsWith("--- ")
+      || rawLine.startsWith("+++ ")
+    ) {
       return {
         key,
         kind: "meta",

@@ -1,26 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  RefreshCwIcon,
   XIcon,
 } from "lucide-react";
+import type { PanelImperativeHandle } from "react-resizable-panels";
 import {
+  fetchWorkspaceFileDiff,
   fetchWorkspaceFilePreview,
   fetchWorkspaceFileTree,
-  refreshWorkspaceFileTree,
 } from "../../api";
-import type { FileMentionItem } from "../../types";
+import type { GitFileStatus, WorkspaceFileTreeItem } from "../../types";
 import {
   getWorkspaceFileIcon,
   getWorkspaceFolderIcon,
   type WorkspaceTreeIcon,
 } from "../../lib/workspaceFileIcons";
 import {
+  workspaceFileDiffQueryKey,
   workspaceFilePreviewQueryKey,
   workspaceFileTreeQueryKey,
 } from "./workspaceFileTreeQueries";
+import { GitDiffResult } from "./GitDiffResult";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -33,13 +35,20 @@ import {
 } from "../ui/resizable";
 import { ScrollArea } from "../ui/scroll-area";
 import { Skeleton } from "../ui/skeleton";
+import { Toggle } from "../ui/toggle";
+import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 
 type TreeNode = {
   name: string;
   path: string;
   children: TreeNode[];
-  item: FileMentionItem | null;
+  item: WorkspaceFileTreeItem | null;
+  hasGitStatus: boolean;
 };
+
+type PreviewMode = "diff" | "raw";
+
+const PREVIEW_AUTO_MAX_PERCENT = 72;
 
 export function WorkspaceFileTreePanel({
   workspaceKey,
@@ -48,45 +57,115 @@ export function WorkspaceFileTreePanel({
   workspaceKey: string | null | undefined;
   onClose: () => void;
 }) {
-  const queryClient = useQueryClient();
+  const treeContainerRef = useRef<HTMLDivElement | null>(null);
+  const panelBodyRef = useRef<HTMLDivElement | null>(null);
+  const previewPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const selectedTreeScrollFrameRef = useRef<number | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedPathRevision, setSelectedPathRevision] = useState(0);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("raw");
   const [searchTerm, setSearchTerm] = useState("");
+  const [showChangedOnly, setShowChangedOnly] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
+  const [collapsedChangedPaths, setCollapsedChangedPaths] = useState<Set<string>>(() => new Set());
   const treeQueryKey = workspaceFileTreeQueryKey(workspaceKey);
   const treeQuery = useQuery({
     queryKey: treeQueryKey,
     queryFn: fetchWorkspaceFileTree,
-  });
-  const refreshMutation = useMutation({
-    mutationFn: refreshWorkspaceFileTree,
-    onSuccess: (payload) => {
-      queryClient.setQueryData(treeQueryKey, payload);
-    },
-  });
-  const previewQuery = useQuery({
-    queryKey: workspaceFilePreviewQueryKey(workspaceKey, selectedPath),
-    queryFn: () => fetchWorkspaceFilePreview(selectedPath!),
-    enabled: selectedPath !== null,
+    refetchInterval: 2000,
   });
   const items = useMemo(
     () => treeQuery.data?.items ?? [],
     [treeQuery.data?.items],
   );
+  const changedFileCount = useMemo(
+    () => items.filter((item) => item.git_status != null).length,
+    [items],
+  );
+  const selectedItem = useMemo(
+    () => items.find((item) => item.path === selectedPath) ?? null,
+    [items, selectedPath],
+  );
+  const selectedGitStatus = selectedItem?.git_status ?? null;
+  const selectedCanPreviewRaw = selectedGitStatus !== "D";
+  const selectedCanDiff = selectedGitStatus !== null;
+  const activePreviewMode = selectedCanDiff
+    ? (selectedCanPreviewRaw ? previewMode : "diff")
+    : "raw";
+  const previewQuery = useQuery({
+    queryKey: workspaceFilePreviewQueryKey(workspaceKey, selectedPath),
+    queryFn: () => fetchWorkspaceFilePreview(selectedPath!),
+    enabled: selectedPath !== null && activePreviewMode === "raw",
+  });
+  const gitStatusVersion = treeQuery.data?.git_status_version ?? null;
+  const diffQuery = useQuery({
+    queryKey: workspaceFileDiffQueryKey(workspaceKey, selectedPath, gitStatusVersion),
+    queryFn: () => fetchWorkspaceFileDiff(selectedPath!),
+    enabled: selectedPath !== null && activePreviewMode === "diff" && selectedCanDiff,
+  });
   const tree = useMemo(
     () => buildTree(items),
     [items],
   );
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const visibleTree = useMemo(
-    () => filterTree(tree, normalizedSearch),
-    [normalizedSearch, tree],
+  const gitStatusFilterDisabled = treeQuery.data != null && treeQuery.data.git_repository === false;
+  const effectiveShowChangedOnly = showChangedOnly && !gitStatusFilterDisabled;
+  const filteredByGitStatusTree = useMemo(
+    () => (effectiveShowChangedOnly ? filterChangedTree(tree) : tree),
+    [effectiveShowChangedOnly, tree],
   );
-  const isRefreshing = refreshMutation.isPending || treeQuery.isFetching;
+  const changedFolderPaths = useMemo(
+    () => collectFolderPaths(filteredByGitStatusTree),
+    [filteredByGitStatusTree],
+  );
+  const changedFolderPathSet = useMemo(
+    () => new Set(changedFolderPaths),
+    [changedFolderPaths],
+  );
+  const displayedExpandedPaths = useMemo(() => {
+    const paths = new Set(expandedPaths);
+    if (!effectiveShowChangedOnly) return paths;
+    for (const path of collapsedChangedPaths) {
+      paths.delete(path);
+    }
+    for (const path of changedFolderPaths) {
+      if (!collapsedChangedPaths.has(path)) {
+        paths.add(path);
+      }
+    }
+    return paths;
+  }, [
+    changedFolderPaths,
+    collapsedChangedPaths,
+    effectiveShowChangedOnly,
+    expandedPaths,
+  ]);
+  const visibleTree = useMemo(
+    () => filterTree(filteredByGitStatusTree, normalizedSearch),
+    [filteredByGitStatusTree, normalizedSearch],
+  );
+  const visibleEmptyMessage = effectiveShowChangedOnly
+    ? normalizedSearch.length > 0
+      ? "No matching changed files."
+      : "No changed files."
+    : "No matching files.";
   const scanStillRunning =
     treeQuery.data?.scan_status === "scanning" || treeQuery.data?.is_stale === true;
   const showInitialScan =
     (treeQuery.data?.scan_status === "scanning" || treeQuery.data?.is_stale === true)
     && tree.length === 0;
+  const scheduleSelectedTreeRowScroll = useCallback(() => {
+    if (selectedTreeScrollFrameRef.current !== null) {
+      cancelTreeScrollFrame(selectedTreeScrollFrameRef.current);
+    }
+    selectedTreeScrollFrameRef.current = requestTreeScrollFrame(() => {
+      selectedTreeScrollFrameRef.current = null;
+      const selectedRow = treeContainerRef.current?.querySelector<HTMLElement>(
+        '.workspace-tree__row--file[data-selected="true"]',
+      );
+      selectedRow?.scrollIntoView?.({ block: "start", inline: "nearest" });
+    });
+  }, []);
 
   useEffect(() => {
     if (!scanStillRunning || treeQuery.isFetching) return undefined;
@@ -96,10 +175,63 @@ export function WorkspaceFileTreePanel({
     return () => window.clearTimeout(timeoutId);
   }, [scanStillRunning, treeQuery]);
 
+  useEffect(() => () => {
+    if (selectedTreeScrollFrameRef.current !== null) {
+      cancelTreeScrollFrame(selectedTreeScrollFrameRef.current);
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    if (selectedPath === null) return;
+    scheduleSelectedTreeRowScroll();
+  }, [
+    scheduleSelectedTreeRowScroll,
+    selectedPath,
+    selectedPathRevision,
+  ]);
+
+  useLayoutEffect(() => {
+    if (selectedPath === null) return;
+    const panelBody = panelBodyRef.current;
+    const previewPanel = previewPanelRef.current;
+    if (!panelBody || !previewPanel) return;
+    const panelBodyHeight = getElementHeight(panelBody);
+    if (panelBodyHeight === null) return;
+    const previewSize = getAutoPreviewPanelSize(selectedPath, panelBodyHeight);
+    if (previewSize === null) return;
+    previewPanel.resize(previewSize);
+  }, [
+    activePreviewMode,
+    selectedPath,
+    selectedPathRevision,
+  ]);
+
   const togglePath = (path: string) => {
+    const isExpanded = displayedExpandedPaths.has(path);
+    if (effectiveShowChangedOnly && changedFolderPathSet.has(path)) {
+      setCollapsedChangedPaths((current) => {
+        const next = new Set(current);
+        if (isExpanded) {
+          next.add(path);
+        } else {
+          next.delete(path);
+        }
+        return next;
+      });
+      setExpandedPaths((current) => {
+        const next = new Set(current);
+        if (isExpanded) {
+          next.delete(path);
+        } else {
+          next.add(path);
+        }
+        return next;
+      });
+      return;
+    }
     setExpandedPaths((current) => {
       const next = new Set(current);
-      if (next.has(path)) {
+      if (isExpanded) {
         next.delete(path);
       } else {
         next.add(path);
@@ -132,20 +264,28 @@ export function WorkspaceFileTreePanel({
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
-        <div className="workspace-file-panel__actions">
-          <Button
+        <div className="workspace-file-panel__filters">
+          <Toggle
             type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="workspace-file-panel__action"
-            aria-label="Refresh file tree"
-            disabled={isRefreshing}
-            onClick={() => {
-              refreshMutation.mutate();
+            pressed={effectiveShowChangedOnly}
+            onPressedChange={(pressed) => {
+              setShowChangedOnly(pressed);
+              setCollapsedChangedPaths(new Set());
             }}
+            disabled={gitStatusFilterDisabled}
+            className="workspace-file-panel__changed-toggle"
+            aria-label={`Show changed files only (${changedFileCount} changed)`}
+            title={
+              gitStatusFilterDisabled
+                ? "Git status is unavailable for this workspace"
+                : "Show only files with git changes"
+            }
           >
-            <RefreshCwIcon aria-hidden="true" />
-          </Button>
+            <span>Changed</span>
+            <span className="workspace-file-panel__changed-count">{changedFileCount}</span>
+          </Toggle>
+        </div>
+        <div className="workspace-file-panel__actions">
           <Button
             type="button"
             variant="ghost"
@@ -158,11 +298,10 @@ export function WorkspaceFileTreePanel({
           </Button>
         </div>
       </header>
-      {treeQuery.error || refreshMutation.error || treeQuery.data?.error ? (
+      {treeQuery.error || treeQuery.data?.error ? (
         <Alert variant="destructive" className="workspace-file-panel__alert">
           <AlertDescription>
             {treeQuery.data?.error
-              ?? refreshMutation.error?.message
               ?? treeQuery.error?.message
               ?? "Unable to load file tree."}
           </AlertDescription>
@@ -171,6 +310,7 @@ export function WorkspaceFileTreePanel({
       <ResizablePanelGroup
         direction="vertical"
         className="workspace-file-panel__body"
+        elementRef={panelBodyRef}
       >
         <ResizablePanel
           id="workspace-file-tree-list"
@@ -178,7 +318,7 @@ export function WorkspaceFileTreePanel({
           minSize="10rem"
           className="workspace-file-panel__tree-panel"
         >
-          <div className="workspace-file-panel__tree">
+          <div className="workspace-file-panel__tree" ref={treeContainerRef}>
             <ScrollArea className="workspace-file-panel__tree-scroll" type="auto">
               {treeQuery.isPending || showInitialScan ? (
                 <div className="workspace-file-panel__skeleton" aria-label="Loading files">
@@ -189,7 +329,7 @@ export function WorkspaceFileTreePanel({
               ) : tree.length === 0 ? (
                 <p className="workspace-file-panel__empty">No files found.</p>
               ) : visibleTree.length === 0 ? (
-                <p className="workspace-file-panel__empty">No matching files.</p>
+                <p className="workspace-file-panel__empty">{visibleEmptyMessage}</p>
               ) : (
                 <ul className="workspace-tree" role="tree" aria-label="Workspace files">
                   {visibleTree.map((node) => (
@@ -197,10 +337,14 @@ export function WorkspaceFileTreePanel({
                       key={node.path}
                       node={node}
                       selectedPath={selectedPath}
-                      expandedPaths={expandedPaths}
+                      expandedPaths={displayedExpandedPaths}
                       forceExpanded={normalizedSearch.length > 0}
                       onToggle={togglePath}
-                      onSelect={setSelectedPath}
+                      onSelect={(path, gitStatus) => {
+                        setSelectedPath(path);
+                        setSelectedPathRevision((revision) => revision + 1);
+                        setPreviewMode(gitStatus === null ? "raw" : "diff");
+                      }}
                     />
                   ))}
                 </ul>
@@ -218,30 +362,86 @@ export function WorkspaceFileTreePanel({
           defaultSize="36%"
           minSize="8rem"
           className="workspace-file-panel__preview-panel"
+          panelRef={previewPanelRef}
         >
           <section className="workspace-file-panel__preview" aria-label="File preview">
             {selectedPath === null ? (
               <p className="workspace-file-panel__empty">Select a file to preview it.</p>
-            ) : previewQuery.isPending ? (
-              <div className="workspace-file-panel__skeleton" aria-label="Loading preview">
-                <Skeleton />
-                <Skeleton />
-              </div>
-            ) : previewQuery.error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{previewQuery.error.message}</AlertDescription>
-              </Alert>
-            ) : previewQuery.data?.error ? (
-              <PreviewErrorMessage error={previewQuery.data.error} />
             ) : (
               <>
                 <div className="workspace-file-panel__preview-heading">
-                  {selectedPath}
+                  <span>{selectedPath}</span>
+                  {selectedCanDiff && selectedCanPreviewRaw ? (
+                    <div className="workspace-file-panel__preview-actions">
+                      <ToggleGroup
+                        type="single"
+                        value={activePreviewMode}
+                        onValueChange={(value) => {
+                          if (value === "diff" || value === "raw") {
+                            setPreviewMode(value);
+                          }
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="workspace-file-panel__preview-mode-toggle"
+                        aria-label="Preview mode"
+                      >
+                        <ToggleGroupItem
+                          value="diff"
+                          className="workspace-file-panel__preview-mode-option"
+                        >
+                          Diff
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
+                          value="raw"
+                          className="workspace-file-panel__preview-mode-option"
+                        >
+                          Raw
+                        </ToggleGroupItem>
+                      </ToggleGroup>
+                    </div>
+                  ) : null}
                 </div>
-                <FilePreviewContent
-                  content={previewQuery.data?.content ?? ""}
-                  path={selectedPath}
-                />
+                {activePreviewMode === "diff" && selectedCanDiff ? (
+                  diffQuery.isPending ? (
+                    <div className="workspace-file-panel__skeleton" aria-label="Loading diff">
+                      <Skeleton />
+                      <Skeleton />
+                    </div>
+                  ) : diffQuery.error ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>{diffQuery.error.message}</AlertDescription>
+                    </Alert>
+                  ) : diffQuery.data?.error ? (
+                    <DiffErrorMessage error={diffQuery.data.error} />
+                  ) : (
+                    <GitDiffResult
+                      metadata={{
+                        tool_name: "apply_patch",
+                        path: selectedPath,
+                        diff: diffQuery.data?.diff ?? "",
+                        operation: operationForStatus(selectedGitStatus),
+                        success: true,
+                      }}
+                    />
+                  )
+                ) : previewQuery.isPending ? (
+                  <div className="workspace-file-panel__skeleton" aria-label="Loading preview">
+                    <Skeleton />
+                    <Skeleton />
+                  </div>
+                ) : previewQuery.error ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{previewQuery.error.message}</AlertDescription>
+                  </Alert>
+                ) : previewQuery.data?.error ? (
+                  <PreviewErrorMessage error={previewQuery.data.error} />
+                ) : (
+                  <FilePreviewContent
+                    content={previewQuery.data?.content ?? ""}
+                    path={selectedPath}
+                  />
+                )}
               </>
             )}
           </section>
@@ -295,7 +495,7 @@ function TreeNodeView({
   expandedPaths: Set<string>;
   forceExpanded: boolean;
   onToggle: (path: string) => void;
-  onSelect: (path: string) => void;
+  onSelect: (path: string, gitStatus: GitFileStatus | null) => void;
 }) {
   if (node.item) {
     const icon = getWorkspaceFileIcon(
@@ -308,12 +508,27 @@ function TreeNodeView({
           type="button"
           className="workspace-tree__row workspace-tree__row--file"
           data-selected={node.path === selectedPath ? "true" : undefined}
+          data-git-status={node.item.git_status ?? undefined}
           title={node.path}
-          onClick={() => onSelect(node.path)}
+          onClick={() => onSelect(node.path, node.item?.git_status ?? null)}
         >
           <span className="workspace-tree__chevron" aria-hidden="true" />
           <WorkspaceIcon icon={icon} />
-          <span>{node.name}</span>
+          <span
+            className="workspace-tree__name"
+            data-git-status={node.item.git_status ?? undefined}
+          >
+            {node.name}
+          </span>
+          {node.item.git_status ? (
+            <span
+              className="workspace-tree__git-marker workspace-tree__status"
+              data-status={node.item.git_status}
+              aria-label={`Git status ${node.item.git_status}`}
+            >
+              {node.item.git_status}
+            </span>
+          ) : null}
         </button>
       </li>
     );
@@ -332,7 +547,13 @@ function TreeNodeView({
           {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
         </span>
         <WorkspaceIcon icon={icon} />
-        <span>{node.name}</span>
+        <span className="workspace-tree__name">{node.name}</span>
+        {node.hasGitStatus ? (
+          <span
+            className="workspace-tree__git-marker workspace-tree__folder-dot"
+            aria-label="Contains git changes"
+          />
+        ) : null}
       </button>
       {expanded && node.children.length > 0 ? (
         <ul className="workspace-tree__group" role="group">
@@ -385,8 +606,69 @@ function PreviewErrorMessage({
   );
 }
 
-function buildTree(items: FileMentionItem[]): TreeNode[] {
-  const root: TreeNode = { name: "", path: "", children: [], item: null };
+function DiffErrorMessage({
+  error,
+}: {
+  error: "not_git_repository" | "not_found" | "binary" | "outside_workspace" | "git_failed";
+}) {
+  const message = {
+    not_git_repository: "This workspace is not a git repository.",
+    not_found: "No git diff is available for this file.",
+    binary: "Binary file diffs cannot be previewed.",
+    outside_workspace: "File is outside the workspace.",
+    git_failed: "Unable to read git diff for this file.",
+  }[error];
+  return (
+    <Alert>
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
+  );
+}
+
+function operationForStatus(status: GitFileStatus | null): string {
+  if (status === "A" || status === "?") return "create_file";
+  if (status === "R") return "move_file";
+  return "update_file";
+}
+
+export function getAutoPreviewPanelSize(
+  _content: string,
+  panelBodyHeightPx: number,
+): string | null {
+  if (!Number.isFinite(panelBodyHeightPx) || panelBodyHeightPx <= 0) return null;
+  return `${PREVIEW_AUTO_MAX_PERCENT}%`;
+}
+
+function getElementHeight(element: HTMLElement): number | null {
+  const rectHeight = element.getBoundingClientRect().height;
+  if (Number.isFinite(rectHeight) && rectHeight > 0) return rectHeight;
+  if (element.clientHeight > 0) return element.clientHeight;
+  return null;
+}
+
+function requestTreeScrollFrame(callback: FrameRequestCallback): number {
+  if (typeof window.requestAnimationFrame === "function") {
+    return window.requestAnimationFrame(callback);
+  }
+  return window.setTimeout(() => callback(window.performance.now()), 0);
+}
+
+function cancelTreeScrollFrame(frameId: number): void {
+  if (typeof window.cancelAnimationFrame === "function") {
+    window.cancelAnimationFrame(frameId);
+    return;
+  }
+  window.clearTimeout(frameId);
+}
+
+function buildTree(items: WorkspaceFileTreeItem[]): TreeNode[] {
+  const root: TreeNode = {
+    name: "",
+    path: "",
+    children: [],
+    item: null,
+    hasGitStatus: false,
+  };
   const directories = new Map<string, TreeNode>([["", root]]);
   for (const item of items) {
     const parts = item.path.split("/").filter(Boolean);
@@ -396,7 +678,13 @@ function buildTree(items: FileMentionItem[]): TreeNode[] {
       currentPath = currentPath ? `${currentPath}/${part}` : part;
       let directory = directories.get(currentPath);
       if (!directory) {
-        directory = { name: part, path: currentPath, children: [], item: null };
+        directory = {
+          name: part,
+          path: currentPath,
+          children: [],
+          item: null,
+          hasGitStatus: false,
+        };
         directories.set(currentPath, directory);
         parent.children.push(directory);
       }
@@ -404,10 +692,27 @@ function buildTree(items: FileMentionItem[]): TreeNode[] {
     }
     const name = parts.at(-1);
     if (!name) continue;
-    parent.children.push({ name, path: item.path, children: [], item });
+    parent.children.push({
+      name,
+      path: item.path,
+      children: [],
+      item,
+      hasGitStatus: item.git_status != null,
+    });
   }
+  updateFolderGitStatus(root);
   sortTree(root.children);
   return root.children;
+}
+
+function updateFolderGitStatus(node: TreeNode): boolean {
+  if (node.item) return node.hasGitStatus;
+  let hasChangedDescendant = false;
+  for (const child of node.children) {
+    hasChangedDescendant = updateFolderGitStatus(child) || hasChangedDescendant;
+  }
+  node.hasGitStatus = hasChangedDescendant;
+  return node.hasGitStatus;
 }
 
 function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
@@ -419,6 +724,24 @@ function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
     if (!matches && children.length === 0) return [];
     return [{ ...node, children }];
   });
+}
+
+function filterChangedTree(nodes: TreeNode[]): TreeNode[] {
+  return nodes.flatMap((node) => {
+    if (node.item) return node.hasGitStatus ? [node] : [];
+    if (!node.hasGitStatus) return [];
+    return [{ ...node, children: filterChangedTree(node.children) }];
+  });
+}
+
+function collectFolderPaths(nodes: TreeNode[]): string[] {
+  const paths: string[] = [];
+  for (const node of nodes) {
+    if (node.item) continue;
+    paths.push(node.path);
+    paths.push(...collectFolderPaths(node.children));
+  }
+  return paths;
 }
 
 function nodeMatches(node: TreeNode, query: string): boolean {

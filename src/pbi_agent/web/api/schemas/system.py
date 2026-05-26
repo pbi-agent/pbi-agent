@@ -29,6 +29,10 @@ class FileMentionItemModel(BaseModel):
     kind: Literal["file", "image"]
 
 
+class WorkspaceFileTreeItemModel(FileMentionItemModel):
+    git_status: Literal["M", "A", "D", "R", "U", "?"] | None = None
+
+
 ScanStatus = Literal["idle", "scanning", "ready", "failed"]
 
 
@@ -41,12 +45,15 @@ class FileMentionSearchResponse(BaseModel):
 
 
 class WorkspaceFileTreeResponse(BaseModel):
-    items: list[FileMentionItemModel]
+    items: list[WorkspaceFileTreeItemModel]
     scan_status: ScanStatus
     is_stale: bool
     file_count: int
     truncated: bool = False
     error: str | None = None
+    git_repository: bool = False
+    git_status_version: str | None = None
+    git_status_error: str | None = None
 
 
 PreviewError = Literal[
@@ -57,6 +64,14 @@ PreviewError = Literal[
     "read_failed",
 ]
 
+DiffError = Literal[
+    "not_git_repository",
+    "not_found",
+    "binary",
+    "outside_workspace",
+    "git_failed",
+]
+
 
 class WorkspaceFilePreviewResponse(BaseModel):
     path: str
@@ -64,6 +79,12 @@ class WorkspaceFilePreviewResponse(BaseModel):
     size_bytes: int | None = None
     truncated: bool = False
     error: PreviewError | None = None
+
+
+class WorkspaceFileDiffResponse(BaseModel):
+    path: str
+    diff: str | None = None
+    error: DiffError | None = None
 
 
 class SlashCommandItemModel(BaseModel):

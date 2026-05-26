@@ -349,9 +349,13 @@ export type WelcomeSseEventModel = { seq: number; created_at: string; type: "wel
 
 export type WelcomeSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; interactive: boolean; model?: string | null; reasoning_effort?: string | null; single_turn_hint?: string | null };
 
+export type WorkspaceFileDiffResponse = { path: string; diff?: string | null; error?: "not_git_repository" | "not_found" | "binary" | "outside_workspace" | "git_failed" | null };
+
 export type WorkspaceFilePreviewResponse = { path: string; content?: string | null; size_bytes?: number | null; truncated?: boolean; error?: "not_found" | "binary" | "too_large" | "outside_workspace" | "read_failed" | null };
 
-export type WorkspaceFileTreeResponse = { items: FileMentionItemModel[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; truncated?: boolean; error?: string | null };
+export type WorkspaceFileTreeItemModel = { path: string; kind: "file" | "image"; git_status?: "M" | "A" | "D" | "R" | "U" | "?" | null };
+
+export type WorkspaceFileTreeResponse = { items: WorkspaceFileTreeItemModel[]; scan_status: "idle" | "scanning" | "ready" | "failed"; is_stale: boolean; file_count: number; truncated?: boolean; error?: string | null; git_repository?: boolean; git_status_version?: string | null; git_status_error?: string | null };
 
 export type WorkspaceListResponse = { workspaces: WorkspaceRecordModel[]; picker_available: boolean };
 
@@ -404,6 +408,7 @@ export type ApiOperationResponses = {
   "GET /api/dashboard/stats": DashboardStatsResponse;
   "GET /api/events/sessions/{session_id}": unknown;
   "GET /api/events/{stream_id}": unknown;
+  "GET /api/files/diff": WorkspaceFileDiffResponse;
   "GET /api/files/preview": WorkspaceFilePreviewResponse;
   "GET /api/files/search": FileMentionSearchResponse;
   "GET /api/files/tree": WorkspaceFileTreeResponse;
@@ -520,6 +525,7 @@ export type ApiOperationQueryParams = {
   "GET /api/dashboard/stats": { start_date?: string | null; end_date?: string | null; scope?: string };
   "GET /api/events/sessions/{session_id}": { since?: number; live_session_id?: string | null };
   "GET /api/events/{stream_id}": { since?: number };
+  "GET /api/files/diff": { path: string };
   "GET /api/files/preview": { path: string };
   "GET /api/files/search": { q?: string; limit?: number };
   "GET /api/runs": { limit?: number; offset?: number; status?: string | null; provider?: string | null; model?: string | null; start_date?: string | null; end_date?: string | null; sort_by?: string; sort_dir?: string; scope?: string };

@@ -30,6 +30,7 @@ import type {
   DashboardStatsPayload,
   ExpandedSessionInput,
   FileMentionSearchPayload,
+  WorkspaceFileDiffPayload,
   WorkspaceFilePreviewPayload,
   WorkspaceFileTreePayload,
   ImageAttachment,
@@ -65,6 +66,7 @@ type LiveSessionResponsePayload = { session: LiveSession };
 type FileMentionSearchResponsePayload = FileMentionSearchPayload;
 type WorkspaceFileTreeResponsePayload = WorkspaceFileTreePayload;
 type WorkspaceFilePreviewResponsePayload = WorkspaceFilePreviewPayload;
+type WorkspaceFileDiffResponsePayload = WorkspaceFileDiffPayload;
 type SkillMentionSearchResponsePayload = SkillMentionSearchPayload;
 type SlashCommandSearchResponsePayload = { items: SlashCommandItem[] };
 type ImageUploadResponsePayload = { uploads: ImageAttachment[] };
@@ -423,6 +425,16 @@ export async function fetchWorkspaceFilePreview(
   return apiRequest<"GET /api/files/preview", WorkspaceFilePreviewResponsePayload>(
     "GET /api/files/preview",
     `/api/files/preview${params}`,
+  );
+}
+
+export async function fetchWorkspaceFileDiff(
+  path: string,
+): Promise<WorkspaceFileDiffPayload> {
+  const params = queryString("GET /api/files/diff", { path });
+  return apiRequest<"GET /api/files/diff", WorkspaceFileDiffResponsePayload>(
+    "GET /api/files/diff",
+    `/api/files/diff${params}`,
   );
 }
 
