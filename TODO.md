@@ -1,4 +1,4 @@
-[X] Expand preview pane to max auto height on file selection
-[X] Update focused preview sizing test
-[X] Run focused/full frontend validation
+[X] Fix leading **/ gitignore fallback matching
+[X] Add focused regression coverage
+[X] Run focused validation
 [X] Update memory

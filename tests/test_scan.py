@@ -47,6 +47,13 @@ def test_scan_workspace_files_excludes_gitignored_files_and_folders(
     (tmp_path / "build").mkdir()
     (tmp_path / "build" / "bundle.js").write_text("ignored\n", encoding="utf-8")
     (tmp_path / "kept.txt").write_text("kept\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "-f", "ignored.txt", "build/bundle.js"],
+        cwd=tmp_path,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
     result = scan_workspace_files(tmp_path)
 
@@ -69,6 +76,55 @@ def test_scan_workspace_files_fallback_walks_nested_non_git_workspace(
 
     assert result.error is None
     assert result.files == ["a/b/nested.txt"]
+
+
+def test_scan_workspace_files_fallback_honors_gitignore(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".gitignore").write_text(
+        "ignored.txt\nbuild/\n*.log\n!important.log\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "ignored.txt").write_text("ignored\n", encoding="utf-8")
+    (tmp_path / "debug.log").write_text("ignored\n", encoding="utf-8")
+    (tmp_path / "important.log").write_text("kept\n", encoding="utf-8")
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "bundle.js").write_text("ignored\n", encoding="utf-8")
+    (tmp_path / "kept.txt").write_text("kept\n", encoding="utf-8")
+
+    result = scan_workspace_files(tmp_path)
+
+    assert result.error is None
+    assert result.files == [".gitignore", "important.log", "kept.txt"]
+
+
+def test_scan_workspace_files_fallback_honors_leading_globstar_gitignore(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".gitignore").write_text(
+        "**/node_modules/\n**/docs/*.html\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "node_modules").mkdir()
+    (tmp_path / "node_modules" / "root.js").write_text("ignored\n", encoding="utf-8")
+    (tmp_path / "nested" / "node_modules").mkdir(parents=True)
+    (tmp_path / "nested" / "node_modules" / "dep.js").write_text(
+        "ignored\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "root.html").write_text("ignored\n", encoding="utf-8")
+    (tmp_path / "nested" / "docs").mkdir()
+    (tmp_path / "nested" / "docs" / "nested.html").write_text(
+        "ignored\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "kept.md").write_text("kept\n", encoding="utf-8")
+
+    result = scan_workspace_files(tmp_path)
+
+    assert result.error is None
+    assert result.files == [".gitignore", "docs/kept.md"]
 
 
 def test_scan_workspace_files_child_git_workspace_ignores_parent_gitignore(

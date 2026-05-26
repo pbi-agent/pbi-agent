@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from pbi_agent.web.git_ignore import filter_gitignored_paths
+
 GitFileStatus = Literal["M", "A", "D", "R", "U", "?"]
 GitDiffError = Literal[
     "not_git_repository",
@@ -72,10 +74,14 @@ def workspace_git_status(root: Path) -> GitStatusSnapshot:
         )
 
     statuses = _parse_porcelain_z(completed.stdout)
+    ignored_filtered_paths = filter_gitignored_paths(root, statuses)
+    filtered_statuses: dict[str, GitFileStatus] = {
+        path: statuses[path] for path in ignored_filtered_paths
+    }
     return GitStatusSnapshot(
         is_repository=True,
-        statuses=statuses,
-        version=_status_version(root, statuses),
+        statuses=filtered_statuses,
+        version=_status_version(root, filtered_statuses),
     )
 
 

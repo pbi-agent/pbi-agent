@@ -650,6 +650,8 @@ def test_workspace_file_tree_refresh_and_preview(monkeypatch, tmp_path: Path) ->
 def test_workspace_file_tree_git_status_and_diff(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
+    (workspace / ".gitignore").write_text("ignored-tracked.txt\n", encoding="utf-8")
+    (workspace / "ignored-tracked.txt").write_text("old ignored\n", encoding="utf-8")
     (workspace / "tracked.txt").write_text("old\n", encoding="utf-8")
     (workspace / "deleted.txt").write_text("bye\n", encoding="utf-8")
     (workspace / "src").mkdir()
@@ -661,6 +663,12 @@ def test_workspace_file_tree_git_status_and_diff(monkeypatch, tmp_path: Path) ->
         stdout=subprocess.DEVNULL,
     )
     subprocess.run(["git", "add", "."], cwd=workspace, check=True)
+    subprocess.run(
+        ["git", "add", "-f", "ignored-tracked.txt"],
+        cwd=workspace,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
     subprocess.run(
         [
             "git",
@@ -677,6 +685,7 @@ def test_workspace_file_tree_git_status_and_diff(monkeypatch, tmp_path: Path) ->
         stdout=subprocess.DEVNULL,
     )
     (workspace / "tracked.txt").write_text("new\n", encoding="utf-8")
+    (workspace / "ignored-tracked.txt").write_text("new ignored\n", encoding="utf-8")
     (workspace / "deleted.txt").unlink()
     (workspace / "src" / "untracked.txt").write_text("fresh\n", encoding="utf-8")
     monkeypatch.chdir(workspace)
@@ -691,6 +700,7 @@ def test_workspace_file_tree_git_status_and_diff(monkeypatch, tmp_path: Path) ->
         assert statuses["tracked.txt"] == "M"
         assert statuses["deleted.txt"] == "D"
         assert statuses["src/untracked.txt"] == "?"
+        assert "ignored-tracked.txt" not in statuses
         first_version = payload["git_status_version"]
 
         modified_diff = client.get(

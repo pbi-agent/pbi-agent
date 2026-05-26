@@ -197,6 +197,13 @@ def test_search_input_mentions_skips_gitignored_directories(tmp_path: Path) -> N
     (tmp_path / "node_modules").mkdir()
     (tmp_path / "node_modules" / "main.js").write_text("ignored\n", encoding="utf-8")
     (tmp_path / "main.py").write_text("print('hi')\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "-f", "node_modules/main.js"],
+        cwd=tmp_path,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 
     results = search_input_mentions("ma", root=tmp_path, limit=10)
 

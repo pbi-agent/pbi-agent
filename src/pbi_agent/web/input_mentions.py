@@ -17,7 +17,7 @@ FILE_MENTION_PATTERN = re.compile(r"@(?P<path>(?:\\.|[" + PATH_CHAR_CLASS + r"])
 EMAIL_PREFIX_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]$")
 IMAGE_FILE_SUFFIXES = frozenset({".jpeg", ".jpg", ".png", ".webp"})
 
-_MAX_WORKSPACE_FILES = 2_000
+_MAX_WORKSPACE_FILES = 10_000
 _MIN_FUZZY_SCORE = 15
 _MIN_FUZZY_RATIO = 0.4
 
