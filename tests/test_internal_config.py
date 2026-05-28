@@ -33,6 +33,7 @@ from pbi_agent.config import (
     load_internal_config_snapshot,
     normalize_slash_alias,
     parse_command_markdown,
+    parse_csv_setting,
     resolve_runtime,
     resolve_settings,
     resolve_web_runtime,
@@ -178,6 +179,8 @@ def test_list_command_configs_discovers_command_files(tmp_path: Path) -> None:
     assert commands[0].instructions == "# Fix GitHub Issue\n\nResolve the linked issue."
     assert commands[0].path == str(path.relative_to(tmp_path))
     assert commands[0].model_profile_id is None
+    assert commands[0].skills is None
+    assert commands[0].sub_agents is None
 
 
 def test_list_command_configs_parses_model_profile_frontmatter(
@@ -225,6 +228,55 @@ def test_list_command_configs_parses_allowed_tools_frontmatter(
     command = list_command_configs(tmp_path)[0]
 
     assert command.allowed_tools == ("read", "web", "shell")
+
+
+def test_list_command_configs_parses_skills_and_sub_agents_frontmatter(
+    tmp_path: Path,
+) -> None:
+    _write_command(
+        tmp_path,
+        "review.md",
+        "\n".join(
+            [
+                "---",
+                "name: review",
+                "description: Review safely.",
+                "skills: fastapi, shadcn",
+                "sub_agents: confidence-checker, fixer",
+                "---",
+                "",
+                "Review only.",
+            ]
+        ),
+    )
+
+    command = list_command_configs(tmp_path)[0]
+
+    assert command.skills == ("fastapi", "shadcn")
+    assert command.sub_agents == ("confidence-checker", "fixer")
+
+
+def test_parse_command_markdown_normalizes_skills_and_sub_agents_frontmatter() -> None:
+    _, metadata = parse_command_markdown(
+        "\n".join(
+            [
+                "---",
+                "name: review",
+                "description: Review safely.",
+                "skills: fastapi, shadcn",
+                "sub_agents: confidence-checker, fixer",
+                "---",
+                "",
+                "Review only.",
+            ]
+        )
+    )
+
+    assert parse_csv_setting(metadata.get("skills")) == ("fastapi", "shadcn")
+    assert parse_csv_setting(metadata.get("sub_agents")) == (
+        "confidence-checker",
+        "fixer",
+    )
 
 
 def test_list_command_configs_preserves_empty_allowed_tools_frontmatter(

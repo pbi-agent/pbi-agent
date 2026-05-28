@@ -46,6 +46,21 @@ import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
 
+function ConfigListBadge({
+  label,
+  items,
+}: {
+  label: string;
+  items: string[] | null;
+}) {
+  if (!items?.length) return null;
+  return (
+    <Badge size="meta" variant="outline">
+      {label}: {items.join(", ")}
+    </Badge>
+  );
+}
+
 function CommandCard({
   command,
   onPreview,
@@ -68,6 +83,9 @@ function CommandCard({
         <Badge size="meta" variant="secondary">
           {command.slash_alias}
         </Badge>
+        <ConfigListBadge label="Tools" items={command.allowed_tools} />
+        <ConfigListBadge label="Skills" items={command.skills} />
+        <ConfigListBadge label="Sub-agents" items={command.sub_agents} />
         {command.model_profile_id ? (
           <Badge size="meta" variant="outline">
             Profile: {command.model_profile_id}

@@ -869,6 +869,15 @@ class ConfigurationMixin:
             "instructions": command.instructions,
             "path": command.path,
             "model_profile_id": command.model_profile_id,
+            "allowed_tools": (
+                list(command.allowed_tools)
+                if command.allowed_tools is not None
+                else None
+            ),
+            "skills": list(command.skills) if command.skills is not None else None,
+            "sub_agents": (
+                list(command.sub_agents) if command.sub_agents is not None else None
+            ),
         }
 
     def _installed_command_views(self) -> list[dict[str, Any]]:
@@ -977,6 +986,14 @@ class ConfigurationMixin:
             "instructions": agent.system_prompt,
             "path": self._relative_workspace_path(agent.location),
             "model_profile_id": agent.model_profile_id,
+            "allowed_tools": (
+                list(agent.allowed_tools) if agent.allowed_tools is not None else None
+            ),
+            "skills": list(agent.skills) if agent.skills is not None else None,
+            "commands": list(agent.commands) if agent.commands is not None else None,
+            "sub_agents": (
+                list(agent.sub_agents) if agent.sub_agents is not None else None
+            ),
             "enabled": enabled,
         }
 

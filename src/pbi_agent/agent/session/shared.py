@@ -38,6 +38,7 @@ NEW_SESSION_SENTINEL = "__new_session__"
 RESUME_SESSION_PREFIX = "__resume_session__:"
 SUB_AGENT_MAX_REQUESTS = 400
 SUB_AGENT_MAX_ELAPSED_SECONDS = 1200.0
+SUB_AGENT_MAX_DEPTH = 2
 INTERACTIVE_ONLY_TOOLS = {"ask_user"}
 SUB_AGENT_DISABLED_TOOLS = {"sub_agent"} | INTERACTIVE_ONLY_TOOLS
 SKILLS_COMMAND = "/skills"
@@ -163,6 +164,8 @@ def _turn_instructions(
     excluded_tools: set[str] | None = None,
     cwd: Path | None = None,
     user_input: str | None = None,
+    visible_skill_names: tuple[str, ...] | None = None,
+    visible_agent_names: tuple[str, ...] | None = None,
     workspace_directory_key: str | None = None,
 ) -> str | None:
     if active_command_instructions is None:
@@ -173,7 +176,9 @@ def _turn_instructions(
         excluded_tools=excluded_tools,
         cwd=cwd,
         explicit_skill_names=extract_explicit_skill_names(user_input),
+        visible_skill_names=visible_skill_names,
         explicit_agent_names=extract_explicit_agent_names(user_input),
+        visible_agent_names=visible_agent_names,
         workspace_directory_key=workspace_directory_key,
     )
 

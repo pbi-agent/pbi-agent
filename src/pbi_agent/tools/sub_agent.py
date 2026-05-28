@@ -5,25 +5,50 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from pbi_agent.agent.reference_resolution import resolve_sub_agent_references
 from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 _DEFAULT_AGENT_TYPE = "default"
+_SUB_AGENT_MAX_DEPTH = 2
 
 
 def build_spec(
     workspace: Path | None = None,
     *,
     directory_key: str | None = None,
+    visible_agent_names: tuple[str, ...] | None = None,
 ) -> ToolSpec:
-    agent_type_values = [_DEFAULT_AGENT_TYPE]
-    agent_type_values.extend(
-        agent.name
-        for agent in discover_project_sub_agents(
-            workspace,
-            directory_key=directory_key,
+    if visible_agent_names is None:
+        agent_type_values = [_DEFAULT_AGENT_TYPE]
+        agent_type_values.extend(
+            agent.name
+            for agent in discover_project_sub_agents(
+                workspace,
+                directory_key=directory_key,
+            )
         )
+    else:
+        resolved_agents = (
+            resolve_sub_agent_references(
+                visible_agent_names,
+                workspace,
+                directory_key=directory_key,
+                strict=True,
+                source_label="Command frontmatter",
+            )
+            or ()
+        )
+        agent_type_values = [agent.name for agent in resolved_agents]
+    required = ["task_instruction"]
+    if visible_agent_names is not None:
+        required.append("agent_type")
+    agent_type_description = (
+        "Project sub-agent name to invoke. Use "
+        f"`{_DEFAULT_AGENT_TYPE}` for the built-in generalist sub-agent."
     )
+    if visible_agent_names is not None:
+        agent_type_description = "Project sub-agent name to invoke."
 
     return ToolSpec(
         name="sub_agent",
@@ -52,19 +77,27 @@ def build_spec(
                 "agent_type": {
                     "type": "string",
                     "enum": agent_type_values,
-                    "description": (
-                        "Project sub-agent name to invoke. Use "
-                        f"`{_DEFAULT_AGENT_TYPE}` for the built-in generalist sub-agent."
-                    ),
+                    "description": agent_type_description,
                 },
             },
-            "required": ["task_instruction"],
+            "required": required,
             "additionalProperties": False,
         },
     )
 
 
 SPEC = build_spec()
+
+
+def _agent_type_values(context: ToolContext) -> tuple[str, ...]:
+    spec = context.tool_catalog.get_spec("sub_agent") if context.tool_catalog else None
+    if spec is None:
+        return ()
+    agent_type = spec.parameters_schema.get("properties", {}).get("agent_type", {})
+    values = agent_type.get("enum", ())
+    if not isinstance(values, list):
+        return ()
+    return tuple(value for value in values if isinstance(value, str))
 
 
 def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -105,14 +138,51 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     parent_context = context.parent_context
     parent_tracer = context.tracer
 
-    if sub_agent_depth > 0:
+    if sub_agent_depth >= _SUB_AGENT_MAX_DEPTH:
         return {
             "status": "failed",
             "error": {
-                "type": "nested_sub_agent_disabled",
-                "message": "Nested sub-agent runs are disabled in this version.",
+                "type": "nested_sub_agent_depth_exceeded",
+                "message": f"Nested sub-agent runs are limited to depth {_SUB_AGENT_MAX_DEPTH}.",
             },
         }
+
+    allowed_agent_types = _agent_type_values(context)
+    scoped_agent_types = bool(allowed_agent_types) and (
+        _DEFAULT_AGENT_TYPE not in allowed_agent_types
+    )
+    if scoped_agent_types and (
+        agent_type is None or agent_type not in allowed_agent_types
+    ):
+        return {
+            "status": "failed",
+            "error": {
+                "type": "invalid_arguments",
+                "message": (
+                    "'agent_type' is required and must reference one of the "
+                    "configured project sub-agents."
+                ),
+            },
+        }
+
+    if sub_agent_depth > 0:
+        if (
+            not allowed_agent_types
+            or _DEFAULT_AGENT_TYPE in allowed_agent_types
+            or agent_type is None
+            or agent_type not in allowed_agent_types
+        ):
+            return {
+                "status": "failed",
+                "error": {
+                    "type": "nested_sub_agent_disabled",
+                    "message": (
+                        "Nested sub-agent runs are disabled unless the current "
+                        "project sub-agent frontmatter declares a scoped "
+                        "'sub_agents' list."
+                    ),
+                },
+            }
 
     if settings is None:
         return {

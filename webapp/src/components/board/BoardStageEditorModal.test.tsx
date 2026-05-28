@@ -74,6 +74,9 @@ const commands: CommandView[] = [
     instructions: "Plan first",
     path: ".agents/commands/plan.md",
     model_profile_id: null,
+    allowed_tools: null,
+    skills: null,
+    sub_agents: null,
   },
 ];
 

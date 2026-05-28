@@ -317,6 +317,8 @@ class CommandConfig:
     path: str = ""
     model_profile_id: str | None = None
     allowed_tools: tuple[str, ...] | None = None
+    skills: tuple[str, ...] | None = None
+    sub_agents: tuple[str, ...] | None = None
 
     def validate(self) -> None:
         self.id = slugify(self.id)
@@ -486,6 +488,8 @@ def list_command_configs(workspace: Path | None = None) -> list[CommandConfig]:
             path=str(command_path.relative_to(root)),
             model_profile_id=metadata.get("model_profile_id"),
             allowed_tools=parse_csv_setting(metadata.get("allowed_tools")),
+            skills=parse_csv_setting(metadata.get("skills")),
+            sub_agents=parse_csv_setting(metadata.get("sub_agents")),
         )
         try:
             command.validate()
@@ -520,6 +524,8 @@ def parse_command_markdown(content: str) -> tuple[str, dict[str, str]]:
                     "description",
                     "model_profile_id",
                     "allowed_tools",
+                    "skills",
+                    "sub_agents",
                 }
             ),
         )
@@ -544,6 +550,11 @@ def parse_command_markdown(content: str) -> tuple[str, dict[str, str]]:
     if isinstance(value, str):
         parsed = parse_csv_setting(value)
         metadata["allowed_tools"] = ",".join(parsed or ())
+    for key in ("skills", "sub_agents"):
+        value = metadata.get(key)
+        if isinstance(value, str):
+            parsed = parse_csv_setting(value)
+            metadata[key] = ",".join(parsed or ())
     try:
         _validate_allowed_tools(
             parse_csv_setting(metadata.get("allowed_tools")),

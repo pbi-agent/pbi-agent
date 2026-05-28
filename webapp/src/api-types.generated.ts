@@ -23,7 +23,7 @@ export type AgentMentionItemModel = { name: string; description: string; path: s
 
 export type AgentMentionSearchResponse = { items: AgentMentionItemModel[] };
 
-export type AgentViewModel = { id: string; name: string; description: string; instructions: string; path: string; model_profile_id: string | null; enabled: boolean };
+export type AgentViewModel = { id: string; name: string; description: string; instructions: string; path: string; model_profile_id: string | null; allowed_tools: string[] | null; skills: string[] | null; commands: string[] | null; sub_agents: string[] | null; enabled: boolean };
 
 export type AllRunsResponse = { runs: AllRunsRunModel[]; total_count: number };
 
@@ -59,7 +59,7 @@ export type CommandInstallResultViewModel = { command_id: string; slash_alias: s
 
 export type CommandListResponse = { commands: CommandViewModel[]; config_revision: string };
 
-export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string; model_profile_id: string | null };
+export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string; model_profile_id: string | null; allowed_tools: string[] | null; skills: string[] | null; sub_agents: string[] | null };
 
 export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; active_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 

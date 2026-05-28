@@ -32,6 +32,9 @@ class ProjectSubAgent:
     location: Path
     model_profile_id: str | None = None
     allowed_tools: tuple[str, ...] | None = None
+    skills: tuple[str, ...] | None = None
+    commands: tuple[str, ...] | None = None
+    sub_agents: tuple[str, ...] | None = None
 
 
 def format_project_sub_agents_markdown(
@@ -207,6 +210,9 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
         "description",
         "model_profile_id",
         "allowed_tools",
+        "skills",
+        "commands",
+        "sub_agents",
     }
     unsupported_keys = sorted(set(metadata) - supported_keys)
     if unsupported_keys:
@@ -231,6 +237,9 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
     from pbi_agent.config import ConfigError, parse_csv_setting
 
     allowed_tools = parse_csv_setting(metadata.get("allowed_tools"))
+    skills = parse_csv_setting(metadata.get("skills"))
+    commands = parse_csv_setting(metadata.get("commands"))
+    sub_agents = parse_csv_setting(metadata.get("sub_agents"))
     try:
         from pbi_agent.config import validate_allowed_tools
 
@@ -248,6 +257,9 @@ def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:
         location=agent_path.resolve(),
         model_profile_id=normalized_model_profile_id,
         allowed_tools=allowed_tools,
+        skills=skills,
+        commands=commands,
+        sub_agents=sub_agents,
     )
 
 

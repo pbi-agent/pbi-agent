@@ -206,6 +206,128 @@ def test_sub_agent_tool_blocks_nested_calls() -> None:
     assert result["error"]["type"] == "nested_sub_agent_disabled"
 
 
+def test_sub_agent_tool_rejects_nested_calls_at_depth_cap(tmp_path) -> None:
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "fixer.md").write_text(
+        "---\nname: fixer\ndescription: Fix code.\n---\n\nFix prompt.\n",
+        encoding="utf-8",
+    )
+
+    result = sub_agent_tool.handle(
+        {"task_instruction": "Inspect src", "agent_type": "fixer"},
+        ToolContext(
+            sub_agent_depth=2,
+            tool_catalog=ToolCatalog.from_builtin_registry(
+                tmp_path,
+                visible_sub_agent_names=("fixer",),
+            ),
+        ),
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"]["type"] == "nested_sub_agent_depth_exceeded"
+
+
+def test_sub_agent_tool_allows_scoped_nested_project_agent(
+    monkeypatch, tmp_path
+) -> None:
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "fixer.md").write_text(
+        "---\nname: fixer\ndescription: Fix code.\n---\n\nFix prompt.\n",
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_run_sub_agent_task(
+        task_instruction: str,
+        settings: Settings,
+        display,
+        *,
+        parent_session_usage: TokenUsage,
+        parent_turn_usage: TokenUsage,
+        sub_agent_depth: int = 0,
+        tool_catalog: ToolCatalog | None = None,
+        agent_type: str | None = None,
+        include_context: bool = False,
+        parent_tool_availability_overridden: bool = False,
+        parent_context: ParentContextSnapshot | None = None,
+        parent_tracer=None,
+        workspace_root=None,
+        workspace_directory_key=None,
+    ) -> dict[str, object]:
+        del (
+            settings,
+            display,
+            parent_session_usage,
+            parent_turn_usage,
+            tool_catalog,
+            include_context,
+            parent_tool_availability_overridden,
+            parent_context,
+            parent_tracer,
+            workspace_root,
+            workspace_directory_key,
+        )
+        captured["task_instruction"] = task_instruction
+        captured["sub_agent_depth"] = sub_agent_depth
+        captured["agent_type"] = agent_type
+        return {"status": "completed", "final_output": "done"}
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.run_sub_agent_task", fake_run_sub_agent_task
+    )
+
+    result = sub_agent_tool.handle(
+        {"task_instruction": "Fix lint", "agent_type": "fixer"},
+        ToolContext(
+            settings=Settings(api_key="test-key", provider="openai", model="gpt-5"),
+            display=_ParentDisplay(),
+            session_usage=TokenUsage(model="gpt-5"),
+            turn_usage=TokenUsage(model="gpt-5"),
+            sub_agent_depth=1,
+            tool_catalog=ToolCatalog.from_builtin_registry(
+                tmp_path,
+                visible_sub_agent_names=("fixer",),
+            ),
+        ),
+    )
+
+    assert result == {"status": "completed", "final_output": "done"}
+    assert captured == {
+        "task_instruction": "Fix lint",
+        "sub_agent_depth": 1,
+        "agent_type": "fixer",
+    }
+
+
+def test_sub_agent_tool_requires_agent_type_for_scoped_catalog(tmp_path) -> None:
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "fixer.md").write_text(
+        "---\nname: fixer\ndescription: Fix code.\n---\n\nFix prompt.\n",
+        encoding="utf-8",
+    )
+    tool_catalog = ToolCatalog.from_builtin_registry(
+        tmp_path,
+        visible_sub_agent_names=("fixer",),
+    )
+    sub_agent_spec = tool_catalog.get_spec("sub_agent")
+
+    assert sub_agent_spec is not None
+    assert "agent_type" in sub_agent_spec.parameters_schema["required"]
+
+    result = sub_agent_tool.handle(
+        {"task_instruction": "Fix lint"},
+        ToolContext(tool_catalog=tool_catalog),
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"]["type"] == "invalid_arguments"
+    assert "'agent_type' is required" in result["error"]["message"]
+
+
 def test_sub_agent_tool_passes_agent_type_to_runtime(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -570,6 +692,151 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
     assert isinstance(captured["settings"], Settings)
     assert captured["settings"].model == "gpt-5"
     assert captured["settings"].reasoning_effort == settings.reasoning_effort
+
+
+def test_run_sub_agent_task_scopes_project_agent_skills(tmp_path, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog=None,
+    ) -> _ProviderStub:
+        del settings, excluded_tools, tool_catalog
+        captured["system_prompt"] = system_prompt
+        return _ProviderStub()
+
+    skills_root = tmp_path / ".agents" / "skills"
+    for name, description in (
+        ("fastapi", "Build FastAPI routes."),
+        ("shadcn", "Build shadcn UI."),
+    ):
+        skill_dir = skills_root / name
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n",
+            encoding="utf-8",
+        )
+    agents_root = tmp_path / ".agents" / "agents"
+    agents_root.mkdir(parents=True)
+    (agents_root / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Review code.\n"
+        "skills: fastapi\n"
+        "---\n\n"
+        "You are a code reviewer.\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
+
+    result = run_sub_agent_task(
+        "Review the latest patch with $shadcn",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(workspace=tmp_path),
+        agent_type="reviewer",
+        workspace_root=tmp_path,
+    )
+
+    assert result["status"] == "completed"
+    assert "<name>fastapi</name>" in str(captured["system_prompt"])
+    assert "<name>shadcn</name>" not in str(captured["system_prompt"])
+
+
+def test_run_sub_agent_task_enables_scoped_nested_sub_agent_schema_and_prompt(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog=None,
+    ) -> _ProviderStub:
+        del settings
+        captured["system_prompt"] = system_prompt
+        captured["excluded_tools"] = excluded_tools
+        assert tool_catalog is not None
+        spec = tool_catalog.get_spec("sub_agent")
+        assert spec is not None
+        captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        return _ProviderStub()
+
+    agents_root = tmp_path / ".agents" / "agents"
+    agents_root.mkdir(parents=True)
+    (agents_root / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Review code.\n"
+        "sub_agents: fixer\n"
+        "---\n\n"
+        "You are a code reviewer.\n",
+        encoding="utf-8",
+    )
+    (agents_root / "fixer.md").write_text(
+        "---\nname: fixer\ndescription: Fix code.\n---\n\nYou fix code.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
+
+    result = run_sub_agent_task(
+        "Review the latest patch",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(tmp_path),
+        agent_type="reviewer",
+        workspace_root=tmp_path,
+    )
+
+    assert result["status"] == "completed"
+    assert captured["excluded_tools"] == {"ask_user"}
+    assert captured["enum"] == ["fixer"]
+    assert "<available_sub_agents>" in str(captured["system_prompt"])
+    assert "<name>fixer</name>" in str(captured["system_prompt"])
+    assert "<name>reviewer</name>" not in str(captured["system_prompt"])
+    assert "without `agent_type` for the default generalist" not in str(
+        captured["system_prompt"]
+    )
+
+
+def test_run_sub_agent_task_rejects_self_nested_sub_agent(tmp_path) -> None:
+    agents_root = tmp_path / ".agents" / "agents"
+    agents_root.mkdir(parents=True)
+    (agents_root / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Review code.\n"
+        "sub_agents: reviewer\n"
+        "---\n\n"
+        "You are a code reviewer.\n",
+        encoding="utf-8",
+    )
+
+    result = run_sub_agent_task(
+        "Review the latest patch",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(tmp_path),
+        agent_type="reviewer",
+        workspace_root=tmp_path,
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"]["type"] == "invalid_nested_sub_agents"
+    assert "cannot list itself" in result["error"]["message"]
 
 
 def test_run_sub_agent_task_uses_project_agent_model_profile(

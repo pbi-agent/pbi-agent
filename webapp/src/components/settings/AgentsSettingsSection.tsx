@@ -54,6 +54,21 @@ import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
 import { Switch } from "../ui/switch";
 
+function ConfigListBadge({
+  label,
+  items,
+}: {
+  label: string;
+  items: string[] | null;
+}) {
+  if (!items?.length) return null;
+  return (
+    <Badge size="meta" variant="outline">
+      {label}: {items.join(", ")}
+    </Badge>
+  );
+}
+
 function AgentCard({
   agent,
   onPreview,
@@ -84,6 +99,10 @@ function AgentCard({
         <div className="provider-card__subtitle">{agent.path}</div>
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
+        <ConfigListBadge label="Tools" items={agent.allowed_tools} />
+        <ConfigListBadge label="Skills" items={agent.skills} />
+        <ConfigListBadge label="Commands" items={agent.commands} />
+        <ConfigListBadge label="Sub-agents" items={agent.sub_agents} />
         {agent.model_profile_id ? (
           <Badge size="meta" variant="outline">
             Profile: {agent.model_profile_id}

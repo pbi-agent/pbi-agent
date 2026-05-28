@@ -36,11 +36,13 @@ class ToolCatalog:
         workspace: Path | None = None,
         *,
         directory_key: str | None = None,
+        visible_sub_agent_names: tuple[str, ...] | None = None,
     ) -> "ToolCatalog":
         entries: dict[str, ToolCatalogEntry] = {}
         for spec in registry.get_tool_specs(
             workspace=workspace,
             directory_key=directory_key,
+            visible_sub_agent_names=visible_sub_agent_names,
         ):
             handler = registry.get_tool_handler(spec.name)
             if handler is None:
@@ -65,6 +67,14 @@ class ToolCatalog:
                 continue
             merged[entry.spec.name] = entry
         return ToolCatalog(merged)
+
+    def with_spec(self, spec: ToolSpec) -> "ToolCatalog":
+        entry = self._entries.get(spec.name)
+        if entry is None:
+            return self
+        replaced = dict(self._entries)
+        replaced[spec.name] = ToolCatalogEntry(spec=spec, handler=entry.handler)
+        return ToolCatalog(replaced)
 
     def get_specs(self, *, excluded_names: set[str] | None = None) -> list[ToolSpec]:
         excluded = excluded_names or set()

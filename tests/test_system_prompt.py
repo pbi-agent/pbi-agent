@@ -8,7 +8,8 @@ import stat
 
 import pytest
 
-from pbi_agent.config import Settings
+from pbi_agent.config import CommandConfig, Settings
+from pbi_agent.agent.session.shared import _turn_instructions
 from pbi_agent.agent.system_prompt import (
     _MAX_FILE_BYTES,
     get_sub_agent_system_prompt,
@@ -22,6 +23,28 @@ def _assert_builtin_prompt_base(prompt: str) -> None:
     assert prompt.startswith("You are task assistant.")
     assert "<tool_usage_rules>" in prompt
     assert "</tool_usage_rules>" in prompt
+
+
+def _write_skill(tmp_path: Path, name: str, description: str) -> Path:
+    skill_dir = tmp_path / ".agents" / "skills" / name
+    skill_dir.mkdir(parents=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(
+        f"---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n",
+        encoding="utf-8",
+    )
+    return skill_path
+
+
+def _write_sub_agent(tmp_path: Path, name: str, description: str) -> Path:
+    agent_dir = tmp_path / ".agents" / "agents"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    agent_path = agent_dir / f"{name}.md"
+    agent_path.write_text(
+        f"---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n",
+        encoding="utf-8",
+    )
+    return agent_path
 
 
 # ---------------------------------------------------------------------------
@@ -163,15 +186,70 @@ def test_get_sub_agent_system_prompt_without_agents_md(tmp_path, monkeypatch):
     assert "<available_skills>" not in prompt
 
 
+def test_get_sub_agent_system_prompt_appends_component_commands_in_order(tmp_path):
+    prompt = get_sub_agent_system_prompt(
+        agent_prompt_override="Review implementation and tests.",
+        cwd=tmp_path,
+        component_commands=(
+            CommandConfig(
+                id="review",
+                name="Review",
+                slash_alias="/review",
+                description="Review command.",
+                instructions="First command body.",
+                model_profile_id="command-profile",
+                allowed_tools=("shell",),
+                skills=("fastapi",),
+                sub_agents=("fixer",),
+            ),
+            CommandConfig(
+                id="qa",
+                name="QA",
+                slash_alias="/qa",
+                description="QA command.",
+                instructions="Second command body.",
+            ),
+        ),
+    )
+
+    assert prompt.index("Review implementation and tests.") < prompt.index(
+        "<component_commands>"
+    )
+    assert prompt.index("First command body.") < prompt.index("Second command body.")
+    assert '<component_command name="Review" alias="/review">' in prompt
+    assert '<component_command name="QA" alias="/qa">' in prompt
+    assert "command-profile" not in prompt
+    assert "fastapi" not in prompt
+    assert "fixer" not in prompt
+
+
+def test_get_sub_agent_system_prompt_appends_component_commands_without_agent_body(
+    tmp_path,
+):
+    prompt = get_sub_agent_system_prompt(
+        agent_prompt_override="",
+        cwd=tmp_path,
+        component_commands=(
+            CommandConfig(
+                id="review",
+                name="Review",
+                slash_alias="/review",
+                description="Review command.",
+                instructions="Review command body.",
+            ),
+        ),
+    )
+
+    assert "<component_commands>" in prompt
+    assert "Review command body." in prompt
+    assert '<component_command name="Review" alias="/review">' in prompt
+
+
 def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
-    skill_dir = tmp_path / ".agents" / "skills" / "code-review"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\n"
-        "name: code-review\n"
-        "description: Review code changes before implementation.\n"
-        "---\n\n# Code Review\n",
-        encoding="utf-8",
+    skill_path = _write_skill(
+        tmp_path,
+        "code-review",
+        "Review code changes before implementation.",
     )
 
     monkeypatch.chdir(tmp_path)
@@ -184,7 +262,7 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
         "<description>Review code changes before implementation.</description>"
         in prompt
     )
-    assert f"<location>{skill_dir.joinpath('SKILL.md').resolve()}</location>" in prompt
+    assert f"<location>{skill_path.resolve()}</location>" in prompt
     assert "Project skills use progressive disclosure" in prompt
     assert "the user explicitly names it" in prompt
     assert "Treat `$<skill-name>` in user input as an explicit request" in prompt
@@ -193,6 +271,98 @@ def test_get_system_prompt_with_project_skills(tmp_path, monkeypatch):
         'load its SKILL.md with `explore_workspace` target="read" using the listed location'
         in prompt
     )
+
+
+def test_get_system_prompt_scopes_available_skills_to_command_skill_names(tmp_path):
+    _write_skill(tmp_path, "fastapi", "Build FastAPI routes.")
+    _write_skill(tmp_path, "shadcn", "Build shadcn UI.")
+
+    prompt = get_system_prompt(
+        cwd=tmp_path,
+        visible_skill_names=("fastapi",),
+        explicit_skill_names={"shadcn"},
+    )
+
+    assert "<available_skills>" in prompt
+    assert "<name>fastapi</name>" in prompt
+    assert "<name>shadcn</name>" not in prompt
+
+
+def test_get_system_prompt_warns_and_omits_missing_command_skill(
+    tmp_path,
+    capsys,
+):
+    _write_skill(tmp_path, "fastapi", "Build FastAPI routes.")
+
+    prompt = get_system_prompt(
+        cwd=tmp_path,
+        visible_skill_names=("fastapi", "missing-skill"),
+    )
+
+    assert "<name>fastapi</name>" in prompt
+    assert "missing-skill" not in prompt
+    assert (
+        "Command frontmatter references unavailable or disabled skill "
+        "'missing-skill'; omitting." in capsys.readouterr().err
+    )
+
+
+def test_get_sub_agent_system_prompt_scopes_available_skills_to_agent_skill_names(
+    tmp_path,
+):
+    _write_skill(tmp_path, "fastapi", "Build FastAPI routes.")
+    _write_skill(tmp_path, "shadcn", "Build shadcn UI.")
+
+    prompt = get_sub_agent_system_prompt(
+        cwd=tmp_path,
+        visible_skill_names=("fastapi",),
+        explicit_skill_names={"shadcn"},
+        skill_source_label="Sub-agent 'reviewer' frontmatter",
+    )
+
+    assert "<available_skills>" in prompt
+    assert "<name>fastapi</name>" in prompt
+    assert "<name>shadcn</name>" not in prompt
+
+
+def test_get_sub_agent_system_prompt_warns_and_omits_missing_agent_skill(
+    tmp_path,
+    capsys,
+):
+    _write_skill(tmp_path, "fastapi", "Build FastAPI routes.")
+
+    prompt = get_sub_agent_system_prompt(
+        cwd=tmp_path,
+        visible_skill_names=("fastapi", "missing-skill"),
+        skill_source_label="Sub-agent 'reviewer' frontmatter",
+    )
+
+    assert "<name>fastapi</name>" in prompt
+    assert "missing-skill" not in prompt
+    assert (
+        "Sub-agent 'reviewer' frontmatter references unavailable or disabled "
+        "skill 'missing-skill'; omitting." in capsys.readouterr().err
+    )
+
+
+def test_turn_instructions_scope_command_skills_and_ignore_external_mentions(
+    tmp_path,
+):
+    _write_skill(tmp_path, "fastapi", "Build FastAPI routes.")
+    _write_skill(tmp_path, "shadcn", "Build shadcn UI.")
+
+    instructions = _turn_instructions(
+        "Review implementation.",
+        settings=Settings(api_key="test-key", provider="openai"),
+        cwd=tmp_path,
+        user_input="/review please use $shadcn",
+        visible_skill_names=("fastapi",),
+    )
+
+    assert instructions is not None
+    assert "<active_command>\nReview implementation.\n</active_command>" in instructions
+    assert "<name>fastapi</name>" in instructions
+    assert "<name>shadcn</name>" not in instructions
 
 
 def test_disabled_project_skill_is_hidden_unless_explicitly_tagged(
@@ -295,6 +465,46 @@ def test_get_system_prompt_with_project_sub_agents(tmp_path, monkeypatch):
     assert "<name>code-reviewer</name>" in prompt
     assert "<description>Review code changes before merging.</description>" in prompt
     assert "call `sub_agent` with `agent_type`" in prompt
+
+
+def test_get_system_prompt_scopes_available_sub_agents_to_command_names(tmp_path):
+    _write_sub_agent(tmp_path, "reviewer", "Review code changes.")
+    _write_sub_agent(tmp_path, "fixer", "Fix code changes.")
+
+    prompt = get_system_prompt(
+        cwd=tmp_path,
+        visible_agent_names=("reviewer",),
+        explicit_agent_names={"fixer"},
+    )
+
+    assert "<available_sub_agents>" in prompt
+    assert "<name>reviewer</name>" in prompt
+    assert "<name>fixer</name>" not in prompt
+    assert "without `agent_type` for the default generalist" not in prompt
+    assert (
+        "with `agent_type` set to one of the available project sub-agent names"
+        in prompt
+    )
+
+
+def test_turn_instructions_scope_command_sub_agents_and_ignore_external_mentions(
+    tmp_path,
+):
+    _write_sub_agent(tmp_path, "reviewer", "Review code changes.")
+    _write_sub_agent(tmp_path, "fixer", "Fix code changes.")
+
+    instructions = _turn_instructions(
+        "Review implementation.",
+        settings=Settings(api_key="test-key", provider="openai"),
+        cwd=tmp_path,
+        user_input="/review please use @fixer",
+        visible_agent_names=("reviewer",),
+    )
+
+    assert instructions is not None
+    assert "<active_command>\nReview implementation.\n</active_command>" in instructions
+    assert "<name>reviewer</name>" in instructions
+    assert "<name>fixer</name>" not in instructions
 
 
 def test_disabled_project_sub_agent_is_hidden_unless_explicitly_tagged(tmp_path):

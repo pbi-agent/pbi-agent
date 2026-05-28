@@ -335,6 +335,9 @@ class CommandViewModel(BaseModel):
     instructions: str
     path: str
     model_profile_id: str | None
+    allowed_tools: list[str] | None
+    skills: list[str] | None
+    sub_agents: list[str] | None
 
 
 class CommandListResponse(BaseModel):
@@ -443,6 +446,10 @@ class AgentViewModel(BaseModel):
     instructions: str
     path: str
     model_profile_id: str | None
+    allowed_tools: list[str] | None
+    skills: list[str] | None
+    commands: list[str] | None
+    sub_agents: list[str] | None
     enabled: bool
 
 

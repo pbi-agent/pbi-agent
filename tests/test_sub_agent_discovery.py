@@ -129,6 +129,51 @@ def test_discovers_allowed_tools(tmp_path: Path) -> None:
     assert agents[0].allowed_tools == ("read", "web", "shell")
 
 
+def test_discovers_composable_frontmatter_lists(tmp_path: Path) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "reviewer.md",
+        (
+            "---\n"
+            "name: reviewer\n"
+            "description: Reviews code changes.\n"
+            "skills: fastapi, shadcn\n"
+            "commands: review, qa\n"
+            "sub_agents: confidence-checker, fixer\n"
+            "---\n\n"
+            "Review prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert len(agents) == 1
+    assert agents[0].skills == ("fastapi", "shadcn")
+    assert agents[0].commands == ("review", "qa")
+    assert agents[0].sub_agents == ("confidence-checker", "fixer")
+
+
+def test_absent_composable_frontmatter_lists_remain_none(tmp_path: Path) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "reviewer.md",
+        (
+            "---\n"
+            "name: reviewer\n"
+            "description: Reviews code changes.\n"
+            "---\n\n"
+            "Review prompt.\n"
+        ),
+    )
+
+    agents = discover_project_sub_agents(tmp_path)
+
+    assert len(agents) == 1
+    assert agents[0].skills is None
+    assert agents[0].commands is None
+    assert agents[0].sub_agents is None
+
+
 def test_skips_unknown_builtin_tool_availability(tmp_path: Path, capsys) -> None:
     _write_sub_agent(
         tmp_path,

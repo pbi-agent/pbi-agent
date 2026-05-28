@@ -381,8 +381,13 @@ def test_open_runtime_provider_passes_command_reservations(
         def __exit__(self, *_: object) -> None:
             return None
 
-        def to_tool_catalog(self, *, directory_key: str | None = None) -> ToolCatalog:
-            del directory_key
+        def to_tool_catalog(
+            self,
+            *,
+            directory_key: str | None = None,
+            visible_sub_agent_names: tuple[str, ...] | None = None,
+        ) -> ToolCatalog:
+            del directory_key, visible_sub_agent_names
             return ToolCatalog().merged(
                 [
                     ToolCatalogEntry(
@@ -457,8 +462,13 @@ def test_open_runtime_provider_binds_command_reservations_to_workspace(
         def __exit__(self, *_: object) -> None:
             return None
 
-        def to_tool_catalog(self, *, directory_key: str | None = None) -> ToolCatalog:
-            del directory_key
+        def to_tool_catalog(
+            self,
+            *,
+            directory_key: str | None = None,
+            visible_sub_agent_names: tuple[str, ...] | None = None,
+        ) -> ToolCatalog:
+            del directory_key, visible_sub_agent_names
             return ToolCatalog()
 
     class _ProviderStub:
@@ -517,8 +527,13 @@ def test_reserved_slash_extension_names_include_active_mcp_tools(
         def __exit__(self, *_: object) -> None:
             return None
 
-        def to_tool_catalog(self, *, directory_key: str | None = None) -> ToolCatalog:
-            del directory_key
+        def to_tool_catalog(
+            self,
+            *,
+            directory_key: str | None = None,
+            visible_sub_agent_names: tuple[str, ...] | None = None,
+        ) -> ToolCatalog:
+            del directory_key, visible_sub_agent_names
             return ToolCatalog().merged(
                 [
                     ToolCatalogEntry(
@@ -676,7 +691,13 @@ def test_slash_search_excludes_extensions_that_collide_with_active_mcp_tools(
         def __exit__(self, *_: object) -> None:
             return None
 
-        def to_tool_catalog(self, *, directory_key: str | None = None) -> ToolCatalog:
+        def to_tool_catalog(
+            self,
+            *,
+            directory_key: str | None = None,
+            visible_sub_agent_names: tuple[str, ...] | None = None,
+        ) -> ToolCatalog:
+            del directory_key, visible_sub_agent_names
             return ToolCatalog().merged(
                 [
                     ToolCatalogEntry(

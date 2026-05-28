@@ -210,6 +210,30 @@ def test_builtin_tool_catalog_sub_agent_schema_uses_explicit_workspace(
     ]
 
 
+def test_builtin_tool_catalog_sub_agent_schema_scopes_visible_agents(
+    tmp_path,
+) -> None:
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "reviewer.md").write_text(
+        "---\nname: reviewer\ndescription: Reviews code.\n---\n\nReview prompt.\n",
+        encoding="utf-8",
+    )
+    (agents_dir / "fixer.md").write_text(
+        "---\nname: fixer\ndescription: Fixes code.\n---\n\nFix prompt.\n",
+        encoding="utf-8",
+    )
+
+    catalog = ToolCatalog.from_builtin_registry(
+        tmp_path,
+        visible_sub_agent_names=("reviewer",),
+    )
+    spec = catalog.get_spec("sub_agent")
+
+    assert spec is not None
+    assert spec.parameters_schema["properties"]["agent_type"]["enum"] == ["reviewer"]
+
+
 def test_runtime_provider_sub_agent_schema_uses_explicit_workspace(
     tmp_path, monkeypatch
 ) -> None:
@@ -342,3 +366,107 @@ def test_runtime_provider_sub_agent_schema_includes_explicit_disabled_agent(
         pass
 
     assert captured["enum"] == ["default", "reviewer"]
+
+
+def test_runtime_provider_sub_agent_schema_scopes_visible_agents(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "reviewer.md").write_text(
+        "---\nname: reviewer\ndescription: Reviews code.\n---\n\nReview prompt.\n",
+        encoding="utf-8",
+    )
+    (agents_dir / "fixer.md").write_text(
+        "---\nname: fixer\ndescription: Fixes code.\n---\n\nFix prompt.\n",
+        encoding="utf-8",
+    )
+    captured: dict[str, Any] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
+    ) -> _ProviderContextStub:
+        del system_prompt, excluded_tools
+        assert tool_catalog is not None
+        spec = tool_catalog.get_spec("sub_agent")
+        assert spec is not None
+        captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        return _ProviderContextStub(settings)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.runtime.create_provider",
+        fake_create_provider,
+    )
+
+    with _open_runtime_provider(
+        Settings(api_key="test-key", provider="openai"),
+        workspace_root=tmp_path,
+        visible_sub_agent_names=("reviewer",),
+    ):
+        pass
+
+    assert captured["enum"] == ["reviewer"]
+
+
+def test_runtime_provider_replaces_reused_catalog_sub_agent_schema_when_scoped(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    agents_dir = tmp_path / ".agents" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "reviewer.md").write_text(
+        "---\nname: reviewer\ndescription: Reviews code.\n---\n\nReview prompt.\n",
+        encoding="utf-8",
+    )
+    (agents_dir / "fixer.md").write_text(
+        "---\nname: fixer\ndescription: Fixes code.\n---\n\nFix prompt.\n",
+        encoding="utf-8",
+    )
+    reused_catalog = ToolCatalog.from_builtin_registry(tmp_path)
+    original_spec = reused_catalog.get_spec("sub_agent")
+    assert original_spec is not None
+    assert original_spec.parameters_schema["properties"]["agent_type"]["enum"] == [
+        "default",
+        "fixer",
+        "reviewer",
+    ]
+    captured: dict[str, Any] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
+    ) -> _ProviderContextStub:
+        del system_prompt, excluded_tools
+        assert tool_catalog is not None
+        spec = tool_catalog.get_spec("sub_agent")
+        assert spec is not None
+        captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        return _ProviderContextStub(settings)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.runtime.create_provider",
+        fake_create_provider,
+    )
+
+    with _open_runtime_provider(
+        Settings(api_key="test-key", provider="openai"),
+        tool_catalog=reused_catalog,
+        workspace_root=tmp_path,
+        visible_sub_agent_names=("reviewer",),
+    ):
+        pass
+
+    assert captured["enum"] == ["reviewer"]
+    assert original_spec.parameters_schema["properties"]["agent_type"]["enum"] == [
+        "default",
+        "fixer",
+        "reviewer",
+    ]

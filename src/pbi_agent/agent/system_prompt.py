@@ -5,6 +5,10 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pbi_agent.agent.reference_resolution import (
+    resolve_skill_references,
+    resolve_sub_agent_references,
+)
 from pbi_agent.agent.sub_agent_discovery import discover_project_sub_agents
 from pbi_agent.agent.skill_discovery import discover_project_skills
 from pbi_agent.tools.availability import (
@@ -15,7 +19,7 @@ from pbi_agent.tools.availability import (
 from pbi_agent.tools.registry import get_tool_specs
 
 if TYPE_CHECKING:
-    from pbi_agent.config import Settings
+    from pbi_agent.config import CommandConfig, Settings
 
 _DEFAULT_SYSTEM_PROMPT_PREAMBLE = """
 You are task assistant. Treat every user task/question as workspace-related: inspect context and use available tools to achieve the outcome.
@@ -181,13 +185,26 @@ def _append_available_skills(
     cwd: Path | None = None,
     *,
     explicit_skill_names: set[str] | None = None,
+    visible_skill_names: tuple[str, ...] | None = None,
+    source_label: str = "Command frontmatter",
     workspace_directory_key: str | None = None,
 ) -> str:
-    skills = discover_project_skills(
-        cwd,
-        explicit_skill_names=explicit_skill_names,
-        directory_key=workspace_directory_key,
-    )
+    if visible_skill_names is None:
+        skills = discover_project_skills(
+            cwd,
+            explicit_skill_names=explicit_skill_names,
+            directory_key=workspace_directory_key,
+        )
+    else:
+        skills = list(
+            resolve_skill_references(
+                visible_skill_names,
+                cwd,
+                directory_key=workspace_directory_key,
+                source_label=source_label,
+            )
+            or ()
+        )
     if not skills:
         return base_prompt
 
@@ -225,13 +242,27 @@ def _append_available_sub_agents(
     cwd: Path | None = None,
     *,
     explicit_agent_names: set[str] | None = None,
+    visible_agent_names: tuple[str, ...] | None = None,
+    source_label: str = "Command frontmatter",
     workspace_directory_key: str | None = None,
 ) -> str:
-    agents = discover_project_sub_agents(
-        cwd,
-        explicit_agent_names=explicit_agent_names,
-        directory_key=workspace_directory_key,
-    )
+    if visible_agent_names is None:
+        agents = discover_project_sub_agents(
+            cwd,
+            explicit_agent_names=explicit_agent_names,
+            directory_key=workspace_directory_key,
+        )
+    else:
+        agents = list(
+            resolve_sub_agent_references(
+                visible_agent_names,
+                cwd,
+                directory_key=workspace_directory_key,
+                strict=True,
+                source_label=source_label,
+            )
+            or ()
+        )
     if not agents:
         return base_prompt
 
@@ -248,10 +279,15 @@ def _append_available_sub_agents(
     catalog_lines.append("</available_sub_agents>")
     catalog = "\n".join(catalog_lines)
 
-    instructions = """
+    default_rule = (
+        "- Use `sub_agent` without `agent_type` for the default generalist sub-agent."
+        if visible_agent_names is None
+        else "- Use `sub_agent` with `agent_type` set to one of the available project sub-agent names below."
+    )
+    instructions = f"""
 <sub_agent_loading_rules>
 The `sub_agent` tool is available for delegated work.
-- Use `sub_agent` without `agent_type` for the default generalist sub-agent.
+{default_rule}
 - When a task matches one of the available project sub-agents below, call `sub_agent` with `agent_type` set to that sub-agent's `name`.
 - Treat `@<agent-name> (agent)` and `@<agent-name>` in user input as explicit requests to call that named sub-agent.
 - Project sub-agents are isolated by default. Set `include_context` to `true` when the child should inherit the parent conversation context.
@@ -273,6 +309,35 @@ def _append_active_command(
     return f"{base_prompt}\n\n<active_command>\n{instructions}\n</active_command>"
 
 
+def _append_component_commands(
+    base_prompt: str,
+    commands: Iterable["CommandConfig"] | None = None,
+) -> str:
+    if commands is None:
+        return base_prompt
+    sections: list[str] = []
+    for command in commands:
+        instructions = command.instructions.strip()
+        if not instructions:
+            continue
+        sections.extend(
+            [
+                f'<component_command name="{command.name}" alias="{command.slash_alias}">',
+                instructions,
+                "</component_command>",
+            ]
+        )
+    if not sections:
+        return base_prompt
+    command_sections = "\n\n".join(sections)
+    return (
+        f"{base_prompt}\n\n"
+        "<component_commands>\n"
+        f"{command_sections}\n"
+        "</component_commands>"
+    )
+
+
 def get_system_prompt(
     active_command_instructions: str | None = None,
     *,
@@ -280,6 +345,8 @@ def get_system_prompt(
     excluded_tools: Iterable[str] | None = None,
     cwd: Path | None = None,
     explicit_skill_names: set[str] | None = None,
+    visible_skill_names: tuple[str, ...] | None = None,
+    visible_agent_names: tuple[str, ...] | None = None,
     explicit_agent_names: set[str] | None = None,
     workspace_directory_key: str | None = None,
 ) -> str:
@@ -298,6 +365,7 @@ def get_system_prompt(
             prompt,
             cwd,
             explicit_skill_names=explicit_skill_names,
+            visible_skill_names=visible_skill_names,
             workspace_directory_key=workspace_directory_key,
         )
     if "sub_agent" in active_names:
@@ -305,6 +373,7 @@ def get_system_prompt(
             prompt,
             cwd,
             explicit_agent_names=explicit_agent_names,
+            visible_agent_names=visible_agent_names,
             workspace_directory_key=workspace_directory_key,
         )
     return _append_active_command(prompt, active_command_instructions)
@@ -317,9 +386,18 @@ def get_sub_agent_system_prompt(
     excluded_tools: Iterable[str] | None = None,
     cwd: Path | None = None,
     explicit_skill_names: set[str] | None = None,
+    visible_skill_names: tuple[str, ...] | None = None,
+    skill_source_label: str = "Sub-agent frontmatter",
+    visible_agent_names: tuple[str, ...] | None = None,
+    agent_source_label: str = "Sub-agent frontmatter",
+    component_commands: Iterable["CommandConfig"] | None = None,
     workspace_directory_key: str | None = None,
 ) -> str:
-    if agent_prompt_override:
+    if agent_prompt_override is not None:
+        agent_prompt_override = _append_component_commands(
+            agent_prompt_override,
+            component_commands,
+        )
         base = _inject_tool_usage_rules(
             agent_prompt_override,
             _tool_usage_rules(settings=settings, excluded_tools=excluded_tools),
@@ -333,11 +411,21 @@ def get_sub_agent_system_prompt(
     prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}", cwd)
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
-    if "explore_workspace" not in active_names:
-        return prompt
-    return _append_available_skills(
-        prompt,
-        cwd,
-        explicit_skill_names=explicit_skill_names,
-        workspace_directory_key=workspace_directory_key,
-    )
+    if "explore_workspace" in active_names:
+        prompt = _append_available_skills(
+            prompt,
+            cwd,
+            explicit_skill_names=explicit_skill_names,
+            visible_skill_names=visible_skill_names,
+            source_label=skill_source_label,
+            workspace_directory_key=workspace_directory_key,
+        )
+    if "sub_agent" in active_names:
+        prompt = _append_available_sub_agents(
+            prompt,
+            cwd,
+            visible_agent_names=visible_agent_names,
+            source_label=agent_source_label,
+            workspace_directory_key=workspace_directory_key,
+        )
+    return prompt

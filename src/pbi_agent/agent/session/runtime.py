@@ -8,6 +8,10 @@ from typing import Any, Callable
 
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.agent.skill_discovery import extract_explicit_skill_names
+from pbi_agent.agent.reference_resolution import (
+    resolve_command_references,
+    resolve_sub_agent_references,
+)
 from pbi_agent.agent.sub_agent_discovery import (
     extract_explicit_agent_names,
     format_project_sub_agents_markdown,
@@ -20,6 +24,7 @@ from pbi_agent.agent.system_prompt import (
     get_system_prompt,
 )
 from pbi_agent.config import (
+    ConfigError,
     ResolvedRuntime,
     Settings,
     resolve_runtime_for_profile_id,
@@ -90,6 +95,7 @@ from pbi_agent.agent.session.shared import (
     RESUME_SESSION_PREFIX,
     SKILLS_COMMAND,
     SUB_AGENT_DISABLED_TOOLS,
+    SUB_AGENT_MAX_DEPTH,
     SUB_AGENT_MAX_ELAPSED_SECONDS,
     SUB_AGENT_MAX_REQUESTS,
     SessionTurnInterrupted,
@@ -148,6 +154,12 @@ def run_single_turn(
     active_command_instructions = (
         active_command.instructions if active_command is not None else None
     )
+    active_command_skill_names = (
+        active_command.skills if active_command is not None else None
+    )
+    active_command_sub_agent_names = (
+        active_command.sub_agents if active_command is not None else None
+    )
     workspace = (workspace_root or Path.cwd()).resolve()
     explicit_skill_names = extract_explicit_skill_names(prompt_text)
     explicit_agent_names = extract_explicit_agent_names(prompt_text)
@@ -157,6 +169,8 @@ def run_single_turn(
         excluded_tools=INTERACTIVE_ONLY_TOOLS,
         cwd=workspace,
         user_input=prompt_text,
+        visible_skill_names=active_command_skill_names,
+        visible_agent_names=active_command_sub_agent_names,
         workspace_directory_key=workspace_directory_key,
     )
     display.welcome(
@@ -209,6 +223,8 @@ def run_single_turn(
                 excluded_tools=INTERACTIVE_ONLY_TOOLS,
                 cwd=workspace,
                 explicit_skill_names=explicit_skill_names,
+                visible_skill_names=active_command_skill_names,
+                visible_agent_names=active_command_sub_agent_names,
                 explicit_agent_names=explicit_agent_names,
                 workspace_directory_key=workspace_directory_key,
             ),
@@ -217,6 +233,7 @@ def run_single_turn(
             workspace_root=workspace,
             workspace_directory_key=workspace_directory_key,
             explicit_agent_names=explicit_agent_names,
+            visible_sub_agent_names=active_command_sub_agent_names,
         ) as provider:
             display.assistant_start()
             _resume_session(
@@ -594,6 +611,14 @@ def run_session_loop(
                     excluded_tools=turn_excluded_tools,
                     cwd=workspace,
                     user_input=user_input,
+                    visible_skill_names=(
+                        active_command.skills if active_command is not None else None
+                    ),
+                    visible_agent_names=(
+                        active_command.sub_agents
+                        if active_command is not None
+                        else None
+                    ),
                     workspace_directory_key=workspace_directory_key,
                 )
                 if turn_instructions is None and (
@@ -605,6 +630,11 @@ def run_session_loop(
                         cwd=workspace,
                         explicit_skill_names=explicit_skill_names,
                         explicit_agent_names=explicit_agent_names,
+                        visible_agent_names=(
+                            active_command.sub_agents
+                            if active_command is not None
+                            else None
+                        ),
                         workspace_directory_key=workspace_directory_key,
                     )
                 if turn_instructions is None and turn_interactive_mode:
@@ -614,6 +644,11 @@ def run_session_loop(
                         cwd=workspace,
                         explicit_skill_names=explicit_skill_names,
                         explicit_agent_names=explicit_agent_names,
+                        visible_agent_names=(
+                            active_command.sub_agents
+                            if active_command is not None
+                            else None
+                        ),
                         workspace_directory_key=workspace_directory_key,
                     )
                 turn_input = _build_user_turn_input(
@@ -675,6 +710,10 @@ def run_session_loop(
                                 turn_settings,
                             )
                             or explicit_agent_names
+                            or (
+                                active_command is not None
+                                and active_command.sub_agents is not None
+                            )
                         ):
                             turn_provider = turn_provider_stack.enter_context(
                                 _open_runtime_provider(
@@ -687,6 +726,11 @@ def run_session_loop(
                                     workspace_root=workspace,
                                     workspace_directory_key=workspace_directory_key,
                                     explicit_agent_names=explicit_agent_names,
+                                    visible_sub_agent_names=(
+                                        active_command.sub_agents
+                                        if active_command is not None
+                                        else None
+                                    ),
                                 )
                             )
                             _refresh_provider_history_from_store(
@@ -923,6 +967,8 @@ def run_sub_agent_task(
 ) -> dict[str, Any]:
     workspace = (workspace_root or Path.cwd()).resolve()
     agent_definition = None
+    component_commands: Any = None
+    visible_nested_agent_names: tuple[str, ...] | None = None
     if agent_type is not None:
         if workspace_directory_key is None:
             agent_definition = get_project_sub_agent_by_name(agent_type, workspace)
@@ -940,6 +986,45 @@ def run_sub_agent_task(
                     "message": f"No project sub-agent named '{agent_type}' is loaded.",
                 },
             }
+        component_commands = resolve_command_references(
+            getattr(agent_definition, "commands", None),
+            workspace,
+            strict=True,
+            source_label=f"Sub-agent '{agent_definition.name}' frontmatter",
+        )
+        declared_sub_agents = getattr(agent_definition, "sub_agents", None)
+        if declared_sub_agents is not None:
+            if any(
+                nested.casefold() == agent_definition.name.casefold()
+                for nested in declared_sub_agents
+            ):
+                return {
+                    "status": "failed",
+                    "error": {
+                        "type": "invalid_nested_sub_agents",
+                        "message": (
+                            f"Sub-agent '{agent_definition.name}' cannot list "
+                            "itself in frontmatter 'sub_agents'."
+                        ),
+                    },
+                }
+            try:
+                resolve_sub_agent_references(
+                    declared_sub_agents,
+                    workspace,
+                    directory_key=workspace_directory_key,
+                    strict=True,
+                    source_label=f"Sub-agent '{agent_definition.name}' frontmatter",
+                )
+            except ConfigError as exc:
+                return {
+                    "status": "failed",
+                    "error": {
+                        "type": "invalid_nested_sub_agents",
+                        "message": str(exc),
+                    },
+                }
+            visible_nested_agent_names = declared_sub_agents
 
     agent_model_profile_id = (
         getattr(agent_definition, "model_profile_id", None)
@@ -1029,6 +1114,15 @@ def run_sub_agent_task(
             )
         )
         child_display.session_usage(child_session_usage)
+        nested_sub_agents_enabled = (
+            visible_nested_agent_names is not None
+            and sub_agent_depth + 1 < SUB_AGENT_MAX_DEPTH
+        )
+        child_excluded_tools = (
+            INTERACTIVE_ONLY_TOOLS
+            if nested_sub_agents_enabled
+            else SUB_AGENT_DISABLED_TOOLS
+        )
         with _open_runtime_provider(
             child_settings,
             system_prompt=get_sub_agent_system_prompt(
@@ -1038,15 +1132,37 @@ def run_sub_agent_task(
                     else None
                 ),
                 settings=child_settings,
-                excluded_tools=SUB_AGENT_DISABLED_TOOLS,
+                excluded_tools=child_excluded_tools,
                 cwd=workspace,
                 explicit_skill_names=extract_explicit_skill_names(task_instruction),
+                visible_skill_names=(
+                    getattr(agent_definition, "skills", None)
+                    if agent_definition is not None
+                    else None
+                ),
+                skill_source_label=(
+                    f"Sub-agent '{agent_definition.name}' frontmatter"
+                    if agent_definition is not None
+                    else "Sub-agent frontmatter"
+                ),
+                visible_agent_names=(
+                    visible_nested_agent_names if nested_sub_agents_enabled else None
+                ),
+                agent_source_label=(
+                    f"Sub-agent '{agent_definition.name}' frontmatter"
+                    if agent_definition is not None
+                    else "Sub-agent frontmatter"
+                ),
+                component_commands=component_commands,
                 workspace_directory_key=workspace_directory_key,
             ),
-            excluded_tools=SUB_AGENT_DISABLED_TOOLS,
+            excluded_tools=child_excluded_tools,
             tool_catalog=tool_catalog,
             workspace_root=workspace,
             workspace_directory_key=workspace_directory_key,
+            visible_sub_agent_names=(
+                visible_nested_agent_names if nested_sub_agents_enabled else None
+            ),
         ) as provider:
             _apply_sub_agent_parent_context(
                 provider=provider,
@@ -1189,6 +1305,7 @@ def _open_runtime_provider(
     workspace_root: Path | None = None,
     workspace_directory_key: str | None = None,
     explicit_agent_names: set[str] | None = None,
+    visible_sub_agent_names: tuple[str, ...] | None = None,
 ):
     from pbi_agent.mcp import McpServerPool
 
@@ -1202,6 +1319,7 @@ def _open_runtime_provider(
         excluded_tools=excluded_tools,
         cwd=workspace,
         explicit_agent_names=explicit_agent_names,
+        visible_agent_names=visible_sub_agent_names,
         workspace_directory_key=workspace_directory_key,
     )
     effective_tool_availability_overridden = (
@@ -1211,6 +1329,18 @@ def _open_runtime_provider(
     )
     try:
         if tool_catalog is not None:
+            if visible_sub_agent_names is not None:
+                from pbi_agent.tools.sub_agent import (
+                    build_spec as _build_sub_agent_spec,
+                )
+
+                tool_catalog = tool_catalog.with_spec(
+                    _build_sub_agent_spec(
+                        workspace,
+                        directory_key=workspace_directory_key,
+                        visible_agent_names=visible_sub_agent_names,
+                    )
+                )
             provider = create_provider(
                 runtime_settings,
                 system_prompt=active_system_prompt,
@@ -1228,6 +1358,7 @@ def _open_runtime_provider(
             with McpServerPool(workspace) as mcp_pool:
                 mcp_tool_catalog = mcp_pool.to_tool_catalog(
                     directory_key=workspace_directory_key,
+                    visible_sub_agent_names=visible_sub_agent_names,
                 )
                 mcp_tool_names = frozenset(mcp_tool_catalog.names())
                 mcp_tool_names_token = _ACTIVE_MCP_TOOL_NAMES.set(mcp_tool_names)

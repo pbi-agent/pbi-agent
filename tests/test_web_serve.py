@@ -199,16 +199,27 @@ def _write_agent(
     prompt: str,
     *,
     model_profile_id: str | None = None,
+    allowed_tools: str | None = None,
+    skills: str | None = None,
+    commands: str | None = None,
+    sub_agents: str | None = None,
 ) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"{name}.md"
-    profile_line = (
-        f"model_profile_id: {model_profile_id}\n"
-        if model_profile_id is not None
-        else ""
-    )
+    metadata = ["---", f"name: {name}", f"description: {description}"]
+    if model_profile_id is not None:
+        metadata.append(f"model_profile_id: {model_profile_id}")
+    if allowed_tools is not None:
+        metadata.append(f"allowed_tools: {allowed_tools}")
+    if skills is not None:
+        metadata.append(f"skills: {skills}")
+    if commands is not None:
+        metadata.append(f"commands: {commands}")
+    if sub_agents is not None:
+        metadata.append(f"sub_agents: {sub_agents}")
+    metadata.append("---")
     path.write_text(
-        f"---\nname: {name}\ndescription: {description}\n{profile_line}---\n\n{prompt}\n",
+        "\n".join(metadata) + f"\n\n{prompt}\n",
         encoding="utf-8",
     )
     return path
@@ -1656,6 +1667,9 @@ def test_command_list_endpoint_returns_command_files(
                 "instructions": "# Focus command\n\nStay focused on the requested change.",
                 "path": ".agents/commands/focus.md",
                 "model_profile_id": None,
+                "allowed_tools": None,
+                "skills": None,
+                "sub_agents": None,
             }
         ]
 
@@ -1676,11 +1690,21 @@ def test_commands_endpoint_exposes_model_profile_id(tmp_path, monkeypatch) -> No
     _write_command(
         tmp_path,
         "plan",
-        _command_markdown(
-            "Plan",
-            "Plan command",
-            "# Plan command\n\nPlan first.",
-            model_profile_id="analysis",
+        "\n".join(
+            [
+                "---",
+                "name: Plan",
+                "description: Plan command",
+                "model_profile_id: analysis",
+                "allowed_tools: read,shell",
+                "skills: fastapi,shadcn",
+                "sub_agents: confidence-checker,fixer",
+                "---",
+                "",
+                "# Plan command",
+                "",
+                "Plan first.",
+            ]
         ),
     )
     app = create_app(_settings())
@@ -1690,6 +1714,12 @@ def test_commands_endpoint_exposes_model_profile_id(tmp_path, monkeypatch) -> No
 
     assert response.status_code == 200
     assert response.json()["commands"][0]["model_profile_id"] == "analysis"
+    assert response.json()["commands"][0]["allowed_tools"] == ["read", "shell"]
+    assert response.json()["commands"][0]["skills"] == ["fastapi", "shadcn"]
+    assert response.json()["commands"][0]["sub_agents"] == [
+        "confidence-checker",
+        "fixer",
+    ]
     assert response.json()["commands"][0]["instructions"] == (
         "# Plan command\n\nPlan first."
     )
@@ -1815,6 +1845,9 @@ def test_command_install_endpoint_installs_conflicts_and_forces_replacement(
                 "instructions": "# Ship the change\n\nShip the current implementation.",
                 "path": ".agents/commands/ship.md",
                 "model_profile_id": None,
+                "allowed_tools": None,
+                "skills": None,
+                "sub_agents": None,
             }
         ]
         assert (tmp_path / ".agents" / "commands" / "ship.md").is_file()
@@ -1846,6 +1879,9 @@ def test_command_install_endpoint_installs_conflicts_and_forces_replacement(
                 "instructions": "# Ship the update\n\nShip the updated implementation.",
                 "path": ".agents/commands/ship.md",
                 "model_profile_id": None,
+                "allowed_tools": None,
+                "skills": None,
+                "sub_agents": None,
             }
         ]
 
@@ -2057,6 +2093,10 @@ def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
         "Review code changes.",
         "You review code changes.",
         model_profile_id="analysis",
+        allowed_tools="read,shell",
+        skills="fastapi,shadcn",
+        commands="review",
+        sub_agents="confidence-checker,fixer",
     )
     app = create_app(_settings())
 
@@ -2072,6 +2112,10 @@ def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
                 "instructions": "You review code changes.",
                 "path": ".agents/agents/code-reviewer.md",
                 "model_profile_id": "analysis",
+                "allowed_tools": ["read", "shell"],
+                "skills": ["fastapi", "shadcn"],
+                "commands": ["review"],
+                "sub_agents": ["confidence-checker", "fixer"],
                 "enabled": True,
             }
         ]
@@ -2199,6 +2243,10 @@ def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
                 "instructions": "Ship the current implementation.",
                 "path": ".agents/agents/shipper.md",
                 "model_profile_id": None,
+                "allowed_tools": None,
+                "skills": None,
+                "commands": None,
+                "sub_agents": None,
                 "enabled": True,
             }
         ]
@@ -2230,6 +2278,10 @@ def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
                 "instructions": "Ship the updated implementation.",
                 "path": ".agents/agents/shipper.md",
                 "model_profile_id": None,
+                "allowed_tools": None,
+                "skills": None,
+                "commands": None,
+                "sub_agents": None,
                 "enabled": True,
             }
         ]

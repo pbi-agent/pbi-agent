@@ -515,6 +515,9 @@ describe("SettingsPage", () => {
           instructions: "# Repo Review\n\nReview repository changes.",
           path: ".agents/commands/repo-review.md",
           model_profile_id: null,
+          allowed_tools: null,
+          skills: null,
+          sub_agents: null,
         },
       ],
       config_revision: "rev-2",
@@ -578,6 +581,10 @@ describe("SettingsPage", () => {
           instructions: "Review repository changes.",
           path: ".agents/agents/repo-reviewer.md",
           model_profile_id: null,
+          allowed_tools: null,
+          skills: null,
+          commands: null,
+          sub_agents: null,
           enabled: true,
         },
       ],
@@ -846,6 +853,9 @@ describe("SettingsPage", () => {
             description: "Review Mode",
             path: ".agents/commands/review.md",
             model_profile_id: "analysis",
+            allowed_tools: ["read", "shell"],
+            skills: ["fastapi", "shadcn"],
+            sub_agents: ["confidence-checker", "fixer"],
             instructions:
               "# Review Mode\n\nReview proposed code changes.\n\n- Bugs\n- Tests",
           },
@@ -860,6 +870,11 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("Review")).toBeInTheDocument();
     expect(screen.getAllByText(/\/review/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Review Mode")).toBeInTheDocument();
+    expect(screen.getByText("Tools: read, shell")).toBeInTheDocument();
+    expect(screen.getByText("Skills: fastapi, shadcn")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sub-agents: confidence-checker, fixer"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Profile: analysis")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Preview" }));
@@ -916,6 +931,9 @@ describe("SettingsPage", () => {
               instructions: "# Repo Review\n\nReview repository changes.",
               path: ".agents/commands/repo-review.md",
               model_profile_id: null,
+              allowed_tools: null,
+              skills: null,
+              sub_agents: null,
             },
           ],
         }),
@@ -969,6 +987,9 @@ describe("SettingsPage", () => {
             instructions: "# Repo Review\n\nReview repository changes.",
             path: ".agents/commands/repo-review.md",
             model_profile_id: null,
+            allowed_tools: null,
+            skills: null,
+            sub_agents: null,
           },
         ],
         config_revision: "rev-2",
@@ -1099,6 +1120,10 @@ describe("SettingsPage", () => {
             instructions: "# Agent Prompt\n\nReview code changes carefully.",
             path: ".agents/agents/code-reviewer.md",
             model_profile_id: "analysis",
+            allowed_tools: ["read", "shell"],
+            skills: ["fastapi", "shadcn"],
+            commands: ["review"],
+            sub_agents: ["confidence-checker", "fixer"],
             enabled: true,
           },
         ],
@@ -1111,6 +1136,12 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("code-reviewer")).toBeInTheDocument();
     expect(screen.getByText("Review code changes")).toBeInTheDocument();
+    expect(screen.getByText("Tools: read, shell")).toBeInTheDocument();
+    expect(screen.getByText("Skills: fastapi, shadcn")).toBeInTheDocument();
+    expect(screen.getByText("Commands: review")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sub-agents: confidence-checker, fixer"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Profile: analysis")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Preview" }));
@@ -1130,6 +1161,10 @@ describe("SettingsPage", () => {
         instructions: "Review code changes carefully.",
         path: ".agents/agents/code-reviewer.md",
         model_profile_id: null,
+        allowed_tools: null,
+        skills: null,
+        commands: null,
+        sub_agents: null,
         enabled: true,
       },
     ];
@@ -1199,6 +1234,10 @@ describe("SettingsPage", () => {
               instructions: "Review repository changes.",
               path: ".agents/agents/repo-reviewer.md",
               model_profile_id: null,
+              allowed_tools: null,
+              skills: null,
+              commands: null,
+              sub_agents: null,
               enabled: true,
             },
           ],
@@ -1247,6 +1286,10 @@ describe("SettingsPage", () => {
             instructions: "Review repository changes.",
             path: ".agents/agents/repo-reviewer.md",
             model_profile_id: null,
+            allowed_tools: null,
+            skills: null,
+            commands: null,
+            sub_agents: null,
             enabled: true,
           },
         ],

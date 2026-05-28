@@ -35,10 +35,15 @@ def _resolve_spec(
     *,
     workspace: Path | None = None,
     directory_key: str | None = None,
+    visible_sub_agent_names: tuple[str, ...] | None = None,
 ) -> ToolSpec:
     spec_or_factory, _handler = entry
     if callable(spec_or_factory):
-        return spec_or_factory(workspace, directory_key=directory_key)
+        return spec_or_factory(
+            workspace,
+            directory_key=directory_key,
+            visible_agent_names=visible_sub_agent_names,
+        )
     return spec_or_factory
 
 
@@ -47,10 +52,16 @@ def get_tool_specs(
     excluded_names: set[str] | None = None,
     workspace: Path | None = None,
     directory_key: str | None = None,
+    visible_sub_agent_names: tuple[str, ...] | None = None,
 ) -> list[ToolSpec]:
     excluded = excluded_names or set()
     return [
-        _resolve_spec(item, workspace=workspace, directory_key=directory_key)
+        _resolve_spec(
+            item,
+            workspace=workspace,
+            directory_key=directory_key,
+            visible_sub_agent_names=visible_sub_agent_names,
+        )
         for name, item in _REGISTRY.items()
         if name not in excluded
     ]
@@ -68,11 +79,17 @@ def get_tool_spec(
     *,
     workspace: Path | None = None,
     directory_key: str | None = None,
+    visible_sub_agent_names: tuple[str, ...] | None = None,
 ) -> ToolSpec | None:
     entry = _REGISTRY.get(name)
     if entry is None:
         return None
-    return _resolve_spec(entry, workspace=workspace, directory_key=directory_key)
+    return _resolve_spec(
+        entry,
+        workspace=workspace,
+        directory_key=directory_key,
+        visible_sub_agent_names=visible_sub_agent_names,
+    )
 
 
 def get_openai_tool_definitions(

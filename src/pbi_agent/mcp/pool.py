@@ -104,7 +104,12 @@ class McpServerPool:
         self._thread = None
         self._loop = None
 
-    def to_tool_catalog(self, *, directory_key: str | None = None) -> ToolCatalog:
+    def to_tool_catalog(
+        self,
+        *,
+        directory_key: str | None = None,
+        visible_sub_agent_names: tuple[str, ...] | None = None,
+    ) -> ToolCatalog:
         extra_entries: list[ToolCatalogEntry] = []
         for binding in self._bindings:
             extra_entries.append(
@@ -120,6 +125,7 @@ class McpServerPool:
         return ToolCatalog.from_builtin_registry(
             self._workspace,
             directory_key=directory_key,
+            visible_sub_agent_names=visible_sub_agent_names,
         ).merged(extra_entries)
 
     def call_tool(
