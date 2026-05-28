@@ -553,7 +553,8 @@
   color: var(--foreground);
 }
 
-.workspace-file-panel__close {
+.workspace-file-panel__close,
+.workspace-file-panel__preview-close {
   color: var(--color-text-tertiary);
 }
 

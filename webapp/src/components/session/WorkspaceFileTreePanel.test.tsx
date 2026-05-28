@@ -99,6 +99,71 @@ describe("WorkspaceFileTreePanel", () => {
     expect(screen.getByRole("radio", { name: "Raw" })).toHaveAttribute("data-state", "on");
   });
 
+  it("keeps the preview closed until selecting a file and closes it from the preview header", async () => {
+    const user = userEvent.setup();
+    mockFetchTree.mockResolvedValue(treePayload());
+
+    renderWithProviders(
+      <WorkspaceFileTreePanel workspaceKey="workspace" onClose={vi.fn()} />,
+    );
+
+    expect(screen.queryByRole("region", { name: "File preview" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close file preview" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize file tree and preview" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: /README\.md/i }));
+
+    expect(await screen.findByRole("region", { name: "File preview" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockFetchPreview).toHaveBeenCalledWith("README.md");
+    });
+    expect(
+      screen.getByRole("separator", { name: "Resize file tree and preview" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close file preview" }));
+
+    expect(screen.queryByRole("region", { name: "File preview" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize file tree and preview" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the preview when the resizable group already has a measured height", async () => {
+    const user = userEvent.setup();
+    const getBoundingClientRectSpy = vi
+      .spyOn(Element.prototype, "getBoundingClientRect")
+      .mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 320,
+        height: 640,
+        top: 0,
+        right: 320,
+        bottom: 640,
+        left: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+    mockFetchTree.mockResolvedValue(treePayload());
+
+    try {
+      renderWithProviders(
+        <WorkspaceFileTreePanel workspaceKey="workspace" onClose={vi.fn()} />,
+      );
+
+      await user.click(await screen.findByRole("button", { name: /README\.md/i }));
+
+      expect(await screen.findByRole("region", { name: "File preview" })).toBeInTheDocument();
+      await waitFor(() => {
+        expect(mockFetchPreview).toHaveBeenCalledWith("README.md");
+      });
+    } finally {
+      getBoundingClientRectSpy.mockRestore();
+    }
+  });
+
   it("filters the tree to changed files only", async () => {
     const user = userEvent.setup();
     mockFetchTree.mockResolvedValue(treePayload());

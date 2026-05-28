@@ -5,7 +5,6 @@ import {
   ChevronRightIcon,
   XIcon,
 } from "lucide-react";
-import type { PanelImperativeHandle } from "react-resizable-panels";
 import {
   fetchWorkspaceFileDiff,
   fetchWorkspaceFilePreview,
@@ -49,6 +48,7 @@ type TreeNode = {
 type PreviewMode = "diff" | "raw";
 
 const PREVIEW_AUTO_MAX_PERCENT = 72;
+const TREE_WITH_PREVIEW_DEFAULT_PERCENT = 100 - PREVIEW_AUTO_MAX_PERCENT;
 
 export function WorkspaceFileTreePanel({
   workspaceKey,
@@ -58,8 +58,6 @@ export function WorkspaceFileTreePanel({
   onClose: () => void;
 }) {
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
-  const panelBodyRef = useRef<HTMLDivElement | null>(null);
-  const previewPanelRef = useRef<PanelImperativeHandle | null>(null);
   const selectedTreeScrollFrameRef = useRef<number | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedPathRevision, setSelectedPathRevision] = useState(0);
@@ -190,22 +188,6 @@ export function WorkspaceFileTreePanel({
     selectedPathRevision,
   ]);
 
-  useLayoutEffect(() => {
-    if (selectedPath === null) return;
-    const panelBody = panelBodyRef.current;
-    const previewPanel = previewPanelRef.current;
-    if (!panelBody || !previewPanel) return;
-    const panelBodyHeight = getElementHeight(panelBody);
-    if (panelBodyHeight === null) return;
-    const previewSize = getAutoPreviewPanelSize(selectedPath, panelBodyHeight);
-    if (previewSize === null) return;
-    previewPanel.resize(previewSize);
-  }, [
-    activePreviewMode,
-    selectedPath,
-    selectedPathRevision,
-  ]);
-
   const togglePath = (path: string) => {
     const isExpanded = displayedExpandedPaths.has(path);
     if (effectiveShowChangedOnly && changedFolderPathSet.has(path)) {
@@ -308,11 +290,14 @@ export function WorkspaceFileTreePanel({
       <ResizablePanelGroup
         direction="vertical"
         className="workspace-file-panel__body"
-        elementRef={panelBodyRef}
       >
         <ResizablePanel
           id="workspace-file-tree-list"
-          defaultSize="64%"
+          defaultSize={
+            selectedPath === null
+              ? "100%"
+              : `${TREE_WITH_PREVIEW_DEFAULT_PERCENT}%`
+          }
           minSize="10rem"
           className="workspace-file-panel__tree-panel"
         >
@@ -350,27 +335,24 @@ export function WorkspaceFileTreePanel({
             </ScrollArea>
           </div>
         </ResizablePanel>
-        <ResizableHandle
-          direction="vertical"
-          aria-label="Resize file tree and preview"
-          withHandle
-        />
-        <ResizablePanel
-          id="workspace-file-preview"
-          defaultSize="36%"
-          minSize="8rem"
-          className="workspace-file-panel__preview-panel"
-          panelRef={previewPanelRef}
-        >
-          <section className="workspace-file-panel__preview" aria-label="File preview">
-            {selectedPath === null ? (
-              <p className="workspace-file-panel__empty">Select a file to preview it.</p>
-            ) : (
-              <>
+        {selectedPath !== null ? (
+          <>
+            <ResizableHandle
+              direction="vertical"
+              aria-label="Resize file tree and preview"
+              withHandle
+            />
+            <ResizablePanel
+              id="workspace-file-preview"
+              defaultSize={`${PREVIEW_AUTO_MAX_PERCENT}%`}
+              minSize="8rem"
+              className="workspace-file-panel__preview-panel"
+            >
+              <section className="workspace-file-panel__preview" aria-label="File preview">
                 <div className="workspace-file-panel__preview-heading">
                   <span>{selectedPath}</span>
-                  {selectedCanDiff && selectedCanPreviewRaw ? (
-                    <div className="workspace-file-panel__preview-actions">
+                  <div className="workspace-file-panel__preview-actions">
+                    {selectedCanDiff && selectedCanPreviewRaw ? (
                       <ToggleGroup
                         type="single"
                         value={activePreviewMode}
@@ -397,8 +379,18 @@ export function WorkspaceFileTreePanel({
                           Raw
                         </ToggleGroupItem>
                       </ToggleGroup>
-                    </div>
-                  ) : null}
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="workspace-file-panel__preview-close app-close-icon-button"
+                      aria-label="Close file preview"
+                      onClick={() => setSelectedPath(null)}
+                    >
+                      <XIcon aria-hidden="true" />
+                    </Button>
+                  </div>
                 </div>
                 {activePreviewMode === "diff" && selectedCanDiff ? (
                   diffQuery.isPending ? (
@@ -440,10 +432,10 @@ export function WorkspaceFileTreePanel({
                     path={selectedPath}
                   />
                 )}
-              </>
-            )}
-          </section>
-        </ResizablePanel>
+              </section>
+            </ResizablePanel>
+          </>
+        ) : null}
       </ResizablePanelGroup>
     </aside>
   );
@@ -635,13 +627,6 @@ export function getAutoPreviewPanelSize(
 ): string | null {
   if (!Number.isFinite(panelBodyHeightPx) || panelBodyHeightPx <= 0) return null;
   return `${PREVIEW_AUTO_MAX_PERCENT}%`;
-}
-
-function getElementHeight(element: HTMLElement): number | null {
-  const rectHeight = element.getBoundingClientRect().height;
-  if (Number.isFinite(rectHeight) && rectHeight > 0) return rectHeight;
-  if (element.clientHeight > 0) return element.clientHeight;
-  return null;
 }
 
 function requestTreeScrollFrame(callback: FrameRequestCallback): number {

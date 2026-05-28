@@ -643,7 +643,10 @@ describe("SessionPage", () => {
     const readmeFile = await screen.findByRole("button", { name: "README.md" });
     expect(srcFolder.querySelector('img[data-icon-name="folder-src"]')).toBeInTheDocument();
     expect(readmeFile.querySelector('img[data-icon-name="readme"]')).toBeInTheDocument();
-    expect(screen.getByRole("separator", { name: "Resize file tree and preview" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("separator", { name: "Resize file tree and preview" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "File preview" })).not.toBeInTheDocument();
     expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Close file tree" })).toHaveAttribute(
       "aria-expanded",

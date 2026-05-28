@@ -1,3 +1,5 @@
-[X] Match workspace file search styling to session search
-[X] Run focused frontend validation
-[X] Update memory and summarize
+- [X] Reproduce/inspect preview resize crash
+- [X] Fix preview panel layout timing
+- [X] Update tests for file-click preview open
+- [X] Run focused frontend validation
+- [X] Update memory and summarize
