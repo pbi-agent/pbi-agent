@@ -1,6 +1,27 @@
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type FocusEvent,
+  type MouseEvent,
+} from "react";
 import { createPortal } from "react-dom";
 import type { UsagePayload } from "../../types";
+import { cn } from "../../lib/utils";
+
+function composeHandlers<E>(
+  theirs: ((event: E) => void) | undefined,
+  ours: (event: E) => void,
+): (event: E) => void {
+  return (event: E) => {
+    theirs?.(event);
+    ours(event);
+  };
+}
 
 const SIZE = 22;
 const STROKE = 3;
@@ -32,14 +53,52 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-export function UsageBar({
-  compactThreshold,
-  usage,
-}: {
+type UsageBarOwnProps = {
   compactThreshold: number | null;
   usage: UsagePayload | null;
-}) {
+  /**
+   * Renders the gauge as a clickable control (e.g. a dropdown trigger).
+   * Hovering still surfaces the usage tooltip; the click is owned by the
+   * parent so the same gauge can also open run details.
+   */
+  interactive?: boolean;
+  /** Suppresses the hover tooltip, e.g. while an attached dropdown is open. */
+  tooltipSuppressed?: boolean;
+};
+
+type UsageBarProps = UsageBarOwnProps &
+  Omit<
+    ButtonHTMLAttributes<HTMLButtonElement>,
+    keyof UsageBarOwnProps | "type" | "role"
+  >;
+
+export const UsageBar = forwardRef<HTMLButtonElement, UsageBarProps>(function UsageBar(
+  {
+    compactThreshold,
+    usage,
+    interactive = false,
+    tooltipSuppressed = false,
+    className,
+    onBlur,
+    onFocus,
+    onMouseEnter,
+    onMouseLeave,
+    ...buttonProps
+  },
+  forwardedRef,
+) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const setTriggerRef = useCallback(
+    (node: HTMLButtonElement | null) => {
+      triggerRef.current = node;
+      if (typeof forwardedRef === "function") {
+        forwardedRef(node);
+      } else if (forwardedRef) {
+        forwardedRef.current = node;
+      }
+    },
+    [forwardedRef],
+  );
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const tooltipId = useId();
   const [tooltipOpen, setTooltipOpen] = useState(false);
@@ -60,6 +119,11 @@ export function UsageBar({
     hasUsage && threshold
       ? `${usageLabel} of ${thresholdLabel} context tokens used`
       : "Context window usage unavailable";
+  const interactiveAriaLabel =
+    hasUsage && threshold
+      ? `Run history. Context usage ${percentLabel} (${usageLabel} of ${thresholdLabel} tokens).`
+      : "Run history. Context window usage unavailable.";
+  const showTooltip = tooltipOpen && !tooltipSuppressed;
 
   const updateTooltipPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -94,7 +158,7 @@ export function UsageBar({
   }, []);
 
   useLayoutEffect(() => {
-    if (!tooltipOpen) return;
+    if (!showTooltip) return;
     updateTooltipPosition();
     window.addEventListener("resize", updateTooltipPosition);
     window.addEventListener("scroll", updateTooltipPosition, true);
@@ -102,13 +166,13 @@ export function UsageBar({
       window.removeEventListener("resize", updateTooltipPosition);
       window.removeEventListener("scroll", updateTooltipPosition, true);
     };
-  }, [tooltipOpen, updateTooltipPosition]);
+  }, [showTooltip, updateTooltipPosition]);
 
   // This tooltip is positioned locally instead of using the shared Radix
   // TooltipContent because Radix Popper only shifts on the placement's main
   // axis (`crossAxis: false`). The gauge can sit near both top and side
   // viewport edges, so we clamp both axes here to keep a real viewport gutter.
-  const tooltip = tooltipOpen
+  const tooltip = showTooltip
     ? createPortal(
         <div
           ref={tooltipRef}
@@ -151,23 +215,42 @@ export function UsageBar({
       )
     : null;
 
+  const semanticProps = interactive
+    ? { "aria-label": interactiveAriaLabel }
+    : {
+        role: "progressbar" as const,
+        "aria-valuemin": 0,
+        "aria-valuemax": 100,
+        "aria-valuenow": hasUsage && threshold ? Math.round(clampedPercent) : 0,
+        "aria-valuetext": ariaValueText,
+        "aria-label": "Context window usage",
+      };
+
   return (
     <>
       <button
-        ref={triggerRef}
+        ref={setTriggerRef}
         type="button"
-        className={`context-gauge context-gauge--${status}`}
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={hasUsage && threshold ? Math.round(clampedPercent) : 0}
-        aria-valuetext={ariaValueText}
-        aria-label="Context window usage"
-        aria-describedby={tooltipOpen ? tooltipId : undefined}
-        onBlur={() => setTooltipOpen(false)}
-        onFocus={() => setTooltipOpen(true)}
-        onMouseEnter={() => setTooltipOpen(true)}
-        onMouseLeave={() => setTooltipOpen(false)}
+        className={cn(
+          `context-gauge context-gauge--${status}`,
+          interactive && "context-gauge--interactive",
+          className,
+        )}
+        {...semanticProps}
+        aria-describedby={showTooltip ? tooltipId : undefined}
+        {...buttonProps}
+        onBlur={composeHandlers<FocusEvent<HTMLButtonElement>>(onBlur, () =>
+          setTooltipOpen(false),
+        )}
+        onFocus={composeHandlers<FocusEvent<HTMLButtonElement>>(onFocus, () =>
+          setTooltipOpen(true),
+        )}
+        onMouseEnter={composeHandlers<MouseEvent<HTMLButtonElement>>(onMouseEnter, () =>
+          setTooltipOpen(true),
+        )}
+        onMouseLeave={composeHandlers<MouseEvent<HTMLButtonElement>>(onMouseLeave, () =>
+          setTooltipOpen(false),
+        )}
       >
         <svg
           width={SIZE}
@@ -201,4 +284,4 @@ export function UsageBar({
       {tooltip}
     </>
   );
-}
+});

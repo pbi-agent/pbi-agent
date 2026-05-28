@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDownIcon, Clock3Icon } from "lucide-react";
 import { fetchSessionRuns } from "../../api";
-import type { RunSession } from "../../types";
+import type { RunSession, UsagePayload } from "../../types";
 import { StatusPill } from "../shared/StatusPill";
-import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,8 +10,17 @@ import {
 } from "../ui/dropdown-menu";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { RunDetailModal } from "./RunDetailModal";
+import { UsageBar } from "./UsageBar";
 
-export function RunHistory({ sessionId }: { sessionId: string }) {
+export function RunHistory({
+  sessionId,
+  compactThreshold,
+  usage,
+}: {
+  sessionId: string;
+  compactThreshold: number | null;
+  usage: UsagePayload | null;
+}) {
   const [selectedRun, setSelectedRun] = useState<RunSession | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -38,20 +45,12 @@ export function RunHistory({ sessionId }: { sessionId: string }) {
       }}>
         <div className="run-history">
           <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="session-topbar-control run-history__toggle"
-              disabled={runsQuery.isLoading && !hasRuns}
-              aria-label="Toggle run history"
-            >
-              <Clock3Icon data-icon="inline-start" />
-              <span className="run-history__label">
-                {hasRuns ? `${runs.length}` : ""}
-              </span>
-              <ChevronDownIcon data-icon="inline-end" />
-            </Button>
+            <UsageBar
+              interactive
+              tooltipSuppressed={isOpen}
+              compactThreshold={compactThreshold}
+              usage={usage}
+            />
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end" className="run-history__panel">

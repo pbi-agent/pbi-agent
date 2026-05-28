@@ -137,4 +137,44 @@ describe("UsageBar", () => {
     );
     expect(metaNodes.length).toBeGreaterThan(0);
   });
+
+  it("renders as a run-history trigger when interactive and still shows the usage tooltip", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <UsageBar
+        interactive
+        compactThreshold={200000}
+        usage={makeUsage({ context_tokens: 85000 })}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("progressbar", { name: "Context window usage" }),
+    ).not.toBeInTheDocument();
+    const trigger = screen.getByRole("button", {
+      name: "Run history. Context usage 42.5% (85,000 of 200,000 tokens).",
+    });
+    expect(trigger).toHaveClass("context-gauge", "context-gauge--interactive");
+
+    await user.hover(trigger);
+    await waitFor(() => {
+      expect(screen.getAllByText("85,000").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("suppresses the hover tooltip while tooltipSuppressed is set", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <UsageBar
+        interactive
+        tooltipSuppressed
+        compactThreshold={200000}
+        usage={makeUsage({ context_tokens: 85000 })}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: /run history/i });
+    await user.hover(trigger);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
 });

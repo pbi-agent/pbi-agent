@@ -54,7 +54,20 @@ vi.mock("./ConnectionBadge", () => ({
 }));
 
 vi.mock("./RunHistory", () => ({
-  RunHistory: ({ sessionId }: { sessionId: string }) => <div>Run History {sessionId}</div>,
+  RunHistory: ({
+    sessionId,
+    compactThreshold,
+    usage,
+  }: {
+    sessionId: string;
+    compactThreshold: number | null;
+    usage: UsagePayload | null;
+  }) => {
+    // The merged gauge lives inside RunHistory on session routes, so forward
+    // the usage props to the same spy the standalone UsageBar mock reports to.
+    usageBarMock({ compactThreshold, usage });
+    return <div>Run History {sessionId}</div>;
+  },
 }));
 
 vi.mock("./SessionSidebar", () => ({
@@ -624,17 +637,18 @@ describe("SessionPage", () => {
     expect(within(topbar).queryByText("workspace/demo")).not.toBeInTheDocument();
   });
 
-  it("keeps the file tree closed by default and toggles the sidebar", async () => {
+  it("keeps the workspace explorer closed by default and toggles the sidebar", async () => {
     const user = userEvent.setup();
     renderSessionRoute("/sessions/session-1");
 
-    const toggle = await screen.findByRole("button", { name: "Open file tree" });
+    const toggle = await screen.findByRole("button", { name: "Open workspace explorer" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("complementary", { name: "Workspace file tree" })).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-keyshortcuts", "Alt+Shift+E");
+    expect(screen.queryByRole("complementary", { name: "Workspace explorer" })).not.toBeInTheDocument();
 
     await user.click(toggle);
 
-    const fileTreePanel = await screen.findByRole("complementary", { name: "Workspace file tree" });
+    const fileTreePanel = await screen.findByRole("complementary", { name: "Workspace explorer" });
     expect(fileTreePanel).toBeInTheDocument();
     const fileTreeHeader = fileTreePanel.querySelector(".workspace-file-panel__header");
     expect(fileTreeHeader).not.toBeNull();
@@ -648,17 +662,56 @@ describe("SessionPage", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "File preview" })).not.toBeInTheDocument();
     expect(fetchWorkspaceFileTree).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Close file tree" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Close workspace explorer" })).toHaveAttribute(
       "aria-expanded",
       "true",
     );
+  });
+
+  it("toggles the workspace explorer with Alt+Shift+E", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByRole("button", { name: "Open workspace explorer" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    const firstShortcut = dispatchWindowKeydown({
+      key: "e",
+      code: "KeyE",
+      altKey: true,
+      shiftKey: true,
+    });
+
+    expect(firstShortcut.event.defaultPrevented).toBe(true);
+    expect(firstShortcut.dispatchResult).toBe(false);
+    expect(await screen.findByRole("complementary", { name: "Workspace explorer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close workspace explorer" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    const secondShortcut = dispatchWindowKeydown({
+      key: "e",
+      code: "KeyE",
+      altKey: true,
+      shiftKey: true,
+    });
+
+    expect(secondShortcut.event.defaultPrevented).toBe(true);
+    expect(secondShortcut.dispatchResult).toBe(false);
+    expect(await screen.findByRole("button", { name: "Open workspace explorer" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByRole("complementary", { name: "Workspace explorer" })).not.toBeInTheDocument();
   });
 
   it("previews files from the auto-refreshing file tree", async () => {
     const user = userEvent.setup();
     renderSessionRoute("/sessions/session-1");
 
-    await user.click(await screen.findByRole("button", { name: "Open file tree" }));
+    await user.click(await screen.findByRole("button", { name: "Open workspace explorer" }));
 
     expect(screen.queryByRole("button", { name: "Refresh file tree" })).not.toBeInTheDocument();
     const srcFolder = await screen.findByRole("button", { name: "src" });
@@ -688,7 +741,7 @@ describe("SessionPage", () => {
     });
     renderSessionRoute("/sessions/session-1");
 
-    await user.click(await screen.findByRole("button", { name: "Open file tree" }));
+    await user.click(await screen.findByRole("button", { name: "Open workspace explorer" }));
     await user.click(await screen.findByRole("button", { name: "README.md" }));
 
     await waitFor(() => {
@@ -722,7 +775,7 @@ describe("SessionPage", () => {
       });
     renderSessionRoute("/sessions/session-1");
 
-    await user.click(await screen.findByRole("button", { name: "Open file tree" }));
+    await user.click(await screen.findByRole("button", { name: "Open workspace explorer" }));
     expect(await screen.findByLabelText("Loading files")).toBeInTheDocument();
 
     await waitFor(() => {
@@ -735,7 +788,7 @@ describe("SessionPage", () => {
     const user = userEvent.setup();
     const { queryClient } = renderSessionRoute("/sessions/session-1");
 
-    await user.click(await screen.findByRole("button", { name: "Open file tree" }));
+    await user.click(await screen.findByRole("button", { name: "Open workspace explorer" }));
     vi.mocked(refreshWorkspaceFileTree).mockClear();
 
     act(() => {
@@ -892,7 +945,7 @@ describe("SessionPage", () => {
 
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent(
-      "Let the agent ask questions and offer choices. Press Maj+Tab / Shift+Tab to enable.",
+      "Interactive mode off. Let the agent ask questions and offer choices. Shift+Tab to enable.",
     );
     expect(tooltip.closest("[data-app-tooltip]")).not.toBeNull();
 
@@ -906,7 +959,7 @@ describe("SessionPage", () => {
     await user.unhover(toggle);
     await user.hover(enabledToggle);
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Interactive mode enabled. Press Maj+Tab / Shift+Tab to disable.",
+      "Interactive mode on. The agent can ask questions and offer choices. Shift+Tab to disable.",
     );
   });
 
@@ -968,6 +1021,77 @@ describe("SessionPage", () => {
     }
   });
 
+  it("toggles tool history with Alt+Shift+H on main session routes", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByRole("button", { name: "Enable tool history" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Alt+Shift+H",
+    );
+
+    const firstShortcut = dispatchWindowKeydown({
+      key: "h",
+      code: "KeyH",
+      altKey: true,
+      shiftKey: true,
+    });
+
+    expect(firstShortcut.event.defaultPrevented).toBe(true);
+    expect(firstShortcut.dispatchResult).toBe(false);
+    expect(await screen.findByRole("button", { name: "Disable tool history" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await waitFor(() => {
+      expect(window.localStorage.getItem("pbi-agent.include-tool-history")).toBe("true");
+    });
+
+    const secondShortcut = dispatchWindowKeydown({
+      key: "h",
+      code: "KeyH",
+      altKey: true,
+      shiftKey: true,
+    });
+
+    expect(secondShortcut.event.defaultPrevented).toBe(true);
+    expect(secondShortcut.dispatchResult).toBe(false);
+    expect(await screen.findByRole("button", { name: "Enable tool history" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await waitFor(() => {
+      expect(window.localStorage.getItem("pbi-agent.include-tool-history")).toBe("false");
+    });
+  });
+
+  it("ignores non-matching tool history shortcut variants", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByRole("button", { name: "Enable tool history" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    const ignoredShortcuts: KeyboardEventInit[] = [
+      { key: "h", altKey: true },
+      { key: "h", shiftKey: true },
+      { key: "h", altKey: true, shiftKey: true, repeat: true },
+      { key: "h", altKey: true, shiftKey: true, ctrlKey: true },
+      { key: "h", altKey: true, shiftKey: true, metaKey: true },
+    ];
+
+    for (const shortcut of ignoredShortcuts) {
+      const { event, dispatchResult } = dispatchWindowKeydown(shortcut);
+      expect(event.defaultPrevented).toBe(false);
+      expect(dispatchResult).toBe(true);
+      expect(screen.getByRole("button", { name: "Enable tool history" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(window.localStorage.getItem("pbi-agent.include-tool-history")).toBe("false");
+    }
+  });
+
   it("renders sub-agent routes as hidden read-only child sessions", async () => {
     useSessionStore.setState((state) => ({
       ...state,
@@ -1009,7 +1133,16 @@ describe("SessionPage", () => {
     const { event, dispatchResult } = dispatchWindowKeydown({ key: "Tab", shiftKey: true });
     expect(event.defaultPrevented).toBe(false);
     expect(dispatchResult).toBe(true);
+    const toolHistoryShortcut = dispatchWindowKeydown({
+      key: "h",
+      code: "KeyH",
+      altKey: true,
+      shiftKey: true,
+    });
+    expect(toolHistoryShortcut.event.defaultPrevented).toBe(false);
+    expect(toolHistoryShortcut.dispatchResult).toBe(true);
     expect(screen.queryByRole("button", { name: /interactive mode/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /tool history/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to main session" })).toHaveAttribute(
       "href",
       "/sessions/session-1",

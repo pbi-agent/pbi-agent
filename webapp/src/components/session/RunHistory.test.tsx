@@ -52,27 +52,25 @@ describe("RunHistory", () => {
     mockFetchSessionRuns.mockReset();
   });
 
-  it("updates the run count when the query is invalidated and refetched", async () => {
-    mockFetchSessionRuns
-      .mockResolvedValueOnce([makeRun({ run_session_id: "run-1" })])
-      .mockResolvedValueOnce([
-        makeRun({ run_session_id: "run-1" }),
-        makeRun({ run_session_id: "run-2", started_at: "2026-04-27T10:01:00Z" }),
-      ]);
+  it("uses the usage gauge as the trigger and opens run details on click", async () => {
+    const user = userEvent.setup();
+    mockFetchSessionRuns.mockResolvedValue([
+      makeRun({ run_session_id: "run-1", model: "gpt-5.4" }),
+    ]);
 
-    const { queryClient } = renderWithProviders(<RunHistory sessionId="session-1" />);
+    renderWithProviders(
+      <RunHistory sessionId="session-1" compactThreshold={200000} usage={null} />,
+    );
 
-    const toggle = await screen.findByRole("button", { name: /toggle run history/i });
-    expect(toggle).toHaveClass("session-topbar-control", "run-history__toggle");
-    await waitFor(() => expect(toggle.querySelector(".run-history__label")).toHaveTextContent("1"));
+    const trigger = await screen.findByRole("button", { name: /run history/i });
+    expect(trigger).toHaveClass("context-gauge", "context-gauge--interactive");
+    expect(
+      screen.queryByRole("progressbar", { name: "Context window usage" }),
+    ).not.toBeInTheDocument();
 
-    await queryClient.invalidateQueries({ queryKey: ["session-runs", "session-1"] });
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /toggle run history/i }).querySelector(".run-history__label"),
-      ).toHaveTextContent("2");
-    });
+    await user.click(trigger);
+    await waitFor(() => expect(trigger).toHaveAttribute("aria-expanded", "true"));
+    await screen.findByText(/gpt-5\.4/);
   });
 
   it("refetches on open and shows newest run first with final status", async () => {
@@ -99,9 +97,11 @@ describe("RunHistory", () => {
         }),
       ]);
 
-    renderWithProviders(<RunHistory sessionId="session-1" />);
+    renderWithProviders(
+      <RunHistory sessionId="session-1" compactThreshold={null} usage={null} />,
+    );
 
-    const toggle = await screen.findByRole("button", { name: /toggle run history/i });
+    const toggle = await screen.findByRole("button", { name: /run history/i });
     await user.click(toggle);
     await waitFor(() => expect(toggle).toHaveAttribute("aria-expanded", "true"));
 
@@ -128,9 +128,11 @@ describe("RunHistory", () => {
       }),
     ]);
 
-    renderWithProviders(<RunHistory sessionId="session-1" />);
+    renderWithProviders(
+      <RunHistory sessionId="session-1" compactThreshold={null} usage={null} />,
+    );
 
-    await user.click(await screen.findByRole("button", { name: /toggle run history/i }));
+    await user.click(await screen.findByRole("button", { name: /run history/i }));
 
     const summary = await screen.findByText("gpt-5.4 · 123 tok · $0.85");
     const runButton = summary.closest("button");
@@ -153,9 +155,11 @@ describe("RunHistory", () => {
       }),
     ]);
 
-    renderWithProviders(<RunHistory sessionId="session-1" />);
+    renderWithProviders(
+      <RunHistory sessionId="session-1" compactThreshold={null} usage={null} />,
+    );
 
-    await user.click(await screen.findByRole("button", { name: /toggle run history/i }));
+    await user.click(await screen.findByRole("button", { name: /run history/i }));
 
     const status = await screen.findByText("completed");
     expect(status).toHaveAttribute("data-variant", "completed");

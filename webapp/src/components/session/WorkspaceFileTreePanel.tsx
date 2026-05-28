@@ -226,7 +226,7 @@ export function WorkspaceFileTreePanel({
     <aside
       id="workspace-file-tree-panel"
       className="workspace-file-panel"
-      aria-label="Workspace file tree"
+      aria-label="Workspace explorer"
     >
       <header className="workspace-file-panel__header">
         <div className="workspace-file-panel__heading">
@@ -271,7 +271,7 @@ export function WorkspaceFileTreePanel({
             variant="ghost"
             size="icon-sm"
             className="workspace-file-panel__close app-close-icon-button"
-            aria-label="Close file tree panel"
+            aria-label="Close workspace explorer panel"
             onClick={onClose}
           >
             <XIcon aria-hidden="true" />

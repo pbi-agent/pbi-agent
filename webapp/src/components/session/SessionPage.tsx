@@ -7,9 +7,9 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CpuIcon,
-  FileIcon,
+  HistoryIcon,
   MessageCircleQuestionMark,
-  WrenchIcon,
+  PanelRightIcon,
 } from "lucide-react";
 import { AppSidebarLayout } from "../AppSidebar";
 import {
@@ -77,6 +77,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { EmptyState } from "../shared/EmptyState";
+import { Separator } from "../ui/separator";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
@@ -87,6 +88,29 @@ type SubAgentDisplayMap = Record<string, {
 }>;
 
 const EMPTY_TIMELINE_ITEMS: TimelineItem[] = [];
+const TOOL_HISTORY_SHORTCUT = "Alt+Shift+H";
+const WORKSPACE_EXPLORER_SHORTCUT = "Alt+Shift+E";
+
+function formatAltShiftShortcut(key: string): string {
+  const platform = typeof navigator === "undefined" ? "" : navigator.platform;
+  const isMac = /Mac|iP(hone|od|ad)/.test(platform);
+  return isMac ? `⌥⇧${key.toUpperCase()}` : `Alt+Shift+${key.toUpperCase()}`;
+}
+
+function matchesAltShiftShortcut(event: KeyboardEvent, key: string): boolean {
+  const normalizedKey = key.toLowerCase();
+  const keyMatches =
+    event.key.toLowerCase() === normalizedKey
+    || event.code.toLowerCase() === `key${normalizedKey}`;
+  return (
+    keyMatches
+    && event.altKey
+    && event.shiftKey
+    && !event.repeat
+    && !event.ctrlKey
+    && !event.metaKey
+  );
+}
 
 function useTimelineDisplayProjection(
   items: TimelineItem[],
@@ -179,6 +203,8 @@ export function SessionPage({
   const refreshedEndedLiveSessionsRef = useRef<Set<string>>(new Set());
   const isSidebarOpen = useSidebarStore((state) => state.isOpen);
   const workspaceQueryKey = workspaceKey ?? workspaceRoot ?? null;
+  const toolHistoryShortcutLabel = formatAltShiftShortcut("H");
+  const workspaceExplorerShortcutLabel = formatAltShiftShortcut("E");
 
   const routeSessionKey = routeSessionId
     ? getSavedSessionKey(routeSessionId)
@@ -372,27 +398,44 @@ export function SessionPage({
   useEffect(() => {
     if (isSubAgentRoute) return undefined;
 
-    const handleInteractiveShortcut = (event: KeyboardEvent) => {
+    const handleBehaviorShortcut = (event: KeyboardEvent) => {
       if (
-        event.key !== "Tab"
-        || !event.shiftKey
-        || event.repeat
-        || event.ctrlKey
-        || event.metaKey
-        || event.altKey
+        event.key === "Tab"
+        && event.shiftKey
+        && !event.repeat
+        && !event.ctrlKey
+        && !event.metaKey
+        && !event.altKey
       ) {
+        event.preventDefault();
+        setInteractiveMode((current) => !current);
         return;
       }
 
+      if (!matchesAltShiftShortcut(event, "h")) return;
       event.preventDefault();
-      setInteractiveMode((current) => !current);
+      setIncludeToolHistory((current) => !current);
     };
 
-    window.addEventListener("keydown", handleInteractiveShortcut, true);
+    window.addEventListener("keydown", handleBehaviorShortcut, true);
     return () => {
-      window.removeEventListener("keydown", handleInteractiveShortcut, true);
+      window.removeEventListener("keydown", handleBehaviorShortcut, true);
     };
   }, [isSubAgentRoute]);
+
+  useEffect(() => {
+    const handleWorkspaceExplorerShortcut = (event: KeyboardEvent) => {
+      if (!matchesAltShiftShortcut(event, "e")) return;
+
+      event.preventDefault();
+      setFileTreeOpen((current) => !current);
+    };
+
+    window.addEventListener("keydown", handleWorkspaceExplorerShortcut, true);
+    return () => {
+      window.removeEventListener("keydown", handleWorkspaceExplorerShortcut, true);
+    };
+  }, []);
 
   useEffect(() => {
     const handleNewSessionShortcut = (event: KeyboardEvent) => {
@@ -825,83 +868,114 @@ export function SessionPage({
           </div>
         ) : null}
         <div className="session-topbar__actions">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Toggle
-                type="button"
-                variant="outline"
-                size="sm"
-                className="session-topbar-control session-file-tree-toggle"
-                pressed={fileTreeOpen}
-                aria-label={fileTreeOpen ? "Close file tree" : "Open file tree"}
-                aria-expanded={fileTreeOpen}
-                aria-controls="workspace-file-tree-panel"
-                onPressedChange={setFileTreeOpen}
+          {!isSubAgentRoute ? (
+            <>
+              <div
+                className="session-topbar__group"
+                role="group"
+                aria-label="Agent behavior"
               >
-                <FileIcon aria-hidden="true" />
-              </Toggle>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="end">
-              {fileTreeOpen ? "Close workspace file tree." : "Open workspace file tree."}
-            </TooltipContent>
-          </Tooltip>
-          {!isSubAgentRoute ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Toggle
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="session-topbar-control session-interactive-toggle"
+                      pressed={interactiveMode}
+                      aria-label={
+                        interactiveMode ? "Disable interactive mode" : "Enable interactive mode"
+                      }
+                      aria-keyshortcuts="Shift+Tab"
+                      onPressedChange={setInteractiveMode}
+                    >
+                      <MessageCircleQuestionMark aria-hidden="true" />
+                    </Toggle>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" align="end">
+                    {interactiveMode
+                      ? "Interactive mode on. The agent can ask questions and offer choices. Shift+Tab to disable."
+                      : "Interactive mode off. Let the agent ask questions and offer choices. Shift+Tab to enable."}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Toggle
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="session-topbar-control session-tool-history-toggle"
+                      pressed={includeToolHistory}
+                      aria-label={
+                        includeToolHistory
+                          ? "Disable tool history"
+                          : "Enable tool history"
+                      }
+                      aria-keyshortcuts={TOOL_HISTORY_SHORTCUT}
+                      onPressedChange={setIncludeToolHistory}
+                    >
+                      <HistoryIcon aria-hidden="true" />
+                    </Toggle>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" align="end">
+                    {includeToolHistory
+                      ? `Tool history on. Prior tool calls and results are included. ${toolHistoryShortcutLabel} to disable.`
+                      : `Tool history off. Include prior tool calls and results. ${toolHistoryShortcutLabel} to enable.`}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <Separator
+                orientation="vertical"
+                decorative
+                className="session-topbar__divider"
+              />
+            </>
+          ) : null}
+          <div
+            className="session-topbar__group"
+            role="group"
+            aria-label="Workspace views"
+          >
             <Tooltip>
               <TooltipTrigger asChild>
                 <Toggle
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="session-topbar-control session-tool-history-toggle"
-                  pressed={includeToolHistory}
+                  className="session-topbar-control session-file-tree-toggle"
+                  pressed={fileTreeOpen}
                   aria-label={
-                    includeToolHistory
-                      ? "Disable tool history"
-                      : "Enable tool history"
+                    fileTreeOpen
+                      ? "Close workspace explorer"
+                      : "Open workspace explorer"
                   }
-                  onPressedChange={setIncludeToolHistory}
+                  aria-keyshortcuts={WORKSPACE_EXPLORER_SHORTCUT}
+                  aria-expanded={fileTreeOpen}
+                  aria-controls="workspace-file-tree-panel"
+                  onPressedChange={setFileTreeOpen}
                 >
-                  <WrenchIcon aria-hidden="true" />
+                  <PanelRightIcon aria-hidden="true" />
                 </Toggle>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="end">
-                {includeToolHistory
-                  ? "Prior tool calls and results will be included when continuing saved sessions."
-                  : "Include prior tool calls and results when continuing saved sessions."}
+                {fileTreeOpen
+                  ? `Workspace explorer open. ${workspaceExplorerShortcutLabel} to close.`
+                  : `Workspace explorer closed. Show workspace files. ${workspaceExplorerShortcutLabel} to open.`}
               </TooltipContent>
             </Tooltip>
-          ) : null}
-          {!isSubAgentRoute ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Toggle
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="session-topbar-control session-interactive-toggle"
-                  pressed={interactiveMode}
-                  aria-label={
-                    interactiveMode ? "Disable interactive mode" : "Enable interactive mode"
-                  }
-                  onPressedChange={setInteractiveMode}
-                >
-                  <MessageCircleQuestionMark aria-hidden="true" />
-                </Toggle>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="end">
-                {interactiveMode
-                  ? "Interactive mode enabled. Press Maj+Tab / Shift+Tab to disable."
-                  : "Let the agent ask questions and offer choices. Press Maj+Tab / Shift+Tab to enable."}
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
+          </div>
           {routeSessionId && !isSubAgentRoute ? (
-            <RunHistory sessionId={routeSessionId} />
-          ) : null}
-          <UsageBar
-            compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
-            usage={displayedUsage}
-          />
+            <RunHistory
+              sessionId={routeSessionId}
+              compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
+              usage={displayedUsage}
+            />
+          ) : (
+            <UsageBar
+              compactThreshold={sessionState?.runtime?.compact_threshold ?? null}
+              usage={displayedUsage}
+            />
+          )}
         </div>
       </div>
 
