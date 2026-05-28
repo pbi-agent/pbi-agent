@@ -80,17 +80,6 @@ function CommandCard({
         <div className="provider-card__subtitle">{command.path}</div>
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
-        <Badge size="meta" variant="secondary">
-          {command.slash_alias}
-        </Badge>
-        <ConfigListBadge label="Tools" items={command.allowed_tools} />
-        <ConfigListBadge label="Skills" items={command.skills} />
-        <ConfigListBadge label="Sub-agents" items={command.sub_agents} />
-        {command.model_profile_id ? (
-          <Badge size="meta" variant="outline">
-            Profile: {command.model_profile_id}
-          </Badge>
-        ) : null}
         <Button
           type="button"
           variant="ghost"
@@ -103,6 +92,28 @@ function CommandCard({
         </Button>
       </div>
     </Card>
+  );
+}
+
+function CommandPreviewBadges({ command }: { command: CommandView }) {
+  return (
+    <div
+      className="settings-preview-dialog__header-meta"
+      role="group"
+      aria-label="Command metadata"
+    >
+      <Badge size="meta" variant="secondary">
+        {command.slash_alias}
+      </Badge>
+      {command.model_profile_id ? (
+        <Badge size="meta" variant="outline">
+          Profile: {command.model_profile_id}
+        </Badge>
+      ) : null}
+      <ConfigListBadge label="Tools" items={command.allowed_tools} />
+      <ConfigListBadge label="Skills" items={command.skills} />
+      <ConfigListBadge label="Sub-agents" items={command.sub_agents} />
+    </div>
   );
 }
 
@@ -519,6 +530,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
           path={previewCommand.path}
           content={previewCommand.instructions}
           icon={FileTextIcon}
+          headerContent={<CommandPreviewBadges command={previewCommand} />}
           onClose={() => setPreviewCommand(null)}
         />
       ) : null}

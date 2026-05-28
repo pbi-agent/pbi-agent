@@ -868,18 +868,38 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Commands");
 
     expect(await screen.findByText("Review")).toBeInTheDocument();
-    expect(screen.getAllByText(/\/review/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Review Mode")).toBeInTheDocument();
-    expect(screen.getByText("Tools: read, shell")).toBeInTheDocument();
-    expect(screen.getByText("Skills: fastapi, shadcn")).toBeInTheDocument();
+    const commandCard = screen.getByText("Review Mode").closest(".command-card");
+    expect(commandCard).not.toBeNull();
     expect(
-      screen.getByText("Sub-agents: confidence-checker, fixer"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Profile: analysis")).toBeInTheDocument();
+      within(commandCard as HTMLElement).getAllByText(".agents/commands/review.md").length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(within(commandCard as HTMLElement).queryByText("/review")).not.toBeInTheDocument();
+    expect(
+      within(commandCard as HTMLElement).queryByText("Tools: read, shell"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(commandCard as HTMLElement).queryByText("Skills: fastapi, shadcn"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(commandCard as HTMLElement).queryByText(
+        "Sub-agents: confidence-checker, fixer",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(commandCard as HTMLElement).queryByText("Profile: analysis"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Review" });
+    expect(within(dialog).getByText("/review")).toBeInTheDocument();
+    expect(within(dialog).getByText("Profile: analysis")).toBeInTheDocument();
+    expect(within(dialog).getByText("Tools: read, shell")).toBeInTheDocument();
+    expect(within(dialog).getByText("Skills: fastapi, shadcn")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Sub-agents: confidence-checker, fixer"),
+    ).toBeInTheDocument();
     expect(within(dialog).getByRole("heading", { name: "Review Mode" })).toBeInTheDocument();
     expect(within(dialog).getByText("Review proposed code changes.")).toBeInTheDocument();
     expect(within(dialog).getByText("Bugs")).toBeInTheDocument();
