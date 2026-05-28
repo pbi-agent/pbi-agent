@@ -330,9 +330,6 @@ def _resolve_read_list_target(
     else:
         root_dir = root.resolve(strict=False)
         target_path = resolve_safe_path(root_dir, raw_pattern).resolve(strict=False)
-        _ensure_inside(
-            target_path, root_dir, message="'pattern' must resolve inside 'root'."
-        )
     _ensure_inside(
         target_path,
         workspace_root,

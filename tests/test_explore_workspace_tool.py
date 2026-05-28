@@ -322,7 +322,7 @@ def test_explore_workspace_rejects_root_outside_workspace(
     assert result.result == {"error": "'root' must resolve inside the workspace."}
 
 
-def test_explore_workspace_rejects_read_pattern_outside_root(
+def test_explore_workspace_allows_read_pattern_outside_root_inside_workspace(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -330,13 +330,30 @@ def test_explore_workspace_rejects_read_pattern_outside_root(
     (tmp_path / "README.md").write_text("# Notes\n", encoding="utf-8")
 
     result = explore_workspace_tool.handle(
-        {"pattern": "../README.md", "target": "read", "root": "src"},
+        {"pattern": str(tmp_path / "README.md"), "target": "read", "root": "src"},
+        ToolContext(),
+    )
+
+    assert result == "# Notes"
+
+
+def test_explore_workspace_rejects_read_pattern_outside_workspace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("# Notes\n", encoding="utf-8")
+    monkeypatch.chdir(workspace)
+
+    result = explore_workspace_tool.handle(
+        {"pattern": str(outside), "target": "read"},
         ToolContext(),
     )
 
     assert isinstance(result, ToolOutput)
     assert result.is_error is True
-    assert result.result == {"error": "'pattern' must resolve inside 'root'."}
+    assert result.result == {"error": "'pattern' must resolve inside the workspace."}
 
 
 def test_explore_workspace_invalid_regex_returns_error_output(
