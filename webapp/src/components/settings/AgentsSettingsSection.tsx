@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
-  CheckCircle2Icon,
   DownloadIcon,
   EyeIcon,
   FolderGit2Icon,
@@ -30,12 +29,7 @@ import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   Dialog,
   DialogContent,
@@ -237,7 +231,6 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
     source: string | null;
     agentName: string;
   } | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   function resetDialogState() {
     setCustomSource("");
@@ -276,10 +269,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
     resetDialogState();
   }
 
-  async function applyInstallResponse(
-    response: AgentInstallPayload,
-    agentName: string,
-  ) {
+  async function applyInstallResponse(response: AgentInstallPayload) {
     queryClient.setQueryData<ConfigBootstrapPayload>(
       ["config-bootstrap"],
       (current) =>
@@ -290,9 +280,6 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
               config_revision: response.config_revision,
             }
           : current,
-    );
-    setSuccessMessage(
-      `Installed ${agentName}. New sessions can delegate to it immediately; active sessions can run /reload.`,
     );
     closeAddDialog();
     await Promise.all([
@@ -324,15 +311,11 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
 
   async function handleToggleAgent(agent: AgentView, enabled: boolean) {
     setTogglingAgent(agent.name);
-    setSuccessMessage(null);
     try {
       const response = await setAgentEnabled(agent.name, enabled);
       await applyAgentListResponse(response);
-      setSuccessMessage(
-        `${enabled ? "Enabled" : "Disabled"} ${agent.name}. New sessions use the updated agent catalog immediately; active sessions can run /reload.`,
-      );
-    } catch (err) {
-      setSuccessMessage((err as Error).message);
+    } catch {
+      // Keep the tab free of notification cards.
     } finally {
       setTogglingAgent(null);
     }
@@ -340,15 +323,11 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
 
   async function handleToggleAll(enabled: boolean) {
     setTogglingAll(true);
-    setSuccessMessage(null);
     try {
       const response = await setAllAgentsEnabled(enabled);
       await applyAgentListResponse(response);
-      setSuccessMessage(
-        `${enabled ? "Enabled" : "Disabled"} all installed agents. Active sessions can run /reload.`,
-      );
-    } catch (err) {
-      setSuccessMessage((err as Error).message);
+    } catch {
+      // Keep the tab free of notification cards.
     } finally {
       setTogglingAll(false);
     }
@@ -369,7 +348,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
         agent_name: candidate.agent_name,
         ...(force ? { force: true } : {}),
       });
-      await applyInstallResponse(response, candidate.agent_name);
+      await applyInstallResponse(response);
     } catch (err) {
       const message = (err as Error).message;
       setInstallError(message);
@@ -395,21 +374,6 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
 
   return (
     <section className="settings-section settings-section--active">
-      {successMessage ? (
-        <Alert className="settings-inline-note skills-success-note">
-          <CheckCircle2Icon />
-          <AlertDescription>{successMessage}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Alert className="settings-inline-note skills-reload-note">
-        <SparklesIcon />
-        <AlertDescription>
-          New sessions see installed agents immediately. Active sessions can run{" "}
-          <code className="command-hint__path">/reload</code> before the next model request.
-        </AlertDescription>
-      </Alert>
-
       <Card className="settings-panel">
         <CardHeader className="settings-panel__header">
           <div className="settings-panel__heading">

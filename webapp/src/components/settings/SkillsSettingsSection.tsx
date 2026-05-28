@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
-  CheckCircle2Icon,
   DownloadIcon,
   EyeIcon,
   FolderGit2Icon,
@@ -30,12 +29,7 @@ import { SettingsPreviewDialog } from "./SettingsPreviewDialog";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import {
   Dialog,
   DialogContent,
@@ -185,7 +179,6 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
     source: string | null;
     skillName: string;
   } | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [togglingAll, setTogglingAll] = useState(false);
 
@@ -226,10 +219,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
     resetDialogState();
   }
 
-  async function applyInstallResponse(
-    response: SkillInstallPayload,
-    skillName: string,
-  ) {
+  async function applyInstallResponse(response: SkillInstallPayload) {
     queryClient.setQueryData<ConfigBootstrapPayload>(
       ["config-bootstrap"],
       (current) =>
@@ -240,9 +230,6 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
               config_revision: response.config_revision,
             }
           : current,
-    );
-    setSuccessMessage(
-      `Installed ${skillName}. New sessions can use it immediately; active sessions can run /reload.`,
     );
     closeAddDialog();
     await Promise.all([
@@ -274,15 +261,11 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
 
   async function handleToggleSkill(skill: SkillView, enabled: boolean) {
     setTogglingSkill(skill.name);
-    setSuccessMessage(null);
     try {
       const response = await setSkillEnabled(skill.name, enabled);
       await applySkillListResponse(response);
-      setSuccessMessage(
-        `${enabled ? "Enabled" : "Disabled"} ${skill.name}. New sessions use the updated skill catalog immediately; active sessions can run /reload.`,
-      );
-    } catch (err) {
-      setSuccessMessage((err as Error).message);
+    } catch {
+      // Keep the tab free of notification cards.
     } finally {
       setTogglingSkill(null);
     }
@@ -290,15 +273,11 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
 
   async function handleToggleAll(enabled: boolean) {
     setTogglingAll(true);
-    setSuccessMessage(null);
     try {
       const response = await setAllSkillsEnabled(enabled);
       await applySkillListResponse(response);
-      setSuccessMessage(
-        `${enabled ? "Enabled" : "Disabled"} all installed skills. Active sessions can run /reload.`,
-      );
-    } catch (err) {
-      setSuccessMessage((err as Error).message);
+    } catch {
+      // Keep the tab free of notification cards.
     } finally {
       setTogglingAll(false);
     }
@@ -319,7 +298,7 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
         skill_name: candidate.name,
         ...(force ? { force: true } : {}),
       });
-      await applyInstallResponse(response, candidate.name);
+      await applyInstallResponse(response);
     } catch (err) {
       const message = (err as Error).message;
       setInstallError(message);
@@ -345,21 +324,6 @@ export function SkillsSettingsSection({ skills }: { skills: SkillView[] }) {
 
   return (
     <section className="settings-section settings-section--active">
-      {successMessage ? (
-        <Alert className="settings-inline-note skills-success-note">
-          <CheckCircle2Icon />
-          <AlertDescription>{successMessage}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Alert className="settings-inline-note skills-reload-note">
-        <SparklesIcon />
-        <AlertDescription>
-          New sessions see installed skills immediately. Active sessions can run{" "}
-          <code className="command-hint__path">/reload</code> before the next model request.
-        </AlertDescription>
-      </Alert>
-
       <Card className="settings-panel">
         <CardHeader className="settings-panel__header">
           <div className="settings-panel__heading">

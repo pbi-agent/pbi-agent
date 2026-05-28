@@ -1,5 +1,4 @@
-[X] Inspect Commands settings badge rendering and preview usage
-[X] Move command badges into preview header
-[X] Update tests/styles/static assets
-[X] Run validation
+[X] Restore project settings headers while keeping notices removed
+[X] Update SettingsPage tests for restored headers/no notices
+[X] Run focused frontend validation and rebuild static assets
 [X] Update task memory

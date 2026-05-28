@@ -2,7 +2,6 @@ import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
-  CheckCircle2Icon,
   DownloadIcon,
   EyeIcon,
   FileTextIcon,
@@ -205,7 +204,6 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
     commandName: string;
     slashAlias: string;
   } | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   function resetDialogState() {
     setCustomSource("");
@@ -244,10 +242,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
     resetDialogState();
   }
 
-  async function applyInstallResponse(
-    response: CommandInstallPayload,
-    commandLabel: string,
-  ) {
+  async function applyInstallResponse(response: CommandInstallPayload) {
     queryClient.setQueryData<ConfigBootstrapPayload>(
       ["config-bootstrap"],
       (current) =>
@@ -258,9 +253,6 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
               config_revision: response.config_revision,
             }
           : current,
-    );
-    setSuccessMessage(
-      `Installed ${commandLabel}. It is available from the composer command menu immediately.`,
     );
     closeAddDialog();
     await Promise.all([
@@ -284,7 +276,7 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
         command_name: candidate.command_id,
         ...(force ? { force: true } : {}),
       });
-      await applyInstallResponse(response, candidate.slash_alias);
+      await applyInstallResponse(response);
     } catch (err) {
       const message = (err as Error).message;
       setInstallError(message);
@@ -315,26 +307,9 @@ export function CommandsSettingsSection({ commands }: { commands: CommandView[] 
 
   return (
     <section className="settings-section settings-section--active">
-      {successMessage ? (
-        <Alert className="settings-inline-note commands-success-note">
-          <CheckCircle2Icon />
-          <AlertDescription>{successMessage}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <Alert className="settings-inline-note commands-hint">
-        <AlertDescription>
-          Add Markdown files under{" "}
-          <code className="command-hint__path">.agents/commands/</code> — a
-          file like{" "}
-          <code className="command-hint__path">.agents/commands/review.md</code>{" "}
-          becomes <code className="command-hint__path">/review</code>.
-        </AlertDescription>
-      </Alert>
-
       <Card className="settings-panel">
         <CardHeader className="settings-panel__header">
-          <div>
+          <div className="settings-panel__heading">
             <CardTitle className="settings-panel__title">Project Commands</CardTitle>
             <div className="settings-panel__subtitle">
               Installed slash commands from .agents/commands

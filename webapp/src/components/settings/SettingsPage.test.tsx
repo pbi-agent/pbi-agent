@@ -913,6 +913,10 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Commands");
 
     expect(await screen.findByText("Project Commands")).toBeInTheDocument();
+    expect(
+      screen.getByText("Installed slash commands from .agents/commands"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Add Markdown files under")).not.toBeInTheDocument();
     expect(fetchCommandCandidates).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Add Command" }));
@@ -935,7 +939,7 @@ describe("SettingsPage", () => {
     expect(fetchCommandCandidates).toHaveBeenCalledWith(null);
   });
 
-  it("installs a selected command, refetches settings, and shows success", async () => {
+  it("installs a selected command, refetches settings, and closes the dialog", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap)
       .mockResolvedValueOnce(makeConfigBootstrap())
@@ -976,7 +980,6 @@ describe("SettingsPage", () => {
       }),
     );
     await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/Installed \/repo-review/i)).toBeInTheDocument();
     expect(
       await screen.findByText(".agents/commands/repo-review.md"),
     ).toBeInTheDocument();
@@ -1212,7 +1215,6 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Agents");
     await user.click(await screen.findByRole("switch", { name: "Disable code-reviewer" }));
     await waitFor(() => expect(setAgentEnabled).toHaveBeenCalledWith("code-reviewer", false));
-    expect(await screen.findByText(/Disabled code-reviewer/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Enable all" }));
     await waitFor(() => expect(setAllAgentsEnabled).toHaveBeenCalledWith(true));
@@ -1226,6 +1228,12 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Agents");
 
     expect(await screen.findByText("Project Agents")).toBeInTheDocument();
+    expect(
+      screen.getByText("Installed sub-agents from .agents/agents"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/New sessions see installed agents immediately/),
+    ).not.toBeInTheDocument();
     expect(fetchAgentCandidates).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Add Agent" }));
@@ -1246,7 +1254,7 @@ describe("SettingsPage", () => {
     expect(fetchAgentCandidates).toHaveBeenCalledWith(null);
   });
 
-  it("installs a selected agent, refetches settings, and shows success", async () => {
+  it("installs a selected agent, refetches settings, and closes the dialog", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap)
       .mockResolvedValueOnce(makeConfigBootstrap())
@@ -1286,7 +1294,6 @@ describe("SettingsPage", () => {
       }),
     );
     await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/Installed repo-reviewer/i)).toBeInTheDocument();
     expect(
       await screen.findByText(".agents/agents/repo-reviewer.md"),
     ).toBeInTheDocument();
@@ -1475,6 +1482,12 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Skills");
 
     expect(await screen.findByText("Project Skills")).toBeInTheDocument();
+    expect(
+      screen.getByText("Installed Agent Skills from .agents/skills"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/New sessions see installed skills immediately/),
+    ).not.toBeInTheDocument();
     expect(fetchSkillCandidates).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Add Skill" }));
@@ -1495,7 +1508,7 @@ describe("SettingsPage", () => {
     expect(fetchSkillCandidates).toHaveBeenCalledWith(null);
   });
 
-  it("installs a selected skill, refetches settings, and shows success", async () => {
+  it("installs a selected skill, refetches settings, and closes the dialog", async () => {
     const user = userEvent.setup();
     vi.mocked(fetchConfigBootstrap)
       .mockResolvedValueOnce(makeConfigBootstrap())
@@ -1530,7 +1543,6 @@ describe("SettingsPage", () => {
       }),
     );
     await waitFor(() => expect(fetchConfigBootstrap).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/Installed repo-review/i)).toBeInTheDocument();
     expect(
       await screen.findByText(".agents/skills/repo-review/SKILL.md"),
     ).toBeInTheDocument();
