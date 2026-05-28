@@ -635,12 +635,14 @@ function buildTurnSummaries(
   {
     showSubAgentCards,
     sessionIsActive,
+    suppressFinalTurnSummary,
     turnElapsedSeconds,
     turnCostUsd,
     workRunDurations,
   }: {
     showSubAgentCards: boolean;
     sessionIsActive: boolean;
+    suppressFinalTurnSummary: boolean;
     turnElapsedSeconds?: number | null;
     turnCostUsd?: number | null;
     workRunDurations: ReadonlyMap<string, number | null>;
@@ -665,7 +667,7 @@ function buildTurnSummaries(
     if (!turn) return;
     const closedTurn = turn;
     turn = null;
-    if (finalTurn && sessionIsActive) return;
+    if (finalTurn && (sessionIsActive || suppressFinalTurnSummary)) return;
 
     const summaryItems = workRunCountItems(closedTurn.workItems, showSubAgentCards);
     const durationSeconds = secondsBetween(closedTurn.startMs, closedTurn.endMs)
@@ -1739,6 +1741,14 @@ export const SessionTimeline = memo(function SessionTimeline({
       ? latestRenderUnit.key
       : null;
   const latestWorkRunKey = [...renderUnits].reverse().find((unit) => unit.kind === "work_run")?.key ?? null;
+  // In sub-agent routes, a progress assistant message can briefly clear
+  // `processing` while the selected child is still running. Suppress the
+  // final summary until the child status settles so that summary row does not
+  // flash in and out between tool updates.
+  const selectedSubAgentStillRunning = !showSubAgentCards
+    && Object.values(subAgents).some((subAgent) =>
+      subAgent.status === "running" || subAgent.status === "starting",
+    );
   const liveTurnElapsedSeconds = useLiveTurnElapsedSeconds(
     turnElapsedSeconds ?? null,
     sessionIsActive,
@@ -1761,6 +1771,7 @@ export const SessionTimeline = memo(function SessionTimeline({
     () => buildTurnSummaries(renderUnits, {
       showSubAgentCards,
       sessionIsActive,
+      suppressFinalTurnSummary: selectedSubAgentStillRunning,
       turnElapsedSeconds: liveTurnElapsedSeconds,
       turnCostUsd,
       workRunDurations,
@@ -1768,6 +1779,7 @@ export const SessionTimeline = memo(function SessionTimeline({
     [
       renderUnits,
       sessionIsActive,
+      selectedSubAgentStillRunning,
       showSubAgentCards,
       liveTurnElapsedSeconds,
       turnCostUsd,

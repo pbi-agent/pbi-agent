@@ -629,6 +629,139 @@ describe("SessionTimeline", () => {
     );
   });
 
+  it("defers the final sub-agent turn summary until the selected sub-agent completes", () => {
+    const firstItems: TimelineItem[] = [
+      {
+        kind: "message",
+        itemId: "sub-user-1",
+        createdAt: "2026-05-14T10:00:00.000Z",
+        updatedAt: "2026-05-14T10:00:00.000Z",
+        role: "user",
+        content: "Implement the task",
+        markdown: false,
+        subAgentId: "subagent-1",
+      },
+      {
+        kind: "tool_group",
+        itemId: "subagent-1-tool-1",
+        createdAt: "2026-05-14T10:00:01.000Z",
+        updatedAt: "2026-05-14T10:00:03.000Z",
+        label: "shell",
+        status: "completed",
+        subAgentId: "subagent-1",
+        items: [
+          {
+            text: "first command",
+            metadata: { tool_name: "shell", status: "completed" },
+          },
+        ],
+      },
+      {
+        kind: "message",
+        itemId: "subagent-1-progress",
+        createdAt: "2026-05-14T10:00:04.000Z",
+        updatedAt: "2026-05-14T10:00:04.000Z",
+        role: "assistant",
+        content: "Continuing.",
+        markdown: true,
+        subAgentId: "subagent-1",
+      },
+    ];
+    const secondTool: TimelineItem = {
+      kind: "tool_group",
+      itemId: "subagent-1-tool-2",
+      createdAt: "2026-05-14T10:00:05.000Z",
+      updatedAt: "2026-05-14T10:00:07.000Z",
+      label: "explore_workspace",
+      status: "running",
+      subAgentId: "subagent-1",
+      items: [
+        {
+          text: "read file",
+          metadata: {
+            tool_name: "explore_workspace",
+            status: "running",
+            arguments: { pattern: "README.md", target: "read" },
+          },
+        },
+      ],
+    };
+    const completedSecondTool: TimelineItem = {
+      ...secondTool,
+      status: "completed",
+      items: [
+        {
+          text: "read file",
+          metadata: {
+            tool_name: "explore_workspace",
+            status: "completed",
+            arguments: { pattern: "README.md", target: "read" },
+          },
+        },
+      ],
+    };
+    const finalMessage: TimelineItem = {
+      kind: "message",
+      itemId: "subagent-1-final",
+      createdAt: "2026-05-14T10:00:08.000Z",
+      updatedAt: "2026-05-14T10:00:08.000Z",
+      role: "assistant",
+      content: "Done.",
+      markdown: true,
+      subAgentId: "subagent-1",
+    };
+
+    const { rerender } = render(
+      <SessionTimeline
+        items={firstItems}
+        subAgents={{
+          "subagent-1": { title: "Worker", status: "running" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={1}
+        showSubAgentCards={false}
+      />,
+    );
+
+    expect(screen.queryByRole("note", { name: /Turn summary/i })).not.toBeInTheDocument();
+
+    rerender(
+      <SessionTimeline
+        items={[...firstItems, secondTool]}
+        subAgents={{
+          "subagent-1": { title: "Worker", status: "running" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running tool" }}
+        itemsVersion={2}
+        showSubAgentCards={false}
+      />,
+    );
+
+    expect(screen.queryByRole("note", { name: /Turn summary/i })).not.toBeInTheDocument();
+
+    rerender(
+      <SessionTimeline
+        items={[...firstItems, completedSecondTool, finalMessage]}
+        subAgents={{
+          "subagent-1": { title: "Worker", status: "completed" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={null}
+        itemsVersion={3}
+        showSubAgentCards={false}
+      />,
+    );
+
+    expect(screen.getByRole("note", {
+      name: "Turn summary 1 read, 1 shell · 0:08",
+    })).toBeInTheDocument();
+  });
+
   it("follows the bottom when a tool group appends to a collapsed active Working block", async () => {
     const scrollTo = vi.fn();
     HTMLElement.prototype.scrollTo = scrollTo;
