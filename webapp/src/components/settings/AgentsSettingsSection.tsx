@@ -83,14 +83,7 @@ function AgentCard({
   return (
     <Card className="settings-item settings-item--provider skill-card">
       <div className="provider-card__info">
-        <span className="settings-item__name">
-          {agent.name}
-          {agent.enabled === false ? (
-            <Badge size="meta" variant="secondary" className="ml-2">
-              disabled
-            </Badge>
-          ) : null}
-        </span>
+        <span className="settings-item__name">{agent.name}</span>
         {agent.description ? (
           <div className="settings-item__summary skill-card__description">
             {agent.description}
@@ -99,15 +92,6 @@ function AgentCard({
         <div className="provider-card__subtitle">{agent.path}</div>
       </div>
       <div className="settings-item__actions settings-item__actions--provider command-card__actions">
-        <ConfigListBadge label="Tools" items={agent.allowed_tools} />
-        <ConfigListBadge label="Skills" items={agent.skills} />
-        <ConfigListBadge label="Commands" items={agent.commands} />
-        <ConfigListBadge label="Sub-agents" items={agent.sub_agents} />
-        {agent.model_profile_id ? (
-          <Badge size="meta" variant="outline">
-            Profile: {agent.model_profile_id}
-          </Badge>
-        ) : null}
         <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <Switch
             size="sm"
@@ -130,6 +114,41 @@ function AgentCard({
         </Button>
       </div>
     </Card>
+  );
+}
+
+function AgentPreviewBadges({ agent }: { agent: AgentView }) {
+  const hasBadges =
+    agent.enabled === false ||
+    Boolean(agent.model_profile_id) ||
+    Boolean(agent.allowed_tools?.length) ||
+    Boolean(agent.skills?.length) ||
+    Boolean(agent.commands?.length) ||
+    Boolean(agent.sub_agents?.length);
+
+  if (!hasBadges) return null;
+
+  return (
+    <div
+      className="settings-preview-dialog__header-meta"
+      role="group"
+      aria-label="Agent metadata"
+    >
+      {agent.enabled === false ? (
+        <Badge size="meta" variant="secondary">
+          disabled
+        </Badge>
+      ) : null}
+      {agent.model_profile_id ? (
+        <Badge size="meta" variant="outline">
+          Profile: {agent.model_profile_id}
+        </Badge>
+      ) : null}
+      <ConfigListBadge label="Tools" items={agent.allowed_tools} />
+      <ConfigListBadge label="Skills" items={agent.skills} />
+      <ConfigListBadge label="Commands" items={agent.commands} />
+      <ConfigListBadge label="Sub-agents" items={agent.sub_agents} />
+    </div>
   );
 }
 
@@ -623,6 +642,7 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
           path={previewAgent.path}
           content={previewAgent.instructions}
           icon={SparklesIcon}
+          headerContent={<AgentPreviewBadges agent={previewAgent} />}
           onClose={() => setPreviewAgent(null)}
         />
       ) : null}

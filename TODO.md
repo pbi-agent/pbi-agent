@@ -1,3 +1,4 @@
-[X] Update docs for composable command/sub-agent frontmatter
-[X] Validate documentation build
+[X] Move agent metadata badges into preview header
+[X] Update tests for new badge placement
+[X] Validate frontend changes
 [X] Update task memory

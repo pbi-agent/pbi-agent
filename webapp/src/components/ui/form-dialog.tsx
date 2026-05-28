@@ -30,6 +30,7 @@ type FormDialogProps = {
   onOpenChange: (open: boolean) => void;
   title: React.ReactNode;
   description?: React.ReactNode;
+  headerContent?: React.ReactNode;
   icon?: React.ReactNode;
   onSubmit?: (event: React.FormEvent<HTMLFormElement>) => void;
   isPending?: boolean;
@@ -55,6 +56,7 @@ export function FormDialog({
   onOpenChange,
   title,
   description,
+  headerContent,
   icon,
   onSubmit,
   isPending = false,
@@ -121,6 +123,7 @@ export function FormDialog({
               <div>{description}</div>
             </DialogDescription>
           ) : null}
+          {headerContent ? headerContent : null}
         </DialogHeader>
 
         {onSubmit ? (

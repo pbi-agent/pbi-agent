@@ -1136,17 +1136,24 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("code-reviewer")).toBeInTheDocument();
     expect(screen.getByText("Review code changes")).toBeInTheDocument();
-    expect(screen.getByText("Tools: read, shell")).toBeInTheDocument();
-    expect(screen.getByText("Skills: fastapi, shadcn")).toBeInTheDocument();
-    expect(screen.getByText("Commands: review")).toBeInTheDocument();
+    expect(screen.queryByText("Tools: read, shell")).not.toBeInTheDocument();
+    expect(screen.queryByText("Skills: fastapi, shadcn")).not.toBeInTheDocument();
+    expect(screen.queryByText("Commands: review")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Sub-agents: confidence-checker, fixer"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Profile: analysis")).toBeInTheDocument();
+      screen.queryByText("Sub-agents: confidence-checker, fixer"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Profile: analysis")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
     const dialog = await screen.findByRole("dialog", { name: "code-reviewer" });
+    expect(within(dialog).getByText("Profile: analysis")).toBeInTheDocument();
+    expect(within(dialog).getByText("Tools: read, shell")).toBeInTheDocument();
+    expect(within(dialog).getByText("Skills: fastapi, shadcn")).toBeInTheDocument();
+    expect(within(dialog).getByText("Commands: review")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Sub-agents: confidence-checker, fixer"),
+    ).toBeInTheDocument();
     expect(within(dialog).getByRole("heading", { name: "Agent Prompt" })).toBeInTheDocument();
     expect(within(dialog).getByText("Review code changes carefully.")).toBeInTheDocument();
   });

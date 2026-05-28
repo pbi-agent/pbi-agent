@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { LucideProps } from "lucide-react";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { FormDialog } from "../ui/form-dialog";
@@ -8,6 +8,7 @@ type SettingsPreviewDialogProps = {
   path: string;
   content: string;
   icon: ComponentType<LucideProps>;
+  headerContent?: ReactNode;
   onClose: () => void;
 };
 
@@ -16,6 +17,7 @@ export function SettingsPreviewDialog({
   path,
   content,
   icon: Icon,
+  headerContent,
   onClose,
 }: SettingsPreviewDialogProps) {
   return (
@@ -26,6 +28,7 @@ export function SettingsPreviewDialog({
       }}
       title={title}
       description={path}
+      headerContent={headerContent}
       icon={<Icon />}
       size="wide"
       contentClassName="settings-preview-dialog"
