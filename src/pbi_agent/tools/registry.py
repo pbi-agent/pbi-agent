@@ -6,7 +6,7 @@ from typing import Any
 
 from pbi_agent.tools.types import ToolHandler, ToolSpec
 
-ToolSpecFactory = Callable[[Path | None], ToolSpec]
+ToolSpecFactory = Callable[..., ToolSpec]
 
 _REGISTRY: dict[str, tuple[ToolSpec | ToolSpecFactory, ToolHandler]] = {}
 
@@ -34,10 +34,11 @@ def _resolve_spec(
     entry: tuple[ToolSpec | ToolSpecFactory, ToolHandler],
     *,
     workspace: Path | None = None,
+    directory_key: str | None = None,
 ) -> ToolSpec:
     spec_or_factory, _handler = entry
     if callable(spec_or_factory):
-        return spec_or_factory(workspace)
+        return spec_or_factory(workspace, directory_key=directory_key)
     return spec_or_factory
 
 
@@ -45,10 +46,11 @@ def get_tool_specs(
     *,
     excluded_names: set[str] | None = None,
     workspace: Path | None = None,
+    directory_key: str | None = None,
 ) -> list[ToolSpec]:
     excluded = excluded_names or set()
     return [
-        _resolve_spec(item, workspace=workspace)
+        _resolve_spec(item, workspace=workspace, directory_key=directory_key)
         for name, item in _REGISTRY.items()
         if name not in excluded
     ]
@@ -61,11 +63,16 @@ def get_tool_handler(name: str) -> ToolHandler | None:
     return entry[1]
 
 
-def get_tool_spec(name: str, *, workspace: Path | None = None) -> ToolSpec | None:
+def get_tool_spec(
+    name: str,
+    *,
+    workspace: Path | None = None,
+    directory_key: str | None = None,
+) -> ToolSpec | None:
     entry = _REGISTRY.get(name)
     if entry is None:
         return None
-    return _resolve_spec(entry, workspace=workspace)
+    return _resolve_spec(entry, workspace=workspace, directory_key=directory_key)
 
 
 def get_openai_tool_definitions(

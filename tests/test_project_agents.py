@@ -20,6 +20,7 @@ from pbi_agent.agents.project_catalog import (
     discover_installed_project_agents,
     render_installed_project_agents,
 )
+from pbi_agent.agents.state import set_agent_enabled
 from pbi_agent.agents.project_installer import (
     DEFAULT_AGENTS_SOURCE,
     GitHubAgentSource,
@@ -173,7 +174,29 @@ def test_render_installed_project_agents_lists_table(tmp_path: Path) -> None:
     rendered = output.getvalue()
     assert "Project Agents" in rendered
     assert "code-reviewer" in rendered
+    assert "enabled" in rendered
     assert "Reviews code changes." in rendered
+
+
+def test_render_installed_project_agents_lists_disabled_status(tmp_path: Path) -> None:
+    _write_agent(
+        tmp_path / ".agents" / "agents",
+        "code-reviewer",
+        "Reviews code changes.",
+        "You are a code reviewer.",
+    )
+    set_agent_enabled("code-reviewer", False, workspace=tmp_path)
+    output = io.StringIO()
+
+    rc = render_installed_project_agents(
+        workspace=tmp_path,
+        console=Console(file=output, force_terminal=False, color_system=None),
+    )
+
+    assert rc == 0
+    rendered = output.getvalue()
+    assert "code-reviewer" in rendered
+    assert "disabled" in rendered
 
 
 def test_render_installed_project_agents_shows_empty_state(tmp_path: Path) -> None:
@@ -205,6 +228,22 @@ def test_discover_installed_project_agents_is_workspace_scoped(tmp_path: Path) -
     )
 
     discovered = discover_installed_project_agents(workspace=workspace_one)
+
+    assert [agent.name for agent in discovered] == ["code-reviewer"]
+
+
+def test_discover_installed_project_agents_includes_disabled_agents(
+    tmp_path: Path,
+) -> None:
+    _write_agent(
+        tmp_path / ".agents" / "agents",
+        "code-reviewer",
+        "Reviews code changes.",
+        "You are a code reviewer.",
+    )
+    set_agent_enabled("code-reviewer", False, workspace=tmp_path)
+
+    discovered = discover_installed_project_agents(workspace=tmp_path)
 
     assert [agent.name for agent in discovered] == ["code-reviewer"]
 

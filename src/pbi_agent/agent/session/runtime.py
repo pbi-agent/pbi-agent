@@ -9,8 +9,11 @@ from typing import Any, Callable
 from pbi_agent.agent.skill_discovery import format_project_skills_markdown
 from pbi_agent.agent.skill_discovery import extract_explicit_skill_names
 from pbi_agent.agent.sub_agent_discovery import (
+    extract_explicit_agent_names,
     format_project_sub_agents_markdown,
     get_project_sub_agent_by_name,
+    reset_active_explicit_agent_names,
+    set_active_explicit_agent_names,
 )
 from pbi_agent.agent.system_prompt import (
     get_sub_agent_system_prompt,
@@ -147,6 +150,7 @@ def run_single_turn(
     )
     workspace = (workspace_root or Path.cwd()).resolve()
     explicit_skill_names = extract_explicit_skill_names(prompt_text)
+    explicit_agent_names = extract_explicit_agent_names(prompt_text)
     turn_instructions = _turn_instructions(
         active_command_instructions,
         settings=settings,
@@ -205,12 +209,14 @@ def run_single_turn(
                 excluded_tools=INTERACTIVE_ONLY_TOOLS,
                 cwd=workspace,
                 explicit_skill_names=explicit_skill_names,
+                explicit_agent_names=explicit_agent_names,
                 workspace_directory_key=workspace_directory_key,
             ),
             excluded_tools=INTERACTIVE_ONLY_TOOLS,
             tool_availability_overridden=runtime.tool_availability_overridden,
             workspace_root=workspace,
             workspace_directory_key=workspace_directory_key,
+            explicit_agent_names=explicit_agent_names,
         ) as provider:
             display.assistant_start()
             _resume_session(
@@ -490,7 +496,10 @@ def run_session_loop(
                     continue
                 if normalized_command == AGENTS_COMMAND:
                     _render_temporary_command_markdown(
-                        format_project_sub_agents_markdown(workspace)
+                        format_project_sub_agents_markdown(
+                            workspace,
+                            directory_key=workspace_directory_key,
+                        )
                     )
                     continue
                 if normalized_command == EXTENSIONS_COMMAND:
@@ -578,6 +587,7 @@ def run_session_loop(
                     interactive_mode=turn_interactive_mode
                 )
                 explicit_skill_names = extract_explicit_skill_names(user_input)
+                explicit_agent_names = extract_explicit_agent_names(user_input)
                 turn_instructions = _turn_instructions(
                     active_command_instructions,
                     settings=turn_settings,
@@ -586,12 +596,15 @@ def run_session_loop(
                     user_input=user_input,
                     workspace_directory_key=workspace_directory_key,
                 )
-                if turn_instructions is None and explicit_skill_names:
+                if turn_instructions is None and (
+                    explicit_skill_names or explicit_agent_names
+                ):
                     turn_instructions = get_system_prompt(
                         settings=turn_settings,
                         excluded_tools=turn_excluded_tools,
                         cwd=workspace,
                         explicit_skill_names=explicit_skill_names,
+                        explicit_agent_names=explicit_agent_names,
                         workspace_directory_key=workspace_directory_key,
                     )
                 if turn_instructions is None and turn_interactive_mode:
@@ -600,6 +613,7 @@ def run_session_loop(
                         excluded_tools=turn_excluded_tools,
                         cwd=workspace,
                         explicit_skill_names=explicit_skill_names,
+                        explicit_agent_names=explicit_agent_names,
                         workspace_directory_key=workspace_directory_key,
                     )
                 turn_input = _build_user_turn_input(
@@ -655,19 +669,24 @@ def run_session_loop(
                 try:
                     _raise_if_interrupted(display)
                     with ExitStack() as turn_provider_stack:
-                        if _requires_provider_reopen(
-                            current_runtime.settings,
-                            turn_settings,
+                        if (
+                            _requires_provider_reopen(
+                                current_runtime.settings,
+                                turn_settings,
+                            )
+                            or explicit_agent_names
                         ):
                             turn_provider = turn_provider_stack.enter_context(
                                 _open_runtime_provider(
                                     turn_settings,
+                                    system_prompt=turn_instructions,
                                     excluded_tools=turn_excluded_tools,
                                     tool_availability_overridden=(
                                         turn_runtime.tool_availability_overridden
                                     ),
                                     workspace_root=workspace,
                                     workspace_directory_key=workspace_directory_key,
+                                    explicit_agent_names=explicit_agent_names,
                                 )
                             )
                             _refresh_provider_history_from_store(
@@ -905,7 +924,14 @@ def run_sub_agent_task(
     workspace = (workspace_root or Path.cwd()).resolve()
     agent_definition = None
     if agent_type is not None:
-        agent_definition = get_project_sub_agent_by_name(agent_type, workspace)
+        if workspace_directory_key is None:
+            agent_definition = get_project_sub_agent_by_name(agent_type, workspace)
+        else:
+            agent_definition = get_project_sub_agent_by_name(
+                agent_type,
+                workspace,
+                directory_key=workspace_directory_key,
+            )
         if agent_definition is None:
             return {
                 "status": "failed",
@@ -1162,16 +1188,20 @@ def _open_runtime_provider(
     tool_availability_overridden: bool | None = None,
     workspace_root: Path | None = None,
     workspace_directory_key: str | None = None,
+    explicit_agent_names: set[str] | None = None,
 ):
     from pbi_agent.mcp import McpServerPool
 
     runtime = _coerce_runtime(settings)
     runtime_settings = runtime.settings
     workspace = (workspace_root or Path.cwd()).resolve()
+    explicit_agent_names = explicit_agent_names or set()
+    explicit_agent_token = set_active_explicit_agent_names(explicit_agent_names)
     active_system_prompt = system_prompt or get_system_prompt(
         settings=runtime_settings,
         excluded_tools=excluded_tools,
         cwd=workspace,
+        explicit_agent_names=explicit_agent_names,
         workspace_directory_key=workspace_directory_key,
     )
     effective_tool_availability_overridden = (
@@ -1179,63 +1209,70 @@ def _open_runtime_provider(
         if tool_availability_overridden is None
         else tool_availability_overridden
     )
-    if tool_catalog is not None:
-        provider = create_provider(
-            runtime_settings,
-            system_prompt=active_system_prompt,
-            excluded_tools=excluded_tools,
-            tool_catalog=tool_catalog,
-        )
-        setattr(provider, "_workspace_root", workspace)
-        setattr(provider, "_workspace_directory_key", workspace_directory_key)
-        _set_provider_tool_availability_overridden(
-            provider, effective_tool_availability_overridden
-        )
-        with provider:
-            yield provider
-    else:
-        with McpServerPool(workspace) as mcp_pool:
-            mcp_tool_catalog = mcp_pool.to_tool_catalog()
-            mcp_tool_names = frozenset(mcp_tool_catalog.names())
-            mcp_tool_names_token = _ACTIVE_MCP_TOOL_NAMES.set(mcp_tool_names)
-            workspace_key = _mcp_workspace_key(workspace)
-            with _ACTIVE_MCP_TOOL_NAMES_LOCK:
-                _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE[workspace_key] = (
-                    *_ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE.get(workspace_key, ()),
-                    mcp_tool_names,
-                )
-            tool_catalog, _extension_diagnostics = tool_catalog_with_extensions(
-                mcp_tool_catalog,
-                workspace,
-                reserved_names=lambda: _reserved_slash_extension_names(workspace),
+    try:
+        if tool_catalog is not None:
+            provider = create_provider(
+                runtime_settings,
+                system_prompt=active_system_prompt,
+                excluded_tools=excluded_tools,
+                tool_catalog=tool_catalog,
             )
-            try:
-                provider = create_provider(
-                    runtime_settings,
-                    system_prompt=active_system_prompt,
-                    excluded_tools=excluded_tools,
-                    tool_catalog=tool_catalog,
+            setattr(provider, "_workspace_root", workspace)
+            setattr(provider, "_workspace_directory_key", workspace_directory_key)
+            _set_provider_tool_availability_overridden(
+                provider, effective_tool_availability_overridden
+            )
+            with provider:
+                yield provider
+        else:
+            with McpServerPool(workspace) as mcp_pool:
+                mcp_tool_catalog = mcp_pool.to_tool_catalog(
+                    directory_key=workspace_directory_key,
                 )
-                setattr(provider, "_workspace_root", workspace)
-                setattr(provider, "_workspace_directory_key", workspace_directory_key)
-                _set_provider_tool_availability_overridden(
-                    provider, effective_tool_availability_overridden
-                )
-                with provider:
-                    yield provider
-            finally:
+                mcp_tool_names = frozenset(mcp_tool_catalog.names())
+                mcp_tool_names_token = _ACTIVE_MCP_TOOL_NAMES.set(mcp_tool_names)
+                workspace_key = _mcp_workspace_key(workspace)
                 with _ACTIVE_MCP_TOOL_NAMES_LOCK:
-                    remaining_workspace_mcp_names = _remove_active_mcp_tool_names(
-                        _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE.get(workspace_key, ()),
+                    _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE[workspace_key] = (
+                        *_ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE.get(workspace_key, ()),
                         mcp_tool_names,
                     )
-                    if remaining_workspace_mcp_names:
-                        _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE[workspace_key] = (
-                            remaining_workspace_mcp_names
+                tool_catalog, _extension_diagnostics = tool_catalog_with_extensions(
+                    mcp_tool_catalog,
+                    workspace,
+                    reserved_names=lambda: _reserved_slash_extension_names(workspace),
+                )
+                try:
+                    provider = create_provider(
+                        runtime_settings,
+                        system_prompt=active_system_prompt,
+                        excluded_tools=excluded_tools,
+                        tool_catalog=tool_catalog,
+                    )
+                    setattr(provider, "_workspace_root", workspace)
+                    setattr(
+                        provider, "_workspace_directory_key", workspace_directory_key
+                    )
+                    _set_provider_tool_availability_overridden(
+                        provider, effective_tool_availability_overridden
+                    )
+                    with provider:
+                        yield provider
+                finally:
+                    with _ACTIVE_MCP_TOOL_NAMES_LOCK:
+                        remaining_workspace_mcp_names = _remove_active_mcp_tool_names(
+                            _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE.get(workspace_key, ()),
+                            mcp_tool_names,
                         )
-                    else:
-                        _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE.pop(workspace_key, None)
-                _ACTIVE_MCP_TOOL_NAMES.reset(mcp_tool_names_token)
+                        if remaining_workspace_mcp_names:
+                            _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE[workspace_key] = (
+                                remaining_workspace_mcp_names
+                            )
+                        else:
+                            _ACTIVE_MCP_TOOL_NAMES_BY_WORKSPACE.pop(workspace_key, None)
+                    _ACTIVE_MCP_TOOL_NAMES.reset(mcp_tool_names_token)
+    finally:
+        reset_active_explicit_agent_names(explicit_agent_token)
 
 
 # ---------------------------------------------------------------------------

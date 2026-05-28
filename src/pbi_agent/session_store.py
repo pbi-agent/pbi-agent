@@ -218,6 +218,13 @@ CREATE TABLE IF NOT EXISTS disabled_project_skills (
     PRIMARY KEY (directory, skill_name)
 );
 
+CREATE TABLE IF NOT EXISTS disabled_project_agents (
+    directory  TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (directory, agent_name)
+);
+
 CREATE TABLE IF NOT EXISTS maintenance_state (
     name             TEXT PRIMARY KEY,
     last_run_date    TEXT NOT NULL,
@@ -480,6 +487,13 @@ def _normalize_project_skill_name(skill_name: str) -> str:
     normalized = skill_name.strip().casefold()
     if not normalized:
         raise ValueError("skill name cannot be empty")
+    return normalized
+
+
+def _normalize_project_agent_name(agent_name: str) -> str:
+    normalized = agent_name.strip().casefold()
+    if not normalized:
+        raise ValueError("agent name cannot be empty")
     return normalized
 
 
@@ -913,6 +927,11 @@ class SessionStore:
             "skill_name = LOWER(skill_name) "
             "WHERE directory != LOWER(directory) OR skill_name != LOWER(skill_name)"
         )
+        self._conn.execute(
+            "UPDATE disabled_project_agents SET directory = LOWER(directory), "
+            "agent_name = LOWER(agent_name) "
+            "WHERE directory != LOWER(directory) OR agent_name != LOWER(agent_name)"
+        )
         self._conn.commit()
 
     def record_recent_workspace(
@@ -1050,6 +1069,71 @@ class SessionStore:
                     [
                         (normalized_directory, skill_name, now)
                         for skill_name in normalized_skills
+                    ],
+                )
+            self._conn.commit()
+
+    def list_disabled_project_agents(self, directory: str) -> list[str]:
+        normalized_directory = _normalize_directory_key(directory)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT agent_name FROM disabled_project_agents "
+                "WHERE directory = ? ORDER BY agent_name COLLATE NOCASE ASC",
+                (normalized_directory,),
+            ).fetchall()
+        return [str(row["agent_name"]) for row in rows]
+
+    def set_project_agent_enabled(
+        self,
+        directory: str,
+        agent_name: str,
+        *,
+        enabled: bool,
+    ) -> None:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_agent = _normalize_project_agent_name(agent_name)
+        now = _now_iso()
+        with self._lock:
+            if enabled:
+                self._conn.execute(
+                    "DELETE FROM disabled_project_agents "
+                    "WHERE directory = ? AND agent_name = ?",
+                    (normalized_directory, normalized_agent),
+                )
+            else:
+                self._conn.execute(
+                    "INSERT INTO disabled_project_agents "
+                    "(directory, agent_name, updated_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(directory, agent_name) DO UPDATE SET "
+                    "updated_at = excluded.updated_at",
+                    (normalized_directory, normalized_agent, now),
+                )
+            self._conn.commit()
+
+    def set_project_agents_enabled(
+        self,
+        directory: str,
+        agent_names: list[str],
+        *,
+        enabled: bool,
+    ) -> None:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_agents = sorted(
+            {_normalize_project_agent_name(name) for name in agent_names}
+        )
+        now = _now_iso()
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM disabled_project_agents WHERE directory = ?",
+                (normalized_directory,),
+            )
+            if not enabled:
+                self._conn.executemany(
+                    "INSERT INTO disabled_project_agents "
+                    "(directory, agent_name, updated_at) VALUES (?, ?, ?)",
+                    [
+                        (normalized_directory, agent_name, now)
+                        for agent_name in normalized_agents
                     ],
                 )
             self._conn.commit()

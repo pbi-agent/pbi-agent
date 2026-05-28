@@ -718,6 +718,103 @@ def test_skill_state_uses_active_workspace_after_switch_with_env_key(
         assert store.list_disabled_project_skills("initial-workspace-key") == []
 
 
+def test_agent_state_uses_active_workspace_after_switch_with_env_key(
+    monkeypatch, tmp_path
+) -> None:
+    workspace_a = tmp_path / "workspace-a"
+    workspace_b = tmp_path / "workspace-b"
+    workspace_a.mkdir()
+    workspace_b.mkdir()
+    _write_agent(
+        workspace_b / ".agents" / "agents",
+        "code-reviewer",
+        "Review code changes.",
+        "Review the current diff.",
+    )
+    monkeypatch.chdir(workspace_a)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    monkeypatch.setenv(WORKSPACE_KEY_ENV, "initial-workspace-key")
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        with SessionStore(db_path=tmp_path / "sessions.db") as store:
+            store.record_recent_workspace(
+                directory_key="custom-workspace-key",
+                root_path=str(workspace_b),
+                display_path="Custom Display",
+                is_sandbox=False,
+            )
+            store.set_project_agent_enabled(
+                "custom-workspace-key",
+                "code-reviewer",
+                enabled=False,
+            )
+
+        switch_response = client.post(
+            "/api/workspaces/switch",
+            json={"directory_key": "custom-workspace-key"},
+        )
+        assert switch_response.status_code == 200
+
+        agents_response = client.get("/api/config/agents")
+        assert agents_response.status_code == 200
+        assert agents_response.json()["agents"][0]["enabled"] is False
+
+        search_response = client.get("/api/agents/search")
+        assert search_response.status_code == 200
+        assert search_response.json()["items"][0]["enabled"] is False
+
+        enable_response = client.post(
+            "/api/config/agents/code-reviewer/enabled",
+            json={"enabled": True},
+        )
+        assert enable_response.status_code == 200
+        assert enable_response.json()["agents"][0]["enabled"] is True
+
+    with SessionStore(db_path=tmp_path / "sessions.db") as store:
+        assert store.list_disabled_project_agents("custom-workspace-key") == []
+        assert store.list_disabled_project_agents("initial-workspace-key") == []
+
+
+def test_agent_settings_keeps_disabled_agents_visible(monkeypatch, tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    _write_agent(
+        workspace / ".agents" / "agents",
+        "code-reviewer",
+        "Review code changes.",
+        "Review the current diff.",
+    )
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        disable_response = client.post(
+            "/api/config/agents/code-reviewer/enabled",
+            json={"enabled": False},
+        )
+        assert disable_response.status_code == 200
+        disabled_agents = disable_response.json()["agents"]
+        assert [agent["name"] for agent in disabled_agents] == ["code-reviewer"]
+        assert disabled_agents[0]["enabled"] is False
+
+        agents_response = client.get("/api/config/agents")
+        assert agents_response.status_code == 200
+        listed_agents = agents_response.json()["agents"]
+        assert [agent["name"] for agent in listed_agents] == ["code-reviewer"]
+        assert listed_agents[0]["enabled"] is False
+
+        enable_response = client.post(
+            "/api/config/agents/code-reviewer/enabled",
+            json={"enabled": True},
+        )
+        assert enable_response.status_code == 200
+        enabled_agents = enable_response.json()["agents"]
+        assert [agent["name"] for agent in enabled_agents] == ["code-reviewer"]
+        assert enabled_agents[0]["enabled"] is True
+
+
 def test_workspace_file_tree_refresh_and_preview(monkeypatch, tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1920,6 +2017,7 @@ def test_skill_install_endpoint_installs_conflicts_and_forces_replacement(
                 "description": "Ship the change.",
                 "instructions": "# ship",
                 "path": ".agents/skills/ship/SKILL.md",
+                "enabled": True,
             }
         ]
         assert (tmp_path / ".agents" / "skills" / "ship" / "SKILL.md").is_file()
@@ -1944,6 +2042,7 @@ def test_skill_install_endpoint_installs_conflicts_and_forces_replacement(
                 "description": "Ship the updated change.",
                 "instructions": "# ship",
                 "path": ".agents/skills/ship/SKILL.md",
+                "enabled": True,
             }
         ]
 
@@ -1973,6 +2072,7 @@ def test_agent_bootstrap_and_list_endpoint_return_installed_project_agents(
                 "instructions": "You review code changes.",
                 "path": ".agents/agents/code-reviewer.md",
                 "model_profile_id": "analysis",
+                "enabled": True,
             }
         ]
 
@@ -2099,6 +2199,7 @@ def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
                 "instructions": "Ship the current implementation.",
                 "path": ".agents/agents/shipper.md",
                 "model_profile_id": None,
+                "enabled": True,
             }
         ]
         assert (tmp_path / ".agents" / "agents" / "shipper.md").is_file()
@@ -2129,6 +2230,7 @@ def test_agent_install_endpoint_installs_conflicts_and_forces_replacement(
                 "instructions": "Ship the updated implementation.",
                 "path": ".agents/agents/shipper.md",
                 "model_profile_id": None,
+                "enabled": True,
             }
         ]
 
@@ -2214,6 +2316,7 @@ def test_skill_search_endpoint_returns_installed_project_skills(
                 "name": "release-writing",
                 "description": "Write release notes",
                 "path": ".agents/skills/release-writing/SKILL.md",
+                "enabled": True,
             }
         ]
     }

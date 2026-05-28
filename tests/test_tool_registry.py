@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from pbi_agent.agent.session.runtime import _open_runtime_provider
+from pbi_agent.agents.state import set_agent_enabled
 from pbi_agent.config import Settings
 from pbi_agent.tools import registry
 from pbi_agent.tools.availability import effective_excluded_tool_names
@@ -253,3 +254,91 @@ def test_runtime_provider_sub_agent_schema_uses_explicit_workspace(
         pass
 
     assert captured["enum"] == ["default", "bravo"]
+
+
+def test_runtime_provider_sub_agent_schema_uses_active_workspace_directory_key(
+    tmp_path, monkeypatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    (workspace / ".agents" / "agents").mkdir(parents=True)
+    (workspace / ".agents" / "agents" / "reviewer.md").write_text(
+        "---\nname: reviewer\ndescription: Reviews code.\n---\n\nReview prompt.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("PBI_AGENT_WORKSPACE_KEY", "initial-workspace-key")
+    set_agent_enabled(
+        "reviewer",
+        False,
+        workspace=workspace,
+        directory_key="active-workspace-key",
+    )
+    captured: dict[str, Any] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
+    ) -> _ProviderContextStub:
+        del system_prompt, excluded_tools
+        assert tool_catalog is not None
+        spec = tool_catalog.get_spec("sub_agent")
+        assert spec is not None
+        captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        return _ProviderContextStub(settings)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.runtime.create_provider",
+        fake_create_provider,
+    )
+
+    with _open_runtime_provider(
+        Settings(api_key="test-key", provider="openai"),
+        workspace_root=workspace,
+        workspace_directory_key="active-workspace-key",
+    ):
+        pass
+
+    assert captured["enum"] == ["default"]
+
+
+def test_runtime_provider_sub_agent_schema_includes_explicit_disabled_agent(
+    tmp_path, monkeypatch
+) -> None:
+    (tmp_path / ".agents" / "agents").mkdir(parents=True)
+    (tmp_path / ".agents" / "agents" / "reviewer.md").write_text(
+        "---\nname: reviewer\ndescription: Reviews code.\n---\n\nReview prompt.\n",
+        encoding="utf-8",
+    )
+    set_agent_enabled("reviewer", False, workspace=tmp_path)
+    captured: dict[str, Any] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
+    ) -> _ProviderContextStub:
+        del system_prompt, excluded_tools
+        assert tool_catalog is not None
+        spec = tool_catalog.get_spec("sub_agent")
+        assert spec is not None
+        captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        return _ProviderContextStub(settings)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.runtime.create_provider",
+        fake_create_provider,
+    )
+
+    with _open_runtime_provider(
+        Settings(api_key="test-key", provider="openai"),
+        workspace_root=tmp_path,
+        explicit_agent_names={"reviewer"},
+    ):
+        pass
+
+    assert captured["enum"] == ["default", "reviewer"]

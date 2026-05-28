@@ -37,6 +37,16 @@ def test_expand_file_mentions_warns_for_missing_file(tmp_path: Path) -> None:
     assert warnings == ["Referenced file not found: missing.md"]
 
 
+def test_expand_file_mentions_ignores_agent_tags(tmp_path: Path) -> None:
+    expanded, warnings = expand_file_mentions(
+        "Ask @code-reviewer (agent) to inspect auth and @qa-bot too",
+        root=tmp_path,
+    )
+
+    assert expanded == "Ask @code-reviewer (agent) to inspect auth and @qa-bot too"
+    assert warnings == []
+
+
 def test_expand_file_mentions_ignores_outside_workspace_paths(tmp_path: Path) -> None:
     outside = tmp_path.parent / "outside.txt"
     outside.write_text("outside\n", encoding="utf-8")

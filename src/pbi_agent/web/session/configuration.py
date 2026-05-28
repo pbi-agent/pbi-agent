@@ -38,6 +38,11 @@ from pbi_agent.config import (
 )
 from pbi_agent.agent.sub_agent_discovery import ProjectSubAgent
 from pbi_agent.agents.project_catalog import discover_installed_project_agents
+from pbi_agent.agents.state import (
+    agent_enabled_map,
+    set_agent_enabled,
+    set_all_agents_enabled,
+)
 from pbi_agent.agents.project_installer import (
     ProjectAgentInstallResult,
     RemoteAgentCandidateSummary,
@@ -590,6 +595,41 @@ class ConfigurationMixin:
             "config_revision": revision,
         }
 
+    def set_project_agent_enabled(
+        self,
+        *,
+        agent_name: str,
+        enabled: bool,
+    ) -> dict[str, Any]:
+        agents = discover_installed_project_agents(workspace=self._workspace_root)
+        if not any(agent.name.casefold() == agent_name.casefold() for agent in agents):
+            raise KeyError(agent_name)
+        set_agent_enabled(
+            agent_name,
+            enabled,
+            workspace=self._workspace_root,
+            directory_key=self._directory_key,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "agents": self._installed_agent_views(),
+            "config_revision": revision,
+        }
+
+    def set_all_project_agents_enabled(self, *, enabled: bool) -> dict[str, Any]:
+        agents = discover_installed_project_agents(workspace=self._workspace_root)
+        set_all_agents_enabled(
+            [agent.name for agent in agents],
+            enabled,
+            workspace=self._workspace_root,
+            directory_key=self._directory_key,
+        )
+        _, revision = load_internal_config_snapshot()
+        return {
+            "agents": self._installed_agent_views(),
+            "config_revision": revision,
+        }
+
     def list_project_agent_candidates(
         self,
         *,
@@ -915,15 +955,21 @@ class ConfigurationMixin:
         }
 
     def _installed_agent_views(self) -> list[dict[str, Any]]:
+        agents = sorted(
+            discover_installed_project_agents(workspace=self._workspace_root),
+            key=lambda item: (item.name.casefold(), item.location.as_posix()),
+        )
+        enabled = agent_enabled_map(
+            [agent.name for agent in agents],
+            workspace=self._workspace_root,
+            directory_key=self._directory_key,
+        )
         return [
-            self._agent_view(agent)
-            for agent in sorted(
-                discover_installed_project_agents(workspace=self._workspace_root),
-                key=lambda item: (item.name.casefold(), item.location.as_posix()),
-            )
+            self._agent_view(agent, enabled=enabled.get(agent.name, True))
+            for agent in agents
         ]
 
-    def _agent_view(self, agent: ProjectSubAgent) -> dict[str, Any]:
+    def _agent_view(self, agent: ProjectSubAgent, *, enabled: bool) -> dict[str, Any]:
         return {
             "id": agent.name,
             "name": agent.name,
@@ -931,6 +977,7 @@ class ConfigurationMixin:
             "instructions": agent.system_prompt,
             "path": self._relative_workspace_path(agent.location),
             "model_profile_id": agent.model_profile_id,
+            "enabled": enabled,
         }
 
     def _agent_candidate_view(

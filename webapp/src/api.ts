@@ -21,6 +21,7 @@ import type {
   AgentCandidatesPayload,
   AgentInstallPayload,
   AgentListPayload,
+  AgentMentionSearchPayload,
   BoardStage,
   BootstrapPayload,
   CommandCandidatesPayload,
@@ -343,6 +344,28 @@ export async function installAgent(
   });
 }
 
+export async function setAgentEnabled(
+  agentName: string,
+  enabled: boolean,
+): Promise<AgentListPayload> {
+  return requestJson<AgentListPayload>(
+    `/api/config/agents/${encodeURIComponent(agentName)}/enabled`,
+    {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    },
+  );
+}
+
+export async function setAllAgentsEnabled(
+  enabled: boolean,
+): Promise<AgentListPayload> {
+  return requestJson<AgentListPayload>("/api/config/agents/enabled", {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 export async function fetchSessions(options: { query?: string } = {}): Promise<SessionRecord[]> {
   const query = options.query?.trim() ?? "";
   const params = queryString("GET /api/sessions", {
@@ -474,6 +497,19 @@ export async function searchSkillMentions(
   });
   return requestJson<SkillMentionSearchResponsePayload>(
     `/api/skills/search${params}`,
+  );
+}
+
+export async function searchAgentMentions(
+  query: string,
+  limit = 8,
+): Promise<AgentMentionSearchPayload> {
+  const params = queryString("GET /api/agents/search", {
+    q: query,
+    limit,
+  });
+  return requestJson<AgentMentionSearchPayload>(
+    `/api/agents/search${params}`,
   );
 }
 

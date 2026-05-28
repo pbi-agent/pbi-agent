@@ -220,8 +220,18 @@ Project skills use progressive disclosure: the catalog contains only each skill'
     return f"{base_prompt}\n\n{instructions}\n{catalog}"
 
 
-def _append_available_sub_agents(base_prompt: str, cwd: Path | None = None) -> str:
-    agents = discover_project_sub_agents(cwd)
+def _append_available_sub_agents(
+    base_prompt: str,
+    cwd: Path | None = None,
+    *,
+    explicit_agent_names: set[str] | None = None,
+    workspace_directory_key: str | None = None,
+) -> str:
+    agents = discover_project_sub_agents(
+        cwd,
+        explicit_agent_names=explicit_agent_names,
+        directory_key=workspace_directory_key,
+    )
     if not agents:
         return base_prompt
 
@@ -243,6 +253,7 @@ def _append_available_sub_agents(base_prompt: str, cwd: Path | None = None) -> s
 The `sub_agent` tool is available for delegated work.
 - Use `sub_agent` without `agent_type` for the default generalist sub-agent.
 - When a task matches one of the available project sub-agents below, call `sub_agent` with `agent_type` set to that sub-agent's `name`.
+- Treat `@<agent-name> (agent)` and `@<agent-name>` in user input as explicit requests to call that named sub-agent.
 - Project sub-agents are isolated by default. Set `include_context` to `true` when the child should inherit the parent conversation context.
 </sub_agent_loading_rules>
 """.strip()
@@ -269,6 +280,7 @@ def get_system_prompt(
     excluded_tools: Iterable[str] | None = None,
     cwd: Path | None = None,
     explicit_skill_names: set[str] | None = None,
+    explicit_agent_names: set[str] | None = None,
     workspace_directory_key: str | None = None,
 ) -> str:
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
@@ -289,7 +301,12 @@ def get_system_prompt(
             workspace_directory_key=workspace_directory_key,
         )
     if "sub_agent" in active_names:
-        prompt = _append_available_sub_agents(prompt, cwd)
+        prompt = _append_available_sub_agents(
+            prompt,
+            cwd,
+            explicit_agent_names=explicit_agent_names,
+            workspace_directory_key=workspace_directory_key,
+        )
     return _append_active_command(prompt, active_command_instructions)
 
 

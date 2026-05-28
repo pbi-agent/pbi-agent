@@ -31,9 +31,17 @@ class ToolCatalog:
         return list(self._entries)
 
     @classmethod
-    def from_builtin_registry(cls, workspace: Path | None = None) -> "ToolCatalog":
+    def from_builtin_registry(
+        cls,
+        workspace: Path | None = None,
+        *,
+        directory_key: str | None = None,
+    ) -> "ToolCatalog":
         entries: dict[str, ToolCatalogEntry] = {}
-        for spec in registry.get_tool_specs(workspace=workspace):
+        for spec in registry.get_tool_specs(
+            workspace=workspace,
+            directory_key=directory_key,
+        ):
             handler = registry.get_tool_handler(spec.name)
             if handler is None:
                 continue

@@ -268,6 +268,17 @@ export type SkillMentionSearchPayload = {
   items: SkillMentionItem[];
 };
 
+export type AgentMentionItem = {
+  name: string;
+  description: string;
+  path: string;
+  enabled: boolean;
+};
+
+export type AgentMentionSearchPayload = {
+  items: AgentMentionItem[];
+};
+
 export type SlashCommandItem = {
   name: string;
   description: string;

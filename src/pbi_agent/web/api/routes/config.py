@@ -454,6 +454,37 @@ def list_agents(manager: SessionManagerDep) -> AgentListResponse:
     )
 
 
+@router.post("/agents/{agent_name}/enabled", response_model=AgentListResponse)
+def set_agent_enabled_state(
+    agent_name: str,
+    request: SkillEnabledRequest,
+    manager: SessionManagerDep,
+) -> AgentListResponse:
+    try:
+        payload = manager.set_project_agent_enabled(
+            agent_name=agent_name,
+            enabled=request.enabled,
+        )
+    except KeyError as exc:
+        raise not_found("Agent not found.") from exc
+    return AgentListResponse(
+        agents=[model_from_payload(AgentViewModel, item) for item in payload["agents"]],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@router.post("/agents/enabled", response_model=AgentListResponse)
+def set_all_agents_enabled_state(
+    request: SkillEnabledRequest,
+    manager: SessionManagerDep,
+) -> AgentListResponse:
+    payload = manager.set_all_project_agents_enabled(enabled=request.enabled)
+    return AgentListResponse(
+        agents=[model_from_payload(AgentViewModel, item) for item in payload["agents"]],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
 @router.post("/agents/candidates", response_model=AgentCandidatesResponse)
 def list_agent_candidates(
     request: AgentCandidateRequest,

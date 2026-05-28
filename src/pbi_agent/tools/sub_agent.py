@@ -11,10 +11,18 @@ from pbi_agent.tools.types import ToolContext, ToolSpec
 _DEFAULT_AGENT_TYPE = "default"
 
 
-def build_spec(workspace: Path | None = None) -> ToolSpec:
+def build_spec(
+    workspace: Path | None = None,
+    *,
+    directory_key: str | None = None,
+) -> ToolSpec:
     agent_type_values = [_DEFAULT_AGENT_TYPE]
     agent_type_values.extend(
-        agent.name for agent in discover_project_sub_agents(workspace)
+        agent.name
+        for agent in discover_project_sub_agents(
+            workspace,
+            directory_key=directory_key,
+        )
     )
 
     return ToolSpec(

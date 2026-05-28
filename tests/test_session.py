@@ -1994,6 +1994,52 @@ def test_run_session_loop_explicit_disabled_skill_includes_skill_catalog(
     assert "<location>" in instructions
 
 
+def test_run_session_loop_explicit_disabled_agent_includes_agent_context(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    agent_dir = tmp_path / ".agents" / "agents"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "reviewer.md").write_text(
+        "---\nname: reviewer\ndescription: Reviews code.\n---\n\nReview prompt.\n",
+        encoding="utf-8",
+    )
+    with SessionStore() as store:
+        store.set_project_agent_enabled(str(tmp_path), "reviewer", enabled=False)
+
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy(["@reviewer (agent) check auth", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    monotonic_values = iter([5.0, 6.5])
+    provider_open_calls: list[dict[str, object]] = []
+
+    @contextmanager
+    def stub_runtime_provider(*args, **kwargs):
+        del args
+        provider_open_calls.append(dict(kwargs))
+        yield provider
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        stub_runtime_provider,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == ["@reviewer (agent) check auth"]
+    assert provider_open_calls[-1]["explicit_agent_names"] == {"reviewer"}
+    assert provider.request_instructions
+    instructions = provider.request_instructions[0]
+    assert instructions is not None
+    assert "<available_sub_agents>" in instructions
+    assert "<name>reviewer</name>" in instructions
+
+
 def test_run_session_loop_honors_per_turn_tool_history_preference(
     monkeypatch,
     tmp_path,
@@ -2477,7 +2523,9 @@ def test_run_session_loop_handles_agents_command_locally(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_sub_agents_markdown",
-        lambda workspace=None: "### Sub-Agents\n\n- `reviewer`: Reviews code",
+        lambda workspace=None, *, directory_key=None: (
+            "### Sub-Agents\n\n- `reviewer`: Reviews code"
+        ),
     )
 
     exit_code = run_session_loop(settings, display)
@@ -2637,7 +2685,7 @@ def test_run_session_loop_uses_transient_renderer_for_temporary_commands(
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_sub_agents_markdown",
-        lambda workspace=None: "agents output",
+        lambda workspace=None, *, directory_key=None: "agents output",
     )
 
     exit_code = run_session_loop(settings, display)
@@ -3797,7 +3845,9 @@ def test_run_session_loop_keeps_local_command_precedence_over_command_files(
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.format_project_skills_markdown",
-        lambda workspace=None: "### Project Skills\n\n- `repo-skill`: Demo skill",
+        lambda workspace=None, *, directory_key=None: (
+            "### Project Skills\n\n- `repo-skill`: Demo skill"
+        ),
     )
 
     exit_code = run_session_loop(settings, display)

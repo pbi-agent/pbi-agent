@@ -14,6 +14,8 @@ import {
   ApiError,
   fetchAgentCandidates,
   installAgent,
+  setAgentEnabled,
+  setAllAgentsEnabled,
 } from "../../api";
 import type {
   AgentCandidateView,
@@ -50,18 +52,30 @@ import {
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { Skeleton } from "../ui/skeleton";
+import { Switch } from "../ui/switch";
 
 function AgentCard({
   agent,
   onPreview,
+  onToggle,
+  toggling,
 }: {
   agent: AgentView;
   onPreview: () => void;
+  onToggle: (enabled: boolean) => void;
+  toggling: boolean;
 }) {
   return (
     <Card className="settings-item settings-item--provider skill-card">
       <div className="provider-card__info">
-        <span className="settings-item__name">{agent.name}</span>
+        <span className="settings-item__name">
+          {agent.name}
+          {agent.enabled === false ? (
+            <Badge size="meta" variant="secondary" className="ml-2">
+              disabled
+            </Badge>
+          ) : null}
+        </span>
         {agent.description ? (
           <div className="settings-item__summary skill-card__description">
             {agent.description}
@@ -75,6 +89,16 @@ function AgentCard({
             Profile: {agent.model_profile_id}
           </Badge>
         ) : null}
+        <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <Switch
+            size="sm"
+            checked={agent.enabled !== false}
+            disabled={toggling}
+            onCheckedChange={onToggle}
+            aria-label={`${agent.enabled !== false ? "Disable" : "Enable"} ${agent.name}`}
+          />
+          {agent.enabled !== false ? "Enabled" : "Disabled"}
+        </label>
         <Button
           type="button"
           variant="ghost"
@@ -168,6 +192,8 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
   const [installingAgent, setInstallingAgent] = useState<string | null>(null);
+  const [togglingAgent, setTogglingAgent] = useState<string | null>(null);
+  const [togglingAll, setTogglingAll] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [conflictRetry, setConflictRetry] = useState<{
     source: string | null;
@@ -237,6 +263,59 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
     ]);
   }
 
+  async function applyAgentListResponse(response: {
+    agents: AgentView[];
+    config_revision: string;
+  }) {
+    queryClient.setQueryData<ConfigBootstrapPayload>(
+      ["config-bootstrap"],
+      (current) =>
+        current
+          ? {
+              ...current,
+              agents: response.agents,
+              config_revision: response.config_revision,
+            }
+          : current,
+    );
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["config-bootstrap"] }),
+      queryClient.invalidateQueries({ queryKey: ["bootstrap"] }),
+    ]);
+  }
+
+  async function handleToggleAgent(agent: AgentView, enabled: boolean) {
+    setTogglingAgent(agent.name);
+    setSuccessMessage(null);
+    try {
+      const response = await setAgentEnabled(agent.name, enabled);
+      await applyAgentListResponse(response);
+      setSuccessMessage(
+        `${enabled ? "Enabled" : "Disabled"} ${agent.name}. New sessions use the updated agent catalog immediately; active sessions can run /reload.`,
+      );
+    } catch (err) {
+      setSuccessMessage((err as Error).message);
+    } finally {
+      setTogglingAgent(null);
+    }
+  }
+
+  async function handleToggleAll(enabled: boolean) {
+    setTogglingAll(true);
+    setSuccessMessage(null);
+    try {
+      const response = await setAllAgentsEnabled(enabled);
+      await applyAgentListResponse(response);
+      setSuccessMessage(
+        `${enabled ? "Enabled" : "Disabled"} all installed agents. Active sessions can run /reload.`,
+      );
+    } catch (err) {
+      setSuccessMessage((err as Error).message);
+    } finally {
+      setTogglingAll(false);
+    }
+  }
+
   async function handleInstall(
     candidate: AgentCandidateView,
     force = false,
@@ -295,22 +374,56 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
 
       <Card className="settings-panel">
         <CardHeader className="settings-panel__header">
-          <div>
+          <div className="settings-panel__heading">
             <CardTitle className="settings-panel__title">Project Agents</CardTitle>
             <div className="settings-panel__subtitle">
               Installed sub-agents from .agents/agents
             </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="settings-action-button"
-            onClick={openAddDialog}
-          >
-            <PlusIcon data-icon="inline-start" />
-            Add Agent
-          </Button>
+          <div className="settings-panel__actions">
+            {agents.length > 0 ? (
+              <div
+                className="settings-panel__bulk-toggle"
+                role="group"
+                aria-label="Toggle all agents"
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="settings-action-button settings-panel__bulk-toggle-button"
+                  onClick={() => void handleToggleAll(true)}
+                  disabled={togglingAll}
+                >
+                  Enable all
+                </Button>
+                <Separator
+                  orientation="vertical"
+                  className="settings-panel__bulk-toggle-divider"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="settings-action-button settings-panel__bulk-toggle-button"
+                  onClick={() => void handleToggleAll(false)}
+                  disabled={togglingAll}
+                >
+                  Disable all
+                </Button>
+              </div>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="settings-action-button"
+              onClick={openAddDialog}
+            >
+              <PlusIcon data-icon="inline-start" />
+              Add Agent
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="settings-panel__body">
           {agents.length === 0 ? (
@@ -324,6 +437,8 @@ export function AgentsSettingsSection({ agents }: { agents: AgentView[] }) {
                 key={agent.id}
                 agent={agent}
                 onPreview={() => setPreviewAgent(agent)}
+                onToggle={(enabled) => void handleToggleAgent(agent, enabled)}
+                toggling={togglingAgent === agent.name}
               />
             ))
           )}

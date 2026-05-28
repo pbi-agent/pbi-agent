@@ -11,6 +11,7 @@ from pbi_agent.web.command_registry import (
     list_slash_commands,
     search_slash_command_tuples,
 )
+from pbi_agent.web.agent_mentions import search_agent_mentions
 from pbi_agent.web.input_mentions import (
     MentionSearchPayload,
     WorkspaceFileIndex,
@@ -117,6 +118,27 @@ class CatalogsMixin:
                 "enabled": item.enabled,
             }
             for item in search_skill_mentions(
+                query,
+                root=self._catalogs_manager()._workspace_root,
+                limit=limit,
+                directory_key=self._catalogs_manager()._directory_key,
+            )
+        ]
+
+    def search_agent_mentions(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "name": item.name,
+                "description": item.description,
+                "path": item.path,
+                "enabled": item.enabled,
+            }
+            for item in search_agent_mentions(
                 query,
                 root=self._catalogs_manager()._workspace_root,
                 limit=limit,

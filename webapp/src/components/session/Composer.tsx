@@ -19,8 +19,8 @@ import {
   TerminalIcon,
   XIcon,
 } from "lucide-react";
-import { searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
-import type { FileMentionItem, SkillMentionItem, SlashCommandItem } from "../../types";
+import { searchAgentMentions, searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
+import type { AgentMentionItem, FileMentionItem, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
 import { useFileExistence } from "../../hooks/useFileExistence";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
@@ -76,6 +76,11 @@ type CompletionItem =
       kind: "mention";
       key: string;
       mention: FileMentionItem;
+    }
+  | {
+      kind: "agent";
+      key: string;
+      agent: AgentMentionItem;
     }
   | {
       kind: "skill";
@@ -197,7 +202,7 @@ function escapeMentionPath(path: string): string {
 
 type HighlightSegment =
   | { kind: "text"; text: string }
-  | { kind: "mention" | "skill"; text: string };
+  | { kind: "mention" | "skill" | "agent"; text: string };
 
 type HighlightValidators = {
   skillNames: Set<string>;
@@ -208,7 +213,7 @@ type HighlightValidators = {
 function findNextHighlightCandidate(
   text: string,
   cursor: number,
-): { start: number; kind: "mention" | "skill"; end: number } | null {
+): { start: number; kind: "mention" | "skill" | "agent"; end: number } | null {
   for (let index = cursor; index < text.length; index += 1) {
     const character = text[index];
     if (character !== "@" && character !== "$") continue;
@@ -225,6 +230,9 @@ function findNextHighlightCandidate(
         }
         if (TOKEN_BOUNDARY_PATTERN.test(text[end])) break;
         end += 1;
+      }
+      if (text.slice(end, end + 8) === " (agent)") {
+        return { start: index, kind: "agent", end: end + 8 };
       }
       return { start: index, kind: "mention", end };
     }
@@ -279,9 +287,11 @@ function parseComposerHighlightSegments(
     appendHighlightSegment(segments, { kind: "text", text: text.slice(cursor, candidate.start) });
 
     const tokenText = text.slice(candidate.start, candidate.end);
-    const shouldHighlight = candidate.kind === "skill"
-      ? skillNames.has(tokenText.slice(1))
-      : isFileKnown(tokenText.slice(1).replaceAll("\\ ", " "));
+    const shouldHighlight = candidate.kind === "agent" || (
+      candidate.kind === "skill"
+        ? skillNames.has(tokenText.slice(1))
+        : isFileKnown(tokenText.slice(1).replaceAll("\\ ", " "))
+    );
     appendHighlightSegment(segments, {
       kind: shouldHighlight ? candidate.kind : "text",
       text: tokenText,
@@ -520,6 +530,27 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     [],
   );
 
+  const buildAgentReplacement = useCallback(
+    (
+      item: AgentMentionItem,
+      currentText: string,
+      currentCursor: number,
+    ): { nextInput: string; nextCursor: number } | null => {
+      const currentMention = parseActiveMention(currentText, currentCursor);
+      if (!currentMention) {
+        return null;
+      }
+
+      return replaceTextRange(
+        currentText,
+        currentMention.start,
+        currentMention.end,
+        `@${item.name} (agent)`,
+      );
+    },
+    [],
+  );
+
   const buildSlashReplacement = useCallback(
     (
       item: SlashCommandItem,
@@ -548,6 +579,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       const nextState =
         item.kind === "mention"
           ? buildMentionReplacement(item.mention, textValue, cursorValue)
+          : item.kind === "agent"
+            ? buildAgentReplacement(item.agent, textValue, cursorValue)
           : item.kind === "skill"
             ? buildSkillReplacement(item.skill, textValue, cursorValue)
             : buildSlashReplacement(item.command, textValue, cursorValue);
@@ -559,7 +592,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       applyInputState(nextState.nextInput, nextState.nextCursor);
       return nextState;
     },
-    [applyInputState, buildMentionReplacement, buildSkillReplacement, buildSlashReplacement, cursorIndex, input, resetHistoryBrowsing],
+    [applyInputState, buildAgentReplacement, buildMentionReplacement, buildSkillReplacement, buildSlashReplacement, cursorIndex, input, resetHistoryBrowsing],
   );
 
   const appendFiles = useCallback(
@@ -820,25 +853,37 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   errorMessage: null,
                   shouldPoll: false,
                 }))
-              : await searchFileMentions(requestQuery, 8).then((result) => ({
-                  items: result.items.map(
-                    (mention): CompletionItem => ({
-                      kind: "mention",
-                      key: mention.path,
-                      mention,
-                    }),
-                  ),
-                  loading: result.scan_status === "scanning" && result.items.length === 0,
-                  statusMessage: result.is_stale
+              : await Promise.all([
+                  searchAgentMentions(requestQuery, 8),
+                  searchFileMentions(requestQuery, 8),
+                ]).then(([agentResult, fileResult]) => ({
+                  items: [
+                    ...agentResult.items.map(
+                      (agent): CompletionItem => ({
+                        kind: "agent",
+                        key: `agent:${agent.name}`,
+                        agent,
+                      }),
+                    ),
+                    ...fileResult.items.map(
+                      (mention): CompletionItem => ({
+                        kind: "mention",
+                        key: `file:${mention.path}`,
+                        mention,
+                      }),
+                    ),
+                  ].slice(0, 8),
+                  loading: fileResult.scan_status === "scanning" && fileResult.items.length === 0 && agentResult.items.length === 0,
+                  statusMessage: fileResult.is_stale
                     ? "Refreshing file index..."
-                    : result.scan_status === "scanning"
+                    : fileResult.scan_status === "scanning"
                       ? "Indexing files..."
                       : null,
                   errorMessage:
-                    result.scan_status === "failed"
-                      ? result.error ?? "Unable to index workspace files"
+                    fileResult.scan_status === "failed"
+                      ? fileResult.error ?? "Unable to index workspace files"
                       : null,
-                  shouldPoll: result.scan_status === "scanning",
+                  shouldPoll: fileResult.scan_status === "scanning",
                 }));
         if (!isCurrentRequest()) return;
         setCompletionItems(payload.items);
@@ -862,7 +907,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             ? "Unable to load commands"
             : requestMode === "skill"
               ? "Unable to load skills"
-              : "Unable to load files",
+              : "Unable to load files and agents",
         );
       }
     };
@@ -1060,19 +1105,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         ? "Searching commands..."
         : completionMode === "skill"
           ? "Searching skills..."
-          : "Searching files...")
+          : "Searching files and agents...")
     : completionStatusMessage ??
       (completionMode === "slash"
         ? "No matching commands"
         : completionMode === "skill"
           ? "No matching skills"
-          : "No matching files"));
+          : "No matching files or agents"));
   const completionLabel =
     completionMode === "slash"
       ? "Slash command suggestions"
       : completionMode === "skill"
         ? "Skill suggestions"
-        : "Workspace file suggestions";
+        : "Workspace file and agent suggestions";
   const attachmentStatus =
     attachmentMessage ??
     (pendingImages.length > 0
@@ -1284,6 +1329,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       ? item.command.name
                       : item.kind === "skill"
                         ? `$${item.skill.name}`
+                        : item.kind === "agent"
+                          ? `@${item.agent.name} (agent)`
                         : `@${item.mention.path}`}
                     {item.kind === "slash" && item.command.description ? (
                       <span className="composer__completion-description">
@@ -1302,6 +1349,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                     className={`composer__completion-kind composer__completion-kind--${item.mention.kind}`}
                   >
                     {item.mention.kind}
+                  </span>
+                ) : item.kind === "agent" ? (
+                  <span className="composer__completion-kind composer__completion-kind--agent">
+                    {item.agent.enabled === false ? "disabled agent" : "agent"}
                   </span>
                 ) : item.kind === "skill" ? (
                   <span className="composer__completion-kind composer__completion-kind--skill">

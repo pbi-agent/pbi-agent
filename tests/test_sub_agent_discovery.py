@@ -9,9 +9,11 @@ import pytest
 from pbi_agent.agent.sub_agent_discovery import (
     ProjectSubAgent,
     discover_project_sub_agents,
+    extract_explicit_agent_names,
     format_project_sub_agents_markdown,
     get_project_sub_agent_by_name,
 )
+from pbi_agent.agents.state import set_agent_enabled
 
 
 def _write_sub_agent(root: Path, filename: str, content: str) -> Path:
@@ -45,6 +47,45 @@ def test_discovers_valid_project_sub_agent(tmp_path: Path) -> None:
             location=agent_path.resolve(),
         )
     ]
+
+
+def test_disabled_project_sub_agents_are_filtered_unless_explicit(
+    tmp_path: Path,
+) -> None:
+    _write_sub_agent(
+        tmp_path,
+        "code-reviewer.md",
+        (
+            "---\n"
+            "name: code-reviewer\n"
+            "description: Reviews code changes.\n"
+            "---\n\n"
+            "You are a code reviewer.\n"
+        ),
+    )
+    set_agent_enabled("code-reviewer", False, workspace=tmp_path)
+
+    assert discover_project_sub_agents(tmp_path) == []
+    assert [
+        agent.name
+        for agent in discover_project_sub_agents(
+            tmp_path,
+            explicit_agent_names={"code-reviewer"},
+        )
+    ] == ["code-reviewer"]
+
+
+def test_extract_explicit_agent_names_accepts_visible_and_bare_tags() -> None:
+    assert extract_explicit_agent_names(
+        "@code-reviewer (agent) look at auth, then @qa_bot please."
+    ) == {"code-reviewer", "qa_bot"}
+
+
+def test_extract_explicit_agent_names_requires_trailing_boundary() -> None:
+    assert extract_explicit_agent_names("@docs/readme.md @code-reviewer.md") == set()
+    assert extract_explicit_agent_names(
+        "@code-reviewer (agent) and @qa_bot, please"
+    ) == {"code-reviewer", "qa_bot"}
 
 
 def test_discovers_model_profile_id(tmp_path: Path) -> None:

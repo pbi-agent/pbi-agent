@@ -10,6 +10,7 @@ from pbi_agent.agent.system_prompt import (
     get_system_prompt,
 )
 from pbi_agent.agent.skill_discovery import extract_explicit_skill_names
+from pbi_agent.agent.sub_agent_discovery import extract_explicit_agent_names
 from pbi_agent.config import (
     CommandConfig,
     ResolvedRuntime,
@@ -35,7 +36,7 @@ _ACTIVE_MCP_TOOL_NAMES_LOCK = threading.Lock()
 
 NEW_SESSION_SENTINEL = "__new_session__"
 RESUME_SESSION_PREFIX = "__resume_session__:"
-SUB_AGENT_MAX_REQUESTS = 200
+SUB_AGENT_MAX_REQUESTS = 400
 SUB_AGENT_MAX_ELAPSED_SECONDS = 1200.0
 INTERACTIVE_ONLY_TOOLS = {"ask_user"}
 SUB_AGENT_DISABLED_TOOLS = {"sub_agent"} | INTERACTIVE_ONLY_TOOLS
@@ -172,6 +173,7 @@ def _turn_instructions(
         excluded_tools=excluded_tools,
         cwd=cwd,
         explicit_skill_names=extract_explicit_skill_names(user_input),
+        explicit_agent_names=extract_explicit_agent_names(user_input),
         workspace_directory_key=workspace_directory_key,
     )
 

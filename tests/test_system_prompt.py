@@ -297,6 +297,33 @@ def test_get_system_prompt_with_project_sub_agents(tmp_path, monkeypatch):
     assert "call `sub_agent` with `agent_type`" in prompt
 
 
+def test_disabled_project_sub_agent_is_hidden_unless_explicitly_tagged(tmp_path):
+    from pbi_agent.agents.state import set_agent_enabled
+
+    agent_dir = tmp_path / ".agents" / "agents"
+    agent_dir.mkdir(parents=True)
+    agent_path = agent_dir / "code-reviewer.md"
+    agent_path.write_text(
+        "---\n"
+        "name: code-reviewer\n"
+        "description: Review code changes before merging.\n"
+        "---\n\n"
+        "You are a code reviewer.\n",
+        encoding="utf-8",
+    )
+    set_agent_enabled("code-reviewer", False, workspace=tmp_path)
+
+    prompt = get_system_prompt(cwd=tmp_path)
+    explicit_prompt = get_system_prompt(
+        cwd=tmp_path,
+        explicit_agent_names={"code-reviewer"},
+    )
+
+    assert "<name>code-reviewer</name>" not in prompt
+    assert "<name>code-reviewer</name>" in explicit_prompt
+    assert "Treat `@<agent-name> (agent)`" in explicit_prompt
+
+
 def test_get_system_prompt_filters_tool_rules_by_active_availability(
     tmp_path, monkeypatch
 ):

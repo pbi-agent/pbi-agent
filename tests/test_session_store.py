@@ -113,6 +113,39 @@ def test_project_skill_bulk_state_replaces_disabled_set(tmp_path) -> None:
         assert store.list_disabled_project_skills("/w") == []
 
 
+def test_project_agent_state_is_directory_scoped(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        store.set_project_agent_enabled("/Project-A", "Code-Reviewer", enabled=False)
+        store.set_project_agent_enabled("/project-b", "Plan-Agent", enabled=False)
+
+        assert store.list_disabled_project_agents("/project-a") == ["code-reviewer"]
+        assert store.list_disabled_project_agents("/PROJECT-B") == ["plan-agent"]
+
+        store.set_project_agent_enabled("/project-a", "code-reviewer", enabled=True)
+        assert store.list_disabled_project_agents("/project-a") == []
+        assert store.list_disabled_project_agents("/project-b") == ["plan-agent"]
+
+
+def test_project_agent_bulk_state_replaces_disabled_set(tmp_path) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        store.set_project_agent_enabled("/w", "stale-agent", enabled=False)
+        store.set_project_agents_enabled(
+            "/w",
+            ["Code-Reviewer", "plan-agent", "code-reviewer"],
+            enabled=False,
+        )
+
+        assert store.list_disabled_project_agents("/w") == [
+            "code-reviewer",
+            "plan-agent",
+        ]
+
+        store.set_project_agents_enabled("/w", [], enabled=True)
+        assert store.list_disabled_project_agents("/w") == []
+
+
 def test_update_previous_id_and_title(tmp_path) -> None:
     db = tmp_path / "sessions.db"
     with SessionStore(db_path=db) as store:

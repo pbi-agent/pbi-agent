@@ -16,6 +16,9 @@ PATH_CHAR_CLASS = r"A-Za-z0-9._~/\\:-"
 FILE_MENTION_PATTERN = re.compile(r"@(?P<path>(?:\\.|[" + PATH_CHAR_CLASS + r"])+)")
 EMAIL_PREFIX_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]$")
 IMAGE_FILE_SUFFIXES = frozenset({".jpeg", ".jpg", ".png", ".webp"})
+AGENT_MENTION_PREFIX_PATTERN = re.compile(
+    r"^[A-Za-z][A-Za-z0-9_-]*(?:\s+\(agent\))?(?=$|[\s()[\]{}'\"`,;])"
+)
 
 _MAX_WORKSPACE_FILES = 10_000
 _MIN_FUZZY_SCORE = 15
@@ -268,6 +271,9 @@ def _collect_mentioned_files(
 
         result = _resolve_mentioned_file(raw_segment, root=root)
         if result.path is None:
+            if AGENT_MENTION_PREFIX_PATTERN.match(raw_segment):
+                index = at_index + 1
+                continue
             if result.path_too_long:
                 warnings.append("Referenced file path is too long and was ignored.")
             else:

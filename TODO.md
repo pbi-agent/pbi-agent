@@ -1,5 +1,4 @@
-- [X] Reproduce/inspect preview resize crash
-- [X] Fix preview panel layout timing
-- [X] Update tests for file-click preview open
-- [X] Run focused frontend validation
-- [X] Update memory and summarize
+[X] Fix MCP pool test stubs for directory_key
+[X] Update test double to_tool_catalog signatures
+[X] Run focused extension regression
+[X] Run full commit validation gate

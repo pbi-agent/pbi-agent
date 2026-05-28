@@ -20,8 +20,10 @@ import {
   installSkill,
   logoutProviderAuth,
   refreshProviderAuth,
+  setAllAgentsEnabled,
   setAllSkillsEnabled,
   setActiveModelProfile,
+  setAgentEnabled,
   setSkillEnabled,
   startProviderAuthFlow,
   updateMaintenanceConfig,
@@ -86,6 +88,8 @@ vi.mock("../../api", async (importOriginal) => {
     fetchProviderUsageLimits: vi.fn(),
     fetchAgentCandidates: vi.fn(),
     installAgent: vi.fn(),
+    setAgentEnabled: vi.fn(),
+    setAllAgentsEnabled: vi.fn(),
     fetchCommandCandidates: vi.fn(),
     installCommand: vi.fn(),
     fetchSkillCandidates: vi.fn(),
@@ -574,6 +578,7 @@ describe("SettingsPage", () => {
           instructions: "Review repository changes.",
           path: ".agents/agents/repo-reviewer.md",
           model_profile_id: null,
+          enabled: true,
         },
       ],
       config_revision: "rev-2",
@@ -1094,6 +1099,7 @@ describe("SettingsPage", () => {
             instructions: "# Agent Prompt\n\nReview code changes carefully.",
             path: ".agents/agents/code-reviewer.md",
             model_profile_id: "analysis",
+            enabled: true,
           },
         ],
       }),
@@ -1112,6 +1118,42 @@ describe("SettingsPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "code-reviewer" });
     expect(within(dialog).getByRole("heading", { name: "Agent Prompt" })).toBeInTheDocument();
     expect(within(dialog).getByText("Review code changes carefully.")).toBeInTheDocument();
+  });
+
+  it("toggles project agents individually and in bulk", async () => {
+    const user = userEvent.setup();
+    const agents = [
+      {
+        id: "code-reviewer",
+        name: "code-reviewer",
+        description: "Review code changes",
+        instructions: "Review code changes carefully.",
+        path: ".agents/agents/code-reviewer.md",
+        model_profile_id: null,
+        enabled: true,
+      },
+    ];
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({ agents }),
+    );
+    vi.mocked(setAgentEnabled).mockResolvedValue({
+      agents: [{ ...agents[0], enabled: false }],
+      config_revision: "rev-2",
+    });
+    vi.mocked(setAllAgentsEnabled).mockResolvedValue({
+      agents: [{ ...agents[0], enabled: true }],
+      config_revision: "rev-3",
+    });
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Agents");
+    await user.click(await screen.findByRole("switch", { name: "Disable code-reviewer" }));
+    await waitFor(() => expect(setAgentEnabled).toHaveBeenCalledWith("code-reviewer", false));
+    expect(await screen.findByText(/Disabled code-reviewer/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Enable all" }));
+    await waitFor(() => expect(setAllAgentsEnabled).toHaveBeenCalledWith(true));
   });
 
   it("does not fetch agent candidates until the add agent dialog opens", async () => {
@@ -1157,6 +1199,7 @@ describe("SettingsPage", () => {
               instructions: "Review repository changes.",
               path: ".agents/agents/repo-reviewer.md",
               model_profile_id: null,
+              enabled: true,
             },
           ],
         }),
@@ -1204,6 +1247,7 @@ describe("SettingsPage", () => {
             instructions: "Review repository changes.",
             path: ".agents/agents/repo-reviewer.md",
             model_profile_id: null,
+            enabled: true,
           },
         ],
         config_revision: "rev-2",

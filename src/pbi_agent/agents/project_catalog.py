@@ -5,13 +5,16 @@ from pathlib import Path
 from rich.console import Console
 
 from pbi_agent.agent.sub_agent_discovery import (
-    discover_project_sub_agents,
+    ProjectSubAgent,
+    discover_all_project_sub_agents,
     render_installed_project_sub_agents,
 )
 
 
-def discover_installed_project_agents(workspace: Path | None = None):
-    return discover_project_sub_agents(workspace)
+def discover_installed_project_agents(
+    workspace: Path | None = None,
+) -> list[ProjectSubAgent]:
+    return discover_all_project_sub_agents(workspace)
 
 
 def render_installed_project_agents(

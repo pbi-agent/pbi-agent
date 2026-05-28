@@ -1,16 +1,27 @@
 from __future__ import annotations
 
 import sys
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 import re
 
+from pbi_agent.agents.state import agent_enabled_map
 from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
 
 from rich.console import Console
 from rich.table import Table
 
 _DISCOVERY_ROOT = Path(".agents") / "agents"
+_ACTIVE_EXPLICIT_AGENT_NAMES: ContextVar[frozenset[str]] = ContextVar(
+    "pbi_explicit_sub_agent_names",
+    default=frozenset(),
+)
+_AGENT_TAG_BOUNDARY_CHARS = r"\s()[\]{}'\"`,;"
+_AGENT_TAG_RE = re.compile(
+    rf"(?:^|(?<=[{_AGENT_TAG_BOUNDARY_CHARS}]))@([A-Za-z][A-Za-z0-9_-]*)"
+    rf"(?:\s+\(agent\)|(?=$|[{_AGENT_TAG_BOUNDARY_CHARS}]))"
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -23,8 +34,12 @@ class ProjectSubAgent:
     allowed_tools: tuple[str, ...] | None = None
 
 
-def format_project_sub_agents_markdown(workspace: Path | None = None) -> str:
-    agents = discover_project_sub_agents(workspace)
+def format_project_sub_agents_markdown(
+    workspace: Path | None = None,
+    *,
+    directory_key: str | None = None,
+) -> str:
+    agents = discover_project_sub_agents(workspace, directory_key=directory_key)
     lines = ["### Sub-Agents", ""]
     lines.append(
         "Default: use `sub_agent` without `agent_type` for the built-in generalist sub-agent."
@@ -46,7 +61,7 @@ def render_installed_project_sub_agents(
     *,
     console: Console | None = None,
 ) -> int:
-    agents = discover_project_sub_agents(workspace=workspace)
+    agents = discover_all_project_sub_agents(workspace=workspace)
     active_console = console or Console()
 
     if not agents:
@@ -57,13 +72,20 @@ def render_installed_project_sub_agents(
 
     table = Table(title="Project Agents", title_style="bold cyan")
     table.add_column("Name", style="green")
+    table.add_column("Status", style="yellow")
     table.add_column("Description")
     table.add_column("Location", style="dim")
+    enabled = agent_enabled_map([agent.name for agent in agents], workspace=workspace)
     for agent in agents:
         description = agent.description
         if agent.model_profile_id:
             description = f"{description} [profile: {agent.model_profile_id}]"
-        table.add_row(agent.name, description, str(agent.location))
+        table.add_row(
+            agent.name,
+            "enabled" if enabled.get(agent.name, True) else "disabled",
+            description,
+            str(agent.location),
+        )
     active_console.print(table)
     return 0
 
@@ -72,7 +94,32 @@ def _warn(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def discover_project_sub_agents(workspace: Path | None = None) -> list[ProjectSubAgent]:
+def discover_project_sub_agents(
+    workspace: Path | None = None,
+    *,
+    explicit_agent_names: set[str] | None = None,
+    directory_key: str | None = None,
+) -> list[ProjectSubAgent]:
+    explicit_names = {
+        name.casefold()
+        for name in (explicit_agent_names or set(_ACTIVE_EXPLICIT_AGENT_NAMES.get()))
+    }
+    discovered = discover_all_project_sub_agents(workspace)
+    enabled = agent_enabled_map(
+        [agent.name for agent in discovered],
+        workspace=workspace,
+        directory_key=directory_key,
+    )
+    return [
+        agent
+        for agent in discovered
+        if enabled.get(agent.name, True) or agent.name.casefold() in explicit_names
+    ]
+
+
+def discover_all_project_sub_agents(
+    workspace: Path | None = None,
+) -> list[ProjectSubAgent]:
     root = (workspace or Path.cwd()).resolve()
     agents_root = root / _DISCOVERY_ROOT
     if not agents_root.is_dir():
@@ -102,12 +149,34 @@ def discover_project_sub_agents(workspace: Path | None = None) -> list[ProjectSu
 
 
 def get_project_sub_agent_by_name(
-    name: str, workspace: Path | None = None
+    name: str,
+    workspace: Path | None = None,
+    *,
+    explicit_agent_names: set[str] | None = None,
+    directory_key: str | None = None,
 ) -> ProjectSubAgent | None:
-    for agent in discover_project_sub_agents(workspace):
+    for agent in discover_project_sub_agents(
+        workspace,
+        explicit_agent_names=explicit_agent_names,
+        directory_key=directory_key,
+    ):
         if agent.name == name:
             return agent
     return None
+
+
+def extract_explicit_agent_names(text: str | None) -> set[str]:
+    if not text:
+        return set()
+    return {match.group(1) for match in _AGENT_TAG_RE.finditer(text)}
+
+
+def set_active_explicit_agent_names(names: set[str]):
+    return _ACTIVE_EXPLICIT_AGENT_NAMES.set(frozenset(names))
+
+
+def reset_active_explicit_agent_names(token: object) -> None:
+    _ACTIVE_EXPLICIT_AGENT_NAMES.reset(token)  # type: ignore[arg-type]
 
 
 def _load_project_sub_agent(agent_path: Path) -> ProjectSubAgent | None:

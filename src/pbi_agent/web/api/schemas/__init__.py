@@ -44,6 +44,8 @@ from .config import (
     SkillViewModel,
 )
 from .system import (
+    AgentMentionItemModel,
+    AgentMentionSearchResponse,
     BootstrapResponse,
     ExpandInputRequest,
     ExpandInputResponse,
@@ -91,6 +93,8 @@ __all__ = [
     "AgentInstallResponse",
     "AgentInstallResultViewModel",
     "AgentListResponse",
+    "AgentMentionItemModel",
+    "AgentMentionSearchResponse",
     "AgentViewModel",
     "BoardStageModel",
     "BoardStagesResponse",

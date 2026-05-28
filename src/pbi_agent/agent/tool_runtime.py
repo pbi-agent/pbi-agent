@@ -6,6 +6,7 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -111,6 +112,7 @@ def _execute_tool_calls_parallel(
             raise
         futures: dict[Future[ToolResult], tuple[int, ToolCall]] = {
             executor.submit(
+                copy_context().run,
                 _execute_one_tool_call,
                 call,
                 tool_catalog,

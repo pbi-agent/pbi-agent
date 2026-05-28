@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { Composer } from "./Composer";
-import { searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
+import { searchAgentMentions, searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
 import { renderWithProviders } from "../../test/render";
 import { resetFileExistenceForTest } from "../../hooks/useFileExistence";
 import { resetSkillCatalogForTest } from "../../hooks/useSkillCatalog";
@@ -11,6 +11,7 @@ vi.mock("../../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api")>();
   return {
     ...actual,
+    searchAgentMentions: vi.fn(),
     searchFileMentions: vi.fn(),
     searchSkillMentions: vi.fn(),
     searchSlashCommands: vi.fn(),
@@ -106,6 +107,7 @@ describe("Composer", () => {
       file_count: 0,
       error: null,
     });
+    vi.mocked(searchAgentMentions).mockResolvedValue({ items: [] });
     vi.mocked(searchSkillMentions).mockResolvedValue({ items: [] });
     vi.mocked(searchSlashCommands).mockResolvedValue([]);
   });
@@ -321,6 +323,43 @@ describe("Composer", () => {
     await user.type(screen.getByRole("textbox", { name: "Message" }), "$w");
 
     expect(await screen.findByText("disabled skill")).toBeInTheDocument();
+  });
+
+  it("shows mixed file and agent suggestions and inserts visible agent tags", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchAgentMentions).mockResolvedValue({
+      items: [
+        {
+          name: "code-reviewer",
+          description: "Review code changes",
+          path: ".agents/agents/code-reviewer.md",
+          enabled: false,
+        },
+      ],
+    });
+    vi.mocked(searchFileMentions).mockResolvedValue({
+      items: [{ path: "code-reviewer-notes.md", kind: "file" }],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 1,
+      error: null,
+    });
+    renderComposer();
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    await user.type(textbox, "@code");
+
+    expect(
+      await screen.findByRole("listbox", {
+        name: "Workspace file and agent suggestions",
+      }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("@code-reviewer (agent)")).toBeInTheDocument();
+    expect(screen.getByText("disabled agent")).toBeInTheDocument();
+    expect(screen.getByText("@code-reviewer-notes.md")).toBeInTheDocument();
+
+    await user.keyboard("{Enter}");
+    expect(textbox).toHaveValue("@code-reviewer (agent) ");
   });
 
   it("does not override normal multiline ArrowUp navigation below the first line", () => {

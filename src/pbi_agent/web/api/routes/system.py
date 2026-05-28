@@ -23,6 +23,8 @@ from pbi_agent.web.api.schemas.system import (
     AllRunsResponse,
     AllRunsRunModel,
     BootstrapResponse,
+    AgentMentionItemModel,
+    AgentMentionSearchResponse,
     CreateSessionRequest,
     DailyBucketModel,
     DashboardOverviewModel,
@@ -641,6 +643,20 @@ def search_available_skills(
         items=[
             model_from_payload(SkillMentionItemModel, item)
             for item in manager.search_skill_mentions(q, limit=limit)
+        ]
+    )
+
+
+@router.get("/agents/search", response_model=AgentMentionSearchResponse)
+def search_available_agents(
+    manager: SessionManagerDep,
+    q: MentionQuery = "",
+    limit: MentionLimitQuery = 8,
+) -> AgentMentionSearchResponse:
+    return AgentMentionSearchResponse(
+        items=[
+            model_from_payload(AgentMentionItemModel, item)
+            for item in manager.search_agent_mentions(q, limit=limit)
         ]
     )
 

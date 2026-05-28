@@ -19,7 +19,11 @@ export type AgentInstallResultViewModel = { agent_name: string; install_path: st
 
 export type AgentListResponse = { agents: AgentViewModel[]; config_revision: string };
 
-export type AgentViewModel = { id: string; name: string; description: string; instructions: string; path: string; model_profile_id: string | null };
+export type AgentMentionItemModel = { name: string; description: string; path: string; enabled: boolean };
+
+export type AgentMentionSearchResponse = { items: AgentMentionItemModel[] };
+
+export type AgentViewModel = { id: string; name: string; description: string; instructions: string; path: string; model_profile_id: string | null; enabled: boolean };
 
 export type AllRunsResponse = { runs: AllRunsRunModel[]; total_count: number };
 
@@ -382,13 +386,16 @@ export type SseControlEventModel = ServerConnectedSseEventModel | ServerHeartbea
 export type SseEventModel = ServerConnectedSseEventModel | ServerHeartbeatSseEventModel | ServerReplayIncompleteSseEventModel | SessionResetSseEventModel | SessionIdentitySseEventModel | InputStateSseEventModel | WaitStateSseEventModel | ProcessingStateSseEventModel | UserQuestionsRequestedSseEventModel | UserQuestionsResolvedSseEventModel | UsageUpdatedSseEventModel | MessageAddedSseEventModel | MessageRekeyedSseEventModel | MessageRemovedSseEventModel | ThinkingUpdatedSseEventModel | ToolGroupAddedSseEventModel | SubAgentStateSseEventModel | SessionStateSseEventModel | SessionRuntimeUpdatedSseEventModel | WelcomeSseEventModel | SessionCreatedSseEventModel | SessionUpdatedSseEventModel | BoardStagesUpdatedSseEventModel | TaskUpdatedSseEventModel | TaskDeletedSseEventModel | LiveSessionStartedSseEventModel | LiveSessionUpdatedSseEventModel | LiveSessionBoundSseEventModel | LiveSessionEndedSseEventModel | WorkspaceSwitchedSseEventModel;
 
 export type ApiOperationResponses = {
+  "GET /api/agents/search": AgentMentionSearchResponse;
   "GET /api/board/stages": BoardStagesResponse;
   "PUT /api/board/stages": BoardStagesResponse;
   "GET /api/bootstrap": BootstrapResponse;
   "PUT /api/config/active-model-profile": ActiveProfileResponse;
   "GET /api/config/agents": AgentListResponse;
   "POST /api/config/agents/candidates": AgentCandidatesResponse;
+  "POST /api/config/agents/enabled": AgentListResponse;
   "POST /api/config/agents/install": AgentInstallResponse;
+  "POST /api/config/agents/{agent_name}/enabled": AgentListResponse;
   "GET /api/config/bootstrap": ConfigBootstrapResponse;
   "GET /api/config/commands": CommandListResponse;
   "POST /api/config/commands/candidates": CommandCandidatesResponse;
@@ -461,7 +468,9 @@ export type ApiJsonRequestBodies = {
   "PUT /api/board/stages": UpdateBoardStagesRequest;
   "PUT /api/config/active-model-profile": ActiveProfileRequest;
   "POST /api/config/agents/candidates": AgentCandidateRequest;
+  "POST /api/config/agents/enabled": SkillEnabledRequest;
   "POST /api/config/agents/install": AgentInstallRequest;
+  "POST /api/config/agents/{agent_name}/enabled": SkillEnabledRequest;
   "POST /api/config/commands/candidates": CommandCandidateRequest;
   "POST /api/config/commands/install": CommandInstallRequest;
   "PUT /api/config/maintenance": MaintenanceConfigModel;
@@ -491,6 +500,7 @@ export type ApiJsonRequestBodies = {
 };
 
 export type ApiOperationPathParams = {
+  "POST /api/config/agents/{agent_name}/enabled": { agent_name: string };
   "DELETE /api/config/model-profiles/{profile_id}": { profile_id: string };
   "PATCH /api/config/model-profiles/{profile_id}": { profile_id: string };
   "DELETE /api/config/providers/{provider_id}": { provider_id: string };
@@ -528,6 +538,7 @@ export type ApiOperationPathParams = {
 };
 
 export type ApiOperationQueryParams = {
+  "GET /api/agents/search": { q?: string; limit?: number };
   "GET /api/dashboard/run-filter-values": { start_date?: string | null; end_date?: string | null; scope?: string };
   "GET /api/dashboard/stats": { start_date?: string | null; end_date?: string | null; scope?: string };
   "GET /api/events/sessions/{session_id}": { since?: number; live_session_id?: string | null };

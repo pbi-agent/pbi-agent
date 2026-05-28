@@ -108,6 +108,17 @@ class SkillMentionSearchResponse(BaseModel):
     items: list[SkillMentionItemModel]
 
 
+class AgentMentionItemModel(BaseModel):
+    name: str
+    description: str
+    path: str
+    enabled: bool
+
+
+class AgentMentionSearchResponse(BaseModel):
+    items: list[AgentMentionItemModel]
+
+
 class ExpandInputRequest(BaseModel):
     text: str = ""
 

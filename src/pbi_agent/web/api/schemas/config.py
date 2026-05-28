@@ -443,6 +443,7 @@ class AgentViewModel(BaseModel):
     instructions: str
     path: str
     model_profile_id: str | None
+    enabled: bool
 
 
 class AgentListResponse(BaseModel):
