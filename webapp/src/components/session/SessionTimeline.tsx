@@ -1258,6 +1258,10 @@ function waitForNextAnimationFrame(): Promise<void> {
   });
 }
 
+function isWorkRunTimelineTarget(target: HTMLElement): boolean {
+  return target.classList.contains("timeline-entry--work-run");
+}
+
 type WorkRunPhase = ProcessingPhase | "active";
 
 function useVisibleWorkRunPhase(phase: WorkRunPhase | null) {
@@ -1372,6 +1376,7 @@ function WorkRun({
   unit,
   subAgents,
   active,
+  sessionIsActive,
   phase,
   open,
   closeSignal,
@@ -1385,6 +1390,7 @@ function WorkRun({
   unit: Extract<RenderUnit, { kind: "work_run" }>;
   subAgents: Record<string, SubAgentSummary>;
   active: boolean;
+  sessionIsActive: boolean;
   phase: WorkRunPhase | null;
   open: boolean;
   closeSignal: string | null;
@@ -1413,16 +1419,17 @@ function WorkRun({
     () => workingSummaryText(workRunSummaryItems, durationSeconds),
     [durationSeconds, workRunSummaryItems],
   );
-  const hasRunningSubAgent = useMemo(
-    () => unit.items.some((item) => {
+  const hasRunningSubAgentCard = useMemo(
+    () => (showSubAgentCards ?? true) && unit.items.some((item) => {
       if (!item.subAgentId) return false;
       const status = subAgents[item.subAgentId]?.status;
       return status === "running" || status === "starting";
     }),
-    [subAgents, unit.items],
+    [showSubAgentCards, subAgents, unit.items],
   );
   const hasVisibleSummary = workRunSummary.length > 0;
-  const isVisiblyActive = active || unit.running || hasRunningSubAgent;
+  const isVisiblyActive =
+    active || hasRunningSubAgentCard || (!sessionIsActive && unit.running);
   const showPlaceholderSummary = active && !hasVisibleSummary;
   const workRunGroupCount = useMemo(
     () => buildWorkingGroups(unit.items, showSubAgentCards ?? true).length,
@@ -1961,7 +1968,17 @@ export const SessionTimeline = memo(function SessionTimeline({
         }
         userScrolledRef.current = false;
       } else if (!userScrolledRef.current) {
-        // Scroll to top of new assistant/tool/thinking item
+        // Collapsed Working runs only expose the outer run wrapper as the
+        // target for a newly appended tool/thinking item.  Scrolling to that
+        // wrapper's top is especially noisy in sub-agent routes, where one
+        // active child transcript can contain many tool groups; keep following
+        // the bottom instead of jumping back to the start of the run.
+        if (target && isWorkRunTimelineTarget(target)) {
+          markProgrammaticScroll();
+          container.scrollTo({ top: container.scrollHeight, behavior: "instant" });
+          return;
+        }
+        // Scroll to top of new assistant item or expanded inner activity row.
         if (target) {
           void waitForImages(container).then(() => {
             if (scrollRequestRef.current !== scrollRequestId) return;
@@ -2043,6 +2060,7 @@ export const SessionTimeline = memo(function SessionTimeline({
                 unit={unit}
                 subAgents={subAgents}
                 active={isActiveUnit}
+                sessionIsActive={sessionIsActive}
                 phase={isActiveUnit ? visibleActivePhase : null}
                 open={openWorkRunKey === unit.key}
                 closeSignal={closeCollapsiblesSignal}

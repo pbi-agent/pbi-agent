@@ -2040,6 +2040,78 @@ def test_run_session_loop_explicit_disabled_agent_includes_agent_context(
     assert "<name>reviewer</name>" in instructions
 
 
+def test_run_session_loop_explicit_disabled_agent_reopens_provider_with_schema(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    agent_dir = tmp_path / ".agents" / "agents"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "reviewer.md").write_text(
+        "---\nname: reviewer\ndescription: Reviews code.\n---\n\nReview prompt.\n",
+        encoding="utf-8",
+    )
+    (agent_dir / "worker.md").write_text(
+        "---\nname: worker\ndescription: Implements changes.\n---\n\nWorker prompt.\n",
+        encoding="utf-8",
+    )
+    with SessionStore() as store:
+        store.set_project_agent_enabled(str(tmp_path), "reviewer", enabled=False)
+
+    display = _SessionDisplaySpy(
+        ["use @reviewer (agent) to review current fix", "quit"]
+    )
+    opened: list[dict[str, object | None]] = []
+    providers: list[_ChatProviderStub] = []
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog: ToolCatalog | None = None,
+    ) -> _ChatProviderStub:
+        del settings, excluded_tools
+        assert tool_catalog is not None
+        spec = tool_catalog.get_spec("sub_agent")
+        assert spec is not None
+        opened.append(
+            {
+                "system_prompt": system_prompt,
+                "agent_enum": spec.parameters_schema["properties"]["agent_type"][
+                    "enum"
+                ],
+            }
+        )
+        provider = _ChatProviderStub()
+        providers.append(provider)
+        return provider
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.runtime.create_provider",
+        fake_create_provider,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        iter([5.0, 6.5]).__next__,
+    )
+
+    exit_code = run_session_loop(
+        Settings(api_key="test-key", provider="openai", max_tool_workers=2),
+        cast(DisplayProtocol, display),
+    )
+
+    assert exit_code == 0
+    assert opened[0]["agent_enum"] == ["default", "worker"]
+    assert opened[1]["agent_enum"] == ["default", "reviewer", "worker"]
+    turn_system_prompt = opened[1]["system_prompt"]
+    assert isinstance(turn_system_prompt, str)
+    assert "<available_sub_agents>" in turn_system_prompt
+    assert "<name>reviewer</name>" in turn_system_prompt
+    assert providers[1].request_instructions == [turn_system_prompt]
+
+
 def test_run_session_loop_honors_per_turn_tool_history_preference(
     monkeypatch,
     tmp_path,

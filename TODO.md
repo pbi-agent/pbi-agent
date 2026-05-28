@@ -1,4 +1,3 @@
-[X] Fix MCP pool test stubs for directory_key
-[X] Update test double to_tool_catalog signatures
-[X] Run focused extension regression
-[X] Run full commit validation gate
+[X] Fix stale sub-agent Working active state
+[X] Run focused validation
+[X] Update task memory

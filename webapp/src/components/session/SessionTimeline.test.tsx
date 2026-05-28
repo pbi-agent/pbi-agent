@@ -559,6 +559,189 @@ describe("SessionTimeline", () => {
     );
   });
 
+  it("does not keep older Working blocks shimmering while a later block is active", () => {
+    render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "sub-user-1",
+            role: "user",
+            content: "Implement the task",
+            markdown: false,
+            subAgentId: "subagent-1",
+          },
+          {
+            kind: "tool_group",
+            itemId: "subagent-1-tool-1",
+            label: "shell",
+            status: "running",
+            subAgentId: "subagent-1",
+            items: [
+              {
+                text: "first command",
+                metadata: { tool_name: "shell", status: "running" },
+              },
+            ],
+          },
+          {
+            kind: "message",
+            itemId: "subagent-1-progress",
+            role: "assistant",
+            content: "Continuing.",
+            markdown: true,
+            subAgentId: "subagent-1",
+          },
+          {
+            kind: "tool_group",
+            itemId: "subagent-1-tool-2",
+            label: "explore_workspace",
+            status: "running",
+            subAgentId: "subagent-1",
+            items: [
+              {
+                text: "read file",
+                metadata: { tool_name: "explore_workspace", status: "running" },
+              },
+            ],
+          },
+        ]}
+        subAgents={{
+          "subagent-1": { title: "Worker", status: "running" },
+        }}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Waiting" }}
+        itemsVersion={1}
+        showSubAgentCards={false}
+      />,
+    );
+
+    const workingButtons = screen.getAllByRole("button", { name: /Working/ });
+    expect(workingButtons).toHaveLength(2);
+    expect(workingButtons[0].querySelector('[data-component="text-shimmer"]')).toHaveAttribute(
+      "data-active",
+      "false",
+    );
+    expect(workingButtons[1].querySelector('[data-component="text-shimmer"]')).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+  });
+
+  it("follows the bottom when a tool group appends to a collapsed active Working block", async () => {
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollTo = scrollTo;
+    const { container, rerender } = render(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "sub-user-1",
+            role: "user",
+            content: "Implement the task",
+            markdown: false,
+            subAgentId: "subagent-1",
+          },
+          {
+            kind: "message",
+            itemId: "subagent-1-progress",
+            role: "assistant",
+            content: "Continuing.",
+            markdown: true,
+            subAgentId: "subagent-1",
+          },
+          {
+            kind: "tool_group",
+            itemId: "subagent-1-tool-1",
+            label: "shell",
+            status: "completed",
+            subAgentId: "subagent-1",
+            items: [
+              {
+                text: "first command",
+                metadata: { tool_name: "shell", status: "completed" },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "model_wait", message: "Waiting" }}
+        itemsVersion={1}
+        showSubAgentCards={false}
+      />,
+    );
+
+    const scrollArea = container.querySelector<HTMLElement>(".session-scroll-area");
+    expect(scrollArea).not.toBeNull();
+    Object.defineProperty(scrollArea!, "scrollHeight", { configurable: true, value: 2000 });
+    scrollTo.mockClear();
+
+    rerender(
+      <SessionTimeline
+        items={[
+          {
+            kind: "message",
+            itemId: "sub-user-1",
+            role: "user",
+            content: "Implement the task",
+            markdown: false,
+            subAgentId: "subagent-1",
+          },
+          {
+            kind: "message",
+            itemId: "subagent-1-progress",
+            role: "assistant",
+            content: "Continuing.",
+            markdown: true,
+            subAgentId: "subagent-1",
+          },
+          {
+            kind: "tool_group",
+            itemId: "subagent-1-tool-1",
+            label: "shell",
+            status: "completed",
+            subAgentId: "subagent-1",
+            items: [
+              {
+                text: "first command",
+                metadata: { tool_name: "shell", status: "completed" },
+              },
+            ],
+          },
+          {
+            kind: "tool_group",
+            itemId: "subagent-1-tool-2",
+            label: "explore_workspace",
+            status: "running",
+            subAgentId: "subagent-1",
+            items: [
+              {
+                text: "read file",
+                metadata: { tool_name: "explore_workspace", status: "running" },
+              },
+            ],
+          },
+        ]}
+        subAgents={{}}
+        connection="connected"
+        waitMessage={null}
+        processing={{ active: true, phase: "tool_execution", message: "Running tool" }}
+        itemsVersion={2}
+        showSubAgentCards={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenCalledWith({
+        top: 2000,
+        behavior: "instant",
+      });
+    });
+  });
+
   it("renders thinking and tool rows directly inside an expanded Working group", () => {
     const { container } = render(
       <SessionTimeline
