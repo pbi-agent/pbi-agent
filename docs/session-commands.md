@@ -132,6 +132,8 @@ name: fastapi
 description: FastAPI best practices and conventions. Use when working with FastAPI APIs and Pydantic models for them.
 model_profile_id: analysis
 allowed_tools: read,web,shell
+skills: fastapi
+sub_agents: api-reviewer
 ---
 
 # FastAPI mode
@@ -161,6 +163,12 @@ model profiles and `pbi-agent run`: `read`, `write`, `web`, `sub-agent`, and
 `shell`. For example, `allowed_tools: read,shell` permits workspace inspection
 and shell commands but disables file edits, web access, and sub-agent
 delegation for that command turn.
+
+Use optional `skills` to scope the command turn to a comma-separated list of
+project skills. Missing or disabled configured skills print a warning and are
+omitted. Use optional `sub_agents` to scope delegated project agents for the
+command turn. When `sub_agents` is present, the `sub_agent` tool requires
+`agent_type` and does not expose the built-in `default` child agent.
 
 Project slash commands are model turns, unlike built-in local commands such as `/skills` and `/compact`.
 

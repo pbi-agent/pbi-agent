@@ -37,6 +37,12 @@ tools without changing global provider settings.
 If project skill files are present, their catalog is appended after the active
 prompt content in all of the cases above, including custom `INSTRUCTIONS.md`.
 
+Project commands and sub-agents can further scope that composition with
+frontmatter fields. Commands may declare `skills` and `sub_agents`; sub-agents
+may declare `skills`, reusable `commands`, and nested `sub_agents`. These
+comma-separated lists let one component expose only the project skills,
+delegates, and command prompt blocks it needs.
+
 ## When changes take effect
 
 New one-shot runs and newly created sessions read customization files when their

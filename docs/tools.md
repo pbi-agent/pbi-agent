@@ -68,6 +68,13 @@ Precedence is replacement-based: command frontmatter, sub-agent frontmatter, or
 `pbi-agent run` CLI flags replace the selected profile's tool allow-list for
 that turn/run. When absent, the selected profile settings apply.
 
+Command and sub-agent frontmatter can also scope composition lists. A command
+with `sub_agents: confidence-checker` exposes only that project agent through
+the `sub_agent` tool for the command turn and requires `agent_type`; the
+built-in `default` child agent is not exposed in that scoped mode. A sub-agent
+with `sub_agents: fixer` can delegate only to that nested project agent, subject
+to the same tool visibility rules and the nested depth cap.
+
 | Tool | Destructive | Purpose |
 | --- | --- | --- |
 | `shell` | yes | Run a shell command in the workspace and return stdout, stderr, and exit code. |

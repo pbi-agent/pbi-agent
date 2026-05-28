@@ -125,18 +125,20 @@ Installs a command preset from the official catalog, a local path, or a GitHub r
 | `--list` | `false` | List candidate commands from the selected source without installing anything. |
 | `--force` | `false` | Replace an existing local install under `.agents/commands/<command-name>.md`. |
 
-Public command catalogs are discovered from `commands/*.md` by default. Command files require `name` and `description` frontmatter; the normalized `name` becomes the slash alias and install filename. They may also set `model_profile_id` for that command turn and `allowed_tools` to replace the selected profile's built-in tool visibility:
+Public command catalogs are discovered from `commands/*.md` by default. Command files require `name` and `description` frontmatter; the normalized `name` becomes the slash alias and install filename. They may also set `model_profile_id` for that command turn, `allowed_tools` to replace the selected profile's built-in tool visibility, `skills` to scope the skill catalog, and `sub_agents` to scope delegated project agents:
 
 ```yaml
 ---
-name: review
-description: Review code without editing files.
-model_profile_id: analysis
+name: reviewer
+description: Review implementation and test coverage.
+model_profile_id: reviewer
 allowed_tools: read,shell
+skills: fastapi,shadcn
+sub_agents: confidence-checker,fixer
 ---
 ```
 
-`allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. See [Project Commands](/customization/commands#command-tool-visibility). If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
+`allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. `skills` and `sub_agents` are comma-separated scalar lists. See [Project Commands](/customization/commands). If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
 
 ## `pbi-agent agents`
 
@@ -171,18 +173,21 @@ Installs an agent definition from the official catalog, a local path, or a GitHu
 | `--list` | `false` | List candidate agents from the selected source without installing anything. |
 | `--force` | `false` | Replace an existing local install under `.agents/agents/<agent-name>.md`. |
 
-Agent files require `name` and `description` frontmatter. They may also set `model_profile_id` for that child run and `allowed_tools` to replace inherited/profile built-in tool visibility:
+Agent files require `name` and `description` frontmatter. They may also set `model_profile_id` for that child run, `allowed_tools` to replace inherited/profile built-in tool visibility, `skills` to scope the child skill catalog, `commands` to include project command prompt components, and `sub_agents` to allow a scoped nested delegation list:
 
 ```yaml
 ---
-name: code-reviewer
-description: Review code changes without applying patches.
-model_profile_id: analysis
+name: reviewer
+description: Review implementation and test coverage.
+model_profile_id: reviewer
 allowed_tools: read,shell
+skills: fastapi,shadcn
+commands: review
+sub_agents: confidence-checker,fixer
 ---
 ```
 
-`allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. See [Project Sub-agents](/customization/sub-agents#sub-agent-tool-visibility). Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
+`allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. `skills`, `commands`, and `sub_agents` are comma-separated scalar lists. See [Project Sub-agents](/customization/sub-agents). Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
 
 ## `pbi-agent kanban`
 

@@ -1,1 +1,3 @@
-[!] Requested removal of explore_workspace workspace confinement is blocked by repo safety constraint.
+[X] Update docs for composable command/sub-agent frontmatter
+[X] Validate documentation build
+[X] Update task memory

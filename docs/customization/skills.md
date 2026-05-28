@@ -51,6 +51,17 @@ expected to load a relevant skill itself with `explore_workspace` using
 `target: "read"` before proceeding, then use `explore_workspace` or bounded
 shell commands to inspect referenced project-local resources as needed.
 
+Project commands and sub-agents can restrict this catalog with a `skills`
+frontmatter field:
+
+```yaml
+skills: fastapi,shadcn
+```
+
+When a scoped component references a missing or disabled skill, `pbi-agent`
+prints a warning and omits that skill from the prompt catalog. If no `skills`
+field is present, the normal enabled project skill catalog is used.
+
 This implementation is project-only. User-level skill directories are
 intentionally not scanned, and any files referenced by a project skill must stay
 inside the workspace so the existing file tools can access them safely.
