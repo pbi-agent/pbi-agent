@@ -23,6 +23,17 @@ describe("workspace file icons", () => {
     expect(icon.url).toContain(".svg");
   });
 
+  it.each([
+    ["document.dtx", "dtx"],
+    ["package.sty", "sty"],
+    ["route.resolver.ts", "angular-resolver"],
+  ])("maps duplicate-source icon %s to the %s icon", (path, iconName) => {
+    const icon = getWorkspaceFileIcon(path);
+
+    expect(icon.iconName).toBe(iconName);
+    expect(icon.url).toContain(".svg");
+  });
+
   it("uses the requested fallback icon when no file association matches", () => {
     const icon = getWorkspaceFileIcon("upload.unknown-extension", "image");
 

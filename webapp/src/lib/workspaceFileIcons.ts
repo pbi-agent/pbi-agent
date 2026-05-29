@@ -21,8 +21,21 @@ export type WorkspaceTreeIcon = {
 };
 
 const manifest = materialIconTheme as IconManifest;
+// These dependency SVGs have byte-identical contents. If all copies are emitted,
+// Rolldown can choose either original file name for the shared output asset,
+// which cascades into unstable chunk hashes.
+const duplicateIconFileAliases = new Map([
+  ["angular-resolver.clone.svg", "angular-guard.clone.svg"],
+  ["dtx.clone.svg", "doctex.clone.svg"],
+  ["sty.clone.svg", "latex-package.clone.svg"],
+]);
 const iconModules = import.meta.glob<string>(
-  "../../../node_modules/material-icon-theme/icons/*.svg",
+  [
+    "../../../node_modules/material-icon-theme/icons/*.svg",
+    "!../../../node_modules/material-icon-theme/icons/angular-resolver.clone.svg",
+    "!../../../node_modules/material-icon-theme/icons/dtx.clone.svg",
+    "!../../../node_modules/material-icon-theme/icons/sty.clone.svg",
+  ],
   {
     eager: true,
     import: "default",
@@ -32,6 +45,10 @@ const iconModules = import.meta.glob<string>(
 const iconUrlsByFileName = new Map(
   Object.entries(iconModules).map(([path, url]) => [path.split("/").at(-1) ?? path, url]),
 );
+for (const [aliasFileName, canonicalFileName] of duplicateIconFileAliases) {
+  const canonicalUrl = iconUrlsByFileName.get(canonicalFileName);
+  if (canonicalUrl) iconUrlsByFileName.set(aliasFileName, canonicalUrl);
+}
 
 export function getWorkspaceFileIcon(
   path: string,

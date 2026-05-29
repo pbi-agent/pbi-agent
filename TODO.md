@@ -1,7 +1,8 @@
 # Session TODO
 
-- [X] Update command frontmatter for ask-user/model profiles
-- [X] Inspect related command/profile conventions
-- [X] Edit refine-task and plan-interactive
-- [X] Validate frontmatter parses
+- [X] Reproduce repeated web build churn
+- [X] Identify nondeterministic/static asset cause
+- [X] Implement minimal deterministic fix
+- [X] Rebuild committed web static assets
+- [X] Validate repeated build stability and frontend checks
 - [X] Update memory
