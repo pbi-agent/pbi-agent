@@ -1,7 +1,7 @@
 # Session TODO
 
-- [x] Inspect divergent branch state
-- [x] Preserve local-only bookkeeping commit
-- [x] Align local master with origin/master
-- [x] Verify pull/status
+- [x] Inspect native workspace picker failure path
+- [x] Add regression coverage for Tk import failures
+- [x] Patch availability check
+- [x] Run focused validation
 - [x] Update memory

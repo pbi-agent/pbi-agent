@@ -1015,6 +1015,42 @@ def test_web_api_pick_workspace_uses_windows_picker_in_wsl_when_tkinter_unavaila
         assert payload["bootstrap"]["workspace_root"] == str(workspace_b)
 
 
+def test_web_api_recent_workspaces_handles_broken_tkinter_install(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+
+    app = create_app(_settings())
+    original_find_spec = session_manager_module.importlib.util.find_spec
+
+    def fake_find_spec(name: str, package: str | None = None) -> object | None:
+        if name == "tkinter":
+            return object()
+        if name == "tkinter.filedialog":
+            raise ImportError("Error loading shared library libtk8.6.so")
+        return original_find_spec(name, package)
+
+    monkeypatch.setattr(
+        session_manager_module,
+        "_wsl_windows_folder_picker_available",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        session_manager_module.importlib.util,
+        "find_spec",
+        fake_find_spec,
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/workspaces/recent")
+
+    assert response.status_code == 200
+    assert response.json()["picker_available"] is False
+
+
 def test_web_api_pick_workspace_reports_unavailable_without_native_or_windows_picker(
     monkeypatch, tmp_path
 ) -> None:
