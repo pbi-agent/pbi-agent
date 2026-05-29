@@ -579,6 +579,45 @@ def test_run_sub_agent_task_uses_parent_checkpoint_for_openai_context_inheritanc
     assert child_provider.request_messages == ["Summarize the repo structure"]
 
 
+def test_run_sub_agent_task_strips_parent_ask_user_tool_group(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog=None,
+    ) -> _ProviderStub:
+        del excluded_tools, tool_catalog
+        captured["settings"] = settings
+        captured["system_prompt"] = system_prompt
+        return _ProviderStub()
+
+    monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
+
+    result = run_sub_agent_task(
+        "Summarize the repo structure",
+        Settings(
+            api_key="test-key",
+            provider="openai",
+            model="gpt-5",
+            allowed_tools=("sub-agent", "ask-user"),
+        ),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(),
+        parent_tool_availability_overridden=True,
+    )
+
+    assert result["status"] == "completed"
+    captured_settings = captured["settings"]
+    assert isinstance(captured_settings, Settings)
+    assert captured_settings.allowed_tools == ("sub-agent",)
+    assert "Use `ask_user`" not in str(captured["system_prompt"])
+
+
 def test_run_sub_agent_task_falls_back_to_transcript_for_xai_context_inheritance(
     monkeypatch,
 ) -> None:

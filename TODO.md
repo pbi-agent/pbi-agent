@@ -1,7 +1,7 @@
 # Session TODO
 
-- [X] Add `Alt+Shift+H` shortcut for Tool history
-- [X] Add `Alt+Shift+E` shortcut for Workspace Explorer
-- [X] Update tooltip/ARIA labels for the new shortcuts
-- [X] Update frontend tests
-- [X] Run focused frontend validation
+- [X] Update command frontmatter for ask-user/model profiles
+- [X] Inspect related command/profile conventions
+- [X] Edit refine-task and plan-interactive
+- [X] Validate frontmatter parses
+- [X] Update memory

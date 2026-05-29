@@ -49,6 +49,7 @@ from pbi_agent.observability import RunTracer
 from pbi_agent.providers import create_provider
 from pbi_agent.session_store import MessageImageAttachment, SessionStore
 from pbi_agent.tools.catalog import ToolCatalog
+from pbi_agent.tools.availability import without_ui_only_tool_categories
 from pbi_agent.tools.types import ParentContextSnapshot
 
 from pbi_agent.agent.session.commands import (
@@ -1075,6 +1076,12 @@ def run_sub_agent_task(
                 child_settings,
                 allowed_tools=getattr(agent_definition, "allowed_tools", None),
             )
+        # UI-only command groups are parent-turn only; sub-agents run in the
+        # background and must keep interactive tools disabled.
+        child_settings = _settings_with_tool_availability(
+            child_settings,
+            allowed_tools=without_ui_only_tool_categories(child_settings.allowed_tools),
+        )
         child_display = display.begin_sub_agent(
             task_instruction=task_instruction,
             reasoning_effort=child_settings.reasoning_effort,

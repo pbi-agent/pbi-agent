@@ -104,7 +104,8 @@ Tool visibility is replacement-based. A `pbi-agent run --allowed-tools ...`
 flag, project command `allowed_tools`, or project sub-agent `allowed_tools`
 replaces the profile allow-list for that run, command turn, or child run only.
 MCP and extension tools are not affected, and the UI-only `ask_user` tool is not
-configured through profiles.
+configured through profiles. Project commands may opt into `ask-user` for their
+own command turn.
 
 Omit `write` for read-only profiles. Omit `web` to disable both `read_web_url`
 and native provider web search.

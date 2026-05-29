@@ -160,9 +160,11 @@ Use optional `model_profile_id` to force a specific saved model profile whenever
 Use optional `allowed_tools` to replace the selected profile's built-in tool
 visibility for that command turn. It accepts the same comma-separated groups as
 model profiles and `pbi-agent run`: `read`, `write`, `web`, `sub-agent`, and
-`shell`. For example, `allowed_tools: read,shell` permits workspace inspection
-and shell commands but disables file edits, web access, and sub-agent
-delegation for that command turn.
+`shell`, plus command-only `ask-user`. For example,
+`allowed_tools: read,shell` permits workspace inspection and shell commands but
+disables file edits, web access, and sub-agent delegation for that command
+turn. Use `allowed_tools: read,ask-user` when a command may ask browser users
+clarifying questions.
 
 Use optional `skills` to scope the command turn to a comma-separated list of
 project skills. Missing or disabled configured skills print a warning and are

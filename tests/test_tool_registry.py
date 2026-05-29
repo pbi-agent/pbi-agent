@@ -107,6 +107,27 @@ def test_effective_excluded_tool_names_honors_allowed_tools() -> None:
     assert "read_web_url" in excluded
 
 
+def test_effective_excluded_tool_names_keeps_ask_user_disabled_when_not_allowed() -> (
+    None
+):
+    assert "ask_user" in effective_excluded_tool_names(
+        Settings(provider="openai", allowed_tools=())
+    )
+    assert "ask_user" in effective_excluded_tool_names(
+        Settings(provider="openai", allowed_tools=("read",))
+    )
+
+
+def test_effective_excluded_tool_names_allows_command_enabled_ask_user() -> None:
+    excluded = effective_excluded_tool_names(
+        Settings(provider="openai", allowed_tools=("ask-user",))
+    )
+
+    assert "ask_user" not in excluded
+    assert "explore_workspace" in excluded
+    assert "shell" in excluded
+
+
 def test_web_allowed_tool_enables_fetch_tool_and_native_web_search() -> None:
     from pbi_agent.tools.availability import native_web_search_enabled
 

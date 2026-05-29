@@ -18,7 +18,7 @@ default with an allow-list.
 In the browser app, edit a model profile in **Settings → Model Profiles** and
 use **Tool visibility** to select these same groups for that profile.
 
-The allow-list accepts only these built-in tool groups:
+The allow-list accepts these built-in tool groups:
 
 | Tool group | Built-ins |
 | --- | --- |
@@ -35,8 +35,10 @@ providers use `apply_patch`, while other providers use `write_file` and
 `replace_in_file`.
 
 The `ask_user` clarification tool is UI-only. It is enabled by the browser
-session's interactive mode and is not configurable through model profiles,
-command/sub-agent frontmatter, or `pbi-agent run` tool allow-lists.
+session's interactive mode by default. Project command frontmatter may also
+declare the `ask-user` group in `allowed_tools` to make it available for that command
+turn. It is not configurable through model profiles, sub-agent frontmatter, or
+`pbi-agent run` tool allow-lists.
 
 The `web` group controls both `read_web_url` and native provider web search.
 Omit `web` from `allowed_tools` to disable both.
@@ -54,7 +56,8 @@ pbi-agent config profiles create --name ReadOnly --provider-id openai \
   --allowed-tools read,web
 ```
 
-Project command or sub-agent frontmatter uses the same comma-separated key:
+Project command or sub-agent frontmatter uses the same comma-separated key.
+Project commands may additionally include `ask-user`:
 
 ```yaml
 ---

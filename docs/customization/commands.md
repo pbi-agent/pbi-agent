@@ -77,7 +77,7 @@ interactive sessions.
 ## Command tool visibility
 
 `allowed_tools` uses the same comma-separated built-in tool groups as model
-profiles and `pbi-agent run`:
+profiles and `pbi-agent run`, plus command-only `ask-user`:
 
 | Tool group | Built-ins |
 | --- | --- |
@@ -86,6 +86,7 @@ profiles and `pbi-agent run`:
 | `web` | `read_web_url` and provider-native web search |
 | `sub-agent` | `sub_agent` |
 | `shell` | `shell` |
+| `ask-user` | `ask_user` clarification prompts for this command turn |
 
 If `allowed_tools` is omitted, the command turn uses the selected profile's tool
 visibility. If it is present, it replaces the selected profile's allow-list for
@@ -94,8 +95,9 @@ profile.
 
 Use `write` only for commands that should be able to edit files. Omit `web` to
 disable both `read_web_url` and native provider web search for the command turn.
-MCP and extension tools are not affected by this allow-list, and the UI-only
-`ask_user` tool is not configurable through command frontmatter.
+MCP and extension tools are not affected by this allow-list. Include `ask-user`
+only on commands that should be allowed to ask browser users clarifying
+questions during that command turn.
 
 See [Built-in Tools](/tools#availability-controls) for full availability
 semantics and precedence.

@@ -194,7 +194,7 @@ def test_skips_unknown_builtin_tool_availability(tmp_path: Path, capsys) -> None
     assert "unknown tools" in capsys.readouterr().err
 
 
-def test_skips_unknown_ask_user_allowed_tool(tmp_path: Path, capsys) -> None:
+def test_skips_command_only_ask_user_allowed_tool(tmp_path: Path, capsys) -> None:
     _write_sub_agent(
         tmp_path,
         "reviewer.md",
@@ -202,7 +202,7 @@ def test_skips_unknown_ask_user_allowed_tool(tmp_path: Path, capsys) -> None:
             "---\n"
             "name: reviewer\n"
             "description: Reviews code changes.\n"
-            "allowed_tools: ask_user\n"
+            "allowed_tools: ask-user\n"
             "---\n\n"
             "Review prompt.\n"
         ),
@@ -211,7 +211,7 @@ def test_skips_unknown_ask_user_allowed_tool(tmp_path: Path, capsys) -> None:
     agents = discover_project_sub_agents(tmp_path)
 
     assert agents == []
-    assert "unknown tools: ask_user" in capsys.readouterr().err
+    assert "unknown tools: ask-user" in capsys.readouterr().err
 
 
 def test_skips_missing_description(tmp_path: Path, capsys) -> None:

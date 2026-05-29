@@ -41,6 +41,7 @@ from pbi_agent.config import (
     save_internal_config_with_revision,
     select_active_model_profile,
     update_maintenance_config,
+    validate_allowed_tools,
 )
 
 
@@ -217,7 +218,7 @@ def test_list_command_configs_parses_allowed_tools_frontmatter(
                 "---",
                 "name: review",
                 "description: Review safely.",
-                "allowed_tools: read, web, shell",
+                "allowed_tools: read, web, shell, ask_user",
                 "---",
                 "",
                 "Review only.",
@@ -227,7 +228,7 @@ def test_list_command_configs_parses_allowed_tools_frontmatter(
 
     command = list_command_configs(tmp_path)[0]
 
-    assert command.allowed_tools == ("read", "web", "shell")
+    assert command.allowed_tools == ("read", "web", "shell", "ask-user")
 
 
 def test_list_command_configs_parses_skills_and_sub_agents_frontmatter(
@@ -320,20 +321,29 @@ def test_parse_command_markdown_rejects_unknown_allowed_tool() -> None:
         )
 
 
-def test_parse_command_markdown_rejects_ui_only_ask_user_tool() -> None:
-    with pytest.raises(CommandManifestError, match="unknown tools: ask_user"):
-        parse_command_markdown(
-            "\n".join(
-                [
-                    "---",
-                    "name: review",
-                    "description: Review safely.",
-                    "allowed_tools: ask_user",
-                    "---",
-                    "",
-                    "Review only.",
-                ]
-            )
+def test_parse_command_markdown_accepts_command_only_ask_user_tool() -> None:
+    _, metadata = parse_command_markdown(
+        "\n".join(
+            [
+                "---",
+                "name: review",
+                "description: Review safely.",
+                "allowed_tools: ask_user",
+                "---",
+                "",
+                "Review only.",
+            ]
+        )
+    )
+
+    assert metadata["allowed_tools"] == "ask-user"
+
+
+def test_global_allowed_tools_validation_rejects_ask_user() -> None:
+    with pytest.raises(ConfigError, match="unknown tools: ask-user"):
+        validate_allowed_tools(
+            ("ask-user",),
+            error_prefix="Model profile tool availability",
         )
 
 

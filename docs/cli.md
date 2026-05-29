@@ -138,7 +138,7 @@ sub_agents: confidence-checker,fixer
 ---
 ```
 
-`allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. `skills` and `sub_agents` are comma-separated scalar lists. See [Project Commands](/customization/commands). If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
+Command `allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`, plus command-only `ask-user`. `skills` and `sub_agents` are comma-separated scalar lists. See [Project Commands](/customization/commands). If a repository keeps command files under `.agents/commands/`, target that directory explicitly with a local path or GitHub tree URL.
 
 ## `pbi-agent agents`
 

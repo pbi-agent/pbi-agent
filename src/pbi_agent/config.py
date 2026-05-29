@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from pbi_agent.frontmatter import FrontmatterParseError, parse_simple_frontmatter
 from pbi_agent.tools.availability import BUILTIN_TOOL_CATEGORIES
+from pbi_agent.tools.availability import UI_ONLY_TOOL_CATEGORIES
 
 from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
@@ -74,6 +75,10 @@ RESERVED_COMMAND_ALIASES = frozenset(
     {"/skills", "/mcp", "/agents", "/init", "/reload", "/compact", "/extensions"}
 )
 PROJECT_COMMANDS_DIR = Path(".agents") / "commands"
+COMMAND_ONLY_ALLOWED_TOOLS = frozenset(UI_ONLY_TOOL_CATEGORIES)
+COMMAND_ALLOWED_TOOL_ALIASES = {
+    "ask_user": "ask-user",
+}
 
 
 class ConfigError(ValueError):
@@ -339,9 +344,11 @@ class CommandConfig:
             )
         if not self.instructions:
             raise ConfigError("Command instructions cannot be empty.")
+        self.allowed_tools = _normalize_command_allowed_tools(self.allowed_tools)
         _validate_allowed_tools(
             self.allowed_tools,
             error_prefix="Command tool availability",
+            extra_allowed_tools=COMMAND_ONLY_ALLOWED_TOOLS,
         )
 
 
@@ -419,14 +426,27 @@ def parse_csv_setting(value: str | None) -> tuple[str, ...] | None:
     return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
+def _normalize_command_allowed_tools(
+    allowed_tools: tuple[str, ...] | None,
+) -> tuple[str, ...] | None:
+    if allowed_tools is None:
+        return None
+    return tuple(
+        COMMAND_ALLOWED_TOOL_ALIASES.get(tool_name, tool_name)
+        for tool_name in allowed_tools
+    )
+
+
 def _validate_allowed_tools(
     allowed_tools: tuple[str, ...] | None,
     *,
     error_prefix: str,
+    extra_allowed_tools: frozenset[str] = frozenset(),
 ) -> None:
-    unknown_tools = sorted(set(allowed_tools or ()) - set(BUILTIN_TOOL_CATEGORIES))
+    allowed_tool_names = set(BUILTIN_TOOL_CATEGORIES) | set(extra_allowed_tools)
+    unknown_tools = sorted(set(allowed_tools or ()) - allowed_tool_names)
     if unknown_tools:
-        allowed = ", ".join(sorted(BUILTIN_TOOL_CATEGORIES))
+        allowed = ", ".join(sorted(allowed_tool_names))
         raise ConfigError(
             f"{error_prefix} has unknown tools: "
             f"{', '.join(unknown_tools)}. Allowed tools: {allowed}."
@@ -548,7 +568,7 @@ def parse_command_markdown(content: str) -> tuple[str, dict[str, str]]:
             metadata.pop("model_profile_id", None)
     value = metadata.get("allowed_tools")
     if isinstance(value, str):
-        parsed = parse_csv_setting(value)
+        parsed = _normalize_command_allowed_tools(parse_csv_setting(value))
         metadata["allowed_tools"] = ",".join(parsed or ())
     for key in ("skills", "sub_agents"):
         value = metadata.get(key)
@@ -557,8 +577,11 @@ def parse_command_markdown(content: str) -> tuple[str, dict[str, str]]:
             metadata[key] = ",".join(parsed or ())
     try:
         _validate_allowed_tools(
-            parse_csv_setting(metadata.get("allowed_tools")),
+            _normalize_command_allowed_tools(
+                parse_csv_setting(metadata.get("allowed_tools"))
+            ),
             error_prefix="Command tool availability",
+            extra_allowed_tools=COMMAND_ONLY_ALLOWED_TOOLS,
         )
     except ConfigError as exc:
         raise CommandManifestError(str(exc)) from exc
