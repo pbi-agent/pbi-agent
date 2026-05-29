@@ -1,7 +1,7 @@
 # Session TODO
 
-- [x] Inspect current command frontmatter/instructions
-- [x] Define command complexity tiers, model profiles, and strict allowed tools
-- [x] Update command definitions
-- [x] Validate command loading and formatting
+- [x] Inspect divergent branch state
+- [x] Preserve local-only bookkeeping commit
+- [x] Align local master with origin/master
+- [x] Verify pull/status
 - [x] Update memory
