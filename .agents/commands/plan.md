@@ -2,6 +2,7 @@
 name: plan
 description: Plan Mode (Non-Interactive)
 model_profile_id: planner
+allowed_tools: read,shell,web
 ---
 
 # Plan Mode (Non-Interactive)

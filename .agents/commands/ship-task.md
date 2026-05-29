@@ -1,7 +1,8 @@
 ---
 name: ship-task
 description: Ship Task Mode
-model_profile_id: worker-mini
+model_profile_id: worker-pro
+allowed_tools: read,shell
 ---
 
 # Ship Task Mode

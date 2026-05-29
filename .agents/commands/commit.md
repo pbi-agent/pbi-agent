@@ -2,6 +2,7 @@
 name: commit
 description: Commit Mode
 model_profile_id: worker-mini
+allowed_tools: read,shell
 ---
 
 # Commit Mode

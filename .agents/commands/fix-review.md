@@ -1,7 +1,8 @@
 ---
 name: fix-review
 description: Fix Review Findings
-model_profile_id: reviewer
+model_profile_id: worker
+allowed_tools: read,write,shell
 ---
 
 # Fix Review Findings

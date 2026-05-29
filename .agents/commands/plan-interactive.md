@@ -2,7 +2,7 @@
 name: plan-interactive
 description: Plan Mode (Interactive)
 model_profile_id: planner
-allowed_tools: read,ask-user,web
+allowed_tools: read,shell,web,ask-user
 ---
 
 # Plan Mode (Interactive)

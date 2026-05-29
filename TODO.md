@@ -1,8 +1,7 @@
 # Session TODO
 
-- [X] Reproduce repeated web build churn
-- [X] Identify nondeterministic/static asset cause
-- [X] Implement minimal deterministic fix
-- [X] Rebuild committed web static assets
-- [X] Validate repeated build stability and frontend checks
-- [X] Update memory
+- [x] Inspect current command frontmatter/instructions
+- [x] Define command complexity tiers, model profiles, and strict allowed tools
+- [x] Update command definitions
+- [x] Validate command loading and formatting
+- [x] Update memory

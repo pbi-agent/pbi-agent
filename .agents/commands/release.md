@@ -1,7 +1,8 @@
 ---
 name: release
 description: Release Workflow Mode
-model_profile_id: worker-mini
+model_profile_id: worker-pro
+allowed_tools: read,write,shell
 ---
 
 # Release Workflow Mode
