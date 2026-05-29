@@ -2,7 +2,7 @@
 name: review
 description: Review Mode
 model_profile_id: reviewer
-allowed_tools: read, shell
+allowed_tools: read,shell
 ---
 
 # Review Mode
