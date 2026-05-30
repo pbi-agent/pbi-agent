@@ -9,16 +9,22 @@ from pbi_agent.tools.workspace_access import relative_workspace_path
 from pbi_agent.tools.workspace_access import resolve_safe_path
 
 SUPPORTED_IMAGE_MIME_TYPES = (
-    "image/jpeg",
     "image/png",
+    "image/jpeg",
     "image/webp",
+    "image/heic",
+    "image/heif",
 )
 _MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20 MB
 _MIME_LABELS = {
-    "image/jpeg": "JPEG",
     "image/png": "PNG",
+    "image/jpeg": "JPEG",
     "image/webp": "WEBP",
+    "image/heic": "HEIC",
+    "image/heif": "HEIF",
 }
+_HEIC_BRANDS = {"heic", "heix", "hevc", "hevx", "heim", "heis"}
+_HEIF_BRANDS = {"mif1", "msf1", "heif"}
 
 
 def load_workspace_image(root: Path, raw_path: Any) -> ImageAttachment:
@@ -68,6 +74,28 @@ def detect_image_mime_type(raw_bytes: bytes) -> str | None:
         return "image/jpeg"
     if len(raw_bytes) >= 12 and raw_bytes[:4] == b"RIFF" and raw_bytes[8:12] == b"WEBP":
         return "image/webp"
+    heif_mime_type = _detect_heif_mime_type(raw_bytes)
+    if heif_mime_type is not None:
+        return heif_mime_type
+    return None
+
+
+def _detect_heif_mime_type(raw_bytes: bytes) -> str | None:
+    if len(raw_bytes) < 12 or raw_bytes[4:8] != b"ftyp":
+        return None
+
+    brands = [raw_bytes[8:12]]
+    compatible_brands = raw_bytes[16:]
+    brands.extend(
+        compatible_brands[index : index + 4]
+        for index in range(0, len(compatible_brands) - 3, 4)
+    )
+    for brand in brands:
+        brand_name = brand.decode("ascii", errors="ignore").strip()
+        if brand_name in _HEIC_BRANDS:
+            return "image/heic"
+        if brand_name in _HEIF_BRANDS:
+            return "image/heif"
     return None
 
 

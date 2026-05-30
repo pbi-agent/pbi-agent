@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import io
 import json
 import urllib.error
@@ -28,6 +29,7 @@ from pbi_agent.stt.audio import (
 )
 from pbi_agent.stt.base import SttProviderError
 from pbi_agent.stt.elevenlabs import extract_transcript_text as extract_elevenlabs_text
+from pbi_agent.stt.google import extract_transcript_text as extract_google_text
 from pbi_agent.stt.xai import extract_transcript_text as extract_xai_text
 from pbi_agent.web.serve import create_app
 
@@ -185,6 +187,65 @@ def test_stt_xai_request_shape_and_transcript(
         headers["content-type"],
         file_header_index=file_index,
     )
+    assert prepared_wav != wav_bytes
+    channels, sample_rate, frames = _wav_info(prepared_wav)
+    assert channels == 1
+    assert sample_rate == 16_000
+    assert frames == 1_600
+
+
+def test_stt_google_request_shape_and_transcript(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wav_bytes = _wav_bytes(channels=2, sample_rate=8_000, frames=800)
+    _select_provider(
+        ProviderConfig(
+            id="google-stt",
+            name="Google STT",
+            kind="google",
+            api_key="gemini-key",
+        )
+    )
+    calls: list[urllib.request.Request] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float) -> _FakeResponse:
+        del timeout
+        calls.append(request)
+        return _FakeResponse(
+            {
+                "candidates": [
+                    {"content": {"parts": [{"text": "hello from google"}]}},
+                    {"content": {"parts": [{"text": "second candidate"}]}},
+                ]
+            }
+        )
+
+    monkeypatch.setattr(http_client, "urlopen", fake_urlopen)
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = _post_wav(client, wav_bytes)
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "hello from google\nsecond candidate"}
+    assert len(calls) == 1
+    request = calls[0]
+    headers = _headers(request)
+    assert request.full_url == (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-3.5-flash:generateContent"
+    )
+    assert headers["x-goog-api-key"] == "gemini-key"
+    assert headers["content-type"] == "application/json"
+    assert isinstance(request.data, bytes)
+    payload = json.loads(request.data.decode("utf-8"))
+    parts = payload["contents"][0]["parts"]
+    assert parts[0] == {
+        "text": 'Generate a transcript of the speech. Remove filler words (e.g. "uh", "um", "er") and return only the transcript text.'
+    }
+    inline_data = parts[1]["inline_data"]
+    assert inline_data["mime_type"] == "audio/wav"
+    prepared_wav = base64.b64decode(inline_data["data"])
     assert prepared_wav != wav_bytes
     channels, sample_rate, frames = _wav_info(prepared_wav)
     assert channels == 1
@@ -448,3 +509,20 @@ def test_xai_extraction_accepts_empty_and_rejects_invalid() -> None:
         extract_xai_text({})
     with pytest.raises(SttProviderError, match="xAI returned"):
         extract_xai_text({"text": 123})
+
+
+def test_google_extraction_combines_candidates_and_rejects_invalid() -> None:
+    assert (
+        extract_google_text(
+            {
+                "candidates": [
+                    {"content": {"parts": [{"text": " one "}, {"text": "two"}]}},
+                    {"content": {"parts": [{"text": "three"}]}},
+                ]
+            }
+        )
+        == "one\ntwo\nthree"
+    )
+    assert extract_google_text({"candidates": []}) == ""
+    with pytest.raises(SttProviderError, match="Google returned"):
+        extract_google_text({})

@@ -1,4 +1,3 @@
-- [x] Inspect STT implementation and existing docs
-- [x] Add STT/dictation documentation and navigation
-- [x] Build docs and fix any issues
-- [x] Update memory and summarize
+- [x] Fix OpenAI overload retry review finding
+- [x] Run focused OpenAI validation
+- [x] Update task memory

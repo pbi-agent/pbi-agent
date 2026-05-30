@@ -246,6 +246,7 @@ function makeConfigBootstrap(
         "openai",
         "chatgpt",
         "github_copilot",
+        "google",
         "deepgram",
         "elevenlabs",
       ],
@@ -349,6 +350,31 @@ function makeConfigBootstrap(
           supports_model_profiles: true,
           supports_stt: false,
         },
+        google: {
+          label: "Google",
+          description: null,
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+          },
+          default_model: "gemini-3.1-pro-preview",
+          default_sub_agent_model: "gemini-3-flash-preview",
+          default_responses_url:
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+          default_generic_api_url: null,
+          supports_responses_url: true,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
+          supports_native_web_search: true,
+          supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: true,
+        },
         deepgram: {
           label: "Deepgram",
           description: "Uses a Deepgram API key for speech-to-text.",
@@ -411,6 +437,7 @@ function makeApiKeyProvider(
 ): ConfigBootstrapPayload["providers"][number] {
   const envNames: Record<string, string> = {
     openai: "OPENAI_API_KEY",
+    google: "GEMINI_API_KEY",
     deepgram: "DEEPGRAM_API_KEY",
     elevenlabs: "ELEVENLABS_API_KEY",
   };
@@ -1844,14 +1871,14 @@ describe("SettingsPage", () => {
 
   it("saves the selected speech-to-text provider automatically", async () => {
     const user = userEvent.setup();
-    const deepgramProvider = makeApiKeyProvider(
-      "deepgram-main",
-      "Deepgram Main",
-      "deepgram",
+    const googleProvider = makeApiKeyProvider(
+      "google-main",
+      "Google Main",
+      "google",
     );
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(
       makeConfigBootstrap({
-        providers: [...makeConfigBootstrap().providers, deepgramProvider],
+        providers: [...makeConfigBootstrap().providers, googleProvider],
         stt_provider_id: null,
       }),
     );
@@ -1869,14 +1896,14 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
     expect(providerSelect).toHaveClass("active-profile-control__select");
 
-    await selectRadixOption(user, providerSelect, "Deepgram Main (Deepgram)");
+    await selectRadixOption(user, providerSelect, "Google Main (Google)");
 
     expect(
       screen.queryByRole("button", { name: "Save Speech Provider" }),
     ).not.toBeInTheDocument();
 
     await waitFor(() =>
-      expect(setSttProvider).toHaveBeenCalledWith("deepgram-main", "rev-1"),
+      expect(setSttProvider).toHaveBeenCalledWith("google-main", "rev-1"),
     );
   });
 
@@ -1902,7 +1929,7 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Add OpenAI, xAI, Deepgram, or ElevenLabs provider credentials first.",
+        "Add OpenAI, xAI, Google, Deepgram, or ElevenLabs provider credentials first.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -1978,6 +2005,9 @@ describe("SettingsPage", () => {
     const openAiOption = within(listbox)
       .getByText("OpenAI API")
       .closest('[role="option"]');
+    const googleOption = within(listbox)
+      .getByText("Google")
+      .closest('[role="option"]');
     const deepgramOption = within(listbox)
       .getByText("Deepgram")
       .closest('[role="option"]');
@@ -1986,11 +2016,15 @@ describe("SettingsPage", () => {
       .closest('[role="option"]');
 
     expect(openAiOption).not.toBeNull();
+    expect(googleOption).not.toBeNull();
     expect(deepgramOption).not.toBeNull();
     expect(elevenLabsOption).not.toBeNull();
 
     expect(
       within(openAiOption as HTMLElement).queryByText("STT"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(googleOption as HTMLElement).queryByText("STT"),
     ).not.toBeInTheDocument();
     expect(
       within(deepgramOption as HTMLElement).getByText("STT"),

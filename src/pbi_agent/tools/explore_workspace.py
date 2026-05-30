@@ -20,7 +20,7 @@ MAX_LIMIT = 1_000
 
 _SEARCH_TARGETS = {"content", "path"}
 _TARGETS = _SEARCH_TARGETS | {"read", "list"}
-_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif"}
 
 _STRING_OR_STRING_ARRAY_SCHEMA: dict[str, Any] = {
     "oneOf": [
@@ -419,7 +419,7 @@ def _is_supported_image_path(target_path: Path) -> bool:
         return True
     try:
         with target_path.open("rb") as handle:
-            return detect_image_mime_type(handle.read(12)) is not None
+            return detect_image_mime_type(handle.read(64)) is not None
     except OSError:
         return False
 

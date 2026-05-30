@@ -146,7 +146,13 @@ describe("Composer", () => {
     inputPrototype.showPicker = showPicker;
 
     try {
-      renderComposer();
+      const { container } = renderComposer();
+      const input = container.querySelector<HTMLInputElement>(
+        'input[name="image-upload"]',
+      );
+      expect(input?.accept).toBe(
+        "image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif",
+      );
 
       await user.click(screen.getByRole("button", { name: "Actions" }));
       await user.click(screen.getByRole("menuitem", { name: "Image" }));
@@ -611,10 +617,12 @@ describe("Composer", () => {
   it("submits selected image files with the message", async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderComposer();
-    const image = new File(["binary"], "diagram.png", { type: "image/png" });
+    const image = new File(["binary"], "diagram.heif");
 
-    await user.upload(document.querySelector('input[name="image-upload"]')!, image);
-    expect(screen.getByText("diagram.png")).toBeInTheDocument();
+    fireEvent.change(document.querySelector('input[name="image-upload"]')!, {
+      target: { files: [image] },
+    });
+    expect(await screen.findByText("diagram.heif")).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "review this");
     await user.click(screen.getByRole("button", { name: "Send message" }));

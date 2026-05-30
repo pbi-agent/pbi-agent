@@ -153,9 +153,14 @@ describe("TaskModal", () => {
       />,
     );
 
-    const input = document.querySelector<HTMLInputElement>('input[name="task-image-upload"]');
+    const input = document.querySelector<HTMLInputElement>(
+      'input[name="task-image-upload"]',
+    );
     expect(input).not.toBeNull();
-    const file = new File(["binary"], "mockup.png", { type: "image/png" });
+    expect(input?.accept).toBe(
+      "image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif",
+    );
+    const file = new File(["binary"], "mockup.heic");
     fireEvent.change(input!, { target: { files: [file] } });
 
     expect(onChange).toHaveBeenCalledOnce();
@@ -234,7 +239,7 @@ describe("TaskModal", () => {
 
     expect(pasteEvent.defaultPrevented).toBe(true);
     expect(onChange).toHaveBeenCalledWith({
-      imageError: "Only PNG, JPEG, and WEBP images are supported.",
+    imageError: "Only PNG, JPEG, WEBP, HEIC, and HEIF images are supported.",
     });
   });
 });

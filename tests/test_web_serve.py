@@ -1625,6 +1625,10 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             is True
         )
         assert (
+            refreshed_payload["options"]["provider_metadata"]["google"]["supports_stt"]
+            is True
+        )
+        assert (
             refreshed_payload["options"]["provider_metadata"]["deepgram"][
                 "supports_model_profiles"
             ]

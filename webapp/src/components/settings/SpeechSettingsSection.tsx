@@ -166,7 +166,7 @@ export function SpeechSettingsSection({
           ) : (
             <EmptyState
               title="No speech-to-text provider ready"
-              description="Add OpenAI, xAI, Deepgram, or ElevenLabs provider credentials first."
+              description="Add OpenAI, xAI, Google, Deepgram, or ElevenLabs provider credentials first."
             />
           )}
 

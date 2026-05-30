@@ -113,7 +113,21 @@ type ImageFileInput = HTMLInputElement & {
 
 type DictationState = "idle" | "recording" | "transcribing";
 
-const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const SUPPORTED_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+const SUPPORTED_IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".heic",
+  ".heif",
+];
 const TOKEN_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
 const FILE_MENTION_POLL_INTERVAL_MS = 500;
 
@@ -330,6 +344,14 @@ function replaceTextRange(
 
 function imageFingerprint(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function isSupportedImageFile(file: File): boolean {
+  if (SUPPORTED_IMAGE_TYPES.has(file.type.toLowerCase())) {
+    return true;
+  }
+  const name = file.name.toLowerCase();
+  return SUPPORTED_IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension));
 }
 
 function isDictationShortcut(event: KeyboardEvent<HTMLElement>): boolean {
@@ -746,9 +768,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         return;
       }
 
-      const nextFiles = files.filter((file) => SUPPORTED_IMAGE_TYPES.has(file.type));
+      const nextFiles = files.filter(isSupportedImageFile);
       if (nextFiles.length === 0) {
-        setAttachmentMessage("Only PNG, JPEG, and WEBP images are supported.");
+        setAttachmentMessage(
+          "Only PNG, JPEG, WEBP, HEIC, and HEIF images are supported.",
+        );
         return;
       }
 
@@ -1319,7 +1343,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         ref={fileInputRef}
         type="file"
         name="image-upload"
-        accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif"
         multiple
         hidden
         onChange={(event) => {

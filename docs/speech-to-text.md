@@ -13,13 +13,15 @@ sending.
 
 ## Supported providers
 
-STT uses saved **Providers**. OpenAI and xAI providers can be used for both model
-profiles and dictation; Deepgram and ElevenLabs are STT-only provider kinds.
+STT uses saved **Providers**. OpenAI, xAI, and Google providers can be used for
+both model profiles and dictation; Deepgram and ElevenLabs are STT-only provider
+kinds.
 
 | Provider kind | Use | Default key environment variable | Notes |
 | --- | --- | --- | --- |
 | `openai` | Model profiles and STT | `OPENAI_API_KEY` | Uses OpenAI audio transcriptions with `gpt-4o-transcribe`. If no saved key or provider-specific env var is configured, STT can also use `PBI_AGENT_API_KEY`. |
 | `xai` | Model profiles and STT | `XAI_API_KEY` | Uses the xAI STT endpoint. |
+| `google` | Model profiles and STT | `GEMINI_API_KEY` | Uses Gemini audio understanding with `gemini-3.5-flash` and inline WAV audio. |
 | `deepgram` | STT only | `DEEPGRAM_API_KEY` | Uses Deepgram Listen with `nova-3` and smart formatting. |
 | `elevenlabs` | STT only | `ELEVENLABS_API_KEY` | Uses ElevenLabs Scribe v2. pbi-agent converts prepared WAV audio to raw 16 kHz mono PCM before upload. |
 
@@ -31,10 +33,10 @@ speech was detected” instead of treating it as a failure.
 
 1. Open **Settings**.
 2. In **Providers**, add a provider with an STT-capable kind:
-   **OpenAI API**, **xAI**, **Deepgram**, or **ElevenLabs**.
+   **OpenAI API**, **xAI**, **Google**, **Deepgram**, or **ElevenLabs**.
 3. Add credentials either as a saved API key or as an environment-variable
-   reference such as `OPENAI_API_KEY`, `XAI_API_KEY`, `DEEPGRAM_API_KEY`, or
-   `ELEVENLABS_API_KEY`.
+   reference such as `OPENAI_API_KEY`, `XAI_API_KEY`, `GEMINI_API_KEY`,
+   `DEEPGRAM_API_KEY`, or `ELEVENLABS_API_KEY`.
 4. Open **Speech-to-text** in Settings.
 5. Choose the provider from **Active default**.
 
@@ -52,6 +54,12 @@ pbi-agent config providers create \
   --name "OpenAI STT" \
   --kind openai \
   --api-key-env OPENAI_API_KEY
+
+pbi-agent config providers create \
+  --id google-stt \
+  --name "Google STT" \
+  --kind google \
+  --api-key-env GEMINI_API_KEY
 
 pbi-agent config providers create \
   --id deepgram-stt \

@@ -7,6 +7,7 @@ from pbi_agent.stt.base import SttBackend, SttConfigurationError
 _DEFAULT_BACKEND_MODULES = (
     "pbi_agent.stt.openai",
     "pbi_agent.stt.xai",
+    "pbi_agent.stt.google",
     "pbi_agent.stt.deepgram",
     "pbi_agent.stt.elevenlabs",
 )
