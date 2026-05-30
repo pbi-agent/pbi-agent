@@ -243,6 +243,7 @@ export function WorkspaceFileTreePanel({
           onChange={setSearchTerm}
           placeholder="Search files"
           ariaLabel="Search files"
+          clearLabel="Clear file search"
         />
         <div className="workspace-file-panel__filters">
           <Toggle

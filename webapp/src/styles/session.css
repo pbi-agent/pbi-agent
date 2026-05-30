@@ -126,7 +126,58 @@
 .session-sidebar__search-input {
   height: 2rem;
   padding-left: 1.85rem;
+  padding-right: 2.05rem;
   font-size: var(--text-xs);
+}
+
+.session-sidebar__search-input::-webkit-search-decoration,
+.session-sidebar__search-input::-webkit-search-cancel-button,
+.session-sidebar__search-input::-webkit-search-results-button,
+.session-sidebar__search-input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.session-sidebar__search-clear {
+  position: absolute;
+  right: calc(var(--sp-2) + 0.25rem);
+  top: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: none;
+  transform: translateY(-50%);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+
+.session-sidebar__search-clear svg {
+  width: 0.8125rem;
+  height: 0.8125rem;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.session-sidebar__search-clear:hover:not(:disabled),
+.session-sidebar__search-clear:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  color: var(--foreground);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.session-sidebar__search-clear:active:not(:disabled) {
+  transform: translateY(-50%);
+}
+
+.session-sidebar__search-clear:hover:not(:disabled) svg,
+.session-sidebar__search-clear:focus-visible:not(:disabled) svg {
+  transform: scale(1.08);
 }
 
 .session-sidebar__list {
