@@ -46,6 +46,20 @@ function supportsStt(provider: ProviderView, options: ConfigOptions): boolean {
   return options.provider_metadata[provider.kind]?.supports_stt === true;
 }
 
+function providerCapabilityBadges(
+  provider: ProviderView,
+  options: ConfigOptions,
+): Array<{ label: string; variant: "secondary" | "info" }> {
+  const badges: Array<{ label: string; variant: "secondary" | "info" }> = [];
+  if (supportsModelProfiles(provider, options)) {
+    badges.push({ label: "Model profiles", variant: "secondary" });
+  }
+  if (supportsStt(provider, options)) {
+    badges.push({ label: "STT", variant: "info" });
+  }
+  return badges;
+}
+
 function ProviderCard({
   provider,
   options,
@@ -70,8 +84,7 @@ function ProviderCard({
   const authStatus = provider.auth_status;
   const showAuthActions = provider.auth_mode !== "api_key";
   const showUsageAction = supportsUsageLimits(provider);
-  const showSttBadge = supportsStt(provider, options);
-  const sttOnly = showSttBadge && !supportsModelProfiles(provider, options);
+  const capabilityBadges = providerCapabilityBadges(provider, options);
 
   // Build compact subtitle
   const subtitleParts: string[] = [providerKindLabel(provider.kind, options)];
@@ -90,11 +103,13 @@ function ProviderCard({
             {subtitleParts.join(" · ")}
           </div>
         )}
-        {showSttBadge && (
+        {capabilityBadges.length > 0 && (
           <div className="settings-item__meta">
-            <Badge size="meta" variant={sttOnly ? "warning" : "info"}>
-              {sttOnly ? "STT-only" : "STT"}
-            </Badge>
+            {capabilityBadges.map((badge) => (
+              <Badge key={badge.label} size="meta" variant={badge.variant}>
+                {badge.label}
+              </Badge>
+            ))}
           </div>
         )}
       </div>

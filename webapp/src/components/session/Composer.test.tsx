@@ -10,6 +10,7 @@ import { resetSkillCatalogForTest } from "../../hooks/useSkillCatalog";
 const createWavRecorderMock = vi.hoisted(() => vi.fn());
 const recorderStopMock = vi.hoisted(() => vi.fn());
 const recorderCancelMock = vi.hoisted(() => vi.fn());
+const recorderFrequencyMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../lib/audioRecorder", () => ({
   createWavRecorder: createWavRecorderMock,
@@ -115,13 +116,16 @@ describe("Composer", () => {
     createWavRecorderMock.mockReset();
     recorderStopMock.mockReset();
     recorderCancelMock.mockReset();
+    recorderFrequencyMock.mockReset();
     recorderStopMock.mockResolvedValue(
       new File(["RIFF"], "dictation.wav", { type: "audio/wav" }),
     );
     recorderCancelMock.mockResolvedValue(undefined);
+    recorderFrequencyMock.mockReturnValue(new Uint8Array(0));
     createWavRecorderMock.mockResolvedValue({
       stop: recorderStopMock,
       cancel: recorderCancelMock,
+      getFrequencyData: recorderFrequencyMock,
     });
     vi.mocked(searchFileMentions).mockResolvedValue({
       items: [],
@@ -287,7 +291,12 @@ describe("Composer", () => {
     );
     expect(createWavRecorderMock).toHaveBeenCalledTimes(1);
 
+    expect(screen.queryByRole("textbox", { name: "Message" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Recording audio/ })).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "Stop dictation recording" }));
+
+    expect(screen.queryByRole("img", { name: /Recording audio/ })).not.toBeInTheDocument();
 
     expect(await screen.findByRole("button", { name: "Transcribing dictation" })).toBeDisabled();
     expect(recorderStopMock).toHaveBeenCalledTimes(1);
@@ -316,12 +325,45 @@ describe("Composer", () => {
     fireEvent.keyDown(textbox, { key: " ", code: "Space", ctrlKey: true });
 
     expect(await screen.findByRole("button", { name: "Stop dictation recording" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Message" })).not.toBeInTheDocument();
 
-    fireEvent.keyDown(textbox, { key: " ", code: "Space", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: " ", code: "Space", ctrlKey: true });
 
     await waitFor(() => expect(recorderStopMock).toHaveBeenCalledTimes(1));
     await waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("transcribed text");
+    });
+  });
+
+  it("handles Ctrl+Space once when focus stays on the dictation button", async () => {
+    const user = userEvent.setup();
+    let resolveTranscription: ((value: string) => void) | undefined;
+    const onTranscribeDictation = vi.fn(
+      () => new Promise<string>((resolve) => {
+        resolveTranscription = resolve;
+      }),
+    );
+    renderComposer({ onTranscribeDictation });
+
+    await user.click(screen.getByRole("button", { name: "Start dictation" }));
+    const stopButton = await screen.findByRole("button", {
+      name: "Stop dictation recording",
+    });
+    expect(stopButton).toHaveFocus();
+
+    fireEvent.keyDown(stopButton, { key: " ", code: "Space", ctrlKey: true });
+
+    expect(await screen.findByRole("button", { name: "Transcribing dictation" })).toBeDisabled();
+    expect(recorderStopMock).toHaveBeenCalledTimes(1);
+    expect(onTranscribeDictation).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      resolveTranscription?.("button focus transcript");
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(
+        "button focus transcript",
+      );
     });
   });
 

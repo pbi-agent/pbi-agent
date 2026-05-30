@@ -450,6 +450,21 @@ async function openSettingsTab(
   await user.click(button!);
 }
 
+async function openProviderKindMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Kind" }));
+  return screen.findByRole("menu");
+}
+
+async function selectProviderKind(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+) {
+  const menu = await openProviderKindMenu(user);
+  const item = within(menu).getByText(label).closest('[role="menuitemradio"]');
+  expect(item).not.toBeNull();
+  await user.click(item as HTMLElement);
+}
+
 describe("SettingsPage", () => {
   beforeEach(() => {
     act(() => {
@@ -1831,6 +1846,12 @@ describe("SettingsPage", () => {
     const providerSelect = await screen.findByRole("combobox", {
       name: /speech-to-text provider/i,
     });
+    const providerControl = providerSelect.closest(".active-profile-control");
+    expect(providerControl).not.toBeNull();
+    expect(
+      within(providerControl as HTMLElement).getByText("Active default"),
+    ).toBeInTheDocument();
+    expect(providerSelect).toHaveClass("active-profile-control__select");
 
     await user.selectOptions(providerSelect, "deepgram-main");
 
@@ -1873,31 +1894,94 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("marks STT-only providers in the provider list", async () => {
+  it("renders provider capability badges in the provider list", async () => {
     const user = userEvent.setup();
-    const deepgramProvider = makeApiKeyProvider(
-      "deepgram-main",
-      "Deepgram Main",
-      "deepgram",
+    const elevenLabsProvider = makeApiKeyProvider(
+      "elevenlabs-main",
+      "ElevenLabs Main",
+      "elevenlabs",
     );
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(
       makeConfigBootstrap({
-        providers: [...makeConfigBootstrap().providers, deepgramProvider],
+        providers: [...makeConfigBootstrap().providers, elevenLabsProvider],
       }),
     );
 
     renderWithProviders(<SettingsPage />);
 
     await openSettingsTab(user, "Providers");
-    const deepgramCard = (await screen.findByText("Deepgram Main")).closest(
+    const openAiCard = (await screen.findByText("OpenAI Main")).closest(
+      ".provider-card",
+    );
+    const chatGptCard = (await screen.findByText("ChatGPT Main")).closest(
+      ".provider-card",
+    );
+    const elevenLabsCard = (await screen.findByText("ElevenLabs Main")).closest(
       ".provider-card",
     );
 
-    expect(deepgramCard).not.toBeNull();
-    expect(within(deepgramCard as HTMLElement).getByText("STT-only")).toHaveAttribute(
+    expect(openAiCard).not.toBeNull();
+    expect(chatGptCard).not.toBeNull();
+    expect(elevenLabsCard).not.toBeNull();
+
+    expect(
+      within(openAiCard as HTMLElement).getByText("Model profiles"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(within(openAiCard as HTMLElement).getByText("STT")).toHaveAttribute(
       "data-slot",
       "badge",
     );
+
+    expect(
+      within(chatGptCard as HTMLElement).getByText("Model profiles"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(within(chatGptCard as HTMLElement).queryByText("STT")).not.toBeInTheDocument();
+
+    expect(
+      within(elevenLabsCard as HTMLElement).queryByText("Model profiles"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(elevenLabsCard as HTMLElement).getByText("STT"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(
+      within(elevenLabsCard as HTMLElement).queryByText("STT-only"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks STT-only provider kinds in the Add Provider dropdown", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Providers");
+    await user.click(await screen.findByRole("button", { name: "Add Provider" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add Provider" });
+    await user.click(within(dialog).getByRole("button", { name: "Kind" }));
+
+    const menu = await screen.findByRole("menu");
+    const openAiOption = within(menu)
+      .getByText("OpenAI API")
+      .closest('[role="menuitemradio"]');
+    const deepgramOption = within(menu)
+      .getByText("Deepgram")
+      .closest('[role="menuitemradio"]');
+    const elevenLabsOption = within(menu)
+      .getByText("ElevenLabs")
+      .closest('[role="menuitemradio"]');
+
+    expect(openAiOption).not.toBeNull();
+    expect(deepgramOption).not.toBeNull();
+    expect(elevenLabsOption).not.toBeNull();
+
+    expect(
+      within(openAiOption as HTMLElement).queryByText("STT"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(deepgramOption as HTMLElement).getByText("STT"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(
+      within(elevenLabsOption as HTMLElement).getByText("STT"),
+    ).toHaveAttribute("data-slot", "badge");
   });
 
   it("disables adding model profiles when only STT-only providers exist", async () => {
@@ -2208,7 +2292,7 @@ describe("SettingsPage", () => {
     expect(document.querySelector('input[name="provider-name"]')).toHaveClass(
       "task-form__input",
     );
-    expect(document.querySelector('select[name="provider-kind"]')).toHaveClass(
+    expect(within(dialog).getByRole("button", { name: "Kind" })).toHaveClass(
       "task-form__select",
     );
     const credentialSource = document.querySelector(".secret-mode-tabs");
@@ -2239,13 +2323,15 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
 
-    expect(screen.getAllByRole("option", { name: "OpenAI API" })[0]).toBeInTheDocument();
+    const menu = await openProviderKindMenu(user);
+    expect(within(menu).getByText("OpenAI API")).toBeInTheDocument();
     expect(
-      screen.getAllByRole("option", { name: "ChatGPT (Subscription)" })[0],
+      within(menu).getByText("ChatGPT (Subscription)"),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("option", { name: "GitHub Copilot (Subscription)" })[0],
+      within(menu).getByText("GitHub Copilot (Subscription)"),
     ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     expect(screen.getByText("Uses an OpenAI API key.")).toBeInTheDocument();
   });
 
@@ -2264,10 +2350,7 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
-    await user.selectOptions(
-      document.querySelector('select[name="provider-kind"]') as HTMLSelectElement,
-      "azure",
-    );
+    await selectProviderKind(user, "Azure");
 
     expect(screen.getByText("Azure")).toBeInTheDocument();
     expect(screen.getByDisplayValue("AZURE_API_KEY")).toBeInTheDocument();
@@ -2311,10 +2394,7 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
-    await user.selectOptions(
-      document.querySelector('select[name="provider-kind"]') as HTMLSelectElement,
-      "chatgpt",
-    );
+    await selectProviderKind(user, "ChatGPT (Subscription)");
     await user.type(screen.getByPlaceholderText("e.g. My OpenAI"), "ChatGPT Starter");
 
     expect(

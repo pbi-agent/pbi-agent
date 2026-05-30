@@ -24,6 +24,7 @@ import { searchAgentMentions, searchFileMentions, searchSkillMentions, searchSla
 import type { AgentMentionItem, FileMentionItem, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
 import { createWavRecorder, type WavRecorder } from "../../lib/audioRecorder";
+import { DictationWaveform } from "./DictationWaveform";
 import { useFileExistence } from "../../hooks/useFileExistence";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
@@ -603,6 +604,32 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       void startDictation();
     }
   }, [dictationState, startDictation, stopDictation]);
+
+  const getDictationFrequencyData = useCallback(
+    () => dictationRecorderRef.current?.getFrequencyData() ?? null,
+    [],
+  );
+
+  // While recording, the textarea (and its key-capture) is replaced by the
+  // waveform, so the stop shortcut is handled at the document level instead.
+  useEffect(() => {
+    if (dictationState !== "recording") return;
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const isShortcut =
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        !event.repeat &&
+        (key === " " || key === "spacebar" || event.code === "Space");
+      if (!isShortcut || event.defaultPrevented) return;
+      event.preventDefault();
+      void stopDictation();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [dictationState, stopDictation]);
 
   const buildMentionReplacement = useCallback(
     (
@@ -1258,6 +1285,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     if (!isDictationShortcut(event)) return;
     if (dictationState !== "recording" && !showDictationAction) return;
     event.preventDefault();
+    event.stopPropagation();
     toggleDictation();
   };
   const dictationButtonLabel =
@@ -1351,6 +1379,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <span>Shell</span>
           </div>
         ) : null}
+        {dictationState === "recording" ? (
+          <DictationWaveform
+            getFrequencyData={getDictationFrequencyData}
+            label="Recording audio… Ctrl+Space to stop"
+          />
+        ) : (
         <InputGroup className="composer__textarea-wrap">
           <div ref={highlightRef} className="composer__textarea-highlights" aria-hidden="true">
             {highlightSegments.map((segment, index) => (
@@ -1395,6 +1429,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             disabled={!canSend}
           />
         </InputGroup>
+        )}
         {showProcessingAnimation ? (
           <span className="sr-only" role="status" aria-live="polite">
             Assistant is processing

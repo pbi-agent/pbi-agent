@@ -1,10 +1,18 @@
 import { useState, type FormEvent } from "react";
+import { ChevronDownIcon } from "lucide-react";
 import type { ConfigOptions, ProviderView } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { FormDialog } from "../ui/form-dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 
 type SecretMode = "none" | "env_var" | "plaintext";
@@ -88,6 +96,42 @@ function responsesUrlPlaceholder(
     return "https://<resource>.openai.azure.com/openai/v1/responses";
   }
   return defaultResponsesUrl ?? "https://api.example.com/v1/responses";
+}
+
+function isSttOnlyProviderKind(
+  providerKind: string,
+  options: ConfigOptions,
+): boolean {
+  const metadata = options.provider_metadata[providerKind];
+  return (
+    metadata?.supports_stt === true &&
+    metadata.supports_model_profiles !== true
+  );
+}
+
+function ProviderKindOptionLabel({
+  providerKind,
+  options,
+}: {
+  providerKind: string;
+  options: ConfigOptions;
+}) {
+  return (
+    <span className="provider-kind-select__value">
+      <span className="provider-kind-select__label">
+        {options.provider_metadata[providerKind]?.label ?? providerKind}
+      </span>
+      {isSttOnlyProviderKind(providerKind, options) ? (
+        <Badge
+          className="provider-kind-select__badge"
+          size="meta"
+          variant="info"
+        >
+          STT
+        </Badge>
+      ) : null}
+    </span>
+  );
 }
 
 export type ProviderPayload = {
@@ -252,18 +296,39 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
 
               <Field>
                 <FieldLabel>Kind</FieldLabel>
-                <NativeSelect
-                  name="provider-kind"
-                  className="task-form__select"
-                  value={form.kind}
-                  onChange={(e) => set({ kind: e.target.value })}
-                >
-                  {options.provider_kinds.map((k) => (
-                    <NativeSelectOption key={k} value={k}>
-                      {options.provider_metadata[k]?.label ?? k}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="task-form__select provider-kind-select__trigger"
+                      aria-label="Kind"
+                    >
+                      <ProviderKindOptionLabel
+                        providerKind={form.kind}
+                        options={options}
+                      />
+                      <ChevronDownIcon
+                        className="provider-kind-select__icon"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="provider-kind-select__content">
+                    <DropdownMenuRadioGroup
+                      value={form.kind}
+                      onValueChange={(value) => set({ kind: value })}
+                    >
+                      {options.provider_kinds.map((k) => (
+                        <DropdownMenuRadioItem key={k} value={k}>
+                          <ProviderKindOptionLabel
+                            providerKind={k}
+                            options={options}
+                          />
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {kindMeta?.description && (
                   <FieldDescription>{kindMeta.description}</FieldDescription>
                 )}

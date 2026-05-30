@@ -4,7 +4,6 @@ import { EmptyState } from "../shared/EmptyState";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Field, FieldDescription, FieldLabel } from "../ui/field";
 import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 
 function providerKindLabel(providerKind: string, options: ConfigOptions): string {
@@ -111,41 +110,36 @@ export function SpeechSettingsSection({
           {showSelector ? (
             <>
               <div className="active-profile-control">
-                <Field className="min-w-0 flex-1">
-                  <FieldLabel htmlFor="stt-provider">
-                    Speech-to-text provider
-                  </FieldLabel>
-                  <NativeSelect
-                    id="stt-provider"
-                    name="stt-provider"
-                    className="active-profile-control__select"
-                    value={selectedProviderId}
-                    disabled={isSaving}
-                    onChange={(event) =>
-                      void handleProviderChange(event.target.value)
-                    }
-                  >
-                    <NativeSelectOption value="">
-                      No speech provider
+                <span className="active-profile-control__label">
+                  Active default
+                </span>
+                <NativeSelect
+                  id="stt-provider"
+                  name="stt-provider"
+                  aria-label="Speech-to-text provider"
+                  className="active-profile-control__select"
+                  value={selectedProviderId}
+                  disabled={isSaving}
+                  onChange={(event) =>
+                    void handleProviderChange(event.target.value)
+                  }
+                >
+                  <NativeSelectOption value="">
+                    No speech provider
+                  </NativeSelectOption>
+                  {activeProviderUnavailable && sttProviderId && (
+                    <NativeSelectOption value={sttProviderId} disabled>
+                      {activeProvider
+                        ? `${providerOptionLabel(activeProvider, options)} — credentials needed`
+                        : `${sttProviderId} — unavailable`}
                     </NativeSelectOption>
-                    {activeProviderUnavailable && sttProviderId && (
-                      <NativeSelectOption value={sttProviderId} disabled>
-                        {activeProvider
-                          ? `${providerOptionLabel(activeProvider, options)} — credentials needed`
-                          : `${sttProviderId} — unavailable`}
-                      </NativeSelectOption>
-                    )}
-                    {credentialedProviders.map((provider) => (
-                      <NativeSelectOption key={provider.id} value={provider.id}>
-                        {providerOptionLabel(provider, options)}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                  <FieldDescription>
-                    Only speech-capable providers with configured credentials can
-                    be selected. Changes are saved automatically.
-                  </FieldDescription>
-                </Field>
+                  )}
+                  {credentialedProviders.map((provider) => (
+                    <NativeSelectOption key={provider.id} value={provider.id}>
+                      {providerOptionLabel(provider, options)}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
               </div>
 
               {activeProviderUnavailable && (

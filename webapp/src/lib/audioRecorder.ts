@@ -1,11 +1,19 @@
 export type WavRecorder = {
   stop: () => Promise<File>;
   cancel: () => Promise<void>;
+  /**
+   * Returns the current byte frequency spectrum (0-255 per bin) of the live
+   * microphone input, for monitoring/visualization. Returns an empty array
+   * once the recorder has stopped or been cancelled.
+   */
+  getFrequencyData: () => Uint8Array;
 };
 
 export type CreateWavRecorderOptions = {
   fileName?: string;
   bufferSize?: number;
+  /** FFT size for the live frequency monitor. Must be a power of two. */
+  fftSize?: number;
 };
 
 type WebkitAudioWindow = Window &
@@ -14,6 +22,7 @@ type WebkitAudioWindow = Window &
   };
 
 const DEFAULT_BUFFER_SIZE = 4096;
+const DEFAULT_FFT_SIZE = 256;
 const WORKLET_PROCESSOR_NAME = "pbi-agent-dictation-recorder";
 const WORKLET_PROCESSOR_SOURCE = `
 class PbiAgentDictationRecorderProcessor extends AudioWorkletProcessor {
@@ -200,6 +209,8 @@ export async function createWavRecorder(
   let recorder: RecorderAudioNode | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
   let sink: GainNode | null = null;
+  let analyser: AnalyserNode | null = null;
+  let frequencyData = new Uint8Array(0);
   let closed = false;
 
   try {
@@ -207,8 +218,13 @@ export async function createWavRecorder(
     source = audioContext.createMediaStreamSource(stream);
     sink = audioContext.createGain();
     sink.gain.value = 0;
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = options.fftSize ?? DEFAULT_FFT_SIZE;
+    analyser.smoothingTimeConstant = 0.8;
+    frequencyData = new Uint8Array(analyser.frequencyBinCount);
 
     source.connect(recorder.node);
+    source.connect(analyser);
     recorder.node.connect(sink);
     sink.connect(audioContext.destination);
 
@@ -219,6 +235,7 @@ export async function createWavRecorder(
     recorder?.cleanup();
     if (source) disconnectNode(source);
     if (recorder) disconnectNode(recorder.node);
+    if (analyser) disconnectNode(analyser);
     if (sink) disconnectNode(sink);
     stopStreamTracks(stream);
     if (audioContext.state !== "closed") {
@@ -227,10 +244,13 @@ export async function createWavRecorder(
     throw error;
   }
 
+  const liveAnalyser = analyser;
+
   async function cleanup(): Promise<void> {
     recorder?.cleanup();
     if (source) disconnectNode(source);
     if (recorder) disconnectNode(recorder.node);
+    if (analyser) disconnectNode(analyser);
     if (sink) disconnectNode(sink);
     stopStreamTracks(stream);
     if (audioContext.state !== "closed") {
@@ -239,6 +259,11 @@ export async function createWavRecorder(
   }
 
   return {
+    getFrequencyData: () => {
+      if (closed) return new Uint8Array(0);
+      liveAnalyser.getByteFrequencyData(frequencyData);
+      return frequencyData;
+    },
     stop: async () => {
       if (closed) {
         throw new Error("Dictation recording has already stopped.");

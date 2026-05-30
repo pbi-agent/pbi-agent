@@ -1,7 +1,5 @@
-# Session TODO
-
-- [x] Inspect STT settings save flow and model-profile auto-save pattern.
-- [x] Update STT provider selection to auto-save and remove save button.
-- [x] Adjust focused frontend tests.
-- [x] Run focused validation.
-- [x] Update memory and hand off.
+- [>] Audit current picker/select/dropdown usages in the web UI
+- [ ] Replace remaining native/custom pickers with shadcn/Radix Select where appropriate
+- [ ] Update focused tests for changed picker behavior
+- [ ] Run frontend validation
+- [ ] Update task memory

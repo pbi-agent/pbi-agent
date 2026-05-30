@@ -13,6 +13,21 @@ class FakeGainNode extends FakeAudioNode {
   readonly gain = { value: 1 };
 }
 
+class FakeAnalyserNode extends FakeAudioNode {
+  fftSize = 2048;
+  smoothingTimeConstant = 0.8;
+
+  get frequencyBinCount(): number {
+    return this.fftSize / 2;
+  }
+
+  readonly getByteFrequencyData = vi.fn((target: Uint8Array) => {
+    for (let index = 0; index < target.length; index += 1) {
+      target[index] = (index * 7) % 256;
+    }
+  });
+}
+
 class FakeScriptProcessorNode extends FakeAudioNode {
   onaudioprocess: ((event: AudioProcessingEvent) => void) | null = null;
 }
@@ -47,6 +62,7 @@ class FakeAudioContext {
   readonly destination = new FakeAudioNode() as unknown as AudioDestinationNode;
   readonly mediaSource = new FakeAudioNode();
   readonly gainNode = new FakeGainNode();
+  readonly analyserNode = new FakeAnalyserNode();
   readonly scriptProcessor = new FakeScriptProcessorNode();
   readonly addModule = vi.fn<(moduleUrl: string) => Promise<void>>((moduleUrl) => {
     void moduleUrl;
@@ -58,6 +74,7 @@ class FakeAudioContext {
     return this.mediaSource as unknown as MediaStreamAudioSourceNode;
   });
   readonly createGain = vi.fn(() => this.gainNode as unknown as GainNode);
+  readonly createAnalyser = vi.fn(() => this.analyserNode as unknown as AnalyserNode);
   readonly createScriptProcessor = vi.fn(
     (
       bufferSize?: number,
@@ -203,6 +220,29 @@ describe("audioRecorder", () => {
     expect(worklet?.disconnect).toHaveBeenCalledTimes(1);
     expect(track.stop).toHaveBeenCalledTimes(1);
     expect(context?.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes the live frequency spectrum and clears it after stopping", async () => {
+    installBrowserMocks();
+
+    const recorder = await createWavRecorder({ fftSize: 64 });
+    const context = FakeAudioContext.instances[0];
+    const analyser = context?.analyserNode;
+
+    expect(context?.createAnalyser).toHaveBeenCalledTimes(1);
+    expect(analyser?.fftSize).toBe(64);
+    expect(context?.mediaSource.connect).toHaveBeenCalledWith(analyser);
+
+    const spectrum = recorder.getFrequencyData();
+    expect(spectrum).toHaveLength(32);
+    expect(spectrum[0]).toBe(0);
+    expect(spectrum[1]).toBe(7);
+    expect(analyser?.getByteFrequencyData).toHaveBeenCalledTimes(1);
+
+    await recorder.stop();
+    const afterStop = recorder.getFrequencyData();
+    expect(afterStop).toHaveLength(0);
+    expect(analyser?.getByteFrequencyData).toHaveBeenCalledTimes(1);
   });
 
   it("falls back to ScriptProcessor only when AudioWorklet is unavailable", async () => {
