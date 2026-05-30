@@ -1,3 +1,4 @@
-- [X] Implement and test xAI REST speech-to-text provider support
-- [X] Fix web config STT-provider endpoint test for xAI now supporting STT
-- [X] Run final validation, update memory, and hand off
+- [x] Inspect STT implementation and existing docs
+- [x] Add STT/dictation documentation and navigation
+- [x] Build docs and fix any issues
+- [x] Update memory and summarize

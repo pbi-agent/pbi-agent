@@ -91,7 +91,7 @@ export default defineConfig({
   },
   themeConfig: {
     nav: [
-      { text: 'Docs', link: '/introduction', activeMatch: '^/(introduction|installation|providers|web-ui|session-commands|cli|sandbox|kanban-dashboard|model-profiles|customization|tools|extensions|environment|changelog)' },
+      { text: 'Docs', link: '/introduction', activeMatch: '^/(introduction|installation|providers|web-ui|speech-to-text|session-commands|cli|sandbox|kanban-dashboard|model-profiles|customization|tools|extensions|environment|changelog)' },
       { text: 'Changelog', link: '/changelog/' },
       { text: 'GitHub', link: 'https://github.com/pbi-agent/pbi-agent' }
     ],
@@ -110,6 +110,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: 'Web UI', link: '/web-ui' },
+          { text: 'Speech-to-text', link: '/speech-to-text' },
           { text: 'Session Commands', link: '/session-commands' },
           { text: 'CLI', link: '/cli' },
           { text: 'Docker Sandbox', link: '/sandbox' },

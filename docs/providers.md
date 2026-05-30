@@ -10,6 +10,11 @@ Saved configuration is split into two entities:
 - Provider: connection-only settings such as provider kind, API key, and endpoint overrides.
 - Model Profile: runnable model/runtime settings tied to one saved Provider.
 
+Speech-to-text (STT) also uses saved Providers, but it does not use model
+profiles. Select the dictation provider in **Settings → Speech-to-text**. OpenAI
+and xAI providers can be used for both model profiles and STT; Deepgram and
+ElevenLabs are STT-only provider kinds.
+
 Runtime resolution now happens in two phases:
 
 1. Select a base model profile from `--profile-id`, then `PBI_AGENT_PROFILE_ID`, then the saved active default profile.
@@ -49,8 +54,20 @@ uv run pbi-agent web
       "id": "openai-main",
       "name": "OpenAI Main",
       "kind": "openai",
+      "auth_mode": "api_key",
       "api_key": "sk-...",
+      "api_key_env": null,
       "responses_url": "https://api.openai.com/v1/responses",
+      "generic_api_url": null
+    },
+    {
+      "id": "deepgram-stt",
+      "name": "Deepgram STT",
+      "kind": "deepgram",
+      "auth_mode": "api_key",
+      "api_key": "",
+      "api_key_env": "DEEPGRAM_API_KEY",
+      "responses_url": null,
       "generic_api_url": null
     }
   ],
@@ -70,22 +87,27 @@ uv run pbi-agent web
       "compact_threshold": 200000
     }
   ],
-  "active_model_profile": "analysis"
+  "web": {
+    "active_profile_id": "analysis",
+    "stt_provider_id": "deepgram-stt"
+  }
 }
 ```
 
 ## Provider Matrix
 
-| Provider | API Shape | Default Endpoint | Default Model | Default Sub-Model | Env Var for Key | Image Input |
-| --- | --- | --- | --- | --- | --- | --- |
-| OpenAI API | Responses API | `https://api.openai.com/v1/responses` | `gpt-5.4` | `gpt-5.4-mini` | `OPENAI_API_KEY` | yes |
-| ChatGPT subscription | Responses API | `https://chatgpt.com/backend-api/codex/responses` | `gpt-5.4` | `gpt-5.4-mini` | account session | yes |
-| GitHub Copilot subscription | Responses API for OpenAI-family models; Chat Completions API for other Copilot models | `https://api.githubcopilot.com/responses` or `https://api.githubcopilot.com/chat/completions` | `gpt-5.4` | `gpt-5-mini` | account session | yes |
-| Azure | Responses API, Chat Completions API, or Anthropic Messages API by endpoint | required `--responses-url` | `gpt-4.1` | `gpt-4.1-mini` | `AZURE_API_KEY` | yes |
-| xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4.20` | `grok-4-1-fast` | `XAI_API_KEY` | no in this build |
-| Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` | `GEMINI_API_KEY` | yes |
-| Anthropic | Messages API | `https://api.anthropic.com/v1/messages` | `claude-opus-4-6` | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` | yes |
-| Generic | Chat Completions API | `https://openrouter.ai/api/v1/chat/completions` | none | none | `GENERIC_API_KEY` | no in this build |
+| Provider | API Shape | Default Endpoint | Default Model | Default Sub-Model | Env Var for Key | Image Input | STT |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| OpenAI API | Responses API | `https://api.openai.com/v1/responses` | `gpt-5.4` | `gpt-5.4-mini` | `OPENAI_API_KEY` | yes | yes |
+| ChatGPT subscription | Responses API | `https://chatgpt.com/backend-api/codex/responses` | `gpt-5.4` | `gpt-5.4-mini` | account session | yes | no |
+| GitHub Copilot subscription | Responses API for OpenAI-family models; Chat Completions API for other Copilot models | `https://api.githubcopilot.com/responses` or `https://api.githubcopilot.com/chat/completions` | `gpt-5.4` | `gpt-5-mini` | account session | yes | no |
+| Azure | Responses API, Chat Completions API, or Anthropic Messages API by endpoint | required `--responses-url` | `gpt-4.1` | `gpt-4.1-mini` | `AZURE_API_KEY` | yes | no |
+| xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4.20` | `grok-4-1-fast` | `XAI_API_KEY` | no in this build | yes |
+| Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` | `GEMINI_API_KEY` | yes | no |
+| Anthropic | Messages API | `https://api.anthropic.com/v1/messages` | `claude-opus-4-6` | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` | yes | no |
+| Generic | Chat Completions API | `https://openrouter.ai/api/v1/chat/completions` | none | none | `GENERIC_API_KEY` | no in this build | no |
+| Deepgram | Speech-to-text only | `https://api.deepgram.com/v1/listen` | n/a | n/a | `DEEPGRAM_API_KEY` | n/a | yes |
+| ElevenLabs | Speech-to-text only | `https://api.elevenlabs.io/v1/speech-to-text` | n/a | n/a | `ELEVENLABS_API_KEY` | n/a | yes |
 
 Image input covers both explicit user attachments (`run --image`, `/image add`) and model-initiated local image inspection through the `read_image` tool.
 
@@ -365,3 +387,9 @@ uv run pbi-agent \
 ::: tip
 For the Generic backend, leaving `--model` unset is intentional when you want the upstream router to pick the model.
 :::
+
+## Related pages
+
+- [Speech-to-text](/speech-to-text)
+- [Model Profiles](/model-profiles)
+- [Environment Variables](/environment)

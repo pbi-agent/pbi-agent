@@ -85,6 +85,7 @@ pbi-agent --api-key "$OPENAI_API_KEY"
 | [Installation](/installation) | Prerequisites, install options, and first run |
 | [Providers](/providers) | Provider setup, auth, and endpoint examples |
 | [Web UI](/web-ui) | Browser sessions, Settings, images, and local commands |
+| [Speech-to-text](/speech-to-text) | STT provider setup and browser dictation |
 | [Kanban Dashboard](/kanban-dashboard) | Task board automation and observability dashboard |
 | [Model Profiles](/model-profiles) | Saved runtime presets and profile resolution |
 | [Session Commands](/session-commands) | Interactive `@file`, `!shell`, slash commands, and `/compact` behavior |
