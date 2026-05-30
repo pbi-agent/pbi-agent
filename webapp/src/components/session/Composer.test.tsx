@@ -1,11 +1,20 @@
 import userEvent from "@testing-library/user-event";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { Composer } from "./Composer";
 import { searchAgentMentions, searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
 import { renderWithProviders } from "../../test/render";
 import { resetFileExistenceForTest } from "../../hooks/useFileExistence";
 import { resetSkillCatalogForTest } from "../../hooks/useSkillCatalog";
+
+const createWavRecorderMock = vi.hoisted(() => vi.fn());
+const recorderStopMock = vi.hoisted(() => vi.fn());
+const recorderCancelMock = vi.hoisted(() => vi.fn());
+const recorderFrequencyMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../lib/audioRecorder", () => ({
+  createWavRecorder: createWavRecorderMock,
+}));
 
 vi.mock("../../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api")>();
@@ -22,6 +31,7 @@ function renderComposer(
   overrides: Partial<React.ComponentProps<typeof Composer>> = {},
 ) {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
+  const onTranscribeDictation = vi.fn().mockResolvedValue("transcribed text");
   const renderResult = renderWithProviders(
     <Composer
       inputEnabled
@@ -31,10 +41,13 @@ function renderComposer(
       interactiveMode={false}
       isSubmitting={false}
       onSubmit={onSubmit}
+      dictationAvailable
+      dictationUnavailableReason={null}
+      onTranscribeDictation={onTranscribeDictation}
       {...overrides}
     />,
   );
-  return { onSubmit, ...renderResult };
+  return { onSubmit, onTranscribeDictation, ...renderResult };
 }
 
 function renderSubmittingComposer() {
@@ -100,6 +113,20 @@ describe("Composer", () => {
     }
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:preview");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    createWavRecorderMock.mockReset();
+    recorderStopMock.mockReset();
+    recorderCancelMock.mockReset();
+    recorderFrequencyMock.mockReset();
+    recorderStopMock.mockResolvedValue(
+      new File(["RIFF"], "dictation.wav", { type: "audio/wav" }),
+    );
+    recorderCancelMock.mockResolvedValue(undefined);
+    recorderFrequencyMock.mockReturnValue(new Uint8Array(0));
+    createWavRecorderMock.mockResolvedValue({
+      stop: recorderStopMock,
+      cancel: recorderCancelMock,
+      getFrequencyData: recorderFrequencyMock,
+    });
     vi.mocked(searchFileMentions).mockResolvedValue({
       items: [],
       scan_status: "ready",
@@ -119,7 +146,13 @@ describe("Composer", () => {
     inputPrototype.showPicker = showPicker;
 
     try {
-      renderComposer();
+      const { container } = renderComposer();
+      const input = container.querySelector<HTMLInputElement>(
+        'input[name="image-upload"]',
+      );
+      expect(input?.accept).toBe(
+        "image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif",
+      );
 
       await user.click(screen.getByRole("button", { name: "Actions" }));
       await user.click(screen.getByRole("menuitem", { name: "Image" }));
@@ -211,7 +244,186 @@ describe("Composer", () => {
 
     expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Actions" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Start dictation" })).toBeEnabled();
+  });
+
+  it("shows dictation for an empty composer and send for non-empty text", async () => {
+    const user = userEvent.setup();
+    renderComposer();
+
+    expect(screen.getByRole("button", { name: "Start dictation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "review this");
+
+    expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start dictation" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the mic for empty image attachments and does not submit image-only input", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderComposer();
+    const image = new File(["binary"], "diagram.png", { type: "image/png" });
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+
+    await user.upload(document.querySelector('input[name="image-upload"]')!, image);
+
+    expect(screen.getByText("diagram.png")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start dictation" })).toBeInTheDocument();
+
+    fireEvent.keyDown(textbox, { key: "Enter" });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("diagram.png")).toBeInTheDocument();
+  });
+
+  it("records, transcribes, inserts text without submitting, and preserves attachments", async () => {
+    const user = userEvent.setup();
+    let resolveTranscription: ((value: string) => void) | undefined;
+    const onTranscribeDictation = vi.fn(
+      () => new Promise<string>((resolve) => {
+        resolveTranscription = resolve;
+      }),
+    );
+    const { onSubmit } = renderComposer({ onTranscribeDictation });
+    const image = new File(["binary"], "diagram.png", { type: "image/png" });
+
+    await user.upload(document.querySelector('input[name="image-upload"]')!, image);
+    await user.click(screen.getByRole("button", { name: "Start dictation" }));
+
+    expect(await screen.findByRole("button", { name: "Stop dictation recording" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(createWavRecorderMock).toHaveBeenCalledTimes(1);
+
+    expect(screen.queryByRole("textbox", { name: "Message" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Recording audio/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Stop dictation recording" }));
+
+    expect(screen.queryByRole("img", { name: /Recording audio/ })).not.toBeInTheDocument();
+
+    expect(await screen.findByRole("button", { name: "Transcribing dictation" })).toBeDisabled();
+    expect(recorderStopMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onTranscribeDictation).toHaveBeenCalledTimes(1));
+    act(() => {
+      resolveTranscription?.("dictated request");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("dictated request");
+    });
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
+    expect(screen.getByText("diagram.png")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("toggles dictation with Ctrl+Space only while the composer is active", async () => {
+    renderComposer();
+
+    fireEvent.keyDown(document.body, { key: " ", code: "Space", ctrlKey: true });
+    expect(createWavRecorderMock).not.toHaveBeenCalled();
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    textbox.focus();
+    fireEvent.keyDown(textbox, { key: " ", code: "Space", ctrlKey: true });
+
+    expect(await screen.findByRole("button", { name: "Stop dictation recording" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Message" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(document.body, { key: " ", code: "Space", ctrlKey: true });
+
+    await waitFor(() => expect(recorderStopMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("transcribed text");
+    });
+  });
+
+  it("handles Ctrl+Space once when focus stays on the dictation button", async () => {
+    const user = userEvent.setup();
+    let resolveTranscription: ((value: string) => void) | undefined;
+    const onTranscribeDictation = vi.fn(
+      () => new Promise<string>((resolve) => {
+        resolveTranscription = resolve;
+      }),
+    );
+    renderComposer({ onTranscribeDictation });
+
+    await user.click(screen.getByRole("button", { name: "Start dictation" }));
+    const stopButton = await screen.findByRole("button", {
+      name: "Stop dictation recording",
+    });
+    expect(stopButton).toHaveFocus();
+
+    fireEvent.keyDown(stopButton, { key: " ", code: "Space", ctrlKey: true });
+
+    expect(await screen.findByRole("button", { name: "Transcribing dictation" })).toBeDisabled();
+    expect(recorderStopMock).toHaveBeenCalledTimes(1);
+    expect(onTranscribeDictation).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      resolveTranscription?.("button focus transcript");
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(
+        "button focus transcript",
+      );
+    });
+  });
+
+  it("disables dictation with a Settings tooltip when no STT provider is available", async () => {
+    const user = userEvent.setup();
+    renderComposer({
+      dictationAvailable: false,
+      dictationUnavailableReason:
+        "Choose a speech-to-text provider in Settings to use dictation.",
+      onTranscribeDictation: vi.fn(),
+    });
+
+    const mic = screen.getByRole("button", { name: "Start dictation" });
+    expect(mic).toBeDisabled();
+
+    const tooltipTrigger = mic.closest(".composer__input-tooltip-trigger");
+    expect(tooltipTrigger).not.toBeNull();
+    await user.hover(tooltipTrigger!);
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Choose a speech-to-text provider in Settings to use dictation.",
+    );
+  });
+
+  it("shows microphone permission errors without changing input or attachments", async () => {
+    const user = userEvent.setup();
+    createWavRecorderMock.mockRejectedValueOnce(
+      new DOMException("Permission denied", "NotAllowedError"),
+    );
+    const { onSubmit } = renderComposer();
+    const image = new File(["binary"], "diagram.png", { type: "image/png" });
+
+    await user.upload(document.querySelector('input[name="image-upload"]')!, image);
+    await user.click(screen.getByRole("button", { name: "Start dictation" }));
+
+    expect(await screen.findByText("Microphone permission was denied.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+    expect(screen.getByText("diagram.png")).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("shows transcription errors without changing input or attachments", async () => {
+    const user = userEvent.setup();
+    const onTranscribeDictation = vi.fn().mockRejectedValue(new Error("STT provider failed"));
+    renderComposer({ onTranscribeDictation });
+    const image = new File(["binary"], "diagram.png", { type: "image/png" });
+
+    await user.upload(document.querySelector('input[name="image-upload"]')!, image);
+    await user.click(screen.getByRole("button", { name: "Start dictation" }));
+    await user.click(await screen.findByRole("button", { name: "Stop dictation recording" }));
+
+    expect(await screen.findByText("STT provider failed")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+    expect(screen.getByText("diagram.png")).toBeInTheDocument();
   });
 
   it("marks the input row while interactive mode is enabled", () => {
@@ -405,10 +617,12 @@ describe("Composer", () => {
   it("submits selected image files with the message", async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderComposer();
-    const image = new File(["binary"], "diagram.png", { type: "image/png" });
+    const image = new File(["binary"], "diagram.heif");
 
-    await user.upload(document.querySelector('input[name="image-upload"]')!, image);
-    expect(screen.getByText("diagram.png")).toBeInTheDocument();
+    fireEvent.change(document.querySelector('input[name="image-upload"]')!, {
+      target: { files: [image] },
+    });
+    expect(await screen.findByText("diagram.heif")).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "review this");
     await user.click(screen.getByRole("button", { name: "Send message" }));

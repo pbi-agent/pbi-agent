@@ -1,10 +1,17 @@
 import { useState, type FormEvent } from "react";
 import type { ConfigOptions, ProviderView } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { FormDialog } from "../ui/form-dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 
 type SecretMode = "none" | "env_var" | "plaintext";
@@ -63,6 +70,8 @@ function defaultApiKeyEnv(providerKind: string): string {
   if (providerKind === "google") return "GEMINI_API_KEY";
   if (providerKind === "anthropic") return "ANTHROPIC_API_KEY";
   if (providerKind === "generic") return "GENERIC_API_KEY";
+  if (providerKind === "deepgram") return "DEEPGRAM_API_KEY";
+  if (providerKind === "elevenlabs") return "ELEVENLABS_API_KEY";
   return "";
 }
 
@@ -86,6 +95,42 @@ function responsesUrlPlaceholder(
     return "https://<resource>.openai.azure.com/openai/v1/responses";
   }
   return defaultResponsesUrl ?? "https://api.example.com/v1/responses";
+}
+
+function isSttOnlyProviderKind(
+  providerKind: string,
+  options: ConfigOptions,
+): boolean {
+  const metadata = options.provider_metadata[providerKind];
+  return (
+    metadata?.supports_stt === true &&
+    metadata.supports_model_profiles !== true
+  );
+}
+
+function ProviderKindOptionLabel({
+  providerKind,
+  options,
+}: {
+  providerKind: string;
+  options: ConfigOptions;
+}) {
+  return (
+    <span className="provider-kind-select__value">
+      <span className="provider-kind-select__label">
+        {options.provider_metadata[providerKind]?.label ?? providerKind}
+      </span>
+      {isSttOnlyProviderKind(providerKind, options) ? (
+        <Badge
+          className="provider-kind-select__badge"
+          size="meta"
+          variant="info"
+        >
+          STT
+        </Badge>
+      ) : null}
+    </span>
+  );
 }
 
 export type ProviderPayload = {
@@ -250,18 +295,27 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
 
               <Field>
                 <FieldLabel>Kind</FieldLabel>
-                <NativeSelect
-                  name="provider-kind"
-                  className="task-form__select"
+                <Select
                   value={form.kind}
-                  onChange={(e) => set({ kind: e.target.value })}
+                  onValueChange={(value) => set({ kind: value })}
                 >
-                  {options.provider_kinds.map((k) => (
-                    <NativeSelectOption key={k} value={k}>
-                      {options.provider_metadata[k]?.label ?? k}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  <SelectTrigger
+                    className="task-form__select provider-kind-select__trigger"
+                    aria-label="Kind"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="provider-kind-select__content">
+                    {options.provider_kinds.map((k) => (
+                      <SelectItem key={k} value={k}>
+                        <ProviderKindOptionLabel
+                          providerKind={k}
+                          options={options}
+                        />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {kindMeta?.description && (
                   <FieldDescription>{kindMeta.description}</FieldDescription>
                 )}

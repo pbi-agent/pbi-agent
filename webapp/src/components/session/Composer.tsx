@@ -14,6 +14,7 @@ import {
   ArrowUpIcon,
   BadgeDollarSignIcon,
   ImageIcon,
+  MicIcon,
   PlusIcon,
   SquareIcon,
   TerminalIcon,
@@ -22,8 +23,11 @@ import {
 import { searchAgentMentions, searchFileMentions, searchSkillMentions, searchSlashCommands } from "../../api";
 import type { AgentMentionItem, FileMentionItem, SkillMentionItem, SlashCommandItem } from "../../types";
 import { cn } from "../../lib/utils";
+import { createWavRecorder, type WavRecorder } from "../../lib/audioRecorder";
+import { DictationWaveform } from "./DictationWaveform";
 import { useFileExistence } from "../../hooks/useFileExistence";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
+import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -58,6 +62,9 @@ interface ComposerProps {
   onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
   canInterrupt?: boolean;
   isInterrupting?: boolean;
+  dictationAvailable?: boolean;
+  dictationUnavailableReason?: string | null;
+  onTranscribeDictation?: (file: File) => Promise<string>;
   restoredInput?: string | null;
   onRestoredInputConsumed?: () => void;
   onInterrupt?: () => void;
@@ -104,7 +111,23 @@ type ImageFileInput = HTMLInputElement & {
   showPicker?: () => void;
 };
 
-const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+type DictationState = "idle" | "recording" | "transcribing";
+
+const SUPPORTED_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+const SUPPORTED_IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".heic",
+  ".heif",
+];
 const TOKEN_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
 const FILE_MENTION_POLL_INTERVAL_MS = 500;
 
@@ -323,6 +346,38 @@ function imageFingerprint(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
 }
 
+function isSupportedImageFile(file: File): boolean {
+  if (SUPPORTED_IMAGE_TYPES.has(file.type.toLowerCase())) {
+    return true;
+  }
+  const name = file.name.toLowerCase();
+  return SUPPORTED_IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension));
+}
+
+function isDictationShortcut(event: KeyboardEvent<HTMLElement>): boolean {
+  const key = event.key.toLowerCase();
+  return (
+    event.ctrlKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    !event.repeat &&
+    (key === " " || key === "spacebar" || event.code === "Space")
+  );
+}
+
+function dictationErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+      return "Microphone permission was denied.";
+    }
+    if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+      return "No microphone was found.";
+    }
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer({
   inputEnabled,
   sessionEnded,
@@ -336,6 +391,9 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   onSubmit,
   canInterrupt = false,
   isInterrupting = false,
+  dictationAvailable = false,
+  dictationUnavailableReason = "Choose a speech-to-text provider in Settings to use dictation.",
+  onTranscribeDictation,
   restoredInput = null,
   onRestoredInputConsumed,
   onInterrupt,
@@ -355,12 +413,14 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [completionSelectedIndex, setCompletionSelectedIndex] = useState(0);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [historyDraft, setHistoryDraft] = useState<string | null>(null);
+  const [dictationState, setDictationState] = useState<DictationState>("idle");
   const completionRequestIdRef = useRef(0);
   const activeCompletionRef = useRef<{
     mode: CompletionMode | null;
     query: string | null;
   }>({ mode: null, query: null });
   const pendingImagesRef = useRef<PendingImage[]>([]);
+  const dictationRecorderRef = useRef<WavRecorder | null>(null);
   const refocusAfterSubmitRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
@@ -390,6 +450,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const { isFileKnown } = useFileExistence(fileTokens);
   const shellCommandPreview = shellInput.slice(1).trim();
   const isActionMenuOpen = canSend && !isShellMode && actionMenuOpen;
+  const inputIsEmpty = input.trim().length === 0;
+  const dictationInProgress = dictationState !== "idle";
+  const showDictationAction =
+    !showStopButton && !isShellMode && (inputIsEmpty || dictationInProgress);
+  const canStartDictation =
+    canSend && inputIsEmpty && dictationAvailable && Boolean(onTranscribeDictation);
   const highlightSegments = parseComposerHighlightSegments(input, {
     skillNames,
     isFileKnown,
@@ -486,6 +552,106 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     },
     [autoResize, closeCompletions, resetHistoryBrowsing],
   );
+
+  const insertDictationTranscript = useCallback(
+    (transcript: string) => {
+      const trimmedTranscript = transcript.trim();
+      if (!trimmedTranscript) {
+        setAttachmentMessage("No speech was detected.");
+        return;
+      }
+
+      const currentInput = textareaRef.current?.value ?? input;
+      const separator =
+        currentInput.trim().length === 0 || /\s$/.test(currentInput) ? "" : " ";
+      const nextInput = `${currentInput}${separator}${trimmedTranscript}`;
+      resetHistoryBrowsing();
+      setAttachmentMessage(null);
+      applyInputState(nextInput, nextInput.length);
+    },
+    [applyInputState, input, resetHistoryBrowsing],
+  );
+
+  const startDictation = useCallback(async () => {
+    if (!canStartDictation) {
+      setAttachmentMessage(
+        dictationUnavailableReason ??
+          "Choose a speech-to-text provider in Settings to use dictation.",
+      );
+      return;
+    }
+
+    setAttachmentMessage(null);
+    try {
+      const recorder = await createWavRecorder();
+      dictationRecorderRef.current = recorder;
+      setDictationState("recording");
+    } catch (error) {
+      dictationRecorderRef.current = null;
+      setDictationState("idle");
+      setAttachmentMessage(
+        dictationErrorMessage(error, "Unable to start dictation recording."),
+      );
+    }
+  }, [canStartDictation, dictationUnavailableReason]);
+
+  const stopDictation = useCallback(async () => {
+    const recorder = dictationRecorderRef.current;
+    if (!recorder) {
+      setDictationState("idle");
+      return;
+    }
+
+    dictationRecorderRef.current = null;
+    setDictationState("transcribing");
+    try {
+      const file = await recorder.stop();
+      const transcript = await onTranscribeDictation?.(file);
+      insertDictationTranscript(transcript ?? "");
+    } catch (error) {
+      setAttachmentMessage(
+        dictationErrorMessage(error, "Unable to transcribe dictation."),
+      );
+    } finally {
+      setDictationState("idle");
+    }
+  }, [insertDictationTranscript, onTranscribeDictation]);
+
+  const toggleDictation = useCallback(() => {
+    if (dictationState === "recording") {
+      void stopDictation();
+      return;
+    }
+    if (dictationState === "idle") {
+      void startDictation();
+    }
+  }, [dictationState, startDictation, stopDictation]);
+
+  const getDictationFrequencyData = useCallback(
+    () => dictationRecorderRef.current?.getFrequencyData() ?? null,
+    [],
+  );
+
+  // While recording, the textarea (and its key-capture) is replaced by the
+  // waveform, so the stop shortcut is handled at the document level instead.
+  useEffect(() => {
+    if (dictationState !== "recording") return;
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const isShortcut =
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        !event.repeat &&
+        (key === " " || key === "spacebar" || event.code === "Space");
+      if (!isShortcut || event.defaultPrevented) return;
+      event.preventDefault();
+      void stopDictation();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [dictationState, stopDictation]);
 
   const buildMentionReplacement = useCallback(
     (
@@ -602,9 +768,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         return;
       }
 
-      const nextFiles = files.filter((file) => SUPPORTED_IMAGE_TYPES.has(file.type));
+      const nextFiles = files.filter(isSupportedImageFile);
       if (nextFiles.length === 0) {
-        setAttachmentMessage("Only PNG, JPEG, and WEBP images are supported.");
+        setAttachmentMessage(
+          "Only PNG, JPEG, WEBP, HEIC, and HEIF images are supported.",
+        );
         return;
       }
 
@@ -707,6 +875,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      void dictationRecorderRef.current?.cancel();
+      dictationRecorderRef.current = null;
+    };
+  }, []);
+
   const clearPendingImages = useCallback(() => {
     setPendingImages((current) => {
       for (const image of current) {
@@ -753,7 +928,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const submitValue = useCallback(
     async (textValue: string) => {
       const trimmed = textValue.trim();
-      if (!trimmed && pendingImages.length === 0) return;
+      if (!trimmed) return;
       if (trimmed.startsWith("!") && pendingImages.length > 0) {
         setAttachmentMessage(
           "Shell commands cannot include image attachments.",
@@ -789,7 +964,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   useEffect(() => {
     if (!canSend || activeCompletionMode === null || activeCompletionQuery === null) {
       completionRequestIdRef.current += 1;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- completion UI must reset immediately when the query becomes invalid; deferring this causes stale suggestions to flash.
       closeCompletions();
       return undefined;
     }
@@ -1128,11 +1302,39 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     isShellMode && "composer__input-row--shell",
     interactiveMode && "composer__input-row--interactive",
     showProcessingAnimation && "composer__input-row--processing",
+    dictationState === "recording" && "composer__input-row--recording",
   );
+
+  const handleComposerKeyDownCapture = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (!isDictationShortcut(event)) return;
+    if (dictationState !== "recording" && !showDictationAction) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleDictation();
+  };
+  const dictationButtonLabel =
+    dictationState === "recording"
+      ? "Stop dictation recording"
+      : dictationState === "transcribing"
+        ? "Transcribing dictation"
+        : "Start dictation";
+  const dictationTooltip =
+    dictationState === "recording"
+      ? "Recording dictation… Ctrl+Space to stop."
+      : dictationState === "transcribing"
+        ? "Transcribing dictation…"
+        : canStartDictation
+          ? "Dictate a message (Ctrl+Space)"
+          : dictationUnavailableReason ??
+            "Choose a speech-to-text provider in Settings to use dictation.";
+  const dictationButtonDisabled =
+    dictationState === "transcribing" ||
+    (dictationState === "idle" && !canStartDictation);
 
   return (
     <form
       className="composer"
+      onKeyDownCapture={handleComposerKeyDownCapture}
       onSubmit={(event) => {
         void handleSubmit(event);
       }}
@@ -1141,7 +1343,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         ref={fileInputRef}
         type="file"
         name="image-upload"
-        accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif"
         multiple
         hidden
         onChange={(event) => {
@@ -1201,6 +1403,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             <span>Shell</span>
           </div>
         ) : null}
+        {dictationState === "recording" ? (
+          <DictationWaveform
+            getFrequencyData={getDictationFrequencyData}
+            label="Recording audio… Ctrl+Space to stop"
+          />
+        ) : (
         <InputGroup className="composer__textarea-wrap">
           <div ref={highlightRef} className="composer__textarea-highlights" aria-hidden="true">
             {highlightSegments.map((segment, index) => (
@@ -1245,9 +1453,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             disabled={!canSend}
           />
         </InputGroup>
+        )}
         {showProcessingAnimation ? (
           <span className="sr-only" role="status" aria-live="polite">
             Assistant is processing
+          </span>
+        ) : null}
+        {dictationState === "recording" ? (
+          <span className="sr-only" role="status" aria-live="polite">
+            Recording dictation
+          </span>
+        ) : dictationState === "transcribing" ? (
+          <span className="sr-only" role="status" aria-live="polite">
+            Transcribing dictation
           </span>
         ) : null}
         <InputGroup className="composer__send-group">
@@ -1275,6 +1493,38 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 </TooltipTrigger>
                 <TooltipContent side="top">
                   {isInterrupting ? "Interrupting current turn…" : "Stop the assistant"}
+                </TooltipContent>
+              </Tooltip>
+            ) : showDictationAction ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="composer__input-tooltip-trigger">
+                    <InputGroupButton
+                      type="button"
+                      aria-label={dictationButtonLabel}
+                      aria-keyshortcuts="Control+Space"
+                      aria-pressed={dictationState === "recording"}
+                      className={cn(
+                        "composer__dictation",
+                        dictationState === "recording" &&
+                          "composer__dictation--recording",
+                        dictationState === "transcribing" &&
+                          "composer__dictation--transcribing",
+                      )}
+                      disabled={dictationButtonDisabled}
+                      onClick={toggleDictation}
+                      size="icon-sm"
+                    >
+                      {dictationState === "transcribing" ? (
+                        <LoadingSpinner size="sm" />
+                      ) : (
+                        <MicIcon aria-hidden="true" />
+                      )}
+                    </InputGroupButton>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {dictationTooltip}
                 </TooltipContent>
               </Tooltip>
             ) : (

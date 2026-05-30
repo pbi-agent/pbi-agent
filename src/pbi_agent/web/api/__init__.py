@@ -3,6 +3,7 @@ from .routers import (
     config_router,
     events_router,
     provider_auth_router,
+    stt_router,
     system_router,
     tasks_router,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "config_router",
     "events_router",
     "provider_auth_router",
+    "stt_router",
     "system_router",
     "tasks_router",
 ]

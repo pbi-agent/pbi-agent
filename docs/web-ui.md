@@ -20,7 +20,7 @@ The web UI is the default interactive workspace. It combines live chat sessions,
 | Sessions | Start or resume agent conversations, use `@file` mentions, upload images, run shell commands, and inspect run history. |
 | Kanban | Manage task cards across configurable workflow stages and start automated task runs. |
 | Dashboard | Review run observability, cost/token totals, duration, errors, and provider/model breakdowns. |
-| Settings | Configure providers, model profiles, ChatGPT and GitHub Copilot account auth, and project skill/command installs. |
+| Settings | Configure providers, model profiles, speech-to-text, ChatGPT and GitHub Copilot account auth, and project skill/command installs. |
 
 If provider setup is incomplete, the app sends you to **Settings** first so you can create a provider and model profile.
 
@@ -39,6 +39,7 @@ Session features include:
 - `@file` mention autocomplete for workspace files.
 - Slash-command autocomplete for built-in and project commands.
 - Image uploads from the `+` action menu or clipboard when the provider supports images.
+- Voice dictation from the microphone when a speech-to-text provider is selected.
 - Shell command mode with `!command` for local commands that do not call the model.
 - A stop/interrupt control while the model is processing.
 - Run history attached to the saved session.
@@ -64,9 +65,11 @@ The Settings page manages persistent local configuration under `~/.pbi-agent/`:
 - Providers hold connection settings such as provider kind, API key, auth mode, and endpoint URLs.
 - Model profiles hold runnable model/runtime settings tied to one saved provider.
 - The active default profile is used when a session or run does not specify another profile.
+- Speech-to-text selects the saved provider used for web UI dictation.
 - Project skills, commands, and agents can be installed from official catalogs, GitHub sources, or server-side local paths.
 
-See [Providers](/providers) and [Model Profiles](/model-profiles) for setup details.
+See [Providers](/providers), [Model Profiles](/model-profiles), and
+[Speech-to-text](/speech-to-text) for setup details.
 
 ## Images
 
@@ -93,5 +96,6 @@ These commands are documented in [Session Commands](/session-commands).
 
 - [Kanban Dashboard](/kanban-dashboard)
 - [Model Profiles](/model-profiles)
+- [Speech-to-text](/speech-to-text)
 - [Session Commands](/session-commands)
 - [Dashboard observability](#primary-navigation)

@@ -22,6 +22,7 @@ This page is separate from the [CLI Reference](/cli) and the [Built-in Tools](/t
 | `/reload` | Web and interactive runtime | Reloads workspace instructions, project catalogs, non-MCP tools, and the web file-mention cache. |
 | `/compact` | Web and interactive runtime | Summarizes the current live session into compact context for future turns. |
 | `/<command-name>` | Web and interactive runtime | Applies a project command from `.agents/commands/*.md` to the current turn. |
+| <kbd>Ctrl</kbd>+<kbd>Space</kbd> | Web session composer | Starts or stops microphone dictation when a speech-to-text provider is configured. |
 
 ::: tip
 In the web composer, type `/` at the start of the message to search available slash commands. Type `@` in a normal prompt to search workspace files.
@@ -192,8 +193,19 @@ For providers that support image input, the web composer can also attach local i
 
 Image uploads cannot be combined with `!` shell command mode.
 
+## Voice dictation
+
+When a speech-to-text provider is configured, the web composer shows a
+microphone button while the input is empty. Click it or press
+<kbd>Ctrl</kbd>+<kbd>Space</kbd> to record, then click or press the shortcut
+again to stop and transcribe. The transcript is inserted into the composer
+before you send the message.
+
+See [Speech-to-text](/speech-to-text) for provider setup and troubleshooting.
+
 ## Related references
 
 - [CLI Reference](/cli) for terminal commands and flags.
 - [Built-in Tools](/tools) for model-callable function tools.
+- [Speech-to-text](/speech-to-text) for dictation setup and provider details.
 - [Customization](/customization/) for `INSTRUCTIONS.md`, `AGENTS.md`, project skills, project commands, sub-agents, and MCP setup.

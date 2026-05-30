@@ -13,6 +13,35 @@ class ResizeObserverMock implements ResizeObserver {
 
 globalThis.ResizeObserver ??= ResizeObserverMock;
 
+if (!("hasPointerCapture" in HTMLElement.prototype)) {
+  Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+    configurable: true,
+    writable: true,
+    value: () => false,
+  });
+}
+if (!("setPointerCapture" in HTMLElement.prototype)) {
+  Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+    configurable: true,
+    writable: true,
+    value: () => {},
+  });
+}
+if (!("releasePointerCapture" in HTMLElement.prototype)) {
+  Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", {
+    configurable: true,
+    writable: true,
+    value: () => {},
+  });
+}
+if (!("scrollIntoView" in Element.prototype)) {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    writable: true,
+    value: () => {},
+  });
+}
+
 afterEach(() => {
   cleanup();
   resetSessionStore();

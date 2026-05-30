@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -14,6 +15,7 @@ from pbi_agent.auth.service import build_runtime_request_auth
 from pbi_agent.config import Settings
 from pbi_agent.media import data_url_for_image
 from pbi_agent.models.messages import CompletedResponse, TokenUsage, UserTurnInput
+from pbi_agent.providers import retry as provider_retry
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.chatgpt_codex_backend import (
     ResponsesRequestOptions,
@@ -341,12 +343,14 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
 
         request_data = json.dumps(body).encode("utf-8")
         max_retries = self._settings.max_retries
+        rate_limit_max_retries = provider_retry.rate_limit_max_retries(max_retries)
+        retry_notice_max_retries = max_retries
         last_error: Exception | None = None
         request_url = GITHUB_COPILOT_CHAT_COMPLETIONS_URL
 
-        for attempt in range(max_retries + 1):
+        for attempt in range(rate_limit_max_retries + 1):
             if attempt > 0:
-                display.retry_notice(attempt, max_retries)
+                display.retry_notice(attempt, retry_notice_max_retries)
 
             req_start = time.perf_counter()
             request_auth = build_runtime_request_auth(
@@ -398,6 +402,9 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                     error_body = exc.read().decode("utf-8", errors="replace")
                 except Exception:
                     pass
+                error_payload = provider_retry.parse_error_payload(error_body) or {
+                    "body": error_body
+                }
                 _trace_provider_call(
                     tracer=tracer,
                     provider=self._settings.provider,
@@ -405,7 +412,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                     url=request_auth.request_url,
                     request_config=self._settings.redacted(),
                     request_payload=body,
-                    response_payload={"body": error_body},
+                    response_payload=error_payload,
                     duration_ms=_duration_ms(req_start),
                     status_code=exc.code,
                     success=False,
@@ -414,30 +421,100 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                 )
 
                 if exc.code == 429:
-                    if attempt >= max_retries:
+                    if not provider_retry.should_retry_rate_limit(error_payload):
+                        display.wait_stop()
+                        raise RuntimeError(
+                            f"GitHub Copilot API error {exc.code}: {error_body}"
+                        ) from exc
+                    if attempt >= rate_limit_max_retries:
                         display.wait_stop()
                         raise RuntimeError(
                             "GitHub Copilot rate limit exceeded after "
-                            f"{max_retries + 1} attempts: {error_body}"
+                            f"{rate_limit_max_retries + 1} attempts: {error_body}"
                         ) from exc
                     wait = _extract_retry_after(exc, attempt)
+                    retry_notice_max_retries = rate_limit_max_retries
                     display.rate_limit_notice(
                         wait_seconds=wait,
                         attempt=attempt + 1,
-                        max_retries=max_retries,
+                        max_retries=rate_limit_max_retries,
+                    )
+                    provider_retry.trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=body,
+                        status_code=exc.code,
+                        error_message=error_body or f"HTTP {exc.code}",
+                        attempt=attempt + 1,
+                        max_retries=rate_limit_max_retries,
+                        metadata={"retryable": True},
                     )
                     time.sleep(wait)
                     continue
 
-                if exc.code >= 500:
+                if provider_retry.is_overload_http_status(exc.code):
+                    if attempt >= max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            "GitHub Copilot API overloaded after "
+                            f"{max_retries + 1} attempts: {error_body}"
+                        ) from exc
+                    wait = _extract_retry_after(exc, attempt)
+                    retry_notice_max_retries = max_retries
+                    display.overload_notice(
+                        wait_seconds=wait,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    provider_retry.trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=body,
+                        status_code=exc.code,
+                        error_message=error_body or f"HTTP {exc.code}",
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={"retryable": True, "overloaded": True},
+                    )
+                    time.sleep(wait)
+                    continue
+
+                if provider_retry.is_retryable_http_status(exc.code):
                     last_error = exc
+                    if attempt >= max_retries:
+                        break
+                    retry_notice_max_retries = max_retries
+                    provider_retry.trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=body,
+                        status_code=exc.code,
+                        error_message=error_body or f"HTTP {exc.code}",
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={"retryable": True},
+                    )
                     continue
 
                 display.wait_stop()
                 raise RuntimeError(
                     f"GitHub Copilot API error {exc.code}: {error_body}"
                 ) from exc
-            except urllib.error.URLError as exc:
+            except (
+                http.client.IncompleteRead,
+                TimeoutError,
+                ConnectionError,
+                urllib.error.URLError,
+            ) as exc:
                 last_error = exc
                 _trace_provider_call(
                     tracer=tracer,
@@ -451,6 +528,22 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                     success=False,
                     error_message=str(exc),
                     metadata={"attempt": attempt + 1},
+                )
+                if attempt >= max_retries:
+                    break
+                retry_notice_max_retries = max_retries
+                provider_retry.trace_provider_retry(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=body,
+                    status_code=None,
+                    error_message=str(exc),
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    metadata={"retryable": True},
                 )
                 continue
 

@@ -679,10 +679,61 @@ def test_anthropic_request_turn_retries_when_api_is_overloaded(
 
     assert response.text == "Recovered."
     assert len(requests) == 2
-    assert waits == [3.0]
-    assert display_spy.overload_notices == [(3.0, 1, 1)]
+    assert waits == [2.0]
+    assert display_spy.overload_notices == [(2.0, 1, 1)]
     assert display_spy.rate_limit_notices == []
     assert display_spy.retry_notices == [(1, 1)]
+
+
+def test_anthropic_request_turn_retries_rate_limit_with_shared_policy(
+    monkeypatch,
+    display_spy,
+    make_http_error,
+    make_http_response,
+) -> None:
+    waits: list[float] = []
+    requests: list[dict[str, object]] = []
+    response_payload = {
+        "id": "msg_retry_rate_limit",
+        "content": [{"type": "text", "text": "Recovered."}],
+        "usage": {"input_tokens": 5, "output_tokens": 3},
+    }
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        if len(requests) == 1:
+            raise make_http_error(
+                url=ANTHROPIC_API_URL,
+                code=429,
+                body='{"error":{"type":"rate_limit_error","message":"slow down"}}',
+                headers={"Retry-After": "0.1"},
+            )
+        return make_http_response(response_payload)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.anthropic_provider.time.sleep",
+        lambda seconds: waits.append(seconds),
+    )
+
+    provider = AnthropicProvider(_make_settings(max_retries=0))
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert waits == [0.1]
+    assert display_spy.rate_limit_notices == [(0.1, 1, 10)]
+    assert display_spy.retry_notices == [(1, 10)]
 
 
 def test_anthropic_request_turn_preserves_error_type_and_request_id(

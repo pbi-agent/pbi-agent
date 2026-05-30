@@ -21,7 +21,13 @@ import {
   FieldGroup,
   FieldLabel,
 } from "../ui/field";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 function notificationPermissionLabel(
@@ -118,25 +124,30 @@ export function NotificationsSettingsSection() {
                       >
                         Notification sound
                       </FieldLabel>
-                      <NativeSelect
-                        id="notification-sound"
-                        size="sm"
-                        className="settings-notifications__sound-select"
+                      <Select
                         value={preferences.soundId}
-                        onChange={(event) => {
-                          const nextSoundId = event.target.value;
+                        onValueChange={(nextSoundId) => {
                           if (isNotificationSoundId(nextSoundId)) {
                             setNotificationSoundId(nextSoundId);
                           }
                         }}
-                        aria-describedby="notification-sound-description"
                       >
+                        <SelectTrigger
+                          id="notification-sound"
+                          size="sm"
+                          className="settings-notifications__sound-select"
+                          aria-describedby="notification-sound-description"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
                         {NOTIFICATION_SOUND_OPTIONS.map((option) => (
-                          <NativeSelectOption key={option.id} value={option.id}>
+                          <SelectItem key={option.id} value={option.id}>
                             {option.label}
-                          </NativeSelectOption>
+                          </SelectItem>
                         ))}
-                      </NativeSelect>
+                        </SelectContent>
+                      </Select>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button

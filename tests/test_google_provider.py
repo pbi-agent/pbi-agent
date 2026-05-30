@@ -350,6 +350,154 @@ def test_google_parse_response_extracts_function_calls_thoughts_and_usage() -> N
     assert result.usage.model == DEFAULT_GOOGLE_MODEL
 
 
+def test_google_parse_response_extracts_interactions_steps_shape() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_steps",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "requires_action",
+            "usage": {
+                "total_input_tokens": 3849,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 24,
+                "total_thought_tokens": 135,
+                "total_tokens": 4008,
+            },
+            "steps": [
+                {
+                    "type": "thought",
+                    "signature": "sig_steps",
+                    "summary": [
+                        {
+                            "type": "text",
+                            "text": "Need to inspect workspace memory first.",
+                        }
+                    ],
+                },
+                {
+                    "type": "function_call",
+                    "id": "7sxzq8ft",
+                    "name": "explore_workspace",
+                    "arguments": {"pattern": "MEMORY.md", "target": "path"},
+                },
+            ],
+        }
+    )
+
+    assert result.response_id == "int_steps"
+    assert result.text == ""
+    assert result.reasoning_content == "Need to inspect workspace memory first."
+    assert result.provider_data["status"] == "requires_action"
+    assert result.provider_data["thought_signatures"] == ["sig_steps"]
+    assert result.function_calls == [
+        ToolCall(
+            call_id="7sxzq8ft",
+            name="explore_workspace",
+            arguments={"pattern": "MEMORY.md", "target": "path"},
+        )
+    ]
+    assert result.usage.input_tokens == 3849
+    assert result.usage.output_tokens == 24
+    assert result.usage.reasoning_tokens == 135
+    assert result.usage.provider_total_tokens == 4008
+    assert result.usage.model == DEFAULT_GOOGLE_MODEL
+
+
+def test_google_parse_response_extracts_text_from_interactions_steps() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_steps_text",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "usage": {
+                "total_input_tokens": 10,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 5,
+                "total_tokens": 15,
+            },
+            "steps": [{"type": "text", "text": "Hello from steps."}],
+        }
+    )
+
+    assert result.text == "Hello from steps."
+    assert result.provider_data["display_items"] == [
+        {"type": "text", "text": "Hello from steps."}
+    ]
+
+
+def test_google_parse_response_extracts_model_output_text_from_steps() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_steps_model_output",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "usage": {
+                "total_input_tokens": 4282,
+                "total_cached_tokens": 0,
+                "total_output_tokens": 46,
+                "total_thought_tokens": 482,
+                "total_tokens": 4810,
+            },
+            "steps": [
+                {
+                    "type": "thought",
+                    "signature": "sig_model_output",
+                    "summary": [
+                        {
+                            "type": "text",
+                            "text": "Prepared a concise greeting.",
+                        }
+                    ],
+                },
+                {
+                    "type": "model_output",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Hello! I am `pbi-agent`, your workspace coding agent."
+                            ),
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+
+    assert result.text == "Hello! I am `pbi-agent`, your workspace coding agent."
+    assert result.reasoning_content == "Prepared a concise greeting."
+    assert result.provider_data["display_items"] == [
+        {
+            "type": "text",
+            "text": "Hello! I am `pbi-agent`, your workspace coding agent.",
+        }
+    ]
+    assert result.usage.reasoning_tokens == 482
+    assert result.usage.total_tokens == 4810
+
+
+def test_google_parse_response_uses_steps_when_outputs_is_empty() -> None:
+    provider = GoogleProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "int_empty_outputs",
+            "model": DEFAULT_GOOGLE_MODEL,
+            "status": "completed",
+            "outputs": [],
+            "steps": [{"type": "text", "text": "Fallback text."}],
+        }
+    )
+
+    assert result.text == "Fallback text."
+
+
 def test_google_request_turn_reuses_previous_interaction_id(monkeypatch) -> None:
     requests: list[dict[str, object]] = []
     responses = iter(
@@ -383,10 +531,15 @@ def test_google_request_turn_reuses_previous_interaction_id(monkeypatch) -> None
                     "total_output_tokens": 4,
                     "total_thought_tokens": 1,
                 },
-                "outputs": [
+                "steps": [
                     {
-                        "type": "text",
-                        "text": "The current temperature is 59F.",
+                        "type": "model_output",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "The current temperature is 59F.",
+                            }
+                        ],
                     }
                 ],
             },
@@ -453,6 +606,8 @@ def test_google_request_turn_reuses_previous_interaction_id(monkeypatch) -> None
             "result": '{"temperature":59}',
         }
     ]
+    assert second.text == "The current temperature is 59F."
+    assert display.markdown == "The current temperature is 59F."
 
 
 def test_google_execute_tool_calls_returns_function_results(
@@ -611,10 +766,10 @@ def test_google_request_turn_retries_after_rate_limit_and_renders_thinking(
 
     assert response.text == "Recovered."
     assert len(requests) == 2
-    assert waits == [1.25]
+    assert waits == [0.25]
     assert display_spy.wait_messages == ["analyzing your request..."]
-    assert display_spy.retry_notices == [(1, 1)]
-    assert display_spy.rate_limit_notices == [(1.25, 1, 1)]
+    assert display_spy.retry_notices == [(1, 10)]
+    assert display_spy.rate_limit_notices == [(0.25, 1, 10)]
     assert display_spy.thinking_calls == [
         {
             "text": "Checked the request first.",
@@ -684,10 +839,72 @@ def test_google_request_turn_retries_when_api_is_overloaded(
 
     assert response.text == "Recovered."
     assert len(requests) == 2
-    assert waits == [3.0]
-    assert display_spy.overload_notices == [(3.0, 1, 1)]
+    assert waits == [2.0]
+    assert display_spy.overload_notices == [(2.0, 1, 1)]
     assert display_spy.rate_limit_notices == []
     assert display_spy.retry_notices == [(1, 1)]
+
+
+def test_google_request_turn_retries_incomplete_interaction_status(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    responses = iter(
+        [
+            {
+                "id": "int_incomplete",
+                "model": DEFAULT_GOOGLE_MODEL,
+                "status": "incomplete",
+                "usage": {
+                    "total_input_tokens": 6,
+                    "total_output_tokens": 0,
+                    "total_tokens": 6,
+                },
+            },
+            {
+                "id": "int_recovered",
+                "model": DEFAULT_GOOGLE_MODEL,
+                "status": "completed",
+                "usage": {
+                    "total_input_tokens": 6,
+                    "total_output_tokens": 4,
+                    "total_tokens": 10,
+                },
+                "steps": [
+                    {
+                        "type": "model_output",
+                        "content": [{"type": "text", "text": "Recovered."}],
+                    }
+                ],
+            },
+        ]
+    )
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return make_http_response(next(responses))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GoogleProvider(_make_settings(max_retries=1))
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+    )
+
+    assert response.text == "Recovered."
+    assert len(requests) == 2
+    assert display_spy.retry_notices == [(1, 1)]
+    assert display_spy.markdown_calls == ["Recovered."]
 
 
 def test_google_request_turn_preserves_gemini_error_type_and_request_id(
@@ -918,6 +1135,167 @@ def test_google_request_turn_serializes_user_input_images(monkeypatch) -> None:
             "type": "image",
             "mime_type": "image/png",
             "data": "QUJDRA==",
+        },
+    ]
+
+
+def test_google_request_turn_serializes_multiple_images_as_ordered_input_parts(
+    monkeypatch,
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return _FakeHTTPResponse(
+            {
+                "id": "int_1",
+                "model": DEFAULT_GOOGLE_MODEL,
+                "status": "completed",
+                "outputs": [{"type": "text", "text": "done"}],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GoogleProvider(_make_settings())
+    provider.request_turn(
+        user_input=UserTurnInput(
+            text="Compare these images.",
+            images=[
+                ImageAttachment(
+                    path="first.heic",
+                    mime_type="image/heic",
+                    data_base64="SEVJQw==",
+                ),
+                ImageAttachment(
+                    path="second.heif",
+                    mime_type="image/heif",
+                    data_base64="SEVJRg==",
+                ),
+            ],
+        ),
+        display=_DisplayStub(),
+        session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+    )
+
+    assert requests[0]["input"] == [
+        {"type": "text", "text": "Compare these images."},
+        {"type": "image", "mime_type": "image/heic", "data": "SEVJQw=="},
+        {"type": "image", "mime_type": "image/heif", "data": "SEVJRg=="},
+    ]
+
+
+def test_google_request_turn_rejects_oversized_inline_image_request(
+    monkeypatch,
+) -> None:
+    urlopen = Mock()
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(
+        "pbi_agent.providers.google_provider._MAX_INLINE_IMAGE_REQUEST_BYTES",
+        100,
+    )
+
+    provider = GoogleProvider(_make_settings())
+
+    with pytest.raises(ValueError, match="inline image requests must be 20 MB"):
+        provider.request_turn(
+            user_input=UserTurnInput(
+                text="Describe this image.",
+                images=[
+                    ImageAttachment(
+                        path="large.png",
+                        mime_type="image/png",
+                        data_base64="A" * 120,
+                    )
+                ],
+            ),
+            display=_DisplayStub(),
+            session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+            turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        )
+
+    urlopen.assert_not_called()
+
+
+def test_google_request_turn_wraps_current_image_when_replaying_history(
+    monkeypatch,
+) -> None:
+    requests: list[dict[str, object]] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return _FakeHTTPResponse(
+            {
+                "id": "int_1",
+                "model": DEFAULT_GOOGLE_MODEL,
+                "status": "completed",
+                "usage": {
+                    "total_input_tokens": 10,
+                    "total_cached_tokens": 0,
+                    "total_output_tokens": 3,
+                    "total_thought_tokens": 0,
+                },
+                "outputs": [{"type": "text", "text": "done"}],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GoogleProvider(_make_settings())
+    provider.restore_messages(
+        [
+            MessageRecord(
+                id=1,
+                session_id="session-1",
+                role="user",
+                content="hi",
+                created_at="2026-03-19T10:00:00+00:00",
+            ),
+            MessageRecord(
+                id=2,
+                session_id="session-1",
+                role="assistant",
+                content="Hello!",
+                created_at="2026-03-19T10:00:01+00:00",
+            ),
+        ]
+    )
+    provider.request_turn(
+        user_input=UserTurnInput(
+            text="Find the extra card.",
+            images=[
+                ImageAttachment(
+                    path="screen.png",
+                    mime_type="image/png",
+                    data_base64="UE5H",
+                )
+            ],
+        ),
+        display=_DisplayStub(),
+        session_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_GOOGLE_MODEL),
+    )
+
+    assert requests[0]["input"] == [
+        {"role": "user", "content": "hi"},
+        {"role": "model", "content": "Hello!"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Find the extra card."},
+                {"type": "image", "mime_type": "image/png", "data": "UE5H"},
+            ],
         },
     ]
 

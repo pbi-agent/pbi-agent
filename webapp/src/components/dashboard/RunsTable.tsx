@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon } from "lucide-react";
 import { fetchAllRuns, fetchRunFilterValues } from "../../api";
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from "../../lib/selectValues";
 import type { AllRunsRun } from "../../types";
 import { StatusPill } from "../shared/StatusPill";
 import { LoadingSpinner } from "../shared/LoadingSpinner";
@@ -9,7 +10,13 @@ import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import {
   Table,
   TableBody,
@@ -176,54 +183,75 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
       <CardHeader className="dashboard-panel__header">
         <CardTitle className="dashboard-panel__title">All Runs</CardTitle>
         <div className="runs-filters" aria-label="Run filters">
-          <NativeSelect
-            size="sm"
-            className="runs-filter-select"
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
+          <Select
+            value={toSelectValue(statusFilter)}
+            onValueChange={(value) => {
+              setStatusFilter(fromSelectValue(value));
               handleFilterChange();
             }}
           >
-            <NativeSelectOption value="">All statuses</NativeSelectOption>
+            <SelectTrigger
+              size="sm"
+              className="runs-filter-select"
+              aria-label="Status filter"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={EMPTY_SELECT_VALUE}>All statuses</SelectItem>
             {statusOptions.map((status) => (
-              <NativeSelectOption key={status} value={status}>
+              <SelectItem key={status} value={status}>
                 {status}
-              </NativeSelectOption>
+              </SelectItem>
             ))}
-          </NativeSelect>
-          <NativeSelect
-            size="sm"
-            className="runs-filter-select"
-            value={providerFilter}
-            onChange={(e) => {
-              setProviderFilter(e.target.value);
+            </SelectContent>
+          </Select>
+          <Select
+            value={toSelectValue(providerFilter)}
+            onValueChange={(value) => {
+              setProviderFilter(fromSelectValue(value));
               handleFilterChange();
             }}
           >
-            <NativeSelectOption value="">All providers</NativeSelectOption>
+            <SelectTrigger
+              size="sm"
+              className="runs-filter-select"
+              aria-label="Provider filter"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={EMPTY_SELECT_VALUE}>All providers</SelectItem>
             {providerOptions.map((provider) => (
-              <NativeSelectOption key={provider} value={provider}>
+              <SelectItem key={provider} value={provider}>
                 {provider}
-              </NativeSelectOption>
+              </SelectItem>
             ))}
-          </NativeSelect>
-          <NativeSelect
-            size="sm"
-            className="runs-filter-select runs-filter-select--model"
-            value={modelFilter}
-            onChange={(e) => {
-              setModelFilter(e.target.value);
+            </SelectContent>
+          </Select>
+          <Select
+            value={toSelectValue(modelFilter)}
+            onValueChange={(value) => {
+              setModelFilter(fromSelectValue(value));
               handleFilterChange();
             }}
           >
-            <NativeSelectOption value="">All models</NativeSelectOption>
+            <SelectTrigger
+              size="sm"
+              className="runs-filter-select runs-filter-select--model"
+              aria-label="Model filter"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={EMPTY_SELECT_VALUE}>All models</SelectItem>
             {modelOptions.map((model) => (
-              <NativeSelectOption key={model} value={model}>
+              <SelectItem key={model} value={model}>
                 {model}
-              </NativeSelectOption>
+              </SelectItem>
             ))}
-          </NativeSelect>
+            </SelectContent>
+          </Select>
         </div>
         <Badge variant="outline" className="dashboard-panel__count">{totalCount} total</Badge>
       </CardHeader>

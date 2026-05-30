@@ -61,7 +61,7 @@ export type CommandListResponse = { commands: CommandViewModel[]; config_revisio
 
 export type CommandViewModel = { id: string; name: string; slash_alias: string; description: string; instructions: string; path: string; model_profile_id: string | null; allowed_tools: string[] | null; skills: string[] | null; sub_agents: string[] | null };
 
-export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; active_profile_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
+export type ConfigBootstrapResponse = { providers: ProviderViewModel[]; model_profiles: ModelProfileViewModel[]; commands: CommandViewModel[]; skills: SkillViewModel[]; agents: AgentViewModel[]; active_profile_id: string | null; stt_provider_id: string | null; maintenance: MaintenanceConfigModel; config_revision: string; options: ConfigOptionsModel };
 
 export type ConfigOptionsModel = { provider_kinds: string[]; reasoning_efforts: string[]; openai_service_tiers: string[]; provider_metadata: Record<string, ProviderKindMetadataModel> };
 
@@ -183,7 +183,7 @@ export type ProviderAuthStatusModel = { auth_mode: string; backend: string | nul
 
 export type ProviderBreakdownModel = { provider: string | null; model: string | null; run_count: number; total_tokens: number; total_cost: number; avg_duration_ms: number | null; error_count: number; total_api_calls: number; total_tool_calls: number };
 
-export type ProviderKindMetadataModel = { label: string; description?: string | null; default_auth_mode: string; auth_modes: string[]; auth_mode_metadata: Record<string, ProviderAuthModeMetadataModel>; default_model: string; default_sub_agent_model: string | null; default_responses_url: string | null; default_generic_api_url: string | null; supports_responses_url: boolean; supports_generic_api_url: boolean; supports_service_tier: boolean; supports_native_web_search: boolean; supports_image_inputs: boolean };
+export type ProviderKindMetadataModel = { label: string; description?: string | null; default_auth_mode: string; auth_modes: string[]; auth_mode_metadata: Record<string, ProviderAuthModeMetadataModel>; default_model: string; default_sub_agent_model: string | null; default_responses_url: string | null; default_generic_api_url: string | null; supports_responses_url: boolean; supports_generic_api_url: boolean; supports_service_tier: boolean; supports_native_web_search: boolean; supports_image_inputs: boolean; supports_model_profiles: boolean; supports_stt: boolean };
 
 export type ProviderListResponse = { providers: ProviderViewModel[]; config_revision: string };
 
@@ -282,6 +282,12 @@ export type SkillViewModel = { id: string; name: string; description: string; in
 export type SlashCommandItemModel = { name: string; description: string; kind: "local_command" | "command" | "extension" };
 
 export type SlashCommandSearchResponse = { items: SlashCommandItemModel[] };
+
+export type SttProviderRequest = { provider_id?: string | null };
+
+export type SttProviderResponse = { stt_provider_id: string | null; config_revision: string };
+
+export type SttTranscriptionResponse = { text: string };
 
 export type SubAgentSnapshotModel = { title: string; status: string; wait_message?: string | null; processing?: ProcessingStateModel | null; session_usage?: Record<string, unknown> | null; turn_usage?: UsageSnapshotModel | null };
 
@@ -415,6 +421,7 @@ export type ApiOperationResponses = {
   "POST /api/config/skills/enabled": SkillListResponse;
   "POST /api/config/skills/install": SkillInstallResponse;
   "POST /api/config/skills/{skill_name}/enabled": SkillListResponse;
+  "PUT /api/config/stt-provider": SttProviderResponse;
   "GET /api/dashboard/run-filter-values": RunFilterValuesResponse;
   "GET /api/dashboard/stats": DashboardStatsResponse;
   "GET /api/events/sessions/{session_id}": unknown;
@@ -452,6 +459,7 @@ export type ApiOperationResponses = {
   "POST /api/sessions/{session_id}/shell-command": LiveSessionResponse;
   "GET /api/skills/search": SkillMentionSearchResponse;
   "GET /api/slash-commands/search": SlashCommandSearchResponse;
+  "POST /api/stt/transcribe": SttTranscriptionResponse;
   "GET /api/tasks": TasksResponse;
   "POST /api/tasks": TaskResponse;
   "POST /api/tasks/images": TaskImageUploadResponse;
@@ -482,6 +490,7 @@ export type ApiJsonRequestBodies = {
   "POST /api/config/skills/enabled": SkillEnabledRequest;
   "POST /api/config/skills/install": SkillInstallRequest;
   "POST /api/config/skills/{skill_name}/enabled": SkillEnabledRequest;
+  "PUT /api/config/stt-provider": SttProviderRequest;
   "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowStartRequest;
   "POST /api/provider-auth/{provider_id}/import": ProviderAuthImportRequest;
   "POST /api/sessions": CreateSessionRequest;

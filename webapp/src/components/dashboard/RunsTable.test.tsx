@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchAllRuns, fetchRunFilterValues } from "../../api";
 import { renderWithProviders } from "../../test/render";
@@ -72,10 +73,15 @@ describe("RunsTable", () => {
   });
 
   it("loads filter options from the distinct database values endpoint", async () => {
+    const user = userEvent.setup();
     renderWithProviders(<RunsTable startDate="2026-05-01" endDate="2026-05-14T23:59:59" scope="workspace" />);
 
+    await user.click(await screen.findByRole("combobox", { name: "Provider filter" }));
     expect(await screen.findByRole("option", { name: "anthropic" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "claude-4" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("combobox", { name: "Model filter" }));
+    expect(await screen.findByRole("option", { name: "claude-4" })).toBeInTheDocument();
     expect(fetchRunFilterValuesMock).toHaveBeenCalledWith({
       start_date: "2026-05-01",
       end_date: "2026-05-14T23:59:59",

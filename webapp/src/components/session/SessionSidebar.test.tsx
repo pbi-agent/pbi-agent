@@ -68,6 +68,17 @@ describe("SessionSidebar", () => {
     expect(props.onSearchQueryChange).toHaveBeenCalledWith("roadmap");
   });
 
+  it("clears the session search from the styled clear button", async () => {
+    const user = userEvent.setup();
+    const props = renderSidebar({ searchQuery: "roadmap" });
+
+    const search = screen.getByRole("searchbox", { name: "Search sessions" });
+    await user.click(screen.getByRole("button", { name: "Clear session search" }));
+
+    expect(props.onSearchQueryChange).toHaveBeenCalledWith("");
+    expect(search).toHaveFocus();
+  });
+
   it("renders a searched empty state", () => {
     renderSidebar({ sessions: [], searchQuery: "missing" });
 

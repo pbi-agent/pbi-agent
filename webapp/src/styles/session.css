@@ -126,7 +126,58 @@
 .session-sidebar__search-input {
   height: 2rem;
   padding-left: 1.85rem;
+  padding-right: 2.05rem;
   font-size: var(--text-xs);
+}
+
+.session-sidebar__search-input::-webkit-search-decoration,
+.session-sidebar__search-input::-webkit-search-cancel-button,
+.session-sidebar__search-input::-webkit-search-results-button,
+.session-sidebar__search-input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.session-sidebar__search-clear {
+  position: absolute;
+  right: calc(var(--sp-2) + 0.25rem);
+  top: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  box-shadow: none;
+  transform: translateY(-50%);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
+}
+
+.session-sidebar__search-clear svg {
+  width: 0.8125rem;
+  height: 0.8125rem;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.session-sidebar__search-clear:hover:not(:disabled),
+.session-sidebar__search-clear:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  color: var(--foreground);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.session-sidebar__search-clear:active:not(:disabled) {
+  transform: translateY(-50%);
+}
+
+.session-sidebar__search-clear:hover:not(:disabled) svg,
+.session-sidebar__search-clear:focus-visible:not(:disabled) svg {
+  transform: scale(1.08);
 }
 
 .session-sidebar__list {
@@ -3048,6 +3099,54 @@
     0 0 0 3px color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
+.composer__input-row--recording {
+  border-color: color-mix(in srgb, var(--color-error) 52%, var(--color-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 13%, transparent);
+}
+
+.composer__waveform {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  align-items: center;
+  padding: 0 var(--sp-3);
+}
+
+.composer__waveform-bars {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: stretch;
+  gap: clamp(1px, 0.35vw, 3px);
+  height: 28px;
+}
+
+.composer__waveform-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transform: scaleY(0.08);
+  transform-origin: center;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-error) 85%, var(--color-accent)),
+    color-mix(in srgb, var(--color-error) 60%, transparent)
+  );
+  transition: transform 90ms linear;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer__waveform-bar {
+    transition: none;
+  }
+}
+
 .composer__input-row--processing::before {
   content: "";
   position: absolute;
@@ -3315,6 +3414,48 @@
   color: var(--color-text-tertiary);
 }
 
+.composer__dictation {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  transition:
+    background var(--duration-fast),
+    box-shadow var(--duration-fast),
+    transform var(--duration-fast);
+}
+
+.composer__dictation:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.composer__dictation:disabled {
+  background: var(--color-surface-3);
+  color: var(--color-text-tertiary);
+}
+
+.composer__dictation .spinner {
+  color: currentColor;
+}
+
+.composer__dictation--recording {
+  background: var(--color-error);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--color-error) 22%, transparent),
+    0 1px 2px color-mix(in srgb, var(--color-error) 35%, transparent);
+  animation: composer-dictation-pulse 1.25s ease-in-out infinite;
+}
+
+.composer__dictation--recording:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error) 88%, black 12%);
+  transform: scale(1.04);
+}
+
+.composer__dictation--transcribing {
+  cursor: progress;
+}
+
 .composer__stop {
   width: 32px;
   height: 32px;
@@ -3366,6 +3507,20 @@
   }
 }
 
+@keyframes composer-dictation-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--color-error) 22%, transparent),
+      0 1px 2px color-mix(in srgb, var(--color-error) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px color-mix(in srgb, var(--color-error) 8%, transparent),
+      0 1px 2px color-mix(in srgb, var(--color-error) 35%, transparent);
+  }
+}
+
 @keyframes composer-processing-sheen {
   0% {
     transform: translateX(-72%);
@@ -3400,6 +3555,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .composer__stop,
+  .composer__dictation--recording,
   .composer__input-row--processing::before,
   .composer__input-row--processing::after {
     animation: none;

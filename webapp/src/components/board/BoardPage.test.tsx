@@ -182,6 +182,7 @@ function makeConfigBootstrap(
   return {
     config_revision: "rev-1",
     active_profile_id: "analysis",
+    stt_provider_id: null,
     maintenance: { retention_days: 30 },
     providers: [],
     model_profiles: [
@@ -267,6 +268,8 @@ function makeConfigBootstrap(
           supports_service_tier: true,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: true,
         },
       },
     },

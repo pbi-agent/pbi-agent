@@ -20,7 +20,7 @@ Each task contains:
 | --- | --- |
 | Title | Short task label shown on the card. |
 | Prompt | The user prompt sent when the task runs. |
-| Image attachments | Optional PNG, JPEG, or WEBP images sent with the initial task prompt. |
+| Image attachments | Optional PNG, JPEG, WEBP, HEIC, or HEIF images sent with the initial task prompt. |
 | Stage | Current board stage. |
 | Profile override | Optional model profile for this task. If empty, the stage/default runtime is used. |
 

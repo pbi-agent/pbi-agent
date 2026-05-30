@@ -83,6 +83,8 @@ type ActiveModelProfileResponsePayload = {
   active_profile_id: string | null;
   config_revision: string;
 };
+type SttProviderResponsePayload = ApiResponse<"PUT /api/config/stt-provider">;
+type SttTranscriptionResponsePayload = ApiResponse<"POST /api/stt/transcribe">;
 type MaintenanceConfigResponsePayload = {
   maintenance: MaintenanceConfig;
   config_revision: string;
@@ -1278,6 +1280,39 @@ export async function setActiveModelProfile(
       body: jsonBody("PUT /api/config/active-model-profile", {
         profile_id: modelProfileId,
       }),
+    },
+  );
+}
+
+export async function setSttProvider(
+  providerId: string | null,
+  configRevision: string,
+): Promise<SttProviderResponsePayload> {
+  const payload: ApiJsonRequestBodies["PUT /api/config/stt-provider"] = {
+    provider_id: providerId,
+  };
+  return apiRequest<"PUT /api/config/stt-provider", SttProviderResponsePayload>(
+    "PUT /api/config/stt-provider",
+    "/api/config/stt-provider",
+    {
+      method: "PUT",
+      headers: { "If-Match": configRevision },
+      body: jsonBody("PUT /api/config/stt-provider", payload),
+    },
+  );
+}
+
+export async function transcribeSttAudio(
+  file: File,
+): Promise<SttTranscriptionResponsePayload> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiRequest<"POST /api/stt/transcribe", SttTranscriptionResponsePayload>(
+    "POST /api/stt/transcribe",
+    "/api/stt/transcribe",
+    {
+      method: "POST",
+      body: formData,
     },
   );
 }

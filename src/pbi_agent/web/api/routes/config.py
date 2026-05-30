@@ -50,6 +50,8 @@ from pbi_agent.web.api.schemas.config import (
     SkillInstallResponse,
     SkillListResponse,
     SkillViewModel,
+    SttProviderRequest,
+    SttProviderResponse,
 )
 
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -334,6 +336,28 @@ def set_active_model_profile(
         raise config_http_error(exc) from exc
     return ActiveProfileResponse(
         active_profile_id=payload["active_profile_id"],
+        config_revision=str(payload["config_revision"]),
+    )
+
+
+@router.put(
+    "/stt-provider",
+    response_model=SttProviderResponse,
+)
+def set_stt_provider(
+    request: SttProviderRequest,
+    manager: SessionManagerDep,
+    expected_revision: ConfigRevisionHeader,
+) -> SttProviderResponse:
+    try:
+        payload = manager.set_stt_provider(
+            request.provider_id,
+            expected_revision=expected_revision,
+        )
+    except Exception as exc:
+        raise config_http_error(exc) from exc
+    return SttProviderResponse(
+        stt_provider_id=payload["stt_provider_id"],
         config_revision=str(payload["config_revision"]),
     )
 

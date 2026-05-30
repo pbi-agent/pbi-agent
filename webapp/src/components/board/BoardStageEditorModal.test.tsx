@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { BoardStageEditorModal } from "./BoardStageEditorModal";
 import { renderWithProviders } from "../../test/render";
 import type { BoardStage, CommandView, ModelProfileView } from "../../types";
@@ -80,6 +80,16 @@ const commands: CommandView[] = [
   },
 ];
 
+async function selectRadixOption(
+  user: ReturnType<typeof userEvent.setup>,
+  control: HTMLElement,
+  optionName: string,
+) {
+  await user.click(control);
+  const listbox = await screen.findByRole("listbox");
+  await user.click(within(listbox).getByRole("option", { name: optionName }));
+}
+
 describe("BoardStageEditorModal", () => {
   it("inserts a new stage before Done when requested and submits edited values", async () => {
     const user = userEvent.setup();
@@ -112,8 +122,8 @@ describe("BoardStageEditorModal", () => {
     if (!profileSelect || !commandSelect) {
       throw new Error("Expected editable profile and command selects.");
     }
-    await user.selectOptions(profileSelect, "analysis");
-    await user.selectOptions(commandSelect, "plan");
+    await selectRadixOption(user, profileSelect, "Analysis");
+    await selectRadixOption(user, commandSelect, "Plan (/plan)");
     const editableToggle = screen.getAllByRole("checkbox").find((checkbox) => !checkbox.hasAttribute("disabled"));
     if (!editableToggle) {
       throw new Error("Expected an editable auto-start toggle.");

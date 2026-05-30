@@ -25,6 +25,7 @@ import {
   setActiveModelProfile,
   setAgentEnabled,
   setSkillEnabled,
+  setSttProvider,
   startProviderAuthFlow,
   updateMaintenanceConfig,
 } from "../../api";
@@ -83,6 +84,7 @@ vi.mock("../../api", async (importOriginal) => {
     updateModelProfile: vi.fn(),
     deleteModelProfile: vi.fn(),
     setActiveModelProfile: vi.fn(),
+    setSttProvider: vi.fn(),
     startProviderAuthFlow: vi.fn(),
     fetchProviderAuthFlow: vi.fn(),
     fetchProviderUsageLimits: vi.fn(),
@@ -108,6 +110,7 @@ function makeConfigBootstrap(
   return {
     config_revision: "rev-1",
     active_profile_id: "analysis",
+    stt_provider_id: null,
     maintenance: { retention_days: 30 },
     providers: [
       {
@@ -239,7 +242,14 @@ function makeConfigBootstrap(
     skills: [],
     agents: [],
     options: {
-      provider_kinds: ["openai", "chatgpt", "github_copilot"],
+      provider_kinds: [
+        "openai",
+        "chatgpt",
+        "github_copilot",
+        "google",
+        "deepgram",
+        "elevenlabs",
+      ],
       reasoning_efforts: ["high", "medium"],
       openai_service_tiers: [],
       provider_metadata: {
@@ -264,6 +274,8 @@ function makeConfigBootstrap(
           supports_service_tier: true,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: true,
         },
         azure: {
           label: "Azure",
@@ -287,6 +299,8 @@ function makeConfigBootstrap(
           supports_service_tier: false,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: false,
         },
         chatgpt: {
           label: "ChatGPT (Subscription)",
@@ -309,6 +323,8 @@ function makeConfigBootstrap(
           supports_service_tier: true,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: false,
         },
         github_copilot: {
           label: "GitHub Copilot (Subscription)",
@@ -331,10 +347,121 @@ function makeConfigBootstrap(
           supports_service_tier: false,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: false,
+        },
+        google: {
+          label: "Google",
+          description: null,
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+          },
+          default_model: "gemini-3.1-pro-preview",
+          default_sub_agent_model: "gemini-3-flash-preview",
+          default_responses_url:
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+          default_generic_api_url: null,
+          supports_responses_url: true,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
+          supports_native_web_search: true,
+          supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: true,
+        },
+        deepgram: {
+          label: "Deepgram",
+          description: "Uses a Deepgram API key for speech-to-text.",
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+          },
+          default_model: "",
+          default_sub_agent_model: null,
+          default_responses_url: null,
+          default_generic_api_url: null,
+          supports_responses_url: false,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
+          supports_native_web_search: false,
+          supports_image_inputs: false,
+          supports_model_profiles: false,
+          supports_stt: true,
+        },
+        elevenlabs: {
+          label: "ElevenLabs",
+          description: "Uses an ElevenLabs API key for speech-to-text.",
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+          },
+          default_model: "",
+          default_sub_agent_model: null,
+          default_responses_url: null,
+          default_generic_api_url: null,
+          supports_responses_url: false,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
+          supports_native_web_search: false,
+          supports_image_inputs: false,
+          supports_model_profiles: false,
+          supports_stt: true,
         },
       },
     },
     ...overrides,
+  };
+}
+
+function makeApiKeyProvider(
+  id: string,
+  name: string,
+  kind: string,
+  hasSecret = true,
+): ConfigBootstrapPayload["providers"][number] {
+  const envNames: Record<string, string> = {
+    openai: "OPENAI_API_KEY",
+    google: "GEMINI_API_KEY",
+    deepgram: "DEEPGRAM_API_KEY",
+    elevenlabs: "ELEVENLABS_API_KEY",
+  };
+  return {
+    id,
+    name,
+    kind,
+    auth_mode: "api_key",
+    responses_url: null,
+    generic_api_url: null,
+    secret_source: "env_var",
+    secret_env_var: envNames[kind] ?? `${kind.toUpperCase()}_API_KEY`,
+    has_secret: hasSecret,
+    auth_status: {
+      auth_mode: "api_key",
+      backend: null,
+      session_status: "missing",
+      has_session: false,
+      can_refresh: false,
+      account_id: null,
+      email: null,
+      plan_type: null,
+      expires_at: null,
+    },
   };
 }
 
@@ -348,6 +475,35 @@ async function openSettingsTab(
   const button = label.closest("button");
   expect(button).not.toBeNull();
   await user.click(button!);
+}
+
+async function openSelectListbox(
+  user: ReturnType<typeof userEvent.setup>,
+  control: HTMLElement,
+) {
+  await user.click(control);
+  return screen.findByRole("listbox");
+}
+
+async function selectRadixOption(
+  user: ReturnType<typeof userEvent.setup>,
+  control: HTMLElement,
+  optionName: string | RegExp,
+) {
+  const listbox = await openSelectListbox(user, control);
+  await user.click(within(listbox).getByRole("option", { name: optionName }));
+}
+
+async function openProviderKindMenu(user: ReturnType<typeof userEvent.setup>) {
+  return openSelectListbox(user, screen.getByRole("combobox", { name: "Kind" }));
+}
+
+async function selectProviderKind(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+) {
+  const listbox = await openProviderKindMenu(user);
+  await user.click(within(listbox).getByRole("option", { name: label }));
 }
 
 describe("SettingsPage", () => {
@@ -387,6 +543,10 @@ describe("SettingsPage", () => {
     });
     vi.mocked(setActiveModelProfile).mockResolvedValue({
       active_profile_id: "qa",
+      config_revision: "rev-2",
+    });
+    vi.mocked(setSttProvider).mockResolvedValue({
+      stt_provider_id: "deepgram-main",
       config_revision: "rev-2",
     });
     vi.mocked(startProviderAuthFlow).mockResolvedValue({
@@ -762,9 +922,10 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Notifications");
 
-    await user.selectOptions(
+    await selectRadixOption(
+      user,
       await screen.findByRole("combobox", { name: /notification sound/i }),
-      "pulse",
+      "Pulse",
     );
 
     expect(readNotificationPreferences().soundId).toBe("pulse");
@@ -1107,7 +1268,7 @@ describe("SettingsPage", () => {
         ),
       ),
     ).toEqual([
-      ["Providers", "Model Profiles"],
+      ["Providers", "Speech-to-text", "Model Profiles"],
       ["Commands", "Skills", "Agents"],
       ["Appearance", "Notifications"],
       ["Maintenance"],
@@ -1120,7 +1281,9 @@ describe("SettingsPage", () => {
     expect(
       await screen.findByRole("button", { name: "Add Provider" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("LLM provider connections and credentials")).toBeInTheDocument();
+    expect(
+      screen.getByText("Model and speech provider connections and credentials"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: /Providers\s*Connections and credentials/,
@@ -1695,14 +1858,235 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Model Profiles");
     await screen.findByRole("button", { name: "Add Profile" });
-    await user.selectOptions(
-      document.querySelector<HTMLSelectElement>('select[name="active-profile"]')!,
-      "qa",
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: /active default profile/i }),
+      "QA",
     );
 
     await waitFor(() =>
       expect(setActiveModelProfile).toHaveBeenCalledWith("qa", "rev-1"),
     );
+  });
+
+  it("saves the selected speech-to-text provider automatically", async () => {
+    const user = userEvent.setup();
+    const googleProvider = makeApiKeyProvider(
+      "google-main",
+      "Google Main",
+      "google",
+    );
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [...makeConfigBootstrap().providers, googleProvider],
+        stt_provider_id: null,
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Speech-to-text");
+    const providerSelect = await screen.findByRole("combobox", {
+      name: /speech-to-text provider/i,
+    });
+    const providerControl = providerSelect.closest(".active-profile-control");
+    expect(providerControl).not.toBeNull();
+    expect(
+      within(providerControl as HTMLElement).getByText("Active default"),
+    ).toBeInTheDocument();
+    expect(providerSelect).toHaveClass("active-profile-control__select");
+
+    await selectRadixOption(user, providerSelect, "Google Main (Google)");
+
+    expect(
+      screen.queryByRole("button", { name: "Save Speech Provider" }),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(setSttProvider).toHaveBeenCalledWith("google-main", "rev-1"),
+    );
+  });
+
+  it("shows speech provider empty state when no STT provider has credentials", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [
+          {
+            ...makeConfigBootstrap().providers[0],
+            has_secret: false,
+          },
+        ],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Speech-to-text");
+
+    expect(
+      await screen.findByText("No speech-to-text provider ready"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Add OpenAI, xAI, Google, Deepgram, or ElevenLabs provider credentials first.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/OpenAI Main \(OpenAI API\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("renders provider capability badges in the provider list", async () => {
+    const user = userEvent.setup();
+    const elevenLabsProvider = makeApiKeyProvider(
+      "elevenlabs-main",
+      "ElevenLabs Main",
+      "elevenlabs",
+    );
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [...makeConfigBootstrap().providers, elevenLabsProvider],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Providers");
+    const openAiCard = (await screen.findByText("OpenAI Main")).closest(
+      ".provider-card",
+    );
+    const chatGptCard = (await screen.findByText("ChatGPT Main")).closest(
+      ".provider-card",
+    );
+    const elevenLabsCard = (await screen.findByText("ElevenLabs Main")).closest(
+      ".provider-card",
+    );
+
+    expect(openAiCard).not.toBeNull();
+    expect(chatGptCard).not.toBeNull();
+    expect(elevenLabsCard).not.toBeNull();
+
+    expect(
+      within(openAiCard as HTMLElement).getByText("Model profiles"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(within(openAiCard as HTMLElement).getByText("STT")).toHaveAttribute(
+      "data-slot",
+      "badge",
+    );
+
+    expect(
+      within(chatGptCard as HTMLElement).getByText("Model profiles"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(within(chatGptCard as HTMLElement).queryByText("STT")).not.toBeInTheDocument();
+
+    expect(
+      within(elevenLabsCard as HTMLElement).queryByText("Model profiles"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(elevenLabsCard as HTMLElement).getByText("STT"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(
+      within(elevenLabsCard as HTMLElement).queryByText("STT-only"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks STT-only provider kinds in the Add Provider dropdown", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Providers");
+    await user.click(await screen.findByRole("button", { name: "Add Provider" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add Provider" });
+    await user.click(within(dialog).getByRole("combobox", { name: "Kind" }));
+
+    const listbox = await screen.findByRole("listbox");
+    const openAiOption = within(listbox)
+      .getByText("OpenAI API")
+      .closest('[role="option"]');
+    const googleOption = within(listbox)
+      .getByText("Google")
+      .closest('[role="option"]');
+    const deepgramOption = within(listbox)
+      .getByText("Deepgram")
+      .closest('[role="option"]');
+    const elevenLabsOption = within(listbox)
+      .getByText("ElevenLabs")
+      .closest('[role="option"]');
+
+    expect(openAiOption).not.toBeNull();
+    expect(googleOption).not.toBeNull();
+    expect(deepgramOption).not.toBeNull();
+    expect(elevenLabsOption).not.toBeNull();
+
+    expect(
+      within(openAiOption as HTMLElement).queryByText("STT"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(googleOption as HTMLElement).queryByText("STT"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(deepgramOption as HTMLElement).getByText("STT"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(
+      within(elevenLabsOption as HTMLElement).getByText("STT"),
+    ).toHaveAttribute("data-slot", "badge");
+  });
+
+  it("disables adding model profiles when only STT-only providers exist", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [
+          makeApiKeyProvider("deepgram-main", "Deepgram Main", "deepgram"),
+        ],
+        model_profiles: [],
+        active_profile_id: null,
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+
+    expect(await screen.findByRole("button", { name: "Add Profile" })).toBeDisabled();
+    expect(screen.getAllByText(/Add an LLM provider/i).length).toBeGreaterThan(0);
+  });
+
+  it("excludes STT-only providers from the model profile provider picker", async () => {
+    const user = userEvent.setup();
+    const deepgramProvider = makeApiKeyProvider(
+      "deepgram-main",
+      "Deepgram Main",
+      "deepgram",
+    );
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [makeConfigBootstrap().providers[0], deepgramProvider],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Add Profile" });
+    const providerSelect = within(dialog).getByRole("combobox", {
+      name: "Provider",
+    });
+    const listbox = await openSelectListbox(user, providerSelect);
+    expect(
+      within(listbox).getByRole("option", {
+        name: "OpenAI Main (OpenAI API)",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).queryByRole("option", {
+        name: "Deepgram Main (Deepgram)",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders tool visibility metadata with standard badge styling", async () => {
@@ -1960,7 +2344,7 @@ describe("SettingsPage", () => {
     expect(document.querySelector('input[name="provider-name"]')).toHaveClass(
       "task-form__input",
     );
-    expect(document.querySelector('select[name="provider-kind"]')).toHaveClass(
+    expect(within(dialog).getByRole("combobox", { name: "Kind" })).toHaveClass(
       "task-form__select",
     );
     const credentialSource = document.querySelector(".secret-mode-tabs");
@@ -1991,13 +2375,15 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
 
-    expect(screen.getAllByRole("option", { name: "OpenAI API" })[0]).toBeInTheDocument();
+    const menu = await openProviderKindMenu(user);
+    expect(within(menu).getByText("OpenAI API")).toBeInTheDocument();
     expect(
-      screen.getAllByRole("option", { name: "ChatGPT (Subscription)" })[0],
+      within(menu).getByText("ChatGPT (Subscription)"),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("option", { name: "GitHub Copilot (Subscription)" })[0],
+      within(menu).getByText("GitHub Copilot (Subscription)"),
     ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
     expect(screen.getByText("Uses an OpenAI API key.")).toBeInTheDocument();
   });
 
@@ -2016,12 +2402,14 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
-    await user.selectOptions(
-      document.querySelector('select[name="provider-kind"]') as HTMLSelectElement,
-      "azure",
-    );
+    await selectProviderKind(user, "Azure");
 
-    expect(screen.getByText("Azure")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("dialog", { name: "Add Provider" })).getByRole(
+        "combobox",
+        { name: "Kind" },
+      ),
+    ).toHaveTextContent("Azure");
     expect(screen.getByDisplayValue("AZURE_API_KEY")).toBeInTheDocument();
     expect(screen.getByText("Azure endpoint URL")).toBeInTheDocument();
     expect(
@@ -2063,10 +2451,7 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
-    await user.selectOptions(
-      document.querySelector('select[name="provider-kind"]') as HTMLSelectElement,
-      "chatgpt",
-    );
+    await selectProviderKind(user, "ChatGPT (Subscription)");
     await user.type(screen.getByPlaceholderText("e.g. My OpenAI"), "ChatGPT Starter");
 
     expect(
@@ -2303,6 +2688,8 @@ describe("SettingsPage", () => {
             supports_service_tier: false,
             supports_native_web_search: true,
             supports_image_inputs: false,
+            supports_model_profiles: true,
+            supports_stt: false,
           },
         },
       },
@@ -2342,16 +2729,14 @@ describe("SettingsPage", () => {
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
     );
 
-    const providerSelect = document.querySelector(
-      'select[name="provider-id"]',
-    ) as HTMLSelectElement;
-    await user.selectOptions(providerSelect, "xai-main");
+    const providerSelect = screen.getByRole("combobox", { name: "Provider" });
+    await selectRadixOption(user, providerSelect, "xAI Main (xAI)");
 
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("xai-main"),
     );
 
-    await user.selectOptions(providerSelect, "azure-main");
+    await selectRadixOption(user, providerSelect, "Azure Main (Azure)");
 
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("azure-main"),
@@ -2376,7 +2761,7 @@ describe("SettingsPage", () => {
     expect(document.querySelector('input[name="profile-name"]')).toHaveClass(
       "task-form__input",
     );
-    expect(document.querySelector('select[name="provider-id"]')).toHaveClass(
+    expect(within(dialog).getByRole("combobox", { name: "Provider" })).toHaveClass(
       "task-form__select",
     );
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute(
@@ -2400,18 +2785,32 @@ describe("SettingsPage", () => {
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
     );
 
-    const modelSelect = document.querySelector('select[name="model"]');
-    const subAgentModelSelect = document.querySelector(
-      'select[name="sub-agent-model"]',
-    );
-    expect(modelSelect).not.toBeNull();
-    expect(subAgentModelSelect).not.toBeNull();
+    const dialog = screen.getByRole("dialog", { name: "Add Profile" });
+    const modelSelect = within(dialog).getByRole("combobox", { name: "Model" });
+    const subAgentModelSelect = within(dialog).getByRole("combobox", {
+      name: "Sub-agent model",
+    });
+
+    let listbox = await openSelectListbox(user, modelSelect);
     expect(
-      screen.getAllByRole("option", { name: "GPT-5.4 (gpt-5.4)" }),
-    ).toHaveLength(2);
+      within(listbox).getByRole("option", { name: "GPT-5.4 (gpt-5.4)" }),
+    ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("option", { name: "GPT-5.4 mini (gpt-5.4-mini)" }),
-    ).toHaveLength(2);
+      within(listbox).getByRole("option", {
+        name: "GPT-5.4 mini (gpt-5.4-mini)",
+      }),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    listbox = await openSelectListbox(user, subAgentModelSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "GPT-5.4 (gpt-5.4)" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).getByRole("option", {
+        name: "GPT-5.4 mini (gpt-5.4-mini)",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("leaves the sub-agent model blank so the main profile model is used", async () => {
@@ -2433,17 +2832,17 @@ describe("SettingsPage", () => {
       document.querySelector<HTMLInputElement>('input[name="profile-name"]')!,
       "Opus",
     );
-    await user.selectOptions(
-      document.querySelector<HTMLSelectElement>('select[name="model"]')!,
-      "gpt-5.4",
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Model" }),
+      "GPT-5.4 (gpt-5.4)",
     );
     expect(
       await screen.findByText("Leave blank to use this profile's main model."),
     ).toBeInTheDocument();
     expect(
-      document.querySelector<HTMLSelectElement>('select[name="sub-agent-model"]')
-        ?.value,
-    ).toBe("");
+      screen.getByRole("combobox", { name: "Sub-agent model" }),
+    ).toHaveTextContent("Profile main model");
 
     await user.click(screen.getByRole("button", { name: "Add Profile" }));
 
@@ -2521,7 +2920,9 @@ describe("SettingsPage", () => {
 
     await screen.findByText("Missing authentication for provider 'openai'.");
     expect(document.querySelector('input[name="model"]')).not.toBeNull();
-    expect(document.querySelector('select[name="model"]')).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Model" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps an existing unknown model editable when discovery does not return it", async () => {
@@ -2570,9 +2971,10 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Model Profiles");
     await screen.findByRole("button", { name: "Add Profile" });
-    await user.selectOptions(
-      document.querySelector<HTMLSelectElement>('select[name="active-profile"]')!,
-      "qa",
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: /active default profile/i }),
+      "QA",
     );
 
     expect(

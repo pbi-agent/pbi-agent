@@ -8,6 +8,7 @@ import {
 } from "react";
 import { ImageIcon, XIcon } from "lucide-react";
 import type { BoardStage, ImageAttachment, ModelProfileView } from "../../types";
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from "../../lib/selectValues";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { FormDialog } from "../ui/form-dialog";
@@ -17,7 +18,13 @@ import {
   FieldLabel,
 } from "../ui/field";
 import { Input } from "../ui/input";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
@@ -40,7 +47,21 @@ export type EditableTask = {
   imageError?: string | null;
 };
 
-const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const SUPPORTED_IMAGE_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+const SUPPORTED_IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".heic",
+  ".heif",
+];
 
 type ImageFileInput = HTMLInputElement & {
   showPicker?: () => void;
@@ -48,6 +69,14 @@ type ImageFileInput = HTMLInputElement & {
 
 function imageFingerprint(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function isSupportedImageFile(file: File): boolean {
+  if (SUPPORTED_IMAGE_TYPES.has(file.type.toLowerCase())) {
+    return true;
+  }
+  const name = file.name.toLowerCase();
+  return SUPPORTED_IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension));
 }
 
 function formatBytes(byteCount: number): string {
@@ -98,9 +127,11 @@ export function TaskModal({
 
   const appendFiles = useCallback(
     (files: File[]) => {
-      const supportedFiles = files.filter((file) => SUPPORTED_IMAGE_TYPES.has(file.type));
+      const supportedFiles = files.filter(isSupportedImageFile);
       if (supportedFiles.length === 0) {
-        onChange({ imageError: "Only PNG, JPEG, and WEBP images are supported." });
+        onChange({
+          imageError: "Only PNG, JPEG, WEBP, HEIC, and HEIF images are supported.",
+        });
         return;
       }
       const existing = new Set([
@@ -194,7 +225,7 @@ export function TaskModal({
             ref={imageInputRef}
             type="file"
             name="task-image-upload"
-            accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif"
             multiple
             hidden
             onChange={handleImageInput}
@@ -238,7 +269,8 @@ export function TaskModal({
                     Add images
                   </Button>
                   <span className="task-form__attachment-note">
-                    PNG, JPEG, or WEBP. Paste screenshots into the prompt or add files here.
+                    PNG, JPEG, WEBP, HEIC, or HEIF. Paste screenshots into the
+                    prompt or add files here.
                     Sent with the task prompt on the first run.
                   </span>
                 </div>
@@ -324,36 +356,43 @@ export function TaskModal({
 
               <Field>
                 <FieldLabel htmlFor={stageId}>Stage</FieldLabel>
-                <NativeSelect
-                  id={stageId}
-                  className="task-form__select"
+                <Select
                   value={task.stage}
-                  onChange={(e) => onChange({ stage: e.target.value })}
-                  required
+                  onValueChange={(value) => onChange({ stage: value })}
                 >
+                  <SelectTrigger id={stageId} className="task-form__select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
                   {boardStages.map((stage) => (
-                    <NativeSelectOption key={stage.id} value={stage.id}>
+                    <SelectItem key={stage.id} value={stage.id}>
                       {stage.name}
-                    </NativeSelectOption>
+                    </SelectItem>
                   ))}
-                </NativeSelect>
+                  </SelectContent>
+                </Select>
               </Field>
 
               <Field>
                 <FieldLabel htmlFor={profileId}>Profile Override</FieldLabel>
-                <NativeSelect
-                  id={profileId}
-                  className="task-form__select"
-                  value={task.profileId}
-                  onChange={(e) => onChange({ profileId: e.target.value })}
+                <Select
+                  value={toSelectValue(task.profileId)}
+                  onValueChange={(value) =>
+                    onChange({ profileId: fromSelectValue(value) })
+                  }
                 >
-                  <NativeSelectOption value="">Use stage/default runtime</NativeSelectOption>
+                  <SelectTrigger id={profileId} className="task-form__select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                  <SelectItem value={EMPTY_SELECT_VALUE}>Use stage/default runtime</SelectItem>
                   {profiles.map((profile) => (
-                    <NativeSelectOption key={profile.id} value={profile.id}>
+                    <SelectItem key={profile.id} value={profile.id}>
                       {profile.name}
-                    </NativeSelectOption>
+                    </SelectItem>
                   ))}
-                </NativeSelect>
+                  </SelectContent>
+                </Select>
               </Field>
             </FieldGroup>
     </FormDialog>

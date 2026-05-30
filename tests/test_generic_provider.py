@@ -742,9 +742,9 @@ def test_generic_request_turn_retries_after_rate_limit(
     assert len(requests) == 2
     assert requests[0]["model"] == "openrouter/my-model"
     assert requests[1]["model"] == "openrouter/my-model"
-    assert waits == [1.25]
-    assert display_spy.rate_limit_notices == [(1.25, 1, 1)]
-    assert display_spy.retry_notices == [(1, 1)]
+    assert waits == [0.25]
+    assert display_spy.rate_limit_notices == [(0.25, 1, 10)]
+    assert display_spy.retry_notices == [(1, 10)]
 
 
 def test_generic_request_turn_records_observability(

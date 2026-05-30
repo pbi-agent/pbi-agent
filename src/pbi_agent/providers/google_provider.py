@@ -7,6 +7,7 @@ Conversation history is managed server-side via ``previous_interaction_id``.
 from __future__ import annotations
 
 import json
+import http.client
 import time
 import urllib.error
 import urllib.request
@@ -29,6 +30,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
+from pbi_agent.providers import retry as provider_retry
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
@@ -46,6 +48,7 @@ if TYPE_CHECKING:
     from pbi_agent.observability import RunTracer
 
 _REQUEST_TIMEOUT_SECS = 3600.0
+_MAX_INLINE_IMAGE_REQUEST_BYTES = 20 * 1024 * 1024
 _THINKING_LEVEL_MAP: dict[str, str] = {
     "low": "low",
     "medium": "medium",
@@ -72,6 +75,27 @@ _HTTP_ERROR_MESSAGES: dict[int, str] = {
     503: "The service may be temporarily overloaded or down.",
     504: "The service is unable to finish processing within the deadline.",
 }
+
+
+class _GoogleInteractionStatusError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        status: str,
+        code: str | None,
+        message: str,
+        payload: dict[str, Any],
+    ) -> None:
+        self.status = status
+        self.code = code
+        self.payload = payload
+        super().__init__(_google_interaction_error_message(status, code, message))
+
+    @property
+    def retryable(self) -> bool:
+        return provider_retry.is_retryable_semantic_status(
+            self.status
+        ) or provider_retry.is_retryable_semantic_error_code(self.code)
 
 
 class GoogleProvider(Provider):
@@ -173,7 +197,7 @@ class GoogleProvider(Provider):
             user_input = UserTurnInput(text=user_message)
 
         if user_input is not None:
-            input_value = _google_user_input_value(user_input)
+            input_value = _google_user_turn_input_value(user_input)
         elif tool_result_items is not None:
             input_value = tool_result_items
         else:
@@ -315,6 +339,15 @@ class GoogleProvider(Provider):
             instructions=instructions,
         )
         request_data = json.dumps(request_body).encode("utf-8")
+        if (
+            _contains_google_inline_image_data(request_body)
+            and len(request_data) > _MAX_INLINE_IMAGE_REQUEST_BYTES
+        ):
+            display.wait_stop()
+            raise ValueError(
+                "Google Interactions inline image requests must be 20 MB or smaller. "
+                "Use smaller images or fewer image attachments."
+            )
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -323,12 +356,14 @@ class GoogleProvider(Provider):
         }
 
         max_retries = self._settings.max_retries
+        rate_limit_max_retries = provider_retry.rate_limit_max_retries(max_retries)
+        retry_notice_max_retries = max_retries
         last_error: Exception | None = None
         last_error_message: str | None = None
 
-        for attempt in range(max_retries + 1):
+        for attempt in range(rate_limit_max_retries + 1):
             if attempt > 0:
-                display.retry_notice(attempt, max_retries)
+                display.retry_notice(attempt, retry_notice_max_retries)
 
             req_start = time.perf_counter()
             try:
@@ -341,7 +376,51 @@ class GoogleProvider(Provider):
                 with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECS) as resp:
                     response_json = json.loads(resp.read().decode("utf-8"))
 
-                _raise_if_interaction_failed(response_json)
+                try:
+                    _raise_if_interaction_failed(response_json)
+                except _GoogleInteractionStatusError as exc:
+                    last_error = exc
+                    last_error_message = str(exc)
+                    _trace_provider_call(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=self._settings.responses_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=request_body,
+                        response_payload=response_json,
+                        duration_ms=_duration_ms(req_start),
+                        status_code=200,
+                        success=False,
+                        error_message=str(exc),
+                        metadata={
+                            "attempt": attempt + 1,
+                            "semantic_error": True,
+                            "interaction_status": exc.status,
+                        },
+                    )
+                    if exc.retryable and attempt < max_retries:
+                        retry_notice_max_retries = max_retries
+                        _trace_provider_retry(
+                            tracer=tracer,
+                            provider=self._settings.provider,
+                            model=self._settings.model,
+                            url=self._settings.responses_url,
+                            request_config=self._settings.redacted(),
+                            request_payload=request_body,
+                            status_code=200,
+                            error_message=str(exc),
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            metadata={
+                                "semantic_error": True,
+                                "interaction_status": exc.status,
+                                "retryable": True,
+                            },
+                        )
+                        continue
+                    display.wait_stop()
+                    raise RuntimeError(str(exc)) from exc
                 result = self._parse_response(response_json)
                 _trace_provider_call(
                     tracer=tracer,
@@ -382,24 +461,50 @@ class GoogleProvider(Provider):
                     metadata={"attempt": attempt + 1},
                 )
                 if exc.code == 429:
-                    if attempt >= max_retries:
+                    if not provider_retry.should_retry_rate_limit(error_payload):
                         display.wait_stop()
                         raise RuntimeError(
                             _format_error_message(
-                                f"Google rate limit exceeded after {max_retries + 1} attempts",
+                                f"Google Interactions API error {exc.code}",
+                                error_payload,
+                            )
+                        ) from exc
+                    if attempt >= rate_limit_max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            _format_error_message(
+                                "Google rate limit exceeded after "
+                                f"{rate_limit_max_retries + 1} attempts",
                                 error_payload,
                             )
                         ) from exc
                     wait = _extract_retry_after(exc, attempt)
+                    retry_notice_max_retries = rate_limit_max_retries
                     display.rate_limit_notice(
                         wait_seconds=wait,
                         attempt=attempt + 1,
-                        max_retries=max_retries,
+                        max_retries=rate_limit_max_retries,
+                    )
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=self._settings.responses_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=request_body,
+                        status_code=exc.code,
+                        error_message=_format_error_message(
+                            f"Google Interactions API error {exc.code}",
+                            error_payload,
+                        ),
+                        attempt=attempt + 1,
+                        max_retries=rate_limit_max_retries,
+                        metadata={"retryable": True},
                     )
                     time.sleep(wait)
                     continue
 
-                if exc.code == 503:
+                if provider_retry.is_overload_http_status(exc.code):
                     if attempt >= max_retries:
                         display.wait_stop()
                         raise RuntimeError(
@@ -408,20 +513,56 @@ class GoogleProvider(Provider):
                                 error_payload,
                             )
                         ) from exc
-                    wait = min(2.0 * (2**attempt), 30.0) + 1.0
+                    wait = _extract_retry_after(exc, attempt)
+                    retry_notice_max_retries = max_retries
                     display.overload_notice(
                         wait_seconds=wait,
                         attempt=attempt + 1,
                         max_retries=max_retries,
                     )
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=self._settings.responses_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=request_body,
+                        status_code=exc.code,
+                        error_message=_format_error_message(
+                            f"Google Interactions API error {exc.code}",
+                            error_payload,
+                        ),
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={"retryable": True, "overloaded": True},
+                    )
                     time.sleep(wait)
                     continue
 
-                if exc.code >= 500:
+                if provider_retry.is_retryable_http_status(exc.code):
                     last_error = exc
                     last_error_message = _format_error_message(
                         f"Google request failed after {max_retries + 1} attempts",
                         error_payload,
+                    )
+                    if attempt >= max_retries:
+                        break
+                    retry_notice_max_retries = max_retries
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=self._settings.responses_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=request_body,
+                        status_code=exc.code,
+                        error_message=_format_error_message(
+                            f"Google Interactions API error {exc.code}",
+                            error_payload,
+                        ),
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={"retryable": True},
                     )
                     continue
 
@@ -432,7 +573,12 @@ class GoogleProvider(Provider):
                         error_payload,
                     )
                 ) from exc
-            except urllib.error.URLError as exc:
+            except (
+                http.client.IncompleteRead,
+                TimeoutError,
+                ConnectionError,
+                urllib.error.URLError,
+            ) as exc:
                 last_error = exc
                 last_error_message = None
                 _trace_provider_call(
@@ -447,6 +593,22 @@ class GoogleProvider(Provider):
                     success=False,
                     error_message=str(exc),
                     metadata={"attempt": attempt + 1},
+                )
+                if attempt >= max_retries:
+                    break
+                retry_notice_max_retries = max_retries
+                _trace_provider_retry(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=self._settings.responses_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=request_body,
+                    status_code=None,
+                    error_message=str(exc),
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    metadata={"retryable": True},
                 )
                 continue
 
@@ -465,18 +627,8 @@ class GoogleProvider(Provider):
         input_value: str | list[dict[str, Any]],
         instructions: str | None,
     ) -> dict[str, Any]:
-        request_input = (
-            [*self._restored_input, *input_value]
-            if isinstance(input_value, list)
-            and self._restored_input
-            and not self._previous_interaction_id
-            else input_value
-        )
-        if (
-            isinstance(input_value, str)
-            and self._restored_input
-            and not self._previous_interaction_id
-        ):
+        request_input: str | list[dict[str, Any]] = input_value
+        if self._restored_input and not self._previous_interaction_id:
             request_input = [
                 *self._restored_input,
                 {"role": "user", "content": input_value},
@@ -511,9 +663,7 @@ class GoogleProvider(Provider):
         saw_google_search_result = False
         pending_google_search_queries: dict[str, list[str]] = {}
 
-        output_items = response_json.get("outputs", [])
-        if not isinstance(output_items, list):
-            output_items = []
+        output_items = _google_response_content_items(response_json)
 
         for item in output_items:
             if not isinstance(item, dict):
@@ -623,12 +773,10 @@ def _extract_google_search_sources(
     """Extract web search sources from Google Interactions and grounding metadata."""
     sources: list[WebSearchSource] = []
 
-    output_items = response_json.get("outputs", [])
-    if isinstance(output_items, list):
-        for item in output_items:
-            if not isinstance(item, dict) or item.get("type") != "google_search_result":
-                continue
-            sources.extend(_extract_google_search_result_sources(item, response_json))
+    for item in _google_response_content_items(response_json):
+        if not isinstance(item, dict) or item.get("type") != "google_search_result":
+            continue
+        sources.extend(_extract_google_search_result_sources(item, response_json))
 
     if sources:
         return sources
@@ -688,11 +836,8 @@ def _extract_google_search_result_sources(
 def _extract_google_text_annotation_sources(
     response_json: dict[str, Any],
 ) -> list[WebSearchSource]:
-    output_items = response_json.get("outputs", [])
-    if not isinstance(output_items, list):
-        return []
     sources: list[WebSearchSource] = []
-    for item in output_items:
+    for item in _google_response_content_items(response_json):
         if not isinstance(item, dict) or item.get("type") != "text":
             continue
         annotations = item.get("annotations", [])
@@ -731,16 +876,50 @@ def _extract_google_grounding_metadata(
             if isinstance(metadata, dict):
                 return metadata
 
-    output_items = response_json.get("outputs", [])
-    if isinstance(output_items, list):
-        for item in output_items:
-            if not isinstance(item, dict):
-                continue
-            metadata = item.get("groundingMetadata")
-            if isinstance(metadata, dict):
-                return metadata
+    for item in _google_response_items(response_json):
+        if not isinstance(item, dict):
+            continue
+        metadata = item.get("groundingMetadata")
+        if isinstance(metadata, dict):
+            return metadata
+
+    for item in _google_response_content_items(response_json):
+        if not isinstance(item, dict):
+            continue
+        metadata = item.get("groundingMetadata")
+        if isinstance(metadata, dict):
+            return metadata
 
     return None
+
+
+def _google_response_items(response_json: dict[str, Any]) -> list[Any]:
+    for key in ("outputs", "steps"):
+        items = response_json.get(key)
+        if isinstance(items, list) and items:
+            return items
+    for key in ("outputs", "steps"):
+        items = response_json.get(key)
+        if isinstance(items, list):
+            return items
+    return []
+
+
+def _google_response_content_items(response_json: dict[str, Any]) -> list[Any]:
+    items: list[Any] = []
+    for item in _google_response_items(response_json):
+        if not isinstance(item, dict) or item.get("type") != "model_output":
+            items.append(item)
+            continue
+
+        content = item.get("content")
+        if isinstance(content, list):
+            items.extend(content)
+        elif isinstance(content, dict):
+            items.append(content)
+        elif isinstance(content, str) and content.strip():
+            items.append({"type": "text", "text": content})
+    return items
 
 
 def _extract_google_search_queries(
@@ -819,6 +998,12 @@ def _google_user_input_value(
     for image in user_input.images:
         content.append(_google_image_part(image))
     return content
+
+
+def _google_user_turn_input_value(
+    user_input: UserTurnInput,
+) -> str | list[dict[str, Any]]:
+    return _google_user_input_value(user_input)
 
 
 def _google_message_record_can_restore(message: MessageRecord) -> bool:
@@ -946,6 +1131,22 @@ def _google_image_part(image: ImageAttachment) -> dict[str, Any]:
     }
 
 
+def _contains_google_inline_image_data(value: Any) -> bool:
+    if isinstance(value, dict):
+        if (
+            value.get("type") == "image"
+            and isinstance(value.get("data"), str)
+            and value.get("data")
+        ):
+            return True
+        return any(
+            _contains_google_inline_image_data(child) for child in value.values()
+        )
+    if isinstance(value, list):
+        return any(_contains_google_inline_image_data(item) for item in value)
+    return False
+
+
 def _google_tool_definitions(
     tool_catalog: ToolCatalog, *, excluded_names: set[str] | None = None
 ) -> list[dict[str, Any]]:
@@ -985,12 +1186,37 @@ def _raise_if_interaction_failed(response_json: dict[str, Any]) -> None:
         if isinstance(error_obj, dict):
             code = str(error_obj.get("code", "unknown_error"))
             message = str(error_obj.get("message", "No error message"))
-            raise RuntimeError(f"Google interaction failed ({code}): {message}")
-        raise RuntimeError(f"Google interaction failed with status {status}.")
-    if status == "in_progress":
-        raise RuntimeError(
-            "Google interaction returned in_progress for a non-background request."
+            raise _GoogleInteractionStatusError(
+                status=str(status),
+                code=code,
+                message=message,
+                payload=response_json,
+            )
+        raise _GoogleInteractionStatusError(
+            status=str(status),
+            code=None,
+            message="",
+            payload=response_json,
         )
+    if status == "in_progress":
+        raise _GoogleInteractionStatusError(
+            status="in_progress",
+            code=None,
+            message="Google interaction returned in_progress for a non-background request.",
+            payload=response_json,
+        )
+
+
+def _google_interaction_error_message(
+    status: str,
+    code: str | None,
+    message: str,
+) -> str:
+    if code:
+        return f"Google interaction failed ({code}): {message}"
+    if status == "in_progress" and message:
+        return message
+    return f"Google interaction failed with status {status}."
 
 
 def _extract_thought_summary_text(summary: Any) -> str:
@@ -1043,17 +1269,14 @@ def _response_model_name(response_json: dict[str, Any]) -> str:
 
 
 def _read_error_body(exc: urllib.error.HTTPError) -> str:
-    try:
-        return exc.read().decode("utf-8", errors="replace")
-    except Exception:
-        return ""
+    return provider_retry.read_error_body(exc)
 
 
 def _normalize_http_error(
     exc: urllib.error.HTTPError,
     error_body: str,
 ) -> dict[str, Any]:
-    payload = _parse_error_payload(error_body)
+    payload = provider_retry.parse_error_payload(error_body)
     error_type = _HTTP_ERROR_TYPES.get(exc.code)
     message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
     request_id = _request_id_from_headers(exc)
@@ -1090,43 +1313,23 @@ def _normalize_http_error(
     return normalized
 
 
-def _parse_error_payload(error_body: str) -> dict[str, Any] | None:
-    stripped = error_body.strip()
-    if not stripped.startswith("{"):
-        return None
-    try:
-        payload = json.loads(stripped)
-    except json.JSONDecodeError:
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
 def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
-    if not exc.headers:
-        return None
-    for header in ("x-request-id", "request-id", "x-goog-request-id"):
-        request_id = exc.headers.get(header)
-        if isinstance(request_id, str) and request_id.strip():
-            return request_id.strip()
-    return None
+    return provider_retry.request_id_from_headers(
+        exc,
+        header_names=("x-request-id", "request-id", "x-goog-request-id"),
+    )
 
 
 def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
-    return f"{prefix}: {json.dumps(error_payload, sort_keys=True)}"
+    return provider_retry.format_error_message(prefix, error_payload)
 
 
 def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
-    try:
-        retry_after = exc.headers.get("Retry-After") if exc.headers else None
-        if retry_after:
-            return max(0.1, min(float(retry_after), 60.0)) + 1.0
-    except (TypeError, ValueError):
-        pass
-    return min(2.0 * (2**attempt), 30.0) + 1.0
+    return provider_retry.retry_after_seconds(exc, attempt)
 
 
 def _duration_ms(started_at: float) -> int:
-    return max(0, int((time.perf_counter() - started_at) * 1000))
+    return provider_retry.duration_ms(started_at)
 
 
 def _trace_provider_call(
@@ -1147,9 +1350,8 @@ def _trace_provider_call(
     error_message: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    if tracer is None:
-        return
-    tracer.log_model_call(
+    provider_retry.trace_provider_call(
+        tracer=tracer,
         provider=provider,
         model=model,
         url=url,
@@ -1163,6 +1365,35 @@ def _trace_provider_call(
         status_code=status_code,
         success=success,
         error_message=error_message,
+        metadata=metadata,
+    )
+
+
+def _trace_provider_retry(
+    *,
+    tracer,
+    provider: str,
+    model: str,
+    url: str,
+    request_config: dict[str, Any],
+    request_payload: dict[str, Any],
+    status_code: int | None,
+    error_message: str,
+    attempt: int,
+    max_retries: int,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    provider_retry.trace_provider_retry(
+        tracer=tracer,
+        provider=provider,
+        model=model,
+        url=url,
+        request_config=request_config,
+        request_payload=request_payload,
+        status_code=status_code,
+        error_message=error_message,
+        attempt=attempt,
+        max_retries=max_retries,
         metadata=metadata,
     )
 

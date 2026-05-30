@@ -26,8 +26,8 @@ from pbi_agent.config import (
     WebConfig,
     create_model_profile_config,
     create_provider_config,
-    find_command_config_by_alias,
     delete_provider_config,
+    find_command_config_by_alias,
     list_command_configs,
     load_internal_config,
     load_internal_config_snapshot,
@@ -40,6 +40,7 @@ from pbi_agent.config import (
     save_internal_config,
     save_internal_config_with_revision,
     select_active_model_profile,
+    select_stt_provider,
     update_maintenance_config,
     validate_allowed_tools,
 )
@@ -68,6 +69,8 @@ def _clear_runtime_env(monkeypatch) -> None:
         "XAI_API_KEY",
         "ANTHROPIC_API_KEY",
         "GOOGLE_API_KEY",
+        "DEEPGRAM_API_KEY",
+        "ELEVENLABS_API_KEY",
         "AZURE_OPENAI_API_KEY",
         "GITHUB_TOKEN",
         "GITHUB_COPILOT_API_KEY",
@@ -393,6 +396,138 @@ def test_config_store_roundtrip_and_active_profile_selection(monkeypatch) -> Non
     assert config.providers[0].api_key == "saved-openai-key"
     assert config.model_profiles[0].service_tier == "flex"
     assert config.model_profiles[0].allowed_tools == ("read", "web", "shell")
+
+
+def test_stt_only_provider_configs_roundtrip_and_metadata(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPGRAM_API_KEY", "deepgram-env-key")
+    create_provider_config(
+        ProviderConfig(
+            id="deepgram-main",
+            name="Deepgram Main",
+            kind="deepgram",
+            api_key_env="DEEPGRAM_API_KEY",
+        )
+    )
+    create_provider_config(
+        ProviderConfig(
+            id="elevenlabs-main",
+            name="ElevenLabs Main",
+            kind="elevenlabs",
+            api_key="eleven-key",
+        )
+    )
+
+    config = load_internal_config()
+
+    assert [item.kind for item in config.providers] == ["deepgram", "elevenlabs"]
+    assert config.providers[0].api_key_env == "DEEPGRAM_API_KEY"
+    assert config_module.PROVIDER_API_KEY_ENVS["xai"] == "XAI_API_KEY"
+    assert config_module.PROVIDER_API_KEY_ENVS["google"] == "GEMINI_API_KEY"
+    assert config_module.PROVIDER_API_KEY_ENVS["deepgram"] == "DEEPGRAM_API_KEY"
+    assert config_module.PROVIDER_API_KEY_ENVS["elevenlabs"] == "ELEVENLABS_API_KEY"
+    assert config_module.provider_has_secret(config.providers[0]) is True
+    assert config_module.provider_ui_metadata("xai")["supports_stt"] is True
+    assert config_module.provider_ui_metadata("xai")["supports_model_profiles"] is True
+    assert config_module.provider_ui_metadata("google")["supports_stt"] is True
+    assert (
+        config_module.provider_ui_metadata("google")["supports_model_profiles"] is True
+    )
+    assert config_module.provider_ui_metadata("deepgram")["supports_stt"] is True
+    assert (
+        config_module.provider_ui_metadata("deepgram")["supports_model_profiles"]
+        is False
+    )
+    assert config_module.provider_ui_metadata("openai")["supports_stt"] is True
+    assert (
+        config_module.provider_ui_metadata("openai")["supports_model_profiles"] is True
+    )
+
+
+def test_stt_only_provider_cannot_back_model_profiles_or_runtime(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    _clear_runtime_env(monkeypatch)
+    create_provider_config(
+        ProviderConfig(
+            id="deepgram-main",
+            name="Deepgram Main",
+            kind="deepgram",
+            api_key="deepgram-key",
+        )
+    )
+
+    with pytest.raises(ConfigError, match="LLM-capable provider kind"):
+        create_model_profile_config(
+            ModelProfileConfig(
+                id="dictation",
+                name="Dictation",
+                provider_id="deepgram-main",
+            )
+        )
+    with pytest.raises(ConfigError, match="LLM-capable provider kind"):
+        config_module.resolve_runtime_for_provider_id("deepgram-main")
+    with pytest.raises(ConfigError, match="--provider must be one of"):
+        config_module.Settings(provider="deepgram", api_key="deepgram-key").validate()
+    with pytest.raises(SystemExit):
+        _args("--provider", "deepgram", "run", "--prompt", "hi")
+
+
+def test_select_stt_provider_persists_validates_and_delete_clears_selection(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    create_provider_config(
+        ProviderConfig(
+            id="deepgram-main",
+            name="Deepgram Main",
+            kind="deepgram",
+            api_key="deepgram-key",
+        )
+    )
+    create_provider_config(
+        ProviderConfig(id="xai-main", name="xAI Main", kind="xai", api_key="x-key")
+    )
+    create_provider_config(
+        ProviderConfig(
+            id="google-main",
+            name="Google Main",
+            kind="google",
+            api_key="gemini-key",
+        )
+    )
+    create_provider_config(
+        ProviderConfig(
+            id="generic-main",
+            name="Generic Main",
+            kind="generic",
+            api_key="generic-key",
+        )
+    )
+
+    stt_provider_id, _ = select_stt_provider("deepgram-main")
+
+    assert stt_provider_id == "deepgram-main"
+    assert load_internal_config().web.stt_provider_id == "deepgram-main"
+
+    stt_provider_id, _ = select_stt_provider("xai-main")
+
+    assert stt_provider_id == "xai-main"
+    assert load_internal_config().web.stt_provider_id == "xai-main"
+
+    stt_provider_id, _ = select_stt_provider("google-main")
+
+    assert stt_provider_id == "google-main"
+    assert load_internal_config().web.stt_provider_id == "google-main"
+
+    with pytest.raises(ConfigError, match="does not support speech-to-text"):
+        select_stt_provider("generic-main")
+    with pytest.raises(ConfigError, match="Unknown provider ID 'missing'"):
+        select_stt_provider("missing")
+
+    delete_provider_config("google-main")
+
+    assert load_internal_config().web.stt_provider_id is None
 
 
 def test_find_command_config_by_alias_reads_command_files(

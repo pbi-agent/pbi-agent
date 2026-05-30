@@ -2407,11 +2407,13 @@ def test_openai_request_turn_retries_rate_limits_up_to_ten_times(
     ]
 
 
+@pytest.mark.parametrize("status_code", [503, 529])
 def test_openai_request_turn_retries_when_api_is_overloaded(
     monkeypatch,
     display_spy,
     make_http_error,
     make_http_response,
+    status_code: int,
 ) -> None:
     requests: list[dict[str, object]] = []
     waits: list[float] = []
@@ -2444,7 +2446,7 @@ def test_openai_request_turn_retries_when_api_is_overloaded(
         if len(requests) == 1:
             raise make_http_error(
                 url=DEFAULT_RESPONSES_URL,
-                code=503,
+                code=status_code,
                 body='{"error":{"message":"The engine is currently overloaded, please try again later"}}',
                 headers={"Retry-After": "0.25"},
             )

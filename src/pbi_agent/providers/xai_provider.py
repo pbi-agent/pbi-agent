@@ -7,6 +7,7 @@ history is managed server-side via ``previous_response_id``.
 from __future__ import annotations
 
 import json
+import http.client
 import re
 import time
 import urllib.error
@@ -33,6 +34,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
+from pbi_agent.providers import retry as provider_retry
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
@@ -301,12 +303,14 @@ class XAIProvider(Provider):
         }
 
         max_retries = self._settings.max_retries
+        rate_limit_max_retries = provider_retry.rate_limit_max_retries(max_retries)
+        retry_notice_max_retries = max_retries
         last_error: Exception | None = None
         last_error_message: str | None = None
 
-        for attempt in range(max_retries + 1):
+        for attempt in range(rate_limit_max_retries + 1):
             if attempt > 0:
-                display.retry_notice(attempt, max_retries)
+                display.retry_notice(attempt, retry_notice_max_retries)
 
             req_start = time.perf_counter()
             try:
@@ -359,28 +363,108 @@ class XAIProvider(Provider):
                     metadata={"attempt": attempt + 1},
                 )
                 if exc.code == 429:
-                    if attempt >= max_retries:
+                    if not provider_retry.should_retry_rate_limit(error_payload):
                         display.wait_stop()
                         raise RuntimeError(
                             _format_error_message(
-                                f"xAI rate limit exceeded after {max_retries + 1} attempts",
+                                f"xAI Responses API error {exc.code}",
+                                error_payload,
+                            )
+                        ) from exc
+                    if attempt >= rate_limit_max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            _format_error_message(
+                                "xAI rate limit exceeded after "
+                                f"{rate_limit_max_retries + 1} attempts",
                                 error_payload,
                             )
                         ) from exc
                     wait = _extract_retry_after(exc, attempt)
+                    retry_notice_max_retries = rate_limit_max_retries
                     display.rate_limit_notice(
                         wait_seconds=wait,
                         attempt=attempt + 1,
-                        max_retries=max_retries,
+                        max_retries=rate_limit_max_retries,
+                    )
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=self._settings.responses_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=request_body,
+                        status_code=exc.code,
+                        error_message=_format_error_message(
+                            f"xAI Responses API error {exc.code}",
+                            error_payload,
+                        ),
+                        attempt=attempt + 1,
+                        max_retries=rate_limit_max_retries,
+                        metadata={"retryable": True},
                     )
                     time.sleep(wait)
                     continue
 
-                if exc.code >= 500:
+                if provider_retry.is_overload_http_status(exc.code):
+                    if attempt >= max_retries:
+                        display.wait_stop()
+                        raise RuntimeError(
+                            _format_error_message(
+                                f"xAI API overloaded after {max_retries + 1} attempts",
+                                error_payload,
+                            )
+                        ) from exc
+                    wait = _extract_retry_after(exc, attempt)
+                    retry_notice_max_retries = max_retries
+                    display.overload_notice(
+                        wait_seconds=wait,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                    )
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=self._settings.responses_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=request_body,
+                        status_code=exc.code,
+                        error_message=_format_error_message(
+                            f"xAI Responses API error {exc.code}",
+                            error_payload,
+                        ),
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={"retryable": True, "overloaded": True},
+                    )
+                    time.sleep(wait)
+                    continue
+
+                if provider_retry.is_retryable_http_status(exc.code):
                     last_error = exc
                     last_error_message = _format_error_message(
                         f"xAI request failed after {max_retries + 1} attempts",
                         error_payload,
+                    )
+                    if attempt >= max_retries:
+                        break
+                    retry_notice_max_retries = max_retries
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=self._settings.responses_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=request_body,
+                        status_code=exc.code,
+                        error_message=_format_error_message(
+                            f"xAI Responses API error {exc.code}",
+                            error_payload,
+                        ),
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={"retryable": True},
                     )
                     continue
 
@@ -391,7 +475,12 @@ class XAIProvider(Provider):
                         error_payload,
                     )
                 ) from exc
-            except urllib.error.URLError as exc:
+            except (
+                http.client.IncompleteRead,
+                TimeoutError,
+                ConnectionError,
+                urllib.error.URLError,
+            ) as exc:
                 last_error = exc
                 last_error_message = None
                 _trace_provider_call(
@@ -406,6 +495,22 @@ class XAIProvider(Provider):
                     success=False,
                     error_message=str(exc),
                     metadata={"attempt": attempt + 1},
+                )
+                if attempt >= max_retries:
+                    break
+                retry_notice_max_retries = max_retries
+                _trace_provider_retry(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=self._settings.responses_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=request_body,
+                    status_code=None,
+                    error_message=str(exc),
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    metadata={"retryable": True},
                 )
                 continue
 
@@ -955,17 +1060,14 @@ def _response_model_name(response_json: dict[str, Any]) -> str:
 
 
 def _read_error_body(exc: urllib.error.HTTPError) -> str:
-    try:
-        return exc.read().decode("utf-8", errors="replace")
-    except Exception:
-        return ""
+    return provider_retry.read_error_body(exc)
 
 
 def _normalize_http_error(
     exc: urllib.error.HTTPError,
     error_body: str,
 ) -> dict[str, Any]:
-    payload = _parse_error_payload(error_body)
+    payload = provider_retry.parse_error_payload(error_body)
     error_type = _HTTP_ERROR_TYPES.get(exc.code)
     message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
     request_id = _request_id_from_headers(exc)
@@ -1003,43 +1105,23 @@ def _normalize_http_error(
     }
 
 
-def _parse_error_payload(error_body: str) -> dict[str, Any] | None:
-    stripped = error_body.strip()
-    if not stripped.startswith("{"):
-        return None
-    try:
-        payload = json.loads(stripped)
-    except json.JSONDecodeError:
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
 def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
-    if not exc.headers:
-        return None
-    for header_name in ("request-id", "x-request-id"):
-        request_id = exc.headers.get(header_name)
-        if isinstance(request_id, str) and request_id.strip():
-            return request_id.strip()
-    return None
+    return provider_retry.request_id_from_headers(
+        exc,
+        header_names=("request-id", "x-request-id"),
+    )
 
 
 def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
-    return f"{prefix}: {json.dumps(error_payload, sort_keys=True)}"
+    return provider_retry.format_error_message(prefix, error_payload)
 
 
 def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
-    try:
-        retry_after = exc.headers.get("Retry-After") if exc.headers else None
-        if retry_after:
-            return max(0.1, min(float(retry_after), 60.0)) + 1.0
-    except (TypeError, ValueError):
-        pass
-    return min(2.0 * (2**attempt), 30.0) + 1.0
+    return provider_retry.retry_after_seconds(exc, attempt)
 
 
 def _duration_ms(started_at: float) -> int:
-    return max(0, int((time.perf_counter() - started_at) * 1000))
+    return provider_retry.duration_ms(started_at)
 
 
 def _trace_provider_call(
@@ -1060,9 +1142,8 @@ def _trace_provider_call(
     error_message: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    if tracer is None:
-        return
-    tracer.log_model_call(
+    provider_retry.trace_provider_call(
+        tracer=tracer,
         provider=provider,
         model=model,
         url=url,
@@ -1076,6 +1157,35 @@ def _trace_provider_call(
         status_code=status_code,
         success=success,
         error_message=error_message,
+        metadata=metadata,
+    )
+
+
+def _trace_provider_retry(
+    *,
+    tracer,
+    provider: str,
+    model: str,
+    url: str,
+    request_config: dict[str, Any],
+    request_payload: dict[str, Any],
+    status_code: int | None,
+    error_message: str,
+    attempt: int,
+    max_retries: int,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    provider_retry.trace_provider_retry(
+        tracer=tracer,
+        provider=provider,
+        model=model,
+        url=url,
+        request_config=request_config,
+        request_payload=request_payload,
+        status_code=status_code,
+        error_message=error_message,
+        attempt=attempt,
+        max_retries=max_retries,
         metadata=metadata,
     )
 

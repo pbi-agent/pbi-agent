@@ -36,6 +36,11 @@ If no saved profile is selected, runtime settings fall back directly to CLI flag
 
 These are only consulted when both `--api-key` and `PBI_AGENT_API_KEY` are absent. That fallback still applies when a saved model profile is selected.
 
+For speech-to-text, saved STT providers first use their saved API key or
+explicit `--api-key-env` reference. If neither is set, pbi-agent checks the
+provider-specific fallback below. OpenAI STT can also fall back to
+`PBI_AGENT_API_KEY`.
+
 | Provider | Fallback env var |
 | --- | --- |
 | OpenAI API | `OPENAI_API_KEY` |
@@ -44,6 +49,8 @@ These are only consulted when both `--api-key` and `PBI_AGENT_API_KEY` are absen
 | Google | `GEMINI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 | Generic | `GENERIC_API_KEY` |
+| Deepgram STT | `DEEPGRAM_API_KEY` |
+| ElevenLabs STT | `ELEVENLABS_API_KEY` |
 
 ChatGPT and GitHub Copilot subscription providers use saved account sessions instead of provider-specific API key fallback variables.
 
@@ -61,5 +68,8 @@ PBI_AGENT_MAX_TOKENS=16384
 ```
 
 ::: tip
-Prefer provider-specific key variables only when you switch providers often and do not want a single shared `PBI_AGENT_API_KEY` to apply to every run.
+Prefer provider-specific key variables when you switch model providers often and
+do not want a single shared `PBI_AGENT_API_KEY` to apply to every model run. For
+STT-only providers, use the provider-specific variable or a saved provider API
+key.
 :::

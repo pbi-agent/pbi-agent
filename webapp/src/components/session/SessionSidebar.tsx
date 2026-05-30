@@ -138,6 +138,7 @@ export function SessionSidebar({
         onChange={(nextQuery) => onSearchQueryChange?.(nextQuery)}
         placeholder="Search sessions"
         ariaLabel="Search sessions"
+        clearLabel="Clear session search"
       />
 
       <div className="session-sidebar__list">

@@ -32,6 +32,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
+from pbi_agent.providers import retry as provider_retry
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.chatgpt_codex_backend import (
     ChatGPTCodexBackend,
@@ -59,7 +60,7 @@ _CHATGPT_WEBSOCKET_IDLE_TIMEOUT_SECS = 300.0
 _CHATGPT_WEBSOCKET_REQUEST_TIMEOUT_SECS = _REQUEST_TIMEOUT_SECS
 _CHATGPT_WEBSOCKET_RETRY_BACKOFF_BASE_SECS = 0.5
 _CHATGPT_WEBSOCKET_RETRY_BACKOFF_MAX_SECS = 8.0
-_RATE_LIMIT_MAX_RETRIES = 10
+_RATE_LIMIT_MAX_RETRIES = provider_retry.MODEL_RATE_LIMIT_MAX_RETRIES
 _HTTP_ERROR_TYPES = {
     429: "rate_limit_error",
     500: "server_error",
@@ -70,15 +71,7 @@ _HTTP_ERROR_MESSAGES = {
     500: "The server had an error while processing your request.",
     503: "The engine is currently overloaded, please try again later.",
 }
-_RETRYABLE_RESPONSE_ERROR_CODES = {
-    "api_error",
-    "internal",
-    "server_error",
-    "server_is_overloaded",
-    "service_unavailable",
-    "unavailable",
-    "overloaded_error",
-}
+_RETRYABLE_RESPONSE_ERROR_CODES = provider_retry.RETRYABLE_SEMANTIC_ERROR_CODES
 
 
 class _ResponseFailedError(RuntimeError):
@@ -431,6 +424,25 @@ class OpenAIProvider(Provider):
                         },
                     )
                     if attempt < max_retries:
+                        _trace_provider_retry(
+                            tracer=tracer,
+                            provider=self._settings.provider,
+                            model=self._settings.model,
+                            url=request_auth.request_url,
+                            request_config=self._settings.redacted(),
+                            request_payload=_sanitize_request_payload_for_observability(
+                                request_body
+                            ),
+                            status_code=200,
+                            error_message=str(exc),
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            metadata={
+                                "semantic_error": True,
+                                "incomplete": True,
+                                "retryable": True,
+                            },
+                        )
                         retry_notice_max_retries = max_retries
                         continue
                     display.wait_stop()
@@ -458,9 +470,45 @@ class OpenAIProvider(Provider):
                         },
                     )
                     if exc.retryable and attempt < max_retries:
+                        _trace_provider_retry(
+                            tracer=tracer,
+                            provider=self._settings.provider,
+                            model=self._settings.model,
+                            url=request_auth.request_url,
+                            request_config=self._settings.redacted(),
+                            request_payload=_sanitize_request_payload_for_observability(
+                                request_body
+                            ),
+                            status_code=200,
+                            error_message=str(exc),
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            metadata={
+                                "semantic_error": True,
+                                "retryable": True,
+                            },
+                        )
                         retry_notice_max_retries = max_retries
                         continue
                     if attempt < max_retries:
+                        _trace_provider_retry(
+                            tracer=tracer,
+                            provider=self._settings.provider,
+                            model=self._settings.model,
+                            url=request_auth.request_url,
+                            request_config=self._settings.redacted(),
+                            request_payload=_sanitize_request_payload_for_observability(
+                                request_body
+                            ),
+                            status_code=200,
+                            error_message=str(exc),
+                            attempt=attempt + 1,
+                            max_retries=max_retries,
+                            metadata={
+                                "semantic_error": True,
+                                "retryable": True,
+                            },
+                        )
                         if self._previous_response_id and not is_user_turn:
                             request_body = self._rebuild_chatgpt_websocket_request_without_previous_response(
                                 input_items=input_items,
@@ -554,11 +602,29 @@ class OpenAIProvider(Provider):
                         attempt=attempt + 1,
                         max_retries=rate_limit_max_retries,
                     )
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=_sanitize_request_payload_for_observability(
+                            request_body
+                        ),
+                        status_code=exc.code,
+                        error_message=_format_error_message(
+                            "OpenAI Responses API error",
+                            error_payload,
+                        ),
+                        attempt=attempt + 1,
+                        max_retries=rate_limit_max_retries,
+                        metadata={"retryable": True},
+                    )
                     time.sleep(wait)
                     continue
 
-                # Overloaded (503)
-                if exc.code == 503:
+                # Overloaded (503/529)
+                if provider_retry.is_overload_http_status(exc.code):
                     if attempt >= max_retries:
                         display.wait_stop()
                         raise RuntimeError(
@@ -574,11 +640,29 @@ class OpenAIProvider(Provider):
                         attempt=attempt + 1,
                         max_retries=max_retries,
                     )
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=_sanitize_request_payload_for_observability(
+                            request_body
+                        ),
+                        status_code=exc.code,
+                        error_message=_format_error_message(
+                            "OpenAI Responses API error",
+                            error_payload,
+                        ),
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={"retryable": True, "overloaded": True},
+                    )
                     time.sleep(wait)
                     continue
 
-                # Server errors (5xx) -- retry
-                if exc.code >= 500:
+                # Server errors -- retry shared transient statuses
+                if provider_retry.is_retryable_http_status(exc.code):
                     last_error = exc
                     last_error_message = _format_error_message(
                         "OpenAI Responses API error",
@@ -587,6 +671,21 @@ class OpenAIProvider(Provider):
                     if attempt >= max_retries:
                         break
                     retry_notice_max_retries = max_retries
+                    _trace_provider_retry(
+                        tracer=tracer,
+                        provider=self._settings.provider,
+                        model=self._settings.model,
+                        url=request_auth.request_url,
+                        request_config=self._settings.redacted(),
+                        request_payload=_sanitize_request_payload_for_observability(
+                            request_body
+                        ),
+                        status_code=exc.code,
+                        error_message=last_error_message,
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        metadata={"retryable": True},
+                    )
                     continue
 
                 # Client errors (4xx) -- don't retry
@@ -636,6 +735,21 @@ class OpenAIProvider(Provider):
                 if attempt >= max_retries:
                     break
                 retry_notice_max_retries = max_retries
+                _trace_provider_retry(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=_sanitize_request_payload_for_observability(
+                        request_body
+                    ),
+                    status_code=None,
+                    error_message=str(exc),
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    metadata={"retryable": True},
+                )
                 continue
             except urllib.error.URLError as exc:
                 last_error = exc
@@ -657,6 +771,21 @@ class OpenAIProvider(Provider):
                 if attempt >= max_retries:
                     break
                 retry_notice_max_retries = max_retries
+                _trace_provider_retry(
+                    tracer=tracer,
+                    provider=self._settings.provider,
+                    model=self._settings.model,
+                    url=request_auth.request_url,
+                    request_config=self._settings.redacted(),
+                    request_payload=_sanitize_request_payload_for_observability(
+                        request_body
+                    ),
+                    status_code=None,
+                    error_message=str(exc),
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    metadata={"retryable": True},
+                )
                 continue
 
         display.wait_stop()
@@ -2009,17 +2138,14 @@ def _response_model_name(response_json: dict[str, Any]) -> str:
 
 
 def _read_error_body(exc: urllib.error.HTTPError) -> str:
-    try:
-        return exc.read().decode("utf-8", errors="replace")
-    except Exception:
-        return ""
+    return provider_retry.read_error_body(exc)
 
 
 def _normalize_http_error(
     exc: urllib.error.HTTPError,
     error_body: str,
 ) -> dict[str, Any]:
-    payload = _parse_error_payload(error_body)
+    payload = provider_retry.parse_error_payload(error_body)
     error_type = _HTTP_ERROR_TYPES.get(exc.code)
     message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
     request_id = _request_id_from_headers(exc)
@@ -2057,41 +2183,16 @@ def _normalize_http_error(
     }
 
 
-def _parse_error_payload(error_body: str) -> dict[str, Any] | None:
-    stripped = error_body.strip()
-    if not stripped.startswith("{"):
-        return None
-    try:
-        payload = json.loads(stripped)
-    except json.JSONDecodeError:
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
 def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
-    if not exc.headers:
-        return None
-    request_id = exc.headers.get("x-request-id") or exc.headers.get("request-id")
-    if isinstance(request_id, str) and request_id.strip():
-        return request_id.strip()
-    return None
+    return provider_retry.request_id_from_headers(exc)
 
 
 def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
-    return f"{prefix}: {json.dumps(error_payload, sort_keys=True)}"
+    return provider_retry.format_error_message(prefix, error_payload)
 
 
 def _should_retry_rate_limit(error_payload: dict[str, Any]) -> bool:
-    error = error_payload.get("error")
-    if not isinstance(error, dict):
-        return True
-    error_type = error.get("type")
-    if (
-        isinstance(error_type, str)
-        and error_type.strip().lower() == "insufficient_quota"
-    ):
-        return False
-    return True
+    return provider_retry.should_retry_rate_limit(error_payload)
 
 
 def _should_retry_missing_previous_response(error_payload: dict[str, Any]) -> bool:
@@ -2106,18 +2207,11 @@ def _should_retry_missing_previous_response(error_payload: dict[str, Any]) -> bo
 
 
 def _extract_retry_after(exc: Any, attempt: int) -> float:
-    try:
-        headers = getattr(exc, "headers", None)
-        retry_after = headers.get("Retry-After") if headers else None
-        if retry_after:
-            return max(0.1, min(float(retry_after), 60.0))
-    except (TypeError, ValueError):
-        pass
-    return min(2.0 * (2**attempt), 30.0)
+    return provider_retry.retry_after_seconds(exc, attempt)
 
 
 def _duration_ms(started_at: float) -> int:
-    return max(0, int((time.perf_counter() - started_at) * 1000))
+    return provider_retry.duration_ms(started_at)
 
 
 def _redact_inline_image_url(value: str) -> str:
@@ -2167,9 +2261,8 @@ def _trace_provider_call(
     error_message: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    if tracer is None:
-        return
-    tracer.log_model_call(
+    provider_retry.trace_provider_call(
+        tracer=tracer,
         provider=provider,
         model=model,
         url=url,
@@ -2197,16 +2290,13 @@ def _trace_provider_request_start(
     request_payload: dict[str, Any],
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    if tracer is None:
-        return
-    tracer.log_event(
-        "model_call_start",
+    provider_retry.trace_provider_request_start(
+        tracer=tracer,
         provider=provider,
         model=model,
         url=url,
         request_config=request_config,
         request_payload=request_payload,
-        success=None,
         metadata=metadata,
     )
 
@@ -2225,24 +2315,18 @@ def _trace_provider_retry(
     max_retries: int,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    if tracer is None:
-        return
-    event_metadata = {
-        "attempt": attempt,
-        "max_retries": max_retries,
-        **(metadata or {}),
-    }
-    tracer.log_event(
-        "model_call_retry",
+    provider_retry.trace_provider_retry(
+        tracer=tracer,
         provider=provider,
         model=model,
         url=url,
         request_config=request_config,
         request_payload=request_payload,
         status_code=status_code,
-        success=False,
         error_message=error_message,
-        metadata=event_metadata,
+        attempt=attempt,
+        max_retries=max_retries,
+        metadata=metadata,
     )
 
 

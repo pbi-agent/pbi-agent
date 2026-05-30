@@ -403,6 +403,8 @@ export type ProviderKindMetadata = {
   supports_service_tier: boolean;
   supports_native_web_search: boolean;
   supports_image_inputs: boolean;
+  supports_model_profiles: boolean;
+  supports_stt: boolean;
 };
 
 export type ProviderAuthModeMetadata = {
@@ -580,6 +582,7 @@ export type ConfigBootstrapPayload = {
   skills: SkillView[];
   agents: AgentView[];
   active_profile_id: string | null;
+  stt_provider_id: string | null;
   maintenance: MaintenanceConfig;
   config_revision: string;
   options: ConfigOptions;

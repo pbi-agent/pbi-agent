@@ -499,17 +499,9 @@
   padding-inline: var(--sp-3);
 }
 
-.board-stage-editor__fields .task-form__select[data-slot="native-select"] {
+.board-stage-editor__fields .task-form__select[data-slot="select-trigger"] {
   padding-left: var(--sp-3);
-  padding-right: var(--sp-10);
-}
-
-.board-stage-editor__fields [data-slot="native-select-icon"] {
-  right: var(--sp-3);
-}
-
-.board-stage-editor__fields [data-slot="native-select-wrapper"] {
-  width: 100%;
+  padding-right: var(--sp-3);
 }
 
 .board-stage-editor__toggle {

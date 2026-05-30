@@ -113,7 +113,7 @@ def _native_folder_picker_available() -> bool:
             importlib.util.find_spec("tkinter") is not None
             and importlib.util.find_spec("tkinter.filedialog") is not None
         )
-    except ModuleNotFoundError:
+    except ImportError:
         return False
 
 

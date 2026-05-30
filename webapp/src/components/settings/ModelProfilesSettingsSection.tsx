@@ -1,10 +1,17 @@
 import { EditIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { ModelProfileView, ProviderView } from "../../types";
+import { EMPTY_SELECT_VALUE, fromSelectValueNullable, toSelectValue } from "../../lib/selectValues";
 import { EmptyState } from "../shared/EmptyState";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 const TOOL_VISIBILITY_LABELS: Record<string, string> = {
@@ -118,30 +125,38 @@ export function ModelProfilesSettingsSection({
               <TooltipTrigger asChild>
                 <span className="inline-flex">{addProfileButton}</span>
               </TooltipTrigger>
-              <TooltipContent>Add a provider first</TooltipContent>
+              <TooltipContent>Add an LLM provider first</TooltipContent>
             </Tooltip>
           ) : addProfileButton}
         </CardHeader>
         <CardContent className="settings-panel__body">
           <div className="active-profile-control">
             <span className="active-profile-control__label">Active default</span>
-            <NativeSelect
-              name="active-profile"
-              className="active-profile-control__select"
-              value={activeProfileId ?? ""}
-              onChange={(event) => onSetActiveProfile(event.target.value || null)}
+            <Select
+              value={toSelectValue(activeProfileId)}
+              onValueChange={(value) =>
+                onSetActiveProfile(fromSelectValueNullable(value))
+              }
             >
-              <NativeSelectOption value="">No default</NativeSelectOption>
+              <SelectTrigger
+                aria-label="Active default profile"
+                className="active-profile-control__select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={EMPTY_SELECT_VALUE}>No default</SelectItem>
               {profiles.map((profile) => (
-                <NativeSelectOption key={profile.id} value={profile.id}>
+                <SelectItem key={profile.id} value={profile.id}>
                   {profile.name}
-                </NativeSelectOption>
+                </SelectItem>
               ))}
-            </NativeSelect>
+              </SelectContent>
+            </Select>
           </div>
 
           {profiles.length === 0 ? (
-            <EmptyState title="No profiles configured" description="Add a model profile to configure runtime settings." />
+            <EmptyState title="No profiles configured" description="Add an LLM provider, then create a model profile to configure runtime settings." />
           ) : (
             profiles.map((profile) => (
               <ProfileCard

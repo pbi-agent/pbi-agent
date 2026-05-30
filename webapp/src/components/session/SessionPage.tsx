@@ -27,12 +27,14 @@ import {
   setSessionProfile,
   submitSessionQuestionResponse,
   refreshWorkspaceFileTree,
+  transcribeSttAudio,
   uploadSavedSessionImages,
 } from "../../api";
 import type {
   HistoryItem,
   LiveSession,
   ModelProfileView,
+  ProviderView,
   SessionDetailPayload,
   TimelineItem,
   LiveSessionSnapshot,
@@ -110,6 +112,13 @@ function matchesAltShiftShortcut(event: KeyboardEvent, key: string): boolean {
     && !event.ctrlKey
     && !event.metaKey
   );
+}
+
+function providerHasCredentials(provider: ProviderView): boolean {
+  if (provider.auth_mode === "api_key") {
+    return provider.has_secret;
+  }
+  return provider.auth_status.session_status === "connected";
 }
 
 function useTimelineDisplayProjection(
@@ -629,6 +638,50 @@ export function SessionPage({
           ?? supportsImageInputs
         )
       : supportsImageInputs;
+  const dictationAvailability = useMemo(() => {
+    const config = configQuery.data;
+    if (!config) {
+      return {
+        available: false,
+        reason: "Speech settings are still loading.",
+      };
+    }
+
+    const sttProviderId = config.stt_provider_id;
+    if (!sttProviderId) {
+      return {
+        available: false,
+        reason: "Choose a speech-to-text provider in Settings to use dictation.",
+      };
+    }
+
+    const provider = config.providers.find((item) => item.id === sttProviderId);
+    if (!provider) {
+      return {
+        available: false,
+        reason: "The selected speech-to-text provider is unavailable. Choose a provider in Settings.",
+      };
+    }
+
+    if (config.options.provider_metadata[provider.kind]?.supports_stt !== true) {
+      return {
+        available: false,
+        reason: `${provider.name} does not support speech-to-text. Choose another provider in Settings.`,
+      };
+    }
+
+    if (!providerHasCredentials(provider)) {
+      return {
+        available: false,
+        reason: `Add credentials for ${provider.name} in Settings to use dictation.`,
+      };
+    }
+
+    return {
+      available: true,
+      reason: null,
+    };
+  }, [configQuery.data]);
   const profileSelectorDisabled =
     isSubAgentRoute
     || modelProfiles.length === 0
@@ -728,6 +781,11 @@ export function SessionPage({
       setDirectSubmitPending(false);
     }
   };
+
+  const handleTranscribeDictation = useCallback(async (file: File) => {
+    const result = await transcribeSttAudio(file);
+    return result.text;
+  }, []);
 
   const handleProfileChange = async (nextProfileId: string) => {
     setPendingProfileId(nextProfileId);
@@ -1109,6 +1167,9 @@ export function SessionPage({
               onSubmit={handleSubmit}
               canInterrupt={canInterruptActiveTurn}
               isInterrupting={interruptMutation.isPending}
+              dictationAvailable={dictationAvailability.available}
+              dictationUnavailableReason={dictationAvailability.reason}
+              onTranscribeDictation={handleTranscribeDictation}
               restoredInput={sessionState?.restoredInput ?? null}
               onRestoredInputConsumed={() => {
                 if (selectedRouteSessionKey) {

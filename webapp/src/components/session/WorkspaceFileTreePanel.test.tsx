@@ -188,6 +188,24 @@ describe("WorkspaceFileTreePanel", () => {
     expect(screen.getByRole("button", { name: /MEMORY\.md/i })).toBeInTheDocument();
   });
 
+  it("clears the file search from the styled clear button", async () => {
+    const user = userEvent.setup();
+    mockFetchTree.mockResolvedValue(treePayload());
+
+    renderWithProviders(
+      <WorkspaceFileTreePanel workspaceKey="workspace" onClose={vi.fn()} />,
+    );
+
+    const search = screen.getByRole("searchbox", { name: "Search files" });
+    await user.type(search, "app");
+    expect(search).toHaveValue("app");
+
+    await user.click(screen.getByRole("button", { name: "Clear file search" }));
+
+    expect(search).toHaveValue("");
+    expect(search).toHaveFocus();
+  });
+
   it("does not scroll the selected file when toggling folders", async () => {
     const user = userEvent.setup();
     const requestAnimationFrameSpy = vi

@@ -42,6 +42,41 @@
 }
 
 /*
+ * Radix Select primitive. Like DropdownMenu, Select item/content padding is
+ * authored as Tailwind utilities in the shadcn component, but the app-wide
+ * unlayered reset (`* { padding: 0 }`) wins over those layered utilities.
+ * Re-apply the shared spacing here so every Select popup keeps the same gutter.
+ */
+:where([data-slot="select-content"]) {
+  box-sizing: border-box;
+  padding: var(--sp-2);
+}
+
+:where([data-slot="select-group"]) {
+  box-sizing: border-box;
+  padding: var(--sp-1) 0;
+}
+
+:where([data-slot="select-label"]) {
+  box-sizing: border-box;
+  min-height: 2rem;
+  padding: var(--sp-2) var(--sp-3);
+  line-height: var(--leading-normal);
+}
+
+:where([data-slot="select-item"]) {
+  box-sizing: border-box;
+  min-height: 2rem;
+  padding: var(--sp-2) calc(var(--sp-6) + var(--sp-2)) var(--sp-2) var(--sp-3);
+  line-height: var(--leading-normal);
+}
+
+:where([data-slot="select-scroll-up-button"]),
+:where([data-slot="select-scroll-down-button"]) {
+  padding-block: var(--sp-1);
+}
+
+/*
  * One app-wide tooltip surface. Every tooltip, including custom fixed-position
  * tooltips, opts into this with `data-app-tooltip` so padding/color/border stay
  * coherent and no local arrow element can overlap the text.
