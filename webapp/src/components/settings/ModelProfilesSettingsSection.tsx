@@ -118,7 +118,7 @@ export function ModelProfilesSettingsSection({
               <TooltipTrigger asChild>
                 <span className="inline-flex">{addProfileButton}</span>
               </TooltipTrigger>
-              <TooltipContent>Add a provider first</TooltipContent>
+              <TooltipContent>Add an LLM provider first</TooltipContent>
             </Tooltip>
           ) : addProfileButton}
         </CardHeader>
@@ -141,7 +141,7 @@ export function ModelProfilesSettingsSection({
           </div>
 
           {profiles.length === 0 ? (
-            <EmptyState title="No profiles configured" description="Add a model profile to configure runtime settings." />
+            <EmptyState title="No profiles configured" description="Add an LLM provider, then create a model profile to configure runtime settings." />
           ) : (
             profiles.map((profile) => (
               <ProfileCard

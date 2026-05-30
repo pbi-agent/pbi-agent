@@ -17,6 +17,7 @@ from pbi_agent.web.api import (
     config_router,
     events_router,
     provider_auth_router,
+    stt_router,
     system_router,
     tasks_router,
 )
@@ -102,6 +103,7 @@ def create_app(
     app.include_router(provider_auth_router)
     app.include_router(tasks_router)
     app.include_router(board_router)
+    app.include_router(stt_router)
     app.include_router(events_router)
 
     @app.get("/", response_class=HTMLResponse)

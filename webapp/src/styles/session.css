@@ -3048,6 +3048,11 @@
     0 0 0 3px color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
+.composer__input-row--recording {
+  border-color: color-mix(in srgb, var(--color-error) 52%, var(--color-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 13%, transparent);
+}
+
 .composer__input-row--processing::before {
   content: "";
   position: absolute;
@@ -3315,6 +3320,48 @@
   color: var(--color-text-tertiary);
 }
 
+.composer__dictation {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  transition:
+    background var(--duration-fast),
+    box-shadow var(--duration-fast),
+    transform var(--duration-fast);
+}
+
+.composer__dictation:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.composer__dictation:disabled {
+  background: var(--color-surface-3);
+  color: var(--color-text-tertiary);
+}
+
+.composer__dictation .spinner {
+  color: currentColor;
+}
+
+.composer__dictation--recording {
+  background: var(--color-error);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--color-error) 22%, transparent),
+    0 1px 2px color-mix(in srgb, var(--color-error) 35%, transparent);
+  animation: composer-dictation-pulse 1.25s ease-in-out infinite;
+}
+
+.composer__dictation--recording:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error) 88%, black 12%);
+  transform: scale(1.04);
+}
+
+.composer__dictation--transcribing {
+  cursor: progress;
+}
+
 .composer__stop {
   width: 32px;
   height: 32px;
@@ -3366,6 +3413,20 @@
   }
 }
 
+@keyframes composer-dictation-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--color-error) 22%, transparent),
+      0 1px 2px color-mix(in srgb, var(--color-error) 35%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 8px color-mix(in srgb, var(--color-error) 8%, transparent),
+      0 1px 2px color-mix(in srgb, var(--color-error) 35%, transparent);
+  }
+}
+
 @keyframes composer-processing-sheen {
   0% {
     transform: translateX(-72%);
@@ -3400,6 +3461,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .composer__stop,
+  .composer__dictation--recording,
   .composer__input-row--processing::before,
   .composer__input-row--processing::after {
     animation: none;

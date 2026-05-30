@@ -22,6 +22,8 @@ class ProviderKindMetadataModel(BaseModel):
     supports_service_tier: bool
     supports_native_web_search: bool
     supports_image_inputs: bool
+    supports_model_profiles: bool
+    supports_stt: bool
 
 
 class ProviderAuthModeMetadataModel(BaseModel):
@@ -318,6 +320,15 @@ class ActiveProfileResponse(BaseModel):
     config_revision: str
 
 
+class SttProviderRequest(BaseModel):
+    provider_id: str | None = None
+
+
+class SttProviderResponse(BaseModel):
+    stt_provider_id: str | None
+    config_revision: str
+
+
 class MaintenanceConfigModel(BaseModel):
     retention_days: int = Field(ge=1)
 
@@ -502,6 +513,7 @@ class ConfigBootstrapResponse(BaseModel):
     skills: list[SkillViewModel]
     agents: list[AgentViewModel]
     active_profile_id: str | None
+    stt_provider_id: str | None
     maintenance: MaintenanceConfigModel
     config_revision: str
     options: ConfigOptionsModel

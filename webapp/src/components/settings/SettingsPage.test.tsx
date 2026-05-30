@@ -25,6 +25,7 @@ import {
   setActiveModelProfile,
   setAgentEnabled,
   setSkillEnabled,
+  setSttProvider,
   startProviderAuthFlow,
   updateMaintenanceConfig,
 } from "../../api";
@@ -83,6 +84,7 @@ vi.mock("../../api", async (importOriginal) => {
     updateModelProfile: vi.fn(),
     deleteModelProfile: vi.fn(),
     setActiveModelProfile: vi.fn(),
+    setSttProvider: vi.fn(),
     startProviderAuthFlow: vi.fn(),
     fetchProviderAuthFlow: vi.fn(),
     fetchProviderUsageLimits: vi.fn(),
@@ -108,6 +110,7 @@ function makeConfigBootstrap(
   return {
     config_revision: "rev-1",
     active_profile_id: "analysis",
+    stt_provider_id: null,
     maintenance: { retention_days: 30 },
     providers: [
       {
@@ -239,7 +242,13 @@ function makeConfigBootstrap(
     skills: [],
     agents: [],
     options: {
-      provider_kinds: ["openai", "chatgpt", "github_copilot"],
+      provider_kinds: [
+        "openai",
+        "chatgpt",
+        "github_copilot",
+        "deepgram",
+        "elevenlabs",
+      ],
       reasoning_efforts: ["high", "medium"],
       openai_service_tiers: [],
       provider_metadata: {
@@ -264,6 +273,8 @@ function makeConfigBootstrap(
           supports_service_tier: true,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: true,
         },
         azure: {
           label: "Azure",
@@ -287,6 +298,8 @@ function makeConfigBootstrap(
           supports_service_tier: false,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: false,
         },
         chatgpt: {
           label: "ChatGPT (Subscription)",
@@ -309,6 +322,8 @@ function makeConfigBootstrap(
           supports_service_tier: true,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: false,
         },
         github_copilot: {
           label: "GitHub Copilot (Subscription)",
@@ -331,10 +346,95 @@ function makeConfigBootstrap(
           supports_service_tier: false,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: false,
+        },
+        deepgram: {
+          label: "Deepgram",
+          description: "Uses a Deepgram API key for speech-to-text.",
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+          },
+          default_model: "",
+          default_sub_agent_model: null,
+          default_responses_url: null,
+          default_generic_api_url: null,
+          supports_responses_url: false,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
+          supports_native_web_search: false,
+          supports_image_inputs: false,
+          supports_model_profiles: false,
+          supports_stt: true,
+        },
+        elevenlabs: {
+          label: "ElevenLabs",
+          description: "Uses an ElevenLabs API key for speech-to-text.",
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+          },
+          default_model: "",
+          default_sub_agent_model: null,
+          default_responses_url: null,
+          default_generic_api_url: null,
+          supports_responses_url: false,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
+          supports_native_web_search: false,
+          supports_image_inputs: false,
+          supports_model_profiles: false,
+          supports_stt: true,
         },
       },
     },
     ...overrides,
+  };
+}
+
+function makeApiKeyProvider(
+  id: string,
+  name: string,
+  kind: string,
+  hasSecret = true,
+): ConfigBootstrapPayload["providers"][number] {
+  const envNames: Record<string, string> = {
+    openai: "OPENAI_API_KEY",
+    deepgram: "DEEPGRAM_API_KEY",
+    elevenlabs: "ELEVENLABS_API_KEY",
+  };
+  return {
+    id,
+    name,
+    kind,
+    auth_mode: "api_key",
+    responses_url: null,
+    generic_api_url: null,
+    secret_source: "env_var",
+    secret_env_var: envNames[kind] ?? `${kind.toUpperCase()}_API_KEY`,
+    has_secret: hasSecret,
+    auth_status: {
+      auth_mode: "api_key",
+      backend: null,
+      session_status: "missing",
+      has_session: false,
+      can_refresh: false,
+      account_id: null,
+      email: null,
+      plan_type: null,
+      expires_at: null,
+    },
   };
 }
 
@@ -387,6 +487,10 @@ describe("SettingsPage", () => {
     });
     vi.mocked(setActiveModelProfile).mockResolvedValue({
       active_profile_id: "qa",
+      config_revision: "rev-2",
+    });
+    vi.mocked(setSttProvider).mockResolvedValue({
+      stt_provider_id: "deepgram-main",
       config_revision: "rev-2",
     });
     vi.mocked(startProviderAuthFlow).mockResolvedValue({
@@ -1107,7 +1211,7 @@ describe("SettingsPage", () => {
         ),
       ),
     ).toEqual([
-      ["Providers", "Model Profiles"],
+      ["Providers", "Speech-to-text", "Model Profiles"],
       ["Commands", "Skills", "Agents"],
       ["Appearance", "Notifications"],
       ["Maintenance"],
@@ -1120,7 +1224,9 @@ describe("SettingsPage", () => {
     expect(
       await screen.findByRole("button", { name: "Add Provider" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("LLM provider connections and credentials")).toBeInTheDocument();
+    expect(
+      screen.getByText("Model and speech provider connections and credentials"),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
         name: /Providers\s*Connections and credentials/,
@@ -1703,6 +1809,148 @@ describe("SettingsPage", () => {
     await waitFor(() =>
       expect(setActiveModelProfile).toHaveBeenCalledWith("qa", "rev-1"),
     );
+  });
+
+  it("saves the selected speech-to-text provider automatically", async () => {
+    const user = userEvent.setup();
+    const deepgramProvider = makeApiKeyProvider(
+      "deepgram-main",
+      "Deepgram Main",
+      "deepgram",
+    );
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [...makeConfigBootstrap().providers, deepgramProvider],
+        stt_provider_id: null,
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Speech-to-text");
+    const providerSelect = await screen.findByRole("combobox", {
+      name: /speech-to-text provider/i,
+    });
+
+    await user.selectOptions(providerSelect, "deepgram-main");
+
+    expect(
+      screen.queryByRole("button", { name: "Save Speech Provider" }),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() =>
+      expect(setSttProvider).toHaveBeenCalledWith("deepgram-main", "rev-1"),
+    );
+  });
+
+  it("shows speech provider empty state when no STT provider has credentials", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [
+          {
+            ...makeConfigBootstrap().providers[0],
+            has_secret: false,
+          },
+        ],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Speech-to-text");
+
+    expect(
+      await screen.findByText("No speech-to-text provider ready"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Add OpenAI, Deepgram, or ElevenLabs provider credentials first.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/OpenAI Main \(OpenAI API\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("marks STT-only providers in the provider list", async () => {
+    const user = userEvent.setup();
+    const deepgramProvider = makeApiKeyProvider(
+      "deepgram-main",
+      "Deepgram Main",
+      "deepgram",
+    );
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [...makeConfigBootstrap().providers, deepgramProvider],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Providers");
+    const deepgramCard = (await screen.findByText("Deepgram Main")).closest(
+      ".provider-card",
+    );
+
+    expect(deepgramCard).not.toBeNull();
+    expect(within(deepgramCard as HTMLElement).getByText("STT-only")).toHaveAttribute(
+      "data-slot",
+      "badge",
+    );
+  });
+
+  it("disables adding model profiles when only STT-only providers exist", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [
+          makeApiKeyProvider("deepgram-main", "Deepgram Main", "deepgram"),
+        ],
+        model_profiles: [],
+        active_profile_id: null,
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+
+    expect(await screen.findByRole("button", { name: "Add Profile" })).toBeDisabled();
+    expect(screen.getAllByText(/Add an LLM provider/i).length).toBeGreaterThan(0);
+  });
+
+  it("excludes STT-only providers from the model profile provider picker", async () => {
+    const user = userEvent.setup();
+    const deepgramProvider = makeApiKeyProvider(
+      "deepgram-main",
+      "Deepgram Main",
+      "deepgram",
+    );
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        providers: [makeConfigBootstrap().providers[0], deepgramProvider],
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Model Profiles");
+    await user.click(await screen.findByRole("button", { name: "Add Profile" }));
+
+    const providerSelect = document.querySelector(
+      'select[name="provider-id"]',
+    ) as HTMLSelectElement;
+    expect(
+      within(providerSelect).getByRole("option", {
+        name: "OpenAI Main (OpenAI API)",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(providerSelect).queryByRole("option", {
+        name: "Deepgram Main (Deepgram)",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders tool visibility metadata with standard badge styling", async () => {
@@ -2303,6 +2551,8 @@ describe("SettingsPage", () => {
             supports_service_tier: false,
             supports_native_web_search: true,
             supports_image_inputs: false,
+            supports_model_profiles: true,
+            supports_stt: false,
           },
         },
       },

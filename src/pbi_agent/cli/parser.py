@@ -13,7 +13,11 @@ from pbi_agent.auth.models import (
     AUTH_MODE_CHATGPT_ACCOUNT,
     AUTH_MODE_COPILOT_ACCOUNT,
 )
-from pbi_agent.config import OPENAI_SERVICE_TIERS, PROVIDER_KINDS
+from pbi_agent.config import (
+    OPENAI_SERVICE_TIERS,
+    PROVIDER_KINDS,
+    RUNTIME_PROVIDER_KINDS,
+)
 from pbi_agent.web.defaults import DEFAULT_WEB_PORT
 
 from .shared import DEFAULT_COMMAND, DEFAULT_SANDBOX_IMAGE
@@ -68,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     provider_group = parser.add_argument_group("Provider and API")
     provider_group.add_argument(
         "--provider",
-        choices=["openai", "azure", "xai", "google", "anthropic", "generic"],
+        choices=list(RUNTIME_PROVIDER_KINDS),
         metavar="PROVIDER",
         default=None,
         help=(

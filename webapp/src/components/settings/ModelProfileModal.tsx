@@ -541,7 +541,7 @@ export function ModelProfileModal({
                 >
                   {providers.length === 0 && (
                     <NativeSelectOption value="" disabled>
-                      No providers configured
+                      No model-capable providers configured
                     </NativeSelectOption>
                   )}
                   {providers.map((p) => (

@@ -55,8 +55,10 @@ PROVIDER_API_KEY_ENVS = {
     "google": "GEMINI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "generic": "GENERIC_API_KEY",
+    "deepgram": "DEEPGRAM_API_KEY",
+    "elevenlabs": "ELEVENLABS_API_KEY",
 }
-PROVIDER_KINDS = (
+MODEL_PROFILE_PROVIDER_KINDS = (
     "openai",
     "azure",
     "chatgpt",
@@ -65,6 +67,20 @@ PROVIDER_KINDS = (
     "google",
     "anthropic",
     "generic",
+)
+RUNTIME_PROVIDER_KINDS = (
+    "openai",
+    "azure",
+    "xai",
+    "google",
+    "anthropic",
+    "generic",
+)
+STT_PROVIDER_KINDS = ("openai", "deepgram", "elevenlabs")
+PROVIDER_KINDS = (
+    *MODEL_PROFILE_PROVIDER_KINDS,
+    "deepgram",
+    "elevenlabs",
 )
 INTERNAL_CONFIG_PATH_ENV = "PBI_AGENT_INTERNAL_CONFIG_PATH"
 PROFILE_ID_ENV = "PBI_AGENT_PROFILE_ID"
@@ -130,8 +146,8 @@ class Settings:
             self.api_key = self.auth.api_key
 
     def validate(self) -> None:
-        if self.provider not in PROVIDER_KINDS:
-            allowed = ", ".join(PROVIDER_KINDS)
+        if self.provider not in MODEL_PROFILE_PROVIDER_KINDS:
+            allowed = ", ".join(MODEL_PROFILE_PROVIDER_KINDS)
             raise ConfigError(f"--provider must be one of: {allowed}.")
         if self.provider in {"openai", "azure"}:
             if not self.api_key:
@@ -266,6 +282,16 @@ class ModelProfileConfig:
         self.name = self.name.strip()
         if not self.name:
             raise ConfigError("Model profile name cannot be empty.")
+        if (
+            provider_kind is not None
+            and provider_kind not in MODEL_PROFILE_PROVIDER_KINDS
+        ):
+            allowed = ", ".join(MODEL_PROFILE_PROVIDER_KINDS)
+            raise ConfigError(
+                "Model profiles require an LLM-capable provider kind. "
+                f"Provider kind '{provider_kind}' is not supported. "
+                f"Allowed provider kinds: {allowed}."
+            )
         if self.reasoning_effort is not None and self.reasoning_effort not in {
             "low",
             "medium",
@@ -368,6 +394,7 @@ class InternalConfig:
 @dataclass(slots=True)
 class WebConfig:
     active_profile_id: str | None = None
+    stt_provider_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -589,6 +616,8 @@ def parse_command_markdown(content: str) -> tuple[str, dict[str, str]]:
 
 
 def _default_responses_url(provider: str) -> str:
+    if provider not in MODEL_PROFILE_PROVIDER_KINDS:
+        return ""
     if provider == "azure":
         return ""
     if provider == "chatgpt":
@@ -609,6 +638,8 @@ def _default_responses_url_for_auth(provider_kind: str, auth_mode: str) -> str:
 
 
 def _default_model(provider: str) -> str:
+    if provider not in MODEL_PROFILE_PROVIDER_KINDS:
+        return ""
     if provider == "generic":
         return ""
     if provider == "azure":
@@ -625,6 +656,8 @@ def _default_model(provider: str) -> str:
 
 
 def _default_sub_agent_model(provider: str) -> str | None:
+    if provider not in MODEL_PROFILE_PROVIDER_KINDS:
+        return None
     if provider == "generic":
         return None
     if provider == "azure":
@@ -666,6 +699,14 @@ def provider_has_secret(provider: ProviderConfig) -> bool:
     return bool(provider.api_key)
 
 
+def provider_supports_model_profiles(provider_kind: str) -> bool:
+    return provider_kind in MODEL_PROFILE_PROVIDER_KINDS
+
+
+def provider_supports_stt(provider_kind: str) -> bool:
+    return provider_kind in STT_PROVIDER_KINDS
+
+
 def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
     auth_mode_metadata = {
         auth_mode: {
@@ -686,6 +727,8 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "google": "Google",
         "anthropic": "Anthropic",
         "generic": "OpenAI-compatible",
+        "deepgram": "Deepgram",
+        "elevenlabs": "ElevenLabs",
     }.get(provider_kind, provider_kind)
     kind_description = {
         "openai": "Uses an OpenAI API key.",
@@ -695,7 +738,10 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         ),
         "chatgpt": "Uses your ChatGPT subscription account.",
         "github_copilot": "Uses your GitHub Copilot subscription account.",
+        "deepgram": "Uses a Deepgram API key for speech-to-text.",
+        "elevenlabs": "Uses an ElevenLabs API key for speech-to-text.",
     }.get(provider_kind)
+    supports_model_profiles = provider_supports_model_profiles(provider_kind)
     return {
         "label": kind_label,
         "description": kind_description,
@@ -706,17 +752,21 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "default_sub_agent_model": _default_sub_agent_model(provider_kind),
         "default_responses_url": (
             _default_responses_url(provider_kind)
-            if provider_kind != "generic"
+            if supports_model_profiles and provider_kind != "generic"
             else None
         ),
         "default_generic_api_url": (
             DEFAULT_GENERIC_API_URL if provider_kind == "generic" else None
         ),
-        "supports_responses_url": provider_kind != "generic",
+        "supports_responses_url": supports_model_profiles
+        and provider_kind != "generic",
         "supports_generic_api_url": provider_kind == "generic",
         "supports_service_tier": provider_kind == "openai",
-        "supports_native_web_search": provider_kind != "generic",
-        "supports_image_inputs": True,
+        "supports_native_web_search": supports_model_profiles
+        and provider_kind != "generic",
+        "supports_image_inputs": supports_model_profiles,
+        "supports_model_profiles": supports_model_profiles,
+        "supports_stt": provider_supports_stt(provider_kind),
     }
 
 
@@ -822,8 +872,18 @@ def load_internal_config() -> InternalConfig:
             providers.append(provider)
 
     profiles: list[ModelProfileConfig] = []
+    providers_by_id = {provider.id: provider for provider in providers}
     for item in profiles_payload:
-        profile = _profile_from_payload(item)
+        provider_kind: str | None = None
+        if isinstance(item, dict):
+            provider_id = item.get("provider_id")
+            if isinstance(provider_id, str):
+                try:
+                    provider = providers_by_id.get(slugify(provider_id))
+                except ConfigError:
+                    provider = None
+                provider_kind = provider.kind if provider is not None else None
+        profile = _profile_from_payload(item, provider_kind=provider_kind)
         if profile is not None:
             profiles.append(profile)
 
@@ -913,6 +973,10 @@ def replace_provider_config(
         updated if existing.id == updated.id else existing
         for existing in config.providers
     ]
+    if config.web.stt_provider_id == updated.id and not provider_supports_stt(
+        updated.kind
+    ):
+        config.web.stt_provider_id = None
     config.providers.sort(key=_config_sort_key)
     revision = save_internal_config_with_revision(
         config, expected_revision=expected_revision
@@ -975,6 +1039,8 @@ def delete_provider_config(
     config.providers = [
         existing for existing in config.providers if existing.id != normalized_id
     ]
+    if config.web.stt_provider_id == normalized_id:
+        config.web.stt_provider_id = None
     return save_internal_config_with_revision(
         config, expected_revision=expected_revision
     )
@@ -1144,6 +1210,29 @@ def select_active_model_profile(
     return config.web.active_profile_id, revision
 
 
+def select_stt_provider(
+    provider_id: str | None,
+    *,
+    expected_revision: str | None = None,
+) -> tuple[str | None, str]:
+    config = load_internal_config()
+    if provider_id is None:
+        config.web.stt_provider_id = None
+    else:
+        provider = _provider_map(config).get(slugify(provider_id))
+        if provider is None:
+            raise ConfigError(f"Unknown provider ID '{provider_id}'.")
+        if not provider_supports_stt(provider.kind):
+            raise ConfigError(
+                f"Provider '{provider.id}' does not support speech-to-text."
+            )
+        config.web.stt_provider_id = provider.id
+    revision = save_internal_config_with_revision(
+        config, expected_revision=expected_revision
+    )
+    return config.web.stt_provider_id, revision
+
+
 def update_maintenance_config(
     *,
     retention_days: int,
@@ -1191,6 +1280,9 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         or os.getenv("PBI_AGENT_PROVIDER")
         or (selected_provider.kind if selected_provider else "openai")
     )
+    if provider_kind not in MODEL_PROFILE_PROVIDER_KINDS:
+        allowed = ", ".join(MODEL_PROFILE_PROVIDER_KINDS)
+        raise ConfigError(f"--provider must be one of: {allowed}.")
     default_auth_mode = (
         selected_provider.auth_mode
         if selected_provider is not None and selected_provider.kind == provider_kind
@@ -1484,6 +1576,13 @@ def _settings_from_runtime_parts(
     profile: ModelProfileConfig | None,
     verbose: bool,
 ) -> Settings:
+    if not provider_supports_model_profiles(provider.kind):
+        allowed = ", ".join(MODEL_PROFILE_PROVIDER_KINDS)
+        raise ConfigError(
+            "Runtime settings require an LLM-capable provider kind. "
+            f"Provider kind '{provider.kind}' is not supported. "
+            f"Allowed provider kinds: {allowed}."
+        )
     secret = _ResolvedSecret(api_key="")
     if (
         provider.auth_mode == AUTH_MODE_API_KEY
@@ -1717,7 +1816,11 @@ def _provider_from_payload(payload: object) -> ProviderConfig | None:
     return provider
 
 
-def _profile_from_payload(payload: object) -> ModelProfileConfig | None:
+def _profile_from_payload(
+    payload: object,
+    *,
+    provider_kind: str | None = None,
+) -> ModelProfileConfig | None:
     if not isinstance(payload, dict):
         return None
     profile_id = payload.get("id")
@@ -1751,7 +1854,7 @@ def _profile_from_payload(payload: object) -> ModelProfileConfig | None:
         ),
     )
     try:
-        profile.validate()
+        profile.validate(provider_kind=provider_kind)
     except ConfigError:
         return None
     return profile
@@ -1763,7 +1866,13 @@ def _web_config_from_payload(payload: object) -> WebConfig:
     active_profile_id = payload.get("active_profile_id")
     if active_profile_id is not None and not isinstance(active_profile_id, str):
         return WebConfig()
-    return WebConfig(active_profile_id=active_profile_id)
+    stt_provider_id = payload.get("stt_provider_id")
+    if stt_provider_id is not None and not isinstance(stt_provider_id, str):
+        return WebConfig()
+    return WebConfig(
+        active_profile_id=active_profile_id,
+        stt_provider_id=stt_provider_id,
+    )
 
 
 def _maintenance_config_from_payload(payload: object) -> MaintenanceConfig:
@@ -1841,6 +1950,9 @@ def _internal_config_payload(config: InternalConfig) -> dict[str, Any]:
     return {
         "providers": [asdict(provider) for provider in config.providers],
         "model_profiles": [asdict(profile) for profile in config.model_profiles],
-        "web": {"active_profile_id": config.web.active_profile_id},
+        "web": {
+            "active_profile_id": config.web.active_profile_id,
+            "stt_provider_id": config.web.stt_provider_id,
+        },
         "maintenance": {"retention_days": config.maintenance.retention_days},
     }

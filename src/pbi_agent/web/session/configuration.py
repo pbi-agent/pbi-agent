@@ -33,6 +33,7 @@ from pbi_agent.config import (
     resolve_runtime_for_provider_id,
     resolve_web_runtime,
     select_active_model_profile,
+    select_stt_provider,
     slugify,
     update_maintenance_config as save_maintenance_config,
 )
@@ -124,6 +125,7 @@ class ConfigurationMixin:
             "skills": self._installed_skill_views(),
             "agents": self._installed_agent_views(),
             "active_profile_id": config.web.active_profile_id,
+            "stt_provider_id": config.web.stt_provider_id,
             "maintenance": self._maintenance_view(config.maintenance),
             "config_revision": revision,
             "options": {
@@ -466,6 +468,20 @@ class ConfigurationMixin:
         )
         return {
             "active_profile_id": active_id,
+            "config_revision": revision,
+        }
+
+    def set_stt_provider(
+        self,
+        provider_id: str | None,
+        *,
+        expected_revision: str,
+    ) -> dict[str, Any]:
+        stt_provider_id, revision = select_stt_provider(
+            provider_id, expected_revision=expected_revision
+        )
+        return {
+            "stt_provider_id": stt_provider_id,
             "config_revision": revision,
         }
 

@@ -11,6 +11,7 @@ import {
   logoutProviderAuth,
   refreshProviderAuth,
   setActiveModelProfile,
+  setSttProvider,
   updateMaintenanceConfig,
   updateModelProfile,
   updateProvider,
@@ -46,6 +47,7 @@ import { ProvidersSettingsSection } from "./ProvidersSettingsSection";
 import type { ProviderPayload } from "./ProviderModal";
 import { ProviderModal } from "./ProviderModal";
 import { SkillsSettingsSection } from "./SkillsSettingsSection";
+import { SpeechSettingsSection } from "./SpeechSettingsSection";
 
 type ModalState =
   | { type: "none" }
@@ -65,6 +67,7 @@ type SettingsTabId =
   | "appearance"
   | "notifications"
   | "providers"
+  | "speech"
   | "model-profiles"
   | "skills"
   | "commands"
@@ -82,6 +85,11 @@ const SETTINGS_NAV_GROUPS: Array<{
         id: "providers",
         label: "Providers",
         description: "Connections and credentials",
+      },
+      {
+        id: "speech",
+        label: "Speech-to-text",
+        description: "Dictation provider",
       },
       {
         id: "model-profiles",
@@ -139,6 +147,16 @@ const SETTINGS_NAV_GROUPS: Array<{
 
 function shouldPromptProviderAuth(provider: ProviderView): boolean {
   return provider.auth_mode !== "api_key";
+}
+
+function providerSupportsModelProfiles(
+  provider: ProviderView,
+  data: ConfigBootstrapPayload,
+): boolean {
+  return (
+    data.options.provider_metadata[provider.kind]?.supports_model_profiles !==
+    false
+  );
 }
 
 export function SettingsPage() {
@@ -287,6 +305,15 @@ export function SettingsPage() {
     }
   }
 
+  async function handleSetSttProvider(providerId: string | null): Promise<void> {
+    try {
+      await setSttProvider(providerId, getRevision());
+      await invalidateBoth();
+    } catch (err) {
+      wrapStale(err);
+    }
+  }
+
   async function handleSaveMaintenance(retentionDays: number): Promise<void> {
     try {
       await updateMaintenanceConfig(retentionDays, getRevision());
@@ -351,6 +378,7 @@ className="settings-nav__header-close app-close-icon-button"
     );
   }
 
+  const configData = configQuery.data;
   const {
     providers,
     model_profiles,
@@ -358,9 +386,13 @@ className="settings-nav__header-close app-close-icon-button"
     skills,
     agents,
     active_profile_id,
+    stt_provider_id,
     maintenance,
     options,
-  } = configQuery.data;
+  } = configData;
+  const modelCapableProviders = providers.filter((provider) =>
+    providerSupportsModelProfiles(provider, configData),
+  );
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) closeSettings(); }}>
@@ -418,7 +450,7 @@ className="settings-nav__header-close app-close-icon-button"
                             <strong>First-time setup:</strong> To start using the app, complete these
                             steps:
                             <ol>
-                              <li>Add a provider and finish any sign-in step</li>
+                              <li>Add an LLM provider and finish any sign-in step</li>
                               <li>Create a model profile that uses that provider</li>
                             </ol>
                           </AlertDescription>
@@ -457,10 +489,19 @@ className="settings-nav__header-close app-close-icon-button"
                     />
                   )}
 
+                  {activeTab === "speech" && (
+                    <SpeechSettingsSection
+                      providers={providers}
+                      options={options}
+                      sttProviderId={stt_provider_id}
+                      onSave={handleSetSttProvider}
+                    />
+                  )}
+
                   {activeTab === "model-profiles" && (
                     <ModelProfilesSettingsSection
                       profiles={model_profiles}
-                      providers={providers}
+                      providers={modelCapableProviders}
                       activeProfileId={active_profile_id}
                       onSetActiveProfile={(profileId) => {
                         void handleSetActiveProfile(profileId);
@@ -535,7 +576,7 @@ className="settings-nav__header-close app-close-icon-button"
       )}
       {modal.type === "create-profile" && (
         <ModelProfileModal
-          providers={providers}
+          providers={modelCapableProviders}
           options={options}
           onSave={(payload) => saveProfile(payload)}
           onClose={() => setModal({ type: "none" })}
@@ -544,7 +585,7 @@ className="settings-nav__header-close app-close-icon-button"
       {modal.type === "edit-profile" && (
         <ModelProfileModal
           profile={modal.profile}
-          providers={providers}
+          providers={modelCapableProviders}
           options={options}
           onSave={(payload) => saveProfile(payload, modal.profile.id)}
           onClose={() => setModal({ type: "none" })}

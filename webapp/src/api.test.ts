@@ -22,6 +22,7 @@ import {
   searchSkillMentions,
   setActiveModelProfile,
   startProviderAuthFlow,
+  transcribeSttAudio,
   updateSession,
   uploadTaskImages,
 } from "./api";
@@ -97,6 +98,30 @@ describe("api helpers", () => {
       throw new Error("Expected task image upload call");
     }
     expect(uploadCall[0]).toBe("/api/tasks/images");
+    const init = uploadCall[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(new Headers(init.headers).has("Content-Type")).toBe(false);
+  });
+
+  it("uploads STT audio as form data", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ text: "hello world" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      transcribeSttAudio(new File(["RIFF"], "dictation.wav", { type: "audio/wav" })),
+    ).resolves.toEqual({ text: "hello world" });
+
+    const uploadCall = fetchMock.mock.calls[0];
+    if (!uploadCall) {
+      throw new Error("Expected STT upload call");
+    }
+    expect(uploadCall[0]).toBe("/api/stt/transcribe");
     const init = uploadCall[1] as RequestInit;
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(FormData);

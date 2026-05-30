@@ -63,6 +63,8 @@ function defaultApiKeyEnv(providerKind: string): string {
   if (providerKind === "google") return "GEMINI_API_KEY";
   if (providerKind === "anthropic") return "ANTHROPIC_API_KEY";
   if (providerKind === "generic") return "GENERIC_API_KEY";
+  if (providerKind === "deepgram") return "DEEPGRAM_API_KEY";
+  if (providerKind === "elevenlabs") return "ELEVENLABS_API_KEY";
   return "";
 }
 

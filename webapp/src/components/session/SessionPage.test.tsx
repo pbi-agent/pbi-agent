@@ -20,6 +20,7 @@ import {
   setActiveModelProfile,
   setSessionProfile,
   submitSessionQuestionResponse,
+  transcribeSttAudio,
   updateSession,
   uploadSavedSessionImages,
 } from "../../api";
@@ -151,6 +152,9 @@ vi.mock("./Composer", async () => {
         liveSessionId,
         interactiveMode,
         onSubmit,
+        dictationAvailable,
+        dictationUnavailableReason,
+        onTranscribeDictation,
         canInterrupt,
         isInterrupting,
         onInterrupt,
@@ -165,6 +169,9 @@ vi.mock("./Composer", async () => {
         inputHistory?: string[];
         interactiveMode: boolean;
         onSubmit: (payload: { text: string; images: File[] }) => Promise<void>;
+        dictationAvailable?: boolean;
+        dictationUnavailableReason?: string | null;
+        onTranscribeDictation?: (file: File) => Promise<string>;
         canInterrupt?: boolean;
         isInterrupting?: boolean;
         onInterrupt?: () => void;
@@ -184,6 +191,8 @@ vi.mock("./Composer", async () => {
           <div>Composer can create {String(canCreateSession)}</div>
           <div>Composer live session {liveSessionId ?? ""}</div>
           <div>Composer interactive {String(interactiveMode)}</div>
+          <div>Composer dictation available {String(dictationAvailable)}</div>
+          <div>Composer dictation reason {dictationUnavailableReason ?? ""}</div>
           <div>Composer restored {restoredInput ?? ""}</div>
           <div>Composer history {JSON.stringify(inputHistory ?? [])}</div>
           {canInterrupt ? (
@@ -226,6 +235,20 @@ vi.mock("./Composer", async () => {
           >
             Submit Shell
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              void (async () => {
+                if (!onTranscribeDictation) return;
+                const text = await onTranscribeDictation(
+                  new File(["RIFF"], "dictation.wav", { type: "audio/wav" }),
+                );
+                document.body.dataset.mockTranscript = text;
+              })();
+            }}
+          >
+            Transcribe Dictation
+          </button>
         </div>
       );
     }),
@@ -252,6 +275,7 @@ vi.mock("../../api", async (importOriginal) => {
     setSessionProfile: vi.fn(),
     setLiveSessionProfile: vi.fn(),
     submitSessionQuestionResponse: vi.fn(),
+    transcribeSttAudio: vi.fn(),
     updateSession: vi.fn(),
     uploadSavedSessionImages: vi.fn(),
   };
@@ -283,6 +307,7 @@ function makeConfigBootstrap(
   return {
     config_revision: "rev-1",
     active_profile_id: "analysis",
+    stt_provider_id: null,
     maintenance: { retention_days: 30 },
     providers: [
       {
@@ -378,6 +403,8 @@ function makeConfigBootstrap(
           supports_service_tier: true,
           supports_native_web_search: true,
           supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: true,
         },
       },
     },
@@ -536,6 +563,7 @@ function dispatchWindowKeydown(init: KeyboardEventInit) {
 describe("SessionPage", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    delete document.body.dataset.mockTranscript;
     useSidebarStore.setState({ isOpen: true });
     useSessionStore.setState({
       activeSessionKey: null,
@@ -578,6 +606,7 @@ describe("SessionPage", () => {
     vi.mocked(submitSessionQuestionResponse).mockResolvedValue(
       makeLiveSession({ live_session_id: "live-question", session_id: "session-1" }),
     );
+    vi.mocked(transcribeSttAudio).mockResolvedValue({ text: "dictated request" });
     vi.mocked(updateSession).mockResolvedValue(makeSessionRecord({ title: "Renamed session" }));
     vi.mocked(fetchWorkspaceFileTree).mockResolvedValue({
       items: [
@@ -900,6 +929,61 @@ describe("SessionPage", () => {
     expect(
       await screen.findByText('Composer history ["first request","!pwd"]'),
     ).toBeInTheDocument();
+  });
+
+  it("passes available dictation when the selected STT provider is credentialed", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap({
+      stt_provider_id: "openai-main",
+    }));
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Composer dictation available true")).toBeInTheDocument();
+    expect(screen.getByText("Composer dictation reason")).toHaveTextContent(
+      "Composer dictation reason",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Transcribe Dictation" }));
+
+    await waitFor(() => {
+      expect(transcribeSttAudio).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "dictation.wav", type: "audio/wav" }),
+      );
+    });
+    expect(document.body.dataset.mockTranscript).toBe("dictated request");
+  });
+
+  it("passes a Settings reason when no STT provider is selected", async () => {
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Composer dictation available false")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Composer dictation reason/)).toHaveTextContent(
+        "Choose a speech-to-text provider in Settings to use dictation.",
+      );
+    });
+  });
+
+  it("passes a Settings credentials reason when the selected STT provider has no credentials", async () => {
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap({
+      stt_provider_id: "openai-main",
+      providers: [
+        {
+          ...makeConfigBootstrap().providers[0],
+          has_secret: false,
+        },
+      ],
+    }));
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Composer dictation available false")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Composer dictation reason/)).toHaveTextContent(
+        "Add credentials for OpenAI Main in Settings to use dictation.",
+      );
+    });
   });
 
   it("uses the sandbox workspace label in the collapsed session topbar badge", async () => {

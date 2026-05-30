@@ -1,7 +1,7 @@
 # Session TODO
 
-- [x] Inspect native workspace picker failure path
-- [x] Add regression coverage for Tk import failures
-- [x] Patch availability check
-- [x] Run focused validation
-- [x] Update memory
+- [x] Inspect STT settings save flow and model-profile auto-save pattern.
+- [x] Update STT provider selection to auto-save and remove save button.
+- [x] Adjust focused frontend tests.
+- [x] Run focused validation.
+- [x] Update memory and hand off.

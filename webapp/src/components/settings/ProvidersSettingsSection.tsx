@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { ConfigOptions, ProviderAuthStatus, ProviderView } from "../../types";
 import { EmptyState } from "../shared/EmptyState";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 
@@ -37,6 +38,14 @@ function supportsUsageLimits(provider: ProviderView): boolean {
   );
 }
 
+function supportsModelProfiles(provider: ProviderView, options: ConfigOptions): boolean {
+  return options.provider_metadata[provider.kind]?.supports_model_profiles !== false;
+}
+
+function supportsStt(provider: ProviderView, options: ConfigOptions): boolean {
+  return options.provider_metadata[provider.kind]?.supports_stt === true;
+}
+
 function ProviderCard({
   provider,
   options,
@@ -61,6 +70,8 @@ function ProviderCard({
   const authStatus = provider.auth_status;
   const showAuthActions = provider.auth_mode !== "api_key";
   const showUsageAction = supportsUsageLimits(provider);
+  const showSttBadge = supportsStt(provider, options);
+  const sttOnly = showSttBadge && !supportsModelProfiles(provider, options);
 
   // Build compact subtitle
   const subtitleParts: string[] = [providerKindLabel(provider.kind, options)];
@@ -77,6 +88,13 @@ function ProviderCard({
         {subtitleParts.length > 0 && (
           <div className="provider-card__subtitle">
             {subtitleParts.join(" · ")}
+          </div>
+        )}
+        {showSttBadge && (
+          <div className="settings-item__meta">
+            <Badge size="meta" variant={sttOnly ? "warning" : "info"}>
+              {sttOnly ? "STT-only" : "STT"}
+            </Badge>
           </div>
         )}
       </div>
@@ -145,7 +163,7 @@ export function ProvidersSettingsSection({
         <CardHeader className="settings-panel__header">
           <div>
             <CardTitle className="settings-panel__title">Providers</CardTitle>
-            <div className="settings-panel__subtitle">LLM provider connections and credentials</div>
+            <div className="settings-panel__subtitle">Model and speech provider connections and credentials</div>
           </div>
           <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onCreate}>
             <PlusIcon data-icon="inline-start" />

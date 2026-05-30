@@ -1507,6 +1507,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         bootstrap_payload = bootstrap_response.json()
         assert bootstrap_payload["providers"] == []
         assert bootstrap_payload["model_profiles"] == []
+        assert bootstrap_payload["stt_provider_id"] is None
         assert [item["id"] for item in bootstrap_payload["commands"]] == [
             "implement",
             "plan",
@@ -1593,6 +1594,7 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert refreshed.status_code == 200
         refreshed_payload = refreshed.json()
         assert refreshed_payload["active_profile_id"] == "analysis"
+        assert refreshed_payload["stt_provider_id"] is None
         assert refreshed_payload["maintenance"] == {"retention_days": 14}
         assert {item["id"] for item in refreshed_payload["providers"]} == {
             "openai-main"
@@ -1612,6 +1614,28 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert refreshed_payload["options"]["provider_metadata"]["openai"][
             "auth_modes"
         ] == ["api_key"]
+        assert (
+            refreshed_payload["options"]["provider_metadata"]["openai"][
+                "supports_model_profiles"
+            ]
+            is True
+        )
+        assert (
+            refreshed_payload["options"]["provider_metadata"]["openai"]["supports_stt"]
+            is True
+        )
+        assert (
+            refreshed_payload["options"]["provider_metadata"]["deepgram"][
+                "supports_model_profiles"
+            ]
+            is False
+        )
+        assert (
+            refreshed_payload["options"]["provider_metadata"]["deepgram"][
+                "supports_stt"
+            ]
+            is True
+        )
         assert refreshed_payload["options"]["provider_metadata"]["openai"][
             "auth_mode_metadata"
         ] == {
@@ -1642,6 +1666,8 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             "supports_service_tier": False,
             "supports_native_web_search": True,
             "supports_image_inputs": True,
+            "supports_model_profiles": True,
+            "supports_stt": False,
         }
         analysis_profile = next(
             item
@@ -1675,6 +1701,68 @@ def test_config_writes_require_current_revision() -> None:
             json={"name": "xAI Main", "kind": "xai", "api_key": "x-key"},
         )
         assert stale_update.status_code == 409
+
+
+def test_config_stt_provider_endpoint_selects_rejects_and_delete_clears() -> None:
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        revision = client.get("/api/config/bootstrap").json()["config_revision"]
+        create_xai = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={"name": "xAI Main", "kind": "xai", "api_key": "x-key"},
+        )
+        assert create_xai.status_code == 200
+        revision = create_xai.json()["config_revision"]
+
+        create_deepgram = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "Deepgram Main",
+                "kind": "deepgram",
+                "api_key_env": "DEEPGRAM_API_KEY",
+            },
+        )
+        assert create_deepgram.status_code == 200
+        revision = create_deepgram.json()["config_revision"]
+
+        select_response = client.put(
+            "/api/config/stt-provider",
+            headers={"If-Match": revision},
+            json={"provider_id": "deepgram-main"},
+        )
+        assert select_response.status_code == 200
+        assert select_response.json()["stt_provider_id"] == "deepgram-main"
+        revision = select_response.json()["config_revision"]
+
+        refreshed = client.get("/api/config/bootstrap")
+        assert refreshed.status_code == 200
+        assert refreshed.json()["stt_provider_id"] == "deepgram-main"
+
+        reject_non_stt = client.put(
+            "/api/config/stt-provider",
+            headers={"If-Match": revision},
+            json={"provider_id": "xai-main"},
+        )
+        assert reject_non_stt.status_code == 400
+        assert "does not support speech-to-text" in reject_non_stt.json()["detail"]
+
+        reject_unknown = client.put(
+            "/api/config/stt-provider",
+            headers={"If-Match": revision},
+            json={"provider_id": "missing"},
+        )
+        assert reject_unknown.status_code == 404
+
+        delete_response = client.delete(
+            "/api/config/providers/deepgram-main",
+            headers={"If-Match": revision},
+        )
+        assert delete_response.status_code == 204
+
+        assert client.get("/api/config/bootstrap").json()["stt_provider_id"] is None
 
 
 def test_command_list_endpoint_returns_command_files(
