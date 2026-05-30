@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ConfigOptions, ProviderView } from "../../types";
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from "../../lib/selectValues";
 import { EmptyState } from "../shared/EmptyState";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 
 function providerKindLabel(providerKind: string, options: ConfigOptions): string {
   return options.provider_metadata[providerKind]?.label ?? providerKind;
@@ -113,33 +120,38 @@ export function SpeechSettingsSection({
                 <span className="active-profile-control__label">
                   Active default
                 </span>
-                <NativeSelect
-                  id="stt-provider"
-                  name="stt-provider"
-                  aria-label="Speech-to-text provider"
-                  className="active-profile-control__select"
-                  value={selectedProviderId}
+                <Select
+                  value={toSelectValue(selectedProviderId)}
                   disabled={isSaving}
-                  onChange={(event) =>
-                    void handleProviderChange(event.target.value)
+                  onValueChange={(value) =>
+                    void handleProviderChange(fromSelectValue(value))
                   }
                 >
-                  <NativeSelectOption value="">
-                    No speech provider
-                  </NativeSelectOption>
+                  <SelectTrigger
+                    id="stt-provider"
+                    aria-label="Speech-to-text provider"
+                    className="active-profile-control__select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={EMPTY_SELECT_VALUE}>
+                      No speech provider
+                    </SelectItem>
                   {activeProviderUnavailable && sttProviderId && (
-                    <NativeSelectOption value={sttProviderId} disabled>
+                    <SelectItem value={sttProviderId} disabled>
                       {activeProvider
                         ? `${providerOptionLabel(activeProvider, options)} — credentials needed`
                         : `${sttProviderId} — unavailable`}
-                    </NativeSelectOption>
+                    </SelectItem>
                   )}
                   {credentialedProviders.map((provider) => (
-                    <NativeSelectOption key={provider.id} value={provider.id}>
+                    <SelectItem key={provider.id} value={provider.id}>
                       {providerOptionLabel(provider, options)}
-                    </NativeSelectOption>
+                    </SelectItem>
                   ))}
-                </NativeSelect>
+                  </SelectContent>
+                </Select>
               </div>
 
               {activeProviderUnavailable && (

@@ -7,6 +7,7 @@ import type {
   ProviderModelView,
   ProviderView,
 } from "../../types";
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from "../../lib/selectValues";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { FormDialog } from "../ui/form-dialog";
@@ -20,7 +21,13 @@ import {
   FieldSet,
 } from "../ui/field";
 import { Input } from "../ui/input";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Switch } from "../ui/switch";
 
 const TOOL_VISIBILITY_OPTIONS = [
@@ -397,21 +404,27 @@ export function ModelProfileModal({
       return (
         <>
           <FieldLabel>{args.label}</FieldLabel>
-          <NativeSelect
-            name={args.name}
-            className="task-form__select"
-            value={args.value}
-            onChange={(e) => args.onChange(e.target.value)}
+          <Select
+            value={toSelectValue(args.value)}
+            onValueChange={(value) => args.onChange(fromSelectValue(value))}
           >
-            <NativeSelectOption value="">
-              {args.defaultOptionLabel ?? "Provider default"}
-            </NativeSelectOption>
+            <SelectTrigger
+              aria-label={args.label}
+              className="task-form__select"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={EMPTY_SELECT_VALUE}>
+                {args.defaultOptionLabel ?? "Provider default"}
+              </SelectItem>
             {args.options.map((option) => (
-              <NativeSelectOption key={option.value} value={option.value}>
+              <SelectItem key={option.value} value={option.value}>
                 {option.label}
-              </NativeSelectOption>
+              </SelectItem>
             ))}
-          </NativeSelect>
+            </SelectContent>
+          </Select>
           <Button
             type="button"
             variant="outline"
@@ -532,24 +545,31 @@ export function ModelProfileModal({
 
               <Field>
                 <FieldLabel>Provider</FieldLabel>
-                <NativeSelect
-                  name="provider-id"
-                  className="task-form__select"
-                  value={form.provider_id}
-                  onChange={(e) => handleProviderChange(e.target.value)}
-                  required
+                <Select
+                  value={toSelectValue(form.provider_id)}
+                  onValueChange={(value) =>
+                    handleProviderChange(fromSelectValue(value))
+                  }
                 >
+                  <SelectTrigger
+                    aria-label="Provider"
+                    className="task-form__select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
                   {providers.length === 0 && (
-                    <NativeSelectOption value="" disabled>
+                    <SelectItem value={EMPTY_SELECT_VALUE} disabled>
                       No model-capable providers configured
-                    </NativeSelectOption>
+                    </SelectItem>
                   )}
                   {providers.map((p) => (
-                    <NativeSelectOption key={p.id} value={p.id}>
+                    <SelectItem key={p.id} value={p.id}>
                       {p.name} ({providerKindLabel(p.kind)})
-                    </NativeSelectOption>
+                    </SelectItem>
                   ))}
-                </NativeSelect>
+                  </SelectContent>
+                </Select>
               </Field>
 
               <div className="task-form__row">
@@ -604,21 +624,29 @@ export function ModelProfileModal({
               <div className="task-form__row">
                 <Field>
                   <FieldLabel>Reasoning effort</FieldLabel>
-                  <NativeSelect
-                    name="reasoning-effort"
-                    className="task-form__select"
-                    value={form.reasoning_effort}
-                    onChange={(e) => set({ reasoning_effort: e.target.value })}
+                  <Select
+                    value={toSelectValue(form.reasoning_effort)}
+                    onValueChange={(value) =>
+                      set({ reasoning_effort: fromSelectValue(value) })
+                    }
                   >
-                    <NativeSelectOption value="">
-                      Provider default
-                    </NativeSelectOption>
+                    <SelectTrigger
+                      aria-label="Reasoning effort"
+                      className="task-form__select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_SELECT_VALUE}>
+                        Provider default
+                      </SelectItem>
                     {options.reasoning_efforts.map((r) => (
-                      <NativeSelectOption key={r} value={r}>
+                      <SelectItem key={r} value={r}>
                         {r}
-                      </NativeSelectOption>
+                      </SelectItem>
                     ))}
-                  </NativeSelect>
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Field>
                   <FieldLabel>Max tokens</FieldLabel>
@@ -637,21 +665,29 @@ export function ModelProfileModal({
               {kindMeta?.supports_service_tier && (
                 <Field>
                   <FieldLabel>Service tier</FieldLabel>
-                  <NativeSelect
-                    name="service-tier"
-                    className="task-form__select"
-                    value={form.service_tier}
-                    onChange={(e) => set({ service_tier: e.target.value })}
+                  <Select
+                    value={toSelectValue(form.service_tier)}
+                    onValueChange={(value) =>
+                      set({ service_tier: fromSelectValue(value) })
+                    }
                   >
-                    <NativeSelectOption value="">
-                      Provider default
-                    </NativeSelectOption>
+                    <SelectTrigger
+                      aria-label="Service tier"
+                      className="task-form__select"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_SELECT_VALUE}>
+                        Provider default
+                      </SelectItem>
                     {options.openai_service_tiers.map((t) => (
-                      <NativeSelectOption key={t} value={t}>
+                      <SelectItem key={t} value={t}>
                         {t}
-                      </NativeSelectOption>
+                      </SelectItem>
                     ))}
-                  </NativeSelect>
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
 

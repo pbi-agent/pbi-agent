@@ -333,18 +333,16 @@
   line-height: var(--leading-relaxed);
 }
 
-.task-form__select[data-slot="native-select"] {
+.task-form__select[data-slot="select-trigger"] {
   padding-left: var(--sp-3);
-  padding-right: var(--sp-10);
+  padding-right: var(--sp-3);
   cursor: pointer;
 }
 
-.task-form__body [data-slot="native-select-icon"] {
-  right: var(--sp-3);
-}
-
-.task-form__body [data-slot="native-select-wrapper"] {
-  width: 100%;
+.task-form__select [data-slot="select-value"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .provider-kind-select__trigger {

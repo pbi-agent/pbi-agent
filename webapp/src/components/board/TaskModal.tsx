@@ -8,6 +8,7 @@ import {
 } from "react";
 import { ImageIcon, XIcon } from "lucide-react";
 import type { BoardStage, ImageAttachment, ModelProfileView } from "../../types";
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from "../../lib/selectValues";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { FormDialog } from "../ui/form-dialog";
@@ -17,7 +18,13 @@ import {
   FieldLabel,
 } from "../ui/field";
 import { Input } from "../ui/input";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Textarea } from "../ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
@@ -324,36 +331,43 @@ export function TaskModal({
 
               <Field>
                 <FieldLabel htmlFor={stageId}>Stage</FieldLabel>
-                <NativeSelect
-                  id={stageId}
-                  className="task-form__select"
+                <Select
                   value={task.stage}
-                  onChange={(e) => onChange({ stage: e.target.value })}
-                  required
+                  onValueChange={(value) => onChange({ stage: value })}
                 >
+                  <SelectTrigger id={stageId} className="task-form__select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
                   {boardStages.map((stage) => (
-                    <NativeSelectOption key={stage.id} value={stage.id}>
+                    <SelectItem key={stage.id} value={stage.id}>
                       {stage.name}
-                    </NativeSelectOption>
+                    </SelectItem>
                   ))}
-                </NativeSelect>
+                  </SelectContent>
+                </Select>
               </Field>
 
               <Field>
                 <FieldLabel htmlFor={profileId}>Profile Override</FieldLabel>
-                <NativeSelect
-                  id={profileId}
-                  className="task-form__select"
-                  value={task.profileId}
-                  onChange={(e) => onChange({ profileId: e.target.value })}
+                <Select
+                  value={toSelectValue(task.profileId)}
+                  onValueChange={(value) =>
+                    onChange({ profileId: fromSelectValue(value) })
+                  }
                 >
-                  <NativeSelectOption value="">Use stage/default runtime</NativeSelectOption>
+                  <SelectTrigger id={profileId} className="task-form__select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                  <SelectItem value={EMPTY_SELECT_VALUE}>Use stage/default runtime</SelectItem>
                   {profiles.map((profile) => (
-                    <NativeSelectOption key={profile.id} value={profile.id}>
+                    <SelectItem key={profile.id} value={profile.id}>
                       {profile.name}
-                    </NativeSelectOption>
+                    </SelectItem>
                   ))}
-                </NativeSelect>
+                  </SelectContent>
+                </Select>
               </Field>
             </FieldGroup>
     </FormDialog>

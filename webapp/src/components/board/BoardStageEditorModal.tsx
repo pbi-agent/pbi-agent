@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import type { BoardStage, CommandView, ModelProfileView } from "../../types";
+import { EMPTY_SELECT_VALUE, fromSelectValue, toSelectValue } from "../../lib/selectValues";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { FormDialog } from "../ui/form-dialog";
@@ -11,7 +12,13 @@ import {
   FieldLabel,
 } from "../ui/field";
 import { Input } from "../ui/input";
-import { NativeSelect, NativeSelectOption } from "../ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { type EditableBoardStage, toEditableBoardStages } from "./stageConfig";
 
 const BACKLOG_STAGE_ID = "backlog";
@@ -196,36 +203,54 @@ export function BoardStageEditorModal({
                 <div className="task-form__row">
                   <Field>
                     <FieldLabel>Profile</FieldLabel>
-                    <NativeSelect
-                      className="task-form__select"
-                      value={item.profile_id}
-                      onChange={(event) => updateItem(index, { profile_id: event.target.value })}
+                    <Select
+                      value={toSelectValue(item.profile_id)}
+                      onValueChange={(value) =>
+                        updateItem(index, { profile_id: fromSelectValue(value) })
+                      }
                       disabled={fixedStage}
                     >
-                      <NativeSelectOption value="">No default profile</NativeSelectOption>
+                      <SelectTrigger
+                        aria-label="Profile"
+                        className="task-form__select"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                      <SelectItem value={EMPTY_SELECT_VALUE}>No default profile</SelectItem>
                       {profiles.map((profile) => (
-                        <NativeSelectOption key={profile.id} value={profile.id}>
+                        <SelectItem key={profile.id} value={profile.id}>
                           {profile.name}
-                        </NativeSelectOption>
+                        </SelectItem>
                       ))}
-                    </NativeSelect>
+                      </SelectContent>
+                    </Select>
                   </Field>
 
                   <Field>
                     <FieldLabel>Command</FieldLabel>
-                    <NativeSelect
-                      className="task-form__select"
-                      value={item.command_id}
-                      onChange={(event) => updateItem(index, { command_id: event.target.value })}
+                    <Select
+                      value={toSelectValue(item.command_id)}
+                      onValueChange={(value) =>
+                        updateItem(index, { command_id: fromSelectValue(value) })
+                      }
                       disabled={fixedStage}
                     >
-                      <NativeSelectOption value="">No default command</NativeSelectOption>
+                      <SelectTrigger
+                        aria-label="Command"
+                        className="task-form__select"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                      <SelectItem value={EMPTY_SELECT_VALUE}>No default command</SelectItem>
                       {commands.map((command) => (
-                        <NativeSelectOption key={command.id} value={command.id}>
+                        <SelectItem key={command.id} value={command.id}>
                           {command.name} ({command.slash_alias})
-                        </NativeSelectOption>
+                        </SelectItem>
                       ))}
-                    </NativeSelect>
+                      </SelectContent>
+                    </Select>
                   </Field>
                 </div>
 

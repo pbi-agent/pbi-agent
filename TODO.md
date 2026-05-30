@@ -1,5 +1,4 @@
-- [>] Audit current picker/select/dropdown usages in the web UI
-- [ ] Replace remaining native/custom pickers with shadcn/Radix Select where appropriate
-- [ ] Update focused tests for changed picker behavior
-- [ ] Run frontend validation
-- [ ] Update task memory
+- [x] Audit shadcn Select padding/style cascade
+- [x] Add shared Select overlay spacing fixes
+- [x] Run focused frontend validation
+- [x] Update task memory

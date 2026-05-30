@@ -1,15 +1,14 @@
 import { useState, type FormEvent } from "react";
-import { ChevronDownIcon } from "lucide-react";
 import type { ConfigOptions, ProviderView } from "../../types";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { FormDialog } from "../ui/form-dialog";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "../ui/field";
 import { Input } from "../ui/input";
@@ -296,39 +295,27 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
 
               <Field>
                 <FieldLabel>Kind</FieldLabel>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="task-form__select provider-kind-select__trigger"
-                      aria-label="Kind"
-                    >
-                      <ProviderKindOptionLabel
-                        providerKind={form.kind}
-                        options={options}
-                      />
-                      <ChevronDownIcon
-                        className="provider-kind-select__icon"
-                        aria-hidden="true"
-                      />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="provider-kind-select__content">
-                    <DropdownMenuRadioGroup
-                      value={form.kind}
-                      onValueChange={(value) => set({ kind: value })}
-                    >
-                      {options.provider_kinds.map((k) => (
-                        <DropdownMenuRadioItem key={k} value={k}>
-                          <ProviderKindOptionLabel
-                            providerKind={k}
-                            options={options}
-                          />
-                        </DropdownMenuRadioItem>
-                      ))}
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Select
+                  value={form.kind}
+                  onValueChange={(value) => set({ kind: value })}
+                >
+                  <SelectTrigger
+                    className="task-form__select provider-kind-select__trigger"
+                    aria-label="Kind"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="provider-kind-select__content">
+                    {options.provider_kinds.map((k) => (
+                      <SelectItem key={k} value={k}>
+                        <ProviderKindOptionLabel
+                          providerKind={k}
+                          options={options}
+                        />
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {kindMeta?.description && (
                   <FieldDescription>{kindMeta.description}</FieldDescription>
                 )}

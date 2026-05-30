@@ -450,19 +450,33 @@ async function openSettingsTab(
   await user.click(button!);
 }
 
+async function openSelectListbox(
+  user: ReturnType<typeof userEvent.setup>,
+  control: HTMLElement,
+) {
+  await user.click(control);
+  return screen.findByRole("listbox");
+}
+
+async function selectRadixOption(
+  user: ReturnType<typeof userEvent.setup>,
+  control: HTMLElement,
+  optionName: string | RegExp,
+) {
+  const listbox = await openSelectListbox(user, control);
+  await user.click(within(listbox).getByRole("option", { name: optionName }));
+}
+
 async function openProviderKindMenu(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "Kind" }));
-  return screen.findByRole("menu");
+  return openSelectListbox(user, screen.getByRole("combobox", { name: "Kind" }));
 }
 
 async function selectProviderKind(
   user: ReturnType<typeof userEvent.setup>,
   label: string,
 ) {
-  const menu = await openProviderKindMenu(user);
-  const item = within(menu).getByText(label).closest('[role="menuitemradio"]');
-  expect(item).not.toBeNull();
-  await user.click(item as HTMLElement);
+  const listbox = await openProviderKindMenu(user);
+  await user.click(within(listbox).getByRole("option", { name: label }));
 }
 
 describe("SettingsPage", () => {
@@ -881,9 +895,10 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Notifications");
 
-    await user.selectOptions(
+    await selectRadixOption(
+      user,
       await screen.findByRole("combobox", { name: /notification sound/i }),
-      "pulse",
+      "Pulse",
     );
 
     expect(readNotificationPreferences().soundId).toBe("pulse");
@@ -1816,9 +1831,10 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Model Profiles");
     await screen.findByRole("button", { name: "Add Profile" });
-    await user.selectOptions(
-      document.querySelector<HTMLSelectElement>('select[name="active-profile"]')!,
-      "qa",
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: /active default profile/i }),
+      "QA",
     );
 
     await waitFor(() =>
@@ -1853,7 +1869,7 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
     expect(providerSelect).toHaveClass("active-profile-control__select");
 
-    await user.selectOptions(providerSelect, "deepgram-main");
+    await selectRadixOption(user, providerSelect, "Deepgram Main (Deepgram)");
 
     expect(
       screen.queryByRole("button", { name: "Save Speech Provider" }),
@@ -1956,18 +1972,18 @@ describe("SettingsPage", () => {
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Add Provider" });
-    await user.click(within(dialog).getByRole("button", { name: "Kind" }));
+    await user.click(within(dialog).getByRole("combobox", { name: "Kind" }));
 
-    const menu = await screen.findByRole("menu");
-    const openAiOption = within(menu)
+    const listbox = await screen.findByRole("listbox");
+    const openAiOption = within(listbox)
       .getByText("OpenAI API")
-      .closest('[role="menuitemradio"]');
-    const deepgramOption = within(menu)
+      .closest('[role="option"]');
+    const deepgramOption = within(listbox)
       .getByText("Deepgram")
-      .closest('[role="menuitemradio"]');
-    const elevenLabsOption = within(menu)
+      .closest('[role="option"]');
+    const elevenLabsOption = within(listbox)
       .getByText("ElevenLabs")
-      .closest('[role="menuitemradio"]');
+      .closest('[role="option"]');
 
     expect(openAiOption).not.toBeNull();
     expect(deepgramOption).not.toBeNull();
@@ -2022,16 +2038,18 @@ describe("SettingsPage", () => {
     await openSettingsTab(user, "Model Profiles");
     await user.click(await screen.findByRole("button", { name: "Add Profile" }));
 
-    const providerSelect = document.querySelector(
-      'select[name="provider-id"]',
-    ) as HTMLSelectElement;
+    const dialog = await screen.findByRole("dialog", { name: "Add Profile" });
+    const providerSelect = within(dialog).getByRole("combobox", {
+      name: "Provider",
+    });
+    const listbox = await openSelectListbox(user, providerSelect);
     expect(
-      within(providerSelect).getByRole("option", {
+      within(listbox).getByRole("option", {
         name: "OpenAI Main (OpenAI API)",
       }),
     ).toBeInTheDocument();
     expect(
-      within(providerSelect).queryByRole("option", {
+      within(listbox).queryByRole("option", {
         name: "Deepgram Main (Deepgram)",
       }),
     ).not.toBeInTheDocument();
@@ -2292,7 +2310,7 @@ describe("SettingsPage", () => {
     expect(document.querySelector('input[name="provider-name"]')).toHaveClass(
       "task-form__input",
     );
-    expect(within(dialog).getByRole("button", { name: "Kind" })).toHaveClass(
+    expect(within(dialog).getByRole("combobox", { name: "Kind" })).toHaveClass(
       "task-form__select",
     );
     const credentialSource = document.querySelector(".secret-mode-tabs");
@@ -2352,7 +2370,12 @@ describe("SettingsPage", () => {
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
     await selectProviderKind(user, "Azure");
 
-    expect(screen.getByText("Azure")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("dialog", { name: "Add Provider" })).getByRole(
+        "combobox",
+        { name: "Kind" },
+      ),
+    ).toHaveTextContent("Azure");
     expect(screen.getByDisplayValue("AZURE_API_KEY")).toBeInTheDocument();
     expect(screen.getByText("Azure endpoint URL")).toBeInTheDocument();
     expect(
@@ -2672,16 +2695,14 @@ describe("SettingsPage", () => {
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
     );
 
-    const providerSelect = document.querySelector(
-      'select[name="provider-id"]',
-    ) as HTMLSelectElement;
-    await user.selectOptions(providerSelect, "xai-main");
+    const providerSelect = screen.getByRole("combobox", { name: "Provider" });
+    await selectRadixOption(user, providerSelect, "xAI Main (xAI)");
 
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("xai-main"),
     );
 
-    await user.selectOptions(providerSelect, "azure-main");
+    await selectRadixOption(user, providerSelect, "Azure Main (Azure)");
 
     await waitFor(() =>
       expect(fetchProviderModels).toHaveBeenCalledWith("azure-main"),
@@ -2706,7 +2727,7 @@ describe("SettingsPage", () => {
     expect(document.querySelector('input[name="profile-name"]')).toHaveClass(
       "task-form__input",
     );
-    expect(document.querySelector('select[name="provider-id"]')).toHaveClass(
+    expect(within(dialog).getByRole("combobox", { name: "Provider" })).toHaveClass(
       "task-form__select",
     );
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveAttribute(
@@ -2730,18 +2751,32 @@ describe("SettingsPage", () => {
       expect(fetchProviderModels).toHaveBeenCalledWith("openai-main"),
     );
 
-    const modelSelect = document.querySelector('select[name="model"]');
-    const subAgentModelSelect = document.querySelector(
-      'select[name="sub-agent-model"]',
-    );
-    expect(modelSelect).not.toBeNull();
-    expect(subAgentModelSelect).not.toBeNull();
+    const dialog = screen.getByRole("dialog", { name: "Add Profile" });
+    const modelSelect = within(dialog).getByRole("combobox", { name: "Model" });
+    const subAgentModelSelect = within(dialog).getByRole("combobox", {
+      name: "Sub-agent model",
+    });
+
+    let listbox = await openSelectListbox(user, modelSelect);
     expect(
-      screen.getAllByRole("option", { name: "GPT-5.4 (gpt-5.4)" }),
-    ).toHaveLength(2);
+      within(listbox).getByRole("option", { name: "GPT-5.4 (gpt-5.4)" }),
+    ).toBeInTheDocument();
     expect(
-      screen.getAllByRole("option", { name: "GPT-5.4 mini (gpt-5.4-mini)" }),
-    ).toHaveLength(2);
+      within(listbox).getByRole("option", {
+        name: "GPT-5.4 mini (gpt-5.4-mini)",
+      }),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    listbox = await openSelectListbox(user, subAgentModelSelect);
+    expect(
+      within(listbox).getByRole("option", { name: "GPT-5.4 (gpt-5.4)" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).getByRole("option", {
+        name: "GPT-5.4 mini (gpt-5.4-mini)",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("leaves the sub-agent model blank so the main profile model is used", async () => {
@@ -2763,17 +2798,17 @@ describe("SettingsPage", () => {
       document.querySelector<HTMLInputElement>('input[name="profile-name"]')!,
       "Opus",
     );
-    await user.selectOptions(
-      document.querySelector<HTMLSelectElement>('select[name="model"]')!,
-      "gpt-5.4",
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: "Model" }),
+      "GPT-5.4 (gpt-5.4)",
     );
     expect(
       await screen.findByText("Leave blank to use this profile's main model."),
     ).toBeInTheDocument();
     expect(
-      document.querySelector<HTMLSelectElement>('select[name="sub-agent-model"]')
-        ?.value,
-    ).toBe("");
+      screen.getByRole("combobox", { name: "Sub-agent model" }),
+    ).toHaveTextContent("Profile main model");
 
     await user.click(screen.getByRole("button", { name: "Add Profile" }));
 
@@ -2851,7 +2886,9 @@ describe("SettingsPage", () => {
 
     await screen.findByText("Missing authentication for provider 'openai'.");
     expect(document.querySelector('input[name="model"]')).not.toBeNull();
-    expect(document.querySelector('select[name="model"]')).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Model" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps an existing unknown model editable when discovery does not return it", async () => {
@@ -2900,9 +2937,10 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Model Profiles");
     await screen.findByRole("button", { name: "Add Profile" });
-    await user.selectOptions(
-      document.querySelector<HTMLSelectElement>('select[name="active-profile"]')!,
-      "qa",
+    await selectRadixOption(
+      user,
+      screen.getByRole("combobox", { name: /active default profile/i }),
+      "QA",
     );
 
     expect(
