@@ -35,6 +35,7 @@ class ElevenLabsSttBackend:
                 "timestamps_granularity": "none",
                 "diarize": "false",
                 "tag_audio_events": "false",
+                "no_verbatim": "true",
             },
             files=[
                 MultipartFile(
