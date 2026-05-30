@@ -1,3 +1,4 @@
-- [x] Fix OpenAI overload retry review finding
-- [x] Run focused OpenAI validation
+- [x] Inspect snapshot and locate model profile form markup/styles
+- [x] Remove redundant bottom card/container from the form
+- [x] Run focused frontend validation
 - [x] Update task memory
