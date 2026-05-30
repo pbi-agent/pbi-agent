@@ -1708,13 +1708,18 @@ def test_config_stt_provider_endpoint_selects_rejects_and_delete_clears() -> Non
 
     with TestClient(app) as client:
         revision = client.get("/api/config/bootstrap").json()["config_revision"]
-        create_xai = client.post(
+        create_generic = client.post(
             "/api/config/providers",
             headers={"If-Match": revision},
-            json={"name": "xAI Main", "kind": "xai", "api_key": "x-key"},
+            json={
+                "name": "Generic Main",
+                "kind": "generic",
+                "api_key": "generic-key",
+                "generic_api_url": "https://gateway.example.test/v1",
+            },
         )
-        assert create_xai.status_code == 200
-        revision = create_xai.json()["config_revision"]
+        assert create_generic.status_code == 200
+        revision = create_generic.json()["config_revision"]
 
         create_deepgram = client.post(
             "/api/config/providers",
@@ -1744,7 +1749,7 @@ def test_config_stt_provider_endpoint_selects_rejects_and_delete_clears() -> Non
         reject_non_stt = client.put(
             "/api/config/stt-provider",
             headers={"If-Match": revision},
-            json={"provider_id": "xai-main"},
+            json={"provider_id": "generic-main"},
         )
         assert reject_non_stt.status_code == 400
         assert "does not support speech-to-text" in reject_non_stt.json()["detail"]

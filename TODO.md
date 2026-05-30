@@ -1,4 +1,3 @@
-- [x] Audit shadcn Select padding/style cascade
-- [x] Add shared Select overlay spacing fixes
-- [x] Run focused frontend validation
-- [x] Update task memory
+- [X] Implement and test xAI REST speech-to-text provider support
+- [X] Fix web config STT-provider endpoint test for xAI now supporting STT
+- [X] Run final validation, update memory, and hand off

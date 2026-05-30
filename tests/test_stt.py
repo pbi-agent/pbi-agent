@@ -26,7 +26,9 @@ from pbi_agent.stt.audio import (
     convert_wav_to_pcm_s16le_16k_mono,
     convert_wav_to_wav_s16le_16k_mono,
 )
+from pbi_agent.stt.base import SttProviderError
 from pbi_agent.stt.elevenlabs import extract_transcript_text as extract_elevenlabs_text
+from pbi_agent.stt.xai import extract_transcript_text as extract_xai_text
 from pbi_agent.web.serve import create_app
 
 
@@ -96,6 +98,18 @@ def _headers(request: urllib.request.Request) -> dict[str, str]:
     return {key.lower(): value for key, value in request.header_items()}
 
 
+def _multipart_file_content(
+    body: bytes,
+    content_type: str,
+    *,
+    file_header_index: int,
+) -> bytes:
+    boundary = content_type.split("boundary=", 1)[1].encode("ascii")
+    file_content_start = body.index(b"\r\n\r\n", file_header_index) + 4
+    file_content_end = body.index(b"\r\n--" + boundary, file_content_start)
+    return body[file_content_start:file_content_end]
+
+
 def test_stt_openai_request_shape_and_transcript(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -131,6 +145,51 @@ def test_stt_openai_request_shape_and_transcript(
     assert b'name="response_format"\r\n\r\njson' in body
     assert b'name="file"; filename="upload.wav"' in body
     assert b"Content-Type: audio/wav" in body
+
+
+def test_stt_xai_request_shape_and_transcript(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wav_bytes = _wav_bytes(channels=2, sample_rate=8_000, frames=800)
+    _select_provider(
+        ProviderConfig(id="xai-stt", name="xAI STT", kind="xai", api_key="xai-key")
+    )
+    calls: list[urllib.request.Request] = []
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float) -> _FakeResponse:
+        del timeout
+        calls.append(request)
+        return _FakeResponse({"text": "hello from xai"})
+
+    monkeypatch.setattr(http_client, "urlopen", fake_urlopen)
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = _post_wav(client, wav_bytes)
+
+    assert response.status_code == 200
+    assert response.json() == {"text": "hello from xai"}
+    assert len(calls) == 1
+    request = calls[0]
+    headers = _headers(request)
+    assert request.full_url == "https://api.x.ai/v1/stt"
+    assert headers["authorization"] == "Bearer xai-key"
+    assert headers["content-type"].startswith("multipart/form-data; boundary=")
+    body = request.data
+    assert isinstance(body, bytes)
+    file_index = body.index(b'name="file"; filename="upload.wav"')
+    assert body.find(b"Content-Disposition: form-data", file_index + 1) == -1
+    assert b"Content-Type: audio/wav" in body
+    prepared_wav = _multipart_file_content(
+        body,
+        headers["content-type"],
+        file_header_index=file_index,
+    )
+    assert prepared_wav != wav_bytes
+    channels, sample_rate, frames = _wav_info(prepared_wav)
+    assert channels == 1
+    assert sample_rate == 16_000
+    assert frames == 1_600
 
 
 def test_stt_deepgram_request_shape_and_channel_join(
@@ -381,3 +440,11 @@ def test_elevenlabs_conversion_and_extraction(tmp_path: Path) -> None:
         )
         == "a\nb"
     )
+
+
+def test_xai_extraction_accepts_empty_and_rejects_invalid() -> None:
+    assert extract_xai_text({"text": ""}) == ""
+    with pytest.raises(SttProviderError, match="xAI returned"):
+        extract_xai_text({})
+    with pytest.raises(SttProviderError, match="xAI returned"):
+        extract_xai_text({"text": 123})

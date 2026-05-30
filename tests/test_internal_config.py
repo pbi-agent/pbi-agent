@@ -421,9 +421,12 @@ def test_stt_only_provider_configs_roundtrip_and_metadata(monkeypatch) -> None:
 
     assert [item.kind for item in config.providers] == ["deepgram", "elevenlabs"]
     assert config.providers[0].api_key_env == "DEEPGRAM_API_KEY"
+    assert config_module.PROVIDER_API_KEY_ENVS["xai"] == "XAI_API_KEY"
     assert config_module.PROVIDER_API_KEY_ENVS["deepgram"] == "DEEPGRAM_API_KEY"
     assert config_module.PROVIDER_API_KEY_ENVS["elevenlabs"] == "ELEVENLABS_API_KEY"
     assert config_module.provider_has_secret(config.providers[0]) is True
+    assert config_module.provider_ui_metadata("xai")["supports_stt"] is True
+    assert config_module.provider_ui_metadata("xai")["supports_model_profiles"] is True
     assert config_module.provider_ui_metadata("deepgram")["supports_stt"] is True
     assert (
         config_module.provider_ui_metadata("deepgram")["supports_model_profiles"]
@@ -480,18 +483,31 @@ def test_select_stt_provider_persists_validates_and_delete_clears_selection(
     create_provider_config(
         ProviderConfig(id="xai-main", name="xAI Main", kind="xai", api_key="x-key")
     )
+    create_provider_config(
+        ProviderConfig(
+            id="generic-main",
+            name="Generic Main",
+            kind="generic",
+            api_key="generic-key",
+        )
+    )
 
     stt_provider_id, _ = select_stt_provider("deepgram-main")
 
     assert stt_provider_id == "deepgram-main"
     assert load_internal_config().web.stt_provider_id == "deepgram-main"
 
+    stt_provider_id, _ = select_stt_provider("xai-main")
+
+    assert stt_provider_id == "xai-main"
+    assert load_internal_config().web.stt_provider_id == "xai-main"
+
     with pytest.raises(ConfigError, match="does not support speech-to-text"):
-        select_stt_provider("xai-main")
+        select_stt_provider("generic-main")
     with pytest.raises(ConfigError, match="Unknown provider ID 'missing'"):
         select_stt_provider("missing")
 
-    delete_provider_config("deepgram-main")
+    delete_provider_config("xai-main")
 
     assert load_internal_config().web.stt_provider_id is None
 

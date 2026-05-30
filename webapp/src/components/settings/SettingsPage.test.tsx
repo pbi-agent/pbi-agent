@@ -1902,7 +1902,7 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Add OpenAI, Deepgram, or ElevenLabs provider credentials first.",
+        "Add OpenAI, xAI, Deepgram, or ElevenLabs provider credentials first.",
       ),
     ).toBeInTheDocument();
     expect(

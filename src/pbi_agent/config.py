@@ -76,7 +76,7 @@ RUNTIME_PROVIDER_KINDS = (
     "anthropic",
     "generic",
 )
-STT_PROVIDER_KINDS = ("openai", "deepgram", "elevenlabs")
+STT_PROVIDER_KINDS = ("openai", "xai", "deepgram", "elevenlabs")
 PROVIDER_KINDS = (
     *MODEL_PROFILE_PROVIDER_KINDS,
     "deepgram",
