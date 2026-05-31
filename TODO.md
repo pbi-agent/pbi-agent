@@ -1,4 +1,4 @@
-- [x] Find preview header close-button styling
-- [x] Align preview close button vertically with toggle controls
-- [x] Run targeted frontend validation
+- [x] Remove external Google font import from web styles
+- [x] Rebuild static web bundle so packaged CSS no longer references Google Fonts
+- [x] Run focused validation/search
 - [x] Update task memory
