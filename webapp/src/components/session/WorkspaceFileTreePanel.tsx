@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  Columns2Icon,
+  Rows2Icon,
   XIcon,
 } from "lucide-react";
 import {
@@ -21,7 +23,7 @@ import {
   workspaceFilePreviewQueryKey,
   workspaceFileTreeQueryKey,
 } from "./workspaceFileTreeQueries";
-import { GitDiffResult } from "./GitDiffResult";
+import { GitDiffResult, type GitDiffLayout } from "./GitDiffResult";
 import { MarkdownContent } from "../shared/MarkdownContent";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -62,6 +64,7 @@ export function WorkspaceFileTreePanel({
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedPathRevision, setSelectedPathRevision] = useState(0);
   const [previewMode, setPreviewMode] = useState<PreviewMode>("raw");
+  const [diffLayout, setDiffLayout] = useState<GitDiffLayout>("split");
   const [searchTerm, setSearchTerm] = useState("");
   const [showChangedOnly, setShowChangedOnly] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
@@ -381,6 +384,36 @@ export function WorkspaceFileTreePanel({
                         </ToggleGroupItem>
                       </ToggleGroup>
                     ) : null}
+                    {activePreviewMode === "diff" && selectedCanDiff ? (
+                      <ToggleGroup
+                        type="single"
+                        value={diffLayout}
+                        onValueChange={(value) => {
+                          if (value === "split" || value === "stacked") {
+                            setDiffLayout(value);
+                          }
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="workspace-file-panel__preview-mode-toggle workspace-file-panel__preview-layout-toggle"
+                        aria-label="Diff layout"
+                      >
+                        <ToggleGroupItem
+                          value="split"
+                          className="workspace-file-panel__preview-mode-option"
+                        >
+                          <Columns2Icon data-icon="inline-start" aria-hidden="true" />
+                          Split
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
+                          value="stacked"
+                          className="workspace-file-panel__preview-mode-option"
+                        >
+                          <Rows2Icon data-icon="inline-start" aria-hidden="true" />
+                          Stacked
+                        </ToggleGroupItem>
+                      </ToggleGroup>
+                    ) : null}
                     <Button
                       type="button"
                       variant="ghost"
@@ -414,6 +447,7 @@ export function WorkspaceFileTreePanel({
                         operation: operationForStatus(selectedGitStatus),
                         success: true,
                       }}
+                      layout={diffLayout}
                     />
                   )
                 ) : previewQuery.isPending ? (

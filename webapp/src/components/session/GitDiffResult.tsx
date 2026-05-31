@@ -5,7 +5,16 @@ import {
   PlusIcon,
   XCircleIcon,
 } from "lucide-react";
-import type { ReactElement, ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+  type UIEvent,
+} from "react";
 import type { ApplyPatchToolMetadata } from "../../types";
 import { Badge } from "../ui/badge";
 import {
@@ -18,6 +27,7 @@ import {
 } from "../ui/card";
 
 type DiffLineKind = "added" | "removed" | "context" | "hunk" | "meta" | "empty";
+export type GitDiffLayout = "stacked" | "split";
 
 const EMPTY_DIFF_MESSAGE = "No diff content was provided for this operation.";
 const CONTEXT_EDGE_LINES = 3;
@@ -45,6 +55,25 @@ type DiffBlock =
   | { key: string; kind: "context"; lines: DiffLine[]; collapsed?: number }
   | { key: string; kind: "change"; removed: DiffLine[]; added: DiffLine[] }
   | { key: string; kind: "meta" | "empty"; lines: DiffLine[] };
+
+type SplitDiffRow =
+  | {
+      key: string;
+      kind: "pair";
+      oldLine: DiffLine | null;
+      newLine: DiffLine | null;
+      oldInlineParts?: InlinePart[];
+      newInlineParts?: InlinePart[];
+      focused?: boolean;
+      showTopRadius?: boolean;
+    }
+  | {
+      key: string;
+      kind: "spanning";
+      line: DiffLine;
+      showTopRadius?: boolean;
+    }
+  | { key: string; kind: "collapsed"; count: number };
 
 type InlinePart = {
   key: string;
@@ -90,7 +119,79 @@ export function isApplyPatchToolMetadata(
   );
 }
 
-export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }) {
+export function GitDiffResult({
+  metadata,
+  layout = "stacked",
+}: {
+  metadata: ApplyPatchToolMetadata;
+  layout?: GitDiffLayout;
+}) {
+  const oldSplitScrollRef = useRef<HTMLDivElement | null>(null);
+  const newSplitScrollRef = useRef<HTMLDivElement | null>(null);
+  const oldSplitTableRef = useRef<HTMLTableElement | null>(null);
+  const newSplitTableRef = useRef<HTMLTableElement | null>(null);
+  const syncingSplitScrollRef = useRef(false);
+  const handleSplitPaneScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    if (syncingSplitScrollRef.current) return;
+    const source = event.currentTarget;
+    const target =
+      source === oldSplitScrollRef.current
+        ? newSplitScrollRef.current
+        : oldSplitScrollRef.current;
+    if (!target) return;
+
+    const maxSourceLeft = Math.max(0, source.scrollWidth - source.clientWidth);
+    const maxTargetLeft = Math.max(0, target.scrollWidth - target.clientWidth);
+    const leftRatio = maxSourceLeft > 0 ? source.scrollLeft / maxSourceLeft : null;
+    const maxSourceTop = Math.max(0, source.scrollHeight - source.clientHeight);
+    const maxTargetTop = Math.max(0, target.scrollHeight - target.clientHeight);
+    const topRatio = maxSourceTop > 0 ? source.scrollTop / maxSourceTop : null;
+
+    syncingSplitScrollRef.current = true;
+    target.scrollLeft = leftRatio === null ? source.scrollLeft : maxTargetLeft * leftRatio;
+    target.scrollTop = topRatio === null ? source.scrollTop : maxTargetTop * topRatio;
+    window.requestAnimationFrame(() => {
+      syncingSplitScrollRef.current = false;
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (layout !== "split") return;
+    const measureSplitPaneWidth = () => {
+      const tables = [oldSplitTableRef.current, newSplitTableRef.current].filter(
+        (table): table is HTMLTableElement => table !== null,
+      );
+      for (const table of tables) {
+        table.style.minWidth = "100%";
+      }
+      const oldWidth = oldSplitTableRef.current?.scrollWidth ?? 0;
+      const newWidth = newSplitTableRef.current?.scrollWidth ?? 0;
+      const nextWidth = Math.max(oldWidth, newWidth);
+      for (const table of tables) {
+        table.style.minWidth = nextWidth > 0 ? `${nextWidth}px` : "100%";
+      }
+    };
+
+    measureSplitPaneWidth();
+    window.addEventListener("resize", measureSplitPaneWidth);
+    return () => {
+      window.removeEventListener("resize", measureSplitPaneWidth);
+    };
+  }, [layout, metadata.diff, metadata.path]);
+
+  useEffect(() => {
+    if (layout !== "split") return;
+    syncingSplitScrollRef.current = false;
+    if (oldSplitScrollRef.current) {
+      oldSplitScrollRef.current.scrollLeft = 0;
+      oldSplitScrollRef.current.scrollTop = 0;
+    }
+    if (newSplitScrollRef.current) {
+      newSplitScrollRef.current.scrollLeft = 0;
+      newSplitScrollRef.current.scrollTop = 0;
+    }
+  }, [layout, metadata.diff, metadata.path]);
+
   if (isSuccessfulDeleteFile(metadata)) {
     return <DeletedFileResult metadata={metadata} />;
   }
@@ -109,12 +210,14 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
       ? compactContextBlocks(parsed.blocks)
       : groupDiffLines(emptyStateLines());
   const footerLabel = footerSummary(parsed);
+  const splitRows = layout === "split" ? buildSplitRows(visibleBlocks) : [];
 
   return (
     <Card
       size="sm"
       className="git-diff-result"
       data-status={metadata.success === false ? "failed" : "done"}
+      data-layout={layout}
     >
       <CardHeader className="git-diff-result__header">
         <div className="git-diff-result__title-row">
@@ -172,11 +275,36 @@ export function GitDiffResult({ metadata }: { metadata: ApplyPatchToolMetadata }
           role="region"
           aria-label={`Diff for ${metadata.path ?? "file"}`}
         >
-          <table className="git-diff-result__table">
-            <tbody>
-              {visibleBlocks.flatMap((block) => renderBlock(block))}
-            </tbody>
-          </table>
+          {layout === "split" ? (
+            <div
+              className="git-diff-result__split"
+              role="group"
+              aria-label="Split diff panes"
+            >
+              <div
+                ref={oldSplitScrollRef}
+                className="git-diff-result__split-pane git-diff-result__split-pane--old"
+                onScroll={handleSplitPaneScroll}
+              >
+                {renderSplitPaneTable("old", splitRows, {
+                  ref: oldSplitTableRef,
+                })}
+              </div>
+              <div
+                ref={newSplitScrollRef}
+                className="git-diff-result__split-pane git-diff-result__split-pane--new"
+                onScroll={handleSplitPaneScroll}
+              >
+                {renderSplitPaneTable("new", splitRows, {
+                  ref: newSplitTableRef,
+                })}
+              </div>
+            </div>
+          ) : (
+            <table className="git-diff-result__table git-diff-result__table--stacked">
+              <tbody>{visibleBlocks.flatMap((block) => renderBlock(block))}</tbody>
+            </table>
+          )}
         </div>
         <div className="git-diff-result__footer">
           <span>{footerLabel}</span>
@@ -520,6 +648,73 @@ function renderChangeBlock(block: Extract<DiffBlock, { kind: "change" }>): React
   return rows;
 }
 
+function buildSplitRows(blocks: DiffBlock[]): SplitDiffRow[] {
+  return blocks.flatMap((block) => splitRowsForBlock(block));
+}
+
+function splitRowsForBlock(block: DiffBlock): SplitDiffRow[] {
+  if (block.kind === "change") {
+    return splitRowsForChangeBlock(block);
+  }
+  const rows: SplitDiffRow[] = block.lines.map((line, index) => {
+    if (line.kind === "context") {
+      return {
+        key: `${block.key}-split-${line.key}`,
+        kind: "pair",
+        oldLine: line,
+        newLine: line,
+        showTopRadius: index === 0,
+      };
+    }
+    return {
+      key: `${block.key}-split-${line.key}`,
+      kind: "spanning",
+      line,
+      showTopRadius: index === 0,
+    };
+  });
+  if (block.kind === "context" && block.collapsed && block.collapsed > 0) {
+    rows.splice(CONTEXT_EDGE_LINES, 0, {
+      key: `${block.key}-split-collapsed`,
+      kind: "collapsed",
+      count: block.collapsed,
+    });
+  }
+  return rows;
+}
+
+function splitRowsForChangeBlock(
+  block: Extract<DiffBlock, { kind: "change" }>,
+): SplitDiffRow[] {
+  const rowCount = Math.max(block.removed.length, block.added.length);
+  const pairable = isPairableReplacementBlock(block);
+  const rows: SplitDiffRow[] = [];
+  for (let index = 0; index < rowCount; index += 1) {
+    const removed = block.removed[index] ?? null;
+    const added = block.added[index] ?? null;
+    let oldInlineParts: InlinePart[] | undefined;
+    let newInlineParts: InlinePart[] | undefined;
+    if (pairable && removed && added) {
+      const inline = diffInline(removed.text, added.text);
+      oldInlineParts = inline.oldParts;
+      newInlineParts = inline.newParts;
+    }
+    rows.push({
+      key: `${block.key}-split-${index}-${removed?.key ?? "empty"}-${added?.key ?? "empty"}`,
+      kind: "pair",
+      oldLine: removed,
+      newLine: added,
+      oldInlineParts,
+      newInlineParts,
+      focused:
+        oldInlineParts?.some((part) => part.changed)
+        || newInlineParts?.some((part) => part.changed)
+        || false,
+    });
+  }
+  return rows;
+}
+
 function isPairableReplacementBlock(block: Extract<DiffBlock, { kind: "change" }>): boolean {
   return block.removed.length > 0 && block.removed.length === block.added.length;
 }
@@ -565,6 +760,130 @@ function renderCode(line: DiffLine, inlineParts: InlinePart[] | undefined): Reac
       {part.text || " "}
     </span>
   ));
+}
+
+function renderSplitPaneTable(
+  side: "old" | "new",
+  rows: SplitDiffRow[],
+  options: {
+    ref: RefObject<HTMLTableElement | null>;
+  },
+): ReactElement {
+  return (
+    <table
+      ref={options.ref}
+      className="git-diff-result__split-table"
+    >
+      <colgroup>
+        <col className="git-diff-result__col git-diff-result__col--gutter" />
+        <col className="git-diff-result__col git-diff-result__col--marker" />
+        <col className="git-diff-result__col git-diff-result__col--code" />
+      </colgroup>
+      <tbody>{rows.map((row) => renderSplitPaneRow(side, row))}</tbody>
+    </table>
+  );
+}
+
+function renderSplitPaneRow(
+  side: "old" | "new",
+  row: SplitDiffRow,
+): ReactElement {
+  if (row.kind === "pair") {
+    const line = side === "old" ? row.oldLine : row.newLine;
+    const inlineParts =
+      side === "old" ? row.oldInlineParts : row.newInlineParts;
+    return (
+      <tr
+        key={`${side}-${row.key}`}
+        className="git-diff-result__line git-diff-result__line--split"
+        data-focused={row.focused ? "true" : undefined}
+        data-group-start={row.showTopRadius ? "true" : undefined}
+      >
+        {renderSplitSideCells(side, line, inlineParts)}
+      </tr>
+    );
+  }
+
+  if (row.kind === "collapsed") {
+    const renderCollapsedContent = side === "old";
+    return (
+      <tr
+        key={`${side}-${row.key}`}
+        className="git-diff-result__line git-diff-result__line--collapsed"
+        aria-hidden={renderCollapsedContent ? undefined : "true"}
+      >
+        <td
+          className="git-diff-result__split-spanning git-diff-result__split-spanning--collapsed"
+          colSpan={3}
+        >
+          {renderCollapsedContent ? (
+            <>
+              <span className="git-diff-result__split-spanning-marker">⋯</span>
+              <code>{row.count} unchanged lines</code>
+            </>
+          ) : (
+            <span className="git-diff-result__split-spanning-placeholder">
+              &nbsp;
+            </span>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
+  const renderSpanningContent = side === "old";
+  return (
+    <tr
+      key={`${side}-${row.key}`}
+      className={`git-diff-result__line git-diff-result__line--${row.line.kind}`}
+      data-group-start={row.showTopRadius ? "true" : undefined}
+      aria-hidden={renderSpanningContent ? undefined : "true"}
+    >
+      <td
+        className={`git-diff-result__split-spanning git-diff-result__split-spanning--${row.line.kind}`}
+        colSpan={3}
+      >
+        {renderSpanningContent ? (
+          <>
+            <span className="git-diff-result__split-spanning-marker">
+              {markerForLine(row.line.kind)}
+            </span>
+            <code>{row.line.text || " "}</code>
+          </>
+        ) : (
+          <span className="git-diff-result__split-spanning-placeholder">
+            &nbsp;
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function renderSplitSideCells(
+  side: "old" | "new",
+  line: DiffLine | null,
+  inlineParts: InlinePart[] | undefined,
+): ReactElement[] {
+  const kind = line?.kind ?? "empty";
+  const number = line ? (side === "old" ? line.oldNumber : line.newNumber) : null;
+  const cellClass =
+    `git-diff-result__split-cell git-diff-result__split-cell--${side} `
+    + `git-diff-result__split-cell--${kind}`;
+  return [
+    <td
+      key={`${side}-gutter`}
+      className={`git-diff-result__gutter git-diff-result__gutter--${side} ${cellClass}`}
+    >
+      {number ?? ""}
+    </td>,
+    <td key={`${side}-marker`} className={`git-diff-result__marker ${cellClass}`}>
+      {line ? markerForLine(line.kind) : ""}
+    </td>,
+    <td key={`${side}-code`} className={`git-diff-result__code ${cellClass}`}>
+      <code>{line ? renderCode(line, inlineParts) : " "}</code>
+    </td>,
+  ];
 }
 
 function renderCollapsedRow(key: string, count: number): ReactElement {

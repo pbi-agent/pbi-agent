@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "../../test/render";
@@ -90,6 +90,30 @@ describe("WorkspaceFileTreePanel", () => {
     expect(mockFetchPreview).not.toHaveBeenCalled();
     expect(screen.getByRole("radio", { name: "Diff" })).toHaveAttribute("data-state", "on");
     expect(screen.getByRole("radio", { name: "Raw" })).toHaveAttribute("data-state", "off");
+    expect(screen.getByRole("radio", { name: "Split" })).toHaveAttribute("data-state", "on");
+    expect(screen.getByRole("radio", { name: "Stacked" })).toHaveAttribute("data-state", "off");
+    expect(document.querySelector(".git-diff-result")).toHaveAttribute("data-layout", "split");
+    const oldSplitPane = document.querySelector<HTMLDivElement>(
+      ".git-diff-result__split-pane--old",
+    );
+    const newSplitPane = document.querySelector<HTMLDivElement>(
+      ".git-diff-result__split-pane--new",
+    );
+    expect(oldSplitPane).not.toBeNull();
+    expect(newSplitPane).not.toBeNull();
+    oldSplitPane!.scrollLeft = 48;
+    oldSplitPane!.scrollTop = 24;
+    fireEvent.scroll(oldSplitPane!);
+    expect(newSplitPane!.scrollLeft).toBe(48);
+    expect(newSplitPane!.scrollTop).toBe(24);
+
+    await user.click(screen.getByRole("radio", { name: "Stacked" }));
+    expect(screen.getByRole("radio", { name: "Split" })).toHaveAttribute("data-state", "off");
+    expect(screen.getByRole("radio", { name: "Stacked" })).toHaveAttribute("data-state", "on");
+    expect(document.querySelector(".git-diff-result")).toHaveAttribute(
+      "data-layout",
+      "stacked",
+    );
 
     await user.click(screen.getByRole("radio", { name: "Raw" }));
     await waitFor(() => {

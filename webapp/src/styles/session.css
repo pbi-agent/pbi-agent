@@ -936,6 +936,8 @@
 
 .workspace-file-panel__preview-mode-option {
   min-width: 3rem;
+  gap: var(--sp-1);
+  padding-inline: var(--sp-2);
   border: 0;
   border-radius: calc(var(--radius-md) - 2px);
   background: transparent;
@@ -947,6 +949,14 @@
     color var(--duration-fast) var(--ease),
     box-shadow var(--duration-fast) var(--ease),
     transform var(--duration-fast) var(--ease-out);
+}
+
+.workspace-file-panel__preview-layout-toggle .workspace-file-panel__preview-mode-option {
+  min-width: 4.75rem;
+}
+
+.workspace-file-panel__preview-mode-option svg {
+  flex-shrink: 0;
 }
 
 .workspace-file-panel__preview-mode-option:not([data-state="on"]):hover,
@@ -2534,13 +2544,60 @@
     color-mix(in srgb, var(--color-bg) 86%, var(--color-card));
 }
 
-.git-diff-result__table {
+.git-diff-result__table,
+.git-diff-result__split-table {
   width: 100%;
   min-width: 640px;
   border-collapse: collapse;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
+}
+
+.git-diff-result[data-layout="split"] .git-diff-result__viewport {
+  display: flex;
+  overflow: hidden;
+}
+
+.git-diff-result__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.git-diff-result__split-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+}
+
+.git-diff-result__split-pane--new {
+  border-left: 1px solid var(--color-border-subtle);
+}
+
+.git-diff-result__split-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.git-diff-result__col--gutter {
+  width: 48px;
+}
+
+.git-diff-result__col--marker {
+  width: 30px;
+}
+
+.git-diff-result__col--code {
+  width: calc((100% - 156px) / 2);
+}
+
+.git-diff-result__split-table .git-diff-result__col--code {
+  width: auto;
 }
 
 .git-diff-result__line {
@@ -2624,6 +2681,78 @@
 }
 
 .git-diff-result__code code {
+  font: inherit;
+}
+
+.git-diff-result__split-cell--added {
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+}
+
+.git-diff-result__split-cell--removed {
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+}
+
+.git-diff-result__line--split[data-focused="true"] .git-diff-result__split-cell--added {
+  background: color-mix(in srgb, var(--color-success) 11%, transparent);
+}
+
+.git-diff-result__line--split[data-focused="true"] .git-diff-result__split-cell--removed {
+  background: color-mix(in srgb, var(--color-error) 11%, transparent);
+}
+
+.git-diff-result__split-cell--added.git-diff-result__marker,
+.git-diff-result__split-cell--added.git-diff-result__code {
+  color: var(--color-success);
+}
+
+.git-diff-result__split-cell--removed.git-diff-result__marker,
+.git-diff-result__split-cell--removed.git-diff-result__code {
+  color: var(--color-error);
+}
+
+.git-diff-result__split-cell--empty {
+  color: transparent;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0,
+      transparent 6px,
+      color-mix(in srgb, var(--color-border-subtle) 36%, transparent) 6px,
+      color-mix(in srgb, var(--color-border-subtle) 36%, transparent) 7px
+    ),
+    color-mix(in srgb, var(--color-bg) 82%, var(--color-card));
+}
+
+.git-diff-result__split-spanning {
+  padding-block: 2px;
+  padding-inline: var(--sp-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border-subtle) 54%, transparent);
+  vertical-align: top;
+  color: var(--color-text-secondary);
+  white-space: pre;
+}
+
+.git-diff-result__split-spanning--hunk,
+.git-diff-result__split-spanning--meta {
+  background: color-mix(in srgb, var(--color-info) 10%, transparent);
+  color: var(--color-info);
+}
+
+.git-diff-result__split-spanning--collapsed {
+  background: color-mix(in srgb, var(--color-surface-2) 72%, transparent);
+  color: var(--color-text-tertiary);
+}
+
+.git-diff-result__split-spanning-marker {
+  display: inline-block;
+  width: 3rem;
+  padding-inline-end: var(--sp-2);
+  color: var(--color-text-tertiary);
+  text-align: right;
+  user-select: none;
+}
+
+.git-diff-result__split-spanning code {
   font: inherit;
 }
 
