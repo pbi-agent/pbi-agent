@@ -1,3 +1,4 @@
-- [x] Compress `MEMORY.md`
-- [x] Validate required memory structure
-- [x] Record task outcome
+- [x] Inspect git conflict state
+- [x] Resolve `MEMORY.md` and `TODO.md`
+- [x] Mark conflict files resolved
+- [x] Report remaining git steps
