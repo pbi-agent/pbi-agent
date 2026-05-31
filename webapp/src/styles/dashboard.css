@@ -310,11 +310,13 @@
 .dashboard-table th {
   text-align: left;
   padding: var(--sp-2) var(--sp-3);
-  color: var(--color-text-tertiary);
+  color: var(--muted-foreground);
+  font-family: var(--font-ui);
   font-weight: var(--weight-medium);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: normal;
   font-size: var(--text-xs);
+  line-height: var(--leading-normal);
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
   user-select: none;
@@ -330,6 +332,16 @@
   color: var(--color-text-primary);
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
+}
+
+.dashboard-table th [data-slot="button"] {
+  min-height: 1.75rem;
+  padding-inline: var(--sp-2);
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 .dashboard-table tbody tr {
@@ -369,8 +381,8 @@
 }
 
 .runs-filter-select {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
   line-height: var(--leading-normal);
   font-weight: var(--weight-medium);
   min-width: 8.5rem;
@@ -409,6 +421,11 @@
 
 .runs-filter-select--model {
   min-width: 9.5rem;
+}
+
+.runs-filter-select__content {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
 }
 
 @media (max-width: 800px) {

@@ -121,7 +121,7 @@ export function BreakdownTable({ breakdown }: BreakdownTableProps) {
                 </TableHead>
                 <TableHead>
                   <Button variant="ghost" size="sm" onClick={() => toggleSort("avg_duration_ms")}>
-                  Avg Duration {sortIndicator("avg_duration_ms")}
+                  Avg duration {sortIndicator("avg_duration_ms")}
                   </Button>
                 </TableHead>
                 <TableHead>

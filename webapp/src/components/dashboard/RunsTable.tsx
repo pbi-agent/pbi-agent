@@ -197,13 +197,13 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="runs-filter-select__content">
               <SelectItem value={EMPTY_SELECT_VALUE}>All statuses</SelectItem>
-            {statusOptions.map((status) => (
-              <SelectItem key={status} value={status}>
-                {status}
-              </SelectItem>
-            ))}
+              {statusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select
@@ -220,13 +220,13 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="runs-filter-select__content">
               <SelectItem value={EMPTY_SELECT_VALUE}>All providers</SelectItem>
-            {providerOptions.map((provider) => (
-              <SelectItem key={provider} value={provider}>
-                {provider}
-              </SelectItem>
-            ))}
+              {providerOptions.map((provider) => (
+                <SelectItem key={provider} value={provider}>
+                  {provider}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select
@@ -243,13 +243,13 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="runs-filter-select__content">
               <SelectItem value={EMPTY_SELECT_VALUE}>All models</SelectItem>
-            {modelOptions.map((model) => (
-              <SelectItem key={model} value={model}>
-                {model}
-              </SelectItem>
-            ))}
+              {modelOptions.map((model) => (
+                <SelectItem key={model} value={model}>
+                  {model}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -288,12 +288,12 @@ export function RunsTable({ startDate, endDate, scope }: RunsTableProps) {
                     </TableHead>
                     <TableHead>
                       <Button variant="ghost" size="sm" onClick={() => toggleSort("input_tokens")}>
-                      In Tokens {sortIndicator("input_tokens")}
+                      In tokens {sortIndicator("input_tokens")}
                       </Button>
                     </TableHead>
                     <TableHead>
                       <Button variant="ghost" size="sm" onClick={() => toggleSort("output_tokens")}>
-                      Out Tokens {sortIndicator("output_tokens")}
+                      Out tokens {sortIndicator("output_tokens")}
                       </Button>
                     </TableHead>
                     <TableHead>
