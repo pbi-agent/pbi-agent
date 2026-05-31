@@ -922,6 +922,7 @@
 
 .workspace-file-panel__preview-actions {
   display: inline-flex;
+  align-items: center;
   flex: 0 0 auto;
   gap: var(--sp-1);
 }

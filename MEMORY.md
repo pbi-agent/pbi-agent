@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-05-30
+- Last compacted: 2026-05-31
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -28,6 +28,7 @@
 - Project command `/create-task` creates Kanban cards through `pbi-agent kanban create`; no implementation.
 - Kanban worker outcomes: returned task outcomes complete even with recoverable tool errors; fatal exceptions/interrupts still fail.
 - Release docs: use `release-writing`; changelog index `docs/changelog/index.md`, files `docs/changelog/v<version>.md`, VitePress sidebar links releases; release workflow needs validation triage, publish verification, continuation-gate safety; GitHub Release notes may need frontmatter stripped with `gh release edit` after publish.
+- Release state: v0.12.0 was published to GitHub/PyPI from PR #309; no active release follow-up.
 - Branding: public copy = local coding agent; preserve `pbi-agent`, `pbi_agent`, `PBI_AGENT_*`, `~/.pbi-agent`; logo `src/pbi_agent/web/static/logo.jpg`.
 - Providers: OpenAI Responses use `instructions` + `previous_response_id`; ChatGPT subscription prepends system prompt; Codex transport WebSocket-only (`chatgpt_codex_backend.py`), no unsupported compression.
 - ChatGPT Codex WebSocket: split connect/idle/request timeouts; retryable connect/upgrade/send/read/request timeout failures and `error.type=server_error` without HTTP status; provider emits `model_call_start`/`model_call_retry`; retry backoff covered in OpenAI provider tests.
@@ -78,9 +79,14 @@
 - Web file tree sidebar: uses local dependency-free React tree rendering, not `@pierre/trees`; file/folder icons resolve through `material-icon-theme` manifest/assets via `webapp/src/lib/workspaceFileIcons.ts`; keep panel flexed to fill the right split; `react-resizable-panels` v4 size props must use percentage strings (e.g. `"50%"`) to avoid pixel-sized panes; tree/preview sections use a vertical resizable split only after a file is selected; preview `CodeBlock` must flex and override global `.tool-result__code`/`__pre` max-height; file-row clicks scroll the selected file to the tree viewport top; preview is closed by default, opens from file-row clicks, has a top-right `app-close-icon-button`, and uses default panel sizes to open at the maximum configured height (avoid first-mount imperative resize).
 - Web static build determinism: `workspaceFileIcons.ts` must exclude byte-identical Material Icon Theme SVG duplicates and alias them to canonical filenames (`angular-resolver`→`angular-guard`, `dtx`→`doctex`, `sty`→`latex-package`) so Rolldown does not choose unstable asset names and cascade JS chunk hash churn.
 - Web file tree git status: backend helper `src/pbi_agent/web/git_files.py` uses `git status --porcelain=v1 -z --untracked-files=all`; `/api/files/tree` adds `git_status` plus repo/version/error metadata, `/api/files/diff` returns unified/synthetic diffs; frontend `WorkspaceFileTreePanel` polls while open, shows file letters/visible folder dots in a shared right marker column, has Changed-only filtering plus Diff/Raw toggle, and keys diff cache by `git_status_version`.
+- Workspace diff preview: `GitDiffResult` supports `layout` (`stacked` default for tool cards, `split` for workspace file preview); Workspace Explorer exposes Split/Stacked toggle; split panes use synchronized scroll to avoid long-line overlap.
 - Workspace file indexing honors Git ignore rules even for tracked/statused paths; the stdlib `.gitignore` fallback handles non-git workspaces and leading `**/` root-level matches.
 
 ## Detailed Task Events
 
-## 2026-05-30
-- Released/published v0.12.0 from all commits after v0.11.0: branch `chore/release-v0.12.0`, release commit `98cbd63f`, repair commit `8666ffc0` restored `MEMORY.md`/`TODO.md` to the PR base, PR #309 merged at `1a2db3b0`, tag/release `v0.12.0`, and PyPI wheel+sdist confirmed. Validation: Ruff check/format, basedpyright, dead_code, pytest, docs build, PR Tests, Release workflow/PyPI upload all passed; GitHub Release notes were frontmatter-stripped after publish. Next context: local `master` is behind `origin/master` by 3, current branch has local session bookkeeping only.
+## 2026-05-31
+- Added Split/Stacked layout toggle to Workspace Explorer file diff preview and split-table rendering in `GitDiffResult`; rebuilt web static assets. Validation: `bun run test:web -- WorkspaceFileTreePanel.test.tsx`, `bun run lint`, `bun run typecheck`, `bun run web:build`, `bun run test:web` passed (full web tests emitted pre-existing React act warnings).
+- Tightened Split/Stacked toggle padding and changed split diff rendering to synchronized scroll panes so long lines stay clipped per side; rebuilt web static assets. Validation: focused WorkspaceFileTreePanel test, SettingsPage rerun after one flaky full-suite failure, `bun run lint`, `bun run typecheck`, `bun run web:build`, and final `bun run test:web` passed (pre-existing React act warnings remain).
+- Audited production/enterprise readiness with separate back-end and front-end sub-agents; no product code changed. Validation: `pbi-agent -h` passed; front-end sub-agent reported `bun run lint`, `bun run typecheck`, and `bun run test:web` passing; Python full suite not run.
+- Fixed split diff review findings: split pane horizontal/vertical scroll now syncs by proportional offset after equalizing table widths, and shared split metadata/collapsed row text renders only once. Validation: focused WorkspaceFileTreePanel test, `bun run lint`, `bun run typecheck`, and `bun run web:build` passed.
+- Centered Workspace Explorer preview header action controls so the close button aligns with Diff/Raw and Split/Stacked toggles; rebuilt web static assets. Validation: `bun run lint`, `bun run typecheck`, focused WorkspaceFileTreePanel test, `bun run web:build`, and `bun run test:web` passed (pre-existing React act warnings remain).

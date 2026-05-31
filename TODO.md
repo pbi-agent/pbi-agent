@@ -1,7 +1,4 @@
-# Session TODO
-
-- [x] Inspect divergent branch state
-- [x] Preserve local-only bookkeeping commit
-- [x] Align local master with origin/master
-- [x] Verify pull/status
-- [x] Update memory
+- [x] Find preview header close-button styling
+- [x] Align preview close button vertically with toggle controls
+- [x] Run targeted frontend validation
+- [x] Update task memory
