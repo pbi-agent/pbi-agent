@@ -11,6 +11,11 @@ import pytest
 
 from pbi_agent.models.messages import TokenUsage, WebSearchSource
 from pbi_agent.web import uploads
+from pbi_agent.workspace_context import (
+    SANDBOX_ENV,
+    WORKSPACE_DISPLAY_PATH_ENV,
+    WORKSPACE_KEY_ENV,
+)
 
 
 class DisplaySpy:
@@ -199,6 +204,12 @@ def isolate_internal_config_path(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
 @pytest.fixture(autouse=True)
 def isolate_session_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+
+
+@pytest.fixture(autouse=True)
+def isolate_workspace_context_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (WORKSPACE_KEY_ENV, WORKSPACE_DISPLAY_PATH_ENV, SANDBOX_ENV):
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture(autouse=True)
