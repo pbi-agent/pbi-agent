@@ -1,4 +1,2 @@
-- [x] Inspect git conflict state
-- [x] Resolve `MEMORY.md` and `TODO.md`
-- [x] Mark conflict files resolved
-- [x] Report remaining git steps
+- [X] Implement system-following default theme selection in the web UI
+- [X] Run focused/frontend validation and update memory/handoff

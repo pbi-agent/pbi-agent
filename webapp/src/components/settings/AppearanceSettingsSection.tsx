@@ -1,15 +1,17 @@
-import { CheckIcon, MoonStarIcon, PaletteIcon, SunIcon } from "lucide-react";
+import { CheckIcon, MonitorIcon, MoonStarIcon, PaletteIcon, SunIcon } from "lucide-react";
 import { themeOptions, useTheme, type AppTheme } from "../ThemeProvider";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 
 const themeDescriptions: Record<AppTheme, string> = {
+  system: "Follow the browser or operating system preference.",
   prism: "The default high-contrast prism palette.",
   light: "A bright theme for daytime work.",
   dark: "A dim theme for low-light environments.",
 };
 
 const themeIcons = {
+  system: MonitorIcon,
   prism: PaletteIcon,
   light: SunIcon,
   dark: MoonStarIcon,

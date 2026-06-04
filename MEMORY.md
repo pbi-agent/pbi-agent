@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-05-31
+- Last compacted: 2026-06-04
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -47,11 +47,5 @@
 
 ## Detailed Task Events
 
-## 2026-05-31
-- Added Workspace Explorer Split/Stacked diff layout, split-table `GitDiffResult`, later synced split scrolling, tightened toggle padding, and centered preview header actions; rebuilt static assets. Validation: focused WorkspaceFileTreePanel tests, `bun run lint`, `bun run typecheck`, `bun run web:build`, and `bun run test:web` passed; pre-existing React act warnings remain.
-- Audited production/enterprise readiness with backend/frontend sub-agents; no product code changed. Validation: `pbi-agent -h` passed; frontend sub-agent reported lint/typecheck/web tests passing; Python full suite not run.
-- Removed external Google Fonts import, switched UI typography to bundled Geist, and rebuilt static assets. Validation: `bun run web:build`, Google Fonts source/static search, `bun run lint`, `bun run typecheck`, and `bun run test:web` passed; pre-existing React act warnings remain.
-- Normalized Dashboard run table header casing and filter dropdown typography; rebuilt static assets. Validation: focused RunsTable test, `bun run lint`, `bun run typecheck`, `bun run web:build`, and `bun run test:web` passed; pre-existing React act warnings remain.
-- Compressed `MEMORY.md`: curated long-term bullets to durable conventions/outcomes and collapsed active-day prose. Validation: structure review only; tests skipped (prose-only).
-- Released and published v0.12.1 from PR #310; changes were version/changelog/sidebar/lock updates only, with no user-facing product changes beyond post-v0.12.0 bookkeeping. Validation: local release checks passed, PR test check passed, Release workflow succeeded, GitHub Release notes were frontmatter-stripped, and PyPI wheel+sdist were confirmed.
-- Resolved interrupted `git pull` conflicts in `MEMORY.md` and `TODO.md`, preserving upstream memory plus release outcome context and resetting the session TODO. Validation: conflict-marker grep/status only; product tests skipped (metadata-only).
+## 2026-06-04
+- Added `System` as the default Appearance theme, resolving to OS/browser light/dark with live preference updates while preserving manual Prism/Light/Dark choices; rebuilt static app assets. Validation: focused SettingsPage test, `bun run lint`, `bun run typecheck`, full `bun run test:web`, `bun run web:build`, and `git diff --check` passed; existing React act warnings remain.

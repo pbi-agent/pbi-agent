@@ -38,6 +38,10 @@ import {
 
 const originalNotification = globalThis.Notification;
 const originalAudioContext = window.AudioContext;
+const originalMatchMedia = window.matchMedia;
+
+type MatchMediaChangeListener = (event: MediaQueryListEvent) => void;
+type MatchMediaEventListener = EventListenerOrEventListenerObject;
 
 function installNotificationMock(permission: NotificationPermission) {
   class NotificationMock {
@@ -69,6 +73,80 @@ function restoreNotificationMock() {
     writable: true,
     value: originalAudioContext,
   });
+}
+
+function restoreMatchMediaMock() {
+  if (originalMatchMedia) {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: originalMatchMedia,
+    });
+  } else {
+    Reflect.deleteProperty(window, "matchMedia");
+  }
+}
+
+function installColorSchemeMatchMedia(matchesDark: boolean) {
+  let currentMatchesDark = matchesDark;
+  const query = "(prefers-color-scheme: dark)";
+  const listeners = new Set<MatchMediaEventListener>();
+  const legacyListeners = new Set<MatchMediaChangeListener>();
+  const mediaQueryList = {
+    get matches() {
+      return currentMatchesDark;
+    },
+    media: query,
+    onchange: null as MediaQueryList["onchange"],
+    addEventListener: vi.fn(
+      (eventName: string, listener: MatchMediaEventListener | null) => {
+        if (eventName === "change" && listener) {
+          listeners.add(listener);
+        }
+      },
+    ),
+    removeEventListener: vi.fn(
+      (eventName: string, listener: MatchMediaEventListener | null) => {
+        if (eventName === "change" && listener) {
+          listeners.delete(listener);
+        }
+      },
+    ),
+    addListener: vi.fn((listener: MatchMediaChangeListener) => {
+      legacyListeners.add(listener);
+    }),
+    removeListener: vi.fn((listener: MatchMediaChangeListener) => {
+      legacyListeners.delete(listener);
+    }),
+    dispatchEvent: vi.fn(() => true),
+  } as MediaQueryList;
+
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn(() => mediaQueryList),
+  });
+
+  return {
+    setMatchesDark(nextMatchesDark: boolean) {
+      currentMatchesDark = nextMatchesDark;
+      const event = {
+        matches: currentMatchesDark,
+        media: query,
+      } as MediaQueryListEvent;
+      for (const listener of listeners) {
+        if (typeof listener === "function") {
+          listener(event);
+        } else {
+          listener.handleEvent(event);
+        }
+      }
+      for (const listener of legacyListeners) {
+        listener(event);
+      }
+      mediaQueryList.onchange?.call(mediaQueryList, event);
+    },
+  };
 }
 
 vi.mock("../../api", async (importOriginal) => {
@@ -791,6 +869,7 @@ describe("SettingsPage", () => {
       useSettingsDialog.getState().closeSettings();
     });
     restoreNotificationMock();
+    restoreMatchMediaMock();
     window.localStorage.removeItem("pbi-agent-theme");
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.classList.remove("dark");
@@ -824,6 +903,10 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Appearance");
 
+    expect(screen.getByRole("radio", { name: "System theme" })).toHaveAttribute(
+      "data-theme-option",
+      "system",
+    );
     expect(screen.getByRole("radio", { name: "Prism theme" })).toHaveAttribute(
       "data-theme-option",
       "prism",
@@ -838,8 +921,37 @@ describe("SettingsPage", () => {
     );
   });
 
-  it("changes and persists the selected theme from the appearance tab", async () => {
+  it.each([
+    ["dark", true],
+    ["light", false],
+  ] as const)(
+    "defaults to System and applies the system %s preference",
+    async (resolvedTheme, matchesDark) => {
+      const user = userEvent.setup();
+      installColorSchemeMatchMedia(matchesDark);
+
+      renderWithProviders(
+        <ThemeProvider>
+          <SettingsPage />
+        </ThemeProvider>,
+      );
+
+      await waitFor(() =>
+        expect(document.documentElement.dataset.theme).toBe(resolvedTheme),
+      );
+
+      await openSettingsTab(user, "Appearance");
+      const systemThemeOption = screen.getByRole("radio", {
+        name: "System theme",
+      });
+      expect(systemThemeOption).toHaveAttribute("data-state", "on");
+      expect(systemThemeOption).toHaveAttribute("aria-checked", "true");
+    },
+  );
+
+  it("updates the active theme when the system preference changes", async () => {
     const user = userEvent.setup();
+    const colorScheme = installColorSchemeMatchMedia(false);
 
     renderWithProviders(
       <ThemeProvider>
@@ -848,15 +960,76 @@ describe("SettingsPage", () => {
     );
 
     await openSettingsTab(user, "Appearance");
-    const lightThemeOption = screen.getByRole("radio", { name: "Light theme" });
-
-    await user.click(lightThemeOption);
+    expect(screen.getByRole("radio", { name: "System theme" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
 
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("light"));
-    expect(window.localStorage.getItem("pbi-agent-theme")).toBe("light");
-    expect(lightThemeOption).toHaveAttribute("data-state", "on");
-    expect(lightThemeOption).toHaveAttribute("aria-checked", "true");
+
+    act(() => colorScheme.setMatchesDark(true));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
+    expect(document.documentElement).toHaveClass("dark");
+
+    act(() => colorScheme.setMatchesDark(false));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("light"));
+    expect(document.documentElement).not.toHaveClass("dark");
   });
+
+  it("keeps an existing saved theme instead of defaulting to System", async () => {
+    const user = userEvent.setup();
+    const colorScheme = installColorSchemeMatchMedia(false);
+    window.localStorage.setItem("pbi-agent-theme", "prism");
+
+    renderWithProviders(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("prism"));
+
+    await openSettingsTab(user, "Appearance");
+    const prismThemeOption = screen.getByRole("radio", { name: "Prism theme" });
+    expect(prismThemeOption).toHaveAttribute("data-state", "on");
+    expect(prismThemeOption).toHaveAttribute("aria-checked", "true");
+
+    act(() => colorScheme.setMatchesDark(true));
+    expect(document.documentElement.dataset.theme).toBe("prism");
+  });
+
+  it.each([
+    ["Prism theme", "prism", false, true],
+    ["Light theme", "light", false, true],
+    ["Dark theme", "dark", true, false],
+  ] as const)(
+    "persists %s and stops following system changes",
+    async (optionName, selectedTheme, initialMatchesDark, nextMatchesDark) => {
+      const user = userEvent.setup();
+      const colorScheme = installColorSchemeMatchMedia(initialMatchesDark);
+
+      renderWithProviders(
+        <ThemeProvider>
+          <SettingsPage />
+        </ThemeProvider>,
+      );
+
+      await openSettingsTab(user, "Appearance");
+      const themeOption = screen.getByRole("radio", { name: optionName });
+
+      await user.click(themeOption);
+
+      await waitFor(() =>
+        expect(document.documentElement.dataset.theme).toBe(selectedTheme),
+      );
+      expect(window.localStorage.getItem("pbi-agent-theme")).toBe(selectedTheme);
+      expect(themeOption).toHaveAttribute("data-state", "on");
+      expect(themeOption).toHaveAttribute("aria-checked", "true");
+
+      act(() => colorScheme.setMatchesDark(nextMatchesDark));
+      expect(document.documentElement.dataset.theme).toBe(selectedTheme);
+    },
+  );
 
   it("requests browser permission from the desktop notification control", async () => {
     const user = userEvent.setup();
