@@ -169,13 +169,18 @@ class _DisplaySpy:
 
 
 class _ProviderStub:
-    def __init__(self, *, tool_name: str = "shell") -> None:
+    def __init__(
+        self,
+        *,
+        tool_name: str = "shell",
+        provider_name: str = "openai",
+    ) -> None:
         self.connected = False
         self.request_calls: list[dict[str, object | None]] = []
         self.execute_calls: list[dict[str, object]] = []
         self.previous_response_ids: list[str | None] = []
         self.conversation_checkpoint = "resp_current"
-        self.settings = Settings(api_key="test-key", provider="openai")
+        self.settings = Settings(api_key="test-key", provider=provider_name)
         self.tool_name = tool_name
         self.restored_history_items = None
 
@@ -568,38 +573,53 @@ def test_run_single_turn_restores_tool_history_when_enabled(
     ]
 
 
-def test_run_single_turn_uses_generic_tool_history_across_response_providers(
+@pytest.mark.parametrize(
+    ("source_provider", "target_provider"),
+    [
+        ("xai", "openai"),
+        ("anthropic", "openai"),
+        ("google", "openai"),
+        ("generic", "openai"),
+        ("openai", "anthropic"),
+        ("openai", "google"),
+        ("openai", "generic"),
+        ("google", "xai"),
+    ],
+)
+def test_run_single_turn_uses_generic_tool_history_across_providers(
     monkeypatch,
     tmp_path,
+    source_provider: str,
+    target_provider: str,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    provider = _ProviderStub()
+    provider = _ProviderStub(provider_name=target_provider)
     display = _SessionDisplaySpy([])
-    settings = Settings(api_key="test-key", provider="openai")
+    settings = Settings(api_key="test-key", provider=target_provider)
 
     with SessionStore() as store:
-        session_id = store.create_session(str(tmp_path), "xai", DEFAULT_MODEL)
+        session_id = store.create_session(str(tmp_path), source_provider, DEFAULT_MODEL)
         store.add_message(
             session_id,
             "user",
             "previous user",
-            provider_id="xai",
+            provider_id=source_provider,
         )
         store.add_message(
             session_id,
             "assistant",
             "previous assistant",
-            provider_id="xai",
+            provider_id=source_provider,
         )
         run_id = store.create_run_session(
             run_session_id="run-1",
             session_id=session_id,
             agent_name="main",
             agent_type="session_turn",
-            provider="xai",
-            provider_id="xai",
+            provider=source_provider,
+            provider_id=source_provider,
             profile_id=None,
-            model="grok-4.3",
+            model=f"{source_provider}-model",
             status="completed",
         )
         store.add_observability_event(
@@ -673,6 +693,143 @@ def test_run_single_turn_uses_generic_tool_history_across_response_providers(
         "ok": True,
         "result": "/workspace",
     }
+
+
+def test_run_single_turn_does_not_match_response_history_across_mixed_providers(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub(provider_name="openai")
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "repeat request", provider_id="anthropic")
+        store.add_message(
+            session_id,
+            "assistant",
+            "anthropic answer",
+            provider_id="anthropic",
+        )
+        store.add_message(session_id, "user", "repeat request", provider_id="openai")
+        store.add_message(
+            session_id,
+            "assistant",
+            "openai answer",
+            provider_id="openai",
+        )
+        anthropic_run_id = store.create_run_session(
+            run_session_id="run-anthropic",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="anthropic",
+            provider_id="anthropic",
+            profile_id=None,
+            model="claude",
+            status="completed",
+        )
+        store.add_observability_event(
+            run_session_id=anthropic_run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "messages": [{"role": "user", "content": "repeat request"}]
+            },
+            response_payload={
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_anthropic",
+                        "name": "shell",
+                        "input": {"command": "pwd"},
+                    }
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=anthropic_run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_anthropic",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+        openai_run_id = store.create_run_session(
+            run_session_id="run-openai",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="openai",
+            profile_id=None,
+            model=DEFAULT_MODEL,
+            status="completed",
+        )
+        store.add_observability_event(
+            run_session_id=openai_run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={"input": [{"role": "user", "content": "repeat request"}]},
+            response_payload={
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_openai",
+                        "status": "completed",
+                        "summary": [],
+                    },
+                    {
+                        "type": "message",
+                        "id": "msg_openai",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "openai answer",
+                            }
+                        ],
+                    },
+                ]
+            },
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert provider.restored_history_items is not None
+    assert all(
+        item["type"] != "provider_input_item"
+        for item in provider.restored_history_items
+    )
+    assert [item["type"] for item in provider.restored_history_items] == [
+        "message",
+        "tool_call",
+        "tool_result",
+        "message",
+        "message",
+        "message",
+    ]
 
 
 def test_run_single_turn_falls_back_to_tool_history_when_response_history_incomplete(

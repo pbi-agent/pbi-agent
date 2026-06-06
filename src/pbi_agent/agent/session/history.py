@@ -408,18 +408,15 @@ def _response_history_items_for_provider_restore(
     *,
     provider: Provider | None = None,
 ) -> list[dict[str, Any]]:
-    run_events = _response_model_call_events_by_run(
-        store,
-        session_id,
-        provider=provider,
-    )
-    if not run_events:
+    run_histories = _response_model_call_history_by_run(store, session_id)
+    if not run_histories:
         return []
 
     history_items: list[dict[str, Any]] = []
     run_index = 0
     used_response_history = False
     pending_user: MessageRecord | None = None
+    current_provider = _provider_history_name(provider)
 
     for message in messages:
         if message.role == "user":
@@ -428,15 +425,16 @@ def _response_history_items_for_provider_restore(
             pending_user = message
             continue
         if message.role == "assistant" and pending_user is not None:
-            turn_items: list[dict[str, Any]] = []
-            while run_index < len(run_events):
-                turn_items = _response_history_items_for_run(
-                    run_events[run_index],
-                    pending_user,
-                )
-                run_index += 1
-                if turn_items:
-                    break
+            if run_index >= len(run_histories):
+                return []
+            run, events = run_histories[run_index]
+            run_index += 1
+            if (
+                current_provider is not None
+                and _run_provider_name(run) != current_provider
+            ):
+                return []
+            turn_items = _response_history_items_for_run(events, pending_user)
             if turn_items:
                 history_items.extend(turn_items)
                 used_response_history = True
@@ -454,23 +452,15 @@ def _response_history_items_for_provider_restore(
     return history_items if used_response_history else []
 
 
-def _response_model_call_events_by_run(
+def _response_model_call_history_by_run(
     store: SessionStore,
     session_id: str,
-    *,
-    provider: Provider | None = None,
-) -> list[list[Any]]:
-    histories: list[list[Any]] = []
-    current_provider = _provider_history_name(provider)
+) -> list[tuple[Any, list[Any]]]:
+    histories: list[tuple[Any, list[Any]]] = []
     for run in store.list_run_sessions(session_id):
         if run.parent_run_session_id or run.agent_name not in {None, "main"}:
             continue
         if run.agent_type not in {"session_turn", "single_turn"}:
-            continue
-        if (
-            current_provider is not None
-            and str(run.provider or "").strip().lower() != current_provider
-        ):
             continue
         events = [
             event
@@ -480,8 +470,13 @@ def _response_model_call_events_by_run(
             if event.event_type == "model_call" and event.success != 0
         ]
         if events:
-            histories.append(events)
+            histories.append((run, events))
     return histories
+
+
+def _run_provider_name(run: Any) -> str | None:
+    provider_name = str(getattr(run, "provider", "") or "").strip().lower()
+    return provider_name or None
 
 
 def _response_history_items_for_run(

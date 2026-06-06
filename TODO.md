@@ -1,5 +1,5 @@
-- [x] Inspect session persistence and provider replay code
-- [x] Locate leaking provider-specific history field
-- [x] Reproduce or payload-check session `ec4f315e257d4653aeb6f4db7b40f5a5`
-- [x] Implement targeted normalization/fix if confirmed
-- [x] Run focused validation and update memory
+- [x] Audit history replay across all providers
+- [x] Define provider-agnostic saved tool-history contract
+- [x] Update replay selection/conversion if needed
+- [x] Add cross-provider tests for non-xAI cases
+- [x] Validate and update memory
