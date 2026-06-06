@@ -78,72 +78,72 @@ const SETTINGS_NAV_GROUPS: Array<{
   label: string;
   items: Array<{ id: SettingsTabId; label: string; description: string }>;
 }> = [
-  {
-    label: "Models",
-    items: [
-      {
-        id: "providers",
-        label: "Providers",
-        description: "Connections and credentials",
-      },
-      {
-        id: "speech",
-        label: "Speech-to-text",
-        description: "Dictation provider",
-      },
-      {
-        id: "model-profiles",
-        label: "Model Profiles",
-        description: "Runtime defaults",
-      },
-    ],
-  },
-  {
-    label: "Project",
-    items: [
-      {
-        id: "commands",
-        label: "Commands",
-        description: "Prompt presets",
-      },
-      {
-        id: "skills",
-        label: "Skills",
-        description: "Agent capabilities",
-      },
-      {
-        id: "agents",
-        label: "Agents",
-        description: "Delegated workers",
-      },
-    ],
-  },
-  {
-    label: "Desktop",
-    items: [
-      {
-        id: "appearance",
-        label: "Appearance",
-        description: "Theme and display",
-      },
-      {
-        id: "notifications",
-        label: "Notifications",
-        description: "Desktop and sound alerts",
-      },
-    ],
-  },
-  {
-    label: "Data",
-    items: [
-      {
-        id: "maintenance",
-        label: "Maintenance",
-        description: "Retention and cleanup",
-      },
-    ],
-  },
-];
+    {
+      label: "Models",
+      items: [
+        {
+          id: "providers",
+          label: "Providers",
+          description: "Connections and credentials",
+        },
+        {
+          id: "model-profiles",
+          label: "Model Profiles",
+          description: "Runtime defaults",
+        },
+        {
+          id: "speech",
+          label: "Speech-to-text",
+          description: "Dictation provider",
+        },
+      ],
+    },
+    {
+      label: "Project",
+      items: [
+        {
+          id: "commands",
+          label: "Commands",
+          description: "Prompt presets",
+        },
+        {
+          id: "skills",
+          label: "Skills",
+          description: "Agent capabilities",
+        },
+        {
+          id: "agents",
+          label: "Agents",
+          description: "Delegated workers",
+        },
+      ],
+    },
+    {
+      label: "Desktop",
+      items: [
+        {
+          id: "appearance",
+          label: "Appearance",
+          description: "Theme and display",
+        },
+        {
+          id: "notifications",
+          label: "Notifications",
+          description: "Desktop and sound alerts",
+        },
+      ],
+    },
+    {
+      label: "Data",
+      items: [
+        {
+          id: "maintenance",
+          label: "Maintenance",
+          description: "Retention and cleanup",
+        },
+      ],
+    },
+  ];
 
 function shouldPromptProviderAuth(provider: ProviderView): boolean {
   return provider.auth_mode !== "api_key";
@@ -353,22 +353,22 @@ export function SettingsPage() {
               <div className="settings-dialog__panel settings-dialog__panel--error">
                 <DialogTitle className="sr-only">Settings</DialogTitle>
                 <div className="settings-error-layout">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-className="settings-nav__header-close app-close-icon-button"
-                  onClick={closeSettings}
-                >
-                  <XIcon />
-                  <span className="sr-only">Close</span>
-                </Button>
-                <Alert variant="destructive" className="settings-error-banner">
-                  <AlertTriangleIcon />
-                  <AlertDescription>
-                    Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
-                  </AlertDescription>
-                </Alert>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="settings-nav__header-close app-close-icon-button"
+                    onClick={closeSettings}
+                  >
+                    <XIcon />
+                    <span className="sr-only">Close</span>
+                  </Button>
+                  <Alert variant="destructive" className="settings-error-banner">
+                    <AlertTriangleIcon />
+                    <AlertDescription>
+                      Failed to load settings: {(configQuery.error as Error)?.message ?? "Unknown error"}
+                    </AlertDescription>
+                  </Alert>
                 </div>
               </div>
             </DialogPrimitive.Content>
@@ -403,130 +403,130 @@ className="settings-nav__header-close app-close-icon-button"
             <div className="settings-dialog__panel">
               <DialogTitle className="sr-only">Settings</DialogTitle>
               <div className="settings-page__inner">
-              <div className="settings-shell">
-                <aside className="settings-nav" aria-label="Settings sections">
-                  <div className="settings-nav__header">
-                    <div className="settings-nav__eyebrow">Settings</div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-className="settings-nav__header-close app-close-icon-button"
-                      onClick={closeSettings}
-                    >
-                      <XIcon />
-                      <span className="sr-only">Close</span>
-                    </Button>
-                  </div>
-                  <div className="settings-nav__body">
-                    {SETTINGS_NAV_GROUPS.map((group) => (
-                      <div className="settings-nav__group" key={group.label}>
-                        <div className="settings-nav__group-label">{group.label}</div>
-                        <div className="settings-nav__items">
-                          {group.items.map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`settings-nav__item ${activeTab === item.id ? "settings-nav__item--active" : ""}`}
-                              aria-pressed={activeTab === item.id}
-                              onClick={() => setActiveTab(item.id)}
-                            >
-                              <span className="settings-nav__item-label">{item.label}</span>
-                              <span className="settings-nav__item-description">{item.description}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </aside>
-
-                <div className="settings-tab-content">
-                  {(model_profiles.length === 0 || pageError) && (
-                    <div className="settings-global-alerts">
-                      {model_profiles.length === 0 && (
-                        <Alert className="settings-inline-note settings-onboarding-guide">
-                          <AlertDescription>
-                            <strong>First-time setup:</strong> To start using the app, complete these
-                            steps:
-                            <ol>
-                              <li>Add an LLM provider and finish any sign-in step</li>
-                              <li>Create a model profile that uses that provider</li>
-                            </ol>
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {pageError && (
-                        <Alert variant="destructive" className="settings-error-banner">
-                          <AlertTriangleIcon />
-                          <AlertDescription>{pageError}</AlertDescription>
-                        </Alert>
-                      )}
+                <div className="settings-shell">
+                  <aside className="settings-nav" aria-label="Settings sections">
+                    <div className="settings-nav__header">
+                      <div className="settings-nav__eyebrow">Settings</div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="settings-nav__header-close app-close-icon-button"
+                        onClick={closeSettings}
+                      >
+                        <XIcon />
+                        <span className="sr-only">Close</span>
+                      </Button>
                     </div>
-                  )}
+                    <div className="settings-nav__body">
+                      {SETTINGS_NAV_GROUPS.map((group) => (
+                        <div className="settings-nav__group" key={group.label}>
+                          <div className="settings-nav__group-label">{group.label}</div>
+                          <div className="settings-nav__items">
+                            {group.items.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className={`settings-nav__item ${activeTab === item.id ? "settings-nav__item--active" : ""}`}
+                                aria-pressed={activeTab === item.id}
+                                onClick={() => setActiveTab(item.id)}
+                              >
+                                <span className="settings-nav__item-label">{item.label}</span>
+                                <span className="settings-nav__item-description">{item.description}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </aside>
 
-                  {activeTab === "appearance" && <AppearanceSettingsSection />}
+                  <div className="settings-tab-content">
+                    {(model_profiles.length === 0 || pageError) && (
+                      <div className="settings-global-alerts">
+                        {model_profiles.length === 0 && (
+                          <Alert className="settings-inline-note settings-onboarding-guide">
+                            <AlertDescription>
+                              <strong>First-time setup:</strong> To start using the app, complete these
+                              steps:
+                              <ol>
+                                <li>Add an LLM provider and finish any sign-in step</li>
+                                <li>Create a model profile that uses that provider</li>
+                              </ol>
+                            </AlertDescription>
+                          </Alert>
+                        )}
 
-                  {activeTab === "notifications" && <NotificationsSettingsSection />}
+                        {pageError && (
+                          <Alert variant="destructive" className="settings-error-banner">
+                            <AlertTriangleIcon />
+                            <AlertDescription>{pageError}</AlertDescription>
+                          </Alert>
+                        )}
+                      </div>
+                    )}
 
-                  {activeTab === "providers" && (
-                    <ProvidersSettingsSection
-                      providers={providers}
-                      options={options}
-                      busyProviderId={busyProviderId}
-                      onCreate={() => setModal({ type: "create-provider" })}
-                      onEdit={(provider) => setModal({ type: "edit-provider", provider })}
-                      onDelete={(provider) => setModal({ type: "delete-provider", provider })}
-                      onConnect={(provider) => setModal({ type: "provider-auth", provider })}
-                      onRefresh={(providerId) => {
-                        void handleRefreshProviderAuth(providerId);
-                      }}
-                      onDisconnect={(providerId) => {
-                        void handleDisconnectProviderAuth(providerId);
-                      }}
-                      onShowUsage={(provider) => setModal({ type: "provider-usage", provider })}
-                    />
-                  )}
+                    {activeTab === "appearance" && <AppearanceSettingsSection />}
 
-                  {activeTab === "speech" && (
-                    <SpeechSettingsSection
-                      providers={providers}
-                      options={options}
-                      sttProviderId={stt_provider_id}
-                      onSave={handleSetSttProvider}
-                    />
-                  )}
+                    {activeTab === "notifications" && <NotificationsSettingsSection />}
 
-                  {activeTab === "model-profiles" && (
-                    <ModelProfilesSettingsSection
-                      profiles={model_profiles}
-                      providers={modelCapableProviders}
-                      activeProfileId={active_profile_id}
-                      onSetActiveProfile={(profileId) => {
-                        void handleSetActiveProfile(profileId);
-                      }}
-                      onCreate={() => setModal({ type: "create-profile" })}
-                      onEdit={(profile) => setModal({ type: "edit-profile", profile })}
-                      onDelete={(profile) => setModal({ type: "delete-profile", profile })}
-                    />
-                  )}
+                    {activeTab === "providers" && (
+                      <ProvidersSettingsSection
+                        providers={providers}
+                        options={options}
+                        busyProviderId={busyProviderId}
+                        onCreate={() => setModal({ type: "create-provider" })}
+                        onEdit={(provider) => setModal({ type: "edit-provider", provider })}
+                        onDelete={(provider) => setModal({ type: "delete-provider", provider })}
+                        onConnect={(provider) => setModal({ type: "provider-auth", provider })}
+                        onRefresh={(providerId) => {
+                          void handleRefreshProviderAuth(providerId);
+                        }}
+                        onDisconnect={(providerId) => {
+                          void handleDisconnectProviderAuth(providerId);
+                        }}
+                        onShowUsage={(provider) => setModal({ type: "provider-usage", provider })}
+                      />
+                    )}
 
-                  {activeTab === "skills" && <SkillsSettingsSection skills={skills} />}
+                    {activeTab === "speech" && (
+                      <SpeechSettingsSection
+                        providers={providers}
+                        options={options}
+                        sttProviderId={stt_provider_id}
+                        onSave={handleSetSttProvider}
+                      />
+                    )}
 
-                  {activeTab === "commands" && <CommandsSettingsSection commands={commands} />}
+                    {activeTab === "model-profiles" && (
+                      <ModelProfilesSettingsSection
+                        profiles={model_profiles}
+                        providers={modelCapableProviders}
+                        activeProfileId={active_profile_id}
+                        onSetActiveProfile={(profileId) => {
+                          void handleSetActiveProfile(profileId);
+                        }}
+                        onCreate={() => setModal({ type: "create-profile" })}
+                        onEdit={(profile) => setModal({ type: "edit-profile", profile })}
+                        onDelete={(profile) => setModal({ type: "delete-profile", profile })}
+                      />
+                    )}
 
-                  {activeTab === "agents" && <AgentsSettingsSection agents={agents} />}
+                    {activeTab === "skills" && <SkillsSettingsSection skills={skills} />}
 
-                  {activeTab === "maintenance" && (
-                    <MaintenanceSettingsSection
-                      maintenance={maintenance}
-                      onSave={handleSaveMaintenance}
-                    />
-                  )}
+                    {activeTab === "commands" && <CommandsSettingsSection commands={commands} />}
+
+                    {activeTab === "agents" && <AgentsSettingsSection agents={agents} />}
+
+                    {activeTab === "maintenance" && (
+                      <MaintenanceSettingsSection
+                        maintenance={maintenance}
+                        onSave={handleSaveMaintenance}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
             </div>
           </DialogPrimitive.Content>
         </div>

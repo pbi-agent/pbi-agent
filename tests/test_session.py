@@ -554,10 +554,11 @@ def test_run_single_turn_restores_tool_history_when_enabled(
         "type": "function_call",
         "call_id": "call_1",
         "name": "shell",
-        "status": "completed",
         "arguments": '{"command": "pwd"}',
     }
     assert restored_items[3]["output"] == '{"ok": true, "result": "/workspace"}'
+    assert "status" not in restored_items[5]
+    assert "phase" not in restored_items[5]
     assert restored_items[5]["content"] == [
         {"type": "output_text", "text": "previous assistant"}
     ]
@@ -565,6 +566,113 @@ def test_run_single_turn_restores_tool_history_when_enabled(
         "previous user",
         "previous assistant",
     ]
+
+
+def test_run_single_turn_uses_generic_tool_history_across_response_providers(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub()
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "xai", DEFAULT_MODEL)
+        store.add_message(
+            session_id,
+            "user",
+            "previous user",
+            provider_id="xai",
+        )
+        store.add_message(
+            session_id,
+            "assistant",
+            "previous assistant",
+            provider_id="xai",
+        )
+        run_id = store.create_run_session(
+            run_session_id="run-1",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="xai",
+            provider_id="xai",
+            profile_id=None,
+            model="grok-4.3",
+            status="completed",
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "previous user"}],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "encrypted_content": "xai-reasoning",
+                        "status": "completed",
+                        "summary": [],
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "status": "completed",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_1",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    outcome = run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert outcome.session_id == session_id
+    assert provider.restored_history_items is not None
+    assert [item["type"] for item in provider.restored_history_items[:4]] == [
+        "message",
+        "tool_call",
+        "tool_result",
+        "message",
+    ]
+    assert provider.restored_history_items[1] == {
+        "type": "tool_call",
+        "call_id": "call_1",
+        "name": "shell",
+        "arguments": {"command": "pwd"},
+        "kind": "function",
+    }
+    assert provider.restored_history_items[2]["output"] == {
+        "ok": True,
+        "result": "/workspace",
+    }
 
 
 def test_run_single_turn_falls_back_to_tool_history_when_response_history_incomplete(

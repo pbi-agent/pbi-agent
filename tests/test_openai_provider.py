@@ -273,6 +273,7 @@ def test_openai_build_request_body_uses_http_responses_shape() -> None:
     assert body["stream"] is False
     assert body["store"] is True
     assert body["parallel_tool_calls"] is True
+    assert body["include"] == ["reasoning.encrypted_content"]
     assert body["prompt_cache_retention"] == "24h"
     assert body["context_management"] == [
         {"type": "compaction", "compact_threshold": 200000}
@@ -404,14 +405,20 @@ def test_openai_build_request_body_replays_restored_response_items() -> None:
     provider = OpenAIProvider(_make_settings())
     restored_items = [
         {"role": "user", "content": "hello"},
-        {"type": "reasoning", "id": "rs_1", "summary": []},
+        {"type": "reasoning", "id": "rs_1", "status": "completed", "summary": []},
         {
             "type": "message",
             "id": "msg_1",
             "role": "assistant",
             "status": "completed",
             "phase": "commentary",
-            "content": [{"type": "output_text", "text": "hi"}],
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": "hi",
+                    "logprobs": [],
+                }
+            ],
         },
     ]
     expected_items = [
@@ -420,8 +427,6 @@ def test_openai_build_request_body_replays_restored_response_items() -> None:
         {
             "type": "message",
             "role": "assistant",
-            "status": "completed",
-            "phase": "commentary",
             "content": [{"type": "output_text", "text": "hi"}],
         },
     ]
@@ -453,14 +458,20 @@ def test_openai_chatgpt_build_request_body_replays_restored_response_items() -> 
     )
     restored_items = [
         {"role": "user", "content": "hello"},
-        {"type": "reasoning", "id": "rs_1", "summary": []},
+        {"type": "reasoning", "id": "rs_1", "status": "completed", "summary": []},
         {
             "type": "message",
             "id": "msg_1",
             "role": "assistant",
             "status": "completed",
             "phase": "commentary",
-            "content": [{"type": "output_text", "text": "hi"}],
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": "hi",
+                    "logprobs": [],
+                }
+            ],
         },
     ]
     expected_items = [
@@ -469,8 +480,6 @@ def test_openai_chatgpt_build_request_body_replays_restored_response_items() -> 
         {
             "type": "message",
             "role": "assistant",
-            "status": "completed",
-            "phase": "commentary",
             "content": [{"type": "output_text", "text": "hi"}],
         },
     ]

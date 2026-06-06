@@ -10,6 +10,9 @@ from pbi_agent.providers.base import Provider
 from pbi_agent.providers.github_copilot_backend import (
     github_copilot_backend_for_model,
 )
+from pbi_agent.providers.protocols.openai_responses import (
+    response_history_item_for_input,
+)
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.workspace_context import current_workspace_context
 
@@ -336,6 +339,7 @@ def _history_items_for_provider_restore(
             store,
             session_id,
             messages,
+            provider=provider,
         )
         if response_history_items:
             return response_history_items
@@ -389,12 +393,26 @@ def _provider_prefers_response_input_history(provider: Provider | None) -> bool:
     return False
 
 
+def _provider_history_name(provider: Provider | None) -> str | None:
+    settings = getattr(provider, "settings", None)
+    if not isinstance(settings, Settings):
+        return None
+    provider_name = str(getattr(settings, "provider", "") or "").strip().lower()
+    return provider_name or None
+
+
 def _response_history_items_for_provider_restore(
     store: SessionStore,
     session_id: str,
     messages: list[MessageRecord],
+    *,
+    provider: Provider | None = None,
 ) -> list[dict[str, Any]]:
-    run_events = _response_model_call_events_by_run(store, session_id)
+    run_events = _response_model_call_events_by_run(
+        store,
+        session_id,
+        provider=provider,
+    )
     if not run_events:
         return []
 
@@ -439,12 +457,20 @@ def _response_history_items_for_provider_restore(
 def _response_model_call_events_by_run(
     store: SessionStore,
     session_id: str,
+    *,
+    provider: Provider | None = None,
 ) -> list[list[Any]]:
     histories: list[list[Any]] = []
+    current_provider = _provider_history_name(provider)
     for run in store.list_run_sessions(session_id):
         if run.parent_run_session_id or run.agent_name not in {None, "main"}:
             continue
         if run.agent_type not in {"session_turn", "single_turn"}:
+            continue
+        if (
+            current_provider is not None
+            and str(run.provider or "").strip().lower() != current_provider
+        ):
             continue
         events = [
             event
@@ -694,19 +720,7 @@ def _response_tool_output_call_id(item: dict[str, Any]) -> str | None:
 
 
 def _response_history_item_for_input(item: dict[str, Any]) -> dict[str, Any]:
-    return _strip_provider_item_ids(_clone_json_dict(item))
-
-
-def _strip_provider_item_ids(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            key: _strip_provider_item_ids(inner)
-            for key, inner in value.items()
-            if key != "id"
-        }
-    if isinstance(value, list):
-        return [_strip_provider_item_ids(item) for item in value]
-    return value
+    return response_history_item_for_input(item)
 
 
 def _contains_redacted_inline_image(value: Any) -> bool:

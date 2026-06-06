@@ -7,25 +7,13 @@ history is managed server-side via ``previous_response_id``.
 from __future__ import annotations
 
 import json
-import http.client
 import re
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from typing import Any, TYPE_CHECKING, cast
 
-from pbi_agent import __version__
 from pbi_agent.agent.system_prompt import get_system_prompt
-from pbi_agent.agent.tool_display import (
-    build_tool_result_callback,
-    display_tool_execution_start,
-    finalize_tool_execution,
-)
-from pbi_agent.agent.tool_runtime import (
-    execute_tool_calls as _execute_tool_calls,
-    to_function_call_output_items,
-)
+from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
 from pbi_agent.models.messages import (
     CompletedResponse,
@@ -34,9 +22,23 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
-from pbi_agent.providers import retry as provider_retry
+from pbi_agent.providers.auth_strategies import BearerTokenAuth, json_model_headers
 from pbi_agent.providers.base import Provider
-from pbi_agent.providers.wait_messages import waiting_message_for_input
+from pbi_agent.providers.endpoints import responses_url
+from pbi_agent.providers.protocols.openai_responses import (
+    normalize_xai_http_error,
+    response_history_item_for_input,
+    responses_include,
+    serialize_function_call_output,
+)
+from pbi_agent.providers.runtime import record_response_usage
+from pbi_agent.providers.tool_execution import execute_provider_tool_calls
+from pbi_agent.providers.transport import (
+    JsonErrorPolicy,
+    JsonModelTransport,
+    JsonRequestSpec,
+    json_error_message,
+)
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
@@ -44,7 +46,7 @@ from pbi_agent.tools.availability import (
     native_web_search_enabled,
 )
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
+from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
@@ -52,32 +54,11 @@ if TYPE_CHECKING:
 
 _REQUEST_TIMEOUT_SECS = 3600.0
 _REASONING_EFFORT_MODELS = ("grok-3-mini",)
-_ENCRYPTED_REASONING_MODELS = ("grok-4",)
 _EFFORT_MAP: dict[str, str] = {
     "low": "low",
     "medium": "high",
     "high": "high",
     "xhigh": "high",
-}
-_HTTP_ERROR_TYPES: dict[int, str] = {
-    400: "invalid_request_error",
-    401: "authentication_error",
-    403: "permission_error",
-    404: "not_found_error",
-    405: "invalid_request_error",
-    415: "invalid_request_error",
-    422: "invalid_request_error",
-    429: "rate_limit_error",
-}
-_HTTP_ERROR_MESSAGES: dict[int, str] = {
-    400: "Request body or URL contains invalid input.",
-    401: "No authorization header or an invalid authorization token was provided.",
-    403: "API key or team lacks permission to perform this action.",
-    404: "The requested model or endpoint could not be found.",
-    405: "HTTP method is not allowed for this endpoint.",
-    415: "Request body is missing or Content-Type is not application/json.",
-    422: "Request body contains an invalid field format.",
-    429: "Too many requests. Reduce request rate or increase your rate limit.",
 }
 
 
@@ -103,6 +84,7 @@ class XAIProvider(Provider):
         )
         self._previous_response_id: str | None = None
         self._restored_input_items: list[dict[str, Any]] = []
+        self._transport = JsonModelTransport()
 
     @property
     def settings(self) -> Settings:
@@ -184,9 +166,12 @@ class XAIProvider(Provider):
             tracer=tracer,
         )
         self._previous_response_id = result.response_id
-        session_usage.add(result.usage)
-        turn_usage.add(result.usage)
-        display.session_usage(session_usage)
+        record_response_usage(
+            result,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+        )
 
         if result.reasoning_summary or result.reasoning_content:
             display.render_thinking(
@@ -237,48 +222,26 @@ class XAIProvider(Provider):
         if not response.function_calls:
             return [], False
 
-        displayable_calls = [
-            call for call in response.function_calls if call.name != "sub_agent"
-        ]
-        if displayable_calls:
-            display.function_start(len(displayable_calls))
-            display_tool_execution_start(display, displayable_calls)
-        try:
-            batch = _execute_tool_calls(
-                response.function_calls,
-                max_workers=max_workers,
-                context=ToolContext(
-                    settings=self._settings,
-                    display=display,
-                    session_usage=session_usage,
-                    turn_usage=turn_usage,
-                    sub_agent_depth=sub_agent_depth,
-                    tool_catalog=self._tool_catalog,
-                    disabled_tool_names=effective_excluded_tool_names(
-                        self._settings, self._excluded_tools
-                    ),
-                    tool_availability_overridden=getattr(
-                        self, "_tool_availability_overridden", False
-                    ),
-                    parent_context=parent_context,
-                    tracer=tracer,
-                    workspace_root=getattr(self, "_workspace_root", None),
-                    workspace_directory_key=getattr(
-                        self, "_workspace_directory_key", None
-                    ),
-                ),
-                on_result=build_tool_result_callback(display),
-            )
-
-            finalize_tool_execution(display)
-        except Exception:
-            if displayable_calls:
-                display.tool_execution_stop()
-            raise
-        if displayable_calls:
-            display.tool_group_end()
-
-        return to_function_call_output_items(batch.results), batch.had_errors
+        return execute_provider_tool_calls(
+            response.function_calls,
+            max_workers=max_workers,
+            settings=self._settings,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tool_catalog=self._tool_catalog,
+            excluded_tools=self._excluded_tools,
+            serialize_result=serialize_function_call_output,
+            sub_agent_depth=sub_agent_depth,
+            parent_context=parent_context,
+            tracer=tracer,
+            tool_availability_overridden=getattr(
+                self, "_tool_availability_overridden", False
+            ),
+            workspace_root=getattr(self, "_workspace_root", None),
+            workspace_directory_key=getattr(self, "_workspace_directory_key", None),
+            execute_calls=_execute_tool_calls,
+        )
 
     def _http_request(
         self,
@@ -288,240 +251,38 @@ class XAIProvider(Provider):
         display: DisplayProtocol,
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
-        display.wait_start(waiting_message_for_input(input_items))
-
         request_body = self._build_request_body(
             input_items=input_items,
             instructions=instructions,
         )
-        request_data = json.dumps(request_body).encode("utf-8")
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._settings.api_key}",
-            "User-Agent": f"pbi-agent/{__version__}",
-        }
+        headers = json_model_headers()
+        headers.update(BearerTokenAuth(self._settings.api_key).headers())
 
-        max_retries = self._settings.max_retries
-        rate_limit_max_retries = provider_retry.rate_limit_max_retries(max_retries)
-        retry_notice_max_retries = max_retries
-        last_error: Exception | None = None
-        last_error_message: str | None = None
-
-        for attempt in range(rate_limit_max_retries + 1):
-            if attempt > 0:
-                display.retry_notice(attempt, retry_notice_max_retries)
-
-            req_start = time.perf_counter()
-            try:
-                req = urllib.request.Request(
-                    self._settings.responses_url,
-                    data=request_data,
-                    headers=headers,
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECS) as resp:
-                    response_json = json.loads(resp.read().decode("utf-8"))
-
-                result = self._parse_response(response_json)
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=self._settings.responses_url,
-                    request_config=self._settings.redacted(),
-                    request_payload=request_body,
-                    response_payload=response_json,
-                    duration_ms=_duration_ms(req_start),
-                    prompt_tokens=result.usage.input_tokens,
-                    completion_tokens=result.usage.output_tokens,
-                    total_tokens=result.usage.total_tokens,
-                    status_code=200,
-                    success=True,
-                    metadata={"attempt": attempt + 1},
-                )
-                display.wait_stop()
-                return result
-            except urllib.error.HTTPError as exc:
-                error_body = _read_error_body(exc)
-                error_payload = _normalize_http_error(exc, error_body)
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=self._settings.responses_url,
-                    request_config=self._settings.redacted(),
-                    request_payload=request_body,
-                    response_payload=error_payload or {"body": error_body},
-                    duration_ms=_duration_ms(req_start),
-                    status_code=exc.code,
-                    success=False,
-                    error_message=_format_error_message(
-                        f"xAI Responses API error {exc.code}",
-                        error_payload,
-                    ),
-                    metadata={"attempt": attempt + 1},
-                )
-                if exc.code == 429:
-                    if not provider_retry.should_retry_rate_limit(error_payload):
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                f"xAI Responses API error {exc.code}",
-                                error_payload,
-                            )
-                        ) from exc
-                    if attempt >= rate_limit_max_retries:
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                "xAI rate limit exceeded after "
-                                f"{rate_limit_max_retries + 1} attempts",
-                                error_payload,
-                            )
-                        ) from exc
-                    wait = _extract_retry_after(exc, attempt)
-                    retry_notice_max_retries = rate_limit_max_retries
-                    display.rate_limit_notice(
-                        wait_seconds=wait,
-                        attempt=attempt + 1,
-                        max_retries=rate_limit_max_retries,
-                    )
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=self._settings.responses_url,
-                        request_config=self._settings.redacted(),
-                        request_payload=request_body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"xAI Responses API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=rate_limit_max_retries,
-                        metadata={"retryable": True},
-                    )
-                    time.sleep(wait)
-                    continue
-
-                if provider_retry.is_overload_http_status(exc.code):
-                    if attempt >= max_retries:
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                f"xAI API overloaded after {max_retries + 1} attempts",
-                                error_payload,
-                            )
-                        ) from exc
-                    wait = _extract_retry_after(exc, attempt)
-                    retry_notice_max_retries = max_retries
-                    display.overload_notice(
-                        wait_seconds=wait,
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                    )
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=self._settings.responses_url,
-                        request_config=self._settings.redacted(),
-                        request_payload=request_body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"xAI Responses API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        metadata={"retryable": True, "overloaded": True},
-                    )
-                    time.sleep(wait)
-                    continue
-
-                if provider_retry.is_retryable_http_status(exc.code):
-                    last_error = exc
-                    last_error_message = _format_error_message(
-                        f"xAI request failed after {max_retries + 1} attempts",
-                        error_payload,
-                    )
-                    if attempt >= max_retries:
-                        break
-                    retry_notice_max_retries = max_retries
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=self._settings.responses_url,
-                        request_config=self._settings.redacted(),
-                        request_payload=request_body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"xAI Responses API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        metadata={"retryable": True},
-                    )
-                    continue
-
-                display.wait_stop()
-                raise RuntimeError(
-                    _format_error_message(
-                        f"xAI Responses API error {exc.code}",
-                        error_payload,
-                    )
-                ) from exc
-            except (
-                http.client.IncompleteRead,
-                TimeoutError,
-                ConnectionError,
-                urllib.error.URLError,
-            ) as exc:
-                last_error = exc
-                last_error_message = None
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=self._settings.responses_url,
-                    request_config=self._settings.redacted(),
-                    request_payload=request_body,
-                    response_payload={"error": str(exc)},
-                    duration_ms=_duration_ms(req_start),
-                    success=False,
-                    error_message=str(exc),
-                    metadata={"attempt": attempt + 1},
-                )
-                if attempt >= max_retries:
-                    break
-                retry_notice_max_retries = max_retries
-                _trace_provider_retry(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=self._settings.responses_url,
-                    request_config=self._settings.redacted(),
-                    request_payload=request_body,
-                    status_code=None,
-                    error_message=str(exc),
-                    attempt=attempt + 1,
-                    max_retries=max_retries,
-                    metadata={"retryable": True},
-                )
-                continue
-
-        display.wait_stop()
-        if last_error is not None:
-            if last_error_message:
-                raise RuntimeError(last_error_message) from last_error
-            raise RuntimeError(
-                f"xAI request failed after {max_retries + 1} attempts: {last_error}"
-            ) from last_error
-        raise RuntimeError("xAI request failed after retries.")
+        return self._transport.post(
+            JsonRequestSpec(
+                provider=self._settings.provider,
+                model=self._settings.model,
+                url=responses_url(self._settings),
+                headers=headers,
+                body=request_body,
+                request_config=self._settings.redacted(),
+                wait_input=input_items,
+                timeout=_REQUEST_TIMEOUT_SECS,
+                error_policy=JsonErrorPolicy(
+                    api_error_label="xAI Responses API error",
+                    rate_limit_exhausted_label="xAI rate limit exceeded",
+                    overload_exhausted_label="xAI API overloaded",
+                    request_failed_label="xAI request failed",
+                    normalize_http_error=normalize_xai_http_error,
+                    format_error=json_error_message,
+                ),
+                sleep=time.sleep,
+            ),
+            settings=self._settings,
+            display=display,
+            tracer=tracer,
+            parse_response=self._parse_response,
+        )
 
     def _build_request_body(
         self,
@@ -548,9 +309,7 @@ class XAIProvider(Provider):
         if self._previous_response_id:
             body["previous_response_id"] = self._previous_response_id
 
-        include = _response_include(self._settings.model)
-        if include:
-            body["include"] = include
+        body["include"] = _response_include()
 
         reasoning = _reasoning_request(
             self._settings.model,
@@ -815,19 +574,7 @@ def _build_system_input_item(prompt: str) -> dict[str, Any]:
 
 
 def _response_history_item_for_input(item: dict[str, Any]) -> dict[str, Any]:
-    return _strip_provider_item_ids(json.loads(json.dumps(item)))
-
-
-def _strip_provider_item_ids(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            key: _strip_provider_item_ids(inner)
-            for key, inner in value.items()
-            if key != "id"
-        }
-    if isinstance(value, list):
-        return [_strip_provider_item_ids(item) for item in value]
-    return value
+    return response_history_item_for_input(item)
 
 
 def _extract_reasoning_summary_texts(raw_summary: Any) -> list[str]:
@@ -1035,11 +782,8 @@ def _deserialize_web_search_sources(raw_sources: Any) -> list[WebSearchSource]:
     return sources
 
 
-def _response_include(model: str) -> list[str]:
-    include = ["web_search_call.action.sources"]
-    if any(model.startswith(prefix) for prefix in _ENCRYPTED_REASONING_MODELS):
-        include.append("reasoning.encrypted_content")
-    return include
+def _response_include() -> list[str]:
+    return responses_include(["web_search_call.action.sources"])
 
 
 def _reasoning_request(model: str, effort: str) -> dict[str, Any]:
@@ -1057,137 +801,6 @@ def _usage_value(usage_obj: Any, key: str) -> int:
 def _response_model_name(response_json: dict[str, Any]) -> str:
     model = response_json.get("model")
     return model if isinstance(model, str) else ""
-
-
-def _read_error_body(exc: urllib.error.HTTPError) -> str:
-    return provider_retry.read_error_body(exc)
-
-
-def _normalize_http_error(
-    exc: urllib.error.HTTPError,
-    error_body: str,
-) -> dict[str, Any]:
-    payload = provider_retry.parse_error_payload(error_body)
-    error_type = _HTTP_ERROR_TYPES.get(exc.code)
-    message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
-    request_id = _request_id_from_headers(exc)
-
-    if payload is not None:
-        payload_request_id = payload.get("request_id")
-        if isinstance(payload_request_id, str) and payload_request_id.strip():
-            request_id = payload_request_id.strip()
-
-        error_value = payload.get("error")
-        if isinstance(error_value, dict):
-            payload_type = error_value.get("type")
-            if isinstance(payload_type, str) and payload_type.strip():
-                error_type = payload_type.strip()
-            payload_message = error_value.get("message")
-            if isinstance(payload_message, str) and payload_message.strip():
-                message = payload_message.strip()
-        elif isinstance(error_value, str) and error_value.strip():
-            message = error_value.strip()
-
-    if error_type is None:
-        if 400 <= exc.code < 500:
-            error_type = "invalid_request_error"
-        else:
-            error_type = "api_error"
-
-    return {
-        "type": "error",
-        "status": exc.code,
-        "error": {
-            "type": error_type,
-            "message": message,
-        },
-        **({"request_id": request_id} if request_id else {}),
-    }
-
-
-def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
-    return provider_retry.request_id_from_headers(
-        exc,
-        header_names=("request-id", "x-request-id"),
-    )
-
-
-def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
-    return provider_retry.format_error_message(prefix, error_payload)
-
-
-def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
-    return provider_retry.retry_after_seconds(exc, attempt)
-
-
-def _duration_ms(started_at: float) -> int:
-    return provider_retry.duration_ms(started_at)
-
-
-def _trace_provider_call(
-    *,
-    tracer,
-    provider: str,
-    model: str,
-    url: str,
-    request_config: dict[str, Any],
-    request_payload: dict[str, Any],
-    response_payload: dict[str, Any],
-    duration_ms: int,
-    prompt_tokens: int | None = None,
-    completion_tokens: int | None = None,
-    total_tokens: int | None = None,
-    status_code: int | None = None,
-    success: bool,
-    error_message: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    provider_retry.trace_provider_call(
-        tracer=tracer,
-        provider=provider,
-        model=model,
-        url=url,
-        request_config=request_config,
-        request_payload=request_payload,
-        response_payload=response_payload,
-        duration_ms=duration_ms,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=total_tokens,
-        status_code=status_code,
-        success=success,
-        error_message=error_message,
-        metadata=metadata,
-    )
-
-
-def _trace_provider_retry(
-    *,
-    tracer,
-    provider: str,
-    model: str,
-    url: str,
-    request_config: dict[str, Any],
-    request_payload: dict[str, Any],
-    status_code: int | None,
-    error_message: str,
-    attempt: int,
-    max_retries: int,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    provider_retry.trace_provider_retry(
-        tracer=tracer,
-        provider=provider,
-        model=model,
-        url=url,
-        request_config=request_config,
-        request_payload=request_payload,
-        status_code=status_code,
-        error_message=error_message,
-        attempt=attempt,
-        max_retries=max_retries,
-        metadata=metadata,
-    )
 
 
 def _reasoning_body_text(reasoning_text: str, summary_text: str) -> str | None:

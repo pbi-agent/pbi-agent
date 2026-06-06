@@ -9,23 +9,13 @@ native web-search is appended separately when enabled.
 """
 
 from __future__ import annotations
-import http.client
 import json
-import logging
 import time
-import urllib.error
-import urllib.request
 from typing import Any, TYPE_CHECKING
 
 from pbi_agent.agent.system_prompt import get_system_prompt
-from pbi_agent.agent.tool_display import (
-    build_tool_result_callback,
-    display_tool_execution_start,
-    finalize_tool_execution,
-)
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
-from pbi_agent.providers.azure import azure_endpoint_kind, AzureEndpointKind
 from pbi_agent.models.messages import (
     CompletedResponse,
     ImageAttachment,
@@ -34,9 +24,23 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
-from pbi_agent.providers import retry as provider_retry
+from pbi_agent.providers.auth_strategies import anthropic_headers
 from pbi_agent.providers.base import Provider
-from pbi_agent.providers.wait_messages import waiting_message_for_input
+from pbi_agent.providers.endpoints import anthropic_messages_url
+from pbi_agent.providers.protocols.anthropic_messages import (
+    ANTHROPIC_VERSION,
+    build_messages_body,
+    normalize_http_error,
+    render_messages_response,
+)
+from pbi_agent.providers.runtime import record_response_usage
+from pbi_agent.providers.tool_execution import execute_provider_tool_calls
+from pbi_agent.providers.transport import (
+    JsonErrorPolicy,
+    JsonModelTransport,
+    JsonRequestSpec,
+    json_error_message,
+)
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
@@ -44,47 +48,14 @@ from pbi_agent.tools.availability import (
     native_web_search_enabled,
 )
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
+from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.web.uploads import load_uploaded_image
 from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
     from pbi_agent.observability import RunTracer
 
-_log = logging.getLogger(__name__)
-
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_VERSION = "2023-06-01"
-
-# Map the CLI reasoning-effort values to Anthropic adaptive thinking effort.
-_EFFORT_MAP: dict[str, str] = {
-    "low": "low",
-    "medium": "medium",
-    "high": "high",
-    "xhigh": "max",
-}
-
-_HTTP_ERROR_TYPES: dict[int, str] = {
-    400: "invalid_request_error",
-    401: "authentication_error",
-    403: "permission_error",
-    404: "not_found_error",
-    413: "request_too_large",
-    429: "rate_limit_error",
-    500: "api_error",
-    529: "overloaded_error",
-}
-
-_HTTP_ERROR_MESSAGES: dict[int, str] = {
-    400: "There was an issue with the format or content of your request.",
-    401: "There's an issue with your API key.",
-    403: "Your API key does not have permission to use the specified resource.",
-    404: "The requested resource could not be found.",
-    413: "Request exceeds the maximum allowed number of bytes.",
-    429: "Your account has hit a rate limit.",
-    500: "An unexpected error has occurred internal to Anthropic's systems.",
-    529: "The API is temporarily overloaded.",
-}
 
 
 class AnthropicProvider(Provider):
@@ -109,6 +80,7 @@ class AnthropicProvider(Provider):
         )
         # Client-side conversation history — full messages list.
         self._messages: list[dict[str, Any]] = []
+        self._transport = JsonModelTransport()
 
     @property
     def settings(self) -> Settings:
@@ -207,9 +179,12 @@ class AnthropicProvider(Provider):
             display=display,
             tracer=tracer,
         )
-        session_usage.add(response.usage)
-        turn_usage.add(response.usage)
-        display.session_usage(session_usage)
+        record_response_usage(
+            response,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+        )
         return response
 
     # -- execute_tool_calls --------------------------------------------------
@@ -252,57 +227,26 @@ class AnthropicProvider(Provider):
             for b in tool_use_blocks
         ]
 
-        displayable_calls = [call for call in fn_calls if call.name != "sub_agent"]
-        if displayable_calls:
-            display.function_start(len(displayable_calls))
-            display_tool_execution_start(display, displayable_calls)
-        try:
-            batch = _execute_tool_calls(
-                fn_calls,
-                max_workers=max_workers,
-                context=ToolContext(
-                    settings=self._settings,
-                    display=display,
-                    session_usage=session_usage,
-                    turn_usage=turn_usage,
-                    sub_agent_depth=sub_agent_depth,
-                    tool_catalog=self._tool_catalog,
-                    disabled_tool_names=effective_excluded_tool_names(
-                        self._settings, self._excluded_tools
-                    ),
-                    tool_availability_overridden=getattr(
-                        self, "_tool_availability_overridden", False
-                    ),
-                    parent_context=parent_context,
-                    tracer=tracer,
-                    workspace_root=getattr(self, "_workspace_root", None),
-                    workspace_directory_key=getattr(
-                        self, "_workspace_directory_key", None
-                    ),
-                ),
-                on_result=build_tool_result_callback(display),
-            )
-            had_errors = batch.had_errors
-
-            tool_result_items: list[dict[str, Any]] = []
-            finalize_tool_execution(display)
-        except Exception:
-            if displayable_calls:
-                display.tool_execution_stop()
-            raise
-        for result in batch.results:
-            tool_result_items.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": result.call_id,
-                    "content": _anthropic_tool_result_content(result),
-                    **({"is_error": True} if result.is_error else {}),
-                }
-            )
-        if displayable_calls:
-            display.tool_group_end()
-
-        return tool_result_items, had_errors
+        return execute_provider_tool_calls(
+            fn_calls,
+            max_workers=max_workers,
+            settings=self._settings,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tool_catalog=self._tool_catalog,
+            excluded_tools=self._excluded_tools,
+            serialize_result=_anthropic_tool_result_item,
+            sub_agent_depth=sub_agent_depth,
+            parent_context=parent_context,
+            tracer=tracer,
+            tool_availability_overridden=getattr(
+                self, "_tool_availability_overridden", False
+            ),
+            workspace_root=getattr(self, "_workspace_root", None),
+            workspace_directory_key=getattr(self, "_workspace_directory_key", None),
+            execute_calls=_execute_tool_calls,
+        )
 
     # -- HTTP transport ------------------------------------------------------
 
@@ -314,301 +258,53 @@ class AnthropicProvider(Provider):
         display: DisplayProtocol,
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
-        """Send the current messages to the Anthropic Messages API and return
-        a parsed ``CompletedResponse``."""
-        display.wait_start(waiting_message_for_input(input_value))
+        """Send the current messages to the Anthropic Messages API."""
+        body = build_messages_body(
+            settings=self._settings,
+            tools=self._tools,
+            messages=self._messages,
+            system_prompt=system_prompt,
+        )
+        response = self._transport.post(
+            JsonRequestSpec(
+                provider=self._settings.provider,
+                model=self._settings.model,
+                url=anthropic_messages_url(
+                    self._settings,
+                    default_url=ANTHROPIC_API_URL,
+                ),
+                headers=anthropic_headers(
+                    api_key=self._settings.api_key,
+                    anthropic_version=ANTHROPIC_VERSION,
+                ),
+                body=body,
+                request_config=self._settings.redacted(),
+                wait_input=input_value,
+                timeout=300,
+                error_policy=JsonErrorPolicy(
+                    api_error_label="Anthropic API error",
+                    rate_limit_exhausted_label="Anthropic rate limit exceeded",
+                    overload_exhausted_label="Anthropic API overloaded",
+                    request_failed_label="Anthropic request failed",
+                    normalize_http_error=normalize_http_error,
+                    format_error=json_error_message,
+                ),
+                sleep=time.sleep,
+            ),
+            settings=self._settings,
+            display=display,
+            tracer=tracer,
+            parse_response=self._parse_response,
+        )
 
-        body: dict[str, Any] = {
-            "model": self._settings.model,
-            "max_tokens": self._settings.max_tokens,
-            "cache_control": {"type": "ephemeral"},
-            "tools": self._tools,
-            "messages": self._messages,
-        }
-
-        if _supports_adaptive_thinking(self._settings.model):
-            body["thinking"] = {"type": "adaptive"}
-            effort = _EFFORT_MAP.get(self._settings.reasoning_effort, "high")
-            body["output_config"] = {"effort": effort}
-
-        if system_prompt:
-            body["system"] = system_prompt
-
-        request_data = json.dumps(body).encode("utf-8")
-
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": self._settings.api_key,
-            "anthropic-version": ANTHROPIC_VERSION,
-        }
-
-        max_retries = self._settings.max_retries
-        rate_limit_max_retries = provider_retry.rate_limit_max_retries(max_retries)
-        retry_notice_max_retries = max_retries
-        last_error: Exception | None = None
-        last_error_message: str | None = None
-
-        for attempt in range(rate_limit_max_retries + 1):
-            if attempt > 0:
-                display.retry_notice(attempt, retry_notice_max_retries)
-
-            req_start = time.perf_counter()
-            try:
-                req = urllib.request.Request(
-                    _request_url(self._settings),
-                    data=request_data,
-                    headers=headers,
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=300) as resp:
-                    response_bytes = resp.read()
-                    response_json = json.loads(response_bytes.decode("utf-8"))
-
-                result = self._parse_response(response_json)
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=_request_url(self._settings),
-                    request_config=self._settings.redacted(),
-                    request_payload=body,
-                    response_payload=response_json,
-                    duration_ms=_duration_ms(req_start),
-                    prompt_tokens=result.usage.input_tokens,
-                    completion_tokens=result.usage.output_tokens,
-                    total_tokens=result.usage.total_tokens,
-                    status_code=200,
-                    success=True,
-                    metadata={"attempt": attempt + 1},
-                )
-                display.wait_stop()
-
-                # Render thinking blocks (if any) before the main text.
-                pdata = result.provider_data or {}
-                if isinstance(pdata, dict):
-                    for thinking_text in pdata.get("thinking_parts", []):
-                        display.render_thinking(thinking_text)
-                    if pdata.get("has_redacted_thinking"):
-                        display.render_redacted_thinking()
-
-                display_items = pdata.get("display_items", [])
-                if isinstance(display_items, list) and display_items:
-                    for item in display_items:
-                        if not isinstance(item, dict):
-                            continue
-                        item_type = item.get("type")
-                        if item_type == "text":
-                            text = item.get("text")
-                            if isinstance(text, str) and text:
-                                display.render_markdown(text)
-                        elif item_type == "web_search":
-                            _display_web_search_result(
-                                display,
-                                item.get("sources", []),
-                                queries=item.get("queries", []),
-                            )
-                else:
-                    if result.text:
-                        display.render_markdown(result.text)
-
-                    if result.web_search_sources:
-                        display.web_search_sources(result.web_search_sources)
-
-                # Append the assistant's response to conversation history so
-                # subsequent turns include it.
-                self._messages.append(
-                    {
-                        "role": "assistant",
-                        "content": response_json.get("content", []),
-                    }
-                )
-
-                return result
-
-            except urllib.error.HTTPError as exc:
-                error_body = _read_error_body(exc)
-                error_payload = _normalize_http_error(exc, error_body)
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=_request_url(self._settings),
-                    request_config=self._settings.redacted(),
-                    request_payload=body,
-                    response_payload=error_payload or {"body": error_body},
-                    duration_ms=_duration_ms(req_start),
-                    status_code=exc.code,
-                    success=False,
-                    error_message=_format_error_message(
-                        f"Anthropic API error {exc.code}",
-                        error_payload,
-                    ),
-                    metadata={"attempt": attempt + 1},
-                )
-
-                if exc.code == 429:
-                    if not provider_retry.should_retry_rate_limit(error_payload):
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                f"Anthropic API error {exc.code}",
-                                error_payload,
-                            )
-                        ) from exc
-                    if attempt >= rate_limit_max_retries:
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                "Anthropic rate limit exceeded after "
-                                f"{rate_limit_max_retries + 1} attempts",
-                                error_payload,
-                            )
-                        ) from exc
-
-                    wait = _extract_retry_after(exc, attempt)
-                    retry_notice_max_retries = rate_limit_max_retries
-                    display.rate_limit_notice(
-                        wait_seconds=wait,
-                        attempt=attempt + 1,
-                        max_retries=rate_limit_max_retries,
-                    )
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=_request_url(self._settings),
-                        request_config=self._settings.redacted(),
-                        request_payload=body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"Anthropic API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=rate_limit_max_retries,
-                        metadata={"retryable": True},
-                    )
-                    time.sleep(wait)
-                    continue
-
-                if provider_retry.is_overload_http_status(exc.code):
-                    if attempt >= max_retries:
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                f"Anthropic API overloaded after {max_retries + 1} attempts",
-                                error_payload,
-                            )
-                        ) from exc
-                    wait = _extract_retry_after(exc, attempt)
-                    retry_notice_max_retries = max_retries
-                    display.overload_notice(
-                        wait_seconds=wait,
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                    )
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=_request_url(self._settings),
-                        request_config=self._settings.redacted(),
-                        request_payload=body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"Anthropic API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        metadata={"retryable": True, "overloaded": True},
-                    )
-                    time.sleep(wait)
-                    continue
-
-                if provider_retry.is_retryable_http_status(exc.code):
-                    last_error = exc
-                    last_error_message = _format_error_message(
-                        f"Anthropic request failed after {max_retries + 1} attempts",
-                        error_payload,
-                    )
-                    if attempt >= max_retries:
-                        break
-                    retry_notice_max_retries = max_retries
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=_request_url(self._settings),
-                        request_config=self._settings.redacted(),
-                        request_payload=body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"Anthropic API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        metadata={"retryable": True},
-                    )
-                    continue
-
-                display.wait_stop()
-                raise RuntimeError(
-                    _format_error_message(
-                        f"Anthropic API error {exc.code}",
-                        error_payload,
-                    )
-                ) from exc
-
-            except (
-                http.client.IncompleteRead,
-                TimeoutError,
-                ConnectionError,
-                urllib.error.URLError,
-            ) as exc:
-                last_error = exc
-                last_error_message = None
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=_request_url(self._settings),
-                    request_config=self._settings.redacted(),
-                    request_payload=body,
-                    response_payload={"error": str(exc)},
-                    duration_ms=_duration_ms(req_start),
-                    success=False,
-                    error_message=str(exc),
-                    metadata={"attempt": attempt + 1},
-                )
-                if attempt >= max_retries:
-                    break
-                retry_notice_max_retries = max_retries
-                _trace_provider_retry(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=_request_url(self._settings),
-                    request_config=self._settings.redacted(),
-                    request_payload=body,
-                    status_code=None,
-                    error_message=str(exc),
-                    attempt=attempt + 1,
-                    max_retries=max_retries,
-                    metadata={"retryable": True},
-                )
-                continue
-
-        display.wait_stop()
-        if last_error is not None:
-            if last_error_message:
-                raise RuntimeError(last_error_message) from last_error
-            raise RuntimeError(
-                f"Anthropic request failed after {max_retries + 1} attempts: "
-                f"{last_error}"
-            ) from last_error
-        raise RuntimeError("Anthropic request failed after retries.")
+        render_messages_response(display, response)
+        self._messages.append(
+            {
+                "role": "assistant",
+                "content": response.provider_data.get("content_blocks", []),
+            }
+        )
+        return response
 
     # -- response parsing ----------------------------------------------------
 
@@ -865,6 +561,15 @@ def _anthropic_tool_result_content(result) -> str | list[dict[str, Any]]:
     return blocks
 
 
+def _anthropic_tool_result_item(result) -> dict[str, Any]:
+    return {
+        "type": "tool_result",
+        "tool_use_id": result.call_id,
+        "content": _anthropic_tool_result_content(result),
+        **({"is_error": True} if result.is_error else {}),
+    }
+
+
 def _anthropic_image_block(image: ImageAttachment) -> dict[str, Any]:
     return {
         "type": "image",
@@ -886,21 +591,6 @@ def _extract_anthropic_web_search_queries(block: dict[str, Any]) -> list[str]:
     return []
 
 
-def _supports_adaptive_thinking(model: str) -> bool:
-    normalized = model.strip().lower()
-    return not normalized.startswith("claude-haiku")
-
-
-def _request_url(settings: Settings) -> str:
-    if (
-        settings.provider == "azure"
-        and azure_endpoint_kind(settings.responses_url)
-        == AzureEndpointKind.ANTHROPIC_MESSAGES
-    ):
-        return settings.responses_url
-    return ANTHROPIC_API_URL
-
-
 def _anthropic_web_search_tool(model: str) -> dict[str, Any]:
     tool: dict[str, Any] = {
         "type": "web_search_20260209",
@@ -909,154 +599,3 @@ def _anthropic_web_search_tool(model: str) -> dict[str, Any]:
     if model.strip().lower().startswith("claude-haiku"):
         tool["allowed_callers"] = ["direct"]
     return tool
-
-
-def _display_web_search_result(
-    display: DisplayProtocol,
-    sources: list[dict[str, Any]],
-    *,
-    queries: list[str] | None = None,
-) -> None:
-    display.function_start(1)
-    display.function_result(
-        name="web_search",
-        success=True,
-        call_id="",
-        arguments={
-            "queries": list(queries or []),
-            "sources": list(sources),
-        },
-    )
-    display.tool_group_end()
-
-
-def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
-    """Extract retry wait from Retry-After header or use exponential backoff."""
-    return provider_retry.retry_after_seconds(exc, attempt)
-
-
-def _read_error_body(exc: urllib.error.HTTPError) -> str:
-    return provider_retry.read_error_body(exc)
-
-
-def _normalize_http_error(
-    exc: urllib.error.HTTPError,
-    error_body: str,
-) -> dict[str, Any]:
-    payload = provider_retry.parse_error_payload(error_body)
-    error_type = _HTTP_ERROR_TYPES.get(exc.code)
-    message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
-    request_id = _request_id_from_headers(exc)
-
-    if payload is not None:
-        payload_request_id = payload.get("request_id")
-        if isinstance(payload_request_id, str) and payload_request_id.strip():
-            request_id = payload_request_id.strip()
-
-        error_value = payload.get("error")
-        if isinstance(error_value, dict):
-            payload_type = error_value.get("type")
-            if isinstance(payload_type, str) and payload_type.strip():
-                error_type = payload_type.strip()
-            payload_message = error_value.get("message")
-            if isinstance(payload_message, str) and payload_message.strip():
-                message = payload_message.strip()
-        elif isinstance(error_value, str) and error_value.strip():
-            message = error_value.strip()
-
-    if error_type is None:
-        if 400 <= exc.code < 500:
-            error_type = "invalid_request_error"
-        else:
-            error_type = "api_error"
-
-    return {
-        "type": "error",
-        "status": exc.code,
-        "error": {
-            "type": error_type,
-            "message": message,
-        },
-        **({"request_id": request_id} if request_id else {}),
-    }
-
-
-def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
-    return provider_retry.request_id_from_headers(
-        exc,
-        header_names=("request-id",),
-    )
-
-
-def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
-    return provider_retry.format_error_message(prefix, error_payload)
-
-
-def _duration_ms(started_at: float) -> int:
-    return provider_retry.duration_ms(started_at)
-
-
-def _trace_provider_call(
-    *,
-    tracer,
-    provider: str,
-    model: str,
-    url: str,
-    request_config: dict[str, Any],
-    request_payload: dict[str, Any],
-    response_payload: dict[str, Any],
-    duration_ms: int,
-    prompt_tokens: int | None = None,
-    completion_tokens: int | None = None,
-    total_tokens: int | None = None,
-    status_code: int | None = None,
-    success: bool,
-    error_message: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    provider_retry.trace_provider_call(
-        tracer=tracer,
-        provider=provider,
-        model=model,
-        url=url,
-        request_config=request_config,
-        request_payload=request_payload,
-        response_payload=response_payload,
-        duration_ms=duration_ms,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=total_tokens,
-        status_code=status_code,
-        success=success,
-        error_message=error_message,
-        metadata=metadata,
-    )
-
-
-def _trace_provider_retry(
-    *,
-    tracer,
-    provider: str,
-    model: str,
-    url: str,
-    request_config: dict[str, Any],
-    request_payload: dict[str, Any],
-    status_code: int | None,
-    error_message: str,
-    attempt: int,
-    max_retries: int,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    provider_retry.trace_provider_retry(
-        tracer=tracer,
-        provider=provider,
-        model=model,
-        url=url,
-        request_config=request_config,
-        request_payload=request_payload,
-        status_code=status_code,
-        error_message=error_message,
-        attempt=attempt,
-        max_retries=max_retries,
-        metadata=metadata,
-    )

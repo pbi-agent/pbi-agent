@@ -185,7 +185,7 @@ def test_google_build_request_body_replays_restored_user_images_without_previous
 
     assert body["input"] == [
         {
-            "role": "user",
+            "type": "user_input",
             "content": [
                 {"type": "text", "text": "describe this"},
                 {
@@ -195,13 +195,19 @@ def test_google_build_request_body_replays_restored_user_images_without_previous
                 },
             ],
         },
-        {"role": "model", "content": "it is a chart"},
-        {"role": "user", "content": "continue"},
+        {
+            "type": "model_output",
+            "content": [{"type": "text", "text": "it is a chart"}],
+        },
+        {
+            "type": "user_input",
+            "content": [{"type": "text", "text": "continue"}],
+        },
     ]
     assert "previous_interaction_id" not in body
 
 
-def test_google_restore_history_groups_parallel_tool_calls() -> None:
+def test_google_restore_history_replays_parallel_tool_calls_as_steps() -> None:
     provider = GoogleProvider(_make_settings())
 
     provider.restore_history_items(
@@ -248,42 +254,36 @@ def test_google_restore_history_groups_parallel_tool_calls() -> None:
         instructions="be concise",
     )
 
-    assert body["input"][:2] == [
+    assert body["input"][:4] == [
         {
-            "role": "model",
-            "content": [
-                {
-                    "type": "function_call",
-                    "id": "call_1",
-                    "name": "shell",
-                    "arguments": {"command": "pwd"},
-                },
-                {
-                    "type": "function_call",
-                    "id": "call_2",
-                    "name": "shell",
-                    "arguments": {"command": "git status"},
-                },
-            ],
+            "type": "function_call",
+            "id": "call_1",
+            "name": "shell",
+            "arguments": {"command": "pwd"},
         },
         {
-            "role": "user",
-            "content": [
-                {
-                    "type": "function_result",
-                    "name": "shell",
-                    "call_id": "call_1",
-                    "result": '{"ok": true, "result": "/workspace"}',
-                },
-                {
-                    "type": "function_result",
-                    "name": "shell",
-                    "call_id": "call_2",
-                    "result": '{"ok": true, "result": "clean"}',
-                },
-            ],
+            "type": "function_call",
+            "id": "call_2",
+            "name": "shell",
+            "arguments": {"command": "git status"},
+        },
+        {
+            "type": "function_result",
+            "name": "shell",
+            "call_id": "call_1",
+            "result": '{"ok": true, "result": "/workspace"}',
+        },
+        {
+            "type": "function_result",
+            "name": "shell",
+            "call_id": "call_2",
+            "result": '{"ok": true, "result": "clean"}',
         },
     ]
+    assert body["input"][4] == {
+        "type": "user_input",
+        "content": [{"type": "text", "text": "continue"}],
+    }
 
 
 def test_google_provider_exposes_shell_required_schema() -> None:
@@ -1288,10 +1288,10 @@ def test_google_request_turn_wraps_current_image_when_replaying_history(
     )
 
     assert requests[0]["input"] == [
-        {"role": "user", "content": "hi"},
-        {"role": "model", "content": "Hello!"},
+        {"type": "user_input", "content": [{"type": "text", "text": "hi"}]},
+        {"type": "model_output", "content": [{"type": "text", "text": "Hello!"}]},
         {
-            "role": "user",
+            "type": "user_input",
             "content": [
                 {"type": "text", "text": "Find the extra card."},
                 {"type": "image", "mime_type": "image/png", "data": "UE5H"},

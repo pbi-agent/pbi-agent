@@ -1,2 +1,5 @@
-- [X] Implement system-following default theme selection in the web UI
-- [X] Run focused/frontend validation and update memory/handoff
+- [x] Inspect session persistence and provider replay code
+- [x] Locate leaking provider-specific history field
+- [x] Reproduce or payload-check session `ec4f315e257d4653aeb6f4db7b40f5a5`
+- [x] Implement targeted normalization/fix if confirmed
+- [x] Run focused validation and update memory

@@ -1,51 +1,38 @@
-"""Generic OpenAI-compatible Chat Completions HTTP provider.
-
-Designed for OpenAI-compatible gateways (for example OpenRouter) that expose
-an OpenAI Chat Completions compatible API.
-"""
+"""Generic OpenAI-compatible Chat Completions HTTP provider."""
 
 from __future__ import annotations
-import http.client
-import json
-import logging
+
 import time
-import urllib.error
-import urllib.request
 from typing import Any, TYPE_CHECKING
 
-from pbi_agent import __version__
-from pbi_agent.agent.system_prompt import get_system_prompt
-from pbi_agent.agent.tool_display import (
-    build_tool_result_callback,
-    display_tool_execution_start,
-    finalize_tool_execution,
-)
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
-from pbi_agent.providers.azure import azure_chat_completions_url
-from pbi_agent.media import data_url_for_image
-from pbi_agent.models.messages import (
-    CompletedResponse,
-    TokenUsage,
-    ToolCall,
-    UserTurnInput,
-)
-from pbi_agent.providers import retry as provider_retry
-from pbi_agent.providers.base import Provider
-from pbi_agent.providers.wait_messages import waiting_message_for_input
-from pbi_agent.session_store import MessageRecord
-from pbi_agent.tools.availability import (
-    default_excluded_tool_names,
-    effective_excluded_tool_names,
-)
-from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ParentContextSnapshot, ToolContext, ToolResult
 from pbi_agent.display.protocol import DisplayProtocol
+from pbi_agent.models.messages import CompletedResponse, TokenUsage, UserTurnInput
+from pbi_agent.providers.auth_strategies import (
+    ApiKeyHeaderAuth,
+    BearerTokenAuth,
+    json_model_headers,
+)
+from pbi_agent.providers.base import Provider
+from pbi_agent.providers.endpoints import chat_completions_url
+from pbi_agent.providers.protocols.chat_completions import ChatCompletionsProtocol
+from pbi_agent.providers.runtime import record_response_usage
+from pbi_agent.providers.tool_execution import execute_provider_tool_calls
+from pbi_agent.providers.transport import (
+    JsonErrorPolicy,
+    JsonModelTransport,
+    JsonRequestSpec,
+    body_error_message,
+    parse_json_error_body,
+)
+from pbi_agent.session_store import MessageRecord
+from pbi_agent.tools.availability import default_excluded_tool_names
+from pbi_agent.tools.catalog import ToolCatalog
+from pbi_agent.tools.types import ParentContextSnapshot
 
 if TYPE_CHECKING:
     from pbi_agent.observability import RunTracer
-
-_log = logging.getLogger(__name__)
 
 
 class GenericProvider(Provider):
@@ -62,17 +49,29 @@ class GenericProvider(Provider):
         self._settings = settings
         self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
         self._excluded_tools = default_excluded_tool_names(excluded_tools)
-        self._tools: list[dict[str, Any]] = []
-        self.refresh_tools()
-        self._system_prompt = system_prompt or get_system_prompt(
-            settings=self._settings,
+        self._protocol = ChatCompletionsProtocol(
+            settings,
+            system_prompt=system_prompt,
             excluded_tools=self._excluded_tools,
+            tool_catalog=self._tool_catalog,
         )
-        self._messages: list[dict[str, Any]] = []
+        self._transport = JsonModelTransport()
 
     @property
     def settings(self) -> Settings:
         return self._settings
+
+    @property
+    def _tools(self) -> list[dict[str, Any]]:
+        return self._protocol.tools
+
+    @property
+    def _messages(self) -> list[dict[str, Any]]:
+        return self._protocol.messages
+
+    @property
+    def _system_prompt(self) -> str:
+        return self._protocol.system_prompt
 
     def connect(self) -> None:
         if not self._settings.api_key:
@@ -85,28 +84,26 @@ class GenericProvider(Provider):
         pass
 
     def reset_conversation(self) -> None:
-        self._messages.clear()
+        self._protocol.reset_conversation()
 
     def set_system_prompt(self, system_prompt: str) -> None:
-        self._system_prompt = system_prompt
+        self._protocol.set_system_prompt(system_prompt)
 
     def refresh_tools(self) -> None:
-        excluded_tools = effective_excluded_tool_names(
-            self._settings, self._excluded_tools
-        )
-        self._tools = self._tool_catalog.get_openai_chat_tool_definitions(
-            excluded_names=excluded_tools
-        )
+        if hasattr(self, "_protocol"):
+            self._protocol.refresh_tools()
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
-        self._messages = [
-            {"role": message.role, "content": message.content}
-            for message in messages
-            if message.role in {"user", "assistant"} and message.content
-        ]
+        self._protocol.restore_messages(messages)
 
     def restore_history_items(self, items: list[dict[str, Any]]) -> None:
-        self._messages = _history_items_to_messages(items)
+        self._protocol.restore_history_items(items)
+
+    def set_runtime_settings(self, settings: Settings) -> None:
+        if self._settings == settings:
+            return
+        self._settings = settings
+        self._protocol.set_runtime_settings(settings)
 
     def request_turn(
         self,
@@ -122,36 +119,25 @@ class GenericProvider(Provider):
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
         del session_id
-        if user_input is None and user_message is not None:
-            user_input = UserTurnInput(text=user_message)
-
-        if user_input is not None:
-            input_value: str | list[dict[str, Any]] = user_input.text
-            if user_input.images:
-                raise ValueError(
-                    "Generic provider image inputs are not enabled in this build."
-                )
-            self._messages.append({"role": "user", "content": user_input.text})
-        elif tool_result_items is not None:
-            input_value = tool_result_items
-            self._messages.extend(tool_result_items)
-        else:
-            raise ValueError("Either user_input or tool_result_items is required")
-
+        input_value = self._protocol.accept_turn(
+            user_message=user_message,
+            user_input=user_input,
+            tool_result_items=tool_result_items,
+        )
         result = self._http_request(
             input_value=input_value,
-            instructions=instructions or self._system_prompt,
+            instructions=instructions or self._protocol.system_prompt,
             display=display,
             tracer=tracer,
         )
-        session_usage.add(result.usage)
-        turn_usage.add(result.usage)
-        display.session_usage(session_usage)
-
-        assistant_message = result.provider_data.get("assistant_message")
-        if isinstance(assistant_message, dict):
-            self._messages.append(assistant_message)
-
+        record_response_usage(
+            result,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+        )
+        self._protocol.record_response(result)
+        self._protocol.render_response(display, result)
         return result
 
     def execute_tool_calls(
@@ -166,53 +152,26 @@ class GenericProvider(Provider):
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
-        if not response.function_calls:
-            return [], False
-
-        displayable_calls = [
-            call for call in response.function_calls if call.name != "sub_agent"
-        ]
-        if displayable_calls:
-            display.function_start(len(displayable_calls))
-            display_tool_execution_start(display, displayable_calls)
-        try:
-            batch = _execute_tool_calls(
-                response.function_calls,
-                max_workers=max_workers,
-                context=ToolContext(
-                    settings=self._settings,
-                    display=display,
-                    session_usage=session_usage,
-                    turn_usage=turn_usage,
-                    sub_agent_depth=sub_agent_depth,
-                    tool_catalog=self._tool_catalog,
-                    disabled_tool_names=effective_excluded_tool_names(
-                        self._settings, self._excluded_tools
-                    ),
-                    tool_availability_overridden=getattr(
-                        self, "_tool_availability_overridden", False
-                    ),
-                    parent_context=parent_context,
-                    tracer=tracer,
-                    workspace_root=getattr(self, "_workspace_root", None),
-                    workspace_directory_key=getattr(
-                        self, "_workspace_directory_key", None
-                    ),
-                ),
-                on_result=build_tool_result_callback(display),
-            )
-
-            tool_result_items: list[dict[str, Any]] = []
-            finalize_tool_execution(display)
-        except Exception:
-            if displayable_calls:
-                display.tool_execution_stop()
-            raise
-        for result in batch.results:
-            tool_result_items.append(_generic_tool_result_item(result))
-        if displayable_calls:
-            display.tool_group_end()
-        return tool_result_items, batch.had_errors
+        return execute_provider_tool_calls(
+            response.function_calls,
+            max_workers=max_workers,
+            settings=self._settings,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tool_catalog=self._tool_catalog,
+            excluded_tools=self._excluded_tools,
+            serialize_result=self._protocol.serialize_tool_result,
+            sub_agent_depth=sub_agent_depth,
+            parent_context=parent_context,
+            tracer=tracer,
+            tool_availability_overridden=getattr(
+                self, "_tool_availability_overridden", False
+            ),
+            workspace_root=getattr(self, "_workspace_root", None),
+            workspace_directory_key=getattr(self, "_workspace_directory_key", None),
+            execute_calls=_execute_tool_calls,
+        )
 
     def _http_request(
         self,
@@ -222,640 +181,42 @@ class GenericProvider(Provider):
         display: DisplayProtocol,
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
-        display.wait_start(waiting_message_for_input(input_value))
-
-        messages: list[dict[str, Any]] = [{"role": "system", "content": instructions}]
-        messages.extend(self._messages)
-
-        body: dict[str, Any] = {
-            "messages": messages,
-            "tools": self._tools,
-            "tool_choice": "auto",
-            "max_tokens": self._settings.max_tokens,
-        }
-        if _should_send_model(self._settings):
-            body["model"] = self._settings.model
-
-        request_data = json.dumps(body).encode("utf-8")
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self._settings.api_key}",
-            "User-Agent": f"pbi-agent/{__version__}",
-        }
+        url = chat_completions_url(self._settings)
+        body = self._protocol.build_request_body(instructions=instructions)
+        headers = json_model_headers()
         if self._settings.provider == "azure":
-            headers.pop("Authorization", None)
-            headers["api-key"] = self._settings.api_key
+            headers.update(
+                ApiKeyHeaderAuth(self._settings.api_key, "api-key").headers()
+            )
+        else:
+            headers.update(BearerTokenAuth(self._settings.api_key).headers())
 
-        max_retries = self._settings.max_retries
-        rate_limit_max_retries = provider_retry.rate_limit_max_retries(max_retries)
-        retry_notice_max_retries = max_retries
-        last_error: Exception | None = None
-
-        for attempt in range(rate_limit_max_retries + 1):
-            if attempt > 0:
-                display.retry_notice(attempt, retry_notice_max_retries)
-
-            req_start = time.perf_counter()
-            try:
-                req = urllib.request.Request(
-                    _request_url(self._settings),
-                    data=request_data,
-                    headers=headers,
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=300) as resp:
-                    response_json = json.loads(resp.read().decode("utf-8"))
-
-                result = self._parse_response(response_json)
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=_request_url(self._settings),
-                    request_config=self._settings.redacted(),
-                    request_payload=body,
-                    response_payload=response_json,
-                    duration_ms=_duration_ms(req_start),
-                    prompt_tokens=result.usage.input_tokens,
-                    completion_tokens=result.usage.output_tokens,
-                    total_tokens=result.usage.total_tokens,
-                    status_code=200,
-                    success=True,
-                    metadata={"attempt": attempt + 1},
-                )
-                display.wait_stop()
-
-                if result.text:
-                    display.render_markdown(result.text)
-
-                return result
-            except urllib.error.HTTPError as exc:
-                error_body = ""
-                try:
-                    error_body = exc.read().decode("utf-8", errors="replace")
-                except Exception:
-                    pass
-                error_payload = provider_retry.parse_error_payload(error_body) or {
-                    "body": error_body
-                }
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=_request_url(self._settings),
-                    request_config=self._settings.redacted(),
-                    request_payload=body,
-                    response_payload=error_payload,
-                    duration_ms=_duration_ms(req_start),
-                    status_code=exc.code,
-                    success=False,
-                    error_message=error_body or f"HTTP {exc.code}",
-                    metadata={"attempt": attempt + 1},
-                )
-
-                if exc.code == 429:
-                    if not provider_retry.should_retry_rate_limit(error_payload):
-                        display.wait_stop()
-                        raise RuntimeError(
-                            f"Generic provider API error {exc.code}: {error_body}"
-                        ) from exc
-                    if attempt >= rate_limit_max_retries:
-                        display.wait_stop()
-                        raise RuntimeError(
-                            "Generic provider rate limit exceeded after "
-                            f"{rate_limit_max_retries + 1} attempts: {error_body}"
-                        ) from exc
-                    wait = _extract_retry_after(exc, attempt)
-                    retry_notice_max_retries = rate_limit_max_retries
-                    display.rate_limit_notice(
-                        wait_seconds=wait,
-                        attempt=attempt + 1,
-                        max_retries=rate_limit_max_retries,
-                    )
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=_request_url(self._settings),
-                        request_config=self._settings.redacted(),
-                        request_payload=body,
-                        status_code=exc.code,
-                        error_message=error_body or f"HTTP {exc.code}",
-                        attempt=attempt + 1,
-                        max_retries=rate_limit_max_retries,
-                        metadata={"retryable": True},
-                    )
-                    time.sleep(wait)
-                    continue
-
-                if provider_retry.is_overload_http_status(exc.code):
-                    if attempt >= max_retries:
-                        display.wait_stop()
-                        raise RuntimeError(
-                            "Generic provider API overloaded after "
-                            f"{max_retries + 1} attempts: {error_body}"
-                        ) from exc
-                    wait = _extract_retry_after(exc, attempt)
-                    retry_notice_max_retries = max_retries
-                    display.overload_notice(
-                        wait_seconds=wait,
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                    )
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=_request_url(self._settings),
-                        request_config=self._settings.redacted(),
-                        request_payload=body,
-                        status_code=exc.code,
-                        error_message=error_body or f"HTTP {exc.code}",
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        metadata={"retryable": True, "overloaded": True},
-                    )
-                    time.sleep(wait)
-                    continue
-
-                if provider_retry.is_retryable_http_status(exc.code):
-                    last_error = exc
-                    if attempt >= max_retries:
-                        break
-                    retry_notice_max_retries = max_retries
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=_request_url(self._settings),
-                        request_config=self._settings.redacted(),
-                        request_payload=body,
-                        status_code=exc.code,
-                        error_message=error_body or f"HTTP {exc.code}",
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        metadata={"retryable": True},
-                    )
-                    continue
-
-                display.wait_stop()
-                raise RuntimeError(
-                    f"Generic provider API error {exc.code}: {error_body}"
-                ) from exc
-            except (
-                http.client.IncompleteRead,
-                TimeoutError,
-                ConnectionError,
-                urllib.error.URLError,
-            ) as exc:
-                last_error = exc
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=_request_url(self._settings),
-                    request_config=self._settings.redacted(),
-                    request_payload=body,
-                    response_payload={"error": str(exc)},
-                    duration_ms=_duration_ms(req_start),
-                    success=False,
-                    error_message=str(exc),
-                    metadata={"attempt": attempt + 1},
-                )
-                if attempt >= max_retries:
-                    break
-                retry_notice_max_retries = max_retries
-                _trace_provider_retry(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=_request_url(self._settings),
-                    request_config=self._settings.redacted(),
-                    request_payload=body,
-                    status_code=None,
-                    error_message=str(exc),
-                    attempt=attempt + 1,
-                    max_retries=max_retries,
-                    metadata={"retryable": True},
-                )
-                continue
-
-        display.wait_stop()
-        if last_error is not None:
-            raise RuntimeError(
-                f"Generic provider request failed after {max_retries + 1} attempts: "
-                f"{last_error}"
-            ) from last_error
-        raise RuntimeError("Generic provider request failed after retries.")
+        return self._transport.post(
+            JsonRequestSpec(
+                provider=self._settings.provider,
+                model=self._settings.model,
+                url=url,
+                headers=headers,
+                body=body,
+                request_config=self._settings.redacted(),
+                wait_input=input_value,
+                timeout=300,
+                error_policy=JsonErrorPolicy(
+                    api_error_label="Generic provider API error",
+                    rate_limit_exhausted_label="Generic provider rate limit exceeded",
+                    overload_exhausted_label="Generic provider API overloaded",
+                    request_failed_label="Generic provider request failed",
+                    normalize_http_error=parse_json_error_body,
+                    format_error=body_error_message,
+                    retryable_http_final_uses_error_message=False,
+                ),
+                sleep=time.sleep,
+            ),
+            settings=self._settings,
+            display=display,
+            tracer=tracer,
+            parse_response=self._protocol.parse_response,
+        )
 
     def _parse_response(self, response_json: dict[str, Any]) -> CompletedResponse:
-        choices = response_json.get("choices", [])
-        messages = _extract_choice_messages(choices)
-        text = "".join(
-            _extract_message_text(message.get("content")) for message in messages
-        )
-        function_calls = [
-            function_call
-            for message in messages
-            for function_call in _parse_tool_calls(message.get("tool_calls"))
-        ]
-
-        assistant_message = _normalize_assistant_messages(messages)
-
-        usage_obj = response_json.get("usage", {})
-        prompt_tokens = int(usage_obj.get("prompt_tokens", 0) or 0)
-        completion_tokens = int(usage_obj.get("completion_tokens", 0) or 0)
-        total_tokens = int(usage_obj.get("total_tokens", 0) or 0)
-        completion_details = usage_obj.get("completion_tokens_details", {})
-        reasoning_tokens = (
-            int(completion_details.get("reasoning_tokens", 0) or 0)
-            if isinstance(completion_details, dict)
-            else 0
-        )
-
-        return CompletedResponse(
-            response_id=response_json.get("id"),
-            text=text,
-            usage=TokenUsage(
-                input_tokens=prompt_tokens,
-                output_tokens=completion_tokens,
-                reasoning_tokens=reasoning_tokens,
-                context_tokens=total_tokens or (prompt_tokens + completion_tokens),
-                model=_response_model_name(response_json),
-            ),
-            function_calls=function_calls,
-            provider_data={"assistant_message": assistant_message},
-        )
-
-
-def _response_model_name(response_json: dict[str, Any]) -> str:
-    model = response_json.get("model")
-    return model if isinstance(model, str) else ""
-
-
-def _generic_tool_result_item(result: ToolResult) -> dict[str, Any]:
-    content: str | list[dict[str, Any]] = result.output_json
-    if result.attachments:
-        content = [{"type": "text", "text": result.output_json}]
-        for attachment in result.attachments:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": data_url_for_image(attachment)},
-                }
-            )
-    return {
-        "role": "tool",
-        "tool_call_id": result.call_id,
-        "content": content,
-    }
-
-
-def _history_items_to_messages(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    messages: list[dict[str, Any]] = []
-    for item in items:
-        if item.get("type") == "tool_result_group":
-            for result in item.get("results", []):
-                if (
-                    isinstance(result, dict)
-                    and (restored := _history_item_to_message(result)) is not None
-                ):
-                    messages.append(restored)
-            continue
-        if (restored := _history_item_to_message(item)) is not None:
-            messages.append(restored)
-    return messages
-
-
-def _history_item_to_message(item: dict[str, Any]) -> dict[str, Any] | None:
-    item_type = item.get("type")
-    if item_type == "message":
-        message = item.get("message")
-        if (
-            isinstance(message, MessageRecord)
-            and message.role in {"user", "assistant"}
-            and message.content
-        ):
-            return {"role": message.role, "content": message.content}
-        return None
-    if item_type == "tool_call":
-        call_id = str(item.get("call_id") or "")
-        name = str(item.get("name") or "")
-        if not call_id or not name:
-            return None
-        arguments = item.get("arguments")
-        return {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [
-                {
-                    "id": call_id,
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "arguments": (
-                            arguments
-                            if isinstance(arguments, str)
-                            else json.dumps(arguments or {})
-                        ),
-                    },
-                }
-            ],
-        }
-    if item_type == "tool_call_group":
-        tool_calls: list[dict[str, Any]] = []
-        for call in item.get("calls", []):
-            if not isinstance(call, dict):
-                continue
-            call_id = str(call.get("call_id") or "")
-            name = str(call.get("name") or "")
-            if not call_id or not name:
-                continue
-            arguments = call.get("arguments")
-            tool_calls.append(
-                {
-                    "id": call_id,
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "arguments": (
-                            arguments
-                            if isinstance(arguments, str)
-                            else json.dumps(arguments or {})
-                        ),
-                    },
-                }
-            )
-        if not tool_calls:
-            return None
-        return {"role": "assistant", "content": "", "tool_calls": tool_calls}
-    if item_type == "tool_result":
-        call_id = str(item.get("call_id") or "")
-        if not call_id:
-            return None
-        output = item.get("output")
-        return {
-            "role": "tool",
-            "tool_call_id": call_id,
-            "content": output if isinstance(output, str) else json.dumps(output),
-        }
-    return None
-
-
-def _extract_choice_messages(choices: Any) -> list[dict[str, Any]]:
-    if not isinstance(choices, list):
-        return []
-
-    messages: list[dict[str, Any]] = []
-    for choice in choices:
-        if not isinstance(choice, dict):
-            continue
-        message = choice.get("message", {})
-        if isinstance(message, dict):
-            messages.append(message)
-    return messages
-
-
-def _should_send_model(settings: Settings) -> bool:
-    return bool(settings.model)
-
-
-def _request_url(settings: Settings) -> str:
-    if settings.provider == "azure":
-        return azure_chat_completions_url(settings.responses_url)
-    return settings.generic_api_url
-
-
-def _extract_message_text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return ""
-
-    text_parts: list[str] = []
-    for part in content:
-        if not isinstance(part, dict):
-            continue
-        part_type = str(part.get("type", "")).strip().lower()
-        text_value = part.get("text")
-        if isinstance(text_value, str) and part_type in {"text", "output_text"}:
-            text_parts.append(text_value)
-    return "".join(text_parts).strip()
-
-
-def _parse_tool_calls(raw_tool_calls: Any) -> list[ToolCall]:
-    if not isinstance(raw_tool_calls, list):
-        return []
-
-    function_calls: list[ToolCall] = []
-    for call in raw_tool_calls:
-        if not isinstance(call, dict):
-            continue
-        function = call.get("function", {})
-        if not isinstance(function, dict):
-            function = {}
-        raw_args = function.get("arguments", "{}")
-        if isinstance(raw_args, str):
-            try:
-                arguments: dict[str, Any] | str | None = json.loads(raw_args)
-            except json.JSONDecodeError:
-                arguments = raw_args
-        else:
-            arguments = raw_args
-        function_calls.append(
-            ToolCall(
-                call_id=str(call.get("id", "")),
-                name=str(function.get("name", "")),
-                arguments=arguments,
-            )
-        )
-    return function_calls
-
-
-def _normalize_assistant_message(message: dict[str, Any]) -> dict[str, Any]:
-    normalized: dict[str, Any] = {"role": "assistant"}
-
-    content = message.get("content")
-    normalized_content = _normalize_message_content(content)
-    if normalized_content is not None:
-        normalized["content"] = normalized_content
-
-    normalized_tool_calls = _normalize_tool_calls(message.get("tool_calls"))
-    if normalized_tool_calls:
-        normalized["tool_calls"] = normalized_tool_calls
-
-    if "content" not in normalized and "tool_calls" not in normalized:
-        normalized["content"] = ""
-
-    return normalized
-
-
-def _normalize_assistant_messages(messages: list[dict[str, Any]]) -> dict[str, Any]:
-    if not messages:
-        return _normalize_assistant_message({})
-    if len(messages) == 1:
-        return _normalize_assistant_message(messages[0])
-
-    normalized: dict[str, Any] = {"role": "assistant"}
-    content_parts: list[Any] = []
-    tool_calls: list[dict[str, Any]] = []
-    for message in messages:
-        normalized_message = _normalize_assistant_message(message)
-        content = normalized_message.get("content")
-        if isinstance(content, str):
-            if content:
-                content_parts.append(content)
-        elif isinstance(content, list):
-            content_parts.extend(content)
-        raw_tool_calls = normalized_message.get("tool_calls")
-        if isinstance(raw_tool_calls, list):
-            tool_calls.extend(call for call in raw_tool_calls if isinstance(call, dict))
-
-    if content_parts:
-        if all(isinstance(part, str) for part in content_parts):
-            normalized["content"] = "".join(content_parts)
-        else:
-            normalized["content"] = content_parts
-    if tool_calls:
-        normalized["tool_calls"] = tool_calls
-    if "content" not in normalized and "tool_calls" not in normalized:
-        normalized["content"] = ""
-    return normalized
-
-
-def _normalize_message_content(content: Any) -> str | list[dict[str, str]] | None:
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return None
-
-    normalized_parts: list[dict[str, str]] = []
-    for part in content:
-        if not isinstance(part, dict):
-            continue
-
-        part_type = str(part.get("type", "")).strip().lower()
-        if part_type in {"text", "output_text"}:
-            text_value = part.get("text")
-            if isinstance(text_value, str):
-                normalized_parts.append({"type": "text", "text": text_value})
-                continue
-
-        if part_type == "refusal":
-            refusal = part.get("refusal")
-            if isinstance(refusal, str):
-                normalized_parts.append({"type": "refusal", "refusal": refusal})
-
-    return normalized_parts or None
-
-
-def _normalize_tool_calls(raw_tool_calls: Any) -> list[dict[str, Any]]:
-    if not isinstance(raw_tool_calls, list):
-        return []
-
-    normalized_calls: list[dict[str, Any]] = []
-    for call in raw_tool_calls:
-        if not isinstance(call, dict):
-            continue
-
-        function = call.get("function", {})
-        if not isinstance(function, dict):
-            function = {}
-
-        name = str(function.get("name", "")).strip()
-        if not name:
-            continue
-
-        raw_arguments = function.get("arguments", "{}")
-        if isinstance(raw_arguments, str):
-            arguments = raw_arguments or "{}"
-        else:
-            arguments = json.dumps(raw_arguments)
-
-        normalized_calls.append(
-            {
-                "id": str(call.get("id", "")),
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "arguments": arguments,
-                },
-            }
-        )
-
-    return normalized_calls
-
-
-def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
-    return provider_retry.retry_after_seconds(exc, attempt)
-
-
-def _duration_ms(started_at: float) -> int:
-    return provider_retry.duration_ms(started_at)
-
-
-def _trace_provider_call(
-    *,
-    tracer,
-    provider: str,
-    model: str,
-    url: str,
-    request_config: dict[str, Any],
-    request_payload: dict[str, Any],
-    response_payload: dict[str, Any],
-    duration_ms: int,
-    prompt_tokens: int | None = None,
-    completion_tokens: int | None = None,
-    total_tokens: int | None = None,
-    status_code: int | None = None,
-    success: bool,
-    error_message: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    provider_retry.trace_provider_call(
-        tracer=tracer,
-        provider=provider,
-        model=model,
-        url=url,
-        request_config=request_config,
-        request_payload=request_payload,
-        response_payload=response_payload,
-        duration_ms=duration_ms,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=total_tokens,
-        status_code=status_code,
-        success=success,
-        error_message=error_message,
-        metadata=metadata,
-    )
-
-
-def _trace_provider_retry(
-    *,
-    tracer,
-    provider: str,
-    model: str,
-    url: str,
-    request_config: dict[str, Any],
-    request_payload: dict[str, Any],
-    status_code: int | None,
-    error_message: str,
-    attempt: int,
-    max_retries: int,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    provider_retry.trace_provider_retry(
-        tracer=tracer,
-        provider=provider,
-        model=model,
-        url=url,
-        request_config=request_config,
-        request_payload=request_payload,
-        status_code=status_code,
-        error_message=error_message,
-        attempt=attempt,
-        max_retries=max_retries,
-        metadata=metadata,
-    )
+        return self._protocol.parse_response(response_json)

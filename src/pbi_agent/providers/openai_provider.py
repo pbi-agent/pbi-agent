@@ -17,11 +17,6 @@ from pbi_agent import __version__
 from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_auth
 from pbi_agent.agent.system_prompt import get_system_prompt
-from pbi_agent.agent.tool_display import (
-    build_tool_result_callback,
-    display_tool_execution_start,
-    finalize_tool_execution,
-)
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings
 from pbi_agent.media import data_url_for_image
@@ -39,6 +34,11 @@ from pbi_agent.providers.chatgpt_codex_backend import (
     ChatGPTCodexWebSocketError,
     ResponsesRequestOptions,
 )
+from pbi_agent.providers.protocols.openai_responses import (
+    response_history_item_for_input,
+    responses_include,
+)
+from pbi_agent.providers.tool_execution import execute_provider_tool_calls
 from pbi_agent.providers.wait_messages import waiting_message_for_input
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
@@ -47,7 +47,7 @@ from pbi_agent.tools.availability import (
     native_web_search_enabled,
 )
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ParentContextSnapshot, ToolContext, ToolResult
+from pbi_agent.tools.types import ParentContextSnapshot, ToolResult
 from pbi_agent.web.uploads import load_uploaded_image
 from pbi_agent.display.protocol import DisplayProtocol
 
@@ -283,50 +283,28 @@ class OpenAIProvider(Provider):
         if not response.function_calls:
             return [], False
 
-        displayable_calls = [
-            call for call in response.function_calls if call.name != "sub_agent"
-        ]
-        if displayable_calls:
-            display.function_start(len(displayable_calls))
-            display_tool_execution_start(display, displayable_calls)
-        try:
-            batch = _execute_tool_calls(
-                response.function_calls,
-                max_workers=max_workers,
-                context=ToolContext(
-                    settings=self._settings,
-                    display=display,
-                    session_usage=session_usage,
-                    turn_usage=turn_usage,
-                    sub_agent_depth=sub_agent_depth,
-                    tool_catalog=self._tool_catalog,
-                    disabled_tool_names=effective_excluded_tool_names(
-                        self._settings, self._excluded_tools
-                    ),
-                    tool_availability_overridden=getattr(
-                        self, "_tool_availability_overridden", False
-                    ),
-                    parent_context=parent_context,
-                    tracer=tracer,
-                    workspace_root=getattr(self, "_workspace_root", None),
-                    workspace_directory_key=getattr(
-                        self, "_workspace_directory_key", None
-                    ),
-                ),
-                on_result=build_tool_result_callback(display),
-            )
-
-            finalize_tool_execution(display)
-        except Exception:
-            if displayable_calls:
-                display.tool_execution_stop()
-            raise
-        if displayable_calls:
-            display.tool_group_end()
-
-        return (
-            self._tool_result_items_for_response(response, batch.results),
-            batch.had_errors,
+        return execute_provider_tool_calls(
+            response.function_calls,
+            max_workers=max_workers,
+            settings=self._settings,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tool_catalog=self._tool_catalog,
+            excluded_tools=self._excluded_tools,
+            serialize_result=lambda result: self._tool_result_items_for_response(
+                response,
+                [result],
+            )[0],
+            sub_agent_depth=sub_agent_depth,
+            parent_context=parent_context,
+            tracer=tracer,
+            tool_availability_overridden=getattr(
+                self, "_tool_availability_overridden", False
+            ),
+            workspace_root=getattr(self, "_workspace_root", None),
+            workspace_directory_key=getattr(self, "_workspace_directory_key", None),
+            execute_calls=_execute_tool_calls,
         )
 
     def _http_request(
@@ -1210,6 +1188,7 @@ class OpenAIProvider(Provider):
             "parallel_tool_calls": True,
             "store": request_options.store,
             "stream": request_options.stream,
+            "include": responses_include(request_options.include),
             "reasoning": {
                 "effort": self._settings.reasoning_effort,
                 "summary": "auto",
@@ -1217,8 +1196,6 @@ class OpenAIProvider(Provider):
         }
         if request_options.tool_choice is not None:
             body["tool_choice"] = request_options.tool_choice
-        if request_options.include is not None:
-            body["include"] = list(request_options.include)
         if request_options.use_session_prompt_cache_key and session_id:
             body["prompt_cache_key"] = session_id
         if request_options.include_max_output_tokens:
@@ -2107,19 +2084,7 @@ def _clone_input_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _response_history_item_for_input(item: dict[str, Any]) -> dict[str, Any]:
-    return _strip_provider_item_ids(_clone_input_item(item))
-
-
-def _strip_provider_item_ids(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            key: _strip_provider_item_ids(inner)
-            for key, inner in value.items()
-            if key != "id"
-        }
-    if isinstance(value, list):
-        return [_strip_provider_item_ids(item) for item in value]
-    return value
+    return response_history_item_for_input(item)
 
 
 def _format_response_failed_message(code: str, message: str) -> str:

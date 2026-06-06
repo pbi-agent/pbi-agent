@@ -208,7 +208,10 @@ def test_xai_build_request_body_maps_grok_3_mini_reasoning_effort() -> None:
     assert body["max_output_tokens"] == DEFAULT_MAX_TOKENS
     assert body["reasoning"] == {"effort": "high"}
     assert body["input"][0] == {"role": "system", "content": "be concise"}
-    assert body["include"] == ["web_search_call.action.sources"]
+    assert body["include"] == [
+        "web_search_call.action.sources",
+        "reasoning.encrypted_content",
+    ]
 
 
 def test_xai_build_request_body_replays_restored_response_items() -> None:

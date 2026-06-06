@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-06-04
+- Last compacted: 2026-06-06
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -23,6 +23,8 @@
 - Kanban/release: `/create-task` only creates cards via `pbi-agent kanban create`. Kanban worker returns complete outcomes despite recoverable tool errors; fatal exceptions/interrupts fail. Release docs use `release-writing`; changelog index `docs/changelog/index.md`, files `docs/changelog/v<version>.md`; release workflow needs validation triage, publish verification, continuation-gate safety.
 - Recent release outcomes: v0.12.0 (PR #309) and v0.12.1 (PR #310) were published to GitHub Releases/PyPI; v0.12.1 was bookkeeping-only and GitHub Release notes were frontmatter-stripped after publish.
 - Branding/providers: public copy = local coding agent. Preserve `pbi-agent`, `pbi_agent`, `PBI_AGENT_*`, `~/.pbi-agent`, logo `src/pbi_agent/web/static/logo.jpg`. OpenAI Responses use `instructions` + `previous_response_id`; ChatGPT subscription prepends system prompt; Codex transport is WebSocket-only with split timeouts/retry events, no unsupported compression.
+- Provider modularization: shared backend helpers live in `src/pbi_agent/providers/{transport,auth_strategies,endpoints,tool_execution,runtime}.py`; protocol helpers live in `src/pbi_agent/providers/protocols/`. Existing providers use these where safe; OpenAI transport remains specialized, but tool execution is shared. Google GCP provider is intentionally not integrated yet.
+- Google Interactions: saved-session/stateless history replay must use steps input (`user_input`, `model_output`, tool/result steps), not role/content turn-list objects; single fresh turns may still use simple string/content input.
 - Web sessions/routes: saved sessions use session-scoped APIs; no user-facing `/api/live-sessions/*` or `/sessions/live/:id`. Blank/saved sessions start/continue without active live id; completed Kanban-bound runs detach live ids without ending saved conversation.
 - Web session internals: `src/pbi_agent/web/session_manager.py` is thin facade over mixins in `src/pbi_agent/web/session/`; patch worker/auth globals in `pbi_agent.web.session.workers` and `pbi_agent.web.session.provider_auth`.
 - Web events: app/session streams use SSE `GET /api/events/{stream}` and `/api/events/sessions/{session_id}` with `server.connected`, heartbeat, `since`/`Last-Event-ID`; WebSocket event routes/helpers removed; frontend keeps defensive `parseSseEvent()`.
@@ -35,6 +37,7 @@
 - Web UI: prefer shadcn primitives/tokens, `cn()`, `lucide-react`; avoid raw colors/manual dark-mode/custom overlay z-index/space utilities. Large modals need safe gutters + inner scroll; floating UI near edges must clamp both axes when needed. Dialog/Sheet/Drawer need accessible title.
 - Web forms/catalog styling: settings modals follow `ProviderModal`/`FormDialog` pattern; add dialogs use flat rows and parent scroll. Catalog panels keep standard headers/actions; tab-level notices removed; installed metadata badges live in preview dialog header. `FormDialog`/`ConfirmDialog` canonical; Badge variants include `success`/`warning`/`info`/`running`/`completed`/`failed`.
 - Web CSS/fonts: unlayered reset in `webapp/src/styles/reset.css` can beat Tailwind v4 utilities; fix scoped unlayered overrides in `webapp/src/styles/overlays.css` unless wider `@layer base` move desired. UI typography uses bundled Geist, not external Google Fonts.
+- Appearance: default theme is `System`, resolving to OS/browser light/dark with live preference updates; manual Prism/Light/Dark choices remain available.
 - Web composer/timeline: Composer highlights `@file`/`$skill`; skill completions use `/api/skills/search`; user/assistant timelines support copy/fork; fenced code uses Shiki `CodeBlock`; `WorkingSummary` categorizes activity. Work runs coalesce thinking/tools between chat messages; stable active placeholders; expansion must not reset auto-follow; one shadcn Accordion closes other tool cards. Composer history browses main-session non-empty user messages with ArrowUp/ArrowDown and draft restore.
 - Web layout/topbar: global `AppSessionsContextPanel`; sidebar head and session topbar use `--topbar-height: 48px`; collapsed sidebar 48px; New Session closes sessions sidebar. Main topbar uses interactive `UsageBar`; sub-agent/new-session routes use standalone gauge. Shortcuts: `Shift+Tab`, `Alt+Shift+H`, `Alt+Shift+E`.
 - Workspace Explorer/file preview: local dependency-free React tree, Material Icon Theme assets via `webapp/src/lib/workspaceFileIcons.ts`, right split fills panel. Preview closed by default, opens from file-row clicks, has top-right `app-close-icon-button`, 72%/28% default split, no first-mount imperative resize. `CodeBlock` must flex and override global max-height; file-row clicks scroll selected file to tree viewport top.
@@ -47,5 +50,7 @@
 
 ## Detailed Task Events
 
-## 2026-06-04
-- Added `System` as the default Appearance theme, resolving to OS/browser light/dark with live preference updates while preserving manual Prism/Light/Dark choices; rebuilt static app assets. Validation: focused SettingsPage test, `bun run lint`, `bun run typecheck`, full `bun run test:web`, `bun run web:build`, and `git diff --check` passed; existing React act warnings remain.
+## 2026-06-06
+- Fixed Google Interactions saved-session continuation for session `a606fe9e549b4cf7b6d21815c1302a3c`: restored messages/history now replay as Interactions steps instead of role/content turns, preventing the `step_list` vs `turn_list` 400. Validation: focused Google/session pytest, Ruff check/format, full basedpyright, and a no-network payload check for that session passed.
+- Added shared OpenAI Responses include handling so request bodies always include `reasoning.encrypted_content`, merged with provider-specific include values. Validation: focused OpenAI/xAI/GitHub Copilot provider pytest, Ruff check/format on touched files, and full basedpyright passed.
+- Fixed cross-provider tool-history replay for session `ec4f315e257d4653aeb6f4db7b40f5a5`: mixed xAI→OpenAI saved sessions now fall back to generic tool call/result history instead of raw Responses traces, and Responses history items strip output-only fields (`status`, `phase`, ids, logprobs) before request replay. Validation: exact session payload check, focused session/OpenAI/xAI pytest, Ruff check/format, full basedpyright passed.

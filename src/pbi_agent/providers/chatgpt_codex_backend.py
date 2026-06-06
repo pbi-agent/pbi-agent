@@ -14,6 +14,9 @@ from urllib.parse import urlparse, urlunparse
 from pbi_agent.auth.providers.openai_chatgpt import OPENAI_CHATGPT_RESPONSES_URL
 from pbi_agent.agent.tool_runtime import to_function_call_output_items
 from pbi_agent.models.messages import CompletedResponse
+from pbi_agent.providers.protocols.openai_responses import (
+    response_history_item_for_input,
+)
 from pbi_agent.tools.types import ToolResult
 
 CHATGPT_ORIGINATOR = "codex_cli_rs"
@@ -714,8 +717,7 @@ def _clone_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sanitize_output_item(item: dict[str, Any]) -> dict[str, Any]:
-    cloned = _clone_item(item)
-    return _strip_backend_ids(cloned)
+    return response_history_item_for_input(item)
 
 
 def _completed_turn_history_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -753,13 +755,3 @@ def _assistant_history_item(item: dict[str, Any]) -> dict[str, Any] | None:
 
     content = "".join(text_parts)
     return {"role": "assistant", "content": content} if content else None
-
-
-def _strip_backend_ids(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            key: _strip_backend_ids(item) for key, item in value.items() if key != "id"
-        }
-    if isinstance(value, list):
-        return [_strip_backend_ids(item) for item in value]
-    return value

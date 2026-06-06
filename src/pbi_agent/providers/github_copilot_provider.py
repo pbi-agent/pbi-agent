@@ -21,12 +21,7 @@ from pbi_agent.providers.chatgpt_codex_backend import (
     ResponsesRequestOptions,
     ResponsesConversationReplay,
 )
-from pbi_agent.providers.generic_provider import (
-    GenericProvider,
-    _duration_ms,
-    _extract_retry_after,
-    _trace_provider_call,
-)
+from pbi_agent.providers.generic_provider import GenericProvider
 from pbi_agent.providers.github_copilot_backend import (
     GITHUB_COPILOT_CHAT_COMPLETIONS_URL,
     github_copilot_backend_for_model,
@@ -374,7 +369,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                     response_json = json.loads(resp.read().decode("utf-8"))
 
                 result = self._parse_response(response_json)
-                _trace_provider_call(
+                provider_retry.trace_provider_call(
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
@@ -382,7 +377,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload=response_json,
-                    duration_ms=_duration_ms(req_start),
+                    duration_ms=provider_retry.duration_ms(req_start),
                     prompt_tokens=result.usage.input_tokens,
                     completion_tokens=result.usage.output_tokens,
                     total_tokens=result.usage.total_tokens,
@@ -405,7 +400,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                 error_payload = provider_retry.parse_error_payload(error_body) or {
                     "body": error_body
                 }
-                _trace_provider_call(
+                provider_retry.trace_provider_call(
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
@@ -413,7 +408,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload=error_payload,
-                    duration_ms=_duration_ms(req_start),
+                    duration_ms=provider_retry.duration_ms(req_start),
                     status_code=exc.code,
                     success=False,
                     error_message=error_body or f"HTTP {exc.code}",
@@ -432,7 +427,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                             "GitHub Copilot rate limit exceeded after "
                             f"{rate_limit_max_retries + 1} attempts: {error_body}"
                         ) from exc
-                    wait = _extract_retry_after(exc, attempt)
+                    wait = provider_retry.retry_after_seconds(exc, attempt)
                     retry_notice_max_retries = rate_limit_max_retries
                     display.rate_limit_notice(
                         wait_seconds=wait,
@@ -462,7 +457,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                             "GitHub Copilot API overloaded after "
                             f"{max_retries + 1} attempts: {error_body}"
                         ) from exc
-                    wait = _extract_retry_after(exc, attempt)
+                    wait = provider_retry.retry_after_seconds(exc, attempt)
                     retry_notice_max_retries = max_retries
                     display.overload_notice(
                         wait_seconds=wait,
@@ -516,7 +511,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                 urllib.error.URLError,
             ) as exc:
                 last_error = exc
-                _trace_provider_call(
+                provider_retry.trace_provider_call(
                     tracer=tracer,
                     provider=self._settings.provider,
                     model=self._settings.model,
@@ -524,7 +519,7 @@ class _GitHubCopilotChatCompletionsProvider(GenericProvider):
                     request_config=self._settings.redacted(),
                     request_payload=body,
                     response_payload={"error": str(exc)},
-                    duration_ms=_duration_ms(req_start),
+                    duration_ms=provider_retry.duration_ms(req_start),
                     success=False,
                     error_message=str(exc),
                     metadata={"attempt": attempt + 1},
