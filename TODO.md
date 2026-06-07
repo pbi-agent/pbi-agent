@@ -1,5 +1,4 @@
-- [x] Audit history replay across all providers
-- [x] Define provider-agnostic saved tool-history contract
-- [x] Update replay selection/conversion if needed
-- [x] Add cross-provider tests for non-xAI cases
-- [x] Validate and update memory
+- [x] Inspect current branch changes and provider docs coverage
+- [x] Update documentation for the new provider if missing
+- [x] Validate docs/build or targeted checks
+- [x] Update task memory and report status

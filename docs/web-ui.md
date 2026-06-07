@@ -62,7 +62,7 @@ Starting a new session resets the provider conversation state while keeping the 
 
 The Settings page manages persistent local configuration under `~/.pbi-agent/`:
 
-- Providers hold connection settings such as provider kind, API key, auth mode, and endpoint URLs.
+- Providers hold connection settings such as provider kind, API key, auth mode, endpoint URLs, and Google Cloud project/location values.
 - Model profiles hold runnable model/runtime settings tied to one saved provider.
 - The active default profile is used when a session or run does not specify another profile.
 - Speech-to-text selects the saved provider used for web UI dictation.

@@ -165,6 +165,8 @@ class ConfigurationMixin:
         api_key_env: str | None,
         responses_url: str | None,
         generic_api_url: str | None,
+        google_cloud_project: str | None,
+        google_cloud_location: str | None,
         expected_revision: str,
     ) -> dict[str, Any]:
         next_auth_mode = auth_mode or provider_ui_metadata(kind)["default_auth_mode"]
@@ -183,6 +185,8 @@ class ConfigurationMixin:
                 api_key_env=api_key_env,
                 responses_url=responses_url,
                 generic_api_url=generic_api_url,
+                google_cloud_project=google_cloud_project,
+                google_cloud_location=google_cloud_location,
             ),
             expected_revision=expected_revision,
         )
@@ -199,6 +203,8 @@ class ConfigurationMixin:
         api_key_env: str | None,
         responses_url: str | None,
         generic_api_url: str | None,
+        google_cloud_project: str | None,
+        google_cloud_location: str | None,
         fields_set: set[str],
         expected_revision: str,
     ) -> dict[str, Any]:
@@ -252,6 +258,16 @@ class ConfigurationMixin:
                 generic_api_url
                 if "generic_api_url" in fields_set
                 else provider.generic_api_url
+            ),
+            google_cloud_project=(
+                google_cloud_project
+                if "google_cloud_project" in fields_set
+                else provider.google_cloud_project
+            ),
+            google_cloud_location=(
+                google_cloud_location
+                if "google_cloud_location" in fields_set
+                else provider.google_cloud_location
             ),
         )
         updated, revision = replace_provider_config(
@@ -785,6 +801,8 @@ class ConfigurationMixin:
             "auth_mode": provider.auth_mode,
             "responses_url": provider.responses_url,
             "generic_api_url": provider.generic_api_url,
+            "google_cloud_project": provider.google_cloud_project,
+            "google_cloud_location": provider.google_cloud_location,
             "secret_source": provider_secret_source(provider),
             "secret_env_var": provider.api_key_env,
             "has_secret": provider_has_secret(provider),

@@ -989,6 +989,8 @@ export async function createProvider(
     api_key_env?: string | null;
     responses_url?: string | null;
     generic_api_url?: string | null;
+    google_cloud_project?: string | null;
+    google_cloud_location?: string | null;
   },
   configRevision: string,
 ): Promise<{ provider: ProviderView; config_revision: string }> {
@@ -1016,6 +1018,8 @@ export async function updateProvider(
     api_key_env: string | null;
     responses_url: string | null;
     generic_api_url: string | null;
+    google_cloud_project: string | null;
+    google_cloud_location: string | null;
   }>,
   configRevision: string,
 ): Promise<{ provider: ProviderView; config_revision: string }> {

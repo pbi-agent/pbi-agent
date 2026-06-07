@@ -89,6 +89,8 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
         table.add_column("API Key")
         table.add_column("Responses URL")
         table.add_column("Generic API URL")
+        table.add_column("GCP Project")
+        table.add_column("GCP Location")
         for provider in providers:
             table.add_row(
                 provider.id,
@@ -99,6 +101,8 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
                 _display_secret(provider.api_key),
                 provider.responses_url or "",
                 provider.generic_api_url or "",
+                provider.google_cloud_project or "",
+                provider.google_cloud_location or "",
             )
         console.print(table)
         return 0
@@ -114,6 +118,8 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
                 api_key_env=args.api_key_env,
                 responses_url=args.responses_url,
                 generic_api_url=args.generic_api_url,
+                google_cloud_project=args.google_cloud_project,
+                google_cloud_location=args.google_cloud_location,
             )
         )
         print(f"Created provider '{provider.id}'.")
@@ -129,6 +135,8 @@ def _handle_config_providers_command(args: argparse.Namespace) -> int:
             api_key_env=args.api_key_env,
             responses_url=args.responses_url,
             generic_api_url=args.generic_api_url,
+            google_cloud_project=args.google_cloud_project,
+            google_cloud_location=args.google_cloud_location,
         )
         print(f"Updated provider '{provider.id}'.")
         return 0

@@ -35,6 +35,7 @@ from pbi_agent.config import (
     parse_command_markdown,
     parse_csv_setting,
     resolve_runtime,
+    resolve_runtime_for_profile_id,
     resolve_settings,
     resolve_web_runtime,
     save_internal_config,
@@ -58,6 +59,9 @@ def _clear_runtime_env(monkeypatch) -> None:
         "PBI_AGENT_SUB_AGENT_MODEL",
         "PBI_AGENT_RESPONSES_URL",
         "PBI_AGENT_GENERIC_API_URL",
+        "PBI_AGENT_GOOGLE_CLOUD_PROJECT",
+        "PBI_AGENT_GOOGLE_CLOUD_LOCATION",
+        "PBI_AGENT_GOOGLE_CLOUD_REGION",
         "PBI_AGENT_REASONING_EFFORT",
         "PBI_AGENT_MAX_TOOL_WORKERS",
         "PBI_AGENT_MAX_RETRIES",
@@ -69,6 +73,11 @@ def _clear_runtime_env(monkeypatch) -> None:
         "XAI_API_KEY",
         "ANTHROPIC_API_KEY",
         "GOOGLE_API_KEY",
+        "GOOGLE_CLOUD_ACCESS_TOKEN",
+        "GOOGLE_CLOUD_LOCATION",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_PROJECT_ID",
+        "GOOGLE_CLOUD_REGION",
         "DEEPGRAM_API_KEY",
         "ELEVENLABS_API_KEY",
         "AZURE_OPENAI_API_KEY",
@@ -423,12 +432,19 @@ def test_stt_only_provider_configs_roundtrip_and_metadata(monkeypatch) -> None:
     assert config.providers[0].api_key_env == "DEEPGRAM_API_KEY"
     assert config_module.PROVIDER_API_KEY_ENVS["xai"] == "XAI_API_KEY"
     assert config_module.PROVIDER_API_KEY_ENVS["google"] == "GEMINI_API_KEY"
+    assert (
+        config_module.PROVIDER_API_KEY_ENVS["google_gcp"] == "GOOGLE_CLOUD_ACCESS_TOKEN"
+    )
     assert config_module.PROVIDER_API_KEY_ENVS["deepgram"] == "DEEPGRAM_API_KEY"
     assert config_module.PROVIDER_API_KEY_ENVS["elevenlabs"] == "ELEVENLABS_API_KEY"
     assert config_module.provider_has_secret(config.providers[0]) is True
     assert config_module.provider_ui_metadata("xai")["supports_stt"] is True
     assert config_module.provider_ui_metadata("xai")["supports_model_profiles"] is True
     assert config_module.provider_ui_metadata("google")["supports_stt"] is True
+    assert (
+        config_module.provider_ui_metadata("google_gcp")["supports_native_web_search"]
+        is False
+    )
     assert (
         config_module.provider_ui_metadata("google")["supports_model_profiles"] is True
     )
@@ -441,6 +457,84 @@ def test_stt_only_provider_configs_roundtrip_and_metadata(monkeypatch) -> None:
     assert (
         config_module.provider_ui_metadata("openai")["supports_model_profiles"] is True
     )
+
+
+def test_google_gcp_config_defaults_and_validation(monkeypatch) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    _clear_runtime_env(monkeypatch)
+
+    settings = resolve_settings(_args("--provider", "google_gcp", "web"))
+
+    assert settings.provider == "google_gcp"
+    assert settings.api_key == ""
+    assert settings.responses_url == config_module.DEFAULT_GOOGLE_GCP_RESPONSES_URL
+    assert settings.google_cloud_project == ""
+    assert settings.google_cloud_location == ""
+    assert settings.model == config_module.DEFAULT_GOOGLE_GCP_MODEL
+    assert settings.sub_agent_model == (
+        config_module.DEFAULT_GOOGLE_GCP_SUB_AGENT_MODEL
+    )
+    settings.validate()
+
+    metadata = config_module.provider_ui_metadata("google_gcp")
+    assert metadata["label"] == "Google Cloud Vertex AI"
+    assert metadata["default_model"] == config_module.DEFAULT_GOOGLE_GCP_MODEL
+    assert metadata["supports_model_profiles"] is True
+    assert metadata["supports_stt"] is False
+
+
+def test_google_gcp_project_location_resolves_from_cli_env_and_provider(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    _clear_runtime_env(monkeypatch)
+    monkeypatch.setenv("PBI_AGENT_GOOGLE_CLOUD_PROJECT", "env-project")
+    monkeypatch.setenv("PBI_AGENT_GOOGLE_CLOUD_REGION", "us-east5")
+
+    settings = resolve_settings(_args("--provider", "google_gcp", "web"))
+
+    assert settings.google_cloud_project == "env-project"
+    assert settings.google_cloud_location == "us-east5"
+
+    cli_settings = resolve_settings(
+        _args(
+            "--provider",
+            "google_gcp",
+            "--google-cloud-project",
+            "cli-project",
+            "--google-cloud-region",
+            "europe-west4",
+            "web",
+        )
+    )
+
+    assert cli_settings.google_cloud_project == "cli-project"
+    assert cli_settings.google_cloud_location == "europe-west4"
+
+    provider, _ = create_provider_config(
+        ProviderConfig(
+            id="gcp-main",
+            name="GCP Main",
+            kind="google_gcp",
+            google_cloud_project="saved-project",
+            google_cloud_location="us-central1",
+        )
+    )
+    profile, _ = create_model_profile_config(
+        ModelProfileConfig(
+            id="gcp-grok",
+            name="GCP Grok",
+            provider_id=provider.id,
+            model="xai/grok-4.1-fast-non-reasoning",
+        )
+    )
+    monkeypatch.delenv("PBI_AGENT_GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("PBI_AGENT_GOOGLE_CLOUD_REGION", raising=False)
+
+    runtime = resolve_runtime_for_profile_id(profile.id)
+
+    assert runtime.settings.google_cloud_project == "saved-project"
+    assert runtime.settings.google_cloud_location == "us-central1"
 
 
 def test_stt_only_provider_cannot_back_model_profiles_or_runtime(

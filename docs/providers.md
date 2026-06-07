@@ -7,7 +7,8 @@ description: 'Provider selection, key resolution, endpoint overrides, history mo
 
 Saved configuration is split into two entities:
 
-- Provider: connection-only settings such as provider kind, API key, and endpoint overrides.
+- Provider: connection-only settings such as provider kind, API key, endpoint
+  overrides, and Google Cloud project/location metadata.
 - Model Profile: runnable model/runtime settings tied to one saved Provider.
 
 Speech-to-text (STT) also uses saved Providers, but it does not use model
@@ -22,7 +23,7 @@ Runtime resolution now happens in two phases:
 
 If no saved profile is selected, runtime settings fall back directly to CLI flags, environment variables, and provider defaults. The old provider-scoped saved runtime snapshot is no longer used, and runtime commands do not rewrite saved config.
 
-API key precedence remains: `--api-key`, then `PBI_AGENT_API_KEY`, then the provider-specific fallback env var, then the saved Provider API key.
+API key precedence remains: `--api-key`, then `PBI_AGENT_API_KEY`, then the provider-specific fallback env var, then the saved Provider API key. Google Cloud Vertex AI can also fall back to Application Default Credentials (ADC) when no explicit bearer token is configured.
 
 `sub_agent` uses the same provider as the parent session. Its sub-model defaults to a provider-specific sub-agent model from `config.py`, and you can override it independently with `--sub-agent-model` or `PBI_AGENT_SUB_AGENT_MODEL`.
 
@@ -58,7 +59,21 @@ uv run pbi-agent web
       "api_key": "sk-...",
       "api_key_env": null,
       "responses_url": "https://api.openai.com/v1/responses",
-      "generic_api_url": null
+      "generic_api_url": null,
+      "google_cloud_project": null,
+      "google_cloud_location": null
+    },
+    {
+      "id": "vertex-ai",
+      "name": "Google Cloud Vertex AI",
+      "kind": "google_gcp",
+      "auth_mode": "api_key",
+      "api_key": "",
+      "api_key_env": null,
+      "responses_url": null,
+      "generic_api_url": null,
+      "google_cloud_project": "my-project",
+      "google_cloud_location": "global"
     },
     {
       "id": "deepgram-stt",
@@ -68,7 +83,9 @@ uv run pbi-agent web
       "api_key": "",
       "api_key_env": "DEEPGRAM_API_KEY",
       "responses_url": null,
-      "generic_api_url": null
+      "generic_api_url": null,
+      "google_cloud_project": null,
+      "google_cloud_location": null
     }
   ],
   "model_profiles": [
@@ -104,6 +121,7 @@ uv run pbi-agent web
 | Azure | Responses API, Chat Completions API, or Anthropic Messages API by endpoint | required `--responses-url` | `gpt-4.1` | `gpt-4.1-mini` | `AZURE_API_KEY` | yes | no |
 | xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4.20` | `grok-4-1-fast` | `XAI_API_KEY` | no in this build | yes |
 | Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` | `GEMINI_API_KEY` | yes | no |
+| Google Cloud Vertex AI | Gemini `generateContent`, OpenAI Responses, OpenAI Chat Completions, or Anthropic Messages by model | derived from project/location or `--responses-url` | `gemini-2.5-flash` | `gemini-2.5-flash` | `GOOGLE_CLOUD_ACCESS_TOKEN` or ADC; Gemini API-key envs also supported | Gemini models | no |
 | Anthropic | Messages API | `https://api.anthropic.com/v1/messages` | `claude-opus-4-6` | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` | yes | no |
 | Generic | Chat Completions API | `https://openrouter.ai/api/v1/chat/completions` | none | none | `GENERIC_API_KEY` | no in this build | no |
 | Deepgram | Speech-to-text only | `https://api.deepgram.com/v1/listen` | n/a | n/a | `DEEPGRAM_API_KEY` | n/a | yes |
@@ -112,7 +130,7 @@ uv run pbi-agent web
 Image input covers both explicit user attachments (`run --image`, `/image add`) and model-initiated local image inspection through the `read_image` tool.
 
 ::: warning
-`--responses-url` is used by the OpenAI API, ChatGPT subscription, GitHub Copilot subscription, Azure, xAI, and Google backends. For Azure it is required and selects the wire protocol from the endpoint path. ChatGPT and GitHub Copilot saved providers normally use their built-in account-session endpoints, Anthropic is hard-wired to `https://api.anthropic.com/v1/messages` in the current implementation, and Generic uses `--generic-api-url` instead.
+`--responses-url` is used by the OpenAI API, ChatGPT subscription, GitHub Copilot subscription, Azure, xAI, Google, and Google Cloud Vertex AI backends. For Azure it is required and selects the wire protocol from the endpoint path. For Google Cloud Vertex AI it can be a full Vertex endpoint or a base URL; otherwise pbi-agent derives the endpoint from Google Cloud project and location settings. ChatGPT and GitHub Copilot saved providers normally use their built-in account-session endpoints, Anthropic is hard-wired to `https://api.anthropic.com/v1/messages` in the current implementation, and Generic uses `--generic-api-url` instead.
 :::
 
 ::: details Hidden compatibility aliases
@@ -343,6 +361,78 @@ uv run pbi-agent --provider xai run --prompt "Summarize the main folders and scr
 export GEMINI_API_KEY="AIza..."
 uv run pbi-agent --provider google web
 ```
+
+## Google Cloud Vertex AI
+
+Use `google_gcp` when you want to run Vertex AI models through Google Cloud
+auth, project, and location settings. The provider chooses a wire protocol from
+the model ID:
+
+| Model pattern | Vertex API shape |
+| --- | --- |
+| `gemini...` or `google/gemini...` | Gemini `generateContent` |
+| `grok...` or `xai/...` | OpenAI Responses-compatible endpoint |
+| `claude...` or `anthropic/...` | Anthropic Messages-compatible `rawPredict` endpoint |
+| Other publisher IDs containing `/`, such as `deepseek-ai/deepseek-v3.1-maas` | OpenAI Chat Completions-compatible endpoint |
+
+Set `PBI_AGENT_GOOGLE_GCP_SHAPE` to `gemini_generate_content`,
+`openai_chat_completions`, `openai_responses`, or `anthropic_messages` when you
+need to override automatic model routing.
+
+| Setting | Value |
+| --- | --- |
+| Select it | `--provider google_gcp` or `PBI_AGENT_PROVIDER=google_gcp` |
+| OAuth2 / ADC auth | `--api-key` with an OAuth2 access token, `PBI_AGENT_API_KEY`, `GOOGLE_CLOUD_ACCESS_TOKEN`, or ADC via `gcloud auth application-default print-access-token` |
+| Gemini API-key auth | saved API key/env or one of `GOOGLE_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_CLOUD_API_KEY`, `VERTEX_AI_API_KEY`, `VERTEX_API_KEY`; sent as `x-goog-api-key` for Gemini express mode |
+| Project | `--google-cloud-project`, `PBI_AGENT_GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_PROJECT`, or `GOOGLE_CLOUD_PROJECT_ID` |
+| Location | `--google-cloud-location`, `PBI_AGENT_GOOGLE_CLOUD_LOCATION`, `PBI_AGENT_GOOGLE_CLOUD_REGION`, `GOOGLE_CLOUD_LOCATION`, or `GOOGLE_CLOUD_REGION`; defaults to `global` |
+| Endpoint override | `--responses-url` or `PBI_AGENT_RESPONSES_URL` |
+| Default model | `gemini-2.5-flash` |
+| Default sub-model | `gemini-2.5-flash` |
+| Model override | `--model` or `PBI_AGENT_MODEL` |
+| History mode | Client-side full message replay |
+| Image input | Supported for Gemini `generateContent` models; not enabled for the xAI/OpenAI-compatible Responses shape in this build |
+
+ADC setup with a saved provider/profile:
+
+```bash
+gcloud auth application-default login
+
+uv run pbi-agent config providers create \
+  --id vertex-ai \
+  --name "Google Cloud Vertex AI" \
+  --kind google_gcp \
+  --google-cloud-project my-project \
+  --google-cloud-location global
+
+uv run pbi-agent config profiles create \
+  --name vertex-gemini \
+  --provider-id vertex-ai \
+  --model gemini-2.5-flash \
+  --sub-agent-model gemini-2.5-flash
+
+uv run pbi-agent config profiles select vertex-gemini
+uv run pbi-agent web
+```
+
+Gemini express-mode API keys can be used for Gemini models. Include project and
+location when possible so pbi-agent can retry with OAuth2/ADC if Google rejects
+the API-key token type:
+
+```bash
+export GEMINI_API_KEY="AIza..."
+
+uv run pbi-agent config providers create \
+  --id vertex-gemini-key \
+  --name "Vertex Gemini API key" \
+  --kind google_gcp \
+  --api-key-env GEMINI_API_KEY \
+  --google-cloud-project my-project \
+  --google-cloud-location global
+```
+
+OpenAI-compatible and Anthropic Vertex endpoints require OAuth2 bearer auth or
+ADC; API-key auth is only used for Gemini express-mode requests.
 
 ## Anthropic
 

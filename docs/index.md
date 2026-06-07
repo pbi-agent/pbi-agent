@@ -15,7 +15,7 @@ hero:
       link: 'https://github.com/pbi-agent/pbi-agent'
 features:
   - title: 'Multi-Provider Support'
-    details: 'Target OpenAI, xAI, Google Gemini, Anthropic, or an OpenAI-compatible gateway from the same CLI.'
+    details: 'Target OpenAI, xAI, Google Gemini, Google Cloud Vertex AI, Anthropic, or an OpenAI-compatible gateway from the same CLI.'
   - title: 'Project Skills & Commands'
     details: 'Install reusable project-local skills and slash-command presets from local sources or GitHub catalogs.'
   - title: 'Parallel Tool Execution'

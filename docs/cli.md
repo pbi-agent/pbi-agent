@@ -15,7 +15,7 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 
 | Flag | Env Var | Default | Description |
 | --- | --- | --- | --- |
-| `--provider` | `PBI_AGENT_PROVIDER` | `openai` | LLM provider backend: `openai`, `azure`, `chatgpt`, `github_copilot`, `xai`, `google`, `anthropic`, or `generic`. |
+| `--provider` | `PBI_AGENT_PROVIDER` | `openai` | LLM provider backend: `openai`, `azure`, `chatgpt`, `github_copilot`, `xai`, `google`, `google_gcp`, `anthropic`, or `generic`. |
 | `--profile-id` | `PBI_AGENT_PROFILE_ID` | none | Select a saved model profile by ID before explicit CLI and env overrides are applied. |
 | `--api-key` | `PBI_AGENT_API_KEY` | none | Shared API key override. If unset, provider-specific fallback env vars are checked. |
 | `--model` | `PBI_AGENT_MODEL` | per-provider | Model override for the selected provider. Generic omits `model` when this is unset. |
@@ -25,7 +25,9 @@ If you run `pbi-agent` without a command, the CLI inserts `web` automatically. G
 | `--max-tool-workers` | `PBI_AGENT_MAX_TOOL_WORKERS` | `4` | Maximum parallel workers for tool execution. |
 | `--max-retries` | `PBI_AGENT_MAX_RETRIES` | `3` | Maximum retries for transient provider failures and rate limits. |
 | `--compact-threshold` | `PBI_AGENT_COMPACT_THRESHOLD` | `200000` | Context compaction threshold sent to OpenAI. |
-| `--responses-url` | `PBI_AGENT_RESPONSES_URL` | provider-specific | Override the Responses or Interactions endpoint for OpenAI API, ChatGPT, GitHub Copilot, Azure, xAI, or Google. Ignored by Anthropic and Generic. |
+| `--responses-url` | `PBI_AGENT_RESPONSES_URL` | provider-specific | Override the Responses, Interactions, or Vertex endpoint for OpenAI API, ChatGPT, GitHub Copilot, Azure, xAI, Google, or Google Cloud Vertex AI. Ignored by Anthropic and Generic. |
+| `--google-cloud-project` | `PBI_AGENT_GOOGLE_CLOUD_PROJECT` | none | Google Cloud project ID for the `google_gcp` provider. |
+| `--google-cloud-location` / `--google-cloud-region` | `PBI_AGENT_GOOGLE_CLOUD_LOCATION` / `PBI_AGENT_GOOGLE_CLOUD_REGION` | `global` for derived Vertex endpoints | Google Cloud Vertex AI location for the `google_gcp` provider. |
 | `--generic-api-url` | `PBI_AGENT_GENERIC_API_URL` | `https://openrouter.ai/api/v1/chat/completions` | Override the OpenAI-compatible Chat Completions endpoint used by the Generic backend. |
 | `--service-tier` | `PBI_AGENT_SERVICE_TIER` | none | OpenAI service tier for request processing: `auto`, `default`, `flex`, or `priority`. Only valid with the OpenAI provider. |
 | `--verbose` | none | `false` | Enable verbose logging. |
@@ -44,6 +46,7 @@ Per-provider model defaults:
 | GitHub Copilot subscription | `gpt-5.4` | `gpt-5-mini` |
 | xAI | `grok-4.20` | `grok-4-1-fast` |
 | Google | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` |
+| Google Cloud Vertex AI | `gemini-2.5-flash` | `gemini-2.5-flash` |
 | Anthropic | `claude-opus-4-6` | `claude-sonnet-4-6` |
 | Generic | none | none |
 
@@ -251,8 +254,8 @@ Stored providers hold connection-only settings: provider kind, API key, and endp
 | Command | Purpose |
 | --- | --- |
 | `pbi-agent config providers list` | List saved providers. |
-| `pbi-agent config providers create --name NAME [--id ID] --kind PROVIDER [--auth-mode api_key|chatgpt_account|copilot_account] [--api-key KEY] [--responses-url URL] [--generic-api-url URL]` | Create a provider. |
-| `pbi-agent config providers update ID [--name NAME] [--kind PROVIDER] [--auth-mode api_key|chatgpt_account|copilot_account] [--api-key KEY] [--responses-url URL] [--generic-api-url URL]` | Update a provider by ID. |
+| `pbi-agent config providers create --name NAME [--id ID] --kind PROVIDER [--auth-mode api_key|chatgpt_account|copilot_account] [--api-key KEY] [--api-key-env ENV] [--responses-url URL] [--generic-api-url URL] [--google-cloud-project PROJECT] [--google-cloud-location LOCATION]` | Create a provider. |
+| `pbi-agent config providers update ID [--name NAME] [--kind PROVIDER] [--auth-mode api_key|chatgpt_account|copilot_account] [--api-key KEY] [--api-key-env ENV] [--responses-url URL] [--generic-api-url URL] [--google-cloud-project PROJECT] [--google-cloud-location LOCATION]` | Update a provider by ID. |
 | `pbi-agent config providers delete ID` | Delete a provider by ID. Deletion fails while any saved model profile still references it. |
 | `pbi-agent config providers auth-status ID` | Show stored account-auth status for a provider. |
 | `pbi-agent config providers auth-login ID [--method browser|device]` | Run the built-in browser or device login flow for a provider. |
@@ -381,6 +384,7 @@ Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`.
 | ChatGPT subscription | yes | yes |
 | GitHub Copilot subscription | yes | yes |
 | Google | yes | yes |
+| Google Cloud Vertex AI | Gemini models only | Gemini models only |
 | Anthropic | yes | yes |
 | xAI | no | no |
 | Generic | no | no |
