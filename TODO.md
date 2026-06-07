@@ -1,5 +1,3 @@
-- [x] Locate session preview git diff renderer
-- [x] Hide git diff metadata/header rows in preview
-- [x] Add/update frontend test coverage if needed
-- [x] Run focused validation
-- [x] Update task memory and report status
+- [x] Catch optional init command/agent filesystem install errors
+- [x] Add focused init bootstrap regression tests
+- [x] Run focused validation and update memory

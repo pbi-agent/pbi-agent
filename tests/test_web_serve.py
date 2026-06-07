@@ -2561,7 +2561,7 @@ def test_slash_command_search_endpoint_returns_web_commands(
         },
         {
             "name": "/init",
-            "description": "Create a starter AGENTS.md instructions file",
+            "description": "Bootstrap AGENTS.md plus default commands and sub-agents",
             "kind": "local_command",
         },
         {
@@ -2613,7 +2613,7 @@ def test_slash_command_search_endpoint_includes_command_file_commands(
         },
         {
             "name": "/init",
-            "description": "Create a starter AGENTS.md instructions file",
+            "description": "Bootstrap AGENTS.md plus default commands and sub-agents",
             "kind": "local_command",
         },
         {

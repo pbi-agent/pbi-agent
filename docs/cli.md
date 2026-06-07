@@ -192,6 +192,23 @@ sub_agents: confidence-checker,fixer
 
 `allowed_tools` accepts comma-separated built-in tool groups: `read`, `write`, `web`, `sub-agent`, and `shell`. `skills`, `commands`, and `sub_agents` are comma-separated scalar lists. See [Project Sub-agents](/customization/sub-agents). Public agent catalogs are discovered from `agents/*.md` by default. If a repository keeps agent files under `.agents/agents/`, target that directory explicitly with a local path or GitHub tree URL.
 
+## `pbi-agent init`
+
+Bootstrap a workspace with starter project guidance plus default official catalog items:
+
+- `AGENTS.md`
+- default commands from the official `pbi-agent/commands` catalog
+- default sub-agents from the official `pbi-agent/agents` catalog
+
+```bash
+pbi-agent init
+pbi-agent init --force
+```
+
+By default, existing bootstrap files are skipped. Use `--force` or `--overwrite` to replace existing `AGENTS.md`, default command files under `.agents/commands/`, and default sub-agent files under `.agents/agents/`.
+
+Init reports created, installed, overwritten, skipped, and failed items. Catalog install failures are shown in the summary without hiding successful `AGENTS.md` handling.
+
 ## `pbi-agent kanban`
 
 Create and manage Kanban board tasks for the current workspace.

@@ -19,6 +19,7 @@ This page is separate from the [CLI Reference](/cli) and the [Built-in Tools](/t
 | `/skills` | Web and interactive runtime | Shows discovered project skills. |
 | `/mcp` | Web and interactive runtime | Shows discovered project MCP servers. |
 | `/agents` | Web and interactive runtime | Shows discovered project sub-agents. |
+| `/init` | Web and interactive runtime | Bootstraps `AGENTS.md` plus default project commands and sub-agents. |
 | `/reload` | Web and interactive runtime | Reloads workspace instructions, project catalogs, non-MCP tools, and the web file-mention cache. |
 | `/compact` | Web and interactive runtime | Summarizes the current live session into compact context for future turns. |
 | `/<command-name>` | Web and interactive runtime | Applies a project command from `.agents/commands/*.md` to the current turn. |
@@ -95,6 +96,12 @@ Shows MCP servers discovered from `.agents/mcp.json`, including their configured
 ### `/agents`
 
 Shows project sub-agent definitions discovered from `.agents/agents/*.md`. These are the `agent_type` choices available to the model-facing `sub_agent` tool.
+
+### `/init`
+
+Bootstraps the workspace without calling the model. It creates a starter `AGENTS.md`, installs default project commands from the official `pbi-agent/commands` catalog, installs default project sub-agents from the official `pbi-agent/agents` catalog, refreshes the active provider initialization, and reports created, installed, overwritten, skipped, and failed items.
+
+By default, existing bootstrap files are skipped. Use `/init --force` or `/init --overwrite` to replace existing `AGENTS.md`, default commands, and default sub-agents.
 
 ### `/reload`
 

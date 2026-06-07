@@ -284,14 +284,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_parser = add_command_parser(
         "init",
-        "Create a starter AGENTS.md instructions file.",
+        "Bootstrap AGENTS.md plus default project commands and sub-agents.",
     )
     init_parser.add_argument(
         "--force",
         "--overwrite",
         dest="force",
         action="store_true",
-        help="Overwrite AGENTS.md if it already exists.",
+        help="Overwrite existing init bootstrap files.",
     )
 
     web_parser = add_command_parser("web", "Serve the browser interface.")
