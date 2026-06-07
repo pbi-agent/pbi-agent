@@ -533,6 +533,7 @@ def run_session_loop(
                     result = init_workspace_bootstrap(
                         workspace=workspace,
                         force=init_force,
+                        directory_key=workspace_directory_key,
                     )
                     _reload_provider_initialization(
                         provider,

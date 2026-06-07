@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from pbi_agent.agents.state import set_agent_enabled
 from pbi_agent.agents.project_installer import (
     DEFAULT_AGENTS_SOURCE,
     ProjectAgentInstallError,
@@ -13,7 +14,6 @@ from pbi_agent.commands.project_installer import (
     ProjectCommandInstallError,
     install_project_command,
 )
-
 
 AGENTS_FILENAME = "AGENTS.md"
 DEFAULT_INIT_COMMANDS: tuple[str, ...] = (
@@ -26,7 +26,12 @@ DEFAULT_INIT_COMMANDS: tuple[str, ...] = (
     "retrospective",
     "review",
 )
-DEFAULT_INIT_AGENTS: tuple[str, ...] = ("code-reviewer",)
+DEFAULT_INIT_AGENTS: tuple[str, ...] = (
+    "code-reviewer",
+    "explorer",
+    "planner",
+    "worker",
+)
 COMMAND_INSTALL_ROOT = Path(".agents/commands")
 AGENT_INSTALL_ROOT = Path(".agents/agents")
 
@@ -138,6 +143,7 @@ def init_workspace_bootstrap(
     *,
     workspace: Path | str = Path("."),
     force: bool = False,
+    directory_key: str | None = None,
 ) -> InitBootstrapResult:
     """Create starter workspace files and install default official catalogs."""
 
@@ -148,7 +154,12 @@ def init_workspace_bootstrap(
         for command_name in DEFAULT_INIT_COMMANDS
     )
     agents = tuple(
-        _install_default_agent(agent_name, workspace=root, force=force)
+        _install_default_agent(
+            agent_name,
+            workspace=root,
+            force=force,
+            directory_key=directory_key,
+        )
         for agent_name in DEFAULT_INIT_AGENTS
     )
     return InitBootstrapResult(
@@ -244,6 +255,7 @@ def _install_default_agent(
     *,
     workspace: Path,
     force: bool,
+    directory_key: str | None,
 ) -> InitBootstrapItemResult:
     target_path = (workspace / AGENT_INSTALL_ROOT / f"{agent_name}.md").resolve()
     pre_existing = target_path.exists()
@@ -279,6 +291,23 @@ def _install_default_agent(
             message=str(exc),
         )
 
+    try:
+        set_agent_enabled(
+            result.agent_name,
+            False,
+            workspace=workspace,
+            directory_key=directory_key,
+        )
+    except Exception as exc:  # noqa: BLE001 - report per-item init failures
+        if not pre_existing:
+            result.install_path.unlink(missing_ok=True)
+        return InitBootstrapItemResult(
+            kind="agent",
+            name=result.agent_name,
+            status="failed",
+            path=result.install_path,
+            message=str(exc),
+        )
     return InitBootstrapItemResult(
         kind="agent",
         name=result.agent_name,

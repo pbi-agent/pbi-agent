@@ -1,4 +1,4 @@
-- [x] Fix Google GCP Responses replay history to keep only the final assistant message
-- [x] Add focused regression for follow-up turn replay
+- [x] Fix rollback for failed default sub-agent disable persistence
+- [x] Add focused regression coverage
 - [x] Run focused validation
 - [x] Update task memory
