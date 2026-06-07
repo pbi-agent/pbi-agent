@@ -1,4 +1,5 @@
-- [x] Inspect current branch changes and provider docs coverage
-- [x] Update documentation for the new provider if missing
-- [x] Validate docs/build or targeted checks
+- [x] Locate session preview git diff renderer
+- [x] Hide git diff metadata/header rows in preview
+- [x] Add/update frontend test coverage if needed
+- [x] Run focused validation
 - [x] Update task memory and report status
