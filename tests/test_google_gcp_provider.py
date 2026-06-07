@@ -1390,6 +1390,57 @@ def test_google_gcp_openai_responses_request_uses_vertex_url_auth_and_body(
     assert "previous_response_id" not in seen["body"]
 
 
+def test_google_gcp_openai_responses_uses_last_assistant_message_as_text(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    monkeypatch.delenv(GOOGLE_GCP_SHAPE_ENV, raising=False)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "demo-project")
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float):
+        del request, timeout
+        return make_http_response(
+            {
+                "id": "resp-gcp-multi",
+                "model": "xai/grok-4.20-reasoning",
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "First update."}],
+                    },
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "Final answer."}],
+                    },
+                ],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    provider = GoogleGcpProvider(
+        _make_settings(
+            api_key="",
+            model="xai/grok-4.20-reasoning",
+        ),
+        system_prompt="be concise",
+        access_token_resolver=lambda: "adc-token",
+        tool_catalog=ToolCatalog(),
+    )
+
+    response = provider.request_turn(
+        user_message="hello",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert response.text == "Final answer."
+    assert display_spy.markdown_calls == ["First update.", "Final answer."]
+
+
 def test_google_gcp_openai_responses_supports_grok_41_fast_and_sanitizes_tools(
     monkeypatch,
     display_spy,
@@ -1541,18 +1592,31 @@ def test_google_gcp_openai_responses_second_turn_replays_client_history(
                 "model": "xai/grok-4.20-reasoning",
                 "output": [
                     {
-                        "id": "msg-first",
+                        "id": "msg-first-update",
                         "type": "message",
                         "role": "assistant",
                         "status": "completed",
                         "content": [
                             {
                                 "type": "output_text",
-                                "text": "hi",
+                                "text": "intermediate",
                                 "logprobs": [],
                             }
                         ],
-                    }
+                    },
+                    {
+                        "id": "msg-first-final",
+                        "type": "message",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "final",
+                                "logprobs": [],
+                            }
+                        ],
+                    },
                 ],
             },
             {
@@ -1603,7 +1667,7 @@ def test_google_gcp_openai_responses_second_turn_replays_client_history(
         {
             "type": "message",
             "role": "assistant",
-            "content": [{"type": "output_text", "text": "hi"}],
+            "content": [{"type": "output_text", "text": "final"}],
         },
         {"role": "user", "content": "continue"},
     ]

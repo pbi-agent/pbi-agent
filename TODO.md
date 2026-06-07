@@ -1,3 +1,4 @@
-- [x] Catch optional init command/agent filesystem install errors
-- [x] Add focused init bootstrap regression tests
-- [x] Run focused validation and update memory
+- [x] Fix Google GCP Responses replay history to keep only the final assistant message
+- [x] Add focused regression for follow-up turn replay
+- [x] Run focused validation
+- [x] Update task memory

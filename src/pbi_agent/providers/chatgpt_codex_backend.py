@@ -722,13 +722,16 @@ def _sanitize_output_item(item: dict[str, Any]) -> dict[str, Any]:
 
 def _completed_turn_history_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     history_items: list[dict[str, Any]] = []
+    last_assistant_item: dict[str, Any] | None = None
     for item in items:
         if item.get("role") == "user":
             history_items.append(_clone_item(item))
             continue
         assistant_item = _assistant_history_item(item)
         if assistant_item is not None:
-            history_items.append(assistant_item)
+            last_assistant_item = assistant_item
+    if last_assistant_item is not None:
+        history_items.append(last_assistant_item)
     return history_items
 
 

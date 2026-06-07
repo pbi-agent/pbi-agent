@@ -1294,7 +1294,6 @@ class OpenAIProvider(Provider):
         return _decode_responses_body(raw_body, streamed=streamed)
 
     def _parse_response(self, response_json: dict[str, Any]) -> CompletedResponse:
-        text_parts: list[str] = []
         assistant_messages: list[str] = []
         reasoning_summary_parts: list[str] = []
         reasoning_content_parts: list[str] = []
@@ -1333,7 +1332,6 @@ class OpenAIProvider(Provider):
                     if part.get("type") == "output_text":
                         text = part.get("text", "")
                         if text:
-                            text_parts.append(text)
                             message_parts.append(text)
                         for annotation in part.get("annotations", []):
                             if not isinstance(annotation, dict):
@@ -1415,7 +1413,7 @@ class OpenAIProvider(Provider):
             reasoning_summary_parts,
             reasoning_content,
         )
-        text = "".join(text_parts).strip()
+        text = assistant_messages[-1] if assistant_messages else ""
         if not text:
             output_text = response_json.get("output_text")
             if isinstance(output_text, str):

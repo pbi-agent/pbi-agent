@@ -1072,18 +1072,20 @@ class _OpenAIResponsesShape(_GoogleGcpShapeStub):
         if not isinstance(output_items, list):
             output_items = []
 
-        text_parts: list[str] = []
+        assistant_messages: list[str] = []
         reasoning_summary_parts: list[str] = []
         reasoning_content_parts: list[str] = []
         encrypted_reasoning_parts: list[str] = []
         function_calls: list[ToolCall] = []
         display_items: list[dict[str, Any]] = []
         history_output_items: list[dict[str, Any]] = []
+        message_history_indexes: list[int] = []
 
         for item in output_items:
             if not isinstance(item, dict):
                 continue
-            history_output_items.append(response_history_item_for_input(item))
+            history_item = response_history_item_for_input(item)
+            history_output_items.append(history_item)
             item_type = item.get("type")
             if item_type == "reasoning":
                 reasoning_summary_parts.extend(
@@ -1098,12 +1100,20 @@ class _OpenAIResponsesShape(_GoogleGcpShapeStub):
             elif item_type == "message":
                 message_text = _openai_responses_message_text(item)
                 if message_text:
-                    text_parts.append(message_text)
+                    assistant_messages.append(message_text)
+                    message_history_indexes.append(len(history_output_items) - 1)
                     display_items.append({"type": "message", "text": message_text})
             elif item_type == "function_call":
                 function_calls.append(_openai_responses_function_call(item))
 
-        text = "".join(text_parts).strip()
+        text = assistant_messages[-1] if assistant_messages else ""
+        if len(message_history_indexes) > 1:
+            skipped_message_indexes = set(message_history_indexes[:-1])
+            history_output_items = [
+                item
+                for index, item in enumerate(history_output_items)
+                if index not in skipped_message_indexes
+            ]
         if not text:
             output_text = response_json.get("output_text")
             if isinstance(output_text, str):

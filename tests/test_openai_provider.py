@@ -682,6 +682,131 @@ def test_openai_chatgpt_replays_restored_user_images_without_previous_id(
     assert "previous_response_id" not in requests[0]
 
 
+def test_openai_chatgpt_codex_persists_and_replays_only_final_message(
+    monkeypatch,
+    display_spy,
+) -> None:
+    requests: list[dict[str, object]] = []
+    responses = iter(
+        [
+            [
+                {"type": "response.created", "response": {"id": "resp_1"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_1",
+                        "model": "gpt-5",
+                        "usage": {
+                            "input_tokens": 5,
+                            "input_tokens_details": {"cached_tokens": 0},
+                            "output_tokens": 3,
+                            "output_tokens_details": {"reasoning_tokens": 1},
+                        },
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [
+                                    {
+                                        "type": "output_text",
+                                        "text": "Intermediate update.",
+                                    }
+                                ],
+                            },
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [
+                                    {
+                                        "type": "output_text",
+                                        "text": "Final answer.",
+                                    }
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+            [
+                {"type": "response.created", "response": {"id": "resp_2"}},
+                {
+                    "type": "response.completed",
+                    "response": {
+                        "id": "resp_2",
+                        "model": "gpt-5",
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "output_text", "text": "Next answer."}
+                                ],
+                            }
+                        ],
+                    },
+                },
+            ],
+        ]
+    )
+
+    def fake_send_websocket_request(
+        self, *, request_body, headers, connect_timeout, idle_timeout, request_timeout
+    ):
+        del self, headers, connect_timeout, idle_timeout, request_timeout
+        requests.append(request_body)
+        return next(responses)
+
+    monkeypatch.setattr(
+        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        fake_send_websocket_request,
+    )
+
+    provider = OpenAIProvider(
+        _make_settings(
+            responses_url=OPENAI_CHATGPT_RESPONSES_URL,
+            auth=OAuthSessionAuth(
+                provider_id="openai-chatgpt",
+                backend="openai_chatgpt",
+                access_token="access-token",
+                refresh_token="refresh-token",
+                account_id="acct_123",
+                expires_at=4070908800,
+                email="user@example.com",
+                plan_type="chatgpt_plus",
+            ),
+        )
+    )
+
+    first = provider.request_turn(
+        user_message="First prompt",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+        session_id="session-123",
+    )
+    second = provider.request_turn(
+        user_message="Next prompt",
+        display=display_spy,
+        session_usage=TokenUsage(model=DEFAULT_MODEL),
+        turn_usage=TokenUsage(model=DEFAULT_MODEL),
+        session_id="session-123",
+    )
+
+    assert first.assistant_messages == ["Intermediate update.", "Final answer."]
+    assert first.text == "Final answer."
+    assert second.text == "Next answer."
+    assert display_spy.markdown_calls == [
+        "Intermediate update.",
+        "Final answer.",
+        "Next answer.",
+    ]
+    assert requests[1]["input"] == [
+        {"role": "user", "content": "First prompt"},
+        {"role": "assistant", "content": "Final answer."},
+        {"role": "user", "content": "Next prompt"},
+    ]
+
+
 def test_openai_build_request_body_includes_service_tier() -> None:
     provider = OpenAIProvider(_make_settings(service_tier="flex"))
 
@@ -989,7 +1114,11 @@ def test_openai_parse_response_preserves_distinct_assistant_messages() -> None:
     )
 
     assert result.assistant_messages == ["First update.", "Second update."]
-    assert result.text == "First update.Second update."
+    assert result.text == "Second update."
+    assert result.provider_data["display_items"] == [
+        {"type": "message", "text": "First update."},
+        {"type": "message", "text": "Second update."},
+    ]
 
 
 def test_openai_request_turn_reuses_previous_response_id(monkeypatch) -> None:

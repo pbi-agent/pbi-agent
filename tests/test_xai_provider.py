@@ -321,6 +321,35 @@ def test_xai_parse_response_extracts_function_calls_and_encrypted_reasoning() ->
     assert result.usage.model == "grok-4-1-fast-reasoning"
 
 
+def test_xai_parse_response_uses_last_assistant_message_as_text() -> None:
+    provider = XAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_multi",
+            "model": "grok-4-1-fast-reasoning",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "First update."}],
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Final answer."}],
+                },
+            ],
+        }
+    )
+
+    assert result.text == "Final answer."
+    assert result.provider_data["display_items"] == [
+        {"type": "message", "text": "First update."},
+        {"type": "message", "text": "Final answer."},
+    ]
+
+
 def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
     requests: list[dict[str, object]] = []
     responses = iter(
