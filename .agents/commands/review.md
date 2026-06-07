@@ -9,7 +9,7 @@ allowed_tools: read,shell
 
 Review proposed code change as if written by another engineer. Prioritize bugs, regressions, actionable risks over style commentary.
 
-This `/review` command is autonomous: perform the review directly in the current agent session. Do not call or delegate to any sub-agent.
+Review mode is autonomous: perform the review directly in the current agent session. Do not call or delegate to any sub-agent.
 
 Run `git status --short --branch` first to identify current workspace changes, then review that diff.
 
