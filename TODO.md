@@ -1,2 +1,1 @@
-- [x] Implement `MEMORY.md` workspace context loading alongside `AGENTS.md`
-- [!] Run final validation and update memory/handoff — repo pytest blocked by known unrelated `test_config_provider_and_profile_list_update_delete_endpoints`; other checks passed
+- [x] Compress and curate `MEMORY.md`
