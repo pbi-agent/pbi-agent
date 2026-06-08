@@ -1,4 +1,2 @@
-- [x] Fix rollback for failed default sub-agent disable persistence
-- [x] Add focused regression coverage
-- [x] Run focused validation
-- [x] Update task memory
+- [x] Implement `MEMORY.md` workspace context loading alongside `AGENTS.md`
+- [!] Run final validation and update memory/handoff — repo pytest blocked by known unrelated `test_config_provider_and_profile_list_update_delete_endpoints`; other checks passed

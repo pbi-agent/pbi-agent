@@ -155,6 +155,15 @@ def load_project_rules(cwd: Path | None = None) -> str | None:
     return _load_file("AGENTS.md", cwd)
 
 
+def load_workspace_memory(cwd: Path | None = None) -> str | None:
+    """Read an optional ``MEMORY.md`` file from *cwd* (default: CWD).
+
+    Returns the file content, or ``None`` when the file is absent, empty,
+    or unreadable.
+    """
+    return _load_file("MEMORY.md", cwd)
+
+
 def _resolve_base_prompt(
     *,
     settings: "Settings | None" = None,
@@ -178,6 +187,14 @@ def _append_project_rules(base_prompt: str, cwd: Path | None = None) -> str:
     if rules is None:
         return base_prompt
     return f"{base_prompt}\n\n<project_rules>\n{rules}\n</project_rules>"
+
+
+def _append_workspace_memory(base_prompt: str, cwd: Path | None = None) -> str:
+    """Append ``<workspace_memory>`` section if ``MEMORY.md`` is present."""
+    memory = load_workspace_memory(cwd)
+    if memory is None:
+        return base_prompt
+    return f"{base_prompt}\n\n<workspace_memory>\n{memory}\n</workspace_memory>"
 
 
 def _append_available_skills(
@@ -352,11 +369,14 @@ def get_system_prompt(
 ) -> str:
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
-    prompt = _append_project_rules(
-        _resolve_base_prompt(
-            settings=settings,
-            excluded_tools=excluded_tools,
-            cwd=cwd,
+    prompt = _append_workspace_memory(
+        _append_project_rules(
+            _resolve_base_prompt(
+                settings=settings,
+                excluded_tools=excluded_tools,
+                cwd=cwd,
+            ),
+            cwd,
         ),
         cwd,
     )
@@ -408,7 +428,10 @@ def get_sub_agent_system_prompt(
             excluded_tools=excluded_tools,
             cwd=cwd,
         )
-    prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}", cwd)
+    prompt = _append_workspace_memory(
+        _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}", cwd),
+        cwd,
+    )
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
     if "explore_workspace" in active_names:
