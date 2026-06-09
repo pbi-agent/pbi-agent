@@ -41,7 +41,7 @@ uv tool install --reinstall .
 
 - Use a single `MEMORY.md` file for both durable memory and recent task history.
 - Keep `MEMORY.md` in three sections only: `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
-- At the start of substantive work, read `Metadata`, `Long-Term Memory`, and any current-day detailed entries relevant to the task.
+- At the start of substantive work, consult the preloaded `<workspace_memory>` system-prompt section for `Metadata`, `Long-Term Memory`, and any current-day detailed entries relevant to the task. Do not read `MEMORY.md` again with tools unless `<workspace_memory>` is absent, you are about to edit/compact it, or the user explicitly asks to inspect the file.
 - Keep `Long-Term Memory` compact and edited in place. Store only durable facts: stable repo conventions, important decisions, reusable validation patterns, active follow-ups, and artifacts that matter beyond one task.
 - Keep `Detailed Task Events` append-only within the active day. Group entries under one `## YYYY-MM-DD` heading per day.
 - After each implementation, append one short task entry to the current day with only: what changed, validation, and next context if needed.
