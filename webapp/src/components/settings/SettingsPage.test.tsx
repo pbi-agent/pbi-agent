@@ -1449,7 +1449,7 @@ describe("SettingsPage", () => {
         ),
       ),
     ).toEqual([
-      ["Providers", "Speech-to-text", "Model Profiles"],
+      ["Providers", "Model Profiles", "Speech-to-text"],
       ["Commands", "Skills", "Agents"],
       ["Appearance", "Notifications"],
       ["Maintenance"],
