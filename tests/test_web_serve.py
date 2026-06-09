@@ -10435,6 +10435,8 @@ def test_config_provider_and_profile_list_update_delete_endpoints(
                 "auth_mode": "api_key",
                 "responses_url": None,
                 "generic_api_url": None,
+                "google_cloud_project": None,
+                "google_cloud_location": None,
                 "secret_source": "env_var",
                 "secret_env_var": "OPENAI_API_KEY",
                 "has_secret": True,
