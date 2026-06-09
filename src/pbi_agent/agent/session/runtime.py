@@ -36,7 +36,7 @@ from pbi_agent.extensions import (
     run_extension,
     tool_catalog_with_extensions,
 )
-from pbi_agent.init_agents import format_init_agents_result, init_agents_file
+from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
 from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.models.messages import (
     AgentOutcome,
@@ -530,9 +530,20 @@ def run_session_loop(
                     continue
                 init_force = _parse_init_command_force(user_input)
                 if init_force is not None:
-                    result = init_agents_file(workspace=workspace, force=init_force)
+                    result = init_workspace_bootstrap(
+                        workspace=workspace,
+                        force=init_force,
+                        directory_key=workspace_directory_key,
+                    )
+                    _reload_provider_initialization(
+                        provider,
+                        workspace,
+                        workspace_directory_key=workspace_directory_key,
+                    )
+                    if on_reload is not None:
+                        on_reload()
                     _render_temporary_command_markdown(
-                        format_init_agents_result(result)
+                        format_init_bootstrap_result(result)
                     )
                     continue
                 if normalized_command == RELOAD_COMMAND:

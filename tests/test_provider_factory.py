@@ -9,6 +9,7 @@ from pbi_agent.providers import create_provider
 from pbi_agent.providers.anthropic_provider import AnthropicProvider
 from pbi_agent.providers.generic_provider import GenericProvider
 from pbi_agent.providers.github_copilot_provider import GitHubCopilotProvider
+from pbi_agent.providers.google_gcp_provider import GoogleGcpProvider
 from pbi_agent.providers.google_provider import GoogleProvider
 from pbi_agent.providers.openai_provider import OpenAIProvider
 from pbi_agent.providers.xai_provider import XAIProvider
@@ -33,6 +34,7 @@ def _provider_default_prompt(provider: object) -> str:
         ("github_copilot", GitHubCopilotProvider),
         ("xai", XAIProvider),
         ("google", GoogleProvider),
+        ("google_gcp", GoogleGcpProvider),
         ("anthropic", AnthropicProvider),
         ("generic", GenericProvider),
     ],
@@ -104,6 +106,7 @@ def test_azure_routes_by_endpoint_url(url: str, expected_type: type) -> None:
         "github_copilot",
         "xai",
         "google",
+        "google_gcp",
         "anthropic",
         "generic",
     ],

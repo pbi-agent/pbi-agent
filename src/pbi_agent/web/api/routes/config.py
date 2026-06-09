@@ -129,6 +129,8 @@ def create_provider(
             api_key_env=request.api_key_env,
             responses_url=request.responses_url,
             generic_api_url=request.generic_api_url,
+            google_cloud_project=request.google_cloud_project,
+            google_cloud_location=request.google_cloud_location,
             expected_revision=expected_revision,
         )
     except Exception as exc:
@@ -156,6 +158,8 @@ def update_provider(
             api_key_env=request.api_key_env,
             responses_url=request.responses_url,
             generic_api_url=request.generic_api_url,
+            google_cloud_project=request.google_cloud_project,
+            google_cloud_location=request.google_cloud_location,
             fields_set=set(request.model_fields_set),
             expected_revision=expected_revision,
         )

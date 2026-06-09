@@ -64,4 +64,4 @@ At finish, give compact handoff:
 - validation run + result
 - unrelated dirty files or pre-existing validation failures
 
-Preserve unrelated changes. Name unrelated changes; do not imply whole workspace clean unless repo-wide validation passed and no unrelated dirty files remain.
+Preserve unrelated changes. Name unrelated changes; do not imply whole workspace clean unless repo-wide validation passed.

@@ -12,6 +12,72 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from pbi_agent import cli
+from pbi_agent.agents.project_installer import ProjectAgentInstallResult
+from pbi_agent.commands.project_installer import (
+    ProjectCommandInstallError,
+    ProjectCommandInstallResult,
+)
+
+
+def _fake_command_install(
+    source: str,
+    *,
+    command_name: str | None = None,
+    force: bool = False,
+    workspace: Path | None = None,
+) -> ProjectCommandInstallResult:
+    assert command_name is not None
+    root = (workspace or Path.cwd()).resolve()
+    install_path = root / ".agents" / "commands" / f"{command_name}.md"
+    if install_path.exists() and not force:
+        raise ProjectCommandInstallError(
+            f"Command already installed at {install_path}."
+        )
+    install_path.parent.mkdir(parents=True, exist_ok=True)
+    install_path.write_text(
+        (
+            f"---\nname: {command_name}\ndescription: {command_name} command.\n---\n\n"
+            f"# {command_name}\n"
+        ),
+        encoding="utf-8",
+    )
+    return ProjectCommandInstallResult(
+        command_id=command_name,
+        slash_alias=f"/{command_name}",
+        install_path=install_path,
+        source=source,
+        ref=None,
+        subpath=f"commands/{command_name}.md",
+    )
+
+
+def _fake_agent_install(
+    source: str,
+    *,
+    agent_name: str | None = None,
+    force: bool = False,
+    workspace: Path | None = None,
+) -> ProjectAgentInstallResult:
+    assert agent_name is not None
+    root = (workspace or Path.cwd()).resolve()
+    install_path = root / ".agents" / "agents" / f"{agent_name}.md"
+    if install_path.exists() and not force:
+        raise AssertionError("init should pre-skip existing default agents")
+    install_path.parent.mkdir(parents=True, exist_ok=True)
+    install_path.write_text(
+        (
+            f"---\nname: {agent_name}\ndescription: Reviews code changes.\n---\n\n"
+            "Review code changes.\n"
+        ),
+        encoding="utf-8",
+    )
+    return ProjectAgentInstallResult(
+        agent_name=agent_name,
+        install_path=install_path,
+        source=source,
+        ref=None,
+        subpath=f"agents/{agent_name}.md",
+    )
 
 
 class DefaultWebCommandTests(unittest.TestCase):
@@ -154,6 +220,14 @@ class DefaultWebCommandTests(unittest.TestCase):
                 with (
                     patch("sys.stdout", stdout),
                     patch(
+                        "pbi_agent.init_agents.install_project_command",
+                        side_effect=_fake_command_install,
+                    ),
+                    patch(
+                        "pbi_agent.init_agents.install_project_agent",
+                        side_effect=_fake_agent_install,
+                    ),
+                    patch(
                         "pbi_agent.cli.entrypoint.resolve_runtime"
                     ) as mock_resolve_runtime,
                     patch(
@@ -166,10 +240,24 @@ class DefaultWebCommandTests(unittest.TestCase):
 
             agents_path = root_dir / "AGENTS.md"
             content = agents_path.read_text(encoding="utf-8")
+            command_created = (
+                root_dir / ".agents" / "commands" / "execute.md"
+            ).is_file()
+            agent_created = (
+                root_dir / ".agents" / "agents" / "code-reviewer.md"
+            ).is_file()
+            generated_agent_created = (
+                root_dir / ".agents" / "agents" / "plan.md"
+            ).exists()
 
         self.assertEqual(rc, 0)
-        self.assertIn("Created", stdout.getvalue())
+        self.assertIn("Created AGENTS.md", stdout.getvalue())
+        self.assertIn("Installed command `/execute`", stdout.getvalue())
+        self.assertIn("Installed sub-agent `code-reviewer`", stdout.getvalue())
         self.assertTrue(content.startswith("# AGENTS.md"))
+        self.assertTrue(command_created)
+        self.assertTrue(agent_created)
+        self.assertFalse(generated_agent_created)
         mock_resolve_runtime.assert_not_called()
         mock_resolve_web_runtime.assert_not_called()
 
@@ -183,7 +271,17 @@ class DefaultWebCommandTests(unittest.TestCase):
             agents_path.write_text("existing", encoding="utf-8")
             try:
                 os.chdir(root_dir)
-                with patch("sys.stdout", stdout):
+                with (
+                    patch("sys.stdout", stdout),
+                    patch(
+                        "pbi_agent.init_agents.install_project_command",
+                        side_effect=_fake_command_install,
+                    ),
+                    patch(
+                        "pbi_agent.init_agents.install_project_agent",
+                        side_effect=_fake_agent_install,
+                    ),
+                ):
                     rc = cli.main(["init"])
             finally:
                 os.chdir(original_cwd)
@@ -191,6 +289,7 @@ class DefaultWebCommandTests(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         self.assertEqual(content, "existing")
+        self.assertIn("Skipped AGENTS.md", stdout.getvalue())
         self.assertIn("already exists", stdout.getvalue())
         self.assertIn("--force", stdout.getvalue())
 
@@ -202,17 +301,80 @@ class DefaultWebCommandTests(unittest.TestCase):
             root_dir = Path(tmpdir).resolve()
             agents_path = root_dir / "AGENTS.md"
             agents_path.write_text("existing", encoding="utf-8")
+            command_path = root_dir / ".agents" / "commands" / "execute.md"
+            command_path.parent.mkdir(parents=True, exist_ok=True)
+            command_path.write_text("old command", encoding="utf-8")
+            agent_path = root_dir / ".agents" / "agents" / "code-reviewer.md"
+            agent_path.parent.mkdir(parents=True, exist_ok=True)
+            agent_path.write_text("old agent", encoding="utf-8")
             try:
                 os.chdir(root_dir)
-                with patch("sys.stdout", stdout):
+                with (
+                    patch("sys.stdout", stdout),
+                    patch(
+                        "pbi_agent.init_agents.install_project_command",
+                        side_effect=_fake_command_install,
+                    ),
+                    patch(
+                        "pbi_agent.init_agents.install_project_agent",
+                        side_effect=_fake_agent_install,
+                    ),
+                ):
                     rc = cli.main(["init", "--force"])
             finally:
                 os.chdir(original_cwd)
             content = agents_path.read_text(encoding="utf-8")
+            command_content = command_path.read_text(encoding="utf-8")
+            agent_content = agent_path.read_text(encoding="utf-8")
 
         self.assertEqual(rc, 0)
-        self.assertIn("Overwrote", stdout.getvalue())
+        self.assertIn("Overwrote AGENTS.md", stdout.getvalue())
+        self.assertIn("Overwrote command `/execute`", stdout.getvalue())
+        self.assertIn("Overwrote sub-agent `code-reviewer`", stdout.getvalue())
         self.assertTrue(content.startswith("# AGENTS.md"))
+        self.assertNotEqual(command_content, "old command")
+        self.assertNotEqual(agent_content, "old agent")
+
+    def test_main_init_reports_catalog_failure_but_returns_success(self) -> None:
+        stdout = io.StringIO()
+
+        def fail_command_install(
+            source: str,
+            *,
+            command_name: str | None = None,
+            force: bool = False,
+            workspace: Path | None = None,
+        ) -> ProjectCommandInstallResult:
+            del source, command_name, force, workspace
+            raise ProjectCommandInstallError("catalog unavailable")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = Path.cwd()
+            root_dir = Path(tmpdir).resolve()
+            try:
+                os.chdir(root_dir)
+                with (
+                    patch("sys.stdout", stdout),
+                    patch(
+                        "pbi_agent.init_agents.install_project_command",
+                        side_effect=fail_command_install,
+                    ),
+                    patch(
+                        "pbi_agent.init_agents.install_project_agent",
+                        side_effect=_fake_agent_install,
+                    ),
+                ):
+                    rc = cli.main(["init"])
+            finally:
+                os.chdir(original_cwd)
+            agents_created = (root_dir / "AGENTS.md").is_file()
+
+        self.assertEqual(rc, 0)
+        self.assertTrue(agents_created)
+        self.assertIn(
+            "Failed command `/execute`: catalog unavailable",
+            stdout.getvalue(),
+        )
 
     def test_service_tier_with_non_openai_provider_errors(self) -> None:
         stderr = io.StringIO()

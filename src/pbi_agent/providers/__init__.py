@@ -28,6 +28,7 @@ def create_provider(
     - ``"github_copilot"``   → GitHub Copilot Responses HTTP provider
     - ``"xai"``              → xAI Responses HTTP provider
     - ``"google"``           → Google Gemini Interactions HTTP provider
+    - ``"google_gcp"``       → Google Cloud Vertex AI provider wrapper
     - ``"anthropic"``        → Anthropic Messages HTTP provider
     - ``"generic"``          → OpenAI-compatible Chat Completions HTTP provider
     """
@@ -107,6 +108,16 @@ def create_provider(
             tool_catalog=tool_catalog,
         )
 
+    if name == "google_gcp":
+        from pbi_agent.providers.google_gcp_provider import GoogleGcpProvider
+
+        return GoogleGcpProvider(
+            settings,
+            system_prompt=system_prompt,
+            excluded_tools=effective_excluded_tools,
+            tool_catalog=tool_catalog,
+        )
+
     if name == "anthropic":
         from pbi_agent.providers.anthropic_provider import AnthropicProvider
 
@@ -129,7 +140,8 @@ def create_provider(
 
     raise ValueError(
         "Unknown provider "
-        f"{name!r}. Supported: openai, azure, chatgpt, github_copilot, xai, google, anthropic, generic."
+        f"{name!r}. Supported: openai, azure, chatgpt, github_copilot, xai, "
+        "google, google_gcp, anthropic, generic."
     )
 
 

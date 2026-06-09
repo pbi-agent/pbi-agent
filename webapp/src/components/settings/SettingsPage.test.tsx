@@ -198,6 +198,8 @@ function makeConfigBootstrap(
         auth_mode: "api_key",
         responses_url: null,
         generic_api_url: null,
+        google_cloud_project: null,
+        google_cloud_location: null,
         secret_source: "env_var",
         secret_env_var: "OPENAI_API_KEY",
         has_secret: true,
@@ -220,6 +222,8 @@ function makeConfigBootstrap(
         auth_mode: "chatgpt_account",
         responses_url: null,
         generic_api_url: null,
+        google_cloud_project: null,
+        google_cloud_location: null,
         secret_source: "none",
         secret_env_var: null,
         has_secret: false,
@@ -526,6 +530,8 @@ function makeApiKeyProvider(
     auth_mode: "api_key",
     responses_url: null,
     generic_api_url: null,
+    google_cloud_project: null,
+    google_cloud_location: null,
     secret_source: "env_var",
     secret_env_var: envNames[kind] ?? `${kind.toUpperCase()}_API_KEY`,
     has_secret: hasSecret,
@@ -602,6 +608,8 @@ describe("SettingsPage", () => {
         auth_mode: "chatgpt_account",
         responses_url: null,
         generic_api_url: null,
+        google_cloud_project: null,
+        google_cloud_location: null,
         secret_source: "none",
         secret_env_var: null,
         has_secret: false,
@@ -1441,7 +1449,7 @@ describe("SettingsPage", () => {
         ),
       ),
     ).toEqual([
-      ["Providers", "Speech-to-text", "Model Profiles"],
+      ["Providers", "Model Profiles", "Speech-to-text"],
       ["Commands", "Skills", "Agents"],
       ["Appearance", "Notifications"],
       ["Maintenance"],
@@ -2411,6 +2419,8 @@ describe("SettingsPage", () => {
             auth_mode: "copilot_account",
             responses_url: "https://api.githubcopilot.com/responses",
             generic_api_url: null,
+            google_cloud_project: null,
+            google_cloud_location: null,
             secret_source: "none",
             secret_env_var: null,
             has_secret: false,
@@ -2439,6 +2449,8 @@ describe("SettingsPage", () => {
             auth_mode: "copilot_account",
             responses_url: "https://api.githubcopilot.com/responses",
             generic_api_url: null,
+            google_cloud_project: null,
+            google_cloud_location: null,
             secret_source: "none",
             secret_env_var: null,
             has_secret: false,
@@ -2611,6 +2623,80 @@ describe("SettingsPage", () => {
           responses_url:
             "https://example-resource.openai.azure.com/openai/v1/responses",
           generic_api_url: null,
+          google_cloud_project: null,
+          google_cloud_location: null,
+        },
+        "rev-1",
+      ),
+    );
+  });
+
+  it("configures Google GCP provider project and location fields", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      makeConfigBootstrap({
+        options: {
+          ...makeConfigBootstrap().options,
+          provider_kinds: ["openai", "google_gcp"],
+          provider_metadata: {
+            ...makeConfigBootstrap().options.provider_metadata,
+            google_gcp: {
+              label: "Google Cloud Vertex AI",
+              description:
+                "Uses Google Cloud Vertex AI with an API key, explicit bearer token, or Application Default Credentials.",
+              default_auth_mode: "api_key",
+              auth_modes: ["api_key"],
+              auth_mode_metadata: {
+                api_key: {
+                  label: "API key",
+                  account_label: null,
+                  supported_methods: [],
+                },
+              },
+              default_model: "gemini-2.5-flash",
+              default_sub_agent_model: "gemini-2.5-flash",
+              default_responses_url: "",
+              default_generic_api_url: null,
+              supports_responses_url: true,
+              supports_generic_api_url: false,
+              supports_service_tier: false,
+              supports_native_web_search: false,
+              supports_image_inputs: true,
+              supports_model_profiles: true,
+              supports_stt: false,
+            },
+          },
+        },
+      }),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Providers");
+    await user.click(await screen.findByRole("button", { name: "Add Provider" }));
+    await selectProviderKind(user, "Google Cloud Vertex AI");
+
+    expect(screen.getByDisplayValue("GOOGLE_API_KEY")).toBeInTheDocument();
+    expect(screen.getByText("Google Cloud project")).toBeInTheDocument();
+    expect(screen.getByText("Google Cloud location")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("e.g. My OpenAI"), "GCP Main");
+    await user.type(screen.getByPlaceholderText("my-gcp-project"), "saved-project");
+    await user.type(screen.getByPlaceholderText("global"), "us-east5");
+    await user.click(screen.getByRole("button", { name: "Add Provider" }));
+
+    await waitFor(() =>
+      expect(createProvider).toHaveBeenCalledWith(
+        {
+          name: "GCP Main",
+          kind: "google_gcp",
+          auth_mode: "api_key",
+          api_key: null,
+          api_key_env: "GOOGLE_API_KEY",
+          responses_url: null,
+          generic_api_url: null,
+          google_cloud_project: "saved-project",
+          google_cloud_location: "us-east5",
         },
         "rev-1",
       ),
@@ -2641,6 +2727,8 @@ describe("SettingsPage", () => {
         auth_mode: "chatgpt_account",
         responses_url: null,
         generic_api_url: null,
+        google_cloud_project: null,
+        google_cloud_location: null,
         secret_source: "none",
         secret_env_var: null,
         has_secret: false,
@@ -2671,6 +2759,8 @@ describe("SettingsPage", () => {
           api_key_env: null,
           responses_url: null,
           generic_api_url: null,
+          google_cloud_project: null,
+          google_cloud_location: null,
         },
         "rev-1",
       ),
@@ -2797,6 +2887,8 @@ describe("SettingsPage", () => {
           responses_url:
             "https://example-resource.openai.azure.com/openai/v1/responses",
           generic_api_url: null,
+          google_cloud_project: null,
+          google_cloud_location: null,
           secret_source: "env_var",
           secret_env_var: "AZURE_API_KEY",
           has_secret: true,
@@ -2819,6 +2911,8 @@ describe("SettingsPage", () => {
           auth_mode: "api_key",
           responses_url: null,
           generic_api_url: null,
+          google_cloud_project: null,
+          google_cloud_location: null,
           secret_source: "env_var",
           secret_env_var: "XAI_API_KEY",
           has_secret: true,

@@ -76,13 +76,26 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PROVIDER",
         default=None,
         help=(
-            "Provider backend: openai, azure, xai, google, anthropic, or generic "
-            "(default: openai)."
+            "Provider backend: openai, azure, xai, google, google_gcp, "
+            "anthropic, or generic (default: openai)."
         ),
     )
     provider_group.add_argument(
         "--responses-url",
-        help="Override the provider API URL (Responses or Interactions).",
+        help="Override the provider API URL (Responses, Interactions, or Vertex).",
+    )
+    provider_group.add_argument(
+        "--google-cloud-project",
+        dest="google_cloud_project",
+        default=None,
+        help="Google Cloud project ID for the google_gcp provider.",
+    )
+    provider_group.add_argument(
+        "--google-cloud-location",
+        "--google-cloud-region",
+        dest="google_cloud_location",
+        default=None,
+        help="Google Cloud Vertex AI location for the google_gcp provider.",
     )
     provider_group.add_argument(
         "--api-key",
@@ -271,14 +284,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_parser = add_command_parser(
         "init",
-        "Create a starter AGENTS.md instructions file.",
+        "Bootstrap AGENTS.md plus default project commands and sub-agents.",
     )
     init_parser.add_argument(
         "--force",
         "--overwrite",
         dest="force",
         action="store_true",
-        help="Overwrite AGENTS.md if it already exists.",
+        help="Overwrite existing init bootstrap files.",
     )
 
     web_parser = add_command_parser("web", "Serve the browser interface.")
@@ -796,6 +809,13 @@ def build_parser() -> argparse.ArgumentParser:
     providers_create.add_argument("--api-key-env", default=None)
     providers_create.add_argument("--responses-url")
     providers_create.add_argument("--generic-api-url")
+    providers_create.add_argument("--google-cloud-project", default=None)
+    providers_create.add_argument(
+        "--google-cloud-location",
+        "--google-cloud-region",
+        dest="google_cloud_location",
+        default=None,
+    )
 
     providers_update = providers_actions.add_parser(
         "update",
@@ -826,6 +846,13 @@ def build_parser() -> argparse.ArgumentParser:
     providers_update.add_argument("--api-key-env", default=None)
     providers_update.add_argument("--responses-url", default=None)
     providers_update.add_argument("--generic-api-url", default=None)
+    providers_update.add_argument("--google-cloud-project", default=None)
+    providers_update.add_argument(
+        "--google-cloud-location",
+        "--google-cloud-region",
+        dest="google_cloud_location",
+        default=None,
+    )
 
     providers_delete = providers_actions.add_parser(
         "delete",

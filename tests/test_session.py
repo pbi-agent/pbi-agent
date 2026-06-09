@@ -45,6 +45,9 @@ from pbi_agent.config import (
     create_model_profile_config,
     create_provider_config,
 )
+from pbi_agent.agents.project_installer import ProjectAgentInstallResult
+from pbi_agent.commands.project_installer import ProjectCommandInstallResult
+from pbi_agent.init_agents import DEFAULT_INIT_AGENTS, DEFAULT_INIT_COMMANDS
 from pbi_agent.models.messages import (
     CompletedResponse,
     ImageAttachment,
@@ -71,6 +74,72 @@ def _write_command(root, name: str, content: str) -> None:
         title = " ".join(part.capitalize() for part in name.split("-") if part)
         content = f"---\nname: {title}\ndescription: {title} command.\n---\n\n{content}"
     (commands_dir / f"{name}.md").write_text(content, encoding="utf-8")
+
+
+def _install_fake_init_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_install_command(
+        source: str,
+        *,
+        command_name: str | None = None,
+        force: bool = False,
+        workspace: Path | None = None,
+    ) -> ProjectCommandInstallResult:
+        del force
+        assert command_name is not None
+        root = (workspace or Path.cwd()).resolve()
+        install_path = root / ".agents" / "commands" / f"{command_name}.md"
+        install_path.parent.mkdir(parents=True, exist_ok=True)
+        install_path.write_text(
+            (
+                f"---\nname: {command_name}\ndescription: {command_name} command.\n"
+                f"---\n\n# {command_name}\n"
+            ),
+            encoding="utf-8",
+        )
+        return ProjectCommandInstallResult(
+            command_id=command_name,
+            slash_alias=f"/{command_name}",
+            install_path=install_path,
+            source=source,
+            ref=None,
+            subpath=f"commands/{command_name}.md",
+        )
+
+    def fake_install_agent(
+        source: str,
+        *,
+        agent_name: str | None = None,
+        force: bool = False,
+        workspace: Path | None = None,
+    ) -> ProjectAgentInstallResult:
+        del force
+        assert agent_name is not None
+        root = (workspace or Path.cwd()).resolve()
+        install_path = root / ".agents" / "agents" / f"{agent_name}.md"
+        install_path.parent.mkdir(parents=True, exist_ok=True)
+        install_path.write_text(
+            (
+                f"---\nname: {agent_name}\ndescription: Reviews code changes.\n"
+                "---\n\nReview code changes.\n"
+            ),
+            encoding="utf-8",
+        )
+        return ProjectAgentInstallResult(
+            agent_name=agent_name,
+            install_path=install_path,
+            source=source,
+            ref=None,
+            subpath=f"agents/{agent_name}.md",
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.init_agents.install_project_command",
+        fake_install_command,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.init_agents.install_project_agent",
+        fake_install_agent,
+    )
 
 
 def test_create_session_uses_workspace_key_env(monkeypatch, tmp_path) -> None:
@@ -169,13 +238,18 @@ class _DisplaySpy:
 
 
 class _ProviderStub:
-    def __init__(self, *, tool_name: str = "shell") -> None:
+    def __init__(
+        self,
+        *,
+        tool_name: str = "shell",
+        provider_name: str = "openai",
+    ) -> None:
         self.connected = False
         self.request_calls: list[dict[str, object | None]] = []
         self.execute_calls: list[dict[str, object]] = []
         self.previous_response_ids: list[str | None] = []
         self.conversation_checkpoint = "resp_current"
-        self.settings = Settings(api_key="test-key", provider="openai")
+        self.settings = Settings(api_key="test-key", provider=provider_name)
         self.tool_name = tool_name
         self.restored_history_items = None
 
@@ -554,16 +628,276 @@ def test_run_single_turn_restores_tool_history_when_enabled(
         "type": "function_call",
         "call_id": "call_1",
         "name": "shell",
-        "status": "completed",
         "arguments": '{"command": "pwd"}',
     }
     assert restored_items[3]["output"] == '{"ok": true, "result": "/workspace"}'
+    assert "status" not in restored_items[5]
+    assert "phase" not in restored_items[5]
     assert restored_items[5]["content"] == [
         {"type": "output_text", "text": "previous assistant"}
     ]
     assert [message.content for message in display.replayed_history] == [
         "previous user",
         "previous assistant",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("source_provider", "target_provider"),
+    [
+        ("xai", "openai"),
+        ("anthropic", "openai"),
+        ("google", "openai"),
+        ("generic", "openai"),
+        ("openai", "anthropic"),
+        ("openai", "google"),
+        ("openai", "generic"),
+        ("google", "xai"),
+    ],
+)
+def test_run_single_turn_uses_generic_tool_history_across_providers(
+    monkeypatch,
+    tmp_path,
+    source_provider: str,
+    target_provider: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub(provider_name=target_provider)
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider=target_provider)
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), source_provider, DEFAULT_MODEL)
+        store.add_message(
+            session_id,
+            "user",
+            "previous user",
+            provider_id=source_provider,
+        )
+        store.add_message(
+            session_id,
+            "assistant",
+            "previous assistant",
+            provider_id=source_provider,
+        )
+        run_id = store.create_run_session(
+            run_session_id="run-1",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider=source_provider,
+            provider_id=source_provider,
+            profile_id=None,
+            model=f"{source_provider}-model",
+            status="completed",
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "input": [{"role": "user", "content": "previous user"}],
+            },
+            response_payload={
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "encrypted_content": "xai-reasoning",
+                        "status": "completed",
+                        "summary": [],
+                    },
+                    {
+                        "type": "function_call",
+                        "call_id": "call_1",
+                        "name": "shell",
+                        "status": "completed",
+                        "arguments": '{"command": "pwd"}',
+                    },
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_1",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    outcome = run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert outcome.session_id == session_id
+    assert provider.restored_history_items is not None
+    assert [item["type"] for item in provider.restored_history_items[:4]] == [
+        "message",
+        "tool_call",
+        "tool_result",
+        "message",
+    ]
+    assert provider.restored_history_items[1] == {
+        "type": "tool_call",
+        "call_id": "call_1",
+        "name": "shell",
+        "arguments": {"command": "pwd"},
+        "kind": "function",
+    }
+    assert provider.restored_history_items[2]["output"] == {
+        "ok": True,
+        "result": "/workspace",
+    }
+
+
+def test_run_single_turn_does_not_match_response_history_across_mixed_providers(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    provider = _ProviderStub(provider_name="openai")
+    display = _SessionDisplaySpy([])
+    settings = Settings(api_key="test-key", provider="openai")
+
+    with SessionStore() as store:
+        session_id = store.create_session(str(tmp_path), "openai", DEFAULT_MODEL)
+        store.add_message(session_id, "user", "repeat request", provider_id="anthropic")
+        store.add_message(
+            session_id,
+            "assistant",
+            "anthropic answer",
+            provider_id="anthropic",
+        )
+        store.add_message(session_id, "user", "repeat request", provider_id="openai")
+        store.add_message(
+            session_id,
+            "assistant",
+            "openai answer",
+            provider_id="openai",
+        )
+        anthropic_run_id = store.create_run_session(
+            run_session_id="run-anthropic",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="anthropic",
+            provider_id="anthropic",
+            profile_id=None,
+            model="claude",
+            status="completed",
+        )
+        store.add_observability_event(
+            run_session_id=anthropic_run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={
+                "messages": [{"role": "user", "content": "repeat request"}]
+            },
+            response_payload={
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_anthropic",
+                        "name": "shell",
+                        "input": {"command": "pwd"},
+                    }
+                ]
+            },
+            success=True,
+        )
+        store.add_observability_event(
+            run_session_id=anthropic_run_id,
+            session_id=session_id,
+            step_index=1,
+            event_type="tool_call",
+            tool_name="shell",
+            tool_call_id="call_anthropic",
+            tool_input={"command": "pwd"},
+            tool_output={"ok": True, "result": "/workspace"},
+            success=True,
+        )
+        openai_run_id = store.create_run_session(
+            run_session_id="run-openai",
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="openai",
+            profile_id=None,
+            model=DEFAULT_MODEL,
+            status="completed",
+        )
+        store.add_observability_event(
+            run_session_id=openai_run_id,
+            session_id=session_id,
+            step_index=0,
+            event_type="model_call",
+            request_payload={"input": [{"role": "user", "content": "repeat request"}]},
+            response_payload={
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_openai",
+                        "status": "completed",
+                        "summary": [],
+                    },
+                    {
+                        "type": "message",
+                        "id": "msg_openai",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "openai answer",
+                            }
+                        ],
+                    },
+                ]
+            },
+            success=True,
+        )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    run_single_turn(
+        "Next request",
+        settings,
+        display,
+        resume_session_id=session_id,
+        include_tool_history=True,
+    )
+
+    assert provider.restored_history_items is not None
+    assert all(
+        item["type"] != "provider_input_item"
+        for item in provider.restored_history_items
+    )
+    assert [item["type"] for item in provider.restored_history_items] == [
+        "message",
+        "tool_call",
+        "tool_result",
+        "message",
+        "message",
+        "message",
     ]
 
 
@@ -2614,9 +2948,14 @@ def test_run_session_loop_handles_init_command_locally(monkeypatch, tmp_path) ->
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
 
     monkeypatch.chdir(tmp_path)
+    _install_fake_init_bootstrap(monkeypatch)
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
         _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.get_system_prompt",
+        lambda **_: "updated prompt",
     )
 
     exit_code = run_session_loop(settings, display)
@@ -2624,8 +2963,18 @@ def test_run_session_loop_handles_init_command_locally(monkeypatch, tmp_path) ->
     content = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert exit_code == 0
     assert provider.request_messages == []
-    assert display.markdown_calls == [f"Created {tmp_path / 'AGENTS.md'}"]
+    assert len(display.markdown_calls) == 1
+    assert "Created AGENTS.md" in display.markdown_calls[0]
+    assert "Installed command `/execute`" in display.markdown_calls[0]
+    assert "Installed sub-agent `code-reviewer`" in display.markdown_calls[0]
     assert content.startswith("# AGENTS.md")
+    for command_name in DEFAULT_INIT_COMMANDS:
+        assert (tmp_path / ".agents" / "commands" / f"{command_name}.md").is_file()
+    for agent_name in DEFAULT_INIT_AGENTS:
+        assert (tmp_path / ".agents" / "agents" / f"{agent_name}.md").is_file()
+    assert not (tmp_path / ".agents" / "agents" / "plan.md").exists()
+    assert provider.system_prompts == ["updated prompt"]
+    assert provider.refresh_tools_calls == 1
     assert display.assistant_start_calls == 0
 
 
@@ -2639,9 +2988,14 @@ def test_run_session_loop_init_command_protects_existing_file(
     agents_path.write_text("existing", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
+    _install_fake_init_bootstrap(monkeypatch)
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
         _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.get_system_prompt",
+        lambda **_: "updated prompt",
     )
 
     exit_code = run_session_loop(settings, display)
@@ -2649,9 +3003,12 @@ def test_run_session_loop_init_command_protects_existing_file(
     assert exit_code == 0
     assert agents_path.read_text(encoding="utf-8") == "existing"
     assert provider.request_messages == []
-    assert display.markdown_calls == [
-        f"Skipped {agents_path}; AGENTS.md already exists. Use --force to overwrite."
-    ]
+    assert len(display.markdown_calls) == 1
+    assert "Skipped AGENTS.md" in display.markdown_calls[0]
+    assert str(agents_path) in display.markdown_calls[0]
+    assert "Use --force to overwrite" in display.markdown_calls[0]
+    assert provider.system_prompts == ["updated prompt"]
+    assert provider.refresh_tools_calls == 1
     assert display.assistant_start_calls == 0
 
 
@@ -2663,11 +3020,22 @@ def test_run_session_loop_init_command_force_overwrites_existing_file(
     settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
     agents_path = tmp_path / "AGENTS.md"
     agents_path.write_text("existing", encoding="utf-8")
+    command_path = tmp_path / ".agents" / "commands" / "plan.md"
+    command_path.parent.mkdir(parents=True, exist_ok=True)
+    command_path.write_text("old command", encoding="utf-8")
+    agent_path = tmp_path / ".agents" / "agents" / "code-reviewer.md"
+    agent_path.parent.mkdir(parents=True, exist_ok=True)
+    agent_path.write_text("old agent", encoding="utf-8")
 
     monkeypatch.chdir(tmp_path)
+    _install_fake_init_bootstrap(monkeypatch)
     monkeypatch.setattr(
         "pbi_agent.agent.session._open_runtime_provider",
         _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.get_system_prompt",
+        lambda **_: "updated prompt",
     )
 
     exit_code = run_session_loop(settings, display)
@@ -2675,8 +3043,15 @@ def test_run_session_loop_init_command_force_overwrites_existing_file(
     content = agents_path.read_text(encoding="utf-8")
     assert exit_code == 0
     assert provider.request_messages == []
-    assert display.markdown_calls == [f"Overwrote {agents_path}"]
+    assert len(display.markdown_calls) == 1
+    assert "Overwrote AGENTS.md" in display.markdown_calls[0]
+    assert "Overwrote command `/plan`" in display.markdown_calls[0]
+    assert "Overwrote sub-agent `code-reviewer`" in display.markdown_calls[0]
     assert content.startswith("# AGENTS.md")
+    assert command_path.read_text(encoding="utf-8") != "old command"
+    assert agent_path.read_text(encoding="utf-8") != "old agent"
+    assert provider.system_prompts == ["updated prompt"]
+    assert provider.refresh_tools_calls == 1
     assert display.assistant_start_calls == 0
 
 

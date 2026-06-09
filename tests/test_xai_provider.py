@@ -208,7 +208,10 @@ def test_xai_build_request_body_maps_grok_3_mini_reasoning_effort() -> None:
     assert body["max_output_tokens"] == DEFAULT_MAX_TOKENS
     assert body["reasoning"] == {"effort": "high"}
     assert body["input"][0] == {"role": "system", "content": "be concise"}
-    assert body["include"] == ["web_search_call.action.sources"]
+    assert body["include"] == [
+        "web_search_call.action.sources",
+        "reasoning.encrypted_content",
+    ]
 
 
 def test_xai_build_request_body_replays_restored_response_items() -> None:
@@ -316,6 +319,35 @@ def test_xai_parse_response_extracts_function_calls_and_encrypted_reasoning() ->
     assert result.usage.output_tokens == 233
     assert result.usage.reasoning_tokens == 207
     assert result.usage.model == "grok-4-1-fast-reasoning"
+
+
+def test_xai_parse_response_uses_last_assistant_message_as_text() -> None:
+    provider = XAIProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "resp_multi",
+            "model": "grok-4-1-fast-reasoning",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "First update."}],
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Final answer."}],
+                },
+            ],
+        }
+    )
+
+    assert result.text == "Final answer."
+    assert result.provider_data["display_items"] == [
+        {"type": "message", "text": "First update."},
+        {"type": "message", "text": "Final answer."},
+    ]
 
 
 def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:

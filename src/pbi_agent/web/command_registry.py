@@ -39,7 +39,7 @@ COMMANDS: tuple[SlashCommand, ...] = (
     ),
     SlashCommand(
         name="/init",
-        description="Create a starter AGENTS.md instructions file",
+        description="Bootstrap AGENTS.md plus default commands and sub-agents",
         hidden_keywords="agents.md instructions setup bootstrap create overwrite force",
     ),
     SlashCommand(

@@ -382,6 +382,8 @@ export type ProviderView = {
   auth_mode: string;
   responses_url: string | null;
   generic_api_url: string | null;
+  google_cloud_project: string | null;
+  google_cloud_location: string | null;
   secret_source: "none" | "plaintext" | "env_var";
   secret_env_var: string | null;
   has_secret: boolean;

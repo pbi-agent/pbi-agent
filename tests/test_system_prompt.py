@@ -1,4 +1,4 @@
-"""Tests for INSTRUCTIONS.md / AGENTS.md loading in system_prompt."""
+"""Tests for INSTRUCTIONS.md / AGENTS.md / MEMORY.md loading in system_prompt."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from pbi_agent.agent.system_prompt import (
     get_system_prompt,
     load_instructions,
     load_project_rules,
+    load_workspace_memory,
 )
 
 
@@ -121,6 +122,62 @@ def test_encoding_errors_replaced(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# load_workspace_memory – unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_memory_returns_none_when_file_absent(tmp_path):
+    assert load_workspace_memory(cwd=tmp_path) is None
+
+
+def test_workspace_memory_returns_stripped_content_when_file_present(tmp_path):
+    (tmp_path / "MEMORY.md").write_text("  Remember pytest.  \n\n", encoding="utf-8")
+    result = load_workspace_memory(cwd=tmp_path)
+    assert result == "Remember pytest."
+
+
+def test_workspace_memory_returns_none_for_empty_file(tmp_path):
+    (tmp_path / "MEMORY.md").write_text("", encoding="utf-8")
+    assert load_workspace_memory(cwd=tmp_path) is None
+
+
+def test_workspace_memory_returns_none_for_whitespace_only_file(tmp_path):
+    (tmp_path / "MEMORY.md").write_text("   \n  \n  ", encoding="utf-8")
+    assert load_workspace_memory(cwd=tmp_path) is None
+
+
+def test_workspace_memory_truncates_large_file(tmp_path, capsys):
+    content = "M" * (_MAX_FILE_BYTES + 500)
+    (tmp_path / "MEMORY.md").write_text(content, encoding="utf-8")
+    result = load_workspace_memory(cwd=tmp_path)
+    assert result is not None
+    assert len(result) <= _MAX_FILE_BYTES
+    assert "MEMORY.md exceeds 1 MB" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(os.name == "nt", reason="chmod not effective on Windows")
+def test_workspace_memory_permission_error(tmp_path, capsys):
+    memory_file = tmp_path / "MEMORY.md"
+    memory_file.write_text("secret", encoding="utf-8")
+    memory_file.chmod(0o000)
+    try:
+        result = load_workspace_memory(cwd=tmp_path)
+        assert result is None
+        assert "MEMORY.md found but unreadable" in capsys.readouterr().err
+    finally:
+        memory_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_workspace_memory_encoding_errors_replaced(tmp_path):
+    raw = b"Hello \xff\xfe Memory"
+    (tmp_path / "MEMORY.md").write_bytes(raw)
+    result = load_workspace_memory(cwd=tmp_path)
+    assert result is not None
+    assert "Hello" in result
+    assert "Memory" in result
+
+
+# ---------------------------------------------------------------------------
 # load_instructions – unit tests
 # ---------------------------------------------------------------------------
 
@@ -161,6 +218,7 @@ def test_get_system_prompt_without_agents_md(tmp_path, monkeypatch):
     _assert_builtin_prompt_base(prompt)
     assert prompt.endswith("</tool_usage_rules>")
     assert "<project_rules>" not in prompt
+    assert "<workspace_memory>" not in prompt
     assert "<available_skills>" not in prompt
 
 
@@ -172,6 +230,36 @@ def test_get_system_prompt_with_agents_md(tmp_path, monkeypatch):
     assert "<project_rules>\nAlways use pytest.\n</project_rules>" in prompt
 
 
+def test_get_system_prompt_with_agents_and_memory_orders_sections(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("Always use pytest.", encoding="utf-8")
+    (tmp_path / "MEMORY.md").write_text("Remember the release note.", encoding="utf-8")
+    _write_skill(tmp_path, "release-notes", "Prepare release notes.")
+
+    prompt = get_system_prompt(
+        active_command_instructions="Plan before coding.",
+        cwd=tmp_path,
+    )
+
+    assert "<project_rules>\nAlways use pytest.\n</project_rules>" in prompt
+    assert (
+        "<workspace_memory>\nRemember the release note.\n</workspace_memory>" in prompt
+    )
+    assert prompt.index("</project_rules>") < prompt.index("<workspace_memory>")
+    assert prompt.index("</workspace_memory>") < prompt.index("<skill_loading_rules>")
+    assert prompt.index("</workspace_memory>") < prompt.index("<active_command>")
+
+
+def test_get_system_prompt_with_memory_md_without_agents_md(tmp_path):
+    (tmp_path / "MEMORY.md").write_text("Remember local decisions.", encoding="utf-8")
+
+    prompt = get_system_prompt(cwd=tmp_path)
+
+    assert "<project_rules>" not in prompt
+    assert (
+        "<workspace_memory>\nRemember local decisions.\n</workspace_memory>" in prompt
+    )
+
+
 def test_get_sub_agent_system_prompt_with_agents_md(tmp_path, monkeypatch):
     (tmp_path / "AGENTS.md").write_text("Sub-agent rule.", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
@@ -179,10 +267,20 @@ def test_get_sub_agent_system_prompt_with_agents_md(tmp_path, monkeypatch):
     assert "<project_rules>\nSub-agent rule.\n</project_rules>" in prompt
 
 
+def test_get_sub_agent_system_prompt_with_memory_md(tmp_path):
+    (tmp_path / "MEMORY.md").write_text("Sub-agent memory.", encoding="utf-8")
+
+    prompt = get_sub_agent_system_prompt(cwd=tmp_path)
+
+    assert "<project_rules>" not in prompt
+    assert "<workspace_memory>\nSub-agent memory.\n</workspace_memory>" in prompt
+
+
 def test_get_sub_agent_system_prompt_without_agents_md(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     prompt = get_sub_agent_system_prompt()
     assert "<project_rules>" not in prompt
+    assert "<workspace_memory>" not in prompt
     assert "<available_skills>" not in prompt
 
 

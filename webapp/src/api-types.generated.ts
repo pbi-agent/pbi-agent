@@ -193,15 +193,15 @@ export type ProviderModelListResponse = { provider_id: string; provider_kind: st
 
 export type ProviderModelViewModel = { id: string; display_name?: string | null; created?: number | string | null; owned_by?: string | null; input_modalities?: string[]; output_modalities?: string[]; aliases?: string[]; supports_reasoning_effort?: boolean | null };
 
-export type ProviderMutationRequest = { id?: string | null; name: string; kind: string; auth_mode?: string | null; api_key?: string | null; api_key_env?: string | null; responses_url?: string | null; generic_api_url?: string | null };
+export type ProviderMutationRequest = { id?: string | null; name: string; kind: string; auth_mode?: string | null; api_key?: string | null; api_key_env?: string | null; responses_url?: string | null; generic_api_url?: string | null; google_cloud_project?: string | null; google_cloud_location?: string | null };
 
 export type ProviderResponse = { provider: ProviderViewModel; config_revision: string };
 
-export type ProviderUpdateRequest = { name?: string | null; kind?: string | null; auth_mode?: string | null; api_key?: string | null; api_key_env?: string | null; responses_url?: string | null; generic_api_url?: string | null };
+export type ProviderUpdateRequest = { name?: string | null; kind?: string | null; auth_mode?: string | null; api_key?: string | null; api_key_env?: string | null; responses_url?: string | null; generic_api_url?: string | null; google_cloud_project?: string | null; google_cloud_location?: string | null };
 
 export type ProviderUsageLimitsResponse = { provider_id: string; provider_kind: string; account_label: string | null; plan_type: string | null; fetched_at: string; buckets: UsageLimitBucketModel[] };
 
-export type ProviderViewModel = { id: string; name: string; kind: string; auth_mode: string; responses_url: string | null; generic_api_url: string | null; secret_source: "none" | "plaintext" | "env_var"; secret_env_var: string | null; has_secret: boolean; auth_status: ProviderAuthStatusModel };
+export type ProviderViewModel = { id: string; name: string; kind: string; auth_mode: string; responses_url: string | null; generic_api_url: string | null; google_cloud_project: string | null; google_cloud_location: string | null; secret_source: "none" | "plaintext" | "env_var"; secret_env_var: string | null; has_secret: boolean; auth_status: ProviderAuthStatusModel };
 
 export type QuestionAnswerRequest = { question_id: string; answer: string; selected_suggestion_index?: number | null; custom?: boolean; custom_note?: string | null };
 

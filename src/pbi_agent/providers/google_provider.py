@@ -7,19 +7,10 @@ Conversation history is managed server-side via ``previous_interaction_id``.
 from __future__ import annotations
 
 import json
-import http.client
 import time
-import urllib.error
-import urllib.request
 from typing import Any, TYPE_CHECKING
 
-from pbi_agent import __version__
 from pbi_agent.agent.system_prompt import get_system_prompt
-from pbi_agent.agent.tool_display import (
-    build_tool_result_callback,
-    display_tool_execution_start,
-    finalize_tool_execution,
-)
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
 from pbi_agent.config import Settings, missing_api_key_message
 from pbi_agent.models.messages import (
@@ -30,9 +21,22 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
-from pbi_agent.providers import retry as provider_retry
+from pbi_agent.providers.auth_strategies import ApiKeyHeaderAuth, json_model_headers
 from pbi_agent.providers.base import Provider
-from pbi_agent.providers.wait_messages import waiting_message_for_input
+from pbi_agent.providers.endpoints import responses_url
+from pbi_agent.providers.protocols.google_interactions import (
+    normalize_http_error,
+    render_interactions_response,
+    validate_interaction_status,
+)
+from pbi_agent.providers.runtime import record_response_usage
+from pbi_agent.providers.tool_execution import execute_provider_tool_calls
+from pbi_agent.providers.transport import (
+    JsonErrorPolicy,
+    JsonModelTransport,
+    JsonRequestSpec,
+    json_error_message,
+)
 from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
@@ -40,7 +44,7 @@ from pbi_agent.tools.availability import (
     native_web_search_enabled,
 )
 from pbi_agent.tools.catalog import ToolCatalog
-from pbi_agent.tools.types import ParentContextSnapshot, ToolContext
+from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.web.uploads import load_uploaded_image
 from pbi_agent.display.protocol import DisplayProtocol
 
@@ -55,47 +59,6 @@ _THINKING_LEVEL_MAP: dict[str, str] = {
     "high": "high",
     "xhigh": "high",
 }
-
-_HTTP_ERROR_TYPES: dict[int, str] = {
-    400: "invalid_argument",
-    403: "permission_denied",
-    404: "not_found",
-    429: "resource_exhausted",
-    500: "internal",
-    503: "unavailable",
-    504: "deadline_exceeded",
-}
-
-_HTTP_ERROR_MESSAGES: dict[int, str] = {
-    400: "The request body is malformed.",
-    403: "Your API key doesn't have the required permissions.",
-    404: "The requested resource wasn't found.",
-    429: "You've exceeded the rate limit.",
-    500: "An unexpected error occurred on Google's side.",
-    503: "The service may be temporarily overloaded or down.",
-    504: "The service is unable to finish processing within the deadline.",
-}
-
-
-class _GoogleInteractionStatusError(RuntimeError):
-    def __init__(
-        self,
-        *,
-        status: str,
-        code: str | None,
-        message: str,
-        payload: dict[str, Any],
-    ) -> None:
-        self.status = status
-        self.code = code
-        self.payload = payload
-        super().__init__(_google_interaction_error_message(status, code, message))
-
-    @property
-    def retryable(self) -> bool:
-        return provider_retry.is_retryable_semantic_status(
-            self.status
-        ) or provider_retry.is_retryable_semantic_error_code(self.code)
 
 
 class GoogleProvider(Provider):
@@ -120,7 +83,8 @@ class GoogleProvider(Provider):
         )
         self._previous_interaction_id: str | None = None
         self._branch_interaction_id: str | None = None
-        self._restored_input: list[dict[str, Any]] = []
+        self._restored_steps: list[dict[str, Any]] = []
+        self._transport = JsonModelTransport()
 
     @property
     def settings(self) -> Settings:
@@ -143,7 +107,7 @@ class GoogleProvider(Provider):
     def reset_conversation(self) -> None:
         self._previous_interaction_id = None
         self._branch_interaction_id = None
-        self._restored_input.clear()
+        self._restored_steps.clear()
 
     def set_system_prompt(self, system_prompt: str) -> None:
         self._instructions = system_prompt
@@ -160,24 +124,18 @@ class GoogleProvider(Provider):
             self._tools.append({"type": "google_search"})
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
-        restored_input: list[dict[str, Any]] = []
+        restored_steps: list[dict[str, Any]] = []
         for message in messages:
             if not _google_message_record_can_restore(message):
                 continue
-            restored_input.append(
-                {
-                    "role": "model" if message.role == "assistant" else "user",
-                    "content": _google_message_record_content(message),
-                }
-            )
-        self._restored_input = restored_input
+            restored_steps.append(_google_message_record_to_input_step(message))
+        self._restored_steps = restored_steps
 
     def restore_history_items(self, items: list[dict[str, Any]]) -> None:
-        self._restored_input = [
-            restored
-            for item in items
-            if (restored := _history_item_to_input_item(item)) is not None
-        ]
+        restored_steps: list[dict[str, Any]] = []
+        for item in items:
+            restored_steps.extend(_history_item_to_input_steps(item))
+        self._restored_steps = restored_steps
 
     def request_turn(
         self,
@@ -213,44 +171,13 @@ class GoogleProvider(Provider):
         if not result.has_tool_calls:
             # Only completed assistant responses are safe to branch from.
             self._branch_interaction_id = result.response_id
-        session_usage.add(result.usage)
-        turn_usage.add(result.usage)
-        display.session_usage(session_usage)
-
-        if result.reasoning_summary or result.reasoning_content:
-            display.render_thinking(
-                _reasoning_body_text(
-                    result.reasoning_content,
-                    result.reasoning_summary,
-                ),
-                title=result.reasoning_summary or None,
-            )
-
-        display_items = result.provider_data.get("display_items")
-        if isinstance(display_items, list) and display_items:
-            for item in display_items:
-                if not isinstance(item, dict):
-                    continue
-                item_type = item.get("type")
-                if item_type == "text":
-                    text = item.get("text")
-                    if isinstance(text, str) and text:
-                        display.render_markdown(text)
-                elif item_type == "google_search_result":
-                    _display_web_search_result(
-                        display,
-                        item.get("sources", []),
-                        queries=item.get("queries", []),
-                    )
-        else:
-            if result.web_search_sources:
-                _display_web_search_result(
-                    display,
-                    result.web_search_sources,
-                    queries=result.provider_data.get("web_search_queries", []),
-                )
-            if result.text:
-                display.render_markdown(result.text)
+        record_response_usage(
+            result,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+        )
+        render_interactions_response(display, result)
 
         return result
 
@@ -269,60 +196,30 @@ class GoogleProvider(Provider):
         if not response.function_calls:
             return [], False
 
-        displayable_calls = [
-            call for call in response.function_calls if call.name != "sub_agent"
-        ]
-        if displayable_calls:
-            display.function_start(len(displayable_calls))
-            display_tool_execution_start(display, displayable_calls)
-        try:
-            batch = _execute_tool_calls(
-                response.function_calls,
-                max_workers=max_workers,
-                context=ToolContext(
-                    settings=self._settings,
-                    display=display,
-                    session_usage=session_usage,
-                    turn_usage=turn_usage,
-                    sub_agent_depth=sub_agent_depth,
-                    tool_catalog=self._tool_catalog,
-                    disabled_tool_names=effective_excluded_tool_names(
-                        self._settings, self._excluded_tools
-                    ),
-                    tool_availability_overridden=getattr(
-                        self, "_tool_availability_overridden", False
-                    ),
-                    parent_context=parent_context,
-                    tracer=tracer,
-                    workspace_root=getattr(self, "_workspace_root", None),
-                    workspace_directory_key=getattr(
-                        self, "_workspace_directory_key", None
-                    ),
-                ),
-                on_result=build_tool_result_callback(display),
-            )
-
-            tool_result_items: list[dict[str, Any]] = []
-            finalize_tool_execution(display)
-        except Exception:
-            if displayable_calls:
-                display.tool_execution_stop()
-            raise
-        for result in batch.results:
-            call = _find_by_id(response.function_calls, result.call_id)
-            item: dict[str, Any] = {
-                "type": "function_result",
-                "name": call.name if call else "",
-                "call_id": result.call_id,
-                "result": _google_function_result_value(result),
-            }
-            if result.is_error:
-                item["is_error"] = True
-            tool_result_items.append(item)
-        if displayable_calls:
-            display.tool_group_end()
-
-        return tool_result_items, batch.had_errors
+        calls_by_id = {call.call_id: call for call in response.function_calls}
+        return execute_provider_tool_calls(
+            response.function_calls,
+            max_workers=max_workers,
+            settings=self._settings,
+            display=display,
+            session_usage=session_usage,
+            turn_usage=turn_usage,
+            tool_catalog=self._tool_catalog,
+            excluded_tools=self._excluded_tools,
+            serialize_result=lambda result: _google_function_result_item(
+                result,
+                calls_by_id.get(result.call_id),
+            ),
+            sub_agent_depth=sub_agent_depth,
+            parent_context=parent_context,
+            tracer=tracer,
+            tool_availability_overridden=getattr(
+                self, "_tool_availability_overridden", False
+            ),
+            workspace_root=getattr(self, "_workspace_root", None),
+            workspace_directory_key=getattr(self, "_workspace_directory_key", None),
+            execute_calls=_execute_tool_calls,
+        )
 
     def _http_request(
         self,
@@ -332,8 +229,6 @@ class GoogleProvider(Provider):
         display: DisplayProtocol,
         tracer: "RunTracer | None" = None,
     ) -> CompletedResponse:
-        display.wait_start(waiting_message_for_input(input_value))
-
         request_body = self._build_request_body(
             input_value=input_value,
             instructions=instructions,
@@ -343,283 +238,42 @@ class GoogleProvider(Provider):
             _contains_google_inline_image_data(request_body)
             and len(request_data) > _MAX_INLINE_IMAGE_REQUEST_BYTES
         ):
-            display.wait_stop()
             raise ValueError(
                 "Google Interactions inline image requests must be 20 MB or smaller. "
                 "Use smaller images or fewer image attachments."
             )
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "x-goog-api-key": self._settings.api_key,
-            "User-Agent": f"pbi-agent/{__version__}",
-        }
 
-        max_retries = self._settings.max_retries
-        rate_limit_max_retries = provider_retry.rate_limit_max_retries(max_retries)
-        retry_notice_max_retries = max_retries
-        last_error: Exception | None = None
-        last_error_message: str | None = None
+        headers = json_model_headers()
+        headers.update(
+            ApiKeyHeaderAuth(self._settings.api_key, "x-goog-api-key").headers()
+        )
 
-        for attempt in range(rate_limit_max_retries + 1):
-            if attempt > 0:
-                display.retry_notice(attempt, retry_notice_max_retries)
-
-            req_start = time.perf_counter()
-            try:
-                req = urllib.request.Request(
-                    self._settings.responses_url,
-                    data=request_data,
-                    headers=headers,
-                    method="POST",
-                )
-                with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECS) as resp:
-                    response_json = json.loads(resp.read().decode("utf-8"))
-
-                try:
-                    _raise_if_interaction_failed(response_json)
-                except _GoogleInteractionStatusError as exc:
-                    last_error = exc
-                    last_error_message = str(exc)
-                    _trace_provider_call(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=self._settings.responses_url,
-                        request_config=self._settings.redacted(),
-                        request_payload=request_body,
-                        response_payload=response_json,
-                        duration_ms=_duration_ms(req_start),
-                        status_code=200,
-                        success=False,
-                        error_message=str(exc),
-                        metadata={
-                            "attempt": attempt + 1,
-                            "semantic_error": True,
-                            "interaction_status": exc.status,
-                        },
-                    )
-                    if exc.retryable and attempt < max_retries:
-                        retry_notice_max_retries = max_retries
-                        _trace_provider_retry(
-                            tracer=tracer,
-                            provider=self._settings.provider,
-                            model=self._settings.model,
-                            url=self._settings.responses_url,
-                            request_config=self._settings.redacted(),
-                            request_payload=request_body,
-                            status_code=200,
-                            error_message=str(exc),
-                            attempt=attempt + 1,
-                            max_retries=max_retries,
-                            metadata={
-                                "semantic_error": True,
-                                "interaction_status": exc.status,
-                                "retryable": True,
-                            },
-                        )
-                        continue
-                    display.wait_stop()
-                    raise RuntimeError(str(exc)) from exc
-                result = self._parse_response(response_json)
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=self._settings.responses_url,
-                    request_config=self._settings.redacted(),
-                    request_payload=request_body,
-                    response_payload=response_json,
-                    duration_ms=_duration_ms(req_start),
-                    prompt_tokens=result.usage.input_tokens,
-                    completion_tokens=result.usage.output_tokens,
-                    total_tokens=result.usage.total_tokens,
-                    status_code=200,
-                    success=True,
-                    metadata={"attempt": attempt + 1},
-                )
-                display.wait_stop()
-                return result
-            except urllib.error.HTTPError as exc:
-                error_body = _read_error_body(exc)
-                error_payload = _normalize_http_error(exc, error_body)
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=self._settings.responses_url,
-                    request_config=self._settings.redacted(),
-                    request_payload=request_body,
-                    response_payload=error_payload or {"body": error_body},
-                    duration_ms=_duration_ms(req_start),
-                    status_code=exc.code,
-                    success=False,
-                    error_message=_format_error_message(
-                        f"Google Interactions API error {exc.code}",
-                        error_payload,
-                    ),
-                    metadata={"attempt": attempt + 1},
-                )
-                if exc.code == 429:
-                    if not provider_retry.should_retry_rate_limit(error_payload):
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                f"Google Interactions API error {exc.code}",
-                                error_payload,
-                            )
-                        ) from exc
-                    if attempt >= rate_limit_max_retries:
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                "Google rate limit exceeded after "
-                                f"{rate_limit_max_retries + 1} attempts",
-                                error_payload,
-                            )
-                        ) from exc
-                    wait = _extract_retry_after(exc, attempt)
-                    retry_notice_max_retries = rate_limit_max_retries
-                    display.rate_limit_notice(
-                        wait_seconds=wait,
-                        attempt=attempt + 1,
-                        max_retries=rate_limit_max_retries,
-                    )
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=self._settings.responses_url,
-                        request_config=self._settings.redacted(),
-                        request_payload=request_body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"Google Interactions API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=rate_limit_max_retries,
-                        metadata={"retryable": True},
-                    )
-                    time.sleep(wait)
-                    continue
-
-                if provider_retry.is_overload_http_status(exc.code):
-                    if attempt >= max_retries:
-                        display.wait_stop()
-                        raise RuntimeError(
-                            _format_error_message(
-                                f"Google API overloaded after {max_retries + 1} attempts",
-                                error_payload,
-                            )
-                        ) from exc
-                    wait = _extract_retry_after(exc, attempt)
-                    retry_notice_max_retries = max_retries
-                    display.overload_notice(
-                        wait_seconds=wait,
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                    )
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=self._settings.responses_url,
-                        request_config=self._settings.redacted(),
-                        request_payload=request_body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"Google Interactions API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        metadata={"retryable": True, "overloaded": True},
-                    )
-                    time.sleep(wait)
-                    continue
-
-                if provider_retry.is_retryable_http_status(exc.code):
-                    last_error = exc
-                    last_error_message = _format_error_message(
-                        f"Google request failed after {max_retries + 1} attempts",
-                        error_payload,
-                    )
-                    if attempt >= max_retries:
-                        break
-                    retry_notice_max_retries = max_retries
-                    _trace_provider_retry(
-                        tracer=tracer,
-                        provider=self._settings.provider,
-                        model=self._settings.model,
-                        url=self._settings.responses_url,
-                        request_config=self._settings.redacted(),
-                        request_payload=request_body,
-                        status_code=exc.code,
-                        error_message=_format_error_message(
-                            f"Google Interactions API error {exc.code}",
-                            error_payload,
-                        ),
-                        attempt=attempt + 1,
-                        max_retries=max_retries,
-                        metadata={"retryable": True},
-                    )
-                    continue
-
-                display.wait_stop()
-                raise RuntimeError(
-                    _format_error_message(
-                        f"Google Interactions API error {exc.code}",
-                        error_payload,
-                    )
-                ) from exc
-            except (
-                http.client.IncompleteRead,
-                TimeoutError,
-                ConnectionError,
-                urllib.error.URLError,
-            ) as exc:
-                last_error = exc
-                last_error_message = None
-                _trace_provider_call(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=self._settings.responses_url,
-                    request_config=self._settings.redacted(),
-                    request_payload=request_body,
-                    response_payload={"error": str(exc)},
-                    duration_ms=_duration_ms(req_start),
-                    success=False,
-                    error_message=str(exc),
-                    metadata={"attempt": attempt + 1},
-                )
-                if attempt >= max_retries:
-                    break
-                retry_notice_max_retries = max_retries
-                _trace_provider_retry(
-                    tracer=tracer,
-                    provider=self._settings.provider,
-                    model=self._settings.model,
-                    url=self._settings.responses_url,
-                    request_config=self._settings.redacted(),
-                    request_payload=request_body,
-                    status_code=None,
-                    error_message=str(exc),
-                    attempt=attempt + 1,
-                    max_retries=max_retries,
-                    metadata={"retryable": True},
-                )
-                continue
-
-        display.wait_stop()
-        if last_error is not None:
-            if last_error_message:
-                raise RuntimeError(last_error_message) from last_error
-            raise RuntimeError(
-                f"Google request failed after {max_retries + 1} attempts: {last_error}"
-            ) from last_error
-        raise RuntimeError("Google request failed after retries.")
+        return self._transport.post(
+            JsonRequestSpec(
+                provider=self._settings.provider,
+                model=self._settings.model,
+                url=responses_url(self._settings),
+                headers=headers,
+                body=request_body,
+                request_config=self._settings.redacted(),
+                wait_input=input_value,
+                timeout=_REQUEST_TIMEOUT_SECS,
+                error_policy=JsonErrorPolicy(
+                    api_error_label="Google Interactions API error",
+                    rate_limit_exhausted_label="Google rate limit exceeded",
+                    overload_exhausted_label="Google API overloaded",
+                    request_failed_label="Google request failed",
+                    normalize_http_error=normalize_http_error,
+                    format_error=json_error_message,
+                ),
+                sleep=time.sleep,
+            ),
+            settings=self._settings,
+            display=display,
+            tracer=tracer,
+            parse_response=self._parse_response,
+            semantic_validator=validate_interaction_status,
+        )
 
     def _build_request_body(
         self,
@@ -628,10 +282,10 @@ class GoogleProvider(Provider):
         instructions: str | None,
     ) -> dict[str, Any]:
         request_input: str | list[dict[str, Any]] = input_value
-        if self._restored_input and not self._previous_interaction_id:
+        if self._restored_steps and not self._previous_interaction_id:
             request_input = [
-                *self._restored_input,
-                {"role": "user", "content": input_value},
+                *self._restored_steps,
+                *_google_current_input_steps(input_value),
             ]
         body: dict[str, Any] = {
             "model": self._settings.model,
@@ -954,38 +608,6 @@ def _extract_google_search_call_queries(item: dict[str, Any]) -> list[str]:
     return [str(query).strip() for query in raw_queries if str(query).strip()]
 
 
-def _display_web_search_result(
-    display: DisplayProtocol,
-    sources: list[WebSearchSource] | list[dict[str, Any]],
-    *,
-    queries: list[str] | None = None,
-) -> None:
-    normalized_sources = [
-        source
-        if isinstance(source, dict)
-        else {"title": source.title, "url": source.url, "snippet": source.snippet}
-        for source in (sources or [])
-    ]
-    display.function_start(1)
-    display.function_result(
-        name="web_search",
-        success=True,
-        call_id="",
-        arguments={
-            "sources": normalized_sources,
-            "queries": list(queries or []),
-        },
-    )
-    display.tool_group_end()
-
-
-def _find_by_id(calls: list[ToolCall], call_id: str) -> ToolCall | None:
-    for call in calls:
-        if call.call_id == call_id:
-            return call
-    return None
-
-
 def _google_user_input_value(
     user_input: UserTurnInput,
 ) -> str | list[dict[str, Any]]:
@@ -1028,34 +650,34 @@ def _google_message_record_content(
     return message.content
 
 
-def _history_item_to_input_item(item: dict[str, Any]) -> dict[str, Any] | None:
+def _google_message_record_to_input_step(message: MessageRecord) -> dict[str, Any]:
+    content = _google_message_record_content(message)
+    if message.role == "assistant":
+        return _google_model_output_step(content)
+    return _google_user_input_step(content)
+
+
+def _history_item_to_input_steps(item: dict[str, Any]) -> list[dict[str, Any]]:
     item_type = item.get("type")
     if item_type == "message":
         message = item.get("message")
         if isinstance(message, MessageRecord) and _google_message_record_can_restore(
             message
         ):
-            return {
-                "role": "model" if message.role == "assistant" else "user",
-                "content": _google_message_record_content(message),
-            }
-        return None
+            return [_google_message_record_to_input_step(message)]
+        return []
     if item_type == "tool_call":
         call_id = str(item.get("call_id") or "")
         name = str(item.get("name") or "")
         if not call_id or not name:
-            return None
-        return {
-            "role": "model",
-            "content": [
-                {
-                    "type": "function_call",
-                    "id": call_id,
-                    "name": name,
-                    "arguments": item.get("arguments") or {},
-                }
-            ],
-        }
+            return []
+        return [
+            _google_function_call_step(
+                call_id=call_id,
+                name=name,
+                arguments=item.get("arguments") or {},
+            )
+        ]
     if item_type == "tool_call_group":
         function_calls: list[dict[str, Any]] = []
         for call in item.get("calls", []):
@@ -1066,30 +688,26 @@ def _history_item_to_input_item(item: dict[str, Any]) -> dict[str, Any] | None:
             if not call_id or not name:
                 continue
             function_calls.append(
-                {
-                    "type": "function_call",
-                    "id": call_id,
-                    "name": name,
-                    "arguments": call.get("arguments") or {},
-                }
+                _google_function_call_step(
+                    call_id=call_id,
+                    name=name,
+                    arguments=call.get("arguments") or {},
+                )
             )
-        if not function_calls:
-            return None
-        return {"role": "model", "content": function_calls}
+        return function_calls
     if item_type == "tool_result":
         call_id = str(item.get("call_id") or "")
         if not call_id:
-            return None
+            return []
         output = item.get("output")
-        result_block: dict[str, Any] = {
-            "type": "function_result",
-            "name": str(item.get("name") or ""),
-            "call_id": call_id,
-            "result": output if isinstance(output, str) else json.dumps(output),
-        }
+        result_block = _google_function_result_history_step(
+            call_id=call_id,
+            name=str(item.get("name") or ""),
+            output=output,
+        )
         if item.get("is_error"):
             result_block["is_error"] = True
-        return {"role": "user", "content": [result_block]}
+        return [result_block]
     if item_type == "tool_result_group":
         result_blocks: list[dict[str, Any]] = []
         for result_item in item.get("results", []):
@@ -1099,19 +717,96 @@ def _history_item_to_input_item(item: dict[str, Any]) -> dict[str, Any] | None:
             if not call_id:
                 continue
             output = result_item.get("output")
-            grouped_result_block: dict[str, Any] = {
-                "type": "function_result",
-                "name": str(result_item.get("name") or ""),
-                "call_id": call_id,
-                "result": output if isinstance(output, str) else json.dumps(output),
-            }
+            grouped_result_block = _google_function_result_history_step(
+                call_id=call_id,
+                name=str(result_item.get("name") or ""),
+                output=output,
+            )
             if result_item.get("is_error"):
                 grouped_result_block["is_error"] = True
             result_blocks.append(grouped_result_block)
-        if not result_blocks:
-            return None
-        return {"role": "user", "content": result_blocks}
-    return None
+        return result_blocks
+    return []
+
+
+def _google_current_input_steps(
+    input_value: str | list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if isinstance(input_value, list) and _is_google_step_list(input_value):
+        return input_value
+    return [_google_user_input_step(input_value)]
+
+
+_GOOGLE_STEP_TYPES = frozenset(
+    {
+        "code_execution_call",
+        "code_execution_result",
+        "file_search_call",
+        "file_search_result",
+        "function_call",
+        "function_result",
+        "google_maps_call",
+        "google_maps_result",
+        "google_search_call",
+        "google_search_result",
+        "mcp_server_tool_call",
+        "mcp_server_tool_result",
+        "model_output",
+        "thought",
+        "url_context_call",
+        "url_context_result",
+        "user_input",
+    }
+)
+
+
+def _is_google_step_list(value: list[dict[str, Any]]) -> bool:
+    return all(
+        isinstance(item, dict) and item.get("type") in _GOOGLE_STEP_TYPES
+        for item in value
+    )
+
+
+def _google_user_input_step(content: str | list[dict[str, Any]]) -> dict[str, Any]:
+    return {"type": "user_input", "content": _google_content_blocks(content)}
+
+
+def _google_model_output_step(content: str | list[dict[str, Any]]) -> dict[str, Any]:
+    return {"type": "model_output", "content": _google_content_blocks(content)}
+
+
+def _google_content_blocks(content: str | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}] if content else []
+    return [dict(item) for item in content if isinstance(item, dict)]
+
+
+def _google_function_call_step(
+    *,
+    call_id: str,
+    name: str,
+    arguments: Any,
+) -> dict[str, Any]:
+    return {
+        "type": "function_call",
+        "id": call_id,
+        "name": name,
+        "arguments": arguments,
+    }
+
+
+def _google_function_result_history_step(
+    *,
+    call_id: str,
+    name: str,
+    output: Any,
+) -> dict[str, Any]:
+    return {
+        "type": "function_result",
+        "name": name,
+        "call_id": call_id,
+        "result": output if isinstance(output, str) else json.dumps(output),
+    }
 
 
 def _google_function_result_value(result) -> str | list[dict[str, Any]]:
@@ -1121,6 +816,21 @@ def _google_function_result_value(result) -> str | list[dict[str, Any]]:
     content = [{"type": "text", "text": result.output_json}]
     content.extend(_google_image_part(image) for image in result.attachments)
     return content
+
+
+def _google_function_result_item(
+    result,
+    call: ToolCall | None,
+) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "type": "function_result",
+        "name": call.name if call else "",
+        "call_id": result.call_id,
+        "result": _google_function_result_value(result),
+    }
+    if result.is_error:
+        item["is_error"] = True
+    return item
 
 
 def _google_image_part(image: ImageAttachment) -> dict[str, Any]:
@@ -1179,46 +889,6 @@ def _normalize_google_schema(value: Any) -> Any:
     return value
 
 
-def _raise_if_interaction_failed(response_json: dict[str, Any]) -> None:
-    status = response_json.get("status")
-    if status in {"failed", "cancelled", "incomplete"}:
-        error_obj = response_json.get("error")
-        if isinstance(error_obj, dict):
-            code = str(error_obj.get("code", "unknown_error"))
-            message = str(error_obj.get("message", "No error message"))
-            raise _GoogleInteractionStatusError(
-                status=str(status),
-                code=code,
-                message=message,
-                payload=response_json,
-            )
-        raise _GoogleInteractionStatusError(
-            status=str(status),
-            code=None,
-            message="",
-            payload=response_json,
-        )
-    if status == "in_progress":
-        raise _GoogleInteractionStatusError(
-            status="in_progress",
-            code=None,
-            message="Google interaction returned in_progress for a non-background request.",
-            payload=response_json,
-        )
-
-
-def _google_interaction_error_message(
-    status: str,
-    code: str | None,
-    message: str,
-) -> str:
-    if code:
-        return f"Google interaction failed ({code}): {message}"
-    if status == "in_progress" and message:
-        return message
-    return f"Google interaction failed with status {status}."
-
-
 def _extract_thought_summary_text(summary: Any) -> str:
     if isinstance(summary, str):
         return summary.strip()
@@ -1266,156 +936,3 @@ def _usage_value(usage_obj: Any, key: str) -> int:
 def _response_model_name(response_json: dict[str, Any]) -> str:
     model = response_json.get("model")
     return model if isinstance(model, str) else ""
-
-
-def _read_error_body(exc: urllib.error.HTTPError) -> str:
-    return provider_retry.read_error_body(exc)
-
-
-def _normalize_http_error(
-    exc: urllib.error.HTTPError,
-    error_body: str,
-) -> dict[str, Any]:
-    payload = provider_retry.parse_error_payload(error_body)
-    error_type = _HTTP_ERROR_TYPES.get(exc.code)
-    message = _HTTP_ERROR_MESSAGES.get(exc.code, f"HTTP {exc.code}")
-    request_id = _request_id_from_headers(exc)
-
-    if payload is not None:
-        error_value = payload.get("error")
-        if isinstance(error_value, dict):
-            payload_type = error_value.get("status")
-            if isinstance(payload_type, str) and payload_type.strip():
-                error_type = payload_type.strip().lower()
-            payload_message = error_value.get("message")
-            if isinstance(payload_message, str) and payload_message.strip():
-                message = payload_message.strip()
-            payload_request_id = error_value.get("request_id")
-            if isinstance(payload_request_id, str) and payload_request_id.strip():
-                request_id = payload_request_id.strip()
-
-    if error_type is None:
-        if 400 <= exc.code < 500:
-            error_type = "invalid_argument"
-        else:
-            error_type = "internal"
-
-    normalized: dict[str, Any] = {
-        "type": "error",
-        "status": exc.code,
-        "error": {
-            "type": error_type,
-            "message": message,
-        },
-    }
-    if request_id:
-        normalized["request_id"] = request_id
-    return normalized
-
-
-def _request_id_from_headers(exc: urllib.error.HTTPError) -> str | None:
-    return provider_retry.request_id_from_headers(
-        exc,
-        header_names=("x-request-id", "request-id", "x-goog-request-id"),
-    )
-
-
-def _format_error_message(prefix: str, error_payload: dict[str, Any]) -> str:
-    return provider_retry.format_error_message(prefix, error_payload)
-
-
-def _extract_retry_after(exc: urllib.error.HTTPError, attempt: int) -> float:
-    return provider_retry.retry_after_seconds(exc, attempt)
-
-
-def _duration_ms(started_at: float) -> int:
-    return provider_retry.duration_ms(started_at)
-
-
-def _trace_provider_call(
-    *,
-    tracer,
-    provider: str,
-    model: str,
-    url: str,
-    request_config: dict[str, Any],
-    request_payload: dict[str, Any],
-    response_payload: dict[str, Any],
-    duration_ms: int,
-    prompt_tokens: int | None = None,
-    completion_tokens: int | None = None,
-    total_tokens: int | None = None,
-    status_code: int | None = None,
-    success: bool,
-    error_message: str | None = None,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    provider_retry.trace_provider_call(
-        tracer=tracer,
-        provider=provider,
-        model=model,
-        url=url,
-        request_config=request_config,
-        request_payload=request_payload,
-        response_payload=response_payload,
-        duration_ms=duration_ms,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=total_tokens,
-        status_code=status_code,
-        success=success,
-        error_message=error_message,
-        metadata=metadata,
-    )
-
-
-def _trace_provider_retry(
-    *,
-    tracer,
-    provider: str,
-    model: str,
-    url: str,
-    request_config: dict[str, Any],
-    request_payload: dict[str, Any],
-    status_code: int | None,
-    error_message: str,
-    attempt: int,
-    max_retries: int,
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    provider_retry.trace_provider_retry(
-        tracer=tracer,
-        provider=provider,
-        model=model,
-        url=url,
-        request_config=request_config,
-        request_payload=request_payload,
-        status_code=status_code,
-        error_message=error_message,
-        attempt=attempt,
-        max_retries=max_retries,
-        metadata=metadata,
-    )
-
-
-def _reasoning_body_text(reasoning_text: str, summary_text: str) -> str | None:
-    if reasoning_text.strip():
-        return reasoning_text
-    body = _summary_body_text(summary_text)
-    return body if body.strip() else None
-
-
-def _summary_body_text(summary_text: str) -> str:
-    lines = summary_text.splitlines()
-    first_non_empty_index = next(
-        (idx for idx, line in enumerate(lines) if line.strip()),
-        None,
-    )
-    if first_non_empty_index is None:
-        return ""
-    remaining_non_empty = any(
-        line.strip() for line in lines[first_non_empty_index + 1 :]
-    )
-    if not remaining_non_empty:
-        return ""
-    return "\n".join(lines[first_non_empty_index + 1 :]).lstrip("\r\n")

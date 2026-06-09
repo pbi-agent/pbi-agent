@@ -11,7 +11,7 @@ A model profile is a saved runtime preset tied to one saved provider. Providers 
 
 | Entity | Stores | Examples |
 | --- | --- | --- |
-| Provider | Connection settings | provider kind, API key, ChatGPT or GitHub Copilot account auth, Azure endpoint, generic API URL |
+| Provider | Connection settings | provider kind, API key, ChatGPT or GitHub Copilot account auth, Azure endpoint, generic API URL, Google Cloud project/location |
 | Model Profile | Runtime settings | model, sub-agent model, reasoning effort, max tokens, tool visibility, retries, compaction threshold |
 
 This separation lets you create multiple profiles for the same provider, such as `fast`, `analysis`, `review`, or `azure-prod`.

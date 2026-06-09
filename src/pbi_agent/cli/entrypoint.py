@@ -10,7 +10,7 @@ from pbi_agent.config import (
     resolve_runtime,
     resolve_web_runtime,
 )
-from pbi_agent.init_agents import format_init_agents_result, init_agents_file
+from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
 from pbi_agent.log_config import configure_logging
 from pbi_agent.maintenance import run_startup_maintenance
 
@@ -52,8 +52,8 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_commands_command(args)
 
     if args.command == "init":
-        result = init_agents_file(force=args.force)
-        print(format_init_agents_result(result))
+        result = init_workspace_bootstrap(force=args.force)
+        print(format_init_bootstrap_result(result))
         return 0
 
     if args.command == "agents":

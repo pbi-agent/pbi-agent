@@ -205,9 +205,10 @@ export function GitDiffResult({
   const statusLabel = metadata.success === false ? "Failed" : "Done";
   const title = titleFor(metadata);
   const fileCountLabel = fileCountDescription(metadata);
+  const contentBlocks = stripDiffHeaderBlocks(parsed.blocks);
   const visibleBlocks =
-    parsed.blocks.length > 0
-      ? compactContextBlocks(parsed.blocks)
+    contentBlocks.length > 0
+      ? compactContextBlocks(contentBlocks)
       : groupDiffLines(emptyStateLines());
   const footerLabel = footerSummary(parsed);
   const splitRows = layout === "split" ? buildSplitRows(visibleBlocks) : [];
@@ -599,6 +600,27 @@ function compactContextBlocks(blocks: DiffBlock[]): DiffBlock[] {
       lines: [...head, ...tail],
       collapsed: block.lines.length - head.length - tail.length,
     };
+  });
+}
+
+function stripDiffHeaderBlocks(blocks: DiffBlock[]): DiffBlock[] {
+  return blocks.flatMap((block): DiffBlock[] => {
+    if (block.kind === "change" || block.kind === "context") {
+      return [block];
+    }
+    const lines = block.lines.filter(
+      (line) => line.kind !== "meta" && line.kind !== "hunk",
+    );
+    if (lines.length === 0) {
+      return [];
+    }
+    return [
+      {
+        ...block,
+        kind: lines.some((line) => line.kind === "empty") ? "empty" : "meta",
+        lines,
+      },
+    ];
   });
 }
 

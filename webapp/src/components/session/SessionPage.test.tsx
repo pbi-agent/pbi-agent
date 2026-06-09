@@ -317,6 +317,8 @@ function makeConfigBootstrap(
         auth_mode: "api_key",
         responses_url: null,
         generic_api_url: null,
+        google_cloud_project: null,
+        google_cloud_location: null,
         secret_source: "env_var",
         secret_env_var: "OPENAI_API_KEY",
         has_secret: true,

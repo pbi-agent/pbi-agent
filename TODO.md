@@ -1,2 +1,1 @@
-- [X] Implement system-following default theme selection in the web UI
-- [X] Run focused/frontend validation and update memory/handoff
+- [x] Compress and curate `MEMORY.md`

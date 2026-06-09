@@ -26,6 +26,8 @@ interface FormState {
   api_key_env: string;
   responses_url: string;
   generic_api_url: string;
+  google_cloud_project: string;
+  google_cloud_location: string;
 }
 
 function initForm(provider?: ProviderView, options?: ConfigOptions): FormState {
@@ -45,6 +47,8 @@ function initForm(provider?: ProviderView, options?: ConfigOptions): FormState {
       api_key_env: provider.secret_env_var ?? "",
       responses_url: provider.responses_url ?? "",
       generic_api_url: provider.generic_api_url ?? "",
+      google_cloud_project: provider.google_cloud_project ?? "",
+      google_cloud_location: provider.google_cloud_location ?? "",
     };
   }
 
@@ -60,6 +64,8 @@ function initForm(provider?: ProviderView, options?: ConfigOptions): FormState {
     api_key_env: defaultApiKeyEnv(defaultKind),
     responses_url: "",
     generic_api_url: "",
+    google_cloud_project: "",
+    google_cloud_location: "",
   };
 }
 
@@ -68,6 +74,7 @@ function defaultApiKeyEnv(providerKind: string): string {
   if (providerKind === "openai") return "OPENAI_API_KEY";
   if (providerKind === "xai") return "XAI_API_KEY";
   if (providerKind === "google") return "GEMINI_API_KEY";
+  if (providerKind === "google_gcp") return "GOOGLE_API_KEY";
   if (providerKind === "anthropic") return "ANTHROPIC_API_KEY";
   if (providerKind === "generic") return "GENERIC_API_KEY";
   if (providerKind === "deepgram") return "DEEPGRAM_API_KEY";
@@ -142,6 +149,8 @@ export type ProviderPayload = {
   api_key_env?: string | null;
   responses_url?: string | null;
   generic_api_url?: string | null;
+  google_cloud_project?: string | null;
+  google_cloud_location?: string | null;
 };
 
 interface Props {
@@ -170,6 +179,8 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
         }
         next.responses_url = "";
         next.generic_api_url = "";
+        next.google_cloud_project = "";
+        next.google_cloud_location = "";
       }
       return next;
     });
@@ -225,6 +236,14 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
     } else {
       payload.responses_url = null;
       payload.generic_api_url = null;
+    }
+
+    if (form.kind === "google_gcp") {
+      payload.google_cloud_project = form.google_cloud_project.trim() || null;
+      payload.google_cloud_location = form.google_cloud_location.trim() || null;
+    } else {
+      payload.google_cloud_project = null;
+      payload.google_cloud_location = null;
     }
 
     try {
@@ -442,6 +461,47 @@ export function ProviderModal({ provider, options, onSave, onClose }: Props) {
                     Leave blank to use the provider default.
                   </FieldDescription>
                 </Field>
+              )}
+
+              {form.kind === "google_gcp" && (
+                <>
+                  <Field>
+                    <FieldLabel>Google Cloud project</FieldLabel>
+                    <Input
+                      name="google-cloud-project"
+                      className="task-form__input"
+                      type="text"
+                      value={form.google_cloud_project}
+                      onChange={(e) =>
+                        set({ google_cloud_project: e.target.value })
+                      }
+                      placeholder="my-gcp-project"
+                    />
+                    <FieldDescription>
+                      Required for Vertex project endpoints such as Grok,
+                      Anthropic, DeepSeek, or bearer/ADC Gemini calls.
+                    </FieldDescription>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel>Google Cloud location</FieldLabel>
+                    <Input
+                      name="google-cloud-location"
+                      className="task-form__input"
+                      type="text"
+                      value={form.google_cloud_location}
+                      onChange={(e) =>
+                        set({ google_cloud_location: e.target.value })
+                      }
+                      placeholder="global"
+                    />
+                    <FieldDescription>
+                      Leave blank to use global. Use a regional Vertex location
+                      such as us-central1 only when your model endpoint requires
+                      it.
+                    </FieldDescription>
+                  </Field>
+                </>
               )}
             </FieldGroup>
     </FormDialog>

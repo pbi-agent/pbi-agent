@@ -8,7 +8,7 @@ description: 'What pbi-agent is, how it is structured, and which providers it su
 `pbi-agent` is a local coding agent for multi-domain workspace automation. It communicates with providers over synchronous HTTP REST APIs using `urllib.request`, so the runtime does not depend on provider SDKs.
 
 ::: tip
-The same CLI surface can target OpenAI, xAI, Google Gemini, Anthropic, or a generic OpenAI-compatible backend.
+The same CLI surface can target OpenAI, xAI, Google Gemini, Google Cloud Vertex AI, Anthropic, or a generic OpenAI-compatible backend.
 :::
 
 ## Architecture Overview
@@ -43,11 +43,12 @@ CLI
 | Azure | Responses API, Chat Completions API, or Anthropic Messages API by endpoint | required `--responses-url` | `gpt-4.1` | `gpt-4.1-mini` |
 | xAI | Responses API | `https://api.x.ai/v1/responses` | `grok-4.20` | `grok-4-1-fast` |
 | Google | Interactions API | `https://generativelanguage.googleapis.com/v1beta/interactions` | `gemini-3.1-pro-preview` | `gemini-3-flash-preview` |
+| Google Cloud Vertex AI | Gemini `generateContent`, OpenAI-compatible, or Anthropic-compatible Vertex APIs by model | derived from project/location or `--responses-url` | `gemini-2.5-flash` | `gemini-2.5-flash` |
 | Anthropic | Messages API | `https://api.anthropic.com/v1/messages` | `claude-opus-4-6` | `claude-sonnet-4-6` |
 | Generic | Chat Completions API | `https://openrouter.ai/api/v1/chat/completions` | none; the `model` field is omitted when unset | none |
 
 ::: details Conversation history mode
-OpenAI, xAI, and Google keep conversation state server-side by passing a previous response or interaction ID. Anthropic and Generic keep history client-side by re-sending accumulated messages on each turn.
+OpenAI, xAI, and Google keep conversation state server-side by passing a previous response or interaction ID. Google Cloud Vertex AI, Anthropic, and Generic keep history client-side by re-sending accumulated messages on each turn.
 :::
 
 ## Read Next

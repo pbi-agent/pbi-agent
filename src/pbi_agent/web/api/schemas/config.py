@@ -46,6 +46,8 @@ class ProviderViewModel(BaseModel):
     auth_mode: str
     responses_url: str | None
     generic_api_url: str | None
+    google_cloud_project: str | None
+    google_cloud_location: str | None
     secret_source: Literal["none", "plaintext", "env_var"]
     secret_env_var: str | None
     has_secret: bool
@@ -82,6 +84,8 @@ class ProviderMutationRequest(BaseModel):
     api_key_env: str | None = None
     responses_url: str | None = None
     generic_api_url: str | None = None
+    google_cloud_project: str | None = None
+    google_cloud_location: str | None = None
 
 
 class ProviderUpdateRequest(BaseModel):
@@ -92,6 +96,8 @@ class ProviderUpdateRequest(BaseModel):
     api_key_env: str | None = None
     responses_url: str | None = None
     generic_api_url: str | None = None
+    google_cloud_project: str | None = None
+    google_cloud_location: str | None = None
 
 
 class ProviderListResponse(BaseModel):

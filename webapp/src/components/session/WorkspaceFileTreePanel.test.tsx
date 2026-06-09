@@ -93,6 +93,15 @@ describe("WorkspaceFileTreePanel", () => {
     expect(screen.getByRole("radio", { name: "Split" })).toHaveAttribute("data-state", "on");
     expect(screen.getByRole("radio", { name: "Stacked" })).toHaveAttribute("data-state", "off");
     expect(document.querySelector(".git-diff-result")).toHaveAttribute("data-layout", "split");
+    const renderedDiffCode = Array.from(
+      document.querySelectorAll(".git-diff-result__code code"),
+      (node) => node.textContent,
+    );
+    expect(renderedDiffCode).not.toContain("diff --git a/src/app.py b/src/app.py");
+    expect(renderedDiffCode).not.toContain("-1 +1 @@");
+    expect(renderedDiffCode).toEqual(
+      expect.arrayContaining(["print('old')", "print('new')"]),
+    );
     const oldSplitPane = document.querySelector<HTMLDivElement>(
       ".git-diff-result__split-pane--old",
     );

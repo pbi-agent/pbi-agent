@@ -37,14 +37,17 @@ DEFAULT_XAI_RESPONSES_URL = "https://api.x.ai/v1/responses"
 DEFAULT_GOOGLE_INTERACTIONS_URL = (
     "https://generativelanguage.googleapis.com/v1beta/interactions"
 )
+DEFAULT_GOOGLE_GCP_RESPONSES_URL = ""
 DEFAULT_GENERIC_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "gpt-5.4"
 DEFAULT_XAI_MODEL = "grok-4.20"
 DEFAULT_GOOGLE_MODEL = "gemini-3.1-pro-preview"
+DEFAULT_GOOGLE_GCP_MODEL = "gemini-2.5-flash"
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-8"
 DEFAULT_SUB_AGENT_MODEL = "gpt-5.4-mini"
 DEFAULT_XAI_SUB_AGENT_MODEL = "grok-4-1-fast"
 DEFAULT_GOOGLE_SUB_AGENT_MODEL = "gemini-3-flash-preview"
+DEFAULT_GOOGLE_GCP_SUB_AGENT_MODEL = "gemini-2.5-flash"
 DEFAULT_ANTHROPIC_SUB_AGENT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 16384
 OPENAI_SERVICE_TIERS = ("auto", "default", "flex", "priority")
@@ -53,6 +56,7 @@ PROVIDER_API_KEY_ENVS = {
     "azure": "AZURE_API_KEY",
     "xai": "XAI_API_KEY",
     "google": "GEMINI_API_KEY",
+    "google_gcp": "GOOGLE_CLOUD_ACCESS_TOKEN",
     "anthropic": "ANTHROPIC_API_KEY",
     "generic": "GENERIC_API_KEY",
     "deepgram": "DEEPGRAM_API_KEY",
@@ -65,6 +69,7 @@ MODEL_PROFILE_PROVIDER_KINDS = (
     "github_copilot",
     "xai",
     "google",
+    "google_gcp",
     "anthropic",
     "generic",
 )
@@ -73,6 +78,7 @@ RUNTIME_PROVIDER_KINDS = (
     "azure",
     "xai",
     "google",
+    "google_gcp",
     "anthropic",
     "generic",
 )
@@ -138,6 +144,8 @@ class Settings:
     generic_api_url: str = DEFAULT_GENERIC_API_URL
     service_tier: str | None = None
     allowed_tools: tuple[str, ...] | None = None
+    google_cloud_project: str = ""
+    google_cloud_location: str = ""
 
     def __post_init__(self) -> None:
         if self.auth is None and self.api_key:
@@ -170,6 +178,10 @@ class Settings:
                     "Missing authentication for provider 'github_copilot'. "
                     "Configure a saved GitHub Copilot account session."
                 )
+        elif self.provider == "google_gcp":
+            # Google Cloud can authenticate with an explicit bearer token or
+            # Application Default Credentials resolved at request time.
+            pass
         elif not self.api_key:
             raise ConfigError(missing_api_key_message(self.provider))
         if self.max_tool_workers < 1:
@@ -224,6 +236,8 @@ class Settings:
             "allowed_tools": (
                 list(self.allowed_tools) if self.allowed_tools is not None else None
             ),
+            "google_cloud_project": self.google_cloud_project,
+            "google_cloud_location": self.google_cloud_location,
         }
 
 
@@ -237,6 +251,8 @@ class ProviderConfig:
     api_key_env: str | None = None
     responses_url: str | None = None
     generic_api_url: str | None = None
+    google_cloud_project: str | None = None
+    google_cloud_location: str | None = None
 
     def validate(self) -> None:
         self.id = slugify(self.id)
@@ -253,6 +269,13 @@ class ProviderConfig:
             )
         if self.api_key_env is not None:
             self.api_key_env = self.api_key_env.strip() or None
+        if self.google_cloud_project is not None:
+            self.google_cloud_project = self.google_cloud_project.strip() or None
+        if self.google_cloud_location is not None:
+            self.google_cloud_location = self.google_cloud_location.strip() or None
+        if self.kind != "google_gcp":
+            self.google_cloud_project = None
+            self.google_cloud_location = None
         if self.auth_mode != AUTH_MODE_API_KEY:
             self.api_key = ""
             self.api_key_env = None
@@ -628,6 +651,8 @@ def _default_responses_url(provider: str) -> str:
         return DEFAULT_XAI_RESPONSES_URL
     if provider == "google":
         return DEFAULT_GOOGLE_INTERACTIONS_URL
+    if provider == "google_gcp":
+        return DEFAULT_GOOGLE_GCP_RESPONSES_URL
     return DEFAULT_RESPONSES_URL
 
 
@@ -650,6 +675,8 @@ def _default_model(provider: str) -> str:
         return DEFAULT_XAI_MODEL
     if provider == "google":
         return DEFAULT_GOOGLE_MODEL
+    if provider == "google_gcp":
+        return DEFAULT_GOOGLE_GCP_MODEL
     if provider == "anthropic":
         return DEFAULT_ANTHROPIC_MODEL
     return DEFAULT_MODEL
@@ -668,6 +695,8 @@ def _default_sub_agent_model(provider: str) -> str | None:
         return DEFAULT_XAI_SUB_AGENT_MODEL
     if provider == "google":
         return DEFAULT_GOOGLE_SUB_AGENT_MODEL
+    if provider == "google_gcp":
+        return DEFAULT_GOOGLE_GCP_SUB_AGENT_MODEL
     if provider == "anthropic":
         return DEFAULT_ANTHROPIC_SUB_AGENT_MODEL
     return DEFAULT_SUB_AGENT_MODEL
@@ -725,6 +754,7 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "github_copilot": "GitHub Copilot (Subscription)",
         "xai": "xAI",
         "google": "Google",
+        "google_gcp": "Google Cloud Vertex AI",
         "anthropic": "Anthropic",
         "generic": "OpenAI-compatible",
         "deepgram": "Deepgram",
@@ -738,6 +768,10 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         ),
         "chatgpt": "Uses your ChatGPT subscription account.",
         "github_copilot": "Uses your GitHub Copilot subscription account.",
+        "google_gcp": (
+            "Uses Google Cloud Vertex AI with an API key, explicit bearer token, "
+            "or Application Default Credentials."
+        ),
         "deepgram": "Uses a Deepgram API key for speech-to-text.",
         "elevenlabs": "Uses an ElevenLabs API key for speech-to-text.",
     }.get(provider_kind)
@@ -763,7 +797,7 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         "supports_generic_api_url": provider_kind == "generic",
         "supports_service_tier": provider_kind == "openai",
         "supports_native_web_search": supports_model_profiles
-        and provider_kind != "generic",
+        and provider_kind not in {"generic", "google_gcp"},
         "supports_image_inputs": supports_model_profiles,
         "supports_model_profiles": supports_model_profiles,
         "supports_stt": provider_supports_stt(provider_kind),
@@ -994,6 +1028,8 @@ def update_provider_config(
     api_key_env: str | None = None,
     responses_url: str | None = None,
     generic_api_url: str | None = None,
+    google_cloud_project: str | None = None,
+    google_cloud_location: str | None = None,
     expected_revision: str | None = None,
 ) -> tuple[ProviderConfig, str]:
     config = load_internal_config()
@@ -1013,6 +1049,16 @@ def update_provider_config(
         ),
         generic_api_url=(
             generic_api_url if generic_api_url is not None else provider.generic_api_url
+        ),
+        google_cloud_project=(
+            google_cloud_project
+            if google_cloud_project is not None
+            else provider.google_cloud_project
+        ),
+        google_cloud_location=(
+            google_cloud_location
+            if google_cloud_location is not None
+            else provider.google_cloud_location
         ),
     )
     return replace_provider_config(
@@ -1308,12 +1354,35 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         )
         or DEFAULT_GENERIC_API_URL
     )
+    google_cloud_project = (
+        getattr(args, "google_cloud_project", None)
+        or os.getenv("PBI_AGENT_GOOGLE_CLOUD_PROJECT")
+        or (
+            selected_provider.google_cloud_project
+            if selected_provider is not None and selected_provider.kind == provider_kind
+            else None
+        )
+        or ""
+    )
+    google_cloud_location = (
+        getattr(args, "google_cloud_location", None)
+        or os.getenv("PBI_AGENT_GOOGLE_CLOUD_LOCATION")
+        or os.getenv("PBI_AGENT_GOOGLE_CLOUD_REGION")
+        or (
+            selected_provider.google_cloud_location
+            if selected_provider is not None and selected_provider.kind == provider_kind
+            else None
+        )
+        or ""
+    )
 
     resolved_provider_id = _resolved_provider_id(
         selected_provider=selected_provider,
         provider_kind=provider_kind,
         responses_url=responses_url,
         generic_api_url=generic_api_url,
+        google_cloud_project=google_cloud_project,
+        google_cloud_location=google_cloud_location,
     )
     resolved_provider = (
         providers.get(resolved_provider_id)
@@ -1446,6 +1515,8 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         provider=provider_kind,
         service_tier=service_tier,
         allowed_tools=allowed_tools,
+        google_cloud_project=google_cloud_project,
+        google_cloud_location=google_cloud_location,
     )
     _validate_allowed_tools(settings.allowed_tools, error_prefix="--allowed-tools")
     return ResolvedRuntime(
@@ -1647,6 +1718,8 @@ def _settings_from_runtime_parts(
         provider=provider.kind,
         service_tier=profile.service_tier if profile else None,
         allowed_tools=(profile.allowed_tools if profile else None),
+        google_cloud_project=provider.google_cloud_project or "",
+        google_cloud_location=provider.google_cloud_location or "",
     )
 
 
@@ -1656,6 +1729,8 @@ def _resolved_provider_id(
     provider_kind: str,
     responses_url: str,
     generic_api_url: str,
+    google_cloud_project: str,
+    google_cloud_location: str,
 ) -> str | None:
     if (
         selected_provider is not None
@@ -1670,6 +1745,8 @@ def _resolved_provider_id(
         == responses_url
         and (selected_provider.generic_api_url or DEFAULT_GENERIC_API_URL)
         == generic_api_url
+        and (selected_provider.google_cloud_project or "") == google_cloud_project
+        and (selected_provider.google_cloud_location or "") == google_cloud_location
     ):
         return selected_provider.id
     return None
@@ -1808,6 +1885,8 @@ def _provider_from_payload(payload: object) -> ProviderConfig | None:
         api_key_env=_optional_string(payload.get("api_key_env")),
         responses_url=_optional_string(payload.get("responses_url")),
         generic_api_url=_optional_string(payload.get("generic_api_url")),
+        google_cloud_project=_optional_string(payload.get("google_cloud_project")),
+        google_cloud_location=_optional_string(payload.get("google_cloud_location")),
     )
     try:
         provider.validate()
