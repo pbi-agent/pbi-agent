@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-06-07
+- Last compacted: 2026-06-09
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -42,9 +42,11 @@
 - Web static determinism: `workspaceFileIcons.ts` excludes byte-identical SVG duplicates and aliases canonical filenames (`angular-resolver`→`angular-guard`, `dtx`→`doctex`, `sty`→`latex-package`) to avoid unstable Rolldown hashes.
 - Run detail/maintenance: shared `StatusPill`/Badge status styling; event rows avoid duplicate model/status chips; payload cards use `CopyShortcut`; header stats wrap safely. Startup `run_startup_maintenance()` runs once per UTC day via SQLite `maintenance_state`; retention config `maintenance.retention_days` default 30/min 1; purge preserves referenced uploads. PyPI check uses `urllib.request`; CLI update warning is Rich stderr only for newer versions.
 - Sandbox/init/extensions: `pbi-agent sandbox [web|run]` uses bundled Dockerfile, matching PyPI version, shared sessions/Kanban/runs, per-workspace `/home/pbi` volume, `/tmp` writable executable tmpfs, explicit container name `pbi-agent-{normalized-workspace-folder}`. `pbi-agent init` and `/init` create starter `AGENTS.md`, install default official commands/sub-agents, and persist disabled default sub-agent state workspace-scoped; failures are per-item and rollback newly installed default sub-agent files if disable persistence fails. `--force`/`--overwrite` replace. Extensions report setup/call failures, capture/truncate fd stdout/stderr, lock per-extension setup, require leading `/`, dynamically reserve built-ins/project commands/MCP tools. Local test extension `.agents/extensions/hello_word.py` echoes `input["text"]`.
-- Test hygiene: pytest isolates web upload root to per-test `tmp_path / "web_uploads"`. Known unrelated blockers: full pytest can fail `test_config_provider_and_profile_list_update_delete_endpoints` on `google_cloud_*` provider payload mismatch; full `bun run test:web` can fail SettingsPage nav-order assertion.
+- Test hygiene: pytest isolates web upload root to per-test `tmp_path / "web_uploads"`. Known unrelated blockers: full `bun run test:web` can fail SettingsPage nav-order assertion.
 
 ## Detailed Task Events
 
-## 2026-06-07
-- Compressed/curated `MEMORY.md`: promoted durable outcomes from active-day logs into compact long-term memory, removed detailed completed task log noise, kept known validation blockers. Validation: manual markdown review only.
+## 2026-06-09
+- Began v0.13.0 minor release from `v0.12.2`, including 1 remote and 11 local post-release commits; edited release-scoped files but stopped before commit/push/merge because full pytest failed at known `test_config_provider_and_profile_list_update_delete_endpoints` provider payload mismatch. Validation before stop: Ruff, format, basedpyright, dead-code passed; pytest failed; docs build not run.
+- Diagnosed and fixed provider config pytest blocker: `test_config_provider_and_profile_list_update_delete_endpoints` expected payload was stale after GCP provider fields were added; added `google_cloud_project`/`google_cloud_location` as `None` for OpenAI provider views. Validation: focused test, full `uv run pytest -q --tb=short -x`, `uv run ruff check .`, `uv run ruff format --check .`, and `uv run basedpyright` passed.
+- Completed/published v0.13.0: PR #314 merged, release workflow succeeded, GitHub Release/tag `v0.13.0` targets merge commit `b93d02a2`, and PyPI shows wheel+sdist. Validation included release checks plus web tests/lint/typecheck/api-types/static build/docs; fixed stale web settings nav-order expectation before merge.
