@@ -127,30 +127,11 @@ class ChatCompletionsProtocol(ResponseProtocol):
 
         assistant_message = _normalize_assistant_messages(messages)
 
-        usage_obj = response_json.get("usage", {})
-        if not isinstance(usage_obj, dict):
-            usage_obj = {}
-        prompt_tokens = int(usage_obj.get("prompt_tokens", 0) or 0)
-        completion_tokens = int(usage_obj.get("completion_tokens", 0) or 0)
-        total_tokens = int(usage_obj.get("total_tokens", 0) or 0)
-        completion_details = usage_obj.get("completion_tokens_details", {})
-        reasoning_tokens = (
-            int(completion_details.get("reasoning_tokens", 0) or 0)
-            if isinstance(completion_details, dict)
-            else 0
-        )
-
         response_id = response_json.get("id")
         return CompletedResponse(
             response_id=response_id if isinstance(response_id, str) else None,
             text=text,
-            usage=TokenUsage(
-                input_tokens=prompt_tokens,
-                output_tokens=completion_tokens,
-                reasoning_tokens=reasoning_tokens,
-                context_tokens=total_tokens or (prompt_tokens + completion_tokens),
-                model=_response_model_name(response_json),
-            ),
+            usage=_parse_usage(response_json),
             function_calls=function_calls,
             provider_data={"assistant_message": assistant_message},
         )
@@ -189,6 +170,84 @@ class ChatCompletionsProtocol(ResponseProtocol):
 def _response_model_name(response_json: dict[str, object]) -> str:
     model = response_json.get("model")
     return model if isinstance(model, str) else ""
+
+
+def _parse_usage(response_json: dict[str, object]) -> TokenUsage:
+    usage = _usage_dict(response_json.get("usage"))
+    prompt_details = _usage_dict(usage.get("prompt_tokens_details"))
+    input_details = _usage_dict(usage.get("input_tokens_details"))
+    completion_details = _usage_dict(usage.get("completion_tokens_details"))
+
+    input_tokens = _usage_value(usage, "prompt_tokens")
+    output_tokens = _usage_value(usage, "completion_tokens")
+    total_tokens = _usage_value(usage, "total_tokens")
+
+    return TokenUsage(
+        input_tokens=input_tokens,
+        cached_input_tokens=_first_usage_detail_value(
+            detail_sources=(prompt_details, input_details, usage),
+            keys=(
+                "cached_tokens",
+                "cached_input_tokens",
+                "cache_read_input_tokens",
+            ),
+        ),
+        cache_write_tokens=_first_usage_detail_value(
+            detail_sources=(prompt_details, input_details, usage),
+            keys=("cache_write_tokens", "cache_creation_input_tokens"),
+        ),
+        cache_write_1h_tokens=_first_usage_detail_value(
+            detail_sources=(prompt_details, input_details, usage),
+            keys=("cache_write_1h_tokens", "cache_creation_input_tokens_1h"),
+        ),
+        output_tokens=output_tokens,
+        reasoning_tokens=_usage_value(completion_details, "reasoning_tokens"),
+        context_tokens=total_tokens or (input_tokens + output_tokens),
+        model=_response_model_name(response_json),
+    )
+
+
+def _usage_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def _usage_value(usage_obj: object, key: str) -> int:
+    if not isinstance(usage_obj, dict):
+        return 0
+    return _coerce_usage_int(usage_obj.get(key))
+
+
+def _first_usage_detail_value(
+    *,
+    detail_sources: tuple[dict[str, object], ...],
+    keys: tuple[str, ...],
+) -> int:
+    for detail_source in detail_sources:
+        for key in keys:
+            value = _usage_value(detail_source, key)
+            if value:
+                return value
+    return 0
+
+
+def _coerce_usage_int(value: object) -> int:
+    if value is None or isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                return int(float(value))
+            except ValueError:
+                return 0
+    return 0
 
 
 def _history_items_to_messages(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

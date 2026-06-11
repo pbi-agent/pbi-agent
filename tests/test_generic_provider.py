@@ -171,6 +171,36 @@ def test_azure_chat_completions_uses_api_key_header_and_endpoint(
     }
 
 
+def test_generic_parse_response_preserves_prompt_cache_usage_details() -> None:
+    provider = GenericProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "chatcmpl_cache",
+            "model": "minimax/minimax-m2.7-highspeed",
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 12,
+                "total_tokens": 112,
+                "prompt_tokens_details": {
+                    "cached_tokens": "64",
+                    "cache_write_tokens": 8,
+                    "cache_write_1h_tokens": 4,
+                },
+                "completion_tokens_details": {"reasoning_tokens": "3"},
+            },
+            "choices": [{"message": {"role": "assistant", "content": "cache-aware"}}],
+        }
+    )
+
+    assert result.usage.input_tokens == 100
+    assert result.usage.cached_input_tokens == 64
+    assert result.usage.cache_write_tokens == 8
+    assert result.usage.cache_write_1h_tokens == 4
+    assert result.usage.output_tokens == 12
+    assert result.usage.reasoning_tokens == 3
+
+
 def test_generic_parse_response_merges_split_choice_text_and_tool_calls() -> None:
     provider = GenericProvider(_make_settings())
 
