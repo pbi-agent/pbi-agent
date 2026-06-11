@@ -7,26 +7,37 @@ allowed_tools: read,write,shell
 
 # Fix Review Findings
 
-Fix findings from the previous `/review` turn in this session.
+Fix findings from previous `/review` or `/code-quality-review` turn in this
+session.
 
-Use the latest review output in the current conversation as the source of truth.
-Do not ask clarifying questions and do not perform a new general review.
+Use latest review-like output in current conversation as truth. Ask no
+clarifying questions. Do not run new general review or code-quality review.
+
+If the latest relevant output says `No findings.` or
+`No code-quality findings.`, make no code changes. Report no findings to fix.
 
 ## Fixing findings
 
 - Fix only the listed findings.
-- Use each finding's file path, line range, priority, and explanation to identify
-  the intended change.
+- Accept either review format:
+  - `/review` findings under `### Findings` with `priority`,
+    `absolute_file_path`, and `line_range`.
+  - `/code-quality-review` findings under `### Code Quality Findings` with
+    `severity`, `file:line`, and maintainability explanation.
+- Use each finding's file path, line/range, priority/severity, and explanation
+  to identify intended change.
+- For code-quality findings, preserve intended behavior while applying requested
+  cleaner structure. Do not treat finding as optional style feedback.
 - Preserve unrelated user or workspace changes.
-- Do not make opportunistic refactors or style-only edits.
+- No opportunistic refactors or style-only edits.
 - Do not commit, push, merge, or open pull requests.
 
 ## Validation
 
-After making fixes, run the focused validation appropriate for the touched surface.
-If validation cannot be run, report why.
+After fixes, run focused validation for touched surface.
+If validation cannot run, report why.
 
-Finish with a concise summary of:
+Finish with concise summary:
 
 - findings fixed
 - files changed

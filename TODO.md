@@ -1,15 +1,3 @@
-- [x] Run release preflight and identify release scope
-- [x] Determine previous release, target minor version, and merged PR set
-- [x] Create release branch and update changelog/version files
-- [x] Run remaining release validation
-- [x] Commit, push, and open release PR
-- [x] Merge/publish after clean PR checks
-- [x] Repair CI web settings navigation test failure
-- [x] Push CI repair commit and re-check PR
-- [x] Record release workflow outcome
-- [x] Reproduce focused provider config test failure
-- [x] Compare expected provider payload with actual response
-- [x] Identify root cause and fix path
-- [x] Apply minimal test expectation update
-- [x] Validate provider config test
-- [x] Record diagnosis outcome
+- [x] Compress `.agents/commands/fix-review.md`
+- [x] Validate Markdown diff
+- [x] Update task memory
