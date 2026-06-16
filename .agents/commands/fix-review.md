@@ -1,7 +1,7 @@
 ---
 name: fix-review
 description: Fix Review Findings
-model_profile_id: worker
+model_profile_id: worker-pro
 allowed_tools: read,write,shell
 ---
 

@@ -1,3 +1,3 @@
-- [x] Update `/code-quality-review` scope instructions for explicit files
-- [x] Validate Markdown-only change
-- [x] Update task memory
+- [x] Inspect current branch diff for code-quality review
+- [x] Identify any high-impact maintainability findings
+- [x] Return review result

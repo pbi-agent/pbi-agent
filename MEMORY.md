@@ -48,3 +48,4 @@
 
 ## 2026-06-16
 - Updated `/code-quality-review` scope rules so explicit filenames/paths/`@file` mentions/globs trigger full-file review instead of branch-diff-only review. Validation: `git diff --check -- .agents/commands/code-quality-review.md TODO.md MEMORY.md` passed.
+- Fixed ChatGPT Codex review findings by moving WebSocket transport/framing/error normalization to `chatgpt_codex_transport.py` and replacing backend disabled branches with enabled/null implementations behind a protocol/factory. Validation: touched-file Ruff format/check passed; `uv run pytest -q --tb=short -x tests/test_openai_provider.py` passed; source-only basedpyright passed. Full test-file basedpyright remains noisy with pre-existing test typing errors.
