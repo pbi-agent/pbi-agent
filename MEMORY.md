@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-06-11
+- Last compacted: 2026-06-16
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -19,7 +19,7 @@
 - Project catalogs/install: top-level `skills`, `commands`, `agents`; public catalogs under `pbi-agent/{skills,commands,agents}`; local install to `.agents/...`. Settings support official/custom install, force-replace conflict flow, ProviderModal/FormDialog-style add dialogs, generated API types, static rebuilds.
 - Skills/agents: disabled project skills stored workspace-scoped in `sessions.db` (`disabled_project_skills`); disabled `$skill` mentions add per-turn instructions with composer token boundaries. `.agents/agents/*.md` supports `name`, `description`, `model_profile_id`, `allowed_tools`; catalogs list disabled agents, runtime filters unless explicitly tagged.
 - Sub-agents: child defaults from active profile/CLI + `sub_agent_model`; parent CLI/command tool overrides flow to profiled sub-agents, but parent profile settings do not mask child profiles. Caps: 400 provider requests, 1200s, no recursion. Web UI keeps child work in stable parent cards; child routes own wait/input/processing/usage.
-- Local commands: `plan` no questions; `plan-interactive` uses `ask_user`; `review` Markdown/autonomous; `fix-review` handles `/review` and `/code-quality-review` outputs and stops on `No findings.` / `No code-quality findings.`; `refine-task` clarifies only; `ship-task` branch/merge helpers; `release` needs explicit publish wording and no history rewrite after PR unless approved. Commands pin strict `allowed_tools`; complexity profiles: `worker-mini`, `planner`, `reviewer`, `worker`, `worker-pro`.
+- Local commands: `plan` no questions; `plan-interactive` uses `ask_user`; `review` Markdown/autonomous; `code-quality-review` treats explicit filenames/paths/`@file`/globs as full-file review scope; `fix-review` handles `/review` and `/code-quality-review` outputs and stops on `No findings.` / `No code-quality findings.`; `refine-task` clarifies only; `ship-task` branch/merge helpers; `release` needs explicit publish wording and no history rewrite after PR unless approved. Commands pin strict `allowed_tools`; complexity profiles: `worker-mini`, `planner`, `reviewer`, `worker`, `worker-pro`.
 - Kanban/release: `/create-task` only creates cards via `pbi-agent kanban create`. Kanban worker returns complete outcomes despite recoverable tool errors; fatal exceptions/interrupts fail. Release docs use `release-writing`; changelog index `docs/changelog/index.md`, files `docs/changelog/v<version>.md`; release flow needs validation triage, publish verification, continuation-gate safety. v0.12.0, v0.12.1, and v0.13.0 shipped; v0.12.1 bookkeeping only.
 - Branding/providers: public copy = local coding agent. Preserve `pbi-agent`, `pbi_agent`, `PBI_AGENT_*`, `~/.pbi-agent`, logo `src/pbi_agent/web/static/logo.jpg`.
 - Provider modularization: shared helpers in `src/pbi_agent/providers/{transport,auth_strategies,endpoints,tool_execution,runtime}.py`; protocol helpers in `src/pbi_agent/providers/protocols/`. Existing providers use these where safe; OpenAI transport remains specialized, tool execution shared. Generic Chat Completions usage must preserve OpenAI-compatible prompt cache fields (`prompt_tokens_details.cached_tokens`, cache writes) into `TokenUsage`.
@@ -46,8 +46,5 @@
 
 ## Detailed Task Events
 
-## 2026-06-11
-- Diagnosed missing cached-token KPI for TokenRouter/Minimax-style generic Chat Completions: local DB lacked the provided run id, but generic parser was dropping `usage.prompt_tokens_details.cached_tokens`; preserved cache read/write fields and added focused test. Validation: `uv run pytest -q --tb=short -x tests/test_generic_provider.py`, Ruff check, Ruff format check, and basedpyright passed.
-- Fixed `/code-quality-review` finding by replacing the generic Chat Completions variadic usage scanner with explicit `_parse_usage()` helpers and named alias lists. Validation: focused generic-provider pytest, Ruff check/format check on touched files, and file-scoped basedpyright passed.
-- Updated `/fix-review` command prompt to handle `/code-quality-review` findings, including `No code-quality findings.`, `severity`, `file:line`, and maintainability-remedy guidance. Validation: `git diff --check -- .agents/commands/fix-review.md TODO.md MEMORY.md` passed; no runtime tests for Markdown-only prompt change.
-- Compressed `.agents/commands/fix-review.md` prose with `$compress` while preserving frontmatter, headings, inline code, and behavior. Validation: `git diff --check -- .agents/commands/fix-review.md TODO.md MEMORY.md` passed.
+## 2026-06-16
+- Updated `/code-quality-review` scope rules so explicit filenames/paths/`@file` mentions/globs trigger full-file review instead of branch-diff-only review. Validation: `git diff --check -- .agents/commands/code-quality-review.md TODO.md MEMORY.md` passed.

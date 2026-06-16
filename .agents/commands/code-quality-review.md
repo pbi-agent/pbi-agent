@@ -7,9 +7,16 @@ allowed_tools: read,shell
 
 # Code Quality Review
 
-Review the current branch diff for structural maintainability, abstraction health, ownership, control flow, and codebase impact.
+Review the requested scope for structural maintainability, abstraction health, ownership, control flow, and codebase impact.
 
-Run `git status --short --branch`, inspect the relevant diff, and infer the task from conversation. Scope findings to in-scope changes.
+## Scope
+
+- If the user invokes this command with one or more filenames, paths, `@file` mentions, or globs, treat those files as the explicit review scope.
+- For explicit file scope, inspect the entire current file content, not just the branch diff. Use `git status --short --branch` and relevant diffs only as context.
+- Do not ignore an explicitly named file because it is unchanged or has no diff.
+- If no explicit file or path is provided, review the current branch diff.
+
+Infer the task from conversation. Scope findings to the explicit files or in-scope changes.
 
 Do not approve merely because behavior or tests pass. Do not turn the review into iterative architecture coaching.
 

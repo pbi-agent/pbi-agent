@@ -1,3 +1,3 @@
-- [x] Compress `.agents/commands/fix-review.md`
-- [x] Validate Markdown diff
+- [x] Update `/code-quality-review` scope instructions for explicit files
+- [x] Validate Markdown-only change
 - [x] Update task memory
