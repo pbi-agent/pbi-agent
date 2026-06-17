@@ -1212,7 +1212,11 @@ class OpenAIProvider(Provider):
             ]
         if instructions:
             body["instructions"] = instructions
-        if include_previous_response_id and self._previous_response_id:
+        if (
+            include_previous_response_id
+            and self._previous_response_id
+            and self._supports_previous_response_id()
+        ):
             body["previous_response_id"] = self._previous_response_id
         if self._settings.service_tier:
             body["service_tier"] = self._settings.service_tier

@@ -1,2 +1,2 @@
-- [x] Clean requested memory references
-- [x] Verify requested terms are absent from memory
+- [x] Inspect current diff for code-quality review
+- [x] Report high-impact maintainability findings or no findings
