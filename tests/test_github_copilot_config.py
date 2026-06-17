@@ -55,7 +55,7 @@ def test_resolve_runtime_for_profile_id_uses_saved_github_copilot_session(
 def test_provider_ui_metadata_exposes_auth_mode_labels_and_methods() -> None:
     metadata = provider_ui_metadata("github_copilot")
 
-    assert metadata["label"] == "GitHub Copilot (Subscription)"
+    assert metadata["label"] == "GitHub Copilot Subscription"
     assert metadata["description"] == "Uses your GitHub Copilot subscription account."
     assert metadata["default_auth_mode"] == AUTH_MODE_COPILOT_ACCOUNT
     assert metadata["auth_mode_metadata"] == {

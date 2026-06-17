@@ -301,6 +301,85 @@ data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","
     )
 
 
+def test_github_copilot_tool_followup_replays_history_without_previous_response_id(
+    monkeypatch,
+) -> None:
+    request_bodies: list[dict[str, object]] = []
+    responses = [
+        """event: response.created
+data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.4","created_at":1}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"explore_workspace","arguments":""}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","delta":"{\\"pattern\\":\\"LICENSE\\",\\"target\\":\\"path\\"}"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"explore_workspace","arguments":"{\\"pattern\\":\\"LICENSE\\",\\"target\\":\\"path\\"}"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_1","model":"gpt-5.4","usage":{"input_tokens":5,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":6}}}
+
+""",
+        """event: response.created
+data: {"type":"response.created","response":{"id":"resp_2","model":"gpt-5.4","created_at":2}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_2"}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_2","delta":"Done"}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"msg_2"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_2","model":"gpt-5.4","usage":{"input_tokens":9,"input_tokens_details":{"cached_tokens":0},"output_tokens":1,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":10}}}
+
+""",
+    ]
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        request_bodies.append(json.loads(request.data.decode("utf-8")))
+        return _FakeHTTPResponse(responses[len(request_bodies) - 1])
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GitHubCopilotProvider(_make_settings())
+    display = _DisplayStub()
+    response = provider.request_turn(
+        user_input=UserTurnInput(text="summarize LICENSE"),
+        display=display,
+        session_usage=TokenUsage(model="gpt-5.4"),
+        turn_usage=TokenUsage(model="gpt-5.4"),
+    )
+    provider.request_turn(
+        tool_result_items=[
+            {
+                "type": "function_call_output",
+                "call_id": response.function_calls[0].call_id,
+                "output": "LICENSE text",
+            }
+        ],
+        display=display,
+        session_usage=TokenUsage(model="gpt-5.4"),
+        turn_usage=TokenUsage(model="gpt-5.4"),
+    )
+
+    second_body = request_bodies[1]
+    second_input = second_body["input"]
+
+    assert "previous_response_id" not in second_body
+    assert isinstance(second_input, list)
+    assert any(item.get("type") == "function_call" for item in second_input)
+    assert any(item.get("type") == "function_call_output" for item in second_input)
+
+
 def test_github_copilot_non_openai_model_uses_chat_completions(
     monkeypatch,
 ) -> None:

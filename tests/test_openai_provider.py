@@ -31,16 +31,18 @@ from pbi_agent.models.messages import (
 from pbi_agent.providers.chatgpt_codex_backend import (
     CHATGPT_CODEX_VERSION,
     CHATGPT_ORIGINATOR,
-    CHATGPT_TURN_STATE_HEADER,
     CHATGPT_WEBSOCKET_BETA_HEADER,
+    ChatGPTCodexBackend,
+    chatgpt_user_agent,
+    websocket_url_for_responses_url,
+)
+from pbi_agent.providers.chatgpt_codex_transport import (
+    CHATGPT_TURN_STATE_HEADER,
     _WS_OPCODE_PING,
     _WS_OPCODE_PONG,
     _WS_OPCODE_TEXT,
-    ChatGPTCodexBackend,
     ChatGPTCodexWebSocketError,
     ResponsesWebSocket,
-    chatgpt_user_agent,
-    websocket_url_for_responses_url,
 )
 from pbi_agent.providers.openai_provider import (
     OpenAIProvider,
@@ -315,6 +317,7 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
         "command",
         "working_directory",
         "timeout_ms",
+        "compression",
     ]
     assert shell_parameters["properties"]["working_directory"]["description"] == (
         "Working directory for the command. Relative paths resolve "
@@ -323,6 +326,10 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
     assert shell_parameters["properties"]["timeout_ms"]["description"] == (
         "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
         "maximum 300 000 (5 minutes)."
+    )
+    assert shell_parameters["properties"]["compression"]["description"] == (
+        "Whether to compress stdout/stderr before returning them. Defaults to true. "
+        "Set false when the full raw output is needed."
     )
     assert "max_output_tokens" not in body
     assert "prompt_cache_retention" not in body
@@ -610,7 +617,7 @@ def test_openai_chatgpt_replays_restored_user_images_without_previous_id(
         ]
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 
@@ -757,7 +764,7 @@ def test_openai_chatgpt_codex_persists_and_replays_only_final_message(
         return next(responses)
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 
@@ -1311,7 +1318,7 @@ def test_chatgpt_codex_websocket_protocol_headers_override_conflicts(
             pass
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.socket.create_connection",
+        "pbi_agent.providers.chatgpt_codex_transport.socket.create_connection",
         lambda *args, **kwargs: FakeSocket(),
     )
 
@@ -1348,7 +1355,7 @@ def test_chatgpt_codex_websocket_connect_timeout_is_retryable(monkeypatch) -> No
         raise connect_error
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.socket.create_connection",
+        "pbi_agent.providers.chatgpt_codex_transport.socket.create_connection",
         fake_create_connection,
     )
 
@@ -1584,7 +1591,7 @@ def test_openai_request_turn_uses_chatgpt_account_auth_headers(monkeypatch) -> N
         ]
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 
@@ -1715,7 +1722,7 @@ def test_openai_request_turn_replays_chatgpt_turn_state_within_turn(
         return next(responses)
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
     provider = OpenAIProvider(
@@ -1899,7 +1906,7 @@ def test_openai_request_turn_retries_incomplete_response_event(
         return next(responses)
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 
@@ -2770,7 +2777,7 @@ def test_openai_chatgpt_websocket_uses_previous_id_for_live_followup(
         return next(responses)
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 
@@ -2924,7 +2931,7 @@ def test_openai_chatgpt_replay_collapses_completed_tool_turns(
         return next(responses)
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 
@@ -3031,7 +3038,7 @@ def test_openai_chatgpt_websocket_connection_limit_reconnects_and_resends(
         ]
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 
@@ -3110,7 +3117,7 @@ def test_openai_chatgpt_websocket_retryable_timeout_traces_start_and_retry(
         ]
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
     monkeypatch.setattr(
@@ -3224,7 +3231,7 @@ def test_openai_chatgpt_websocket_server_error_event_retries(
         ]
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
     monkeypatch.setattr(
@@ -3283,7 +3290,7 @@ def test_openai_chatgpt_websocket_usage_limit_429_does_not_retry(
         )
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 
@@ -3396,7 +3403,7 @@ def test_openai_chatgpt_previous_response_not_found_replays_active_turn(
         return response
 
     monkeypatch.setattr(
-        "pbi_agent.providers.chatgpt_codex_backend.ChatGPTCodexBackend.send_websocket_request",
+        "pbi_agent.providers.chatgpt_codex_backend._EnabledChatGPTCodexBackend.send_websocket_request",
         fake_send_websocket_request,
     )
 

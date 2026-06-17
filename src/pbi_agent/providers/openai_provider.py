@@ -31,9 +31,10 @@ from pbi_agent.providers import retry as provider_retry
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.chatgpt_codex_backend import (
     ChatGPTCodexBackend,
-    ChatGPTCodexWebSocketError,
+    ChatGPTCodexBackendProtocol,
     ResponsesRequestOptions,
 )
+from pbi_agent.providers.chatgpt_codex_transport import ChatGPTCodexWebSocketError
 from pbi_agent.providers.protocols.openai_responses import (
     response_history_item_for_input,
     responses_include,
@@ -107,7 +108,7 @@ class OpenAIProvider(Provider):
         self._tool_catalog = tool_catalog or ToolCatalog.from_builtin_registry()
         self._excluded_tools = default_excluded_tool_names(excluded_tools)
         self._tools: list[dict[str, Any]] = []
-        self._chatgpt_backend = ChatGPTCodexBackend(
+        self._chatgpt_backend: ChatGPTCodexBackendProtocol = ChatGPTCodexBackend(
             responses_url=self._settings.responses_url
         )
         self.refresh_tools()
@@ -1211,7 +1212,11 @@ class OpenAIProvider(Provider):
             ]
         if instructions:
             body["instructions"] = instructions
-        if include_previous_response_id and self._previous_response_id:
+        if (
+            include_previous_response_id
+            and self._previous_response_id
+            and self._supports_previous_response_id()
+        ):
             body["previous_response_id"] = self._previous_response_id
         if self._settings.service_tier:
             body["service_tier"] = self._settings.service_tier

@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 SESSION_DB_PATH_ENV = "PBI_AGENT_SESSION_DB_PATH"
@@ -39,6 +39,7 @@ KANBAN_RUN_STATUS_IDLE = "idle"
 KANBAN_RUN_STATUS_RUNNING = "running"
 KANBAN_RUN_STATUS_COMPLETED = "completed"
 KANBAN_RUN_STATUS_FAILED = "failed"
+_SQLITE_VARIABLE_BATCH_SIZE = 900
 
 _SCHEMA = """\
 CREATE TABLE IF NOT EXISTS sessions (
@@ -499,6 +500,14 @@ def _normalize_project_agent_name(agent_name: str) -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _sqlite_variable_batches(
+    values: list[str] | list[int],
+) -> Iterator[list[str] | list[int]]:
+    batch_size = max(1, _SQLITE_VARIABLE_BATCH_SIZE)
+    for start in range(0, len(values), batch_size):
+        yield values[start : start + batch_size]
 
 
 def _storage_statuses_for_run_status(status: str) -> tuple[str, ...]:
@@ -1255,12 +1264,16 @@ class SessionStore:
     ) -> int:
         if not values:
             return 0
-        placeholders = ",".join("?" for _ in values)
-        cursor = self._conn.execute(
-            f"DELETE FROM {table} WHERE {column} IN ({placeholders})",
-            values,
-        )
-        return cursor.rowcount
+        deleted = 0
+        for batch in _sqlite_variable_batches(values):
+            placeholders = ",".join("?" for _ in batch)
+            cursor = self._conn.execute(
+                f"DELETE FROM {table} WHERE {column} IN ({placeholders})",
+                batch,
+            )
+            if cursor.rowcount > 0:
+                deleted += cursor.rowcount
+        return deleted
 
     def _clear_where_in(
         self,
@@ -1270,12 +1283,16 @@ class SessionStore:
     ) -> int:
         if not values:
             return 0
-        placeholders = ",".join("?" for _ in values)
-        cursor = self._conn.execute(
-            f"UPDATE {table} SET {column} = NULL WHERE {column} IN ({placeholders})",
-            values,
-        )
-        return cursor.rowcount
+        updated = 0
+        for batch in _sqlite_variable_batches(values):
+            placeholders = ",".join("?" for _ in batch)
+            cursor = self._conn.execute(
+                f"UPDATE {table} SET {column} = NULL WHERE {column} IN ({placeholders})",
+                batch,
+            )
+            if cursor.rowcount > 0:
+                updated += cursor.rowcount
+        return updated
 
     def acquire_web_manager_lease(
         self,

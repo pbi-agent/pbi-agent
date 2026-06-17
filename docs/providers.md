@@ -201,7 +201,7 @@ Notes:
 
 The browser UI exposes the same flow from **Settings**:
 
-1. Add or edit a **ChatGPT (Subscription)** provider.
+1. Add or edit a **ChatGPT Subscription** provider.
 2. Leave **Authentication** as **ChatGPT account** and save it.
 3. On the provider card, click **Connect**.
 4. Complete the browser sign-in, or switch to **Device code** in the modal if needed.
@@ -262,7 +262,7 @@ Notes:
 
 The browser UI exposes the same flow from **Settings**:
 
-1. Add or edit a **GitHub Copilot (Subscription)** provider.
+1. Add or edit a **GitHub Copilot Subscription** provider.
 2. Leave **Authentication** as **GitHub Copilot account** and save it.
 3. On the provider card, click **Connect**.
 4. Complete the device-code sign-in shown in the modal.

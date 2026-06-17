@@ -385,7 +385,7 @@ function makeConfigBootstrap(
           supports_stt: false,
         },
         chatgpt: {
-          label: "ChatGPT (Subscription)",
+          label: "ChatGPT Subscription",
           description: "Uses your ChatGPT subscription account.",
           default_auth_mode: "chatgpt_account",
           auth_modes: ["chatgpt_account"],
@@ -409,7 +409,7 @@ function makeConfigBootstrap(
           supports_stt: false,
         },
         github_copilot: {
-          label: "GitHub Copilot (Subscription)",
+          label: "GitHub Copilot Subscription",
           description: "Uses your GitHub Copilot subscription account.",
           default_auth_mode: "copilot_account",
           auth_modes: ["copilot_account"],
@@ -2563,10 +2563,10 @@ describe("SettingsPage", () => {
     const menu = await openProviderKindMenu(user);
     expect(within(menu).getByText("OpenAI API")).toBeInTheDocument();
     expect(
-      within(menu).getByText("ChatGPT (Subscription)"),
+      within(menu).getByText("ChatGPT Subscription"),
     ).toBeInTheDocument();
     expect(
-      within(menu).getByText("GitHub Copilot (Subscription)"),
+      within(menu).getByText("GitHub Copilot Subscription"),
     ).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.getByText("Uses an OpenAI API key.")).toBeInTheDocument();
@@ -2710,7 +2710,7 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
-    await selectProviderKind(user, "ChatGPT (Subscription)");
+    await selectProviderKind(user, "ChatGPT Subscription");
     await user.type(screen.getByPlaceholderText("e.g. My OpenAI"), "ChatGPT Starter");
 
     expect(

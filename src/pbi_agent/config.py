@@ -750,8 +750,8 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
     kind_label = {
         "openai": "OpenAI API",
         "azure": "Azure",
-        "chatgpt": "ChatGPT (Subscription)",
-        "github_copilot": "GitHub Copilot (Subscription)",
+        "chatgpt": "ChatGPT Subscription",
+        "github_copilot": "GitHub Copilot Subscription",
         "xai": "xAI",
         "google": "Google",
         "google_gcp": "Google Cloud Vertex AI",
