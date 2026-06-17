@@ -1,3 +1,2 @@
-- [x] Inspect current branch diff
-- [x] Review changed code for structural maintainability
-- [x] Report code-quality findings
+- [x] Clean requested memory references
+- [x] Verify requested terms are absent from memory
