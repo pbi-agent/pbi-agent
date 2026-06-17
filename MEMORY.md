@@ -49,3 +49,4 @@
 
 ## 2026-06-17
 - Removed shell compression metadata from returned payloads and direct shell output formatting; compressed streams now return only stdout/stderr plus existing status/truncation fields. Validation: focused shell pytest, touched-file Ruff check/format check, and touched-file basedpyright passed.
+- Fixed startup maintenance purge failures from oversized SQLite `IN` variables by batching session/run/event cleanup helpers. Validation: `tests/test_maintenance.py`, touched-file Ruff check/format check, touched-file basedpyright, and `git diff --check` passed.

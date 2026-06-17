@@ -108,6 +108,99 @@ def test_purge_old_session_run_events_leases_and_preserves_kanban(
         )  # noqa: SLF001
 
 
+def test_purge_old_data_batches_large_id_lists(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("pbi_agent.session_store._SQLITE_VARIABLE_BATCH_SIZE", 2)
+    db_path = tmp_path / "sessions.db"
+    with SessionStore(db_path) as store:
+        old_session_ids: list[str] = []
+        for index in range(5):
+            session_id = store.create_session("/w", "openai", "gpt", f"old {index}")
+            run_id = f"old-run-{index}"
+            old_session_ids.append(session_id)
+            store.create_run_session(
+                run_session_id=run_id,
+                session_id=session_id,
+                agent_name=None,
+                agent_type=None,
+                provider="openai",
+                provider_id=None,
+                profile_id=None,
+                model="gpt",
+            )
+            store.add_message(session_id, "user", "old")
+            store.add_observability_event(
+                run_session_id=run_id,
+                session_id=session_id,
+                step_index=1,
+                event_type="api",
+                timestamp=_iso(40),
+            )
+            store.create_kanban_task(
+                directory="/w",
+                title=f"old task {index}",
+                prompt="keep",
+                stage="backlog",
+                session_id=session_id,
+            )
+        store._conn.execute(  # noqa: SLF001 - targeted fixture aging
+            "UPDATE sessions SET updated_at = ?",
+            (_iso(40),),
+        )
+        store._conn.execute(  # noqa: SLF001
+            "UPDATE run_sessions SET started_at = ?",
+            (_iso(40),),
+        )
+        store._conn.commit()  # noqa: SLF001
+
+        new_session_id = store.create_session("/w", "openai", "gpt", "new")
+        store.create_run_session(
+            run_session_id="new-run",
+            session_id=new_session_id,
+            agent_name=None,
+            agent_type=None,
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model="gpt",
+        )
+        store.add_message(new_session_id, "user", "new")
+        store.add_observability_event(
+            run_session_id="new-run",
+            session_id=new_session_id,
+            step_index=1,
+            event_type="api",
+            timestamp=_iso(0),
+        )
+
+        result = store.purge_old_data(_iso(30))
+
+        assert result["sessions"] == 5
+        assert result["messages"] == 5
+        assert result["run_sessions"] == 5
+        assert result["observability_events"] == 5
+        assert all(
+            store.get_session(session_id) is None for session_id in old_session_ids
+        )
+        assert store.get_session(new_session_id) is not None
+        assert store._conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1  # noqa: SLF001
+        assert (
+            store._conn.execute("SELECT COUNT(*) FROM run_sessions").fetchone()[0] == 1
+        )  # noqa: SLF001
+        assert (
+            store._conn.execute("SELECT COUNT(*) FROM observability_events").fetchone()[
+                0
+            ]
+            == 1
+        )  # noqa: SLF001
+        assert [task.session_id for task in store.list_kanban_tasks("/w")] == [
+            None,
+            None,
+            None,
+            None,
+            None,
+        ]
+
+
 def test_upload_purge_preserves_referenced_and_deletes_old_orphans(
     tmp_path: Path,
 ) -> None:
