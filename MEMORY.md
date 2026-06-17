@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-06-16
+- Last compacted: 2026-06-17
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -12,6 +12,7 @@
 - Core constraints: no migrations/backcompat. Provider/tool HTTP uses `urllib.request`. Internal data under `~/.pbi-agent/`. `pbi-agent web` is default command; saved web settings/profile apply there, provider/model runtime flags apply to `run`.
 - API/frontend contracts: keep FastAPI routes/schemas/session manager aligned with `webapp/src/api.ts`, `webapp/src/types.ts`, generated API types, and static bundle. `bun run web:api-types` runs `scripts/generate_api_types.py`; `test_api_types_codegen.py` enforces output. Add JSON calls via generated `ApiOperationResponses`/`ApiJsonRequestBodies`, `apiRequest()`, `jsonBody()`. Provider config API views include nullable GCP fields for non-GCP providers.
 - Tool surface: use `explore_workspace` for read/search/list; removed public `python_exec`, `list_files`, `search_files`, `read_file`, `search_workspace`. `read_web_url` belongs to `web` group.
+- Shell output compression: `shell` has `compression` boolean default true; non-empty stdout/stderr use a local `headroom.compression.UniversalCompressor` with `use_kompress=False`/`ccr_enabled=False` (no message/model API or download/model path); failures fall back to bounded raw output; returned payloads omit compression metadata and only keep output/status/truncation fields.
 - `explore_workspace`: wraps `codetool-explore==0.7.0`; read group only tool. Targets content/path/read/list; regex default true; root arrays and unambiguous whitespace split supported; existing paths with spaces preserved; read/list single-root; root is base not boundary; workspace-confined; file root reads file directly.
 - `allowed_tools`: single group allow-list for profiles, `run`, commands, sub-agents: `read`, `write`, `web`, `sub-agent`, `shell`. Commands can use command-only `ask-user`; runtime tool is `ask_user`. CLI flag `--allowed-tools`; command/sub-agent frontmatter key `allowed_tools`; native web search only via `web`; empty list disables configurable built-ins; `ask_user` UI-only/non-configurable outside command frontmatter and stripped from sub-agents.
 - System prompts: build from active tool specs/settings/exclusions (`ToolSpec.prompt_usage`); omit disabled sub-agent/skill guidance. Base prompt = preamble + active `<tool_usage_rules>`. Optional workspace `AGENTS.md` loads as `<project_rules>`; `MEMORY.md` loads after as `<workspace_memory>` for main and sub-agents.
@@ -46,6 +47,5 @@
 
 ## Detailed Task Events
 
-## 2026-06-16
-- Updated `/code-quality-review` scope rules so explicit filenames/paths/`@file` mentions/globs trigger full-file review instead of branch-diff-only review. Validation: `git diff --check -- .agents/commands/code-quality-review.md TODO.md MEMORY.md` passed.
-- Fixed ChatGPT Codex review findings by moving WebSocket transport/framing/error normalization to `chatgpt_codex_transport.py` and replacing backend disabled branches with enabled/null implementations behind a protocol/factory. Validation: touched-file Ruff format/check passed; `uv run pytest -q --tb=short -x tests/test_openai_provider.py` passed; source-only basedpyright passed. Full test-file basedpyright remains noisy with pre-existing test typing errors.
+## 2026-06-17
+- Removed shell compression metadata from returned payloads and direct shell output formatting; compressed streams now return only stdout/stderr plus existing status/truncation fields. Validation: focused shell pytest, touched-file Ruff check/format check, and touched-file basedpyright passed.

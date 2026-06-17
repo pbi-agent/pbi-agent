@@ -1,3 +1,4 @@
-- [x] Inspect current branch diff for code-quality review
-- [x] Identify any high-impact maintainability findings
-- [x] Return review result
+- [x] Remove shell compression metadata from returned payloads
+- [x] Update affected shell tests
+- [x] Run focused validation
+- [x] Update task memory
