@@ -385,7 +385,7 @@ function makeConfigBootstrap(
           supports_stt: false,
         },
         chatgpt: {
-          label: "ChatGPT (Subscription)",
+          label: "ChatGPT Subscription",
           description: "Uses your ChatGPT subscription account.",
           default_auth_mode: "chatgpt_account",
           auth_modes: ["chatgpt_account"],
@@ -2563,7 +2563,7 @@ describe("SettingsPage", () => {
     const menu = await openProviderKindMenu(user);
     expect(within(menu).getByText("OpenAI API")).toBeInTheDocument();
     expect(
-      within(menu).getByText("ChatGPT (Subscription)"),
+      within(menu).getByText("ChatGPT Subscription"),
     ).toBeInTheDocument();
     expect(
       within(menu).getByText("GitHub Copilot (Subscription)"),
@@ -2710,7 +2710,7 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     await user.click(await screen.findByRole("button", { name: "Add Provider" }));
-    await selectProviderKind(user, "ChatGPT (Subscription)");
+    await selectProviderKind(user, "ChatGPT Subscription");
     await user.type(screen.getByPlaceholderText("e.g. My OpenAI"), "ChatGPT Starter");
 
     expect(

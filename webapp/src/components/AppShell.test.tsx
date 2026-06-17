@@ -114,7 +114,7 @@ function makeConfigBootstrap(
       openai_service_tiers: [],
       provider_metadata: {
         chatgpt: {
-          label: "ChatGPT (Subscription)",
+          label: "ChatGPT Subscription",
           description: "Uses your ChatGPT subscription account.",
           default_auth_mode: "chatgpt_account",
           auth_modes: ["chatgpt_account"],
