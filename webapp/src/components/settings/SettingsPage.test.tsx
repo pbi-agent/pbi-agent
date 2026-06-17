@@ -409,7 +409,7 @@ function makeConfigBootstrap(
           supports_stt: false,
         },
         github_copilot: {
-          label: "GitHub Copilot (Subscription)",
+          label: "GitHub Copilot Subscription",
           description: "Uses your GitHub Copilot subscription account.",
           default_auth_mode: "copilot_account",
           auth_modes: ["copilot_account"],
@@ -2566,7 +2566,7 @@ describe("SettingsPage", () => {
       within(menu).getByText("ChatGPT Subscription"),
     ).toBeInTheDocument();
     expect(
-      within(menu).getByText("GitHub Copilot (Subscription)"),
+      within(menu).getByText("GitHub Copilot Subscription"),
     ).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.getByText("Uses an OpenAI API key.")).toBeInTheDocument();
