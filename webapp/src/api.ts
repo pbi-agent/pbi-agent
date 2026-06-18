@@ -85,6 +85,8 @@ type ActiveModelProfileResponsePayload = {
 };
 type SttProviderResponsePayload = ApiResponse<"PUT /api/config/stt-provider">;
 type SttTranscriptionResponsePayload = ApiResponse<"POST /api/stt/transcribe">;
+type PromptEnhancementPayload = ApiJsonRequestBodies["POST /api/prompt/enhance"];
+type PromptEnhancementResponsePayload = ApiResponse<"POST /api/prompt/enhance">;
 type MaintenanceConfigResponsePayload = {
   maintenance: MaintenanceConfig;
   config_revision: string;
@@ -810,6 +812,19 @@ export async function expandSessionInput(text: string): Promise<ExpandedSessionI
     {
       method: "POST",
       body: jsonBody("POST /api/sessions/expand-input", { text }),
+    },
+  );
+}
+
+export async function enhancePrompt(
+  payload: PromptEnhancementPayload,
+): Promise<PromptEnhancementResponsePayload> {
+  return apiRequest<"POST /api/prompt/enhance", PromptEnhancementResponsePayload>(
+    "POST /api/prompt/enhance",
+    "/api/prompt/enhance",
+    {
+      method: "POST",
+      body: jsonBody("POST /api/prompt/enhance", payload),
     },
   );
 }

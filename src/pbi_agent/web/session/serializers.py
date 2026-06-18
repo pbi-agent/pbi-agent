@@ -94,6 +94,19 @@ def _run_status_from_run(record: RunSessionRecord) -> str:
     return "started"
 
 
+def _session_status_from_live_session(live_session: "LiveSessionState") -> str:
+    status = live_session.status
+    if status == "running" and live_session.ended_at is None:
+        snapshot = live_session.snapshot
+        processing_active = bool((snapshot.processing or {}).get("active"))
+        waiting_on_user = (
+            snapshot.input_enabled or snapshot.pending_user_questions is not None
+        )
+        if waiting_on_user and not processing_active and snapshot.wait_message is None:
+            return "waiting_for_input"
+    return status
+
+
 def _persisted_web_run_status(  # pyright: ignore[reportUnusedFunction] - imported by session route modules
     live_session: "LiveSessionState",
 ) -> str:
@@ -126,7 +139,7 @@ def _serialize_session(  # pyright: ignore[reportUnusedFunction] - imported by s
         active_run_id = active_run.run_session_id
         task_id = active_run.task_id
     if active_live_session is not None:
-        status = active_live_session.status
+        status = _session_status_from_live_session(active_live_session)
         active_live_session_id = active_live_session.live_session_id
         task_id = active_live_session.task_id
     return {

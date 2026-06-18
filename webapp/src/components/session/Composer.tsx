@@ -11,12 +11,8 @@ import {
   type SyntheticEvent,
 } from "react";
 import {
-  ArrowUpIcon,
-  BadgeDollarSignIcon,
   ImageIcon,
-  MicIcon,
   PlusIcon,
-  SquareIcon,
   TerminalIcon,
   XIcon,
 } from "lucide-react";
@@ -25,9 +21,14 @@ import type { AgentMentionItem, FileMentionItem, SkillMentionItem, SlashCommandI
 import { cn } from "../../lib/utils";
 import { createWavRecorder, type WavRecorder } from "../../lib/audioRecorder";
 import { DictationWaveform } from "./DictationWaveform";
+import {
+  ComposerActionButtons,
+  isComposerActionShortcut,
+  useComposerActions,
+  type ComposerDictationState,
+} from "./ComposerActions";
 import { useFileExistence } from "../../hooks/useFileExistence";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
-import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -38,8 +39,6 @@ import {
 } from "../ui/dropdown-menu";
 import {
   InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
   InputGroupTextarea,
 } from "../ui/input-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -65,6 +64,7 @@ interface ComposerProps {
   dictationAvailable?: boolean;
   dictationUnavailableReason?: string | null;
   onTranscribeDictation?: (file: File) => Promise<string>;
+  onEnhancePrompt?: (text: string) => Promise<string>;
   restoredInput?: string | null;
   onRestoredInputConsumed?: () => void;
   onInterrupt?: () => void;
@@ -110,8 +110,6 @@ type PendingImage = {
 type ImageFileInput = HTMLInputElement & {
   showPicker?: () => void;
 };
-
-type DictationState = "idle" | "recording" | "transcribing";
 
 const SUPPORTED_IMAGE_TYPES = new Set([
   "image/png",
@@ -354,18 +352,6 @@ function isSupportedImageFile(file: File): boolean {
   return SUPPORTED_IMAGE_EXTENSIONS.some((extension) => name.endsWith(extension));
 }
 
-function isDictationShortcut(event: KeyboardEvent<HTMLElement>): boolean {
-  const key = event.key.toLowerCase();
-  return (
-    event.ctrlKey &&
-    !event.altKey &&
-    !event.metaKey &&
-    !event.shiftKey &&
-    !event.repeat &&
-    (key === " " || key === "spacebar" || event.code === "Space")
-  );
-}
-
 function dictationErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof DOMException) {
     if (error.name === "NotAllowedError" || error.name === "SecurityError") {
@@ -394,6 +380,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   dictationAvailable = false,
   dictationUnavailableReason = "Choose a speech-to-text provider in Settings to use dictation.",
   onTranscribeDictation,
+  onEnhancePrompt,
   restoredInput = null,
   onRestoredInputConsumed,
   onInterrupt,
@@ -413,7 +400,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [completionSelectedIndex, setCompletionSelectedIndex] = useState(0);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const [historyDraft, setHistoryDraft] = useState<string | null>(null);
-  const [dictationState, setDictationState] = useState<DictationState>("idle");
+  const [dictationState, setDictationState] = useState<ComposerDictationState>("idle");
   const completionRequestIdRef = useRef(0);
   const activeCompletionRef = useRef<{
     mode: CompletionMode | null;
@@ -439,7 +426,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
   const canSend =
     (Boolean(liveSessionId) || canCreateSession) && inputEnabled && !sessionEnded && !isSubmitting;
-  const showProcessingAnimation = isProcessing && !sessionEnded && !canSend;
   const shellInput = input.trimStart();
   const isShellMode = useMemo(() => input.trimStart().startsWith("!"), [input]);
   const skillNames = useSkillCatalog();
@@ -449,13 +435,6 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   );
   const { isFileKnown } = useFileExistence(fileTokens);
   const shellCommandPreview = shellInput.slice(1).trim();
-  const isActionMenuOpen = canSend && !isShellMode && actionMenuOpen;
-  const inputIsEmpty = input.trim().length === 0;
-  const dictationInProgress = dictationState !== "idle";
-  const showDictationAction =
-    !showStopButton && !isShellMode && (inputIsEmpty || dictationInProgress);
-  const canStartDictation =
-    canSend && inputIsEmpty && dictationAvailable && Boolean(onTranscribeDictation);
   const highlightSegments = parseComposerHighlightSegments(input, {
     skillNames,
     isFileKnown,
@@ -573,7 +552,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   );
 
   const startDictation = useCallback(async () => {
-    if (!canStartDictation) {
+    if (!dictationAvailable || !onTranscribeDictation) {
       setAttachmentMessage(
         dictationUnavailableReason ??
           "Choose a speech-to-text provider in Settings to use dictation.",
@@ -593,7 +572,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         dictationErrorMessage(error, "Unable to start dictation recording."),
       );
     }
-  }, [canStartDictation, dictationUnavailableReason]);
+  }, [dictationAvailable, dictationUnavailableReason, onTranscribeDictation]);
 
   const stopDictation = useCallback(async () => {
     const recorder = dictationRecorderRef.current;
@@ -632,20 +611,49 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     [],
   );
 
+  const applyEnhancedPrompt = useCallback(
+    (enhancedText: string) => {
+      resetHistoryBrowsing();
+      applyInputState(enhancedText, enhancedText.length);
+    },
+    [applyInputState, resetHistoryBrowsing],
+  );
+  const getCurrentInput = useCallback(
+    () => textareaRef.current?.value ?? input,
+    [input],
+  );
+
+  const composerActions = useComposerActions({
+    input,
+    canSend,
+    isProcessing,
+    showStopButton,
+    isShellMode,
+    dictationState,
+    dictationAvailable,
+    hasDictationHandler: Boolean(onTranscribeDictation),
+    onEnhancePrompt,
+    getCurrentInput,
+    applyEnhancedPrompt,
+    toggleDictation,
+  });
+  const isPromptEnhancementPending = composerActions.isPromptEnhancementPending;
+  const promptEnhancementPending = composerActions.promptEnhancementPending;
+  const composerInputAvailable = canSend && !promptEnhancementPending;
+  const showProcessingAnimation =
+    (isProcessing && !sessionEnded && !canSend) || promptEnhancementPending;
+  const processingStatusLabel = promptEnhancementPending
+    ? "Enhancing prompt"
+    : "Assistant is processing";
+  const isActionMenuOpen =
+    composerInputAvailable && !isShellMode && actionMenuOpen;
+
   // While recording, the textarea (and its key-capture) is replaced by the
   // waveform, so the stop shortcut is handled at the document level instead.
   useEffect(() => {
     if (dictationState !== "recording") return;
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      const isShortcut =
-        event.ctrlKey &&
-        !event.altKey &&
-        !event.metaKey &&
-        !event.shiftKey &&
-        !event.repeat &&
-        (key === " " || key === "spacebar" || event.code === "Space");
-      if (!isShortcut || event.defaultPrevented) return;
+      if (!isComposerActionShortcut(event) || event.defaultPrevented) return;
       event.preventDefault();
       void stopDictation();
     };
@@ -902,7 +910,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }, []);
 
   const openImagePicker = useCallback(() => {
-    if (!canSend || isShellMode) {
+    if (!composerInputAvailable || isShellMode) {
       return;
     }
 
@@ -923,10 +931,11 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     }
 
     inputElement.click();
-  }, [canSend, isShellMode, supportsImageInputs]);
+  }, [composerInputAvailable, isShellMode, supportsImageInputs]);
 
   const submitValue = useCallback(
     async (textValue: string) => {
+      if (isPromptEnhancementPending()) return;
       const trimmed = textValue.trim();
       if (!trimmed) return;
       if (trimmed.startsWith("!") && pendingImages.length > 0) {
@@ -958,11 +967,15 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         );
       }
     },
-    [clearPendingImages, closeCompletions, onSubmit, pendingImages, resetHistoryBrowsing],
+    [clearPendingImages, closeCompletions, isPromptEnhancementPending, onSubmit, pendingImages, resetHistoryBrowsing],
   );
 
   useEffect(() => {
-    if (!canSend || activeCompletionMode === null || activeCompletionQuery === null) {
+    if (
+      !composerInputAvailable ||
+      activeCompletionMode === null ||
+      activeCompletionQuery === null
+    ) {
       completionRequestIdRef.current += 1;
       closeCompletions();
       return undefined;
@@ -1097,8 +1110,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   }, [
     activeCompletionMode,
     activeCompletionQuery,
-    canSend,
     closeCompletions,
+    composerInputAvailable,
   ]);
 
   const handleSubmit = async (event?: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
@@ -1306,30 +1319,8 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   );
 
   const handleComposerKeyDownCapture = (event: KeyboardEvent<HTMLFormElement>) => {
-    if (!isDictationShortcut(event)) return;
-    if (dictationState !== "recording" && !showDictationAction) return;
-    event.preventDefault();
-    event.stopPropagation();
-    toggleDictation();
+    composerActions.handleShortcut(event);
   };
-  const dictationButtonLabel =
-    dictationState === "recording"
-      ? "Stop dictation recording"
-      : dictationState === "transcribing"
-        ? "Transcribing dictation"
-        : "Start dictation";
-  const dictationTooltip =
-    dictationState === "recording"
-      ? "Recording dictation… Ctrl+Space to stop."
-      : dictationState === "transcribing"
-        ? "Transcribing dictation…"
-        : canStartDictation
-          ? "Dictate a message (Ctrl+Space)"
-          : dictationUnavailableReason ??
-            "Choose a speech-to-text provider in Settings to use dictation.";
-  const dictationButtonDisabled =
-    dictationState === "transcribing" ||
-    (dictationState === "idle" && !canStartDictation);
 
   return (
     <form
@@ -1356,7 +1347,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       <div className={inputRowClassName}>
         <DropdownMenu
           open={isActionMenuOpen}
-          onOpenChange={(open) => setActionMenuOpen(canSend && !isShellMode && open)}
+          onOpenChange={(open) => setActionMenuOpen(composerInputAvailable && !isShellMode && open)}
         >
           <div className="composer__action-menu">
             <Tooltip>
@@ -1368,7 +1359,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                       variant="outline"
                       size="icon-sm"
                       className="composer__action-trigger"
-                      disabled={!canSend || isShellMode}
+                      disabled={!composerInputAvailable || isShellMode}
                       aria-label="Actions"
                     >
                       <PlusIcon />
@@ -1433,6 +1424,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             onChange={(event) => {
               resetHistoryBrowsing();
               setInput(event.target.value);
+              composerActions.clearPromptEnhancementError();
               setCursorIndex(event.target.selectionStart ?? event.target.value.length);
               autoResize();
             }}
@@ -1450,13 +1442,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                   : "Send a message..."
             }
             rows={1}
-            disabled={!canSend}
+            disabled={!composerInputAvailable}
           />
         </InputGroup>
         )}
         {showProcessingAnimation ? (
           <span className="sr-only" role="status" aria-live="polite">
-            Assistant is processing
+            {processingStatusLabel}
           </span>
         ) : null}
         {dictationState === "recording" ? (
@@ -1468,87 +1460,16 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             Transcribing dictation
           </span>
         ) : null}
-        <InputGroup className="composer__send-group">
-          <InputGroupAddon align="inline-end">
-            {showStopButton ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="composer__input-tooltip-trigger">
-                    <InputGroupButton
-                      type="button"
-                      aria-label="Interrupt assistant turn"
-                      className="composer__stop"
-                      disabled={isInterrupting}
-                      onClick={onInterrupt}
-                      size="icon-sm"
-                    >
-                      <SquareIcon
-                        aria-hidden="true"
-                        className="composer__stop-icon"
-                        fill="currentColor"
-                        strokeWidth={0}
-                      />
-                    </InputGroupButton>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {isInterrupting ? "Interrupting current turn…" : "Stop the assistant"}
-                </TooltipContent>
-              </Tooltip>
-            ) : showDictationAction ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="composer__input-tooltip-trigger">
-                    <InputGroupButton
-                      type="button"
-                      aria-label={dictationButtonLabel}
-                      aria-keyshortcuts="Control+Space"
-                      aria-pressed={dictationState === "recording"}
-                      className={cn(
-                        "composer__dictation",
-                        dictationState === "recording" &&
-                          "composer__dictation--recording",
-                        dictationState === "transcribing" &&
-                          "composer__dictation--transcribing",
-                      )}
-                      disabled={dictationButtonDisabled}
-                      onClick={toggleDictation}
-                      size="icon-sm"
-                    >
-                      {dictationState === "transcribing" ? (
-                        <LoadingSpinner size="sm" />
-                      ) : (
-                        <MicIcon aria-hidden="true" />
-                      )}
-                    </InputGroupButton>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {dictationTooltip}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="composer__input-tooltip-trigger">
-                    <InputGroupButton
-                      type="submit"
-                      aria-label={isShellMode ? "Run command" : "Send message"}
-                      className="composer__send"
-                      disabled={!canSend}
-                      size="icon-sm"
-                    >
-                      {isShellMode ? <BadgeDollarSignIcon /> : <ArrowUpIcon />}
-                    </InputGroupButton>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {isShellMode ? "Run command (Enter)" : "Send (Enter)"}
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </InputGroupAddon>
-        </InputGroup>
+        <ComposerActionButtons
+          controller={composerActions}
+          showStopButton={showStopButton}
+          isInterrupting={isInterrupting}
+          onInterrupt={onInterrupt}
+          isShellMode={isShellMode}
+          dictationState={dictationState}
+          dictationUnavailableReason={dictationUnavailableReason}
+          toggleDictation={toggleDictation}
+        />
       </div>
 
       {isShellMode ? (
@@ -1651,7 +1572,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 className="composer__attachment-remove"
                 onClick={() => removePendingImage(image.id)}
                 aria-label={`Remove ${image.file.name}`}
-                disabled={!canSend}
+                disabled={!composerInputAvailable}
               >
                 <XIcon aria-hidden="true" />
               </Button>
@@ -1665,6 +1586,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           className={`composer__attachment-status ${attachmentMessage ? "composer__attachment-status--error" : ""}`}
         >
           {attachmentStatus}
+        </div>
+      ) : null}
+
+      {composerActions.promptEnhancementError ? (
+        <div className="composer__attachment-status composer__attachment-status--error">
+          {composerActions.promptEnhancementError}
         </div>
       ) : null}
 

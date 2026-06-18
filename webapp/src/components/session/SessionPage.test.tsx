@@ -6,6 +6,7 @@ import { renderWithProviders } from "../../test/render";
 import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
 import {
   ApiError,
+  enhancePrompt,
   expandSessionInput,
   fetchBootstrap,
   fetchConfigBootstrap,
@@ -139,6 +140,10 @@ function getSessionTopbar(): HTMLElement {
   return topbar;
 }
 
+function getWorkspaceExplorerChangeDot(toggle: HTMLElement): HTMLElement | null {
+  return toggle.querySelector(".session-file-tree-toggle__change-dot");
+}
+
 vi.mock("./Composer", async () => {
   const React = await import("react");
 
@@ -155,6 +160,8 @@ vi.mock("./Composer", async () => {
         dictationAvailable,
         dictationUnavailableReason,
         onTranscribeDictation,
+        onEnhancePrompt,
+        isEnhancingPrompt,
         canInterrupt,
         isInterrupting,
         onInterrupt,
@@ -172,6 +179,8 @@ vi.mock("./Composer", async () => {
         dictationAvailable?: boolean;
         dictationUnavailableReason?: string | null;
         onTranscribeDictation?: (file: File) => Promise<string>;
+        onEnhancePrompt?: (text: string) => Promise<string>;
+        isEnhancingPrompt?: boolean;
         canInterrupt?: boolean;
         isInterrupting?: boolean;
         onInterrupt?: () => void;
@@ -193,6 +202,7 @@ vi.mock("./Composer", async () => {
           <div>Composer interactive {String(interactiveMode)}</div>
           <div>Composer dictation available {String(dictationAvailable)}</div>
           <div>Composer dictation reason {dictationUnavailableReason ?? ""}</div>
+          <div>Composer enhancing {String(isEnhancingPrompt)}</div>
           <div>Composer restored {restoredInput ?? ""}</div>
           <div>Composer history {JSON.stringify(inputHistory ?? [])}</div>
           {canInterrupt ? (
@@ -249,6 +259,18 @@ vi.mock("./Composer", async () => {
           >
             Transcribe Dictation
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              void (async () => {
+                if (!onEnhancePrompt) return;
+                const text = await onEnhancePrompt("rough prompt");
+                document.body.dataset.mockEnhancedPrompt = text;
+              })();
+            }}
+          >
+            Enhance Prompt
+          </button>
         </div>
       );
     }),
@@ -260,6 +282,7 @@ vi.mock("../../api", async (importOriginal) => {
   return {
     ...actual,
     deleteSession: vi.fn(),
+    enhancePrompt: vi.fn(),
     expandSessionInput: vi.fn(),
     fetchBootstrap: vi.fn(),
     fetchConfigBootstrap: vi.fn(),
@@ -576,6 +599,10 @@ describe("SessionPage", () => {
     vi.mocked(fetchBootstrap).mockResolvedValue(makeBootstrap());
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(fetchSessions).mockResolvedValue([makeSessionRecord()]);
+    vi.mocked(enhancePrompt).mockResolvedValue({
+      text: "Refined prompt.",
+      session: makeSessionRecord({ total_tokens: 42, input_tokens: 30, output_tokens: 12 }),
+    });
     vi.mocked(fetchSessionDetail).mockResolvedValue({
       session: makeSessionRecord(),
       history_items: [],
@@ -697,6 +724,55 @@ describe("SessionPage", () => {
       "aria-expanded",
       "true",
     );
+  });
+
+  it("shows a workspace explorer shortcut dot for hidden changed files", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchWorkspaceFileTree).mockResolvedValue({
+      items: [
+        { path: "src/app.ts", kind: "file", git_status: "M" },
+        { path: "README.md", kind: "file" },
+      ],
+      scan_status: "ready",
+      is_stale: false,
+      file_count: 2,
+      truncated: false,
+      error: null,
+      git_repository: true,
+    });
+    renderSessionRoute("/sessions/session-1");
+
+    const toggle = await screen.findByRole("button", { name: "Open workspace explorer" });
+    await waitFor(() => {
+      expect(getWorkspaceExplorerChangeDot(toggle)).toBeInTheDocument();
+    });
+
+    await user.hover(toggle);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("1 changed file");
+
+    await user.click(toggle);
+
+    const openToggle = await screen.findByRole("button", { name: "Close workspace explorer" });
+    expect(getWorkspaceExplorerChangeDot(openToggle)).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Show changed files only (1 changed)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the workspace explorer shortcut dot hidden without changed files", async () => {
+    const user = userEvent.setup();
+    renderSessionRoute("/sessions/session-1");
+
+    const toggle = await screen.findByRole("button", { name: "Open workspace explorer" });
+    await waitFor(() => {
+      expect(fetchWorkspaceFileTree).toHaveBeenCalled();
+    });
+    expect(getWorkspaceExplorerChangeDot(toggle)).not.toBeInTheDocument();
+
+    await user.hover(toggle);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Show workspace files");
+    expect(tooltip).not.toHaveTextContent("changed file");
   });
 
   it("toggles the workspace explorer with Alt+Shift+E", async () => {
@@ -965,6 +1041,60 @@ describe("SessionPage", () => {
         "Choose a speech-to-text provider in Settings to use dictation.",
       );
     });
+  });
+
+  it("enhances a draft with the current saved session without submitting it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchSessionDetail)
+      .mockResolvedValueOnce({
+        session: makeSessionRecord(),
+        history_items: [],
+        active_live_session: null,
+      } satisfies SessionDetailPayload)
+      .mockResolvedValue({
+        session: makeSessionRecord({ total_tokens: 42, input_tokens: 30, output_tokens: 12 }),
+        history_items: [],
+        active_live_session: null,
+      } satisfies SessionDetailPayload);
+    const { queryClient } = renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Enhance Prompt" }));
+
+    await waitFor(() => {
+      expect(enhancePrompt).toHaveBeenCalledWith({
+        text: "rough prompt",
+        session_id: "session-1",
+      });
+    });
+    expect(document.body.dataset.mockEnhancedPrompt).toBe("Refined prompt.");
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(runSessionShellCommand).not.toHaveBeenCalled();
+    await waitFor(() => {
+      const detail = queryClient.getQueryData<SessionDetailPayload>([
+        "session",
+        "session-1",
+      ]);
+      expect(detail?.session.total_tokens).toBe(42);
+    });
+  });
+
+  it("enhances an unsaved draft without creating a session id", async () => {
+    const user = userEvent.setup();
+    renderSessionRoute("/sessions");
+
+    expect(await screen.findByText("Composer can create true")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Enhance Prompt" }));
+
+    await waitFor(() => {
+      expect(enhancePrompt).toHaveBeenCalledWith({
+        text: "rough prompt",
+        session_id: null,
+      });
+    });
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(runSessionShellCommand).not.toHaveBeenCalled();
+    expect(document.body.dataset.mockEnhancedPrompt).toBe("Refined prompt.");
   });
 
   it("passes a Settings credentials reason when the selected STT provider has no credentials", async () => {

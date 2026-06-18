@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 import time
 import threading
+from datetime import datetime, timezone
 
 import pytest
 
@@ -233,6 +234,55 @@ def test_directory_keys_are_lowercased_and_case_insensitive(tmp_path) -> None:
     assert record is not None
     assert record.directory == "/project-a/subdir"
     assert [session.session_id for session in sessions] == [session_id]
+
+
+def test_mark_web_runs_stale_closes_orphaned_started_turns_for_terminal_web_run(
+    tmp_path,
+) -> None:
+    db = tmp_path / "sessions.db"
+    with SessionStore(db_path=db) as store:
+        session_id = store.create_session("/w", "openai", "gpt-5", "interrupted")
+        web_run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model="gpt-5",
+            status="running",
+            kind="session",
+        )
+        time.sleep(0.001)
+        turn_run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id=None,
+            profile_id=None,
+            model="gpt-5",
+            status="started",
+        )
+        time.sleep(0.001)
+        ended_at = datetime.now(timezone.utc).isoformat()
+        store.update_run_session(
+            web_run_id,
+            status="interrupted",
+            ended_at=ended_at,
+            exit_code=130,
+            fatal_error="Interrupted during app shutdown.",
+        )
+
+        changed = store.mark_web_runs_stale("/w")
+        turn_run = store.get_run_session(turn_run_id)
+
+    assert changed == 1
+    assert turn_run is not None
+    assert turn_run.status == "interrupted"
+    assert turn_run.ended_at == ended_at
+    assert turn_run.exit_code == 130
+    assert turn_run.fatal_error == "Interrupted during app shutdown."
 
 
 def test_ordering_by_updated_at(tmp_path) -> None:

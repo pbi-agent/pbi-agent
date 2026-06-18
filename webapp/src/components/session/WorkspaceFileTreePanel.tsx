@@ -19,6 +19,8 @@ import {
   type WorkspaceTreeIcon,
 } from "../../lib/workspaceFileIcons";
 import {
+  WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
+  WORKSPACE_FILE_TREE_STALE_TIME_MS,
   workspaceFileDiffQueryKey,
   workspaceFilePreviewQueryKey,
   workspaceFileTreeQueryKey,
@@ -73,7 +75,8 @@ export function WorkspaceFileTreePanel({
   const treeQuery = useQuery({
     queryKey: treeQueryKey,
     queryFn: fetchWorkspaceFileTree,
-    refetchInterval: 2000,
+    refetchInterval: WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
+    staleTime: WORKSPACE_FILE_TREE_STALE_TIME_MS,
   });
   const items = useMemo(
     () => treeQuery.data?.items ?? [],

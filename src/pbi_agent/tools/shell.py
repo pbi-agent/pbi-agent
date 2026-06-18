@@ -10,8 +10,6 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
-from collections.abc import Callable, Mapping
-from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +24,6 @@ MAX_STDERR_CHARS = 12_000
 MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS
 SHELL_BOOTSTRAP_ENV = "PBI_AGENT_SHELL_BOOTSTRAP"
 SHELL_EXECUTABLE_ENV = "PBI_AGENT_SHELL_EXECUTABLE"
-_HEADROOM_COMPRESS_CONTENT: Callable[..., Any] | None = None
 
 SPEC = ToolSpec(
     name="shell",
@@ -56,13 +53,6 @@ SPEC = ToolSpec(
                     "maximum 300 000 (5 minutes)."
                 ),
             },
-            "compression": {
-                "type": "boolean",
-                "description": (
-                    "Whether to compress stdout/stderr before returning them. "
-                    "Defaults to true. Set false when the full raw output is needed."
-                ),
-            },
         },
         "required": ["command"],
         "additionalProperties": False,
@@ -87,10 +77,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         timeout_ms = _normalize_timeout_ms(arguments.get("timeout_ms"))
     except ValueError as exc:
         return {"error": str(exc)}
-    try:
-        compression = _normalize_compression(arguments.get("compression"))
-    except ValueError as exc:
-        return {"error": str(exc)}
 
     effective_command = _bootstrap_command(command)
     shell_executable = os.environ.get(SHELL_EXECUTABLE_ENV) or None
@@ -109,7 +95,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             **_build_output_payload(
                 stdout=decode_output(completed.stdout),
                 stderr=decode_output(completed.stderr),
-                compression=compression,
             ),
             "exit_code": completed.returncode,
         }
@@ -118,7 +103,6 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             **_build_output_payload(
                 stdout=decode_output(exc.stdout),
                 stderr=decode_output(exc.stderr),
-                compression=compression,
             ),
             "exit_code": None,
             "timed_out": True,
@@ -174,23 +158,7 @@ def _normalize_timeout_ms(raw_timeout: Any) -> int:
     return min(raw_timeout, MAX_TIMEOUT_MS)
 
 
-def _normalize_compression(raw_compression: Any) -> bool:
-    if raw_compression is None:
-        return True
-    if isinstance(raw_compression, bool):
-        return raw_compression
-    raise ValueError("'compression' must be a boolean.")
-
-
-def _build_output_payload(
-    *,
-    stdout: str,
-    stderr: str,
-    compression: bool = True,
-) -> dict[str, Any]:
-    if compression:
-        stdout = _compress_stream(stdout)
-        stderr = _compress_stream(stderr)
+def _build_output_payload(*, stdout: str, stderr: str) -> dict[str, Any]:
     bounded_stdout, stdout_truncated = bound_output(
         stdout,
         limit=MAX_STDOUT_CHARS,
@@ -208,47 +176,3 @@ def _build_output_payload(
     if stderr_truncated:
         payload["stderr_truncated"] = True
     return payload
-
-
-def _compress_stream(text: str) -> str:
-    if not text:
-        return text
-
-    try:
-        result = _compress_content(text)
-        compressed = _extract_compressed_text(result)
-        if compressed is None or compressed == "":
-            raise ValueError("Headroom returned no compressed text.")
-    except Exception:
-        return text
-    return compressed
-
-
-def _compress_content(text: str) -> Any:
-    global _HEADROOM_COMPRESS_CONTENT  # noqa: PLW0603
-    if _HEADROOM_COMPRESS_CONTENT is None:
-        module = import_module("headroom.compression")
-        config_type = getattr(module, "UniversalCompressorConfig")
-        compressor_type = getattr(module, "UniversalCompressor")
-        config = config_type(use_kompress=False, ccr_enabled=False)
-        compressor = compressor_type(config=config)
-        compress = getattr(compressor, "compress")
-        if not callable(compress):
-            raise RuntimeError("headroom local compressor is not callable.")
-        _HEADROOM_COMPRESS_CONTENT = compress
-    return _HEADROOM_COMPRESS_CONTENT(text)
-
-
-def _extract_compressed_text(result: Any) -> str | None:
-    if isinstance(result, str):
-        return result
-    compressed = _field_value(result, "compressed")
-    if not isinstance(compressed, str):
-        return None
-    return compressed
-
-
-def _field_value(value: Any, key: str) -> Any:
-    if isinstance(value, Mapping):
-        return value.get(key)
-    return getattr(value, key, None)

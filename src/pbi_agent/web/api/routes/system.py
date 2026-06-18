@@ -42,6 +42,8 @@ from pbi_agent.web.api.schemas.system import (
     LiveSessionSnapshotModel,
     NewSessionRequest,
     ObservabilityEventModel,
+    PromptEnhancementRequest,
+    PromptEnhancementResponse,
     ProviderBreakdownModel,
     RunSessionDetailResponse,
     RunFilterValuesResponse,
@@ -225,6 +227,23 @@ def fork_session(
     except ValueError as exc:
         raise bad_request(str(exc)) from exc
     return SessionResponse(session=model_from_payload(SessionRecordModel, session))
+
+
+@router.post("/prompt/enhance", response_model=PromptEnhancementResponse)
+def enhance_prompt(
+    request: PromptEnhancementRequest,
+    manager: SessionManagerDep,
+) -> PromptEnhancementResponse:
+    try:
+        payload = manager.enhance_prompt(
+            text=request.text,
+            session_id=request.session_id,
+        )
+    except KeyError as exc:
+        raise not_found("Session not found.") from exc
+    except Exception as exc:
+        raise bad_request(str(exc)) from exc
+    return model_from_payload(PromptEnhancementResponse, payload)
 
 
 @router.post("/sessions/{session_id}/messages", response_model=LiveSessionResponse)

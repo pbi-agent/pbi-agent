@@ -200,9 +200,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         \( -type f -a \( -name '*.pyc' -o -name '*.pyo' \) \) \
         -delete \
     && rm -rf \
-        "${site_packages}/pyarrow/include" \
-        "${site_packages}/pyarrow/includes" \
-        "${site_packages}/pyarrow/src" \
         /home/pbi/.cache/* \
         /tmp/* \
         /var/tmp/* \

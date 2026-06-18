@@ -32,6 +32,7 @@ function renderComposer(
 ) {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
   const onTranscribeDictation = vi.fn().mockResolvedValue("transcribed text");
+  const onEnhancePrompt = vi.fn().mockResolvedValue("enhanced prompt");
   const renderResult = renderWithProviders(
     <Composer
       inputEnabled
@@ -44,10 +45,11 @@ function renderComposer(
       dictationAvailable
       dictationUnavailableReason={null}
       onTranscribeDictation={onTranscribeDictation}
+      onEnhancePrompt={onEnhancePrompt}
       {...overrides}
     />,
   );
-  return { onSubmit, onTranscribeDictation, ...renderResult };
+  return { onSubmit, onTranscribeDictation, onEnhancePrompt, ...renderResult };
 }
 
 function renderSubmittingComposer() {
@@ -253,9 +255,11 @@ describe("Composer", () => {
 
     expect(screen.getByRole("button", { name: "Start dictation" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enhance prompt" })).not.toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "review this");
 
+    expect(screen.getByRole("button", { name: "Enhance prompt" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send message" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start dictation" })).not.toBeInTheDocument();
   });
@@ -339,6 +343,104 @@ describe("Composer", () => {
     await waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("transcribed text");
     });
+  });
+
+  it("enhances non-empty prompt text with Ctrl+Space without submitting", async () => {
+    const user = userEvent.setup();
+    const onEnhancePrompt = vi.fn().mockResolvedValue("Please review this.");
+    const { onSubmit } = renderComposer({ onEnhancePrompt });
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    await user.type(textbox, "please review ths");
+    fireEvent.keyDown(textbox, { key: " ", code: "Space", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(onEnhancePrompt).toHaveBeenCalledWith("please review ths");
+    });
+    await waitFor(() => {
+      expect(textbox).toHaveValue("Please review this.");
+    });
+    expect(createWavRecorderMock).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not enhance empty, slash, or shell drafts with Ctrl+Space", async () => {
+    const user = userEvent.setup();
+    const onEnhancePrompt = vi.fn().mockResolvedValue("enhanced");
+    renderComposer({ dictationAvailable: false, onEnhancePrompt });
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    textbox.focus();
+    fireEvent.keyDown(textbox, { key: " ", code: "Space", ctrlKey: true });
+    expect(onEnhancePrompt).not.toHaveBeenCalled();
+
+    await user.type(textbox, "/plan");
+    fireEvent.keyDown(textbox, { key: " ", code: "Space", ctrlKey: true });
+    expect(onEnhancePrompt).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Enhance prompt" })).not.toBeInTheDocument();
+
+    await user.clear(textbox);
+    await user.type(textbox, "!pwd");
+    fireEvent.keyDown(textbox, { key: " ", code: "Space", ctrlKey: true });
+    expect(onEnhancePrompt).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Enhance prompt" })).not.toBeInTheDocument();
+  });
+
+  it("shows prompt enhancement loading and error states without changing the draft", async () => {
+    const user = userEvent.setup();
+    let resolveEnhancement: ((value: string) => void) | undefined;
+    const onEnhancePrompt = vi.fn(
+      () => new Promise<string>((resolve) => {
+        resolveEnhancement = resolve;
+      }),
+    );
+    const { rerender } = renderComposer({ onEnhancePrompt });
+
+    const textbox = screen.getByRole("textbox", { name: "Message" });
+    await user.type(textbox, "make this clearer");
+    await user.click(screen.getByRole("button", { name: "Enhance prompt" }));
+
+    expect(textbox).toBeDisabled();
+    expect(textbox.closest(".composer__input-row")).toHaveClass(
+      "composer__input-row--processing",
+    );
+    expect(screen.getByText("Enhancing prompt")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Enhancing prompt" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+
+    act(() => {
+      resolveEnhancement?.("Make this clearer.");
+    });
+    await waitFor(() => {
+      expect(textbox).toHaveValue("Make this clearer.");
+    });
+    await waitFor(() => expect(textbox).toBeEnabled());
+
+    const rejectingEnhance = vi.fn().mockRejectedValue(new Error("Enhancement failed"));
+    rerender(
+      <Composer
+        inputEnabled
+        sessionEnded={false}
+        liveSessionId="live-1"
+        supportsImageInputs
+        interactiveMode={false}
+        isSubmitting={false}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        dictationAvailable
+        dictationUnavailableReason={null}
+        onTranscribeDictation={vi.fn().mockResolvedValue("transcribed text")}
+        onEnhancePrompt={rejectingEnhance}
+      />,
+    );
+    const rerenderedTextbox = screen.getByRole("textbox", { name: "Message" });
+    await user.clear(rerenderedTextbox);
+    await user.type(rerenderedTextbox, "keep original");
+    await user.click(screen.getByRole("button", { name: "Enhance prompt" }));
+
+    expect(await screen.findByText("Enhancement failed")).toBeInTheDocument();
+    expect(rerenderedTextbox).toHaveValue("keep original");
+    expect(screen.getByRole("button", { name: "Enhance prompt" })).toBeEnabled();
   });
 
   it("handles Ctrl+Space once when focus stays on the dictation button", async () => {
