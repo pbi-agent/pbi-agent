@@ -19,6 +19,7 @@ import {
 import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
 import { EmptyState } from "../shared/EmptyState";
+import { LoadingSpinner } from "../shared/LoadingSpinner";
 import { SidebarSearchField } from "./SidebarSearchField";
 
 function formatDate(dateStr: string): string {
@@ -49,6 +50,10 @@ function shouldResumeInCurrentTab(event: MouseEvent<HTMLAnchorElement>): boolean
     !event.shiftKey &&
     !event.defaultPrevented
   );
+}
+
+function isProcessingSession(status: SessionRecord["status"]): boolean {
+  return status === "starting" || status === "running";
 }
 
 export type SessionSidebarProps = {
@@ -164,6 +169,7 @@ export function SessionSidebar({
             const isSaving = savingSessionId === session.session_id;
             const trimmedDraft = draftTitle.trim();
             const saveDisabled = !trimmedDraft || trimmedDraft === session.title || isSaving;
+            const isProcessing = isProcessingSession(session.status);
             return (
               <div
                 key={session.session_id}
@@ -228,6 +234,15 @@ export function SessionSidebar({
                         </span>
                         <div className="session-card__meta">
                           <time className="session-card__time">{formatDate(session.updated_at)}</time>
+                          {isProcessing ? (
+                            <span
+                              className="session-card__processing"
+                              role="status"
+                              aria-label="Session processing"
+                            >
+                              <LoadingSpinner size="sm" />
+                            </span>
+                          ) : null}
                           <MetaBadge className="session-card__model">
                             {session.model}
                           </MetaBadge>

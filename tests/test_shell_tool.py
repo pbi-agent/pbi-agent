@@ -2,60 +2,11 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from pbi_agent.tools import shell as shell_tool
 from pbi_agent.tools.types import ToolContext
-
-
-def _compression_result(text: str, **metadata: object) -> dict[str, object]:
-    return {
-        "compressed": text,
-        **metadata,
-    }
-
-
-def _identity_compress(content: str) -> dict[str, object]:
-    return _compression_result(content)
-
-
-def test_compress_content_uses_headroom_local_compressor_config(monkeypatch) -> None:
-    calls: dict[str, object] = {}
-
-    class FakeConfig:
-        def __init__(self, **kwargs: object) -> None:
-            calls["config"] = kwargs
-
-    class FakeCompressor:
-        def __init__(self, *, config: FakeConfig) -> None:
-            calls["compressor_config"] = config
-
-        def compress(self, content: str) -> dict[str, object]:
-            calls["content"] = content
-            return _compression_result(f"local {content}")
-
-    def fake_import_module(name: str) -> object:
-        calls["module"] = name
-        return SimpleNamespace(
-            UniversalCompressorConfig=FakeConfig,
-            UniversalCompressor=FakeCompressor,
-        )
-
-    monkeypatch.setattr(shell_tool, "_HEADROOM_COMPRESS_CONTENT", None)
-    monkeypatch.setattr(shell_tool, "import_module", fake_import_module)
-
-    try:
-        result = shell_tool._compress_content("content")
-    finally:
-        monkeypatch.setattr(shell_tool, "_HEADROOM_COMPRESS_CONTENT", None)
-
-    assert result == _compression_result("local content")
-    assert calls["module"] == "headroom.compression"
-    assert calls["config"] == {"use_kompress": False, "ccr_enabled": False}
-    assert isinstance(calls["compressor_config"], FakeConfig)
-    assert calls["content"] == "content"
 
 
 def test_shell_handle_runs_command_with_workspace_defaults(
@@ -96,13 +47,6 @@ def test_shell_handle_runs_command_with_workspace_defaults(
         )
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    compression_inputs: list[str] = []
-
-    def fake_compress(content: str) -> dict[str, object]:
-        compression_inputs.append(content)
-        return _compression_result(content)
-
-    monkeypatch.setattr(shell_tool, "_compress_content", fake_compress)
 
     result = shell_tool.handle({"command": "echo hi"}, ToolContext())
 
@@ -111,7 +55,6 @@ def test_shell_handle_runs_command_with_workspace_defaults(
         "stderr": "stderr text",
         "exit_code": 0,
     }
-    assert compression_inputs == ["stdout text", "stderr text"]
     assert calls == [
         {
             "command": "echo hi",
@@ -204,7 +147,6 @@ def test_shell_handle_honors_requested_timeout(
         )
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", _identity_compress)
 
     result = shell_tool.handle(
         {"command": "echo hi", "timeout_ms": 12_345},
@@ -213,40 +155,6 @@ def test_shell_handle_honors_requested_timeout(
 
     assert result["exit_code"] == 0
     assert seen == {"timeout": 12.345}
-
-
-def test_shell_handle_can_disable_compression(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        del args, kwargs
-        return subprocess.CompletedProcess(
-            args="command",
-            returncode=0,
-            stdout=b"raw stdout",
-            stderr=b"raw stderr",
-        )
-
-    def fake_compress(*args: object, **kwargs: object) -> object:
-        del args, kwargs
-        raise AssertionError("compression=false should not call Headroom")
-
-    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", fake_compress)
-
-    result = shell_tool.handle(
-        {"command": "command", "compression": False},
-        ToolContext(),
-    )
-
-    assert result == {
-        "stdout": "raw stdout",
-        "stderr": "raw stderr",
-        "exit_code": 0,
-    }
 
 
 @pytest.mark.parametrize(
@@ -274,28 +182,6 @@ def test_shell_handle_rejects_invalid_timeout_without_running_subprocess(
     assert result == {"error": "'timeout_ms' must be a positive integer."}
 
 
-@pytest.mark.parametrize("compression", ["false", 0, 1])
-def test_shell_handle_rejects_invalid_compression_without_running_subprocess(
-    tmp_path: Path,
-    monkeypatch,
-    compression: object,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        del args, kwargs
-        raise AssertionError("subprocess.run should not be called")
-
-    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-
-    result = shell_tool.handle(
-        {"command": "echo hi", "compression": compression},
-        ToolContext(),
-    )
-
-    assert result == {"error": "'compression' must be a boolean."}
-
-
 def test_shell_handle_returns_timeout_payload(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
 
@@ -309,7 +195,6 @@ def test_shell_handle_returns_timeout_payload(tmp_path: Path, monkeypatch) -> No
         )
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", _identity_compress)
 
     result = shell_tool.handle(
         {"command": "sleep 10", "timeout_ms": 500},
@@ -363,7 +248,6 @@ def test_shell_handle_bounds_large_stdout_and_stderr(
         )
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", _identity_compress)
 
     result = shell_tool.handle({"command": "python"}, ToolContext())
 
@@ -380,168 +264,6 @@ def test_shell_handle_bounds_large_stdout_and_stderr(
     assert "chars omitted" in result["stderr"]
 
 
-def test_shell_handle_compresses_stdout_and_stderr_independently(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        del args, kwargs
-        return subprocess.CompletedProcess(
-            args="command",
-            returncode=0,
-            stdout=b"raw stdout",
-            stderr=b"raw stderr",
-        )
-
-    calls: list[str] = []
-
-    def fake_compress(content: str) -> dict[str, object]:
-        calls.append(content)
-        stream_name = "stdout" if content == "raw stdout" else "stderr"
-        return _compression_result(
-            f"compressed {stream_name}",
-            tokens_saved=7,
-            compression_ratio=0.5,
-            tokens_before=20,
-            tokens_after=13,
-            savings_percentage=35.0,
-            content_type="log",
-            handler_used="LogCompressor",
-        )
-
-    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", fake_compress)
-
-    result = shell_tool.handle({"command": "command"}, ToolContext())
-
-    assert result["stdout"] == "compressed stdout"
-    assert result["stderr"] == "compressed stderr"
-    assert set(result) == {"stdout", "stderr", "exit_code"}
-    assert calls == ["raw stdout", "raw stderr"]
-
-
-def test_shell_handle_skips_compression_for_empty_streams(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        del args, kwargs
-        return subprocess.CompletedProcess(
-            args="command", returncode=0, stdout=b"", stderr=b""
-        )
-
-    def fake_compress(*args: object, **kwargs: object) -> object:
-        del args, kwargs
-        raise AssertionError("empty shell streams should not be compressed")
-
-    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", fake_compress)
-
-    result = shell_tool.handle({"command": "command"}, ToolContext())
-
-    assert result == {"stdout": "", "stderr": "", "exit_code": 0}
-
-
-def test_shell_handle_falls_back_when_compression_fails(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        del args, kwargs
-        return subprocess.CompletedProcess(
-            args="command",
-            returncode=0,
-            stdout=b"raw stdout",
-            stderr=b"raw stderr",
-        )
-
-    def fake_compress(*args: object, **kwargs: object) -> object:
-        del args, kwargs
-        raise RuntimeError("headroom boom")
-
-    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", fake_compress)
-
-    result = shell_tool.handle({"command": "command"}, ToolContext())
-
-    assert result == {
-        "stdout": "raw stdout",
-        "stderr": "raw stderr",
-        "exit_code": 0,
-    }
-
-
-def test_shell_handle_bounds_compressed_output(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    compressed_stdout = "compressed-start-" + "x" * (shell_tool.MAX_STDOUT_CHARS + 100)
-
-    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        del args, kwargs
-        return subprocess.CompletedProcess(
-            args="command",
-            returncode=0,
-            stdout=b"raw stdout",
-            stderr=b"",
-        )
-
-    def fake_compress(content: str) -> dict[str, object]:
-        del content
-        return _compression_result(compressed_stdout)
-
-    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", fake_compress)
-
-    result = shell_tool.handle({"command": "command"}, ToolContext())
-
-    assert result["stdout_truncated"] is True
-    assert len(result["stdout"]) <= shell_tool.MAX_STDOUT_CHARS
-    assert result["stdout"].startswith("compressed-start-")
-    assert result["stderr"] == ""
-    assert set(result) == {"stdout", "stderr", "stdout_truncated", "exit_code"}
-
-
-def test_shell_timeout_payload_compresses_partial_output(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-
-    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        del args, kwargs
-        raise subprocess.TimeoutExpired(
-            cmd="sleep 10",
-            timeout=0.5,
-            output=b"partial stdout",
-            stderr=b"partial stderr",
-        )
-
-    def fake_compress(content: str) -> dict[str, object]:
-        stream_name = "stdout" if content == "partial stdout" else "stderr"
-        return _compression_result(f"compressed {stream_name}")
-
-    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
-    monkeypatch.setattr(shell_tool, "_compress_content", fake_compress)
-
-    result = shell_tool.handle(
-        {"command": "sleep 10", "timeout_ms": 500},
-        ToolContext(),
-    )
-
-    assert result["stdout"] == "compressed stdout"
-    assert result["stderr"] == "compressed stderr"
-    assert result["timed_out"] is True
-    assert result["error"] == "Command timed out after 500ms."
-
-
 def test_shell_tool_schema_keeps_timeout_bounds_in_description_only() -> None:
     timeout_schema = shell_tool.SPEC.parameters_schema["properties"]["timeout_ms"]
 
@@ -550,18 +272,6 @@ def test_shell_tool_schema_keeps_timeout_bounds_in_description_only() -> None:
         "description": (
             "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
             "maximum 300 000 (5 minutes)."
-        ),
-    }
-
-
-def test_shell_tool_schema_includes_compression_default_description() -> None:
-    compression_schema = shell_tool.SPEC.parameters_schema["properties"]["compression"]
-
-    assert compression_schema == {
-        "type": "boolean",
-        "description": (
-            "Whether to compress stdout/stderr before returning them. "
-            "Defaults to true. Set false when the full raw output is needed."
         ),
     }
 

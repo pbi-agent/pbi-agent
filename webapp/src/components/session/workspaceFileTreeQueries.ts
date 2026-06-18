@@ -1,3 +1,6 @@
+export const WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS = 2000;
+export const WORKSPACE_FILE_TREE_STALE_TIME_MS = 2000;
+
 export function workspaceFileTreeQueryKey(workspaceKey: string | null | undefined) {
   return ["workspace-file-tree", workspaceKey ?? null] as const;
 }

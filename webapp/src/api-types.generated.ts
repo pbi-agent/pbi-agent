@@ -163,6 +163,10 @@ export type ProcessingStateSseEventModel = { seq: number; created_at: string; ty
 
 export type ProcessingStateSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; active: boolean; phase?: "starting" | "model_wait" | "tool_execution" | "finalizing" | "interrupting" | "retry_wait" | null; message?: string | null; active_tool_count?: number | null; sub_agent_id?: string | null };
 
+export type PromptEnhancementRequest = { text?: string; session_id?: string | null };
+
+export type PromptEnhancementResponse = { text: string; session?: SessionRecordModel | null };
+
 export type ProviderAuthFlowResponse = { provider: ProviderViewModel; auth_status: ProviderAuthStatusModel; flow: ProviderAuthFlowViewModel; session?: ProviderAuthSessionModel | null };
 
 export type ProviderAuthFlowStartRequest = { method: "browser" | "device" };
@@ -431,6 +435,7 @@ export type ApiOperationResponses = {
   "GET /api/files/search": FileMentionSearchResponse;
   "GET /api/files/tree": WorkspaceFileTreeResponse;
   "POST /api/files/tree/refresh": WorkspaceFileTreeResponse;
+  "POST /api/prompt/enhance": PromptEnhancementResponse;
   "DELETE /api/provider-auth/{provider_id}": ProviderAuthLogoutResponse;
   "GET /api/provider-auth/{provider_id}": ProviderAuthResponse;
   "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowResponse;
@@ -491,6 +496,7 @@ export type ApiJsonRequestBodies = {
   "POST /api/config/skills/install": SkillInstallRequest;
   "POST /api/config/skills/{skill_name}/enabled": SkillEnabledRequest;
   "PUT /api/config/stt-provider": SttProviderRequest;
+  "POST /api/prompt/enhance": PromptEnhancementRequest;
   "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowStartRequest;
   "POST /api/provider-auth/{provider_id}/import": ProviderAuthImportRequest;
   "POST /api/sessions": CreateSessionRequest;

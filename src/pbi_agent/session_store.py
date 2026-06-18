@@ -40,6 +40,25 @@ KANBAN_RUN_STATUS_RUNNING = "running"
 KANBAN_RUN_STATUS_COMPLETED = "completed"
 KANBAN_RUN_STATUS_FAILED = "failed"
 _SQLITE_VARIABLE_BATCH_SIZE = 900
+_ACTIVE_RUN_SESSION_STATUSES = (
+    "started",
+    "starting",
+    "running",
+    "waiting_for_input",
+)
+_TERMINAL_WEB_RUN_SESSION_STATUSES = (
+    "completed",
+    "interrupted",
+    "failed",
+    "ended",
+    "stale",
+)
+_ACTIVE_RUN_SESSION_STATUSES_SQL = ", ".join(
+    f"'{status}'" for status in _ACTIVE_RUN_SESSION_STATUSES
+)
+_TERMINAL_WEB_RUN_SESSION_STATUSES_SQL = ", ".join(
+    f"'{status}'" for status in _TERMINAL_WEB_RUN_SESSION_STATUSES
+)
 
 _SCHEMA = """\
 CREATE TABLE IF NOT EXISTS sessions (
@@ -1949,11 +1968,8 @@ class SessionStore:
         where = "session_id = ?"
         params: list[object] = [session_id]
         if not include_ended:
-            where += (
-                " AND status NOT IN "
-                "('ended', 'failed', 'completed', 'interrupted', 'stale')"
-            )
-        where += " AND agent_type != 'web_session'"
+            where += f" AND status IN ({_ACTIVE_RUN_SESSION_STATUSES_SQL})"
+        where += " AND agent_type NOT IN ('web_session', 'prompt_enhancement')"
         with self._lock:
             row = self._conn.execute(
                 f"SELECT * FROM run_sessions WHERE {where} "
@@ -2088,7 +2104,7 @@ class SessionStore:
             cursor = self._conn.execute(
                 "UPDATE run_sessions SET status = 'stale', ended_at = ? "
                 "WHERE (agent_type IS NULL OR agent_type != 'web_session') "
-                "AND status IN ('started', 'starting', 'running', 'waiting_for_input') "
+                f"AND status IN ({_ACTIVE_RUN_SESSION_STATUSES_SQL}) "
                 "AND session_id IN "
                 "(SELECT session_id FROM sessions WHERE directory = ?) "
                 "AND EXISTS ("
@@ -2104,6 +2120,46 @@ class SessionStore:
                 (now, normalized_directory),
             )
             stale_count += cursor.rowcount
+            orphan_rows = self._conn.execute(
+                "SELECT child.id, web.status, web.ended_at, web.exit_code, "
+                "web.fatal_error FROM run_sessions AS child "
+                "JOIN sessions AS s ON s.session_id = child.session_id "
+                "JOIN run_sessions AS web ON web.session_id = child.session_id "
+                "WHERE s.directory = ? "
+                "AND (child.agent_type IS NULL OR child.agent_type NOT IN "
+                "('web_session', 'prompt_enhancement')) "
+                "AND child.status IN "
+                f"({_ACTIVE_RUN_SESSION_STATUSES_SQL}) "
+                "AND web.agent_type = 'web_session' "
+                "AND web.kind IN ('session', 'task') "
+                "AND web.status IN "
+                f"({_TERMINAL_WEB_RUN_SESSION_STATUSES_SQL}) "
+                "AND web.ended_at IS NOT NULL "
+                "AND web.started_at <= child.started_at "
+                "AND child.started_at <= web.ended_at "
+                "ORDER BY child.id ASC, web.started_at DESC, web.id DESC",
+                (normalized_directory,),
+            ).fetchall()
+            orphan_updates: dict[int, sqlite3.Row] = {}
+            for row in orphan_rows:
+                orphan_updates.setdefault(int(row["id"]), row)
+            for child_id, row in orphan_updates.items():
+                cursor = self._conn.execute(
+                    "UPDATE run_sessions SET status = ?, ended_at = ?, "
+                    "exit_code = COALESCE(exit_code, ?), "
+                    "fatal_error = COALESCE(fatal_error, ?) "
+                    "WHERE id = ? "
+                    "AND status IN "
+                    f"({_ACTIVE_RUN_SESSION_STATUSES_SQL})",
+                    (
+                        row["status"],
+                        row["ended_at"],
+                        row["exit_code"],
+                        row["fatal_error"],
+                        child_id,
+                    ),
+                )
+                stale_count += cursor.rowcount
             self._conn.commit()
         return stale_count
 

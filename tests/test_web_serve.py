@@ -7,6 +7,7 @@ import logging
 import re
 import sqlite3
 import subprocess
+from datetime import datetime, timezone
 from io import BytesIO, StringIO
 from pathlib import Path
 import threading
@@ -76,6 +77,7 @@ from pbi_agent.workspace_context import (
     SANDBOX_ENV,
     WORKSPACE_DISPLAY_PATH_ENV,
     WORKSPACE_KEY_ENV,
+    workspace_context_from_root,
 )
 
 
@@ -414,6 +416,63 @@ def test_combined_timeline_recovers_sub_agent_messages_from_persisted_events() -
             "historical": True,
         },
     ]
+
+
+def test_list_sessions_ignores_orphaned_started_turn_for_interrupted_web_run(
+    tmp_path: Path,
+) -> None:
+    workspace = workspace_context_from_root(tmp_path)
+    with SessionStore() as store:
+        session_id = store.create_session(
+            workspace.directory_key,
+            "openai",
+            "gpt-5.4",
+            "/refine-task interrupted",
+            provider_id="openai-main",
+            profile_id="analysis",
+        )
+        web_run_id = store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="web_session",
+            provider="openai",
+            provider_id="openai-main",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="running",
+            kind="session",
+            project_dir=str(tmp_path),
+        )
+        time.sleep(0.001)
+        store.create_run_session(
+            session_id=session_id,
+            agent_name="main",
+            agent_type="session_turn",
+            provider="openai",
+            provider_id="openai-main",
+            profile_id="analysis",
+            model="gpt-5.4",
+            status="started",
+        )
+        time.sleep(0.001)
+        store.update_run_session(
+            web_run_id,
+            status="interrupted",
+            ended_at=datetime.now(timezone.utc).isoformat(),
+            exit_code=130,
+            fatal_error="Interrupted during app shutdown.",
+        )
+
+    manager = WebSessionManager(_settings(), workspace_context=workspace)
+
+    sessions = manager.list_sessions()
+    detail = manager.get_session_detail(session_id)
+
+    assert sessions[0]["session_id"] == session_id
+    assert sessions[0]["status"] == "ended"
+    assert sessions[0]["active_run_id"] is None
+    assert detail["status"] == "ended"
+    assert detail["active_run"] is None
 
 
 def test_combined_timeline_attaches_turn_usage_from_persisted_events() -> None:

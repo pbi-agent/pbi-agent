@@ -352,6 +352,16 @@ class SessionResponse(BaseModel):
     session: SessionRecordModel
 
 
+class PromptEnhancementRequest(BaseModel):
+    text: str = ""
+    session_id: str | None = None
+
+
+class PromptEnhancementResponse(BaseModel):
+    text: str
+    session: SessionRecordModel | None = None
+
+
 class SessionImageUploadResponse(BaseModel):
     uploads: list[ImageAttachmentModel]
 

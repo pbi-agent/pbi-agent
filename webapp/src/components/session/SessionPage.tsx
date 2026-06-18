@@ -15,10 +15,12 @@ import { AppSidebarLayout } from "../AppSidebar";
 import {
   ApiError,
   createSession,
+  enhancePrompt,
   expandSessionInput,
   fetchConfigBootstrap,
   fetchSessionDetail,
   fetchSessions,
+  fetchWorkspaceFileTree,
   forkSession,
   interruptSession,
   runSessionShellCommand,
@@ -39,6 +41,7 @@ import type {
   TimelineItem,
   LiveSessionSnapshot,
   ProcessingState,
+  SessionRecord,
   UserQuestionAnswer,
 } from "../../types";
 import {
@@ -62,7 +65,11 @@ import { UsageBar } from "./UsageBar";
 import { UserQuestionsPanel } from "./UserQuestionsPanel";
 import { Composer, type ComposerHandle } from "./Composer";
 import { WorkspaceFileTreePanel } from "./WorkspaceFileTreePanel";
-import { workspaceFileTreeQueryKey } from "./workspaceFileTreeQueries";
+import {
+  WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
+  WORKSPACE_FILE_TREE_STALE_TIME_MS,
+  workspaceFileTreeQueryKey,
+} from "./workspaceFileTreeQueries";
 import { WorkspaceBadge } from "../WorkspaceBadge";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -212,6 +219,10 @@ export function SessionPage({
   const refreshedEndedLiveSessionsRef = useRef<Set<string>>(new Set());
   const isSidebarOpen = useSidebarStore((state) => state.isOpen);
   const workspaceQueryKey = workspaceKey ?? workspaceRoot ?? null;
+  const workspaceFileTreeKey = useMemo(
+    () => workspaceFileTreeQueryKey(workspaceQueryKey),
+    [workspaceQueryKey],
+  );
   const toolHistoryShortcutLabel = formatAltShiftShortcut("H");
   const workspaceExplorerShortcutLabel = formatAltShiftShortcut("E");
 
@@ -260,6 +271,29 @@ export function SessionPage({
     queryFn: fetchConfigBootstrap,
     staleTime: 30_000,
   });
+
+  const workspaceFileTreeSummaryQuery = useQuery({
+    queryKey: workspaceFileTreeKey,
+    queryFn: fetchWorkspaceFileTree,
+    refetchInterval: WORKSPACE_FILE_TREE_REFETCH_INTERVAL_MS,
+    staleTime: WORKSPACE_FILE_TREE_STALE_TIME_MS,
+  });
+
+  const changedWorkspaceFileCount = useMemo(
+    () =>
+      workspaceFileTreeSummaryQuery.data?.items.filter((item) => item.git_status != null).length
+      ?? 0,
+    [workspaceFileTreeSummaryQuery.data?.items],
+  );
+  const showWorkspaceFileTreeChangeDot = !fileTreeOpen && changedWorkspaceFileCount > 0;
+  const changedWorkspaceFileLabel =
+    changedWorkspaceFileCount === 1 ? "changed file" : "changed files";
+  const workspaceExplorerTooltip = fileTreeOpen
+    ? `Workspace explorer open. ${workspaceExplorerShortcutLabel} to close.`
+    : showWorkspaceFileTreeChangeDot
+      ? `Workspace explorer closed. ${changedWorkspaceFileCount} ${changedWorkspaceFileLabel}. `
+        + `${workspaceExplorerShortcutLabel} to open.`
+      : `Workspace explorer closed. Show workspace files. ${workspaceExplorerShortcutLabel} to open.`;
 
   const createSessionMutation = useMutation({
     mutationFn: createSession,
@@ -390,6 +424,30 @@ export function SessionPage({
         client.invalidateQueries({ queryKey: ["config-bootstrap"] }),
         client.invalidateQueries({ queryKey: ["bootstrap"] }),
       ]);
+    },
+  });
+
+  const updateSessionRecordCaches = useCallback((updatedSession: SessionRecord) => {
+    client.setQueriesData<SessionRecord[] | undefined>({ queryKey: ["sessions"] }, (sessions) =>
+      (sessions ?? []).map((session) =>
+        session.session_id === updatedSession.session_id ? updatedSession : session,
+      ),
+    );
+    client.setQueryData<SessionDetailPayload | undefined>(
+      ["session", updatedSession.session_id],
+      (detail) => (detail ? { ...detail, session: updatedSession } : detail),
+    );
+    void client.invalidateQueries({ queryKey: ["sessions"] });
+    void client.invalidateQueries({ queryKey: ["session", updatedSession.session_id] });
+  }, [client]);
+
+  const enhancePromptMutation = useMutation({
+    mutationFn: (payload: { text: string; session_id: string | null }) =>
+      enhancePrompt(payload),
+    onSuccess: (result) => {
+      if (result.session) {
+        updateSessionRecordCaches(result.session);
+      }
     },
   });
 
@@ -580,24 +638,23 @@ export function SessionPage({
     if (!liveSessionId || !sessionState?.sessionEnded) return;
     if (refreshedEndedLiveSessionsRef.current.has(liveSessionId)) return;
     refreshedEndedLiveSessionsRef.current.add(liveSessionId);
-    const treeQueryKey = workspaceFileTreeQueryKey(workspaceQueryKey);
     if (fileTreeOpen) {
       void refreshWorkspaceFileTree()
         .then((payload) => {
-          client.setQueryData(treeQueryKey, payload);
+          client.setQueryData(workspaceFileTreeKey, payload);
         })
         .catch(() => {
-          void client.invalidateQueries({ queryKey: treeQueryKey });
+          void client.invalidateQueries({ queryKey: workspaceFileTreeKey });
         });
       return;
     }
-    void client.invalidateQueries({ queryKey: treeQueryKey });
+    void client.invalidateQueries({ queryKey: workspaceFileTreeKey });
   }, [
     client,
     fileTreeOpen,
     sessionState?.liveSessionId,
     sessionState?.sessionEnded,
-    workspaceQueryKey,
+    workspaceFileTreeKey,
   ]);
 
   const activeSessionRecord = useMemo(() => {
@@ -786,6 +843,14 @@ export function SessionPage({
     const result = await transcribeSttAudio(file);
     return result.text;
   }, []);
+
+  const handleEnhancePrompt = useCallback(async (text: string) => {
+    const result = await enhancePromptMutation.mutateAsync({
+      text,
+      session_id: routeSessionId ?? sessionState?.sessionId ?? null,
+    });
+    return result.text;
+  }, [enhancePromptMutation, routeSessionId, sessionState?.sessionId]);
 
   const handleProfileChange = async (nextProfileId: string) => {
     setPendingProfileId(nextProfileId);
@@ -1013,12 +1078,16 @@ export function SessionPage({
                   onPressedChange={setFileTreeOpen}
                 >
                   <PanelRightIcon aria-hidden="true" />
+                  {showWorkspaceFileTreeChangeDot ? (
+                    <span
+                      aria-hidden="true"
+                      className="session-file-tree-toggle__change-dot"
+                    />
+                  ) : null}
                 </Toggle>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="end">
-                {fileTreeOpen
-                  ? `Workspace explorer open. ${workspaceExplorerShortcutLabel} to close.`
-                  : `Workspace explorer closed. Show workspace files. ${workspaceExplorerShortcutLabel} to open.`}
+                {workspaceExplorerTooltip}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -1170,6 +1239,7 @@ export function SessionPage({
               dictationAvailable={dictationAvailability.available}
               dictationUnavailableReason={dictationAvailability.reason}
               onTranscribeDictation={handleTranscribeDictation}
+              onEnhancePrompt={handleEnhancePrompt}
               restoredInput={sessionState?.restoredInput ?? null}
               onRestoredInputConsumed={() => {
                 if (selectedRouteSessionKey) {

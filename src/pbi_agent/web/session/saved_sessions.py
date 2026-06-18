@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import re
 import threading
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from pbi_agent.config import ResolvedRuntime
-from pbi_agent.session_store import KanbanTaskRecord, SessionRecord, SessionStore
+from pbi_agent.session_store import (
+    KanbanTaskRecord,
+    RunSessionRecord,
+    SessionRecord,
+    SessionStore,
+)
+from pbi_agent.web.session.prompt_enhancement import PromptEnhancementService
 from pbi_agent.web.session.serializers import (
     _RUN_RECORD_STATUSES,
     _combined_timeline_snapshot,
@@ -16,49 +22,90 @@ from pbi_agent.web.session.serializers import (
     _serialize_run_as_live_session,
     _serialize_run_session,
     _serialize_session,
+    _session_status_from_live_session,
     _session_status_from_run,
     _web_event_from_record,
 )
 from pbi_agent.web.uploads import delete_uploaded_images
 
 _PERSISTED_MESSAGE_ID_PATTERN = re.compile(r"^msg-(\d+)$")
+_TERMINAL_RUN_STATUSES = frozenset(
+    {
+        "completed",
+        "interrupted",
+        "failed",
+        "ended",
+        "stale",
+    }
+)
+
+
+class _ResolvedSessionActivity(NamedTuple):
+    active_run: RunSessionRecord | None
+    status_run: RunSessionRecord | None
+
+
+def _run_is_covered_by_terminal_web_run(
+    active_run: RunSessionRecord | None,
+    web_run: RunSessionRecord | None,
+) -> bool:
+    if active_run is None or web_run is None:
+        return False
+    if web_run.status not in _TERMINAL_RUN_STATUSES or web_run.ended_at is None:
+        return False
+    if active_run.session_id is None or active_run.session_id != web_run.session_id:
+        return False
+    return web_run.started_at <= active_run.started_at <= web_run.ended_at
+
+
+def _resolve_session_activity(
+    store: SessionStore,
+    session_id: str,
+) -> _ResolvedSessionActivity:
+    active_run = store.get_latest_session_run(session_id, include_ended=False)
+    latest_run = store.get_latest_session_run(session_id, include_ended=True)
+    latest_web_run = store.get_latest_web_session_run(session_id)
+    if _run_is_covered_by_terminal_web_run(active_run, latest_web_run):
+        active_run = None
+    return _ResolvedSessionActivity(
+        active_run=active_run,
+        status_run=active_run or latest_web_run or latest_run,
+    )
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Protocol
+
     from pbi_agent.web.session.state import EventStream, LiveSessionState
+
+    class _ResolveSavedSessionRuntime(Protocol):
+        def __call__(
+            self,
+            session_id: str,
+            *,
+            fallback: ResolvedRuntime,
+        ) -> ResolvedRuntime: ...
 
 
 class SavedSessionsMixin:
     _app_stream: EventStream
+    _default_runtime: ResolvedRuntime
     _directory_key: str
     _lock: threading.Lock
     _running_task_ids: set[str]
+    _workspace_root: Any
 
     if TYPE_CHECKING:
-
-        def _find_live_session_for_saved_session(
-            self,
-            _saved_session_id: str,
-        ) -> LiveSessionState | None: ...
-
-        def _find_live_session_for_saved_session_locked(
-            self,
-            _saved_session_id: str,
-        ) -> LiveSessionState | None: ...
-
-        def _publish_task_updated(self, record: KanbanTaskRecord) -> None: ...
-
-        def _resolve_runtime(self, profile_id: str | None) -> ResolvedRuntime: ...
-
-        def _serialize_live_session(
-            self,
-            live_session: LiveSessionState,
-        ) -> dict[str, Any]: ...
-
-        def _serialize_live_snapshot(
-            self,
-            live_session: LiveSessionState,
-        ) -> dict[str, Any]: ...
+        _find_live_session_for_saved_session: Callable[[str], LiveSessionState | None]
+        _find_live_session_for_saved_session_locked: Callable[
+            [str], LiveSessionState | None
+        ]
+        _publish_task_updated: Callable[[KanbanTaskRecord], None]
+        _resolve_runtime: Callable[[str | None], ResolvedRuntime]
+        _resolve_saved_session_runtime: _ResolveSavedSessionRuntime
+        _serialize_live_session: Callable[[LiveSessionState], dict[str, Any]]
+        _serialize_live_snapshot: Callable[[LiveSessionState], dict[str, Any]]
 
     def list_sessions(
         self,
@@ -71,22 +118,8 @@ class SavedSessionsMixin:
                 limit=limit,
                 search=search,
             )
-            active_runs = {
-                session.session_id: store.get_latest_session_run(
-                    session.session_id,
-                    include_ended=False,
-                )
-                for session in sessions
-            }
-            latest_runs = {
-                session.session_id: store.get_latest_session_run(
-                    session.session_id,
-                    include_ended=True,
-                )
-                for session in sessions
-            }
-            latest_web_runs = {
-                session.session_id: store.get_latest_web_session_run(session.session_id)
+            activities = {
+                session.session_id: _resolve_session_activity(store, session.session_id)
                 for session in sessions
             }
         return [
@@ -95,9 +128,8 @@ class SavedSessionsMixin:
                 active_live_session=self._find_live_session_for_saved_session(
                     session.session_id
                 ),
-                active_run=active_runs.get(session.session_id),
-                status_run=latest_web_runs.get(session.session_id)
-                or latest_runs.get(session.session_id),
+                active_run=activities[session.session_id].active_run,
+                status_run=activities[session.session_id].status_run,
             )
             for session in sessions
         ]
@@ -131,9 +163,7 @@ class SavedSessionsMixin:
             if record is None or record.directory != self._directory_key:
                 raise KeyError(session_id)
             messages = store.list_messages(session_id)
-            latest_run = store.get_latest_session_run(session_id, include_ended=True)
-            active_run = store.get_latest_session_run(session_id, include_ended=False)
-            latest_web_run = store.get_latest_web_session_run(session_id)
+            activity = _resolve_session_activity(store, session_id)
             web_runs = store.list_web_session_runs(session_id)
             web_events_by_run_session_id = {
                 run.run_session_id: [
@@ -152,8 +182,8 @@ class SavedSessionsMixin:
             else None
         )
         serialized_active_run = (
-            _serialize_run_as_live_session(active_run)
-            if active_run is not None and live_session is None
+            _serialize_run_as_live_session(activity.active_run)
+            if activity.active_run is not None and live_session is None
             else None
         )
         live_snapshot = (
@@ -170,17 +200,13 @@ class SavedSessionsMixin:
             "session": _serialize_session(
                 record,
                 active_live_session=live_session,
-                active_run=active_run,
-                status_run=active_run or latest_web_run or latest_run,
+                active_run=activity.active_run,
+                status_run=activity.status_run,
             ),
-            "status": live_session.status
+            "status": _session_status_from_live_session(live_session)
             if live_session is not None
-            else _session_status_from_run(active_run)
-            if active_run is not None
-            else _session_status_from_run(latest_web_run)
-            if latest_web_run is not None
-            else _session_status_from_run(latest_run)
-            if latest_run is not None
+            else _session_status_from_run(activity.status_run)
+            if activity.status_run is not None
             else "idle",
             "history_items": [
                 _serialize_history_message(message) for message in messages
@@ -222,6 +248,50 @@ class SavedSessionsMixin:
             raise KeyError(forked_session_id)
         serialized = _serialize_session(forked)
         self._app_stream.publish("session_created", {"session": serialized})
+        return serialized
+
+    def enhance_prompt(
+        self,
+        *,
+        text: str,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        result = PromptEnhancementService(
+            directory_key=self._directory_key,
+            workspace_root=self._workspace_root,
+            default_runtime=self._default_runtime,
+            resolve_runtime=self._resolve_runtime,
+            resolve_saved_session_runtime=self._resolve_saved_session_runtime,
+            find_live_session=self._find_live_session_for_saved_session,
+        ).enhance_prompt(
+            text=text,
+            session_id=session_id,
+        )
+
+        session_payload = (
+            self._publish_prompt_enhancement_session(result.session)
+            if result.session is not None
+            else None
+        )
+        return {"text": result.text, "session": session_payload}
+
+    def _publish_prompt_enhancement_session(
+        self,
+        record: SessionRecord,
+    ) -> dict[str, Any]:
+        session_id = record.session_id
+        active_live_session = self._find_live_session_for_saved_session(
+            record.session_id
+        )
+        with SessionStore() as store:
+            activity = _resolve_session_activity(store, session_id)
+        serialized = _serialize_session(
+            record,
+            active_live_session=active_live_session,
+            active_run=activity.active_run,
+            status_run=activity.status_run,
+        )
+        self._app_stream.publish("session_updated", {"session": serialized})
         return serialized
 
     def list_session_runs(self, session_id: str) -> list[dict[str, Any]]:

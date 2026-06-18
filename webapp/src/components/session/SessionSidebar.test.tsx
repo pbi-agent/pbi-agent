@@ -110,6 +110,30 @@ describe("SessionSidebar", () => {
     );
   });
 
+  it.each(["starting", "running"] as const)(
+    "shows a processing spinner for %s sessions",
+    (status) => {
+      renderSidebar({ sessions: [makeSession({ status })] });
+
+      expect(
+        screen.getByRole("status", { name: "Session processing" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    "waiting_for_input",
+    "idle",
+    "ended",
+    "failed",
+    "stale",
+    undefined,
+  ] as const)("does not show a processing spinner for %s sessions", (status) => {
+    renderSidebar({ sessions: [makeSession(status ? { status } : {})] });
+
+    expect(screen.queryByRole("status", { name: "Session processing" })).toBeNull();
+  });
+
   it("keeps the actions menu separate from session navigation", async () => {
     const user = userEvent.setup();
     const props = renderSidebar();

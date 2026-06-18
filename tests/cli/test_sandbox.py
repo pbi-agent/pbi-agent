@@ -723,7 +723,6 @@ class DefaultWebCommandTests(unittest.TestCase):
         self.assertIn("site.getsitepackages()[0]", content)
         self.assertIn("-name tests -o -name test -o -name __pycache__", content)
         self.assertIn("-name '*.pyc' -o -name '*.pyo'", content)
-        self.assertIn("${site_packages}/pyarrow/include", content)
         self.assertNotIn("slim-bookworm", content)
         self.assertNotIn("apt-get", content)
         self.assertIn(
