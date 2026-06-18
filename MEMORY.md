@@ -49,3 +49,4 @@
 
 ## 2026-06-18
 - Released and published v0.15.0 from local post-v0.14.0 product changes plus release edits; PR #323 merged, GitHub Release notes were stripped of frontmatter, and PyPI has wheel+sdist. Validation: Ruff, format check, basedpyright, dead-code, full pytest, docs build, uv lock check, PR checks, and Release workflow all passed.
+- Replaced Provider settings card inline actions with a shadcn dropdown menu, updated SettingsPage tests, and rebuilt static web assets. Validation: focused SettingsPage test, full `bun run test:web`, `bun run lint`, `bun run typecheck`, and `bun run web:build` passed.
