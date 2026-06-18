@@ -1,2 +1,4 @@
-- [x] Inspect current diff for code-quality review
-- [x] Report high-impact maintainability findings or no findings
+- [x] Patch web plain-text conversion to tolerate malformed Rich markup
+- [x] Add focused regression coverage without starting a live session
+- [x] Run focused validation
+- [x] Update task memory

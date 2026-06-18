@@ -59,7 +59,7 @@ from pbi_agent.session_store import (
     SessionStore,
     WebManagerLeaseBusyError,
 )
-from pbi_agent.web.display import WebDisplay
+from pbi_agent.web.display import WebDisplay, _plain_text
 from pbi_agent.web.api.routes.events import _iter_sse_events, _resolve_since
 import pbi_agent.web.session_manager as session_manager_module
 from pbi_agent.web.server_runtime import (
@@ -7883,6 +7883,23 @@ def test_web_display_processing_state_has_no_intermediate_inactive_tool_flow() -
         {"active": False, "phase": None, "message": None},
     ]
     assert all(payload["active"] for payload in processing_payloads[:-1])
+
+
+@pytest.mark.parametrize(
+    "markup",
+    [
+        r"closing tag '[/\]' at position 29 doesn't match any open tag",
+        r"rich.errors.MarkupError: closing tag '[/,/\]' at position 84",
+    ],
+)
+def test_web_display_plain_text_tolerates_malformed_rich_markup(
+    markup: str,
+) -> None:
+    assert _plain_text(markup) == markup
+
+
+def test_web_display_plain_text_strips_valid_rich_markup() -> None:
+    assert _plain_text("[green]done[/green]") == "done"
 
 
 def test_web_display_apply_patch_running_event_summarizes_raw_v4a_input() -> None:
