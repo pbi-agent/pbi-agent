@@ -348,11 +348,6 @@ def test_execute_tool_calls_serializes_truncated_shell_output(
 
     monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
     monkeypatch.setattr(
-        shell_tool,
-        "_compress_content",
-        lambda content: {"compressed": content},
-    )
-    monkeypatch.setattr(
         tool_runtime,
         "get_tool_handler",
         lambda name: shell_tool.handle if name == "shell" else None,
