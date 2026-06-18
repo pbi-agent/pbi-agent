@@ -1,4 +1,4 @@
-- [x] Locate provider settings UI and existing menu primitives
-- [x] Replace inline provider actions with dropdown menu
-- [x] Validate frontend changes
+- [x] Patch web plain-text conversion to tolerate malformed Rich markup
+- [x] Add focused regression coverage without starting a live session
+- [x] Run focused validation
 - [x] Update task memory

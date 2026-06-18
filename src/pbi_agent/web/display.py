@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from rich.errors import MarkupError
 from rich.text import Text
 
 from pbi_agent.models.messages import TokenUsage, WebSearchSource
@@ -53,7 +54,10 @@ class _ApplyPatchDisplayOperation:
 def _plain_text(markup: str) -> str:
     if not markup:
         return ""
-    return Text.from_markup(markup).plain
+    try:
+        return Text.from_markup(markup).plain
+    except MarkupError:
+        return Text(markup).plain
 
 
 def _usage_payload(usage: TokenUsage) -> dict[str, Any]:
