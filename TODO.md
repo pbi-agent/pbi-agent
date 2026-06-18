@@ -1,4 +1,4 @@
-- [x] Patch web plain-text conversion to tolerate malformed Rich markup
-- [x] Add focused regression coverage without starting a live session
+- [x] Update prompt enhancer behavior from typo-fix to concise task instruction framing
+- [x] Adjust focused tests if prompt assertions changed
 - [x] Run focused validation
 - [x] Update task memory

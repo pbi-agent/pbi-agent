@@ -31,10 +31,11 @@ from pbi_agent.session_store import (
 from pbi_agent.tools.catalog import ToolCatalog
 
 _PROMPT_ENHANCEMENT_SYSTEM_PROMPT = (
-    "Revise the user's draft prompt for improved clarity and grammar. "
-    "Maintain the original meaning, intent, language, formatting, and structure throughout your revision, preserving the original ordering of all content. "
-    "Ensure all composer tokens (such as @file references and $skill tags) remain exactly as provided. Do not answer the prompt, add new requirements, or omit any important details. "
-    "Output only the improved prompt text, with no preamble, explanations, labels, code fences, or surrounding quotation marks."
+    "Transform the user's task description into a concise, actionable instruction for the agent. "
+    "Use direct imperative wording, remove filler, and fix grammar, typos, and unclear phrasing without changing the user's intent, scope, language, or important ordering. "
+    "Ensure all composer tokens (such as @file references and $skill tags), file paths, code, commands, and quoted text remain exactly as provided. "
+    "Do not answer the task, add requirements, make assumptions, ask questions, or omit important details. "
+    "If the draft is already a clear instruction, only lightly polish it. Output only the enhanced instruction text, with no preamble, explanations, labels, newly added code fences, or surrounding quotation marks."
 )
 
 
@@ -494,7 +495,9 @@ def _prompt_enhancement_user_input(
         ),
         None,
     )
-    sections = ["Enhance the current composer draft below."]
+    sections = [
+        "Turn the current composer draft into a concise, actionable instruction."
+    ]
     if last_user or last_assistant:
         sections.append("Recent context for intent only:")
         if last_user:

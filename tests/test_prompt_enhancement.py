@@ -161,12 +161,14 @@ def test_prompt_enhancement_uses_session_runtime_without_tools_and_records_usage
     assert runtime.tool_availability_overridden is True
     assert open_call["tool_catalog"].names() == []
     assert open_call["tool_availability_overridden"] is True
+    assert "concise, actionable instruction" in open_call["system_prompt"]
     assert "Ensure all composer tokens" in open_call["system_prompt"]
 
     request = calls["request"]
     assert request["instructions"] is None
     assert request["session_id"] == session_id
     prompt_input = request["user_input"].text
+    assert "Turn the current composer draft" in prompt_input
     assert "Last user with @file" in prompt_input
     assert "Last assistant with $skill" in prompt_input
     assert "rough draft using @file and $skill" in prompt_input
