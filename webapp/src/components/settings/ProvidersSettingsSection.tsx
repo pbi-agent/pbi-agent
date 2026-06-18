@@ -2,6 +2,7 @@ import {
   CheckCircle2Icon,
   EditIcon,
   GaugeIcon,
+  MoreHorizontalIcon,
   PlugZapIcon,
   PlusIcon,
   Trash2Icon,
@@ -12,6 +13,14 @@ import { EmptyState } from "../shared/EmptyState";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 function providerKindLabel(providerKind: string, options: ConfigOptions): string {
   return options.provider_metadata[providerKind]?.label ?? providerKind;
@@ -114,36 +123,64 @@ function ProviderCard({
         )}
       </div>
       <div className="provider-card__actions">
-        {showAuthActions && (
-          <>
-            <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onConnect} disabled={isBusy}>
-              <PlugZapIcon data-icon="inline-start" />
-              {authStatus.has_session ? "Reconnect" : "Connect"}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="settings-action-button"
+              aria-label={`Open actions for ${provider.name} provider`}
+            >
+              <MoreHorizontalIcon />
             </Button>
-            <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onRefresh} disabled={isBusy || !authStatus.can_refresh}>
-              <CheckCircle2Icon data-icon="inline-start" />
-              Refresh
-            </Button>
-            {showUsageAction && (
-              <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onShowUsage}>
-                <GaugeIcon data-icon="inline-start" />
-                Usage
-              </Button>
-            )}
-            <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onDisconnect} disabled={isBusy || !authStatus.has_session}>
-              <UnplugIcon data-icon="inline-start" />
-              Disconnect
-            </Button>
-          </>
-        )}
-        <Button type="button" variant="ghost" size="sm" className="settings-action-button" onClick={onEdit}>
-          <EditIcon data-icon="inline-start" />
-          Edit
-        </Button>
-        <Button type="button" variant="ghost" size="sm" className="settings-action-button settings-action-button--danger" onClick={onDelete} disabled={isBusy}>
-          <Trash2Icon data-icon="inline-start" />
-          Delete
-        </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              {showAuthActions ? (
+                <>
+                  <DropdownMenuItem onClick={onConnect} disabled={isBusy}>
+                    <PlugZapIcon />
+                    {authStatus.has_session ? "Reconnect" : "Connect"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={onRefresh}
+                    disabled={isBusy || !authStatus.can_refresh}
+                  >
+                    <CheckCircle2Icon />
+                    Refresh
+                  </DropdownMenuItem>
+                  {showUsageAction ? (
+                    <DropdownMenuItem onClick={onShowUsage}>
+                      <GaugeIcon />
+                      Usage
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem
+                    onClick={onDisconnect}
+                    disabled={isBusy || !authStatus.has_session}
+                  >
+                    <UnplugIcon />
+                    Disconnect
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
+              <DropdownMenuItem onClick={onEdit}>
+                <EditIcon />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={onDelete}
+                disabled={isBusy}
+              >
+                <Trash2Icon />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </Card>
   );

@@ -1,10 +1,4 @@
-- [x] Load release-writing skill and inspect memory
-- [x] Fetch `origin master` and tags
-- [x] Determine release boundary, local/remote commits, and next minor version
-- [x] Prepare `chore/release-v0.15.0` and include post-release product changes
-- [x] Apply version/changelog release edits
-- [x] Run release validation
-- [x] Commit release branch changes
-- [x] Push and open release PR
-- [x] Publish after clean PR/check status
-- [x] Record release task memory
+- [x] Locate provider settings UI and existing menu primitives
+- [x] Replace inline provider actions with dropdown menu
+- [x] Validate frontend changes
+- [x] Update task memory

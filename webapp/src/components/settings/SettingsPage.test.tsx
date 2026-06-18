@@ -561,6 +561,17 @@ async function openSettingsTab(
   await user.click(button!);
 }
 
+async function openProviderActionMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  providerName: string,
+) {
+  await user.click(
+    await screen.findByRole("button", {
+      name: `Open actions for ${providerName} provider`,
+    }),
+  );
+}
+
 async function openSelectListbox(
   user: ReturnType<typeof userEvent.setup>,
   control: HTMLElement,
@@ -2354,11 +2365,15 @@ describe("SettingsPage", () => {
     // Usage data must NOT be fetched eagerly on render.
     expect(fetchProviderUsageLimits).not.toHaveBeenCalled();
 
-    // API-key providers should not expose a Usage button.
-    const usageButtons = screen.getAllByRole("button", { name: "Usage" });
-    expect(usageButtons).toHaveLength(1);
+    // API-key providers should not expose a Usage action.
+    await openProviderActionMenu(user, "OpenAI Main");
+    expect(
+      screen.queryByRole("menuitem", { name: "Usage" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
 
-    await user.click(usageButtons[0]);
+    await openProviderActionMenu(user, "ChatGPT Main");
+    await user.click(screen.getByRole("menuitem", { name: "Usage" }));
 
     expect(
       await screen.findByRole("dialog", { name: /Usage & limits/i }),
@@ -2381,7 +2396,8 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
+    await openProviderActionMenu(user, "ChatGPT Main");
+    await user.click(screen.getByRole("menuitem", { name: "Connect" }));
 
     expect(await screen.findByText("Connect ChatGPT account")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
@@ -2501,7 +2517,8 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     expect(await screen.findByText("Copilot Main")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Connect" }));
+    await openProviderActionMenu(user, "Copilot Main");
+    await user.click(screen.getByRole("menuitem", { name: "Connect" }));
 
     expect(
       await screen.findByText("Connect GitHub Copilot account"),
@@ -2802,7 +2819,8 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
     expect(screen.getByText(/not connected/)).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
+    await openProviderActionMenu(user, "ChatGPT Main");
+    await user.click(screen.getByRole("menuitem", { name: "Connect" }));
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
     await user.click(screen.getByRole("button", { name: "Check status" }));
 
@@ -2826,7 +2844,8 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     expect(await screen.findByText("ChatGPT Main")).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "Connect" })[0]);
+    await openProviderActionMenu(user, "ChatGPT Main");
+    await user.click(screen.getByRole("menuitem", { name: "Connect" }));
     await user.click(screen.getByRole("button", { name: "Start browser sign-in" }));
     await user.click(screen.getByRole("button", { name: "Check status" }));
 
@@ -2863,12 +2882,14 @@ describe("SettingsPage", () => {
 
     await openSettingsTab(user, "Providers");
     await screen.findByText("ChatGPT Main");
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await openProviderActionMenu(user, "ChatGPT Main");
+    await user.click(screen.getByRole("menuitem", { name: "Refresh" }));
     await waitFor(() =>
       expect(refreshProviderAuth).toHaveBeenCalledWith("chatgpt-main"),
     );
 
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await openProviderActionMenu(user, "ChatGPT Main");
+    await user.click(screen.getByRole("menuitem", { name: "Disconnect" }));
     await waitFor(() =>
       expect(logoutProviderAuth).toHaveBeenCalledWith("chatgpt-main"),
     );
