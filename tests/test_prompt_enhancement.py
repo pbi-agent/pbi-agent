@@ -161,7 +161,10 @@ def test_prompt_enhancement_uses_session_runtime_without_tools_and_records_usage
     assert runtime.tool_availability_overridden is True
     assert open_call["tool_catalog"].names() == []
     assert open_call["tool_availability_overridden"] is True
-    assert "concise, actionable instruction" in open_call["system_prompt"]
+    assert (
+        "concise, actionable, and domain-appropriate instruction"
+        in open_call["system_prompt"]
+    )
     assert "Ensure all composer tokens" in open_call["system_prompt"]
 
     request = calls["request"]
