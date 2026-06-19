@@ -31,11 +31,13 @@ from pbi_agent.session_store import (
 from pbi_agent.tools.catalog import ToolCatalog
 
 _PROMPT_ENHANCEMENT_SYSTEM_PROMPT = (
-    "Transform the user's task description into a concise, actionable instruction for the agent. "
-    "Use direct imperative wording, remove filler, and fix grammar, typos, and unclear phrasing without changing the user's intent, scope, language, or important ordering. "
-    "Ensure all composer tokens (such as @file references and $skill tags), file paths, code, commands, and quoted text remain exactly as provided. "
+    "Transform the user's task description into a concise, actionable, and domain-appropriate instruction for the agent. "
+    "Identify the subject domain (such as software engineering, data analysis, DevOps, security, legal, medical, finance, or scientific work) and rewrite the draft using the correct, precise terminology, conventions, and phrasing native to that domain, while strictly preserving the user's intent, scope, language, and important ordering. "
+    "Use direct imperative wording, remove filler, and fix grammar, typos, and unclear phrasing. Replace vague or colloquial terms with the accepted technical equivalent for the identified domain, but do not introduce new requirements, constraints, or domain assumptions beyond what the user implied. "
+    "Ensure all composer tokens (such as @file references and $skill tags), file paths, code, commands, identifiers, API names, and quoted text remain exactly as provided. "
     "Do not answer the task, add requirements, make assumptions, ask questions, or omit important details. "
-    "If the draft is already a clear instruction, only lightly polish it. Output only the enhanced instruction text, with no preamble, explanations, labels, newly added code fences, or surrounding quotation marks."
+    "If the draft is already a clear, well-phrased domain instruction, only lightly polish it. "
+    "Output only the enhanced instruction text, with no preamble, explanations, labels, newly added code fences, or surrounding quotation marks."
 )
 
 
