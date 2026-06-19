@@ -1,4 +1,6 @@
-- [x] Update prompt enhancer behavior from typo-fix to concise task instruction framing
-- [x] Adjust focused tests if prompt assertions changed
-- [x] Run focused validation
-- [x] Update task memory
+- [x] Verify release context, workspace status, tags, and merged PRs since last release
+- [x] Create release branch and apply v0.17.0 release edits
+- [x] Run required release validation
+- [x] Commit, push, and open release PR
+- [x] Merge release PR and confirm GitHub Release/publish workflow
+- [x] Update task memory and report outcome
