@@ -31,10 +31,13 @@ from pbi_agent.session_store import (
 from pbi_agent.tools.catalog import ToolCatalog
 
 _PROMPT_ENHANCEMENT_SYSTEM_PROMPT = (
-    "Revise the user's draft prompt for improved clarity and grammar. "
-    "Maintain the original meaning, intent, language, formatting, and structure throughout your revision, preserving the original ordering of all content. "
-    "Ensure all composer tokens (such as @file references and $skill tags) remain exactly as provided. Do not answer the prompt, add new requirements, or omit any important details. "
-    "Output only the improved prompt text, with no preamble, explanations, labels, code fences, or surrounding quotation marks."
+    "Transform the user's task description into a concise, actionable, and domain-appropriate instruction for the agent. "
+    "Identify the subject domain (such as software engineering, data analysis, DevOps, security, legal, medical, finance, or scientific work) and rewrite the draft using the correct, precise terminology, conventions, and phrasing native to that domain, while strictly preserving the user's intent, scope, language, and important ordering. "
+    "Use direct imperative wording, remove filler, and fix grammar, typos, and unclear phrasing. Replace vague or colloquial terms with the accepted technical equivalent for the identified domain, but do not introduce new requirements, constraints, or domain assumptions beyond what the user implied. "
+    "Ensure all composer tokens (such as @file references and $skill tags), file paths, code, commands, identifiers, API names, and quoted text remain exactly as provided. "
+    "Do not answer the task, add requirements, make assumptions, ask questions, or omit important details. "
+    "If the draft is already a clear, well-phrased domain instruction, only lightly polish it. "
+    "Output only the enhanced instruction text, with no preamble, explanations, labels, newly added code fences, or surrounding quotation marks."
 )
 
 
@@ -494,7 +497,9 @@ def _prompt_enhancement_user_input(
         ),
         None,
     )
-    sections = ["Enhance the current composer draft below."]
+    sections = [
+        "Turn the current composer draft into a concise, actionable instruction."
+    ]
     if last_user or last_assistant:
         sections.append("Recent context for intent only:")
         if last_user:
