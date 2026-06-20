@@ -1,4 +1,3 @@
-- [x] Inspect session 56e2258c0dd34b98a2a3ce8267920bdb event/timeline data.
-- [x] Trace reasoning parser/rendering path and identify mismatch.
-- [x] Implement parser fix and regression tests.
-- [x] Run focused validation and update memory.
+- [x] Inspect session `8a196c98f6bf4625961f0e1d6ec1d1a7` saved provider events.
+- [x] Verify second provider call includes prior `<think>` reasoning in assistant replay.
+- [x] Summarize evidence and remaining risk.

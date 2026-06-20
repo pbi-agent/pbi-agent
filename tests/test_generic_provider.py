@@ -143,6 +143,246 @@ def test_generic_request_turn_renders_chat_completion_reasoning(
     }
 
 
+def test_generic_request_turn_extracts_think_tag_reasoning(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    assistant_content = (
+        "<think>The LICENSE is the standard MIT License text."
+        "</think>**LICENSE summary**\n\nPermissive MIT."
+    )
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float):
+        del request, timeout
+        return make_http_response(
+            {
+                "id": "chatcmpl_think_tags",
+                "model": "MiniMax-M3",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": assistant_content,
+                        }
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GenericProvider(_make_settings(model="MiniMax-M3"))
+    result = provider.request_turn(
+        user_message="summarize LICENSE",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert result.reasoning_content == "The LICENSE is the standard MIT License text."
+    assert result.text == "**LICENSE summary**\n\nPermissive MIT."
+    assert display_spy.thinking_calls == [
+        {
+            "text": "The LICENSE is the standard MIT License text.",
+            "title": None,
+            "replace_existing": False,
+            "widget_id": None,
+        }
+    ]
+    assert display_spy.markdown_calls == ["**LICENSE summary**\n\nPermissive MIT."]
+    assert provider._messages[-1] == {
+        "role": "assistant",
+        "content": assistant_content,
+    }
+
+
+def test_generic_request_turn_replays_tagged_reasoning_after_tool_call(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    requests: list[dict[str, object]] = []
+    assistant_content = (
+        "<think>\n"
+        "The user wants me to summarize the LICENSE file. Let me read it first.\n"
+        "</think>\n"
+    )
+    responses = iter(
+        [
+            {
+                "id": "chatcmpl_tool_think",
+                "model": "MiniMax-M3",
+                "choices": [
+                    {
+                        "finish_reason": "tool_calls",
+                        "message": {
+                            "role": "assistant",
+                            "content": assistant_content,
+                            "tool_calls": [
+                                {
+                                    "id": "call_read_license",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "explore_workspace",
+                                        "arguments": (
+                                            '{"pattern":"LICENSE","target":"read"}'
+                                        ),
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+            },
+            {
+                "id": "chatcmpl_done",
+                "model": "MiniMax-M3",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "The project uses the MIT License.",
+                        }
+                    }
+                ],
+            },
+        ]
+    )
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float):
+        del timeout
+        payload = request.data.decode("utf-8") if request.data else "{}"
+        requests.append(json.loads(payload))
+        return make_http_response(next(responses))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GenericProvider(_make_settings(model="MiniMax-M3"))
+    session_usage = TokenUsage()
+
+    first = provider.request_turn(
+        user_message="summarize LICENSE",
+        display=display_spy,
+        session_usage=session_usage,
+        turn_usage=TokenUsage(),
+    )
+    second = provider.request_turn(
+        tool_result_items=[
+            {
+                "role": "tool",
+                "tool_call_id": "call_read_license",
+                "content": "MIT License",
+            }
+        ],
+        display=display_spy,
+        session_usage=session_usage,
+        turn_usage=TokenUsage(),
+    )
+
+    assert first.text == ""
+    assert first.reasoning_content == (
+        "The user wants me to summarize the LICENSE file. Let me read it first."
+    )
+    assert second.text == "The project uses the MIT License."
+    assert requests[1]["messages"] == [
+        {"role": "system", "content": provider._system_prompt},
+        {"role": "user", "content": "summarize LICENSE"},
+        {
+            "role": "assistant",
+            "content": assistant_content,
+            "tool_calls": [
+                {
+                    "id": "call_read_license",
+                    "type": "function",
+                    "function": {
+                        "name": "explore_workspace",
+                        "arguments": '{"pattern":"LICENSE","target":"read"}',
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_read_license",
+            "content": "MIT License",
+        },
+    ]
+    assert display_spy.thinking_calls == [
+        {
+            "text": (
+                "The user wants me to summarize the LICENSE file. Let me read it first."
+            ),
+            "title": None,
+            "replace_existing": False,
+            "widget_id": None,
+        }
+    ]
+    assert display_spy.markdown_calls == ["The project uses the MIT License."]
+
+
+def test_generic_parse_response_extracts_tool_call_only_think_tags() -> None:
+    provider = GenericProvider(_make_settings())
+    assistant_content = (
+        "<think>The user wants me to summarize the LICENSE file. "
+        "Let me read it first.</think>"
+    )
+
+    result = provider._parse_response(
+        {
+            "id": "chatcmpl_tool_think",
+            "model": "MiniMax-M3",
+            "choices": [
+                {
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "content": assistant_content,
+                        "tool_calls": [
+                            {
+                                "id": "call_read_license",
+                                "type": "function",
+                                "function": {
+                                    "name": "explore_workspace",
+                                    "arguments": (
+                                        '{"pattern":"LICENSE","target":"read"}'
+                                    ),
+                                },
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+    assert result.text == ""
+    assert result.reasoning_content == (
+        "The user wants me to summarize the LICENSE file. Let me read it first."
+    )
+    assert result.function_calls == [
+        ToolCall(
+            call_id="call_read_license",
+            name="explore_workspace",
+            arguments={"pattern": "LICENSE", "target": "read"},
+        )
+    ]
+    assert result.provider_data["assistant_message"] == {
+        "role": "assistant",
+        "content": assistant_content,
+        "tool_calls": [
+            {
+                "id": "call_read_license",
+                "type": "function",
+                "function": {
+                    "name": "explore_workspace",
+                    "arguments": '{"pattern":"LICENSE","target":"read"}',
+                },
+            }
+        ],
+    }
+
+
 def test_azure_chat_completions_uses_api_key_header_and_endpoint(
     monkeypatch,
     display_spy,
