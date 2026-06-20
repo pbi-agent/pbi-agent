@@ -14,6 +14,7 @@ from pbi_agent.models.messages import (
 )
 from pbi_agent.providers.generic_provider import GenericProvider
 from pbi_agent.session_store import MessageRecord
+from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolResult
 
 
@@ -45,6 +46,52 @@ def test_generic_provider_includes_read_web_url_with_web_group() -> None:
 
     tool_names = {tool["function"]["name"] for tool in provider._tools}
     assert "read_web_url" in tool_names
+
+
+def test_generic_request_turn_omits_empty_tools(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float):
+        del timeout
+        seen["body"] = json.loads(
+            request.data.decode("utf-8") if request.data else "{}"
+        )
+        return make_http_response(
+            {
+                "id": "chatcmpl_no_tools",
+                "model": "glm-5.2",
+                "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GenericProvider(
+        _make_settings(model="glm-5.2"),
+        system_prompt="rewrite only",
+        tool_catalog=ToolCatalog(),
+    )
+    assert provider._tools == []
+
+    provider.request_turn(
+        user_message="fix grammar",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert seen["body"] == {
+        "model": "glm-5.2",
+        "messages": [
+            {"role": "system", "content": "rewrite only"},
+            {"role": "user", "content": "fix grammar"},
+        ],
+        "max_tokens": DEFAULT_MAX_TOKENS,
+    }
 
 
 def test_azure_chat_completions_uses_api_key_header_and_endpoint(

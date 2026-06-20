@@ -1148,8 +1148,6 @@ def test_google_gcp_openai_chat_request_uses_maas_url_auth_stream_and_body(
             {"role": "user", "content": "hello"},
         ],
         "max_tokens": 123,
-        "tools": [],
-        "tool_choice": "auto",
         "stream": False,
     }
 

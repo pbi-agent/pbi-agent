@@ -1,4 +1,5 @@
-- [x] Update prompt enhancer behavior from typo-fix to concise task instruction framing
-- [x] Adjust focused tests if prompt assertions changed
+- [x] Locate generic provider empty tools request path
+- [x] Patch request building to omit empty tools
+- [x] Add/update regression tests
 - [x] Run focused validation
-- [x] Update task memory
+- [x] Record memory and summarize

@@ -105,10 +105,11 @@ class ChatCompletionsProtocol(ResponseProtocol):
 
         body: dict[str, Any] = {
             "messages": messages,
-            "tools": self.tools,
-            "tool_choice": "auto",
             "max_tokens": self.settings.max_tokens,
         }
+        if self.tools:
+            body["tools"] = self.tools
+            body["tool_choice"] = "auto"
         if self.settings.model:
             body["model"] = self.settings.model
         return body
