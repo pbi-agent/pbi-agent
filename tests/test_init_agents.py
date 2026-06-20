@@ -327,8 +327,10 @@ def test_init_workspace_bootstrap_reports_catalog_failures_without_aborting_agen
 
     assert result.agents_file.created
     assert (tmp_path / "AGENTS.md").is_file()
-    assert result.commands[-1].name == "review"
-    assert result.commands[-1].status == "failed"
+    review_result = next(
+        command for command in result.commands if command.name == "review"
+    )
+    assert review_result.status == "failed"
     assert result.agents[0].status == "failed"
     assert "Failed command `/review`: catalog unavailable" in rendered
     assert "Failed sub-agent `code-reviewer`: agent catalog unavailable" in rendered
