@@ -29,7 +29,7 @@ class ModelCatalog:
             "model_catalog.json"
         )
         data = json.loads(ref.read_text(encoding="utf-8"))
-        self._models.update(data.get("models", {}))
+        self._models.update(self._normalize_models(data.get("models", {})))
         self._default_context_window = data.get("defaults", {}).get(
             "context_window", self._default_context_window
         )
@@ -40,16 +40,20 @@ class ModelCatalog:
             return
         try:
             data = json.loads(user_path.read_text(encoding="utf-8"))
-            self._models.update(data.get("models", {}))
+            self._models.update(self._normalize_models(data.get("models", {})))
         except (json.JSONDecodeError, OSError):
             pass
 
     # ------------------------------------------------------------------
+    def _normalize_models(self, models: dict[str, dict]) -> dict[str, dict]:
+        return {key.lower(): entry for key, entry in models.items()}
+
     def _find_entry(self, model: str) -> dict | None:
-        if model in self._models:
-            return self._models[model]
+        normalized_model = model.lower()
+        if normalized_model in self._models:
+            return self._models[normalized_model]
         for key, entry in self._models.items():
-            if model.startswith(key):
+            if normalized_model.startswith(key):
                 return entry
         return None
 

@@ -1,3 +1,4 @@
-- [x] Inspect session `8a196c98f6bf4625961f0e1d6ec1d1a7` saved provider events.
-- [x] Verify second provider call includes prior `<think>` reasoning in assistant replay.
-- [x] Summarize evidence and remaining risk.
+- [x] Add MiniMax M3 pricing to the bundled model catalog.
+- [x] Verify lowercase model matching still covers the new model.
+- [x] Add/update focused tests.
+- [x] Run focused validation.

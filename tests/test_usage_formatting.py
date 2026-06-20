@@ -86,6 +86,12 @@ def test_known_model_pricing() -> None:
     pricing = _pricing_for_model("gpt-5.5-pro")
     assert pricing == (30.00, 30.00, 30.00, 3.00, 180.00)
 
+    pricing = _pricing_for_model("glm-5.2")
+    assert pricing == (1.40, 1.40, 1.40, 0.26, 4.40)
+
+    pricing = _pricing_for_model("minimax-m3")
+    assert pricing == (0.30, 0.30, 0.30, 0.06, 1.20)
+
 
 def test_prefix_matching() -> None:
     pricing = _pricing_for_model("gpt-5.3-codex-some-variant")
@@ -107,6 +113,20 @@ def test_prefix_matching() -> None:
     assert ctx == 1_000_000
 
 
+def test_model_matching_is_case_insensitive() -> None:
+    pricing = _pricing_for_model("GLM-5.2")
+    assert pricing == (1.40, 1.40, 1.40, 0.26, 4.40)
+
+    pricing = _pricing_for_model("MINIMAX-M3")
+    assert pricing == (0.30, 0.30, 0.30, 0.06, 1.20)
+
+    pricing = _pricing_for_model("GPT-5.3-CODEX-SOME-VARIANT")
+    assert pricing == (1.75, 1.75, 1.75, 0.175, 14.00)
+
+    ctx = context_window_for_model("GPT-5.3-CODEX-SOME-VARIANT")
+    assert ctx == 272_000
+
+
 def test_unknown_model_context_window_returns_default() -> None:
     assert context_window_for_model("totally-unknown-model-xyz") == 200_000
 
@@ -115,7 +135,7 @@ def test_user_override_catalog(tmp_path, monkeypatch) -> None:
     """User overrides in ~/.pbi-agent/model_catalog.json take precedence."""
     user_catalog = {
         "models": {
-            "my-custom-model": {
+            "MY-CUSTOM-MODEL": {
                 "context_window": 999_999,
                 "pricing": {
                     "input": 10.0,
@@ -135,6 +155,7 @@ def test_user_override_catalog(tmp_path, monkeypatch) -> None:
     catalog = ModelCatalog()
 
     assert catalog.get_context_window("my-custom-model") == 999_999
+    assert catalog.get_context_window("My-Custom-Model") == 999_999
     assert catalog.get_pricing("my-custom-model") == (10.0, 10.0, 10.0, 1.0, 50.0)
     # Bundled models should still be available
     assert catalog.get_pricing("gpt-5.3-codex") == (1.75, 1.75, 1.75, 0.175, 14.00)
