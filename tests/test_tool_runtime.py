@@ -354,7 +354,13 @@ def test_execute_tool_calls_serializes_truncated_shell_output(
     )
 
     batch = tool_runtime.execute_tool_calls(
-        [ToolCall(call_id="call_1", name="shell", arguments={"command": "python"})],
+        [
+            ToolCall(
+                call_id="call_1",
+                name="shell",
+                arguments={"command": "python", "compression": False},
+            )
+        ],
         max_workers=1,
     )
 
@@ -373,6 +379,48 @@ def test_execute_tool_calls_serializes_truncated_shell_output(
     assert result["stderr"].endswith("-stderr-end")
     assert "chars omitted" in result["stdout"]
     assert "chars omitted" in result["stderr"]
+
+
+def test_execute_tool_calls_serializes_compressed_shell_output(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        del args, kwargs
+        return subprocess.CompletedProcess(
+            args="python",
+            returncode=0,
+            stdout=b"raw stdout",
+            stderr=b"raw stderr",
+        )
+
+    def fake_compress_text(text: str, *, backend: str) -> str:
+        assert backend == "auto"
+        return f"compressed: {text}"
+
+    monkeypatch.setattr(shell_tool.subprocess, "run", fake_run)
+    monkeypatch.setattr(shell_tool, "compress_text", fake_compress_text)
+    monkeypatch.setattr(
+        tool_runtime,
+        "get_tool_handler",
+        lambda name: shell_tool.handle if name == "shell" else None,
+    )
+
+    batch = tool_runtime.execute_tool_calls(
+        [ToolCall(call_id="call_1", name="shell", arguments={"command": "python"})],
+        max_workers=1,
+    )
+
+    assert json.loads(batch.results[0].output_json) == {
+        "ok": True,
+        "result": {
+            "stdout": "compressed: raw stdout",
+            "stderr": "compressed: raw stderr",
+            "exit_code": 0,
+        },
+    }
 
 
 def test_shell_tool_uses_configured_bootstrap_and_executable(
@@ -396,7 +444,10 @@ def test_shell_tool_uses_configured_bootstrap_and_executable(
     monkeypatch.setenv(shell_tool.SHELL_BOOTSTRAP_ENV, "/sandbox shell/env")
     monkeypatch.setenv(shell_tool.SHELL_EXECUTABLE_ENV, "/bin/bash")
 
-    result = shell_tool.handle({"command": "bun --version"}, Mock())
+    result = shell_tool.handle(
+        {"command": "bun --version", "compression": False},
+        Mock(),
+    )
 
     assert result["exit_code"] == 0
     assert result["stdout"] == "ok\n"

@@ -317,6 +317,7 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
         "command",
         "working_directory",
         "timeout_ms",
+        "compression",
     ]
     assert shell_parameters["properties"]["working_directory"]["description"] == (
         "Working directory for the command. Relative paths resolve "
@@ -325,6 +326,9 @@ def test_openai_build_request_body_uses_chatgpt_backend_contract() -> None:
     assert shell_parameters["properties"]["timeout_ms"]["description"] == (
         "Timeout in milliseconds. Defaults to 30 000 (30 seconds), "
         "maximum 300 000 (5 minutes)."
+    )
+    assert shell_parameters["properties"]["compression"]["description"] == (
+        "Whether to compress stdout/stderr before returning output. Defaults to true."
     )
     assert "max_output_tokens" not in body
     assert "prompt_cache_retention" not in body

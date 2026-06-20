@@ -155,6 +155,20 @@ wheels = [
 ]
 
 [[package]]
+name = "codetool-shell"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/a8/5f2f1e30c79b4f5effbb3a9eb2390cd932909cb93cad969f4053fd173b93/codetool_shell-0.1.1.tar.gz", hash = "sha256:5173bd72f5b103866fdccddfc4fc6181ae9ee3214bc9e3e049b9d768161b8d56", size = 247506, upload-time = "2026-06-20T10:24:41.948Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/c4/7ff03ab6a695b728d436b1c4bff4ab0e29bc8ee66d2629e5f4d2b35f54fe/codetool_shell-0.1.1-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:b7155d8f91530321796ab3fb12da5c46e93a049c5a01697b913d296febd013fb", size = 734931, upload-time = "2026-06-20T10:24:33.675Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/dc/32eaae4c34abf64b6e15985f5460b73b878c4abf58d18bf7ced821c24359/codetool_shell-0.1.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:e79553d1ae9e9beedd2357e206889233a9fb6559aa8276c4bb8423dd68f632d2", size = 713612, upload-time = "2026-06-20T10:24:35.222Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/8a/31d67e94f7d1d1ea4ac48a984695c435b8d7b23bca1ae30af9f39e12dd01/codetool_shell-0.1.1-py3-none-manylinux2014_aarch64.whl", hash = "sha256:91370ae7f6f82d472e0d8ccb7f1e60f6a917b46412610cb8d77875f9bbf68b9d", size = 750554, upload-time = "2026-06-20T10:24:36.485Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/61/8407e013eae559656351087c5a5043dee8a2bc194cb148537b456b1e391b/codetool_shell-0.1.1-py3-none-manylinux2014_x86_64.whl", hash = "sha256:f81a922804a78027123c6e92247f28c0b929f8fa73fd6d1dd61fb8075e4d1ec4", size = 771942, upload-time = "2026-06-20T10:24:37.745Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/90/87e0750903e72d5ca037a33f5729f1701c21e25fd2304e63ba586375a87a/codetool_shell-0.1.1-py3-none-win_amd64.whl", hash = "sha256:8dd9e8aa3475e5eba281e96998bc451cd80050efb8f6fc108ca72152a993b3df", size = 634551, upload-time = "2026-06-20T10:24:39.349Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/eb/91ff22c785d31092c348fc44abd129ad8d54b46cc54be15a4b504502071a/codetool_shell-0.1.1-py3-none-win_arm64.whl", hash = "sha256:1cbe0b276de069f18ee06a27d9835e4cb8feb23f058d8b5c571070493b696ea9", size = 594393, upload-time = "2026-06-20T10:24:40.747Z" },
+]
+
+[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -434,10 +448,11 @@ wheels = [
 
 [[package]]
 name = "pbi-agent"
-version = "0.17.0"
+version = "0.18.0"
 source = { editable = "." }
 dependencies = [
     { name = "codetool-explore" },
+    { name = "codetool-shell" },
     { name = "fastapi" },
     { name = "lark" },
     { name = "mcp" },
@@ -459,6 +474,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "codetool-explore", specifier = "==0.7.0" },
+    { name = "codetool-shell", specifier = "==0.1.1" },
     { name = "fastapi", specifier = "==0.135.2" },
     { name = "lark", specifier = "==1.3.1" },
     { name = "mcp", specifier = "==1.26.0" },
