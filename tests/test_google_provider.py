@@ -292,6 +292,13 @@ def test_google_provider_exposes_shell_required_schema() -> None:
     shell_tool = next(tool for tool in provider._tools if tool["name"] == "shell")
 
     assert shell_tool["parameters"]["required"] == ["command"]
+    assert shell_tool["parameters"]["properties"]["compression"] == {
+        "type": "boolean",
+        "description": (
+            "Whether to compress stdout/stderr before returning output. "
+            "Defaults to true."
+        ),
+    }
 
 
 def test_google_parse_response_extracts_function_calls_thoughts_and_usage() -> None:

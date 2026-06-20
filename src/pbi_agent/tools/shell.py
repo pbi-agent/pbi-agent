@@ -13,6 +13,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from codetool_shell import compress_text
+
 from pbi_agent.tools.output import MAX_OUTPUT_CHARS as DEFAULT_MAX_OUTPUT_CHARS
 from pbi_agent.tools.output import bound_output, decode_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
@@ -53,6 +55,13 @@ SPEC = ToolSpec(
                     "maximum 300 000 (5 minutes)."
                 ),
             },
+            "compression": {
+                "type": "boolean",
+                "description": (
+                    "Whether to compress stdout/stderr before returning output. "
+                    "Defaults to true."
+                ),
+            },
         },
         "required": ["command"],
         "additionalProperties": False,
@@ -66,6 +75,15 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     command = arguments.get("command", "")
     if not isinstance(command, str) or not command.strip():
         return {"error": "'command' must be a non-empty string."}
+
+    try:
+        compression = (
+            _normalize_compression(arguments["compression"])
+            if "compression" in arguments
+            else True
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
 
     root = (
         context.workspace_root if context.workspace_root is not None else Path.cwd()
@@ -95,6 +113,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             **_build_output_payload(
                 stdout=decode_output(completed.stdout),
                 stderr=decode_output(completed.stderr),
+                compression=compression,
             ),
             "exit_code": completed.returncode,
         }
@@ -103,6 +122,7 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             **_build_output_payload(
                 stdout=decode_output(exc.stdout),
                 stderr=decode_output(exc.stderr),
+                compression=compression,
             ),
             "exit_code": None,
             "timed_out": True,
@@ -158,7 +178,29 @@ def _normalize_timeout_ms(raw_timeout: Any) -> int:
     return min(raw_timeout, MAX_TIMEOUT_MS)
 
 
-def _build_output_payload(*, stdout: str, stderr: str) -> dict[str, Any]:
+def _normalize_compression(raw_compression: Any) -> bool:
+    if not isinstance(raw_compression, bool):
+        raise ValueError("'compression' must be a boolean.")
+    return raw_compression
+
+
+def _compress_output(text: str, *, enabled: bool) -> str:
+    if not enabled or not text:
+        return text
+    try:
+        return decode_output(compress_text(text, backend="auto"))
+    except Exception:
+        return text
+
+
+def _build_output_payload(
+    *,
+    stdout: str,
+    stderr: str,
+    compression: bool,
+) -> dict[str, Any]:
+    stdout = _compress_output(stdout, enabled=compression)
+    stderr = _compress_output(stderr, enabled=compression)
     bounded_stdout, stdout_truncated = bound_output(
         stdout,
         limit=MAX_STDOUT_CHARS,
