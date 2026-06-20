@@ -49,3 +49,4 @@
 
 ## 2026-06-20
 - Added `codetool-shell==0.1.1` and shell `compression` input; stdout/stderr now compress by default before existing bounds, with tests for defaults, opt-out, validation, fallback, timeouts, truncation, schema, and runtime JSON. Validation: focused shell/runtime and provider tests, Ruff, format check, and basedpyright passed; full pytest is blocked by pre-existing `test_init_agents.py` expecting `review` as the last default command while current defaults end with `code-quality-reviewer`.
+- Ran post-restart shell compression smoke audit: default shell output compressed repeated stdout/stderr log templates and timeout partial output, preserved warning/error/path diagnostics, left focused pytest and small git diff readable, and rendered path lists as trees. Noted conservative path-bearing timeout logs may stay raw for safety.
