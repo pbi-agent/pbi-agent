@@ -1,5 +1,4 @@
-- [x] Locate generic provider empty tools request path
-- [x] Patch request building to omit empty tools
-- [x] Add/update regression tests
-- [x] Run focused validation
-- [x] Record memory and summarize
+- [x] Locate system prompt construction and memory insertion.
+- [x] Change ordering so workspace_memory is appended last.
+- [x] Add or update tests for prompt section order.
+- [x] Run focused validation.
