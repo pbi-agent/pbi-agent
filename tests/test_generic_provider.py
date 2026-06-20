@@ -94,6 +94,55 @@ def test_generic_request_turn_omits_empty_tools(
     }
 
 
+def test_generic_request_turn_renders_chat_completion_reasoning(
+    monkeypatch,
+    display_spy,
+    make_http_response,
+) -> None:
+    def fake_urlopen(request: urllib.request.Request, timeout: float):
+        del request, timeout
+        return make_http_response(
+            {
+                "id": "chatcmpl_reasoning",
+                "model": "zai-org/GLM-5.2",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "reasoning": "I should verify the ranking before replying.",
+                            "content": "Rank confirmed.",
+                        }
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    provider = GenericProvider(_make_settings(model="zai-org/GLM-5.2"))
+    result = provider.request_turn(
+        user_message="add the ranking update",
+        display=display_spy,
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert result.reasoning_content == "I should verify the ranking before replying."
+    assert display_spy.thinking_calls == [
+        {
+            "text": "I should verify the ranking before replying.",
+            "title": None,
+            "replace_existing": False,
+            "widget_id": None,
+        }
+    ]
+    assert display_spy.markdown_calls == ["Rank confirmed."]
+    assert provider._messages[-1] == {
+        "role": "assistant",
+        "content": "Rank confirmed.",
+    }
+
+
 def test_azure_chat_completions_uses_api_key_header_and_endpoint(
     monkeypatch,
     display_spy,
@@ -246,6 +295,39 @@ def test_generic_parse_response_preserves_prompt_cache_usage_details() -> None:
     assert result.usage.cache_write_1h_tokens == 4
     assert result.usage.output_tokens == 12
     assert result.usage.reasoning_tokens == 3
+
+
+def test_generic_parse_response_extracts_reasoning_content_aliases() -> None:
+    provider = GenericProvider(_make_settings())
+
+    result = provider._parse_response(
+        {
+            "id": "chatcmpl_reasoning_aliases",
+            "model": "deepseek-r1",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "reasoning_content": "First hidden reasoning block.",
+                    }
+                },
+                {
+                    "message": {
+                        "role": "assistant",
+                        "reasoning_details": [
+                            {"type": "text", "text": "Second hidden reasoning block."}
+                        ],
+                        "content": "Visible answer.",
+                    }
+                },
+            ],
+        }
+    )
+
+    assert result.reasoning_content == (
+        "First hidden reasoning block.\n\nSecond hidden reasoning block."
+    )
+    assert result.text == "Visible answer."
 
 
 def test_generic_parse_response_merges_split_choice_text_and_tool_calls() -> None:

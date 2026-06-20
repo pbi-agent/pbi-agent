@@ -1,4 +1,4 @@
-- [x] Locate system prompt construction and memory insertion.
-- [x] Change ordering so workspace_memory is appended last.
-- [x] Add or update tests for prompt section order.
-- [x] Run focused validation.
+- [x] Inspect session 56e2258c0dd34b98a2a3ce8267920bdb event/timeline data.
+- [x] Trace reasoning parser/rendering path and identify mismatch.
+- [x] Implement parser fix and regression tests.
+- [x] Run focused validation and update memory.

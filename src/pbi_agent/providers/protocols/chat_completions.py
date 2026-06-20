@@ -120,6 +120,11 @@ class ChatCompletionsProtocol(ResponseProtocol):
         text = "".join(
             _extract_message_text(message.get("content")) for message in messages
         )
+        reasoning_content = "\n\n".join(
+            reasoning
+            for message in messages
+            if (reasoning := _extract_message_reasoning(message))
+        ).strip()
         function_calls = [
             function_call
             for message in messages
@@ -134,6 +139,7 @@ class ChatCompletionsProtocol(ResponseProtocol):
             text=text,
             usage=_parse_usage(response_json),
             function_calls=function_calls,
+            reasoning_content=reasoning_content,
             provider_data={"assistant_message": assistant_message},
         )
 
@@ -147,6 +153,11 @@ class ChatCompletionsProtocol(ResponseProtocol):
         display: DisplayProtocol,
         response: CompletedResponse,
     ) -> None:
+        if response.reasoning_summary or response.reasoning_content:
+            display.render_thinking(
+                response.reasoning_content or response.reasoning_summary,
+                title=response.reasoning_summary or None,
+            )
         if response.text:
             display.render_markdown(response.text)
 
@@ -371,6 +382,32 @@ def _extract_message_text(content: object) -> str:
         if isinstance(text_value, str) and part_type in {"text", "output_text"}:
             text_parts.append(text_value)
     return "".join(text_parts).strip()
+
+
+def _extract_message_reasoning(message: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("reasoning", "reasoning_content", "reasoning_details"):
+        text = _extract_reasoning_text(message.get(key))
+        if text and text not in parts:
+            parts.append(text)
+    return "\n\n".join(parts).strip()
+
+
+def _extract_reasoning_text(value: object) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return "\n\n".join(
+            text for item in value if (text := _extract_reasoning_text(item))
+        ).strip()
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key in ("text", "content", "summary"):
+            text = _extract_reasoning_text(value.get(key))
+            if text and text not in parts:
+                parts.append(text)
+        return "\n\n".join(parts).strip()
+    return ""
 
 
 def _parse_tool_calls(raw_tool_calls: object) -> list[ToolCall]:
