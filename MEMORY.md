@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-06-19
+- Last compacted: 2026-06-20
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -12,7 +12,7 @@
 - Core constraints: no migrations/backcompat. Provider/tool HTTP uses `urllib.request`. Internal data under `~/.pbi-agent/`. `pbi-agent web` is default command; saved web settings/profile apply there, provider/model runtime flags apply to `run`.
 - API/frontend contracts: keep FastAPI routes/schemas/session manager aligned with `webapp/src/api.ts`, `webapp/src/types.ts`, generated API types, and static bundle. `bun run web:api-types` runs `scripts/generate_api_types.py`; `test_api_types_codegen.py` enforces output. Add JSON calls via generated `ApiOperationResponses`/`ApiJsonRequestBodies`, `apiRequest()`, `jsonBody()`. Provider config API views include nullable GCP fields for non-GCP providers.
 - Tool surface: use `explore_workspace` for read/search/list; removed public `python_exec`, `list_files`, `search_files`, `read_file`, `search_workspace`. `read_web_url` belongs to `web` group.
-- Shell output: `shell` returns raw stdout/stderr capped at 12k chars per stream with truncation flags; avoid adding another output-processing dependency or parameter unless explicitly requested.
+- Shell output: `shell` compresses decoded stdout/stderr by default via `codetool-shell` before 12k per-stream bounding; `compression=false` bypasses, invalid non-bool `compression` errors before run, compression failures fall back to decoded text, and output shape has no compression metadata.
 - `explore_workspace`: wraps `codetool-explore==0.7.0`; read group only tool. Targets content/path/read/list; regex default true; root arrays supported; read/list single-root; root is base not boundary; workspace-confined; file root reads file directly.
 - `allowed_tools`: single group allow-list for profiles, `run`, commands, sub-agents: `read`, `write`, `web`, `sub-agent`, `shell`. Commands can use command-only `ask-user`; runtime tool is `ask_user`. CLI flag `--allowed-tools`; command/sub-agent frontmatter key `allowed_tools`; native web search only via `web`; empty list disables configurable built-ins; `ask_user` UI-only/non-configurable outside command frontmatter and stripped from sub-agents.
 - System prompts: build from active tool specs/settings/exclusions (`ToolSpec.prompt_usage`); omit disabled sub-agent/skill guidance. Base prompt = preamble + active `<tool_usage_rules>`. Optional workspace `AGENTS.md` loads as `<project_rules>`; `MEMORY.md` loads after as `<workspace_memory>` for main and sub-agents.
@@ -47,5 +47,5 @@
 
 ## Detailed Task Events
 
-## 2026-06-19
-- Released and published v0.17.0 from current local prompt-enhancement commits plus release edits; PR #325 merged, Release/Tests/Deploy Docs workflows passed, GitHub Release notes were stripped of frontmatter, and PyPI has wheel+sdist. Validation: Ruff, format check, basedpyright, dead-code, full pytest, docs build, PR checks, and release workflow all passed. Next: old local branch refs remain untouched; session `MEMORY.md`/`TODO.md` changes are unstaged.
+## 2026-06-20
+- Added `codetool-shell==0.1.1` and shell `compression` input; stdout/stderr now compress by default before existing bounds, with tests for defaults, opt-out, validation, fallback, timeouts, truncation, schema, and runtime JSON. Validation: focused shell/runtime and provider tests, Ruff, format check, and basedpyright passed; full pytest is blocked by pre-existing `test_init_agents.py` expecting `review` as the last default command while current defaults end with `code-quality-reviewer`.

@@ -1,6 +1,5 @@
-- [x] Verify release context, workspace status, tags, and merged PRs since last release
-- [x] Create release branch and apply v0.17.0 release edits
-- [x] Run required release validation
-- [x] Commit, push, and open release PR
-- [x] Merge release PR and confirm GitHub Release/publish workflow
-- [x] Update task memory and report outcome
+- [x] Inspect current shell tool, schema, dependency, and tests
+- [x] Add codetool-shell dependency and lockfile update
+- [x] Implement compression option in shell tool
+- [x] Add/update focused tests for shell output compression and serialization
+- [x] Run validation and update memory
