@@ -1121,4 +1121,29 @@ describe("Composer", () => {
       "/plan (Plan Mode Non-Interactive)",
     );
   });
+
+  it("loads slash commands beyond the old eight-item cap into the anchored popup", async () => {
+    const user = userEvent.setup();
+    const commands = Array.from({ length: 12 }, (_, index) => ({
+      name: `/command-${index + 1}`,
+      description: `Command ${index + 1}`,
+      kind: "local_command" as const,
+    }));
+    vi.mocked(searchSlashCommands).mockResolvedValue(commands);
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "/");
+
+    const listbox = await screen.findByRole("listbox", {
+      name: "Slash command suggestions",
+    });
+    await waitFor(() =>
+      expect(searchSlashCommands).toHaveBeenCalledWith("", 200),
+    );
+    expect(listbox.closest(".composer")).not.toBeNull();
+    await waitFor(() =>
+      expect(screen.getAllByRole("option")).toHaveLength(commands.length),
+    );
+    expect(screen.getByText("/command-12", { exact: false })).toBeInTheDocument();
+  });
 });

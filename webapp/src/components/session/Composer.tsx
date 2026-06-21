@@ -128,6 +128,8 @@ const SUPPORTED_IMAGE_EXTENSIONS = [
 ];
 const TOKEN_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
 const FILE_MENTION_POLL_INTERVAL_MS = 500;
+const COMPLETION_RESULT_LIMIT = 8;
+const SLASH_COMMAND_COMPLETION_LIMIT = 200;
 
 function parseActiveMention(
   text: string,
@@ -402,6 +404,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
   const [historyDraft, setHistoryDraft] = useState<string | null>(null);
   const [dictationState, setDictationState] = useState<ComposerDictationState>("idle");
   const completionRequestIdRef = useRef(0);
+  const completionItemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activeCompletionRef = useRef<{
     mode: CompletionMode | null;
     query: string | null;
@@ -1014,35 +1017,39 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         const payload =
           requestMode === "slash"
             ? {
-                items: (await searchSlashCommands(requestQuery, 8)).map(
-                  (command): CompletionItem => ({
-                    kind: "slash",
-                    key: command.name,
-                    command,
-                  }),
-                ),
+                items: (
+                  await searchSlashCommands(
+                    requestQuery,
+                    SLASH_COMMAND_COMPLETION_LIMIT,
+                  )
+                ).map((command): CompletionItem => ({
+                  kind: "slash",
+                  key: command.name,
+                  command,
+                })),
                 loading: false,
                 statusMessage: null,
                 errorMessage: null,
                 shouldPoll: false,
               }
             : requestMode === "skill"
-              ? await searchSkillMentions(requestQuery, 8).then((result) => ({
-                  items: result.items.map(
-                    (skill): CompletionItem => ({
-                      kind: "skill",
-                      key: skill.name,
-                      skill,
-                    }),
-                  ),
+              ? await searchSkillMentions(
+                  requestQuery,
+                  COMPLETION_RESULT_LIMIT,
+                ).then((result) => ({
+                  items: result.items.map((skill): CompletionItem => ({
+                    kind: "skill",
+                    key: skill.name,
+                    skill,
+                  })),
                   loading: false,
                   statusMessage: null,
                   errorMessage: null,
                   shouldPoll: false,
                 }))
               : await Promise.all([
-                  searchAgentMentions(requestQuery, 8),
-                  searchFileMentions(requestQuery, 8),
+                  searchAgentMentions(requestQuery, COMPLETION_RESULT_LIMIT),
+                  searchFileMentions(requestQuery, COMPLETION_RESULT_LIMIT),
                 ]).then(([agentResult, fileResult]) => ({
                   items: [
                     ...agentResult.items.map(
@@ -1059,7 +1066,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                         mention,
                       }),
                     ),
-                  ].slice(0, 8),
+                  ].slice(0, COMPLETION_RESULT_LIMIT),
                   loading: fileResult.scan_status === "scanning" && fileResult.items.length === 0 && agentResult.items.length === 0,
                   statusMessage: fileResult.is_stale
                     ? "Refreshing file index..."
@@ -1114,6 +1121,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     composerInputAvailable,
   ]);
 
+  useEffect(() => {
+    if (!completionOpen) return;
+    completionItemRefs.current[completionSelectedIndex]?.scrollIntoView?.({
+      block: "nearest",
+    });
+  }, [completionItems, completionOpen, completionSelectedIndex]);
+
   const handleSubmit = async (event?: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
     event?.preventDefault();
     await submitValue(input);
@@ -1141,7 +1155,10 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
 
     if (activeSlashCommand) {
       try {
-        const commands = await searchSlashCommands(activeSlashCommand.query, 8);
+        const commands = await searchSlashCommands(
+          activeSlashCommand.query,
+          SLASH_COMMAND_COMPLETION_LIMIT,
+        );
         const firstMatch = commands[0];
         if (firstMatch) {
           const nextState = buildSlashReplacement(
@@ -1486,8 +1503,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
             completionItems.map((item, index) => (
               <Button
                 key={item.key}
+                ref={(element) => {
+                  completionItemRefs.current[index] = element;
+                }}
                 type="button"
                 variant="ghost"
+                role="option"
+                aria-selected={index === completionSelectedIndex}
                 className={`composer__completion-item ${index === completionSelectedIndex ? "composer__completion-item--active" : ""}`}
                 onMouseDown={(event) => {
                   event.preventDefault();

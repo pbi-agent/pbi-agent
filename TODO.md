@@ -1,6 +1,5 @@
-- [x] Update `/release` command defaults for minor publish workflow.
-- [x] Review command wording for safety conflicts.
+- [x] Locate slash-command dropdown rendering and styles.
+- [x] Make command dropdown overlay upward above the composer card.
+- [x] Add scrollable command list behavior.
+- [x] Run focused frontend validation.
 - [x] Record task result in memory.
-- [x] Fix review finding: move sub-agent visibility out of session runtime.
-- [x] Run focused sub-agent/tool validation.
-- [x] Record fix-review result in memory.
