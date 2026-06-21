@@ -1,5 +1,7 @@
-- [x] Locate saved session 92c53062514049ab8990e39c6e1f1a00 and relevant web tool events
-- [x] Verify web_search tool behavior/results in the session
-- [x] Verify read_web_url tool behavior/results in the session
-- [x] Run focused validation or manual tool checks if needed
-- [x] Record audit outcome in memory
+- [x] Worker: implement issue #328 user-input truncation/expand shortcut
+- [x] Main: inspect worker diff and run focused validation
+- [x] Reviewer round 1: review implementation
+- [x] Code-quality-reviewer round 1: review maintainability
+- [x] Final validation
+- [x] Update memory
+- [x] Handoff
