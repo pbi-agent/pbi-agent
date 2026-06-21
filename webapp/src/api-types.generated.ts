@@ -187,7 +187,7 @@ export type ProviderAuthStatusModel = { auth_mode: string; backend: string | nul
 
 export type ProviderBreakdownModel = { provider: string | null; model: string | null; run_count: number; total_tokens: number; total_cost: number; avg_duration_ms: number | null; error_count: number; total_api_calls: number; total_tool_calls: number };
 
-export type ProviderKindMetadataModel = { label: string; description?: string | null; default_auth_mode: string; auth_modes: string[]; auth_mode_metadata: Record<string, ProviderAuthModeMetadataModel>; default_model: string; default_sub_agent_model: string | null; default_responses_url: string | null; default_generic_api_url: string | null; supports_responses_url: boolean; supports_generic_api_url: boolean; supports_service_tier: boolean; supports_native_web_search: boolean; supports_image_inputs: boolean; supports_model_profiles: boolean; supports_stt: boolean };
+export type ProviderKindMetadataModel = { label: string; description?: string | null; default_auth_mode: string; auth_modes: string[]; auth_mode_metadata: Record<string, ProviderAuthModeMetadataModel>; default_model: string; default_sub_agent_model: string | null; default_responses_url: string | null; default_generic_api_url: string | null; supports_responses_url: boolean; supports_generic_api_url: boolean; supports_service_tier: boolean; supports_image_inputs: boolean; supports_model_profiles: boolean; supports_stt: boolean };
 
 export type ProviderListResponse = { providers: ProviderViewModel[]; config_revision: string };
 

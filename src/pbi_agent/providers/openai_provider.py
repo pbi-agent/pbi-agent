@@ -45,7 +45,6 @@ from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
     effective_excluded_tool_names,
-    native_web_search_enabled,
 )
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot, ToolResult
@@ -159,8 +158,6 @@ class OpenAIProvider(Provider):
             excluded_names=excluded_tools
         )
         self._tools = self._chatgpt_backend.serialize_tools(base_tools)
-        if native_web_search_enabled(self._settings):
-            self._tools.append({"type": "web_search"})
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         self._restored_input_items = [

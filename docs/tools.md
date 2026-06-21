@@ -24,7 +24,7 @@ The allow-list accepts these built-in tool groups:
 | --- | --- |
 | `read` | `explore_workspace` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
-| `web` | `read_web_url` and provider-native web search |
+| `web` | `read_web_url`, `web_search` |
 | `sub-agent` | `sub_agent` |
 | `shell` | `shell` |
 
@@ -40,7 +40,7 @@ declare the `ask-user` group in `allowed_tools` to make it available for that co
 turn. It is not configurable through model profiles, sub-agent frontmatter, or
 `pbi-agent run` tool allow-lists.
 
-The `web` group controls both `read_web_url` and native provider web search.
+The `web` group controls both `read_web_url` and Firecrawl-backed `web_search`.
 Omit `web` from `allowed_tools` to disable both.
 
 Examples:
@@ -84,7 +84,8 @@ to the same tool visibility rules and the nested depth cap.
 | `apply_patch` | yes | Create, update, or delete files through a V4A diff-style file operation. |
 | `sub_agent` | no | Delegate a scoped task to a child agent, optionally selecting a discovered project sub-agent type and inheriting parent context. |
 | `explore_workspace` | no | Search workspace content/paths, read text files, list one directory level, and attach supported image files to the model context. |
-| `read_web_url` | no | Fetch a public web page through markdown.new and return Markdown. |
+| `read_web_url` | no | Fetch a public web page through Firecrawl scrape, falling back to markdown.new, and return Markdown. |
+| `web_search` | no | Search the public web through Firecrawl and return source results. |
 
 ## MCP Tools
 
@@ -275,7 +276,9 @@ Supported image formats are `.png`, `.jpg`, `.jpeg`, and `.webp`. For those file
 
 ## `read_web_url`
 
-Fetch a public web page through `markdown.new` and return bounded Markdown content.
+Fetch a public web page through Firecrawl scrape and return bounded Markdown
+content. If Firecrawl fails, is rate limited, or returns no usable Markdown,
+the tool falls back to `markdown.new`.
 
 | Parameter | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -287,7 +290,21 @@ Fetch a public web page through `markdown.new` and return bounded Markdown conte
 }
 ```
 
-This v1 wrapper uses `markdown.new` defaults only. It does not yet expose `method` or `retain_images`.
+## `web_search`
+
+Search the public web through Firecrawl and return bounded source results.
+
+| Parameter | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `query` | `string` | yes | Search query. |
+| `limit` | `integer` | no | Result limit. Defaults to `5`; values above `10` are capped. |
+
+```json
+{
+  "query": "btc live price",
+  "limit": 5
+}
+```
 
 ## Parallel Tool Execution
 

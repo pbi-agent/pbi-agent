@@ -83,7 +83,7 @@ profiles and `pbi-agent run`, plus command-only `ask-user`:
 | --- | --- |
 | `read` | `explore_workspace` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
-| `web` | `read_web_url` and provider-native web search |
+| `web` | `read_web_url`, `web_search` |
 | `sub-agent` | `sub_agent` |
 | `shell` | `shell` |
 | `ask-user` | `ask_user` clarification prompts for this command turn |
@@ -94,7 +94,7 @@ that command turn only; later non-command turns keep the session's selected
 profile.
 
 Use `write` only for commands that should be able to edit files. Omit `web` to
-disable both `read_web_url` and native provider web search for the command turn.
+disable both `read_web_url` and Firecrawl-backed `web_search` for the command turn.
 MCP and extension tools are not affected by this allow-list. Include `ask-user`
 only on commands that should be allowed to ask browser users clarifying
 questions during that command turn.

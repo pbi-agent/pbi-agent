@@ -19,8 +19,9 @@ my-project/
 
 - Its content becomes the agent's system prompt verbatim.
 - Built-in tools such as `shell`, `apply_patch`, `explore_workspace`,
-  `read_web_url`, and `sub_agent` remain available unless tool visibility is
-  limited by a model profile, command, sub-agent, or `pbi-agent run` flag.
+  `read_web_url`, `web_search`, and `sub_agent` remain available unless tool
+  visibility is limited by a model profile, command, sub-agent, or
+  `pbi-agent run` flag.
 - [`AGENTS.md`](/customization/project-rules) project rules are still appended
   if present.
 

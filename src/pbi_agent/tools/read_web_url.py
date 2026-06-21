@@ -11,6 +11,7 @@ from pbi_agent.tools.output import bound_output
 from pbi_agent.tools.types import ToolContext, ToolSpec
 
 MARKDOWN_NEW_URL = "https://markdown.new/"
+FIRECRAWL_SCRAPE_URL = "https://api.firecrawl.dev/v2/scrape"
 MAX_MARKDOWN_CHARS = 50_000
 _REQUEST_TIMEOUT_SECS = 120.0
 
@@ -43,7 +44,79 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if validation_error is not None:
         return {"error": validation_error}
 
-    request_data = json.dumps({"url": normalized_url}).encode("utf-8")
+    firecrawl_markdown, firecrawl_error = _fetch_firecrawl_markdown(normalized_url)
+    if firecrawl_markdown is not None:
+        return _markdown_result(firecrawl_markdown)
+
+    fallback_markdown, fallback_error = _fetch_markdown_new(normalized_url)
+    if fallback_markdown is not None:
+        return _markdown_result(fallback_markdown)
+
+    firecrawl_detail = firecrawl_error or "Firecrawl scrape returned no Markdown."
+    fallback_detail = fallback_error or "markdown.new fallback returned no Markdown."
+    error = (
+        f"Firecrawl scrape failed: {firecrawl_detail}; "
+        f"markdown.new fallback failed: {fallback_detail}"
+    )
+    return {"error": bound_output(error)[0]}
+
+
+def _markdown_result(raw_markdown: str) -> dict[str, Any]:
+    markdown, truncated = bound_output(raw_markdown, limit=MAX_MARKDOWN_CHARS)
+    result: dict[str, Any] = {
+        "markdown": markdown,
+    }
+    if truncated:
+        result["markdown_truncated"] = True
+    return result
+
+
+def _fetch_firecrawl_markdown(url: str) -> tuple[str | None, str | None]:
+    request_data = json.dumps({"url": url}).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": f"pbi-agent/{__version__}",
+    }
+
+    try:
+        req = urllib.request.Request(
+            FIRECRAWL_SCRAPE_URL,
+            data=request_data,
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECS) as response:
+            raw_body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return None, _format_http_error(exc)
+    except urllib.error.URLError as exc:
+        return None, bound_output(f"failed to fetch URL: {exc.reason}")[0]
+    except Exception as exc:
+        return None, bound_output(str(exc))[0]
+
+    try:
+        parsed = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return None, bound_output("Firecrawl scrape returned invalid JSON.")[0]
+
+    if not isinstance(parsed, dict):
+        return None, "Firecrawl scrape returned an unexpected response."
+
+    data = parsed.get("data")
+    if isinstance(data, dict):
+        markdown = data.get("markdown")
+        if isinstance(markdown, str) and markdown.strip():
+            return markdown, None
+
+    response_error = _firecrawl_response_error(parsed)
+    if response_error:
+        return None, response_error
+    return None, "Firecrawl scrape returned no Markdown."
+
+
+def _fetch_markdown_new(url: str) -> tuple[str | None, str | None]:
+    request_data = json.dumps({"url": url}).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
         "Accept": "text/markdown",
@@ -60,20 +133,26 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
         with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECS) as response:
             raw_markdown = response.read().decode("utf-8", errors="replace")
 
-        markdown, truncated = bound_output(raw_markdown, limit=MAX_MARKDOWN_CHARS)
-        result: dict[str, Any] = {
-            "url": normalized_url,
-            "markdown": markdown,
-        }
-        if truncated:
-            result["markdown_truncated"] = True
-        return result
+        if raw_markdown.strip():
+            return raw_markdown, None
+        return None, "markdown.new returned no Markdown."
     except urllib.error.HTTPError as exc:
-        return {"error": _format_http_error(exc)}
+        return None, _format_http_error(exc)
     except urllib.error.URLError as exc:
-        return {"error": bound_output(f"failed to fetch URL: {exc.reason}")[0]}
+        return None, bound_output(f"failed to fetch URL: {exc.reason}")[0]
     except Exception as exc:
-        return {"error": bound_output(str(exc))[0]}
+        return None, bound_output(str(exc))[0]
+
+
+def _firecrawl_response_error(parsed: dict[str, Any]) -> str:
+    for key in ("error", "message"):
+        value = parsed.get(key)
+        if isinstance(value, str) and value.strip():
+            return bound_output(value.strip())[0]
+    success = parsed.get("success")
+    if success is False:
+        return "Firecrawl scrape was not successful."
+    return ""
 
 
 def _validate_url(url: str) -> str | None:

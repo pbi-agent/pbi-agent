@@ -115,7 +115,7 @@ profiles, `pbi-agent run`, and project commands:
 | --- | --- |
 | `read` | `explore_workspace` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
-| `web` | `read_web_url` and provider-native web search |
+| `web` | `read_web_url`, `web_search` |
 | `sub-agent` | `sub_agent` |
 | `shell` | `shell` |
 

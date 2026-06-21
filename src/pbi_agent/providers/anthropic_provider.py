@@ -4,8 +4,7 @@ Uses direct HTTP calls (``urllib.request``) to the Anthropic Messages API.
 Conversation history is managed client-side by maintaining a full
 ``messages`` list that is sent with every request.
 
-Advertised local tools are provider-policy filtered function tools;
-native web-search is appended separately when enabled.
+Advertised local tools are provider-policy filtered function tools.
 """
 
 from __future__ import annotations
@@ -45,7 +44,6 @@ from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
     effective_excluded_tool_names,
-    native_web_search_enabled,
 )
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot
@@ -113,8 +111,6 @@ class AnthropicProvider(Provider):
         self._tools = self._tool_catalog.get_anthropic_tool_definitions(
             excluded_names=excluded_tools
         )
-        if native_web_search_enabled(self._settings):
-            self._tools.append(_anthropic_web_search_tool(self._settings.model))
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         self._messages = [
@@ -589,13 +585,3 @@ def _extract_anthropic_web_search_queries(block: dict[str, Any]) -> list[str]:
     if isinstance(raw_query, str) and raw_query.strip():
         return [raw_query.strip()]
     return []
-
-
-def _anthropic_web_search_tool(model: str) -> dict[str, Any]:
-    tool: dict[str, Any] = {
-        "type": "web_search_20260209",
-        "name": "web_search",
-    }
-    if model.strip().lower().startswith("claude-haiku"):
-        tool["allowed_callers"] = ["direct"]
-    return tool

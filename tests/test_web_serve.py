@@ -1727,7 +1727,6 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             "supports_responses_url": True,
             "supports_generic_api_url": False,
             "supports_service_tier": False,
-            "supports_native_web_search": True,
             "supports_image_inputs": True,
             "supports_model_profiles": True,
             "supports_stt": False,

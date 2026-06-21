@@ -756,7 +756,7 @@ def test_get_system_prompt_omits_sub_agent_catalog_when_tool_disabled(
     assert "code-reviewer" not in prompt
 
 
-def test_get_system_prompt_mentions_native_web_search_only_for_web_allowed_tool(
+def test_get_system_prompt_mentions_web_search_only_for_web_allowed_tool(
     tmp_path, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
@@ -776,8 +776,9 @@ def test_get_system_prompt_mentions_native_web_search_only_for_web_allowed_tool(
         )
     )
 
-    assert "Use provider-native web search" in web_allowed_prompt
-    assert "Use provider-native web search" not in read_allowed_prompt
+    assert "Use `web_search`" in web_allowed_prompt
+    assert "Use `web_search`" not in read_allowed_prompt
+    assert "Use provider-native web search" not in web_allowed_prompt
 
 
 def test_get_system_prompt_keeps_ask_user_ui_only(tmp_path, monkeypatch):

@@ -66,13 +66,15 @@ def test_google_provider_advertises_simple_edit_tools_only() -> None:
     assert "replace_in_file" in tool_names
     assert "write_file" in tool_names
     assert "read_web_url" in tool_names
+    assert "web_search" in tool_names
 
 
-def test_google_provider_hides_native_web_search_without_web_group() -> None:
+def test_google_provider_hides_web_tools_without_web_group() -> None:
     provider = GoogleProvider(_make_settings(allowed_tools=("read",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" not in tool_names
+    assert "web_search" not in tool_names
     assert {"type": "google_search"} not in provider._tools
 
 
@@ -1383,11 +1385,15 @@ def test_google_execute_tool_calls_serializes_image_attachments(
 
 def test_google_web_search_tool_included_when_enabled() -> None:
     provider = GoogleProvider(_make_settings())
-    assert {"type": "google_search"} in provider._tools
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "web_search" in tool_names
+    assert {"type": "google_search"} not in provider._tools
 
 
 def test_google_web_search_tool_excluded_without_web_group() -> None:
     provider = GoogleProvider(_make_settings(allowed_tools=("read",)))
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "web_search" not in tool_names
     assert {"type": "google_search"} not in provider._tools
 
 

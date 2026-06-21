@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Run one implementation task through mandatory sequential worker, reviewer, code-quality-reviewer, and fixer sub-agent gates.
+description: Run one implementation task through mandatory sequential worker, reviewer/fixer, and code-quality/fixer loops.
 model_profile_id: worker-pro
 allowed_tools: read,write,shell,sub-agent,web
 sub-agent: reviewer,code-quality-reviewer,fixer,worker
@@ -14,10 +14,9 @@ Run one cohesive implementation task through a single sequential workflow. The m
 
 - Treat the request as one task. No parallel work, parallel sub-agents, or batched independent TODOs. Run exactly one sub-agent at a time and wait for each result before the next step.
 - Delegate implementation to `worker` and fixes to `fixer`; the main agent never writes task changes itself.
-- Required gate order per task: `worker` → main diff/validation → `reviewer` → (`fixer` + `reviewer` loop until no findings) → `code-quality-reviewer` → (`reviewer`/`fixer` loop on code-quality findings, then rerun `code-quality-reviewer`) until both reviewers report no findings.
-- Resolve code-quality findings only by rerunning `reviewer` with them, then fixing the resulting reviewer findings—never hand code-quality findings straight to `fixer`.
+- Required gate order per task: `worker` → main diff/validation → `reviewer` loop (`reviewer` → `fixer` on review findings → rerun `reviewer` until no findings) → `code-quality-reviewer` loop (`code-quality-reviewer` → `fixer` on code-quality findings → rerun `code-quality-reviewer` until no findings) → final validation/handoff.
 - Review every sub-agent result before accepting. Never trust a success claim: inspect the diff and rerun focused validation.
-- Task is accepted only after both reviewers report no findings following the latest fixes.
+- Task is accepted only after the review loop reports no findings, then the code-quality loop reports no findings after its latest fixes.
 - Preserve unrelated worktree changes.
 
 ## Start Procedure
@@ -35,7 +34,7 @@ Rules:
 - One TODO entry per workflow step—do not collapse the workflow into a single implementation TODO.
 - Keep exactly one entry `[>]` at a time.
 - Mark a step `[x]` only after the main agent reviews its result.
-- Add repeat-cycle entries as needed (e.g. `Fixer round 2`, `Reviewer round 3`). Feed exact findings back into the loop; never convert findings into broad new tasks.
+- Add repeat-cycle entries as needed (e.g. `Fixer round 2`, `Reviewer round 3`, `Code-quality-reviewer round 2`). Feed exact findings back into the active loop; never convert findings into broad new tasks.
 
 Good shape:
 
@@ -46,6 +45,8 @@ Good shape:
 - [ ] Fixer round 1: resolve reviewer findings when needed
 - [ ] Reviewer round 2: verify fixer changes when needed
 - [ ] Code-quality-reviewer round 1: review maintainability
+- [ ] Fixer round 2: resolve code-quality findings when needed
+- [ ] Code-quality-reviewer round 2: verify code-quality fixes when needed
 - [ ] Final validation
 - [ ] Update memory
 - [ ] Handoff
@@ -69,9 +70,9 @@ Bad shape (workflow collapsed):
 6. After each `fixer` result: mark its TODO `[x]`, add/mark a main diff/validation rerun `[>]`, inspect diff, rerun validation, mark `[x]` or `[!]`.
 7. Add/mark `Reviewer round N+1` `[>]` and rerun; repeat 5–7 until `reviewer` reports no findings.
 8. Mark `Code-quality-reviewer round 1` `[>]`; run it on the task, final diff, reviewer outcome, and validation; mark `[x]` after reading.
-9. If it reports findings: add/mark `Reviewer round N` `[>]` with those findings and the current diff, resolve resulting reviewer findings via `Fixer round N`, rerun `reviewer` until clean.
-10. Add/mark `Code-quality-reviewer round N+1` `[>]` and rerun; repeat 9–10 until clean.
-11. Complete final validation, memory, and handoff as separate TODOs. Done only when both reviewers report no findings after the latest changes and every TODO is `[x]`, `[-]`, or `[!]` with explanation.
+9. If `code-quality-reviewer` reports findings: add/mark `Fixer round N` `[>]`, delegate the exact code-quality findings to `fixer`, and mark `[x]` after reading the fixer result.
+10. After each code-quality fixer result: add/mark a main diff/validation rerun `[>]`, inspect diff, rerun validation, mark `[x]` or `[!]`, then add/mark `Code-quality-reviewer round N+1` `[>]` and rerun. Repeat 9–10 until `code-quality-reviewer` reports no findings.
+11. Complete final validation, memory, and handoff as separate TODOs. Done only when the reviewer loop and code-quality loop have both ended with no findings and every TODO is `[x]`, `[-]`, or `[!]` with explanation.
 
 Never use parallel execution.
 
@@ -114,9 +115,9 @@ Return exactly:
 - Residual risks or follow-up intentionally not handled
 ```
 
-For `fixer`, replace Goal/Context with the exact `reviewer` findings to resolve.
+For `fixer`, replace Goal/Context with the exact current-loop findings to resolve: `reviewer` findings during the review loop, or `code-quality-reviewer` findings during the code-quality loop.
 
-`reviewer` prompt must include: task scope and acceptance criteria; changed files/diff summary; validation run by main agent and sub-agents; prior `code-quality-reviewer` findings when rerunning after code-quality review; any exact issue from main-agent review.
+`reviewer` prompt must include: task scope and acceptance criteria; changed files/diff summary; validation run by main agent and sub-agents; prior `reviewer` findings when rerunning after fixes; any exact issue from main-agent review.
 
 `code-quality-reviewer` prompt must include: task scope and acceptance criteria; final reviewer outcome showing no findings; changed files/diff summary; validation run after the latest fixes.
 
@@ -141,7 +142,7 @@ Run validation for every touched surface:
 - API/SSE contract changes: run project codegen command and codegen tests
 - Static web assets: verify rebuilt hashed chunks are tracked
 
-If new failures appear: reopen the implementation TODO, isolate the failure, rerun `reviewer` with the exact failure, resolve via `fixer`, rerun focused validation, then rerun the `reviewer` and `code-quality-reviewer` gates before final validation again.
+If new failures appear: reopen the implementation TODO, isolate the failure, rerun the affected loop in order (`reviewer`/`fixer` until review has no findings, then `code-quality-reviewer`/`fixer` until code quality has no findings), rerun focused validation, then run final validation again.
 
 ## Handoff
 

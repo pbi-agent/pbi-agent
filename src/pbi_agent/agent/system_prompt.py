@@ -14,7 +14,6 @@ from pbi_agent.agent.skill_discovery import discover_project_skills
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
     effective_excluded_tool_names,
-    native_web_search_enabled,
 )
 from pbi_agent.tools.registry import get_tool_specs
 
@@ -108,11 +107,6 @@ def _tool_usage_rules(
     usage_lines = [
         f"- {spec.prompt_usage}" for spec in specs if spec.prompt_usage is not None
     ]
-    if settings is not None and native_web_search_enabled(settings):
-        usage_lines.append(
-            "- Use provider-native web search when supported by the active "
-            "provider and current web information is needed."
-        )
 
     if usage_lines:
         lines.extend(usage_lines)

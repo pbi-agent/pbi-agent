@@ -39,13 +39,16 @@ def test_generic_provider_advertises_simple_edit_tools_only() -> None:
     assert "replace_in_file" in tool_names
     assert "write_file" in tool_names
     assert "read_web_url" in tool_names
+    assert "web_search" in tool_names
 
 
-def test_generic_provider_includes_read_web_url_with_web_group() -> None:
+def test_generic_provider_includes_web_tools_with_web_group() -> None:
     provider = GenericProvider(_make_settings(allowed_tools=("web",)))
 
     tool_names = {tool["function"]["name"] for tool in provider._tools}
     assert "read_web_url" in tool_names
+    assert "web_search" in tool_names
+    assert "explore_workspace" not in tool_names
 
 
 def test_generic_request_turn_omits_empty_tools(

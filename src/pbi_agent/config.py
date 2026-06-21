@@ -796,8 +796,6 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         and provider_kind != "generic",
         "supports_generic_api_url": provider_kind == "generic",
         "supports_service_tier": provider_kind == "openai",
-        "supports_native_web_search": supports_model_profiles
-        and provider_kind not in {"generic", "google_gcp"},
         "supports_image_inputs": supports_model_profiles,
         "supports_model_profiles": supports_model_profiles,
         "supports_stt": provider_supports_stt(provider_kind),

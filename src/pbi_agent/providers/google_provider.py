@@ -41,7 +41,6 @@ from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
     effective_excluded_tool_names,
-    native_web_search_enabled,
 )
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot
@@ -120,8 +119,6 @@ class GoogleProvider(Provider):
             self._tool_catalog,
             excluded_names=excluded_tools,
         )
-        if native_web_search_enabled(self._settings):
-            self._tools.append({"type": "google_search"})
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         restored_steps: list[dict[str, Any]] = []

@@ -403,7 +403,6 @@ export type ProviderKindMetadata = {
   supports_responses_url: boolean;
   supports_generic_api_url: boolean;
   supports_service_tier: boolean;
-  supports_native_web_search: boolean;
   supports_image_inputs: boolean;
   supports_model_profiles: boolean;
   supports_stt: boolean;
