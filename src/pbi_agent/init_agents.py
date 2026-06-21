@@ -25,7 +25,7 @@ DEFAULT_INIT_COMMANDS: tuple[str, ...] = (
     "refine-task",
     "retrospective",
     "review",
-    "code-quality-reviewer",
+    "code-quality-review",
 )
 DEFAULT_INIT_AGENTS: tuple[str, ...] = (
     "code-reviewer",

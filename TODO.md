@@ -1,4 +1,3 @@
-- [x] Inspect orchestrate command spec
-- [x] Update workflow to single sequential sub-agent orchestration
-- [x] Validate diff
-- [x] Append task memory
+- [>] Implement Firecrawl-backed web read/search with markdown.new read fallback
+- [ ] Final validation
+- [ ] Update memory and handoff
