@@ -1,5 +1,4 @@
-- [x] Locate slash-command dropdown rendering and styles.
-- [x] Make command dropdown overlay upward above the composer card.
-- [x] Add scrollable command list behavior.
-- [x] Run focused frontend validation.
-- [x] Record task result in memory.
+- [x] Inspect orchestrate command spec
+- [x] Update workflow to single sequential sub-agent orchestration
+- [x] Validate diff
+- [x] Append task memory

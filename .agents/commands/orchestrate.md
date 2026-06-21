@@ -1,26 +1,34 @@
 ---
 name: orchestrate
-description: Decompose work into sub-agent tasks with main-agent review and validation gates.
+description: Run one implementation task through mandatory sequential worker, reviewer, code-quality-reviewer, and fixer sub-agent gates.
 model_profile_id: worker-pro
 allowed_tools: read,write,shell,sub-agent,web
+sub-agent: reviewer,code-quality-reviewer,fixer,worker
 ---
 
 # Orchestrate Mode
 
-Decompose work into fewest accurate sub-agent tasks. Use single sub-agent when work is best as one coherent implementation. Execute in parallel only when tasks fully isolated + dependency-free; otherwise execute sequentially. Main agent owns quality.
+Run a single workflow for the user's implementation task. Do not decompose into parallel batches or independently executed implementation tasks. The main agent is the orchestrator for sub-agents: it owns scope, ordering, validation, TODO/memory/handoff, and quality gates, but it does not implement or fix the task directly.
 
 ## Core Rules
 
-Own task. Sub-agents implement only.
+Orchestrate one task. Required sub-agents implement, review, and fix.
 
-- Own scope, ordering, TODO state, memory, final correctness.
-- Default to one implementation sub-agent at a time unless safe parallel batch qualifies below.
-- Do not force multiple sub-agent steps when one bounded task clearer or more accurate.
-- Run sub-agents in parallel only when scopes completely isolated, touch different code areas, and have no ordering, data, contract, or validation dependency.
+- Treat the user request as one cohesive implementation task with one sequential workflow.
+- Do not split into parallel work, launch parallel sub-agents, or batch independent TODOs.
+- Main agent role: orchestrate sub-agents, inspect diffs, run validation, manage TODO/memory, and report results.
+- Main agent must not implement assigned task changes or fix findings directly; delegate implementation to `worker` and fixes to `fixer`.
+- Use all required roles for every implementation task: `worker`, `reviewer`, `code-quality-reviewer`, and `fixer`.
+- Always start implementation by delegating the task to `worker`; never implement an assigned task directly in the main agent.
+- Always run `reviewer` after `worker`.
+- Resolve every `reviewer` finding with `fixer`, then rerun `reviewer` until `reviewer` reports no findings.
+- Only after `reviewer` reports no findings, run `code-quality-reviewer`.
+- If `code-quality-reviewer` reports findings, run `reviewer`, resolve any reviewer findings with `fixer`, then rerun `code-quality-reviewer`; repeat until both reviewers report no findings.
+- Do not mark a task accepted until `reviewer` and `code-quality-reviewer` both report no findings after the latest fixes.
+- Run exactly one sub-agent at a time. Wait for each result before deciding the next sequential step.
 - Review every sub-agent result before accept.
 - Do not trust sub-agent success claim. Check diff, rerun focused validation.
-- If invalid, fix directly or launch repair sub-agent with exact finding.
-- Do not move next until current task reviewed + valid.
+- If invalid, rerun `reviewer` with the exact issue, then use the mandatory `fixer` + `reviewer` loop; do not bypass it with direct main-agent implementation.
 - Preserve unrelated worktree changes.
 
 ## Start Procedure
@@ -40,57 +48,33 @@ Use compact markers:
 - `[!]` blocked
 - `[-]` dropped
 
-Convert findings to TODOs:
-- one reviewable fix per TODO
-- use single TODO when task cohesive and splitting would reduce correctness, context, or efficiency
-- order by severity, dependency, risk
-- keep final TODO for full validation + memory/handoff
-- only main agent edits `TODO.md`
+Use one detailed task list TODO for the user's task plus final validation/memory/handoff TODOs. Do not convert reviewer findings into independent implementation TODOs; feed findings back into the sequential `reviewer`/`fixer` loop. Only main agent edits `TODO.md`.
 
-## Sequential Execution Loop
+## Single Sequential Execution Loop
 
-For each TODO not part of safe parallel batch. If only one TODO, run this loop once:
+Run this loop once for the single implementation task:
 1. Mark the TODO `[>]`.
-2. Launch one sub-agent with a narrow implementation prompt.
-3. Wait for the sub-agent result.
-4. Inspect the diff for that task.
-5. Run focused validation yourself.
-6. Review correctness, integration, contracts, tests, and side effects.
-7. If invalid, fix directly or re-delegate a repair prompt.
-8. Rerun focused validation.
-9. Mark the TODO `[X]` only after acceptance.
+2. Delegate the implementation task to `worker` with a narrow prompt.
+3. Wait for the `worker` result.
+4. Inspect the diff for that task and run focused validation yourself.
+5. Run `reviewer` on the task, diff, and validation results.
+6. If `reviewer` reports findings, delegate those exact findings to `fixer`.
+7. After every `fixer` result, inspect the diff, rerun focused validation, then rerun `reviewer`.
+8. Repeat steps 6-7 until `reviewer` reports no findings.
+9. Run `code-quality-reviewer` on the task, final diff, reviewer outcome, and validation results.
+10. If `code-quality-reviewer` reports findings, rerun `reviewer` with those findings and the current diff.
+11. Resolve any `reviewer` findings with `fixer`, then rerun `reviewer` until it reports no findings.
+12. Rerun `code-quality-reviewer`; repeat steps 10-12 until `code-quality-reviewer` reports no findings.
+13. Mark the TODO `[X]` only after both `reviewer` and `code-quality-reviewer` report no findings after the latest changes.
 
-Prefer one sub-agent task when requested change is cohesive, has one acceptance boundary, or needs shared context to avoid inconsistent edits. Split into multiple TODOs only when work has independently reviewable fixes, separable risk, or clear ordering dependencies.
-
-## Parallel Execution
-
-Parallel sub-agents allowed only for fully independent TODOs.
-
-Before launching parallel batch, verify every TODO in batch:
-- touches different files or clearly separate subsystems
-- has no shared symbols, schemas, generated files, routes, persistence, tests, fixtures, or configuration
-- has no ordering dependency on another TODO in batch
-- can be reviewed and validated independently
-- cannot conflict with unrelated dirty worktree changes
-
-For safe parallel batch:
-1. Mark each TODO `[>]`.
-2. Launch one bounded sub-agent per TODO at the same time.
-3. Wait for all sub-agent results.
-4. Review each result separately before accepting dependent follow-up work.
-5. Inspect combined diff for conflicts, integration issues, accidental overlap.
-6. Run focused validation for each TODO plus combined validation needed by touched surfaces.
-7. If any TODO fails review, fix directly or launch repair sub-agent for that TODO only.
-8. Mark each TODO `[X]` only after own review and validation pass.
-
-If isolation uncertain, do not run in parallel.
+Never use parallel execution in Orchestrate Mode.
 
 ## Sub-Agent Prompt Requirements
 
-Every implementation sub-agent prompt concrete + bounded. Use this structure:
+Every `worker` and `fixer` prompt concrete + bounded. Use this structure:
 
 ```text
-Implement TASK <n> only: <task title>.
+Implement the single assigned task only: <task title>.
 
 Goal:
 <one sentence describing the required correctness or user-visible outcome>
@@ -102,7 +86,7 @@ Context:
 
 Scope:
 - Allowed files/areas: <paths or subsystems>
-- Do not implement unrelated TODOs.
+- Do not implement unrelated work.
 - Do not edit TODO.md or MEMORY.md.
 - Do not change generated/static assets unless this task explicitly requires it.
 - Preserve unrelated worktree changes.
@@ -124,9 +108,24 @@ Return exactly:
 - Residual risks or follow-up intentionally not handled
 ```
 
+For `fixer`, replace the Goal/Context with the exact `reviewer` findings to resolve. Do not ask `fixer` to address unreviewed code-quality findings directly; first rerun `reviewer` with those findings, then fix the resulting reviewer findings.
+
+Every `reviewer` prompt must include:
+- task scope and acceptance criteria
+- changed files/diff summary
+- validation run by main agent and sub-agents
+- prior `code-quality-reviewer` findings when rerunning after code-quality review
+- any exact issue found by main-agent review so the reviewer can confirm or refine actionable findings
+
+Every `code-quality-reviewer` prompt must include:
+- task scope and acceptance criteria
+- final reviewer outcome showing no findings
+- changed files/diff summary
+- validation run after the latest fixes
+
 ## Review Gate
 
-After each sub-agent, review before accept.
+After each required sub-agent step, review before accept. Main-agent review supplements the sub-agent gates but never replaces them.
 
 Check:
 - Diff matches assigned task only.
@@ -141,8 +140,9 @@ Check:
 If review fails:
 - Do not proceed.
 - State blocking issue briefly.
-- Apply minimal fix or launch repair sub-agent with exact issue.
-- Rerun focused validation + review again.
+- Rerun `reviewer` with the exact issue.
+- Launch `fixer` only for findings reported by `reviewer`.
+- Rerun focused validation + `reviewer` again.
 
 ## Final Validation
 
@@ -155,10 +155,11 @@ Common final checks:
 - Static web assets: verify rebuilt hashed chunks are tracked
 
 If final validation reveals new failure:
-- Add or reopen a TODO.
+- Reopen the single implementation TODO.
 - Isolate the failure.
-- Fix before claiming completion.
-- Rerun focused validation, then final validation again.
+- Rerun `reviewer` with the exact failure.
+- Resolve resulting reviewer findings with `fixer`; do not fix directly in the main agent.
+- Rerun focused validation, then the required `reviewer` and `code-quality-reviewer` gates again before final validation.
 
 ## Handoff
 
