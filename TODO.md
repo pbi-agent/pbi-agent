@@ -1,4 +1,6 @@
-- [x] Add MiniMax M3 pricing to the bundled model catalog.
-- [x] Verify lowercase model matching still covers the new model.
-- [x] Add/update focused tests.
-- [x] Run focused validation.
+- [x] Inspect release context, branch state, tags, and merged/local commits.
+- [x] Determine v0.19.0 release notes from all commits since v0.18.0.
+- [x] Create/switch to release branch and apply release file updates.
+- [x] Run required release validation.
+- [x] Commit, push, open release PR, merge, and confirm publish artifacts.
+- [x] Update task memory and report release status.
