@@ -13,12 +13,12 @@ _DEFAULT_AGENT_TYPE = "default"
 _SUB_AGENT_MAX_DEPTH = 2
 
 
-def build_spec(
+def visible_agent_type_values(
     workspace: Path | None = None,
     *,
     directory_key: str | None = None,
     visible_agent_names: tuple[str, ...] | None = None,
-) -> ToolSpec:
+) -> tuple[str, ...]:
     if visible_agent_names is None:
         agent_type_values = [_DEFAULT_AGENT_TYPE]
         agent_type_values.extend(
@@ -28,18 +28,34 @@ def build_spec(
                 directory_key=directory_key,
             )
         )
-    else:
-        resolved_agents = (
-            resolve_sub_agent_references(
-                visible_agent_names,
-                workspace,
-                directory_key=directory_key,
-                strict=True,
-                source_label="Command frontmatter",
-            )
-            or ()
+        return tuple(agent_type_values)
+
+    resolved_agents = (
+        resolve_sub_agent_references(
+            visible_agent_names,
+            workspace,
+            directory_key=directory_key,
+            strict=True,
+            source_label="Command frontmatter",
         )
-        agent_type_values = [agent.name for agent in resolved_agents]
+        or ()
+    )
+    return tuple(agent.name for agent in resolved_agents)
+
+
+def build_spec(
+    workspace: Path | None = None,
+    *,
+    directory_key: str | None = None,
+    visible_agent_names: tuple[str, ...] | None = None,
+    agent_type_values: tuple[str, ...] | None = None,
+) -> ToolSpec:
+    if agent_type_values is None:
+        agent_type_values = visible_agent_type_values(
+            workspace,
+            directory_key=directory_key,
+            visible_agent_names=visible_agent_names,
+        )
     required = ["task_instruction"]
     if visible_agent_names is not None:
         required.append("agent_type")
@@ -76,7 +92,7 @@ def build_spec(
                 },
                 "agent_type": {
                     "type": "string",
-                    "enum": agent_type_values,
+                    "enum": list(agent_type_values),
                     "description": agent_type_description,
                 },
             },
@@ -87,17 +103,6 @@ def build_spec(
 
 
 SPEC = build_spec()
-
-
-def _agent_type_values(context: ToolContext) -> tuple[str, ...]:
-    spec = context.tool_catalog.get_spec("sub_agent") if context.tool_catalog else None
-    if spec is None:
-        return ()
-    agent_type = spec.parameters_schema.get("properties", {}).get("agent_type", {})
-    values = agent_type.get("enum", ())
-    if not isinstance(values, list):
-        return ()
-    return tuple(value for value in values if isinstance(value, str))
 
 
 def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -147,7 +152,11 @@ def handle(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
             },
         }
 
-    allowed_agent_types = _agent_type_values(context)
+    allowed_agent_types = (
+        context.tool_catalog.sub_agent_type_values()
+        if context.tool_catalog is not None
+        else ()
+    )
     scoped_agent_types = bool(allowed_agent_types) and (
         _DEFAULT_AGENT_TYPE not in allowed_agent_types
     )

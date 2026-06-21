@@ -392,23 +392,31 @@ def test_get_system_prompt_scopes_available_skills_to_command_skill_names(tmp_pa
     assert "<name>shadcn</name>" not in prompt
 
 
-def test_get_system_prompt_warns_and_omits_missing_command_skill(
+def test_get_system_prompt_includes_disabled_command_skill_and_omits_missing(
     tmp_path,
     capsys,
 ):
+    from pbi_agent.skills.state import set_skill_enabled
+
     _write_skill(tmp_path, "fastapi", "Build FastAPI routes.")
+    _write_skill(tmp_path, "hibench-communication", "Draft benchmark updates.")
+    set_skill_enabled("hibench-communication", False, workspace=tmp_path)
 
     prompt = get_system_prompt(
         cwd=tmp_path,
-        visible_skill_names=("fastapi", "missing-skill"),
+        visible_skill_names=(
+            "fastapi",
+            "hibench-communication",
+            "missing-skill",
+        ),
     )
 
     assert "<name>fastapi</name>" in prompt
+    assert "<name>hibench-communication</name>" in prompt
     assert "missing-skill" not in prompt
-    assert (
-        "Command frontmatter references unavailable or disabled skill "
-        "'missing-skill'; omitting." in capsys.readouterr().err
-    )
+    stderr = capsys.readouterr().err
+    assert "Command frontmatter references unknown skill 'missing-skill'" in stderr
+    assert "unavailable or disabled skill 'hibench-communication'" not in stderr
 
 
 def test_get_sub_agent_system_prompt_scopes_available_skills_to_agent_skill_names(
@@ -429,6 +437,33 @@ def test_get_sub_agent_system_prompt_scopes_available_skills_to_agent_skill_name
     assert "<name>shadcn</name>" not in prompt
 
 
+def test_get_sub_agent_system_prompt_includes_disabled_agent_skill(
+    tmp_path,
+    capsys,
+):
+    from pbi_agent.skills.state import set_skill_enabled
+
+    _write_skill(tmp_path, "fastapi", "Build FastAPI routes.")
+    _write_skill(tmp_path, "hibench-communication", "Draft benchmark updates.")
+    set_skill_enabled("hibench-communication", False, workspace=tmp_path)
+
+    prompt = get_sub_agent_system_prompt(
+        cwd=tmp_path,
+        visible_skill_names=("fastapi", "hibench-communication", "missing-skill"),
+        skill_source_label="Sub-agent 'reviewer' frontmatter",
+    )
+
+    assert "<name>fastapi</name>" in prompt
+    assert "<name>hibench-communication</name>" in prompt
+    assert "missing-skill" not in prompt
+    stderr = capsys.readouterr().err
+    assert (
+        "Sub-agent 'reviewer' frontmatter references unknown skill 'missing-skill'"
+        in stderr
+    )
+    assert "unavailable or disabled skill 'hibench-communication'" not in stderr
+
+
 def test_get_sub_agent_system_prompt_warns_and_omits_missing_agent_skill(
     tmp_path,
     capsys,
@@ -444,8 +479,8 @@ def test_get_sub_agent_system_prompt_warns_and_omits_missing_agent_skill(
     assert "<name>fastapi</name>" in prompt
     assert "missing-skill" not in prompt
     assert (
-        "Sub-agent 'reviewer' frontmatter references unavailable or disabled "
-        "skill 'missing-skill'; omitting." in capsys.readouterr().err
+        "Sub-agent 'reviewer' frontmatter references unknown skill "
+        "'missing-skill'; omitting." in capsys.readouterr().err
     )
 
 
@@ -589,6 +624,42 @@ def test_get_system_prompt_scopes_available_sub_agents_to_command_names(tmp_path
         "with `agent_type` set to one of the available project sub-agent names"
         in prompt
     )
+
+
+def test_get_system_prompt_includes_disabled_command_sub_agent(tmp_path):
+    from pbi_agent.agents.state import set_agent_enabled
+
+    _write_sub_agent(tmp_path, "reviewer", "Review code changes.")
+    _write_sub_agent(tmp_path, "fixer", "Fix code changes.")
+    set_agent_enabled("fixer", False, workspace=tmp_path)
+
+    prompt = get_system_prompt(
+        cwd=tmp_path,
+        visible_agent_names=("reviewer", "fixer"),
+    )
+
+    assert "<available_sub_agents>" in prompt
+    assert "<name>reviewer</name>" in prompt
+    assert "<name>fixer</name>" in prompt
+
+
+def test_get_sub_agent_system_prompt_includes_disabled_nested_sub_agent(tmp_path):
+    from pbi_agent.agents.state import set_agent_enabled
+
+    _write_sub_agent(tmp_path, "confidence-checker", "Check confidence.")
+    _write_sub_agent(tmp_path, "fixer", "Fix code changes.")
+    set_agent_enabled("confidence-checker", False, workspace=tmp_path)
+    set_agent_enabled("fixer", False, workspace=tmp_path)
+
+    prompt = get_sub_agent_system_prompt(
+        cwd=tmp_path,
+        visible_agent_names=("confidence-checker", "fixer"),
+        agent_source_label="Sub-agent 'reviewer' frontmatter",
+    )
+
+    assert "<available_sub_agents>" in prompt
+    assert "<name>confidence-checker</name>" in prompt
+    assert "<name>fixer</name>" in prompt
 
 
 def test_turn_instructions_scope_command_sub_agents_and_ignore_external_mentions(

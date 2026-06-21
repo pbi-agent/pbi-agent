@@ -982,14 +982,18 @@ def run_sub_agent_task(
     component_commands: Any = None
     visible_nested_agent_names: tuple[str, ...] | None = None
     if agent_type is not None:
-        if workspace_directory_key is None:
-            agent_definition = get_project_sub_agent_by_name(agent_type, workspace)
-        else:
-            agent_definition = get_project_sub_agent_by_name(
-                agent_type,
-                workspace,
-                directory_key=workspace_directory_key,
-            )
+        explicit_agent_names = (
+            {agent_type}
+            if tool_catalog is not None
+            and tool_catalog.is_sub_agent_type_visible(agent_type)
+            else None
+        )
+        agent_definition = get_project_sub_agent_by_name(
+            agent_type,
+            workspace,
+            explicit_agent_names=explicit_agent_names,
+            directory_key=workspace_directory_key,
+        )
         if agent_definition is None:
             return {
                 "status": "failed",
@@ -1348,16 +1352,10 @@ def _open_runtime_provider(
     try:
         if tool_catalog is not None:
             if visible_sub_agent_names is not None:
-                from pbi_agent.tools.sub_agent import (
-                    build_spec as _build_sub_agent_spec,
-                )
-
-                tool_catalog = tool_catalog.with_spec(
-                    _build_sub_agent_spec(
-                        workspace,
-                        directory_key=workspace_directory_key,
-                        visible_agent_names=visible_sub_agent_names,
-                    )
+                tool_catalog = tool_catalog.with_sub_agent_visibility(
+                    workspace,
+                    directory_key=workspace_directory_key,
+                    visible_sub_agent_names=visible_sub_agent_names,
                 )
             provider = create_provider(
                 runtime_settings,

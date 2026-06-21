@@ -9,6 +9,7 @@ from pbi_agent.agent.reference_resolution import (
     resolve_skill_references,
     resolve_sub_agent_references,
 )
+from pbi_agent.agents.state import set_agent_enabled
 from pbi_agent.config import ConfigError
 from pbi_agent.skills.state import set_skill_enabled
 
@@ -67,7 +68,7 @@ def test_resolve_skill_references_preserves_configured_order(
     assert [skill.name for skill in skills] == ["shadcn", "fastapi"]
 
 
-def test_resolve_skill_references_warns_and_omits_missing_or_disabled(
+def test_resolve_skill_references_includes_disabled_and_omits_missing(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -82,14 +83,10 @@ def test_resolve_skill_references_warns_and_omits_missing_or_disabled(
     )
 
     assert skills is not None
-    assert [skill.name for skill in skills] == ["fastapi"]
+    assert [skill.name for skill in skills] == ["fastapi", "disabled"]
     stderr = capsys.readouterr().err
-    assert (
-        "Command 'review' references unavailable or disabled skill 'missing'" in stderr
-    )
-    assert (
-        "Command 'review' references unavailable or disabled skill 'disabled'" in stderr
-    )
+    assert "Command 'review' references unknown skill 'missing'" in stderr
+    assert "disabled" not in stderr
 
 
 def test_resolve_command_references_strict_raises_config_error(
@@ -106,24 +103,25 @@ def test_resolve_command_references_strict_raises_config_error(
         )
 
 
-def test_resolve_sub_agent_references_warns_and_omits_invalid(
+def test_resolve_sub_agent_references_includes_disabled_and_omits_missing(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _write_sub_agent(tmp_path, "reviewer")
+    _write_sub_agent(tmp_path, "disabled")
+    set_agent_enabled("disabled", False, workspace=tmp_path)
 
     agents = resolve_sub_agent_references(
-        ("reviewer", "missing"),
+        ("reviewer", "missing", "disabled"),
         tmp_path,
         source_label="Command 'review'",
     )
 
     assert agents is not None
-    assert [agent.name for agent in agents] == ["reviewer"]
-    assert (
-        "Command 'review' references unavailable or disabled sub-agent 'missing'"
-        in capsys.readouterr().err
-    )
+    assert [agent.name for agent in agents] == ["reviewer", "disabled"]
+    stderr = capsys.readouterr().err
+    assert "Command 'review' references unknown sub-agent 'missing'" in stderr
+    assert "disabled" not in stderr
 
 
 def test_absent_reference_lists_return_none(tmp_path: Path) -> None:
