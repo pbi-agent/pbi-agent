@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
+import re
 from typing import Any
 
 from pbi_agent.agent.system_prompt import get_system_prompt
@@ -23,6 +25,18 @@ from pbi_agent.tools.availability import (
 )
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ToolResult
+
+
+_THINK_TAG_RE = re.compile(
+    r"<think(?:\s+[^>]*)?>(.*?)</think\s*>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _ExtractedText:
+    text: str
+    reasoning: str = ""
 
 
 class ChatCompletionsProtocol(ResponseProtocol):
@@ -105,10 +119,11 @@ class ChatCompletionsProtocol(ResponseProtocol):
 
         body: dict[str, Any] = {
             "messages": messages,
-            "tools": self.tools,
-            "tool_choice": "auto",
             "max_tokens": self.settings.max_tokens,
         }
+        if self.tools:
+            body["tools"] = self.tools
+            body["tool_choice"] = "auto"
         if self.settings.model:
             body["model"] = self.settings.model
         return body
@@ -116,9 +131,15 @@ class ChatCompletionsProtocol(ResponseProtocol):
     def parse_response(self, response_json: dict[str, object]) -> CompletedResponse:
         choices = response_json.get("choices", [])
         messages = _extract_choice_messages(choices)
-        text = "".join(
+        extracted_text = [
             _extract_message_text(message.get("content")) for message in messages
-        )
+        ]
+        text = "".join(item.text for item in extracted_text)
+        reasoning_parts: list[str] = []
+        for message, item in zip(messages, extracted_text, strict=False):
+            _append_unique_text(reasoning_parts, _extract_message_reasoning(message))
+            _append_unique_text(reasoning_parts, item.reasoning)
+        reasoning_content = "\n\n".join(reasoning_parts).strip()
         function_calls = [
             function_call
             for message in messages
@@ -133,6 +154,7 @@ class ChatCompletionsProtocol(ResponseProtocol):
             text=text,
             usage=_parse_usage(response_json),
             function_calls=function_calls,
+            reasoning_content=reasoning_content,
             provider_data={"assistant_message": assistant_message},
         )
 
@@ -146,6 +168,11 @@ class ChatCompletionsProtocol(ResponseProtocol):
         display: DisplayProtocol,
         response: CompletedResponse,
     ) -> None:
+        if response.reasoning_summary or response.reasoning_content:
+            display.render_thinking(
+                response.reasoning_content or response.reasoning_summary,
+                title=response.reasoning_summary or None,
+            )
         if response.text:
             display.render_markdown(response.text)
 
@@ -355,21 +382,82 @@ def _extract_choice_messages(choices: object) -> list[dict[str, Any]]:
     return messages
 
 
-def _extract_message_text(content: object) -> str:
+def _extract_message_text(content: object) -> _ExtractedText:
     if isinstance(content, str):
-        return content
+        return _split_tagged_reasoning(content)
     if not isinstance(content, list):
-        return ""
+        return _ExtractedText("")
 
     text_parts: list[str] = []
+    reasoning_parts: list[str] = []
     for part in content:
         if not isinstance(part, dict):
             continue
         part_type = str(part.get("type", "")).strip().lower()
         text_value = part.get("text")
         if isinstance(text_value, str) and part_type in {"text", "output_text"}:
-            text_parts.append(text_value)
-    return "".join(text_parts).strip()
+            extracted = _split_tagged_reasoning(text_value)
+            if extracted.text:
+                text_parts.append(extracted.text)
+            _append_unique_text(reasoning_parts, extracted.reasoning)
+    return _ExtractedText(
+        "".join(text_parts).strip(),
+        "\n\n".join(reasoning_parts).strip(),
+    )
+
+
+def _split_tagged_reasoning(text: str) -> _ExtractedText:
+    matches = list(_THINK_TAG_RE.finditer(text))
+    if not matches:
+        return _ExtractedText(text)
+
+    reasoning_parts: list[str] = []
+
+    def replace_tag(match: re.Match[str]) -> str:
+        _append_unique_text(reasoning_parts, match.group(1))
+        return ""
+
+    visible_text = _THINK_TAG_RE.sub(replace_tag, text)
+    if not text[: matches[0].start()].strip():
+        visible_text = visible_text.lstrip()
+    if not text[matches[-1].end() :].strip():
+        visible_text = visible_text.rstrip()
+    return _ExtractedText(
+        visible_text,
+        "\n\n".join(reasoning_parts).strip(),
+    )
+
+
+def _append_unique_text(parts: list[str], text: str) -> None:
+    normalized = text.strip()
+    if normalized and normalized not in parts:
+        parts.append(normalized)
+
+
+def _extract_message_reasoning(message: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("reasoning", "reasoning_content", "reasoning_details"):
+        text = _extract_reasoning_text(message.get(key))
+        if text and text not in parts:
+            parts.append(text)
+    return "\n\n".join(parts).strip()
+
+
+def _extract_reasoning_text(value: object) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return "\n\n".join(
+            text for item in value if (text := _extract_reasoning_text(item))
+        ).strip()
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key in ("text", "content", "summary"):
+            text = _extract_reasoning_text(value.get(key))
+            if text and text not in parts:
+                parts.append(text)
+        return "\n\n".join(parts).strip()
+    return ""
 
 
 def _parse_tool_calls(raw_tool_calls: object) -> list[ToolCall]:
@@ -405,7 +493,7 @@ def _normalize_assistant_message(message: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {"role": "assistant"}
 
     content = message.get("content")
-    normalized_content = _normalize_message_content(content)
+    normalized_content = _normalize_replay_message_content(content)
     if normalized_content is not None:
         normalized["content"] = normalized_content
 
@@ -452,7 +540,9 @@ def _normalize_assistant_messages(messages: list[dict[str, Any]]) -> dict[str, A
     return normalized
 
 
-def _normalize_message_content(content: object) -> str | list[dict[str, str]] | None:
+def _normalize_replay_message_content(
+    content: object,
+) -> str | list[dict[str, str]] | None:
     if isinstance(content, str):
         return content
     if not isinstance(content, list):
@@ -467,7 +557,8 @@ def _normalize_message_content(content: object) -> str | list[dict[str, str]] | 
         if part_type in {"text", "output_text"}:
             text_value = part.get("text")
             if isinstance(text_value, str):
-                normalized_parts.append({"type": "text", "text": text_value})
+                if text_value:
+                    normalized_parts.append({"type": "text", "text": text_value})
                 continue
 
         if part_type == "refusal":

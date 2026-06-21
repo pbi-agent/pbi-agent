@@ -1,4 +1,4 @@
-- [x] Update prompt enhancer behavior from typo-fix to concise task instruction framing
-- [x] Adjust focused tests if prompt assertions changed
-- [x] Run focused validation
-- [x] Update task memory
+- [x] Add MiniMax M3 pricing to the bundled model catalog.
+- [x] Verify lowercase model matching still covers the new model.
+- [x] Add/update focused tests.
+- [x] Run focused validation.

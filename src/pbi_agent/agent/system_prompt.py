@@ -369,14 +369,11 @@ def get_system_prompt(
 ) -> str:
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
-    prompt = _append_workspace_memory(
-        _append_project_rules(
-            _resolve_base_prompt(
-                settings=settings,
-                excluded_tools=excluded_tools,
-                cwd=cwd,
-            ),
-            cwd,
+    prompt = _append_project_rules(
+        _resolve_base_prompt(
+            settings=settings,
+            excluded_tools=excluded_tools,
+            cwd=cwd,
         ),
         cwd,
     )
@@ -396,7 +393,8 @@ def get_system_prompt(
             visible_agent_names=visible_agent_names,
             workspace_directory_key=workspace_directory_key,
         )
-    return _append_active_command(prompt, active_command_instructions)
+    prompt = _append_active_command(prompt, active_command_instructions)
+    return _append_workspace_memory(prompt, cwd)
 
 
 def get_sub_agent_system_prompt(
@@ -428,10 +426,7 @@ def get_sub_agent_system_prompt(
             excluded_tools=excluded_tools,
             cwd=cwd,
         )
-    prompt = _append_workspace_memory(
-        _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}", cwd),
-        cwd,
-    )
+    prompt = _append_project_rules(f"{base}\n\n{_SUB_AGENT_PROMPT}", cwd)
     excluded_names = _active_tool_excluded_names(settings, excluded_tools)
     active_names = {spec.name for spec in get_tool_specs(excluded_names=excluded_names)}
     if "explore_workspace" in active_names:
@@ -451,4 +446,4 @@ def get_sub_agent_system_prompt(
             source_label=agent_source_label,
             workspace_directory_key=workspace_directory_key,
         )
-    return prompt
+    return _append_workspace_memory(prompt, cwd)

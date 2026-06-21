@@ -244,9 +244,12 @@ def test_get_system_prompt_with_agents_and_memory_orders_sections(tmp_path):
     assert (
         "<workspace_memory>\nRemember the release note.\n</workspace_memory>" in prompt
     )
-    assert prompt.index("</project_rules>") < prompt.index("<workspace_memory>")
-    assert prompt.index("</workspace_memory>") < prompt.index("<skill_loading_rules>")
-    assert prompt.index("</workspace_memory>") < prompt.index("<active_command>")
+    assert prompt.index("</project_rules>") < prompt.index("<skill_loading_rules>")
+    assert prompt.index("</available_skills>") < prompt.index("<active_command>")
+    assert prompt.index("</active_command>") < prompt.index("<workspace_memory>")
+    assert prompt.endswith(
+        "<workspace_memory>\nRemember the release note.\n</workspace_memory>"
+    )
 
 
 def test_get_system_prompt_with_memory_md_without_agents_md(tmp_path):
@@ -269,11 +272,14 @@ def test_get_sub_agent_system_prompt_with_agents_md(tmp_path, monkeypatch):
 
 def test_get_sub_agent_system_prompt_with_memory_md(tmp_path):
     (tmp_path / "MEMORY.md").write_text("Sub-agent memory.", encoding="utf-8")
+    _write_skill(tmp_path, "sub-agent-memory", "Exercise sub-agent memory ordering.")
 
     prompt = get_sub_agent_system_prompt(cwd=tmp_path)
 
     assert "<project_rules>" not in prompt
     assert "<workspace_memory>\nSub-agent memory.\n</workspace_memory>" in prompt
+    assert prompt.index("</available_skills>") < prompt.index("<workspace_memory>")
+    assert prompt.endswith("<workspace_memory>\nSub-agent memory.\n</workspace_memory>")
 
 
 def test_get_sub_agent_system_prompt_without_agents_md(tmp_path, monkeypatch):
