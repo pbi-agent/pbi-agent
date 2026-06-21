@@ -3,7 +3,7 @@ name: orchestrate
 description: Run one implementation task through mandatory sequential worker, reviewer/fixer, and code-quality/fixer loops.
 model_profile_id: worker-pro
 allowed_tools: read,write,shell,sub-agent,web
-sub-agent: reviewer,code-quality-reviewer,fixer,worker
+sub_agents: reviewer,code-quality-reviewer,fixer,worker
 ---
 
 # Orchestrate Mode
