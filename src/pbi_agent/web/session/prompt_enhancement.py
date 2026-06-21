@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+import re
 from typing import Any, Protocol
 
 from pbi_agent.agent.session.runtime import open_runtime_provider
@@ -38,6 +39,11 @@ _PROMPT_ENHANCEMENT_SYSTEM_PROMPT = (
     "Do not answer the task, add requirements, make assumptions, ask questions, or omit important details. "
     "If the draft is already a clear, well-phrased domain instruction, only lightly polish it. "
     "Output only the enhanced instruction text, with no preamble, explanations, labels, newly added code fences, or surrounding quotation marks."
+)
+
+_LEADING_THINK_TAG_RE = re.compile(
+    r"\A\s*<think(?:\s+[^>]*)?>.*?</think\s*>",
+    flags=re.IGNORECASE | re.DOTALL,
 )
 
 
@@ -399,7 +405,8 @@ class PromptEnhancementService:
                 raise RuntimeError(
                     "Prompt enhancement returned an unsupported tool call."
                 )
-            if not response.text.strip():
+            enhanced_text = _strip_prompt_enhancement_reasoning(response.text)
+            if not enhanced_text:
                 raise RuntimeError("Prompt enhancement returned an empty response.")
 
             if tracer is not None:
@@ -409,7 +416,7 @@ class PromptEnhancementService:
                     metadata={"hidden": True},
                 )
                 tracer_finished = True
-            return response.text, turn_usage
+            return enhanced_text, turn_usage
         except Exception as exc:
             if tracer is not None and not tracer_finished:
                 tracer.log_error(str(exc), metadata={"phase": "prompt_enhancement"})
@@ -508,3 +515,8 @@ def _prompt_enhancement_user_input(
             sections.extend(["Last assistant output:", last_assistant])
     sections.extend(["Current composer draft:", draft])
     return "\n\n".join(sections)
+
+
+def _strip_prompt_enhancement_reasoning(text: str) -> str:
+    """Remove reasoning traces that some open-source models emit as text."""
+    return _LEADING_THINK_TAG_RE.sub("", text, count=1).strip()

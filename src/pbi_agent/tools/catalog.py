@@ -18,8 +18,14 @@ class ToolCatalogEntry:
 
 
 class ToolCatalog:
-    def __init__(self, entries: dict[str, ToolCatalogEntry] | None = None) -> None:
+    def __init__(
+        self,
+        entries: dict[str, ToolCatalogEntry] | None = None,
+        *,
+        sub_agent_type_values: tuple[str, ...] | None = None,
+    ) -> None:
         self._entries = dict(entries or {})
+        self._sub_agent_type_values = sub_agent_type_values
 
     def __len__(self) -> int:
         return len(self._entries)
@@ -30,6 +36,12 @@ class ToolCatalog:
     def names(self) -> list[str]:
         return list(self._entries)
 
+    def sub_agent_type_values(self) -> tuple[str, ...]:
+        return self._sub_agent_type_values or ()
+
+    def is_sub_agent_type_visible(self, agent_type: str) -> bool:
+        return agent_type in self.sub_agent_type_values()
+
     @classmethod
     def from_builtin_registry(
         cls,
@@ -38,7 +50,10 @@ class ToolCatalog:
         directory_key: str | None = None,
         visible_sub_agent_names: tuple[str, ...] | None = None,
     ) -> "ToolCatalog":
+        from pbi_agent.tools.sub_agent import visible_agent_type_values
+
         entries: dict[str, ToolCatalogEntry] = {}
+        sub_agent_type_values: tuple[str, ...] | None = None
         for spec in registry.get_tool_specs(
             workspace=workspace,
             directory_key=directory_key,
@@ -48,7 +63,37 @@ class ToolCatalog:
             if handler is None:
                 continue
             entries[spec.name] = ToolCatalogEntry(spec=spec, handler=handler)
-        return cls(entries)
+            if spec.name == "sub_agent":
+                sub_agent_type_values = visible_agent_type_values(
+                    workspace,
+                    directory_key=directory_key,
+                    visible_agent_names=visible_sub_agent_names,
+                )
+        return cls(entries, sub_agent_type_values=sub_agent_type_values)
+
+    def with_sub_agent_visibility(
+        self,
+        workspace: Path | None = None,
+        *,
+        directory_key: str | None = None,
+        visible_sub_agent_names: tuple[str, ...] | None = None,
+    ) -> "ToolCatalog":
+        from pbi_agent.tools.sub_agent import build_spec, visible_agent_type_values
+
+        agent_type_values = visible_agent_type_values(
+            workspace,
+            directory_key=directory_key,
+            visible_agent_names=visible_sub_agent_names,
+        )
+        return self.with_spec(
+            build_spec(
+                workspace,
+                directory_key=directory_key,
+                visible_agent_names=visible_sub_agent_names,
+                agent_type_values=agent_type_values,
+            ),
+            sub_agent_type_values=agent_type_values,
+        )
 
     def merged(
         self,
@@ -66,15 +111,29 @@ class ToolCatalog:
                 )
                 continue
             merged[entry.spec.name] = entry
-        return ToolCatalog(merged)
+        return ToolCatalog(
+            merged,
+            sub_agent_type_values=self._sub_agent_type_values,
+        )
 
-    def with_spec(self, spec: ToolSpec) -> "ToolCatalog":
+    def with_spec(
+        self,
+        spec: ToolSpec,
+        *,
+        sub_agent_type_values: tuple[str, ...] | None = None,
+    ) -> "ToolCatalog":
         entry = self._entries.get(spec.name)
         if entry is None:
             return self
         replaced = dict(self._entries)
         replaced[spec.name] = ToolCatalogEntry(spec=spec, handler=entry.handler)
-        return ToolCatalog(replaced)
+        next_sub_agent_type_values = self._sub_agent_type_values
+        if spec.name == "sub_agent" and sub_agent_type_values is not None:
+            next_sub_agent_type_values = sub_agent_type_values
+        return ToolCatalog(
+            replaced,
+            sub_agent_type_values=next_sub_agent_type_values,
+        )
 
     def get_specs(self, *, excluded_names: set[str] | None = None) -> list[ToolSpec]:
         excluded = excluded_names or set()

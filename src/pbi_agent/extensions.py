@@ -99,6 +99,44 @@ class ExtensionToolCatalog(ToolCatalog):
     def names(self) -> list[str]:
         return self._current().names()
 
+    def sub_agent_type_values(self) -> tuple[str, ...]:
+        return self._base.sub_agent_type_values()
+
+    def is_sub_agent_type_visible(self, agent_type: str) -> bool:
+        return self._base.is_sub_agent_type_visible(agent_type)
+
+    def with_sub_agent_visibility(
+        self,
+        workspace: Path | None = None,
+        *,
+        directory_key: str | None = None,
+        visible_sub_agent_names: tuple[str, ...] | None = None,
+    ) -> ToolCatalog:
+        return ExtensionToolCatalog(
+            self._base.with_sub_agent_visibility(
+                workspace or self._workspace,
+                directory_key=directory_key,
+                visible_sub_agent_names=visible_sub_agent_names,
+            ),
+            self._workspace,
+            self._reserved_names,
+        )
+
+    def with_spec(
+        self,
+        spec: ToolSpec,
+        *,
+        sub_agent_type_values: tuple[str, ...] | None = None,
+    ) -> ToolCatalog:
+        return ExtensionToolCatalog(
+            self._base.with_spec(
+                spec,
+                sub_agent_type_values=sub_agent_type_values,
+            ),
+            self._workspace,
+            self._reserved_names,
+        )
+
     def get_specs(self, *, excluded_names: set[str] | None = None) -> list[ToolSpec]:
         return self._current().get_specs(excluded_names=excluded_names)
 

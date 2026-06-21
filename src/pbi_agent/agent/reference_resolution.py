@@ -18,23 +18,28 @@ def resolve_skill_references(
     directory_key: str | None = None,
     source_label: str = "Configuration",
 ) -> tuple[ProjectSkill, ...] | None:
-    """Resolve configured skill names against enabled project skills.
+    """Resolve configured skill names against project skills.
 
-    Missing or disabled skills are soft references: warn to stderr and omit them.
-    ``None`` preserves absent-field behavior and returns ``None``.
+    Configured skill names are explicit references, so disabled project skills are
+    included when their on-disk skill definition exists. Missing skills are soft
+    references: warn to stderr and omit them. ``None`` preserves absent-field
+    behavior and returns ``None``.
     """
 
     if configured_names is None:
         return None
-    skills = discover_project_skills(workspace, directory_key=directory_key)
+    skills = discover_project_skills(
+        workspace,
+        explicit_skill_names=set(configured_names),
+        directory_key=directory_key,
+    )
     by_name = {skill.name.casefold(): skill for skill in skills}
     resolved: list[ProjectSkill] = []
     for name in configured_names:
         skill = by_name.get(name.casefold())
         if skill is None:
             _warn(
-                f"Warning: {source_label} references unavailable or disabled "
-                f"skill '{name}'; omitting."
+                f"Warning: {source_label} references unknown skill '{name}'; omitting."
             )
             continue
         resolved.append(skill)
@@ -80,19 +85,25 @@ def resolve_sub_agent_references(
     strict: bool = False,
     source_label: str = "Configuration",
 ) -> tuple[ProjectSubAgent, ...] | None:
-    """Resolve configured sub-agent names against enabled project sub-agents."""
+    """Resolve configured sub-agent names against project sub-agents.
+
+    Configured sub-agent names are explicit references, so disabled project
+    sub-agents are included when their on-disk definition exists.
+    """
 
     if configured_names is None:
         return None
-    agents = discover_project_sub_agents(workspace, directory_key=directory_key)
+    agents = discover_project_sub_agents(
+        workspace,
+        explicit_agent_names=set(configured_names),
+        directory_key=directory_key,
+    )
     by_name = {agent.name.casefold(): agent for agent in agents}
     resolved: list[ProjectSubAgent] = []
     for name in configured_names:
         agent = by_name.get(name.casefold())
         if agent is None:
-            message = (
-                f"{source_label} references unavailable or disabled sub-agent '{name}'."
-            )
+            message = f"{source_label} references unknown sub-agent '{name}'."
             if strict:
                 raise ConfigError(message)
             _warn(f"Warning: {message} Omitting.")

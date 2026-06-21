@@ -64,9 +64,13 @@ class _FakeProvider:
                 status_code=200,
                 success=True,
             )
+        response_text = self._calls.get(
+            "response_text",
+            "Improved prompt with @file and $skill",
+        )
         return CompletedResponse(
             response_id="resp-enhance",
-            text="Improved prompt with @file and $skill",
+            text=response_text,
             usage=usage,
         )
 
@@ -225,3 +229,34 @@ def test_prompt_enhancement_without_session_uses_default_runtime(
     assert runtime.settings.model == "gpt-5.4"
     with SessionStore() as store:
         assert store.list_all_sessions() == []
+
+
+def test_prompt_enhancement_strips_only_leading_model_thinking_trace(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv(SESSION_DB_PATH_ENV, str(tmp_path / "sessions.db"))
+    calls = _install_fake_provider(monkeypatch)
+    calls["response_text"] = (
+        "<think>\n"
+        "The user wants a clearer UI implementation instruction.\n"
+        "</think>\n"
+        "In the agent detail tab, wrap the ranking badge in a link that navigates "
+        "to the ranking page while preserving literal <think>debug</think> tags."
+    )
+
+    app = create_app(_settings())
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/prompt/enhance",
+            json={"text": "in agent detail tab, add a link in ranking badge"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["text"] == (
+        "In the agent detail tab, wrap the ranking badge in a link that navigates "
+        "to the ranking page while preserving literal <think>debug</think> tags."
+    )

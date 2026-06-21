@@ -232,12 +232,15 @@ def test_sub_agent_tool_rejects_nested_calls_at_depth_cap(tmp_path) -> None:
 def test_sub_agent_tool_allows_scoped_nested_project_agent(
     monkeypatch, tmp_path
 ) -> None:
+    from pbi_agent.agents.state import set_agent_enabled
+
     agents_dir = tmp_path / ".agents" / "agents"
     agents_dir.mkdir(parents=True)
     (agents_dir / "fixer.md").write_text(
         "---\nname: fixer\ndescription: Fix code.\n---\n\nFix prompt.\n",
         encoding="utf-8",
     )
+    set_agent_enabled("fixer", False, workspace=tmp_path)
     captured: dict[str, object] = {}
 
     def fake_run_sub_agent_task(
@@ -303,12 +306,15 @@ def test_sub_agent_tool_allows_scoped_nested_project_agent(
 
 
 def test_sub_agent_tool_requires_agent_type_for_scoped_catalog(tmp_path) -> None:
+    from pbi_agent.agents.state import set_agent_enabled
+
     agents_dir = tmp_path / ".agents" / "agents"
     agents_dir.mkdir(parents=True)
     (agents_dir / "fixer.md").write_text(
         "---\nname: fixer\ndescription: Fix code.\n---\n\nFix prompt.\n",
         encoding="utf-8",
     )
+    set_agent_enabled("fixer", False, workspace=tmp_path)
     tool_catalog = ToolCatalog.from_builtin_registry(
         tmp_path,
         visible_sub_agent_names=("fixer",),
@@ -549,6 +555,52 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
     assert captured["settings"].reasoning_effort == "xhigh"
 
 
+def test_run_sub_agent_task_includes_disabled_explicit_skill(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from pbi_agent.skills.state import set_skill_enabled
+
+    captured: dict[str, object] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog=None,
+    ) -> _ProviderStub:
+        del settings, excluded_tools, tool_catalog
+        captured["system_prompt"] = system_prompt
+        return _ProviderStub()
+
+    skill_dir = tmp_path / ".agents" / "skills" / "hibench-communication"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: hibench-communication\n"
+        "description: Draft benchmark updates.\n"
+        "---\n\n"
+        "# HiBench Communication\n",
+        encoding="utf-8",
+    )
+    set_skill_enabled("hibench-communication", False, workspace=tmp_path)
+    monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
+
+    result = run_sub_agent_task(
+        "Draft the update with $hibench-communication",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(workspace=tmp_path),
+        workspace_root=tmp_path,
+    )
+
+    assert result["status"] == "completed"
+    assert "<name>hibench-communication</name>" in str(captured["system_prompt"])
+
+
 def test_run_sub_agent_task_uses_parent_checkpoint_for_openai_context_inheritance(
     monkeypatch,
 ) -> None:
@@ -701,7 +753,7 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
     monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
     monkeypatch.setattr(
         "pbi_agent.agent.session.get_project_sub_agent_by_name",
-        lambda name, workspace=None: type(
+        lambda name, workspace=None, **_kwargs: type(
             "AgentDef",
             (),
             {
@@ -733,7 +785,59 @@ def test_run_sub_agent_task_uses_selected_project_sub_agent_prompt(
     assert captured["settings"].reasoning_effort == settings.reasoning_effort
 
 
+def test_run_sub_agent_task_loads_disabled_explicit_agent_type(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from pbi_agent.agents.state import set_agent_enabled
+
+    captured: dict[str, object] = {}
+
+    def fake_create_provider(
+        settings: Settings,
+        *,
+        system_prompt: str | None = None,
+        excluded_tools: set[str] | None = None,
+        tool_catalog=None,
+    ) -> _ProviderStub:
+        del settings, excluded_tools, tool_catalog
+        captured["system_prompt"] = system_prompt
+        return _ProviderStub()
+
+    agents_root = tmp_path / ".agents" / "agents"
+    agents_root.mkdir(parents=True)
+    (agents_root / "reviewer.md").write_text(
+        "---\n"
+        "name: reviewer\n"
+        "description: Review implementation and test coverage.\n"
+        "---\n\n"
+        "You are a code reviewer.\n",
+        encoding="utf-8",
+    )
+    set_agent_enabled("reviewer", False, workspace=tmp_path)
+    monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
+
+    result = run_sub_agent_task(
+        "Review the latest patch",
+        Settings(api_key="test-key", provider="openai", model="gpt-5"),
+        _ParentDisplay(),
+        parent_session_usage=TokenUsage(model="gpt-5"),
+        parent_turn_usage=TokenUsage(model="gpt-5"),
+        tool_catalog=ToolCatalog.from_builtin_registry(
+            tmp_path,
+            visible_sub_agent_names=("reviewer",),
+        ),
+        agent_type="reviewer",
+        workspace_root=tmp_path,
+    )
+
+    assert result["status"] == "completed"
+    assert "You are a code reviewer." in str(captured["system_prompt"])
+
+
 def test_run_sub_agent_task_scopes_project_agent_skills(tmp_path, monkeypatch) -> None:
+    from pbi_agent.skills.state import set_skill_enabled
+
     captured: dict[str, object] = {}
 
     def fake_create_provider(
@@ -758,6 +862,7 @@ def test_run_sub_agent_task_scopes_project_agent_skills(tmp_path, monkeypatch) -
             f"---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n",
             encoding="utf-8",
         )
+    set_skill_enabled("fastapi", False, workspace=tmp_path)
     agents_root = tmp_path / ".agents" / "agents"
     agents_root.mkdir(parents=True)
     (agents_root / "reviewer.md").write_text(
@@ -792,6 +897,8 @@ def test_run_sub_agent_task_enables_scoped_nested_sub_agent_schema_and_prompt(
     tmp_path,
     monkeypatch,
 ) -> None:
+    from pbi_agent.agents.state import set_agent_enabled
+
     captured: dict[str, object] = {}
 
     def fake_create_provider(
@@ -825,6 +932,7 @@ def test_run_sub_agent_task_enables_scoped_nested_sub_agent_schema_and_prompt(
         "---\nname: fixer\ndescription: Fix code.\n---\n\nYou fix code.\n",
         encoding="utf-8",
     )
+    set_agent_enabled("fixer", False, workspace=tmp_path)
     monkeypatch.setattr("pbi_agent.agent.session.create_provider", fake_create_provider)
 
     result = run_sub_agent_task(
@@ -915,7 +1023,7 @@ def test_run_sub_agent_task_uses_project_agent_model_profile(
     )
     monkeypatch.setattr(
         "pbi_agent.agent.session.get_project_sub_agent_by_name",
-        lambda name, workspace=None: type(
+        lambda name, workspace=None, **_kwargs: type(
             "AgentDef",
             (),
             {

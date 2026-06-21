@@ -253,6 +253,7 @@ def test_builtin_tool_catalog_sub_agent_schema_scopes_visible_agents(
 
     assert spec is not None
     assert spec.parameters_schema["properties"]["agent_type"]["enum"] == ["reviewer"]
+    assert catalog.sub_agent_type_values() == ("reviewer",)
 
 
 def test_runtime_provider_sub_agent_schema_uses_explicit_workspace(
@@ -285,6 +286,7 @@ def test_runtime_provider_sub_agent_schema_uses_explicit_workspace(
         spec = tool_catalog.get_spec("sub_agent")
         assert spec is not None
         captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        captured["visible_agent_types"] = tool_catalog.sub_agent_type_values()
         return _ProviderContextStub(settings)
 
     monkeypatch.setattr(
@@ -299,6 +301,7 @@ def test_runtime_provider_sub_agent_schema_uses_explicit_workspace(
         pass
 
     assert captured["enum"] == ["default", "bravo"]
+    assert captured["visible_agent_types"] == ("default", "bravo")
 
 
 def test_runtime_provider_sub_agent_schema_uses_active_workspace_directory_key(
@@ -332,6 +335,7 @@ def test_runtime_provider_sub_agent_schema_uses_active_workspace_directory_key(
         spec = tool_catalog.get_spec("sub_agent")
         assert spec is not None
         captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        captured["visible_agent_types"] = tool_catalog.sub_agent_type_values()
         return _ProviderContextStub(settings)
 
     monkeypatch.setattr(
@@ -347,6 +351,7 @@ def test_runtime_provider_sub_agent_schema_uses_active_workspace_directory_key(
         pass
 
     assert captured["enum"] == ["default"]
+    assert captured["visible_agent_types"] == ("default",)
 
 
 def test_runtime_provider_sub_agent_schema_includes_explicit_disabled_agent(
@@ -372,6 +377,7 @@ def test_runtime_provider_sub_agent_schema_includes_explicit_disabled_agent(
         spec = tool_catalog.get_spec("sub_agent")
         assert spec is not None
         captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        captured["visible_agent_types"] = tool_catalog.sub_agent_type_values()
         return _ProviderContextStub(settings)
 
     monkeypatch.setattr(
@@ -387,6 +393,7 @@ def test_runtime_provider_sub_agent_schema_includes_explicit_disabled_agent(
         pass
 
     assert captured["enum"] == ["default", "reviewer"]
+    assert captured["visible_agent_types"] == ("default", "reviewer")
 
 
 def test_runtime_provider_sub_agent_schema_scopes_visible_agents(
@@ -403,6 +410,7 @@ def test_runtime_provider_sub_agent_schema_scopes_visible_agents(
         "---\nname: fixer\ndescription: Fixes code.\n---\n\nFix prompt.\n",
         encoding="utf-8",
     )
+    set_agent_enabled("reviewer", False, workspace=tmp_path)
     captured: dict[str, Any] = {}
 
     def fake_create_provider(
@@ -417,6 +425,7 @@ def test_runtime_provider_sub_agent_schema_scopes_visible_agents(
         spec = tool_catalog.get_spec("sub_agent")
         assert spec is not None
         captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        captured["visible_agent_types"] = tool_catalog.sub_agent_type_values()
         return _ProviderContextStub(settings)
 
     monkeypatch.setattr(
@@ -432,6 +441,7 @@ def test_runtime_provider_sub_agent_schema_scopes_visible_agents(
         pass
 
     assert captured["enum"] == ["reviewer"]
+    assert captured["visible_agent_types"] == ("reviewer",)
 
 
 def test_runtime_provider_replaces_reused_catalog_sub_agent_schema_when_scoped(
@@ -470,6 +480,7 @@ def test_runtime_provider_replaces_reused_catalog_sub_agent_schema_when_scoped(
         spec = tool_catalog.get_spec("sub_agent")
         assert spec is not None
         captured["enum"] = spec.parameters_schema["properties"]["agent_type"]["enum"]
+        captured["visible_agent_types"] = tool_catalog.sub_agent_type_values()
         return _ProviderContextStub(settings)
 
     monkeypatch.setattr(
@@ -486,6 +497,7 @@ def test_runtime_provider_replaces_reused_catalog_sub_agent_schema_when_scoped(
         pass
 
     assert captured["enum"] == ["reviewer"]
+    assert captured["visible_agent_types"] == ("reviewer",)
     assert original_spec.parameters_schema["properties"]["agent_type"]["enum"] == [
         "default",
         "fixer",
