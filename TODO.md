@@ -1,3 +1,6 @@
-- [x] Narrow prompt-enhancement reasoning cleanup to a leading think block only.
-- [x] Add regression coverage preserving later think tags.
-- [x] Run focused validation.
+- [x] Update `/release` command defaults for minor publish workflow.
+- [x] Review command wording for safety conflicts.
+- [x] Record task result in memory.
+- [x] Fix review finding: move sub-agent visibility out of session runtime.
+- [x] Run focused sub-agent/tool validation.
+- [x] Record fix-review result in memory.
