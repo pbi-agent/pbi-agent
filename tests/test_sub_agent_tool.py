@@ -551,7 +551,7 @@ def test_run_sub_agent_task_uses_child_prompt_and_aggregates_usage(
     assert parent_turn_usage.sub_agent_total_tokens == 6
     assert captured["excluded_tools"] == {"ask_user", "sub_agent"}
     assert captured["tool_catalog"] is not None
-    assert "delegated sub-agent" in str(captured["system_prompt"])
+    assert "Delegated for main agent" in str(captured["system_prompt"])
     assert isinstance(captured["settings"], Settings)
     assert captured["settings"].model == expected_model
     assert captured["settings"].reasoning_effort == "xhigh"
