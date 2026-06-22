@@ -31,6 +31,7 @@ function makeBootstrap(root: string): BootstrapPayload {
     tasks: [],
     live_sessions: [],
     board_stages: [],
+    hook_warnings: [],
   };
 }
 

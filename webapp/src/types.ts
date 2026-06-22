@@ -315,6 +315,31 @@ export type BootstrapPayload = {
   tasks: TaskRecord[];
   live_sessions: LiveSession[];
   board_stages: BoardStage[];
+  hook_warnings: string[];
+};
+
+export type HookView = {
+  key: string;
+  event: string;
+  matcher: string | null;
+  command: string | null;
+  source: string;
+  source_path: string;
+  status_message: string | null;
+  timeout: number;
+  trust_status: string;
+  current_hash: string;
+  enabled: boolean;
+  managed: boolean;
+  runnable: boolean;
+  diagnostics: string[];
+};
+
+export type HookListPayload = {
+  hooks: HookView[];
+  diagnostics: string[];
+  review_required_count: number;
+  trust_bypass_active: boolean;
 };
 
 export type WorkspaceRecord = {

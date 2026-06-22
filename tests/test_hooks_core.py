@@ -67,6 +67,127 @@ def test_discovery_marks_untrusted_then_trusted(tmp_path: Path) -> None:
     assert trusted.hooks[0].trust_status == HookTrustStatus.TRUSTED
 
 
+def test_discovery_self_declared_project_managed_does_not_bypass_trust(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "repo"
+    hooks_path = workspace / ".agents" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True, exist_ok=True)
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "shell",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "echo managed",
+                                    "managed": True,
+                                }
+                            ],
+                        },
+                        {
+                            "matcher": "apply_patch",
+                            "hooks": [{"type": "command", "command": "echo bypass"}],
+                        },
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    discovery = discover_hooks(
+        workspace,
+        Settings(dangerously_bypass_hook_trust=True),
+        global_config_path=tmp_path / "missing.json",
+        trust_store=HookTrustStore(tmp_path / "state.json"),
+    )
+
+    managed = next(hook for hook in discovery.hooks if hook.matcher == "shell")
+    bypassed = next(hook for hook in discovery.hooks if hook.matcher == "apply_patch")
+    assert not managed.handler.managed
+    assert not managed.managed
+    assert managed.trust_status == HookTrustStatus.TRUSTED
+    assert bypassed.trust_status == HookTrustStatus.TRUSTED
+    assert bypassed.runnable
+    assert "ignoring self-declared managed hook" in managed.diagnostics[0]
+
+
+def test_discovery_self_declared_project_managed_can_be_disabled(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "repo"
+    hooks_path = workspace / ".agents" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True, exist_ok=True)
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "shell",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "echo managed",
+                                    "managed": True,
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    state_path = tmp_path / "state.json"
+    first = discover_hooks(
+        workspace,
+        Settings(),
+        global_config_path=tmp_path / "missing.json",
+        trust_store=HookTrustStore(state_path),
+    ).hooks[0]
+
+    HookTrustStore(state_path).set_enabled(first.key, False)
+    disabled = discover_hooks(
+        workspace,
+        Settings(dangerously_bypass_hook_trust=True),
+        global_config_path=tmp_path / "missing.json",
+        trust_store=HookTrustStore(state_path),
+    ).hooks[0]
+
+    assert not disabled.managed
+    assert disabled.trust_status == HookTrustStatus.DISABLED
+    assert not disabled.runnable
+
+
+def test_bypass_trust_keeps_disabled_hooks_disabled(tmp_path: Path) -> None:
+    workspace = tmp_path / "repo"
+    hooks_path = workspace / ".agents" / "hooks.json"
+    _write_hooks(hooks_path, "echo '{}'")
+    state_path = tmp_path / "state.json"
+    first = discover_hooks(
+        workspace,
+        Settings(),
+        global_config_path=tmp_path / "missing.json",
+        trust_store=HookTrustStore(state_path),
+    ).hooks[0]
+
+    HookTrustStore(state_path).set_enabled(first.key, False)
+    disabled = discover_hooks(
+        workspace,
+        Settings(dangerously_bypass_hook_trust=True),
+        global_config_path=tmp_path / "missing.json",
+        trust_store=HookTrustStore(state_path),
+    ).hooks[0]
+
+    assert disabled.trust_status == HookTrustStatus.DISABLED
+    assert not disabled.runnable
+
+
 def test_discovery_marks_modified_and_disabled(tmp_path: Path) -> None:
     workspace = tmp_path / "repo"
     hooks_path = workspace / ".agents" / "hooks.json"
@@ -161,6 +282,14 @@ def test_parse_pre_tool_rewrite_and_exit_code_block() -> None:
         exit_code=2,
     )
     assert stop_continuation.continuation_prompt == "Continue after hook request."
+
+    subagent_continuation = parse_hook_output(
+        event=HookEventName.SUBAGENT_STOP,
+        stdout="",
+        stderr="continue child",
+        exit_code=2,
+    )
+    assert subagent_continuation.continuation_prompt == "continue child"
 
 
 def test_parse_pre_tool_codex_json_deny() -> None:

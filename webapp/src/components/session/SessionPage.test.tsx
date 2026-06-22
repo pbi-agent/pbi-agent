@@ -320,6 +320,7 @@ function makeBootstrap(overrides: Partial<BootstrapPayload> = {}): BootstrapPayl
     tasks: [],
     live_sessions: [],
     board_stages: [],
+    hook_warnings: [],
     ...overrides,
   };
 }

@@ -1,41 +1,4 @@
-- [x] Worker: implement Codex-like declarative command-hook system
-- [!] Main: inspect worker diff and run focused validation (blocked: JSON PreToolUse deny output crashes parser)
-- [x] Reviewer round 1: review implementation
-- [x] Fixer round 1: resolve reviewer findings
-- [x] Main: inspect fixer round 1 diff and rerun focused validation
-- [x] Reviewer round 2: verify reviewer fixes
-- [x] Fixer round 2: resolve reviewer round 2 findings
-- [x] Main: inspect fixer round 2 diff and rerun focused validation
-- [x] Reviewer round 3: verify reviewer round 2 fixes
-- [x] Fixer round 3: resolve reviewer round 3 findings
-- [x] Main: inspect fixer round 3 diff and rerun focused validation
-- [x] Reviewer round 4: verify reviewer round 3 fixes
-- [x] Fixer round 4: resolve reviewer round 4 finding
-- [x] Main: inspect fixer round 4 diff and rerun focused validation
-- [x] Reviewer round 5: verify reviewer round 4 fix
-- [x] Fixer round 5: resolve reviewer round 5 findings
-- [x] Main: inspect fixer round 5 diff and rerun focused validation
-- [x] Reviewer round 6: verify reviewer round 5 fixes
-- [x] Fixer round 6: resolve reviewer round 6 finding
-- [x] Main: inspect fixer round 6 diff and rerun focused validation
-- [x] Reviewer round 7: verify reviewer round 6 fix
-- [x] Code-quality-reviewer round 1: review maintainability
-- [x] Fixer round 7: resolve code-quality findings
-- [!] Main: inspect fixer round 7 diff and rerun focused validation (blocked: session provider stub failure on hook_runtime kwarg)
-- [x] Reviewer round 8: review code-quality refactor regression
-- [x] Fixer round 8: resolve reviewer round 8 findings
-- [!] Main: inspect fixer round 8 diff and rerun focused validation (blocked: SessionStart context test no longer observes hook runtime after coordinator refactor)
-- [x] Reviewer round 9: verify reviewer round 8 fixes
-- [x] Fixer round 9: resolve reviewer round 9 findings
-- [x] Main: inspect fixer round 9 diff and rerun focused validation
-- [x] Reviewer round 10: verify reviewer round 9 fixes
-- [x] Code-quality-reviewer round 2: verify code-quality fixes
-- [!] Final validation (blocked: full pytest found another session provider stub missing hook_runtime kwarg)
-- [x] Reviewer round 11: review final-validation failure
-- [x] Fixer round 10: resolve reviewer round 11 findings
-- [x] Main: inspect fixer round 10 diff and rerun focused validation
-- [x] Reviewer round 12: verify reviewer round 11 fixes
-- [x] Code-quality-reviewer round 3: verify final-validation fixes
-- [x] Final validation rerun
-- [x] Update memory
-- [x] Handoff
+- [x] Inspect Hooks badge styling against settings badge patterns
+- [x] Patch Hooks badge markup/CSS
+- [ ] Run focused frontend validation
+- [ ] Update task memory

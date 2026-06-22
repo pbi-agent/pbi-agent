@@ -29,7 +29,6 @@ def discover_hooks(
     project_config_path: Path | None = None,
     trust_store: HookTrustStore | None = None,
 ) -> HookDiscovery:
-    del settings
     workspace = workspace.resolve()
     sources = (
         ("global", global_config_path or GLOBAL_HOOK_CONFIG_PATH),
@@ -78,6 +77,12 @@ def discover_hooks(
                     if handler is None:
                         diagnostics.extend(handler_diags)
                         continue
+                    handler, managed_diagnostics = _apply_managed_source_policy(
+                        handler,
+                        source_name=source_name,
+                        path=path,
+                    )
+                    handler_diags.extend(managed_diagnostics)
                     current_hash = normalized_hook_hash(
                         event=event.value,
                         matcher=matcher,
@@ -102,6 +107,9 @@ def discover_hooks(
                         occurrence=identity_counts[identity_base],
                         single_handler_group=len(handlers_raw) == 1,
                     )
+                    bypass_trust = bool(
+                        getattr(settings, "dangerously_bypass_hook_trust", False)
+                    )
                     definitions.append(
                         HookDefinition(
                             event=event,
@@ -116,8 +124,11 @@ def discover_hooks(
                             trust_status=trust.status_for_identity(
                                 identity,
                                 current_hash,
+                                managed=handler.managed,
+                                bypass_trust=bypass_trust,
                             ),
                             diagnostics=tuple(handler_diags),
+                            managed=handler.managed,
                         )
                     )
     return HookDiscovery(hooks=tuple(definitions), diagnostics=tuple(diagnostics))
@@ -138,6 +149,7 @@ def _parse_handler(
         timeout=raw.get("timeout"),
         status_message=_optional_str(raw.get("statusMessage")),
         async_=async_,
+        managed=bool(raw.get("managed", False)),
         raw=dict(raw),
     )
     if type_ != "command":
@@ -150,6 +162,39 @@ def _parse_handler(
         diagnostics.append(f"{path}: command hook missing command")
         return None, diagnostics
     return handler, diagnostics
+
+
+def _apply_managed_source_policy(
+    handler: HookHandlerConfig,
+    *,
+    source_name: str,
+    path: Path,
+) -> tuple[HookHandlerConfig, list[str]]:
+    """Apply the minimal safe policy for trusted-by-policy managed hooks.
+
+    Ordinary global/project JSON is user- or workspace-controlled. Until a
+    separate trusted managed source exists, self-declared ``managed`` in those
+    files must not bypass hook trust review or disable controls.
+    """
+
+    if not handler.managed:
+        return handler, []
+    if source_name == "managed":
+        return handler, []
+    raw = dict(handler.raw)
+    raw["managed"] = False
+    return (
+        HookHandlerConfig(
+            type=handler.type,
+            command=handler.command,
+            timeout=handler.timeout,
+            status_message=handler.status_message,
+            async_=handler.async_,
+            managed=False,
+            raw=raw,
+        ),
+        [(f"{path}: ignoring self-declared managed hook from {source_name} source")],
+    )
 
 
 def _optional_str(value: Any) -> str | None:

@@ -52,6 +52,7 @@ RELOAD_COMMAND = session_shared.RELOAD_COMMAND
 SKILLS_COMMAND = session_shared.SKILLS_COMMAND
 TEMPORARY_LOCAL_COMMANDS = session_shared.TEMPORARY_LOCAL_COMMANDS
 AGENTS_COMMAND = session_shared.AGENTS_COMMAND
+HOOKS_COMMAND = session_shared.HOOKS_COMMAND
 SessionTurnInterrupted = session_shared.SessionTurnInterrupted
 
 _ALIAS_TARGETS = {

@@ -23,6 +23,7 @@ class HookTrustStatus(StrEnum):
     UNTRUSTED = "untrusted"
     MODIFIED = "modified"
     DISABLED = "disabled"
+    MANAGED = "managed"
 
 
 class HookRunStatus(StrEnum):
@@ -40,6 +41,7 @@ class HookHandlerConfig:
     timeout: int | float | None = None
     status_message: str | None = None
     async_: bool = False
+    managed: bool = False
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -75,6 +77,7 @@ class HookDefinition:
     current_hash: str
     trust_status: HookTrustStatus
     diagnostics: tuple[str, ...] = ()
+    managed: bool = False
 
     @property
     def enabled(self) -> bool:
@@ -82,7 +85,7 @@ class HookDefinition:
 
     @property
     def runnable(self) -> bool:
-        return self.trust_status == HookTrustStatus.TRUSTED
+        return self.trust_status in {HookTrustStatus.TRUSTED, HookTrustStatus.MANAGED}
 
 
 @dataclass(frozen=True, slots=True)

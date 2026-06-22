@@ -22,7 +22,7 @@ def parse_hook_output(
             )
         if event == HookEventName.POST_TOOL_USE:
             return ParsedHookOutput(replacement=reason or "Hook provided feedback.")
-        if event == HookEventName.STOP:
+        if event in {HookEventName.STOP, HookEventName.SUBAGENT_STOP}:
             return ParsedHookOutput(
                 continuation_prompt=reason or "Continue after hook request."
             )
@@ -91,7 +91,7 @@ def parse_hook_output(
         post_base = dict(base)
         post_base["additional_context"] = context
         return ParsedHookOutput(**post_base, replacement=replacement)
-    if event == HookEventName.STOP:
+    if event in {HookEventName.STOP, HookEventName.SUBAGENT_STOP}:
         continuation = _str_or_none(specific.get("continuationPrompt")) or _str_or_none(
             parsed.get("continuationPrompt")
         )

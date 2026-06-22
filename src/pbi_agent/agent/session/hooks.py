@@ -171,8 +171,8 @@ class SessionHookCoordinator:
         subagent_name: str,
         response: CompletedResponse,
         tracer: RunTracer | None = None,
-    ) -> None:
-        self.hook_runtime.run(
+    ) -> HookRuntimeResult:
+        return self.hook_runtime.run(
             HookEventName.SUBAGENT_STOP,
             matcher_value=agent_type,
             payload={

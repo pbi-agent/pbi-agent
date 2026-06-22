@@ -131,6 +131,7 @@ export default defineConfig({
               { text: 'Project Skills', link: '/customization/skills' },
               { text: 'Project Commands', link: '/customization/commands' },
               { text: 'Project Sub-agents', link: '/customization/sub-agents' },
+              { text: 'Hooks', link: '/customization/hooks' },
               { text: 'Workspace Reload', link: '/customization/reload' },
               { text: 'MCP Servers', link: '/customization/mcp' },
               { text: 'File Constraints', link: '/customization/file-constraints' }

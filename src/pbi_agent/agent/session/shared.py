@@ -48,6 +48,7 @@ INIT_COMMAND = "/init"
 COMPACT_COMMAND = "/compact"
 RELOAD_COMMAND = "/reload"
 EXTENSIONS_COMMAND = "/extensions"
+HOOKS_COMMAND = "/hooks"
 TEMPORARY_LOCAL_COMMANDS = frozenset(
     {
         SKILLS_COMMAND,
@@ -56,6 +57,7 @@ TEMPORARY_LOCAL_COMMANDS = frozenset(
         INIT_COMMAND,
         RELOAD_COMMAND,
         EXTENSIONS_COMMAND,
+        HOOKS_COMMAND,
     }
 )
 COMPACTION_MARKER = "[compacted context]"

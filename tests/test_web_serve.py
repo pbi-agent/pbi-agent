@@ -2618,6 +2618,11 @@ def test_slash_command_search_endpoint_returns_web_commands(
             "kind": "local_command",
         },
         {
+            "name": "/hooks",
+            "description": "Inspect and review command hooks",
+            "kind": "local_command",
+        },
+        {
             "name": "/init",
             "description": "Bootstrap AGENTS.md plus default commands and sub-agents",
             "kind": "local_command",
@@ -2670,6 +2675,11 @@ def test_slash_command_search_endpoint_includes_command_file_commands(
             "kind": "local_command",
         },
         {
+            "name": "/hooks",
+            "description": "Inspect and review command hooks",
+            "kind": "local_command",
+        },
+        {
             "name": "/init",
             "description": "Bootstrap AGENTS.md plus default commands and sub-agents",
             "kind": "local_command",
@@ -2692,11 +2702,6 @@ def test_slash_command_search_endpoint_includes_command_file_commands(
         {
             "name": "/plan",
             "description": "Planning command",
-            "kind": "command",
-        },
-        {
-            "name": "/review",
-            "description": "Code review command",
             "kind": "command",
         },
     ]

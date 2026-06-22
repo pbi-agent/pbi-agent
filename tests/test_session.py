@@ -20,6 +20,7 @@ from pbi_agent.agent.session import (
     MCP_COMMAND,
     COMPACT_COMMAND,
     COMPACTION_MARKER,
+    HOOKS_COMMAND,
     INIT_COMMAND,
     INTERACTIVE_ONLY_TOOLS,
     _open_compaction_provider,
@@ -2942,6 +2943,46 @@ def test_run_session_loop_handles_skills_command_locally(monkeypatch) -> None:
     assert display.markdown_calls == [
         "### Project Skills\n\n- `repo-skill`: Demo skill"
     ]
+    assert display.assistant_start_calls == 0
+
+
+def test_run_session_loop_handles_hooks_command_locally(monkeypatch, tmp_path) -> None:
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy([HOOKS_COMMAND, "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    hooks_path = tmp_path / ".agents" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "shell",
+                            "hooks": [{"type": "command", "command": "echo check"}],
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_session_loop(settings, display, workspace_root=tmp_path)
+
+    assert exit_code == 0
+    assert provider.request_messages == []
+    assert len(display.markdown_calls) == 1
+    markdown = display.markdown_calls[0]
+    assert "### Hooks" in markdown
+    assert "- `PreToolUse` matcher `shell` from `project` — **untrusted**" in markdown
+    assert "  - command: `echo check`" in markdown
+    assert "Review hooks with `pbi-agent hooks`" in markdown
     assert display.assistant_start_calls == 0
 
 

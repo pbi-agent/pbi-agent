@@ -64,6 +64,7 @@ def normalized_hook_hash(
             "command": handler.command or "",
             "timeout": handler.normalized_timeout,
             "statusMessage": handler.status_message or "",
+            "managed": handler.managed,
         },
     }
     data = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
@@ -126,7 +127,21 @@ class HookTrustStore:
         self,
         identity: HookIdentitySlot,
         current_hash: str,
+        *,
+        managed: bool = False,
+        bypass_trust: bool = False,
     ) -> HookTrustStatus:
+        if managed:
+            return HookTrustStatus.MANAGED
+        if bypass_trust:
+            stored_status = self._status_for_key(
+                identity.key,
+                current_hash,
+                modified_fallback_prefix=identity.modified_fallback_prefix,
+            )
+            if stored_status == HookTrustStatus.DISABLED:
+                return HookTrustStatus.DISABLED
+            return HookTrustStatus.TRUSTED
         return self._status_for_key(
             identity.key,
             current_hash,

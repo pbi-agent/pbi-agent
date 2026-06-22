@@ -37,6 +37,8 @@ from pbi_agent.extensions import (
     tool_catalog_with_extensions,
 )
 from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
+from pbi_agent.hooks.discovery import discover_hooks
+from pbi_agent.hooks.review import format_hooks_markdown
 from pbi_agent.hooks.runtime import HookRuntime
 from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.models.messages import (
@@ -94,6 +96,7 @@ from pbi_agent.agent.session.shared import (
     AGENTS_COMMAND,
     COMPACT_COMMAND,
     EXTENSIONS_COMMAND,
+    HOOKS_COMMAND,
     INTERACTIVE_ONLY_TOOLS,
     MCP_COMMAND,
     NEW_SESSION_SENTINEL,
@@ -617,6 +620,13 @@ def run_session_loop(
                         format_extensions_markdown(
                             workspace,
                             reserved_names=_reserved_slash_extension_names(workspace),
+                        )
+                    )
+                    continue
+                if normalized_command == HOOKS_COMMAND:
+                    _render_temporary_command_markdown(
+                        format_hooks_markdown(
+                            discover_hooks(workspace, current_runtime.settings)
                         )
                     )
                     continue
@@ -1434,13 +1444,46 @@ def run_sub_agent_task(
                 tracer=child_tracer,
                 hook_runtime=child_hook_runtime,
             )
-            child_hooks.run_subagent_stop(
+            stop_hook_result = child_hooks.run_subagent_stop(
                 agent_type=agent_type or "default",
                 task_instruction=task_instruction,
                 subagent_name=child_name,
                 response=response,
                 tracer=child_tracer,
             )
+            if (
+                stop_hook_result.continuation_prompt
+                and request_count < SUB_AGENT_MAX_REQUESTS
+            ):
+                _raise_if_sub_agent_timed_out(started_at)
+                continuation_prompt = stop_hook_result.continuation_prompt
+                child_display.render_user_message(continuation_prompt)
+                response = provider.request_turn(
+                    user_message=continuation_prompt,
+                    display=child_display,
+                    session_usage=child_session_usage,
+                    turn_usage=child_turn_usage,
+                    tracer=child_tracer,
+                )
+                request_count += 1
+                response, continuation_tool_errors, request_count = (
+                    _run_tool_iterations(
+                        provider=provider,
+                        response=response,
+                        max_workers=child_settings.max_tool_workers,
+                        display=child_display,
+                        session_usage=child_session_usage,
+                        turn_usage=child_turn_usage,
+                        sub_agent_depth=sub_agent_depth + 1,
+                        max_requests=SUB_AGENT_MAX_REQUESTS,
+                        request_count=request_count,
+                        started_at=started_at,
+                        max_elapsed_seconds=SUB_AGENT_MAX_ELAPSED_SECONDS,
+                        tracer=child_tracer,
+                        hook_runtime=child_hook_runtime,
+                    )
+                )
+                had_tool_errors = had_tool_errors or continuation_tool_errors
             elapsed = time.monotonic() - started_at
             child_display.turn_usage(child_turn_usage, elapsed)
             child_display.finish_sub_agent(status="completed")

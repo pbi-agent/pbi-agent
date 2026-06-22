@@ -43,7 +43,7 @@ export type Body_upload_saved_session_images_api_sessions__session_id__images_po
 
 export type Body_upload_task_images_api_tasks_images_post = { files: string[] };
 
-export type BootstrapResponse = { workspace_root: string; workspace_key: string; workspace_display_path: string; is_sandbox: boolean; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; supports_image_inputs: boolean; sessions: SessionRecordModel[]; tasks: TaskRecordModel[]; live_sessions: LiveSessionModel[]; board_stages: BoardStageModel[] };
+export type BootstrapResponse = { workspace_root: string; workspace_key: string; workspace_display_path: string; is_sandbox: boolean; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; supports_image_inputs: boolean; sessions: SessionRecordModel[]; tasks: TaskRecordModel[]; live_sessions: LiveSessionModel[]; board_stages: BoardStageModel[]; hook_warnings?: string[] };
 
 export type CommandCandidateRequest = { source?: string | null };
 
@@ -92,6 +92,14 @@ export type ForkSessionRequest = { message_id: string };
 export type HTTPValidationError = { detail?: ValidationError[] };
 
 export type HistoryItemModel = { item_id: string; message_id: string; part_ids: MessagePartIdsModel; role: string; content: string; file_paths?: string[]; image_attachments?: ImageAttachmentModel[]; markdown: boolean; historical: boolean; created_at: string };
+
+export type HookActionRequest = { key: string };
+
+export type HookActionResponse = { hooks: HookViewModel[]; diagnostics: string[]; review_required_count: number; trust_bypass_active?: boolean };
+
+export type HookListResponse = { hooks: HookViewModel[]; diagnostics: string[]; review_required_count: number; trust_bypass_active?: boolean };
+
+export type HookViewModel = { key: string; event: string; matcher: string | null; command: string | null; source: string; source_path: string; status_message: string | null; timeout: number; trust_status: string; current_hash: string; enabled: boolean; managed: boolean; runnable: boolean; diagnostics: string[] };
 
 export type ImageAttachmentModel = { upload_id: string; name: string; mime_type: string; byte_count: number; preview_url: string };
 
@@ -435,6 +443,10 @@ export type ApiOperationResponses = {
   "GET /api/files/search": FileMentionSearchResponse;
   "GET /api/files/tree": WorkspaceFileTreeResponse;
   "POST /api/files/tree/refresh": WorkspaceFileTreeResponse;
+  "GET /api/hooks": HookListResponse;
+  "POST /api/hooks/disable": HookActionResponse;
+  "POST /api/hooks/enable": HookActionResponse;
+  "POST /api/hooks/trust": HookActionResponse;
   "POST /api/prompt/enhance": PromptEnhancementResponse;
   "DELETE /api/provider-auth/{provider_id}": ProviderAuthLogoutResponse;
   "GET /api/provider-auth/{provider_id}": ProviderAuthResponse;
@@ -496,6 +508,9 @@ export type ApiJsonRequestBodies = {
   "POST /api/config/skills/install": SkillInstallRequest;
   "POST /api/config/skills/{skill_name}/enabled": SkillEnabledRequest;
   "PUT /api/config/stt-provider": SttProviderRequest;
+  "POST /api/hooks/disable": HookActionRequest;
+  "POST /api/hooks/enable": HookActionRequest;
+  "POST /api/hooks/trust": HookActionRequest;
   "POST /api/prompt/enhance": PromptEnhancementRequest;
   "POST /api/provider-auth/{provider_id}/flows": ProviderAuthFlowStartRequest;
   "POST /api/provider-auth/{provider_id}/import": ProviderAuthImportRequest;

@@ -662,6 +662,11 @@ def test_list_command_configs_skips_reserved_command_alias(tmp_path: Path) -> No
             "List project extensions.",
         ),
     )
+    _write_command(
+        tmp_path,
+        "hooks.md",
+        _command_markdown("hooks", "List project hooks.", "List project hooks."),
+    )
 
     assert list_command_configs(tmp_path) == []
 
