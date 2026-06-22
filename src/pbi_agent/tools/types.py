@@ -9,6 +9,7 @@ from pbi_agent.session_store import MessageRecord
 
 if TYPE_CHECKING:
     from pbi_agent.config import Settings
+    from pbi_agent.hooks.runtime import HookRuntime
     from pbi_agent.models.messages import TokenUsage
     from pbi_agent.observability import RunTracer
     from pbi_agent.tools.catalog import ToolCatalog
@@ -58,6 +59,10 @@ class ToolContext:
     workspace_root: Path | None = None
     workspace_directory_key: str | None = None
     display_metadata: dict[str, Any] = field(default_factory=dict)
+    hook_runtime: HookRuntime | None = None
+    session_id: str | None = None
+    turn_id: str | None = None
+    current_model: str | None = None
 
 
 @dataclass(slots=True)

@@ -8,6 +8,8 @@ from typing import Any
 from pbi_agent.agent.compaction_prompt import COMPACTION_PROMPT
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.display.protocol import DisplayProtocol
+from pbi_agent.hooks.runtime import HookRuntime
+from pbi_agent.hooks.schemas import HookEventName
 from pbi_agent.models.messages import TokenUsage, ToolCall
 from pbi_agent.observability import RunTracer
 from pbi_agent.providers.base import Provider
@@ -242,6 +244,7 @@ def _compact_live_session(
     pending_tool_exchanges: (
         list[tuple[list[ToolCall], list[dict[str, Any]]]] | None
     ) = None,
+    hook_runtime: HookRuntime | None = None,
 ) -> int:
     if store is None or session_id is None:
         return session_usage.snapshot().context_tokens
@@ -267,6 +270,21 @@ def _compact_live_session(
     ):
         display.render_markdown("No completed session context to compact yet.")
         return 0
+    if hook_runtime is not None:
+        pre_compact = hook_runtime.run(
+            HookEventName.PRE_COMPACT,
+            matcher_value=reason,
+            payload={
+                "reason": reason,
+                "input_message_count": len(summary_input_messages),
+                "pending_tool_exchange": has_pending_tool_exchange,
+            },
+        )
+        if pre_compact.blocked:
+            display.render_markdown(
+                pre_compact.block_reason or "Context compaction stopped by hook."
+            )
+            return session_usage.snapshot().context_tokens
 
     compaction_usage = TokenUsage(
         model=_selected_model(runtime.settings),
@@ -352,6 +370,22 @@ def _compact_live_session(
     display.render_markdown(
         f"Context compacted ({reason}); future turns will use the summary."
     )
+    if hook_runtime is not None:
+        post_compact = hook_runtime.run(
+            HookEventName.POST_COMPACT,
+            matcher_value=reason,
+            payload={
+                "reason": reason,
+                "summary_chars": len(summary_content),
+                "estimated_context_tokens": estimated_context_tokens,
+            },
+            tracer=tracer,
+        )
+        if post_compact.blocked:
+            display.render_markdown(
+                post_compact.block_reason
+                or "Post-compaction hook requested stop after compaction."
+            )
     tracer.finish(
         status="completed",
         usage=compaction_usage,

@@ -70,6 +70,7 @@ from pbi_agent.tools.types import ParentContextSnapshot, ToolResult
 from pbi_agent.web.uploads import load_uploaded_image
 
 if TYPE_CHECKING:
+    from pbi_agent.hooks.runtime import HookRuntime
     from pbi_agent.observability import RunTracer
 
 GoogleGcpShapeName = Literal[
@@ -203,6 +204,7 @@ class GoogleGcpProvider(Provider):
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
+        hook_runtime: "HookRuntime | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         self._sync_shape_runtime_context()
         return self._shape.execute_tool_calls(
@@ -214,6 +216,7 @@ class GoogleGcpProvider(Provider):
             sub_agent_depth=sub_agent_depth,
             parent_context=parent_context,
             tracer=tracer,
+            hook_runtime=hook_runtime,
         )
 
     def set_excluded_tools(self, excluded_tools: set[str]) -> None:
@@ -466,6 +469,7 @@ class _GoogleGcpShapeStub:
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
+        hook_runtime: "HookRuntime | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         del (
             response,
@@ -587,6 +591,7 @@ class _GeminiGenerateContentShape(_GoogleGcpShapeStub):
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
+        hook_runtime: "HookRuntime | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -607,6 +612,7 @@ class _GeminiGenerateContentShape(_GoogleGcpShapeStub):
             sub_agent_depth=sub_agent_depth,
             parent_context=parent_context,
             tracer=tracer,
+            hook_runtime=hook_runtime,
             tool_availability_overridden=self._tool_availability_overridden,
             workspace_root=getattr(self, "_workspace_root", None),
             workspace_directory_key=getattr(self, "_workspace_directory_key", None),
@@ -759,6 +765,7 @@ class _OpenAIChatCompletionsShape(_GoogleGcpShapeStub):
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
+        hook_runtime: "HookRuntime | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         return execute_provider_tool_calls(
             response.function_calls,
@@ -773,6 +780,7 @@ class _OpenAIChatCompletionsShape(_GoogleGcpShapeStub):
             sub_agent_depth=sub_agent_depth,
             parent_context=parent_context,
             tracer=tracer,
+            hook_runtime=hook_runtime,
             tool_availability_overridden=self._tool_availability_overridden,
             workspace_root=getattr(self, "_workspace_root", None),
             workspace_directory_key=getattr(self, "_workspace_directory_key", None),
@@ -940,6 +948,7 @@ class _OpenAIResponsesShape(_GoogleGcpShapeStub):
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
+        hook_runtime: "HookRuntime | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -957,6 +966,7 @@ class _OpenAIResponsesShape(_GoogleGcpShapeStub):
             sub_agent_depth=sub_agent_depth,
             parent_context=parent_context,
             tracer=tracer,
+            hook_runtime=hook_runtime,
             tool_availability_overridden=self._tool_availability_overridden,
             workspace_root=getattr(self, "_workspace_root", None),
             workspace_directory_key=getattr(self, "_workspace_directory_key", None),
@@ -1318,6 +1328,7 @@ class _AnthropicMessagesShape(_GoogleGcpShapeStub):
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
+        hook_runtime: "HookRuntime | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -1335,6 +1346,7 @@ class _AnthropicMessagesShape(_GoogleGcpShapeStub):
             sub_agent_depth=sub_agent_depth,
             parent_context=parent_context,
             tracer=tracer,
+            hook_runtime=hook_runtime,
             tool_availability_overridden=self._tool_availability_overridden,
             workspace_root=getattr(self, "_workspace_root", None),
             workspace_directory_key=getattr(self, "_workspace_directory_key", None),

@@ -182,6 +182,7 @@ class _ProviderStub:
         sub_agent_depth: int = 0,
         parent_context=None,
         tracer=None,
+        hook_runtime=None,
     ):
         del (
             response,
@@ -192,6 +193,7 @@ class _ProviderStub:
             sub_agent_depth,
             parent_context,
             tracer,
+            hook_runtime,
         )
         return [], False
 

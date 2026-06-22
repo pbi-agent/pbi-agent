@@ -34,6 +34,7 @@ from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
+    from pbi_agent.hooks.runtime import HookRuntime
     from pbi_agent.observability import RunTracer
 
 
@@ -111,6 +112,7 @@ class GitHubCopilotProvider(Provider):
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
+        hook_runtime: "HookRuntime | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         return self._delegate.execute_tool_calls(
             response,
@@ -121,6 +123,7 @@ class GitHubCopilotProvider(Provider):
             sub_agent_depth=sub_agent_depth,
             parent_context=parent_context,
             tracer=tracer,
+            hook_runtime=hook_runtime,
         )
 
     def set_previous_response_id(self, response_id: str | None) -> None:

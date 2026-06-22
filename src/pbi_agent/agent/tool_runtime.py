@@ -15,6 +15,7 @@ from pbi_agent.models.messages import ToolCall
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.registry import get_tool_handler, get_tool_spec
 from pbi_agent.tools.types import ToolContext, ToolOutput, ToolResult
+from pbi_agent.hooks.schemas import HookEventName
 
 _log = logging.getLogger(__name__)
 
@@ -253,6 +254,47 @@ def _execute_one_tool_call(
         )
         return result
 
+    hook_runtime = context.hook_runtime if context is not None else None
+    pre_hook_context: str | None = None
+    if hook_runtime is not None:
+        pre_result = hook_runtime.run(
+            HookEventName.PRE_TOOL_USE,
+            matcher_value=call.name,
+            payload={
+                "tool_name": call.name,
+                "tool_use_id": call.call_id,
+                "tool_input": args_or_error,
+            },
+            tracer=tracer,
+        )
+        pre_hook_context = pre_result.context_text
+        if pre_result.blocked:
+            message = pre_result.block_reason or "Blocked by hook."
+            result = _error_result(call, "hook_blocked", message)
+            if pre_hook_context:
+                result = ToolResult(
+                    call_id=result.call_id,
+                    output_json=_append_hook_context_to_tool_output(
+                        result.output_json,
+                        pre_hook_context,
+                    ),
+                    is_error=result.is_error,
+                    attachments=result.attachments,
+                    display_metadata={"hook_context": pre_hook_context},
+                )
+            _log_tool_call(
+                tracer=tracer,
+                call=call,
+                output_payload=json.loads(result.output_json),
+                duration_ms=_duration_ms(start),
+                success=False,
+                error_message=message,
+                metadata={"hook_blocked": True},
+            )
+            return result
+        if pre_result.updated_input is not None:
+            args_or_error = pre_result.updated_input
+
     try:
         tool_context = _tool_context_for_call(context)
         output = handler(args_or_error, tool_context)
@@ -287,6 +329,62 @@ def _execute_one_tool_call(
             attachments=attachments,
             display_metadata=display_metadata,
         )
+        if pre_hook_context:
+            display_metadata["hook_context"] = pre_hook_context
+            output_json = _append_hook_context_to_tool_output(
+                output_json,
+                pre_hook_context,
+            )
+            output_payload = output_json
+            result = ToolResult(
+                call_id=call.call_id,
+                output_json=output_json,
+                is_error=is_error,
+                attachments=attachments,
+                display_metadata=display_metadata,
+            )
+        if hook_runtime is not None:
+            post_result = hook_runtime.run(
+                HookEventName.POST_TOOL_USE,
+                matcher_value=call.name,
+                payload={
+                    "tool_name": call.name,
+                    "tool_use_id": call.call_id,
+                    "tool_input": args_or_error,
+                    "tool_response": output_json,
+                    "tool_is_error": is_error,
+                },
+                tracer=tracer,
+            )
+            if post_result.context_text:
+                combined_context = "\n\n".join(
+                    text
+                    for text in (pre_hook_context, post_result.context_text)
+                    if text
+                )
+                display_metadata["hook_context"] = combined_context
+                output_json = _append_hook_context_to_tool_output(
+                    output_json,
+                    combined_context,
+                )
+                output_payload = output_json
+                result = ToolResult(
+                    call_id=call.call_id,
+                    output_json=output_json,
+                    is_error=is_error,
+                    attachments=attachments,
+                    display_metadata=display_metadata,
+                )
+            if post_result.replacement is not None:
+                output_json = post_result.replacement
+                output_payload = output_json
+                result = ToolResult(
+                    call_id=call.call_id,
+                    output_json=output_json,
+                    is_error=is_error,
+                    attachments=[],
+                    display_metadata=display_metadata,
+                )
         _log_tool_call(
             tracer=tracer,
             call=call,
@@ -380,6 +478,17 @@ def _error_result(call: ToolCall, error_type: str, message: str) -> ToolResult:
         output_json=json.dumps(payload),
         is_error=True,
     )
+
+
+def _append_hook_context_to_tool_output(output_json: str, context_text: str) -> str:
+    try:
+        payload = json.loads(output_json)
+    except json.JSONDecodeError:
+        return f"{output_json}\n\nHook context:\n{context_text}"
+    if isinstance(payload, dict):
+        payload["hook_context"] = context_text
+        return json.dumps(payload)
+    return f"{output_json}\n\nHook context:\n{context_text}"
 
 
 def _tool_context_for_call(context: ToolContext | None) -> ToolContext:
