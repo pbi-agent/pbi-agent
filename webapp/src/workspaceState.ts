@@ -18,6 +18,7 @@ const WORKSPACE_SCOPED_QUERY_PREFIXES = [
   "workspace-file-preview",
   "skill-mentions",
   "slash-commands",
+  "channels",
 ];
 
 export function resetWorkspaceScopedClientState(

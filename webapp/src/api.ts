@@ -24,6 +24,7 @@ import type {
   AgentMentionSearchPayload,
   BoardStage,
   BootstrapPayload,
+  ChannelListPayload,
   HookListPayload,
   CommandCandidatesPayload,
   CommandInstallPayload,
@@ -57,6 +58,7 @@ import type {
   SkillListPayload,
   SlashCommandItem,
   TaskRecord,
+  TelegramChannelUpdatePayload,
   WorkspaceListPayload,
   WorkspacePickerPayload,
   WorkspaceSwitchPayload,
@@ -106,6 +108,8 @@ type RunFilterValuesQuery = ApiQueryParams<"GET /api/dashboard/run-filter-values
 type AllRunsQuery = ApiQueryParams<"GET /api/runs"> & {
   scope?: "workspace" | "global";
 };
+type TelegramChannelUpdateRequest =
+  ApiJsonRequestBodies["PUT /api/channels/telegram"];
 
 export class ApiError extends Error {
   constructor(
@@ -229,6 +233,42 @@ export async function fetchHooks(): Promise<HookListPayload> {
   return apiRequest<"GET /api/hooks", HookListPayload>(
     "GET /api/hooks",
     "/api/hooks",
+  );
+}
+
+export async function fetchChannels(): Promise<ChannelListPayload> {
+  return apiRequest<"GET /api/channels", ChannelListPayload>(
+    "GET /api/channels",
+    "/api/channels",
+  );
+}
+
+export async function updateTelegramChannel(
+  payload: TelegramChannelUpdatePayload,
+): Promise<ChannelListPayload> {
+  return apiRequest<"PUT /api/channels/telegram", ChannelListPayload>(
+    "PUT /api/channels/telegram",
+    "/api/channels/telegram",
+    {
+      method: "PUT",
+      body: jsonBody(
+        "PUT /api/channels/telegram",
+        payload satisfies TelegramChannelUpdateRequest,
+      ),
+    },
+  );
+}
+
+export async function restartTelegramChannel(): Promise<ChannelListPayload> {
+  return apiRequest<
+    "POST /api/channels/telegram/restart",
+    ChannelListPayload
+  >(
+    "POST /api/channels/telegram/restart",
+    "/api/channels/telegram/restart",
+    {
+      method: "POST",
+    },
   );
 }
 

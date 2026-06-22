@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.web.api import (
     board_router,
+    channels_router,
     config_router,
     events_router,
     hooks_router,
@@ -101,6 +102,7 @@ def create_app(
 
     app.include_router(system_router)
     app.include_router(config_router)
+    app.include_router(channels_router)
     app.include_router(provider_auth_router)
     app.include_router(hooks_router)
     app.include_router(tasks_router)

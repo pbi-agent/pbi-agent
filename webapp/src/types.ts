@@ -342,6 +342,35 @@ export type HookListPayload = {
   trust_bypass_active: boolean;
 };
 
+export type ChannelRuntimeStatus = {
+  state: string;
+  error: string | null;
+};
+
+export type TelegramChannelConfigView = {
+  enabled: boolean;
+  token_source: "env" | "secret";
+  token_env_var: string;
+  has_token_secret: boolean;
+  allowed_users: string[];
+  allowed_chats: string[];
+  last_update_id: number | null;
+  status: ChannelRuntimeStatus;
+};
+
+export type ChannelListPayload = {
+  telegram: TelegramChannelConfigView;
+};
+
+export type TelegramChannelUpdatePayload = {
+  enabled: boolean;
+  token_source: "env" | "secret";
+  token_env_var: string;
+  token_secret?: string | null;
+  allowed_users: string[];
+  allowed_chats: string[];
+};
+
 export type WorkspaceRecord = {
   directory_key: string;
   root_path: string;

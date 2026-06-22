@@ -637,6 +637,114 @@
   transform: translateY(-1px);
 }
 
+.settings-channel-card[data-slot="card"] {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+}
+
+.settings-channel-card > [data-slot="card-header"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-4);
+}
+
+.settings-channel-card > [data-slot="card-content"] {
+  width: 100%;
+  min-width: 0;
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+
+.settings-channel-card__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.settings-channel-card__heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.settings-channel-card__title[data-slot="card-title"] {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--color-text);
+}
+
+.settings-channel-card__description[data-slot="card-description"] {
+  max-width: 38rem;
+  color: var(--color-text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.settings-channel-form[data-slot="field-group"] {
+  max-width: 42rem;
+  gap: var(--sp-4);
+}
+
+.settings-channel-field[data-slot="field"],
+.settings-channel-toggle[data-slot="field"] {
+  min-width: 0;
+}
+
+.settings-channel-toggle[data-slot="field"] {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.settings-channel-toggle [data-slot="field-content"] {
+  min-width: 0;
+}
+
+.settings-channel-field [data-slot="field-label"],
+.settings-channel-toggle [data-slot="field-label"] {
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
+.settings-channel-select[data-slot="select-trigger"],
+.settings-channel-control[data-slot="input"],
+.settings-channel-textarea[data-slot="textarea"] {
+  width: 100%;
+}
+
+.settings-channel-textarea[data-slot="textarea"] {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.settings-channel-actions {
+  justify-content: flex-start;
+  width: 100%;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+@media (max-width: 640px) {
+  .settings-channel-card__title-row {
+    flex-direction: column;
+  }
+
+  .settings-channel-toggle[data-slot="field"] {
+    align-items: flex-start;
+  }
+}
+
 .settings-item--provider {
   flex-direction: row;
   align-items: center;

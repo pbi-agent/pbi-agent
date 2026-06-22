@@ -1,4 +1,3 @@
-- [x] Locate deprecated TestClient import usage
-- [x] Apply focused warning fix
-- [x] Run targeted validation
-- [x] Update task memory
+- [x] Fix Channels settings layout and generic sidebar label
+- [x] Run focused frontend validation
+- [x] Update memory

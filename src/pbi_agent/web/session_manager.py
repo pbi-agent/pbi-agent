@@ -11,6 +11,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from pbi_agent.channels.manager import WorkspaceChannelManager
+from pbi_agent.channels.types import TelegramChannelConfig
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.session_store import (
     RecentWorkspaceRecord,
@@ -320,6 +322,12 @@ class WebManagerAlreadyRunningError(WebManagerStartupError):
     """Raised when another web server already owns the workspace lease."""
 
 
+def _payload_string_list(value: object, fallback: list[str]) -> list[str]:
+    if not isinstance(value, list):
+        return fallback
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
 class WebSessionManager(
     CatalogsMixin,
     SavedSessionsMixin,
@@ -358,6 +366,12 @@ class WebSessionManager(
         self._lease_thread: threading.Thread | None = None
         self._started = False
         self._shutdown_requested = False
+        self._channel_manager = WorkspaceChannelManager(
+            runtime=self._default_runtime,
+            workspace_root=self._workspace_root,
+            directory_key=self._directory_key,
+            owner_id=self._manager_owner_id,
+        )
         self._lock = threading.Lock()
 
     @property
@@ -382,6 +396,53 @@ class WebSessionManager(
         if runtime is not None:
             return runtime.settings
         return self._default_runtime.settings
+
+    def get_channels_payload(self) -> dict[str, object]:
+        config = self._channel_manager.telegram_config()
+        status = self._channel_manager.status()
+        return {
+            "telegram": {
+                "enabled": config.enabled,
+                "token_source": config.token_source,
+                "token_env_var": config.token_env_var,
+                "has_token_secret": config.has_secret,
+                "allowed_users": config.allowed_users,
+                "allowed_chats": config.allowed_chats,
+                "last_update_id": config.last_update_id,
+                "status": {"state": status.state, "error": status.error},
+            }
+        }
+
+    def update_telegram_channel(self, payload: dict[str, object]) -> dict[str, object]:
+        current = self._channel_manager.telegram_config()
+        token_secret = payload.get("token_secret")
+        raw_allowed_users = payload.get("allowed_users")
+        raw_allowed_chats = payload.get("allowed_chats")
+        config = TelegramChannelConfig(
+            enabled=bool(payload.get("enabled")),
+            token_source=str(payload.get("token_source") or current.token_source),
+            token_env_var=str(payload.get("token_env_var") or current.token_env_var),
+            token_secret=(
+                str(token_secret)
+                if isinstance(token_secret, str) and token_secret.strip()
+                else current.token_secret
+            ),
+            allowed_users=_payload_string_list(
+                raw_allowed_users, current.allowed_users
+            ),
+            allowed_chats=_payload_string_list(
+                raw_allowed_chats, current.allowed_chats
+            ),
+            last_update_id=current.last_update_id,
+        )
+        if config.token_source not in {"env", "secret"}:
+            config.token_source = "env"
+        self._channel_manager.update_telegram_config(config)
+        return self.get_channels_payload()
+
+    def restart_telegram_channel(self) -> dict[str, object]:
+        self._channel_manager.restart()
+        return self.get_channels_payload()
 
     def start(self) -> None:
         with self._lock:
@@ -422,6 +483,7 @@ class WebSessionManager(
             )
             self._lease_thread.start()
             self._started = True
+        self._channel_manager.start_enabled()
 
 
 class WebWorkspaceCoordinator:
