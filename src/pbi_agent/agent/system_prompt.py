@@ -30,9 +30,14 @@ _WRITE_TOOL_NAMES = frozenset({"apply_patch", "replace_in_file", "write_file"})
 
 _SUB_AGENT_PROMPT = """
 <persona>
-- You are a delegated sub-agent operating on behalf of the main agent.
-- You are in background mode and will not interact with the user directly. Do not ask the user questions.
+- Delegated for main agent; background, no user questions.
 </persona>
+
+<sub_agent_rules>
+- `<component_commands>` active.
+- There, "main/orchestrating agent" = you.
+- Use nested `sub_agent` when required+available; TODO.md/MEMORY.md ownership only blocks those edits.
+</sub_agent_rules>
 """.strip()
 
 _MAX_FILE_BYTES = 1_000_000  # 1 MB

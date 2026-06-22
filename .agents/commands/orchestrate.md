@@ -8,13 +8,13 @@ sub_agents: planner,worker,reviewer,code-quality-reviewer,fixer
 
 # Orchestrate Mode
 
-Run one cohesive implementation task through a single sequential workflow. The main agent orchestrates only: it owns scope, ordering, validation, TODO/memory/handoff, and quality gates. It never implements or fixes directly.
+Run one cohesive implementation task through a single sequential workflow. The orchestrator orchestrates only: it owns scope, ordering, validation, TODO/memory/handoff, and quality gates. It never implements or fixes directly.
 
 ## Core Rules
 
 - Treat the request as one task. No parallel work, parallel sub-agents, or batched independent TODOs. Run exactly one sub-agent at a time and wait for each result before the next step.
 - Decide before implementation whether the user already provided a plan. If a user plan exists, skip `planner` and start with `worker` using that plan. If no user plan exists, run `planner` as the first step only, review its plan, then continue with `worker`.
-- Delegate implementation to `worker` and fixes to `fixer`; the main agent never writes task changes itself.
+- Delegate implementation to `worker` and fixes to `fixer`; the orchestrator never writes task changes itself.
 - Required gate order per task: optional `planner` only when the user did not provide a plan → `worker` → main diff/validation → `reviewer` loop (`reviewer` → `fixer` on review findings → rerun `reviewer` until no findings) → `code-quality-reviewer` loop (`code-quality-reviewer` → `fixer` on code-quality findings → rerun `code-quality-reviewer` until no findings) → final validation/handoff.
 - Review every sub-agent result before accepting. Never trust a success claim: inspect the diff and rerun focused validation.
 - Task is accepted only after the review loop reports no findings, then the code-quality loop reports no findings after its latest fixes.

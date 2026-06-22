@@ -1,2 +1,3 @@
-- [x] Verify sub-agent command frontmatter injection path
-- [x] Summarize whether command instructions are fully injected or only referenced
+- [x] Verify nested sub-agent runtime limits
+- [x] Check session/run persistence supports parent-child nesting
+- [x] Summarize confirmation and caveats

@@ -327,6 +327,29 @@ def test_get_sub_agent_system_prompt_appends_component_commands_in_order(tmp_pat
     assert "fixer" not in prompt
 
 
+def test_get_sub_agent_system_prompt_marks_component_commands_active(tmp_path):
+    prompt = get_sub_agent_system_prompt(
+        agent_prompt_override="You are the orchestrator.",
+        cwd=tmp_path,
+        component_commands=(
+            CommandConfig(
+                id="orchestrate",
+                name="orchestrate",
+                slash_alias="/orchestrate",
+                description="Run orchestration.",
+                instructions=(
+                    "The main agent orchestrates only and delegates to worker."
+                ),
+            ),
+        ),
+    )
+
+    assert "`<component_commands>` active" in prompt
+    assert '"main/orchestrating agent" = you' in prompt
+    assert "Use nested `sub_agent` when required+available" in prompt
+    assert "TODO.md/MEMORY.md ownership only blocks those edits" in prompt
+
+
 def test_get_sub_agent_system_prompt_appends_component_commands_without_agent_body(
     tmp_path,
 ):
