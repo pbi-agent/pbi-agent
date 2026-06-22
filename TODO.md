@@ -1,7 +1,2 @@
-# Session TODO
-
-- [x] Diagnose why successful main-session end notifications don't fire while AFK
-- [x] Add store-driven `SessionFinishedNotificationEffects` (turn finished, input re-enabled, no question/error) firing notification + sound when AFK
-- [x] Mount in `AppShell`
-- [x] Add component test
-- [x] Validate: vitest, lint, typecheck, web:build, full test:web
+- [x] Verify sub-agent command frontmatter injection path
+- [x] Summarize whether command instructions are fully injected or only referenced
