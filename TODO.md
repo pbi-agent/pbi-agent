@@ -2,3 +2,6 @@
 - [x] Patch Hooks badge markup/CSS
 - [ ] Run focused frontend validation
 - [ ] Update task memory
+- [x] Update orchestrate planning instructions
+- [x] Validate orchestrate command diff
+- [x] Update memory for orchestrate command edit

@@ -1,9 +1,9 @@
 ---
 name: orchestrate
-description: Run one implementation task through mandatory sequential worker, reviewer/fixer, and code-quality/fixer loops.
+description: Run one implementation task through an optional initial planning step, then mandatory sequential worker, reviewer/fixer, and code-quality/fixer loops.
 model_profile_id: worker-pro
 allowed_tools: read,write,shell,sub-agent,web
-sub_agents: reviewer,code-quality-reviewer,fixer,worker
+sub_agents: planner,worker,reviewer,code-quality-reviewer,fixer
 ---
 
 # Orchestrate Mode
@@ -13,8 +13,9 @@ Run one cohesive implementation task through a single sequential workflow. The m
 ## Core Rules
 
 - Treat the request as one task. No parallel work, parallel sub-agents, or batched independent TODOs. Run exactly one sub-agent at a time and wait for each result before the next step.
+- Decide before implementation whether the user already provided a plan. If a user plan exists, skip `planner` and start with `worker` using that plan. If no user plan exists, run `planner` as the first step only, review its plan, then continue with `worker`.
 - Delegate implementation to `worker` and fixes to `fixer`; the main agent never writes task changes itself.
-- Required gate order per task: `worker` → main diff/validation → `reviewer` loop (`reviewer` → `fixer` on review findings → rerun `reviewer` until no findings) → `code-quality-reviewer` loop (`code-quality-reviewer` → `fixer` on code-quality findings → rerun `code-quality-reviewer` until no findings) → final validation/handoff.
+- Required gate order per task: optional `planner` only when the user did not provide a plan → `worker` → main diff/validation → `reviewer` loop (`reviewer` → `fixer` on review findings → rerun `reviewer` until no findings) → `code-quality-reviewer` loop (`code-quality-reviewer` → `fixer` on code-quality findings → rerun `code-quality-reviewer` until no findings) → final validation/handoff.
 - Review every sub-agent result before accepting. Never trust a success claim: inspect the diff and rerun focused validation.
 - Task is accepted only after the review loop reports no findings, then the code-quality loop reports no findings after its latest fixes.
 - Preserve unrelated worktree changes.
@@ -23,6 +24,7 @@ Run one cohesive implementation task through a single sequential workflow. The m
 
 - Inspect current workspace changes.
 - Identify unrelated dirty files; do not touch them.
+- Determine whether the user provided an implementation plan. When the user provided a plan, do not run `planner` or ask for another plan; start the workflow at `worker`. When no plan was provided, run `planner` first and do not run it again later.
 
 ## TODO Setup
 
@@ -39,7 +41,9 @@ Rules:
 Good shape:
 
 ```md
-- [>] Worker: implement <task>
+- [>] Planner: create plan for <task> (only when no user plan was provided)
+- [ ] Main: review planner plan
+- [ ] Worker: implement <task>
 - [ ] Main: inspect worker diff and run focused validation
 - [ ] Reviewer round 1: review implementation
 - [ ] Fixer round 1: resolve reviewer findings when needed
@@ -52,6 +56,8 @@ Good shape:
 - [ ] Handoff
 ```
 
+If the user provided a plan, omit the planner TODO entries and make `Worker: implement <task>` the first active step.
+
 Bad shape (workflow collapsed):
 
 ```md
@@ -62,21 +68,48 @@ Bad shape (workflow collapsed):
 
 ## Sequential Execution Loop
 
-1. Mark `Worker: implement <task>` `[>]`; delegate to `worker` with a narrow prompt.
-2. Review the `worker` result; mark its TODO `[x]`.
-3. Mark main diff/validation `[>]`; inspect the diff, run focused validation, mark `[x]` or `[!]`.
-4. Mark `Reviewer round 1` `[>]`; run `reviewer`; mark `[x]` after reading the result.
-5. If `reviewer` reports findings: add/mark `Fixer round N` `[>]`, delegate the exact findings to `fixer`.
-6. After each `fixer` result: mark its TODO `[x]`, add/mark a main diff/validation rerun `[>]`, inspect diff, rerun validation, mark `[x]` or `[!]`.
-7. Add/mark `Reviewer round N+1` `[>]` and rerun; repeat 5–7 until `reviewer` reports no findings.
-8. Mark `Code-quality-reviewer round 1` `[>]`; run it on the task, final diff, reviewer outcome, and validation; mark `[x]` after reading.
-9. If `code-quality-reviewer` reports findings: add/mark `Fixer round N` `[>]`, delegate the exact code-quality findings to `fixer`, and mark `[x]` after reading the fixer result.
-10. After each code-quality fixer result: add/mark a main diff/validation rerun `[>]`, inspect diff, rerun validation, mark `[x]` or `[!]`, then add/mark `Code-quality-reviewer round N+1` `[>]` and rerun. Repeat 9–10 until `code-quality-reviewer` reports no findings.
-11. Complete final validation, memory, and handoff as separate TODOs. Done only when the reviewer loop and code-quality loop have both ended with no findings and every TODO is `[x]`, `[-]`, or `[!]` with explanation.
+1. If the user did not provide a plan: mark `Planner: create plan for <task>` `[>]`; delegate to `planner` for planning only; mark planner `[x]`, then mark `Main: review planner plan` `[>]`, review the returned plan, and mark it `[x]`. Never run `planner` after this first step. If the user provided a plan, skip this step entirely.
+2. Mark `Worker: implement <task>` `[>]`; delegate to `worker` with a narrow prompt that includes the user-provided plan or the reviewed planner plan.
+3. Review the `worker` result; mark its TODO `[x]`.
+4. Mark main diff/validation `[>]`; inspect the diff, run focused validation, mark `[x]` or `[!]`.
+5. Mark `Reviewer round 1` `[>]`; run `reviewer`; mark `[x]` after reading the result.
+6. If `reviewer` reports findings: add/mark `Fixer round N` `[>]`, delegate the exact findings to `fixer`.
+7. After each `fixer` result: mark its TODO `[x]`, add/mark a main diff/validation rerun `[>]`, inspect diff, rerun validation, mark `[x]` or `[!]`.
+8. Add/mark `Reviewer round N+1` `[>]` and rerun; repeat 6–8 until `reviewer` reports no findings.
+9. Mark `Code-quality-reviewer round 1` `[>]`; run it on the task, final diff, reviewer outcome, and validation; mark `[x]` after reading.
+10. If `code-quality-reviewer` reports findings: add/mark `Fixer round N` `[>]`, delegate the exact code-quality findings to `fixer`, and mark `[x]` after reading the fixer result.
+11. After each code-quality fixer result: add/mark a main diff/validation rerun `[>]`, inspect diff, rerun validation, mark `[x]` or `[!]`, then add/mark `Code-quality-reviewer round N+1` `[>]` and rerun. Repeat 10–11 until `code-quality-reviewer` reports no findings.
+12. Complete final validation, memory, and handoff as separate TODOs. Done only when the reviewer loop and code-quality loop have both ended with no findings and every TODO is `[x]`, `[-]`, or `[!]` with explanation.
 
 Never use parallel execution.
 
 ## Sub-Agent Prompts
+
+When `planner` is needed, prompt it for planning only:
+
+```text
+Create an implementation plan only for this task: <task title>.
+
+Goal:
+<one sentence: required correctness or user-visible outcome>
+
+Context:
+- User did not provide an implementation plan, so this is the only planning step.
+- Relevant files/symbols/routes/tests if known: <specific paths and names, or unknown>
+- Repo conventions to preserve: <validation, contracts, no migrations, style>
+
+Scope:
+- Do not edit files.
+- Do not run implementation.
+- Do not edit TODO.md or MEMORY.md.
+- Keep the plan focused on the requested task only.
+
+Return exactly:
+- Brief plan steps
+- Files/areas likely involved
+- Focused validation to run
+- Risks or assumptions
+```
 
 Make every `worker`/`fixer` prompt concrete and bounded:
 
