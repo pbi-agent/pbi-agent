@@ -90,11 +90,21 @@ PROVIDER_KINDS = (
 )
 INTERNAL_CONFIG_PATH_ENV = "PBI_AGENT_INTERNAL_CONFIG_PATH"
 PROFILE_ID_ENV = "PBI_AGENT_PROFILE_ID"
+HOOK_TRUST_BYPASS_ENV = "PBI_AGENT_DANGEROUSLY_BYPASS_HOOK_TRUST"
 DEFAULT_INTERNAL_CONFIG_PATH = Path.home() / ".pbi-agent" / "config.json"
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 SLASH_ALIAS_RE = re.compile(r"^/[a-z0-9][a-z0-9-]*$")
 RESERVED_COMMAND_ALIASES = frozenset(
-    {"/skills", "/mcp", "/agents", "/init", "/reload", "/compact", "/extensions"}
+    {
+        "/skills",
+        "/mcp",
+        "/agents",
+        "/init",
+        "/reload",
+        "/compact",
+        "/extensions",
+        "/hooks",
+    }
 )
 PROJECT_COMMANDS_DIR = Path(".agents") / "commands"
 COMMAND_ONLY_ALLOWED_TOOLS = frozenset(UI_ONLY_TOOL_CATEGORIES)
@@ -146,6 +156,7 @@ class Settings:
     allowed_tools: tuple[str, ...] | None = None
     google_cloud_project: str = ""
     google_cloud_location: str = ""
+    dangerously_bypass_hook_trust: bool = False
 
     def __post_init__(self) -> None:
         if self.auth is None and self.api_key:
@@ -796,8 +807,6 @@ def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
         and provider_kind != "generic",
         "supports_generic_api_url": provider_kind == "generic",
         "supports_service_tier": provider_kind == "openai",
-        "supports_native_web_search": supports_model_profiles
-        and provider_kind not in {"generic", "google_gcp"},
         "supports_image_inputs": supports_model_profiles,
         "supports_model_profiles": supports_model_profiles,
         "supports_stt": provider_supports_stt(provider_kind),
@@ -1517,6 +1526,10 @@ def resolve_runtime(args: argparse.Namespace) -> ResolvedRuntime:
         allowed_tools=allowed_tools,
         google_cloud_project=google_cloud_project,
         google_cloud_location=google_cloud_location,
+        dangerously_bypass_hook_trust=bool(
+            getattr(args, "dangerously_bypass_hook_trust", False)
+        )
+        or _env_bool(HOOK_TRUST_BYPASS_ENV),
     )
     _validate_allowed_tools(settings.allowed_tools, error_prefix="--allowed-tools")
     return ResolvedRuntime(
@@ -1720,7 +1733,13 @@ def _settings_from_runtime_parts(
         allowed_tools=(profile.allowed_tools if profile else None),
         google_cloud_project=provider.google_cloud_project or "",
         google_cloud_location=provider.google_cloud_location or "",
+        dangerously_bypass_hook_trust=_env_bool(HOOK_TRUST_BYPASS_ENV),
     )
+
+
+def _env_bool(name: str) -> bool:
+    value = os.getenv(name, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _resolved_provider_id(

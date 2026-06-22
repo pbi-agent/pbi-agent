@@ -1,4 +1,4 @@
-import { useState, type JSX, type ReactNode } from "react";
+import { useId, useState, type JSX, type ReactNode } from "react";
 import { ChevronRightIcon, SplitIcon } from "lucide-react";
 import type { ImageAttachment, TimelineItem, TimelineMessageItem } from "../../types";
 import { Button } from "../ui/button";
@@ -16,6 +16,8 @@ import { ToolResult } from "./ToolResult";
 import { useSkillCatalog } from "../../hooks/useSkillCatalog";
 
 const SPECIAL_TAG_BOUNDARY_PATTERN = /[\s()[\]{}'"`,;]/;
+const USER_TEXT_COLLAPSE_CHARACTER_THRESHOLD = 700;
+const USER_TEXT_COLLAPSE_LINE_THRESHOLD = 8;
 
 function findSkillTag(content: string, cursor: number): { index: number; tag: string } | undefined {
   for (let index = cursor; index < content.length; index += 1) {
@@ -112,13 +114,30 @@ function renderUserTextNodes(
   return nodes;
 }
 
-function renderUserContent(
-  content: string,
-  filePaths: string[] | undefined,
-  imageAttachments: ImageAttachment[] | undefined,
-  skillNames: Set<string>,
-): JSX.Element {
+function isLongUserContent(content: string): boolean {
+  return (
+    content.length > USER_TEXT_COLLAPSE_CHARACTER_THRESHOLD
+    || content.split(/\r\n|\r|\n/).length > USER_TEXT_COLLAPSE_LINE_THRESHOLD
+  );
+}
+
+function UserMessageContent({
+  content,
+  filePaths,
+  imageAttachments,
+  skillNames,
+  collapsible,
+}: {
+  content: string;
+  filePaths: string[] | undefined;
+  imageAttachments: ImageAttachment[] | undefined;
+  skillNames: Set<string>;
+  collapsible: boolean;
+}): JSX.Element {
   const hasText = content.trim().length > 0;
+  const canCollapse = collapsible && hasText && isLongUserContent(content);
+  const [expanded, setExpanded] = useState(false);
+  const textId = useId();
   const nodes = hasText ? renderUserTextNodes(content, filePaths, skillNames) : [];
 
   return (
@@ -147,7 +166,30 @@ function renderUserContent(
           ))}
         </div>
       ) : null}
-      {hasText ? <p className="timeline-entry__user-text">{nodes}</p> : null}
+      {hasText ? (
+        <p
+          id={canCollapse ? textId : undefined}
+          className={`timeline-entry__user-text${canCollapse && !expanded ? " timeline-entry__user-text--collapsed" : ""}`}
+        >
+          {nodes}
+        </p>
+      ) : null}
+      {canCollapse ? (
+        <div className="timeline-entry__user-toggle-row">
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="timeline-entry__user-toggle"
+            aria-controls={textId}
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse user input" : "Show full user input"}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            {expanded ? "Collapse input" : "Show full input"}
+          </Button>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -287,16 +329,13 @@ export function TimelineEntry({
           {item.markdown && roleClass !== "user" ? (
             <MarkdownContent content={item.content} copyable={item.role === "assistant"} />
           ) : (
-            renderUserContent(
-              item.content,
-              item.kind === "message" && item.role === "user"
-                ? item.filePaths
-                : undefined,
-              item.kind === "message" && item.role === "user"
-                ? item.imageAttachments
-                : undefined,
-              skillNames,
-            )
+            <UserMessageContent
+              content={item.content}
+              filePaths={item.role === "user" ? item.filePaths : undefined}
+              imageAttachments={item.role === "user" ? item.imageAttachments : undefined}
+              skillNames={skillNames}
+              collapsible={item.role === "user"}
+            />
           )}
         </div>
         {turnActions}

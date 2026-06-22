@@ -1,15 +1,18 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { AlertTriangleIcon } from "lucide-react";
 import { fetchBootstrap, fetchConfigBootstrap } from "../api";
 import { useSettingsDialog } from "../hooks/useSettingsDialog";
 import { useSidebarShortcut } from "../hooks/useSidebar";
 import { useTaskEvents } from "../hooks/useTaskEvents";
 import { AskUserNotificationEffects } from "./notifications/AskUserNotificationEffects";
 import { SessionEndedNotificationEffects } from "./notifications/SessionEndedNotificationEffects";
+import { SessionFinishedNotificationEffects } from "./notifications/SessionFinishedNotificationEffects";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
 import { AppSidebarLayout } from "./AppSidebar";
+import { Alert, AlertDescription } from "./ui/alert";
 
 const SessionPage = lazy(() =>
   import("./session/SessionPage").then((m) => ({ default: m.SessionPage })),
@@ -72,11 +75,20 @@ export function AppShell() {
   return (
     <div className="app-shell bg-background text-foreground">
       <AskUserNotificationEffects />
+      <SessionFinishedNotificationEffects />
       <SessionEndedNotificationEffects
         liveSessionEvents={liveSessionEvents}
         liveSessions={bootstrap?.live_sessions ?? []}
         tasks={bootstrap?.tasks ?? []}
       />
+      {(bootstrap?.hook_warnings ?? []).map((warning) => (
+        <div key={warning} className="app-hook-warning">
+          <Alert className="banner banner--notice app-hook-warning__alert">
+            <AlertTriangleIcon />
+            <AlertDescription>{warning}</AlertDescription>
+          </Alert>
+        </div>
+      ))}
 
       <Suspense fallback={<div className="center-spinner"><LoadingSpinner size="lg" /></div>}>
         <Routes>

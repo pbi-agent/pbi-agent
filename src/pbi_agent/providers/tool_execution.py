@@ -24,6 +24,7 @@ from pbi_agent.tools.types import ParentContextSnapshot, ToolContext, ToolResult
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pbi_agent.hooks.runtime import HookRuntime
     from pbi_agent.observability import RunTracer
 
 ToolResultSerializer = Callable[[ToolResult], dict[str, Any]]
@@ -47,6 +48,10 @@ def execute_provider_tool_calls(
     tool_availability_overridden: bool = False,
     workspace_root: "Path | None" = None,
     workspace_directory_key: str | None = None,
+    hook_runtime: "HookRuntime | None" = None,
+    session_id: str | None = None,
+    turn_id: str | None = None,
+    current_model: str | None = None,
     execute_calls: ToolCallExecutor = _execute_tool_calls,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Execute tool calls and serialize results into a provider-native shape."""
@@ -76,6 +81,10 @@ def execute_provider_tool_calls(
                 tracer=tracer,
                 workspace_root=workspace_root,
                 workspace_directory_key=workspace_directory_key,
+                hook_runtime=hook_runtime,
+                session_id=session_id,
+                turn_id=turn_id,
+                current_model=current_model,
             ),
             on_result=build_tool_result_callback(display),
         )

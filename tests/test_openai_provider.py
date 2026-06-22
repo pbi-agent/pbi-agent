@@ -856,6 +856,7 @@ def test_openai_provider_advertises_v4a_tools_only() -> None:
     assert "replace_in_file" not in tool_names
     assert "write_file" not in tool_names
     assert "read_web_url" in tool_names
+    assert "web_search" in tool_names
 
 
 def test_openai_provider_keeps_ask_user_ui_only_by_default() -> None:
@@ -869,11 +870,12 @@ def test_openai_provider_keeps_ask_user_ui_only_by_default() -> None:
     assert "ask_user" in ui_tool_names
 
 
-def test_openai_provider_hides_native_web_search_without_web_group() -> None:
+def test_openai_provider_hides_web_tools_without_web_group() -> None:
     provider = OpenAIProvider(_make_settings(allowed_tools=("read",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" not in tool_names
+    assert "web_search" not in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 
@@ -882,16 +884,18 @@ def test_openai_provider_hides_web_tools_when_web_group_not_allowed() -> None:
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" not in tool_names
+    assert "web_search" not in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 
-def test_openai_provider_web_allowed_tool_includes_native_web_search() -> None:
+def test_openai_provider_web_allowed_tool_includes_local_web_tools() -> None:
     provider = OpenAIProvider(_make_settings(allowed_tools=("web",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" in tool_names
+    assert "web_search" in tool_names
     assert "explore_workspace" not in tool_names
-    assert {"type": "web_search"} in provider._tools
+    assert {"type": "web_search"} not in provider._tools
 
 
 def test_chatgpt_provider_advertises_v4a_tools_only() -> None:
@@ -4183,11 +4187,15 @@ def test_openai_execute_tool_calls_serializes_image_attachments(
 
 def test_openai_web_search_tool_included_when_enabled() -> None:
     provider = OpenAIProvider(_make_settings())
-    assert {"type": "web_search"} in provider._tools
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "web_search" in tool_names
+    assert {"type": "web_search"} not in provider._tools
 
 
 def test_openai_web_search_tool_excluded_without_web_group() -> None:
     provider = OpenAIProvider(_make_settings(allowed_tools=("read",)))
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "web_search" not in tool_names
     assert {"type": "web_search"} not in provider._tools
 
 

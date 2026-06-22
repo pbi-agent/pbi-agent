@@ -43,13 +43,13 @@ from pbi_agent.session_store import MessageRecord
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
     effective_excluded_tool_names,
-    native_web_search_enabled,
 )
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.tools.types import ParentContextSnapshot
 from pbi_agent.display.protocol import DisplayProtocol
 
 if TYPE_CHECKING:
+    from pbi_agent.hooks.runtime import HookRuntime
     from pbi_agent.observability import RunTracer
 
 _REQUEST_TIMEOUT_SECS = 3600.0
@@ -120,8 +120,6 @@ class XAIProvider(Provider):
         self._tools = self._tool_catalog.get_openai_tool_definitions(
             excluded_names=excluded_tools
         )
-        if native_web_search_enabled(self._settings):
-            self._tools.append({"type": "web_search"})
 
     def restore_messages(self, messages: list[MessageRecord]) -> None:
         self._restored_input_items = [
@@ -218,6 +216,7 @@ class XAIProvider(Provider):
         sub_agent_depth: int = 0,
         parent_context: ParentContextSnapshot | None = None,
         tracer: "RunTracer | None" = None,
+        hook_runtime: "HookRuntime | None" = None,
     ) -> tuple[list[dict[str, Any]], bool]:
         if not response.function_calls:
             return [], False
@@ -235,6 +234,7 @@ class XAIProvider(Provider):
             sub_agent_depth=sub_agent_depth,
             parent_context=parent_context,
             tracer=tracer,
+            hook_runtime=hook_runtime,
             tool_availability_overridden=getattr(
                 self, "_tool_availability_overridden", False
             ),

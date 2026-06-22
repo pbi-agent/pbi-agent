@@ -66,3 +66,29 @@ def test_explore_workspace_cli_display_shows_error_detail() -> None:
 
     assert "error:" in text
     assert "unterminated character set at position 0" in text
+
+
+def test_web_search_routes_unwrap_wrapped_result_sources() -> None:
+    tool_name, text = route_function_result(
+        "web_search",
+        status="[green]done[/green]",
+        arguments={"query": "btc live price"},
+        result={
+            "ok": True,
+            "result": {
+                "sources": [
+                    {
+                        "title": "BTC USD — Bitcoin Price and Chart",
+                        "url": "https://www.tradingview.com/symbols/BTCUSD/",
+                        "snippet": "Live Bitcoin price information.",
+                    },
+                ],
+            },
+        },
+    )
+
+    assert tool_name == "web_search"
+    assert "1 source" in text
+    assert "BTC USD" in text
+    assert "https://www.tradingview.com/symbols/BTCUSD/" in text
+    assert "no sources" not in text

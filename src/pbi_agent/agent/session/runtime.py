@@ -37,6 +37,9 @@ from pbi_agent.extensions import (
     tool_catalog_with_extensions,
 )
 from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
+from pbi_agent.hooks.discovery import discover_hooks
+from pbi_agent.hooks.review import format_hooks_markdown
+from pbi_agent.hooks.runtime import HookRuntime
 from pbi_agent.mcp import format_project_mcp_servers_markdown
 from pbi_agent.models.messages import (
     AgentOutcome,
@@ -85,10 +88,15 @@ from pbi_agent.agent.session.history import (
     update_session_after_turn as _update_session_after_turn,
     update_session_title as _update_session_title,
 )
+from pbi_agent.agent.session.hooks import (
+    SessionHookCoordinator,
+    append_hook_context as _append_hook_context,
+)
 from pbi_agent.agent.session.shared import (
     AGENTS_COMMAND,
     COMPACT_COMMAND,
     EXTENSIONS_COMMAND,
+    HOOKS_COMMAND,
     INTERACTIVE_ONLY_TOOLS,
     MCP_COMMAND,
     NEW_SESSION_SENTINEL,
@@ -215,6 +223,17 @@ def run_single_turn(
             "resumed": resume_session_id is not None,
         },
     )
+    hook_runtime = HookRuntime(
+        workspace=workspace,
+        settings=settings,
+        session_id=session_id,
+        model=model,
+        provider=settings.provider,
+        workspace_directory_key=workspace_directory_key,
+        agent_name="main",
+        agent_type="single_turn",
+        tracer=tracer,
+    )
 
     try:
         with _open_runtime_provider(
@@ -237,6 +256,15 @@ def run_single_turn(
             visible_sub_agent_names=active_command_sub_agent_names,
         ) as provider:
             display.assistant_start()
+            hook_coordinator = SessionHookCoordinator(hook_runtime)
+            session_start_context = hook_coordinator.run_session_start(
+                reason="resume" if resume_session_id else "startup",
+                tracer=tracer,
+            )
+            turn_instructions = _append_hook_context(
+                turn_instructions,
+                session_start_context,
+            )
             _resume_session(
                 provider=provider,
                 store=store,
@@ -246,6 +274,29 @@ def run_single_turn(
                 before_message_id=persisted_user_message_id,
                 replay_history=replay_history,
                 include_tool_history=include_tool_history,
+            )
+            prompt_hook = hook_coordinator.run_prompt_submit(
+                prompt_text,
+                tracer=tracer,
+            )
+            if prompt_hook.blocked:
+                message = prompt_hook.block_reason or "Prompt blocked by hook."
+                display.render_markdown(message)
+                display.assistant_stop()
+                tracer.finish(
+                    status="blocked",
+                    usage=turn_usage,
+                    metadata={"blocked_by": "UserPromptSubmit", "reason": message},
+                )
+                return AgentOutcome(
+                    response_id=None,
+                    text=message,
+                    tool_errors=True,
+                    session_id=session_id,
+                )
+            turn_instructions = _append_hook_context(
+                turn_instructions,
+                prompt_hook.context_text,
             )
             if persisted_user_message_id is None:
                 user_message_id = _add_message(
@@ -286,8 +337,27 @@ def run_single_turn(
                 current_user_turn_text=user_turn_history_text,
                 instructions=turn_instructions,
                 tracer=tracer,
+                hook_runtime=hook_runtime,
                 current_turn_tool_exchanges=[],
             )
+            stop_hook = hook_coordinator.run_stop(response, tracer=tracer)
+            if stop_hook.continuation_prompt:
+                response, stop_had_errors = hook_coordinator.run_stop_continuation(
+                    provider=provider,
+                    prompt=stop_hook.continuation_prompt,
+                    response=response,
+                    settings=settings,
+                    display=display,
+                    session_usage=session_usage,
+                    turn_usage=turn_usage,
+                    store=store,
+                    session_id=session_id,
+                    instructions=turn_instructions,
+                    tracer=tracer,
+                    current_user_turn_text=user_turn_history_text,
+                    run_tool_iterations=_run_tool_iterations,
+                )
+                had_tool_errors = had_tool_errors or stop_had_errors
             assistant_message_id = _add_message(
                 store,
                 session_id,
@@ -360,6 +430,8 @@ def run_session_loop(
     provider_history_include_tool_history: bool | None = None
     should_exit = False
     base_excluded_tools = set(excluded_tools) if excluded_tools is not None else set()
+    session_start_hook_sent = False
+    session_start_hook_context: str | None = None
 
     def _render_temporary_command_markdown(text: str) -> None:
         render_transient = getattr(display, "render_transient_markdown", None)
@@ -409,6 +481,7 @@ def run_session_loop(
             workspace_root=workspace,
             workspace_directory_key=workspace_directory_key,
         ) as provider:
+            provider_cycle_restored_session = False
             if resume_session_to_restore is not None:
                 _resume_session(
                     provider=provider,
@@ -422,6 +495,24 @@ def run_session_loop(
                 resume_session_to_restore = None
                 replay_history_on_restore = False
                 provider_history_include_tool_history = include_tool_history
+                provider_cycle_restored_session = True
+            if not session_start_hook_sent:
+                if session_id is not None:
+                    session_start_hook_context = (
+                        SessionHookCoordinator.for_session_loop(
+                            workspace=workspace,
+                            settings=current_runtime.settings,
+                            session_id=session_id,
+                            workspace_directory_key=workspace_directory_key,
+                        ).run_session_start(
+                            reason=(
+                                "resume"
+                                if provider_cycle_restored_session
+                                else "startup"
+                            )
+                        )
+                    )
+                session_start_hook_sent = session_id is not None
             while True:
                 queued_input = display.user_prompt()
                 file_paths: list[str] = []
@@ -472,6 +563,8 @@ def run_session_loop(
                     session_id = None
                     title_set = False
                     provider_history_include_tool_history = None
+                    session_start_hook_sent = False
+                    session_start_hook_context = None
                     _bind_session(display, session_id)
                     continue
                 if user_input.startswith(RESUME_SESSION_PREFIX):
@@ -491,6 +584,8 @@ def run_session_loop(
                         resume_session_to_restore = resume_id
                         replay_history_on_restore = True
                         provider_history_include_tool_history = None
+                        session_start_hook_sent = False
+                        session_start_hook_context = None
                         break
                     else:
                         _bind_session(display, session_id)
@@ -525,6 +620,13 @@ def run_session_loop(
                         format_extensions_markdown(
                             workspace,
                             reserved_names=_reserved_slash_extension_names(workspace),
+                        )
+                    )
+                    continue
+                if normalized_command == HOOKS_COMMAND:
+                    _render_temporary_command_markdown(
+                        format_hooks_markdown(
+                            discover_hooks(workspace, current_runtime.settings)
                         )
                     )
                     continue
@@ -593,6 +695,16 @@ def run_session_loop(
                         display=display,
                         session_usage=session_usage,
                         reason="manual",
+                        hook_runtime=HookRuntime(
+                            workspace=workspace,
+                            settings=current_runtime.settings,
+                            session_id=session_id,
+                            model=_selected_model(current_runtime.settings),
+                            provider=current_runtime.settings.provider,
+                            workspace_directory_key=workspace_directory_key,
+                            agent_name="main",
+                            agent_type="session_turn",
+                        ),
                     )
                     display.session_usage(session_usage)
                     provider_history_include_tool_history = False
@@ -681,6 +793,16 @@ def run_session_loop(
                     )
                     title_set = True
                     _bind_session(display, session_id)
+                    if not session_start_hook_sent:
+                        session_start_hook_context = (
+                            SessionHookCoordinator.for_session_loop(
+                                workspace=workspace,
+                                settings=turn_settings,
+                                session_id=session_id,
+                                workspace_directory_key=workspace_directory_key,
+                            ).run_session_start(reason="startup")
+                        )
+                        session_start_hook_sent = True
                 elif not title_set:
                     _update_session_title(
                         store,
@@ -709,6 +831,24 @@ def run_session_loop(
                         "resumed": resume_session_id is not None,
                     },
                 )
+                hook_runtime = HookRuntime(
+                    workspace=workspace,
+                    settings=turn_settings,
+                    session_id=session_id,
+                    model=_selected_model(turn_settings),
+                    provider=turn_settings.provider,
+                    workspace_directory_key=workspace_directory_key,
+                    agent_name="main",
+                    agent_type="session_turn",
+                    tracer=turn_tracer,
+                )
+                hook_coordinator = SessionHookCoordinator(hook_runtime)
+                if session_start_hook_context:
+                    turn_instructions = _append_hook_context(
+                        turn_instructions,
+                        session_start_hook_context,
+                    )
+                    session_start_hook_context = None
                 display.assistant_start()
                 user_message_id: int | None = None
                 turn_provider = provider
@@ -782,6 +922,37 @@ def run_session_loop(
                                 provider_history_include_tool_history = (
                                     turn_include_tool_history
                                 )
+                        prompt_hook = hook_coordinator.run_prompt_submit(
+                            user_input,
+                            tracer=turn_tracer,
+                        )
+                        if prompt_hook.blocked:
+                            message = (
+                                prompt_hook.block_reason or "Prompt blocked by hook."
+                            )
+                            if reset_provider_settings:
+                                _set_provider_runtime_settings(
+                                    provider,
+                                    current_runtime.settings,
+                                    tool_availability_overridden=(
+                                        current_runtime.tool_availability_overridden
+                                    ),
+                                )
+                            display.render_markdown(message)
+                            turn_tracer.finish(
+                                status="blocked",
+                                usage=turn_usage,
+                                metadata={
+                                    "blocked_by": "UserPromptSubmit",
+                                    "reason": message,
+                                },
+                            )
+                            display.assistant_stop()
+                            continue
+                        turn_instructions = _append_hook_context(
+                            turn_instructions,
+                            prompt_hook.context_text,
+                        )
                         user_message_id = _add_message(
                             store,
                             session_id,
@@ -828,9 +999,33 @@ def run_session_loop(
                             current_user_turn_text=turn_history_text,
                             instructions=turn_instructions,
                             tracer=turn_tracer,
+                            hook_runtime=hook_runtime,
                             current_turn_tool_exchanges=[],
                         )
                         _raise_if_interrupted(display)
+                        stop_hook = hook_coordinator.run_stop(
+                            response,
+                            tracer=turn_tracer,
+                        )
+                        if stop_hook.continuation_prompt:
+                            response, stop_had_errors = (
+                                hook_coordinator.run_stop_continuation(
+                                    provider=turn_provider,
+                                    prompt=stop_hook.continuation_prompt,
+                                    response=response,
+                                    settings=turn_settings,
+                                    display=display,
+                                    session_usage=session_usage,
+                                    turn_usage=turn_usage,
+                                    store=store,
+                                    session_id=session_id,
+                                    instructions=turn_instructions,
+                                    tracer=turn_tracer,
+                                    current_user_turn_text=turn_history_text,
+                                    run_tool_iterations=_run_tool_iterations,
+                                )
+                            )
+                            loop_had_errors = loop_had_errors or stop_had_errors
 
                         assistant_message_id = _add_message(
                             store,
@@ -1186,11 +1381,29 @@ def run_sub_agent_task(
                 visible_nested_agent_names if nested_sub_agents_enabled else None
             ),
         ) as provider:
+            child_hook_runtime = HookRuntime(
+                workspace=workspace,
+                settings=child_settings,
+                session_id=(parent_tracer.session_id if parent_tracer else None),
+                model=_selected_model(child_settings),
+                provider=child_settings.provider,
+                workspace_directory_key=workspace_directory_key,
+                agent_name=child_name,
+                agent_type=agent_type or "default",
+                tracer=child_tracer,
+            )
+            child_hooks = SessionHookCoordinator(child_hook_runtime)
             _apply_sub_agent_parent_context(
                 provider=provider,
                 provider_name=child_settings.provider,
                 include_context=include_context,
                 parent_context=parent_context,
+            )
+            start_hook_context = child_hooks.run_subagent_start(
+                agent_type=agent_type or "default",
+                task_instruction=task_instruction,
+                subagent_name=child_name,
+                tracer=child_tracer,
             )
             child_user_message = _build_sub_agent_initial_message(
                 task_instruction,
@@ -1198,6 +1411,14 @@ def run_sub_agent_task(
                 include_context=include_context,
                 parent_context=parent_context,
             )
+            if start_hook_context:
+                child_user_message = (
+                    _append_hook_context(
+                        child_user_message,
+                        start_hook_context,
+                    )
+                    or child_user_message
+                )
             child_display.render_user_message(child_user_message)
             _raise_if_sub_agent_timed_out(started_at)
             response = provider.request_turn(
@@ -1221,7 +1442,48 @@ def run_sub_agent_task(
                 started_at=started_at,
                 max_elapsed_seconds=SUB_AGENT_MAX_ELAPSED_SECONDS,
                 tracer=child_tracer,
+                hook_runtime=child_hook_runtime,
             )
+            stop_hook_result = child_hooks.run_subagent_stop(
+                agent_type=agent_type or "default",
+                task_instruction=task_instruction,
+                subagent_name=child_name,
+                response=response,
+                tracer=child_tracer,
+            )
+            if (
+                stop_hook_result.continuation_prompt
+                and request_count < SUB_AGENT_MAX_REQUESTS
+            ):
+                _raise_if_sub_agent_timed_out(started_at)
+                continuation_prompt = stop_hook_result.continuation_prompt
+                child_display.render_user_message(continuation_prompt)
+                response = provider.request_turn(
+                    user_message=continuation_prompt,
+                    display=child_display,
+                    session_usage=child_session_usage,
+                    turn_usage=child_turn_usage,
+                    tracer=child_tracer,
+                )
+                request_count += 1
+                response, continuation_tool_errors, request_count = (
+                    _run_tool_iterations(
+                        provider=provider,
+                        response=response,
+                        max_workers=child_settings.max_tool_workers,
+                        display=child_display,
+                        session_usage=child_session_usage,
+                        turn_usage=child_turn_usage,
+                        sub_agent_depth=sub_agent_depth + 1,
+                        max_requests=SUB_AGENT_MAX_REQUESTS,
+                        request_count=request_count,
+                        started_at=started_at,
+                        max_elapsed_seconds=SUB_AGENT_MAX_ELAPSED_SECONDS,
+                        tracer=child_tracer,
+                        hook_runtime=child_hook_runtime,
+                    )
+                )
+                had_tool_errors = had_tool_errors or continuation_tool_errors
             elapsed = time.monotonic() - started_at
             child_display.turn_usage(child_turn_usage, elapsed)
             child_display.finish_sub_agent(status="completed")
@@ -1445,6 +1707,7 @@ def _run_tool_iterations(
     current_user_turn_text: str | None = None,
     instructions: str | None = None,
     tracer: RunTracer | None = None,
+    hook_runtime: HookRuntime | None = None,
     current_turn_tool_exchanges: (
         list[tuple[list[ToolCall], list[dict[str, Any]]]] | None
     ) = None,
@@ -1498,6 +1761,7 @@ def _run_tool_iterations(
                 sub_agent_depth=sub_agent_depth,
                 parent_context=parent_context,
                 tracer=tracer,
+                hook_runtime=hook_runtime,
             )
             _raise_if_interrupted(display)
         except SessionTurnInterrupted:
@@ -1538,6 +1802,7 @@ def _run_tool_iterations(
                     session_usage=session_usage,
                     reason="auto",
                     pending_tool_exchanges=tool_exchanges,
+                    hook_runtime=hook_runtime,
                 )
                 tool_exchanges.clear()
                 display.session_usage(session_usage)

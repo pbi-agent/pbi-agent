@@ -29,6 +29,7 @@ def test_registry_exposes_expected_built_in_tools() -> None:
         "write_file",
         "explore_workspace",
         "read_web_url",
+        "web_search",
         "ask_user",
         "sub_agent",
     }
@@ -92,6 +93,7 @@ def test_effective_excluded_tool_names_disables_web_tools_without_web_group() ->
     )
 
     assert "read_web_url" in excluded
+    assert "web_search" in excluded
 
 
 def test_effective_excluded_tool_names_honors_allowed_tools() -> None:
@@ -105,6 +107,7 @@ def test_effective_excluded_tool_names_honors_allowed_tools() -> None:
     assert "explore_workspace" not in excluded
     assert "shell" in excluded
     assert "read_web_url" in excluded
+    assert "web_search" in excluded
 
 
 def test_effective_excluded_tool_names_keeps_ask_user_disabled_when_not_allowed() -> (
@@ -128,17 +131,16 @@ def test_effective_excluded_tool_names_allows_command_enabled_ask_user() -> None
     assert "shell" in excluded
 
 
-def test_web_allowed_tool_enables_fetch_tool_and_native_web_search() -> None:
-    from pbi_agent.tools.availability import native_web_search_enabled
-
+def test_web_allowed_tool_enables_fetch_and_search_tools() -> None:
     settings = Settings(
         provider="openai",
         allowed_tools=("web",),
     )
 
-    assert "read_web_url" not in effective_excluded_tool_names(settings)
-    assert "explore_workspace" in effective_excluded_tool_names(settings)
-    assert native_web_search_enabled(settings) is True
+    excluded = effective_excluded_tool_names(settings)
+    assert "read_web_url" not in excluded
+    assert "web_search" not in excluded
+    assert "explore_workspace" in excluded
 
 
 def test_apply_patch_uses_codex_freeform_spec() -> None:

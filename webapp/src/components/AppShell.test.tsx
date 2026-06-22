@@ -71,6 +71,7 @@ function makeBootstrap(): BootstrapPayload {
     tasks: [],
     live_sessions: [],
     board_stages: [],
+    hook_warnings: [],
   };
 }
 
@@ -132,7 +133,6 @@ function makeConfigBootstrap(
           supports_responses_url: true,
           supports_generic_api_url: false,
           supports_service_tier: true,
-          supports_native_web_search: true,
           supports_image_inputs: true,
           supports_model_profiles: true,
           supports_stt: false,

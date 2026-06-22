@@ -14,7 +14,6 @@ from pbi_agent.agent.skill_discovery import discover_project_skills
 from pbi_agent.tools.availability import (
     default_excluded_tool_names,
     effective_excluded_tool_names,
-    native_web_search_enabled,
 )
 from pbi_agent.tools.registry import get_tool_specs
 
@@ -31,9 +30,14 @@ _WRITE_TOOL_NAMES = frozenset({"apply_patch", "replace_in_file", "write_file"})
 
 _SUB_AGENT_PROMPT = """
 <persona>
-- You are a delegated sub-agent operating on behalf of the main agent.
-- You are in background mode and will not interact with the user directly. Do not ask the user questions.
+- Delegated for main agent; background, no user questions.
 </persona>
+
+<sub_agent_rules>
+- `<component_commands>` active.
+- There, "main/orchestrating agent" = you.
+- Use nested `sub_agent` when required+available; TODO.md/MEMORY.md ownership only blocks those edits.
+</sub_agent_rules>
 """.strip()
 
 _MAX_FILE_BYTES = 1_000_000  # 1 MB
@@ -108,11 +112,6 @@ def _tool_usage_rules(
     usage_lines = [
         f"- {spec.prompt_usage}" for spec in specs if spec.prompt_usage is not None
     ]
-    if settings is not None and native_web_search_enabled(settings):
-        usage_lines.append(
-            "- Use provider-native web search when supported by the active "
-            "provider and current web information is needed."
-        )
 
     if usage_lines:
         lines.extend(usage_lines)

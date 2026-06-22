@@ -222,6 +222,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable verbose logs.",
     )
     diagnostics_group.add_argument(
+        "--dangerously-bypass-hook-trust",
+        action="store_true",
+        help=(
+            "Dangerous automation mode: run untrusted/modified command hooks "
+            "without review."
+        ),
+    )
+    diagnostics_group.add_argument(
         "--mcp",
         action="store_true",
         help="List discovered project MCP servers from .agents and exit.",
@@ -459,6 +467,42 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show sessions from all directories, not just the current one.",
     )
+
+    hooks_parser = add_command_parser(
+        "hooks",
+        "Inspect and review project/global command hooks.",
+    )
+    hooks_parser.add_argument(
+        "--project-dir",
+        type=Path,
+        default=Path("."),
+        help="Workspace directory for project hook discovery (default: current directory).",
+    )
+    hooks_parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Print machine-readable hook status.",
+    )
+    hooks_subparsers = hooks_parser.add_subparsers(
+        dest="hooks_action",
+        metavar="<action>",
+    )
+    for action in ("trust", "enable", "disable"):
+        action_parser = hooks_subparsers.add_parser(
+            action,
+            prog=f"pbi-agent hooks {action}",
+            description=f"{action.title()} a discovered hook.",
+            help=f"{action.title()} a discovered hook.",
+            formatter_class=CleanHelpFormatter,
+        )
+        action_parser.add_argument("hook_key", help="Hook key from `pbi-agent hooks`.")
+        action_parser.add_argument(
+            "--project-dir",
+            type=Path,
+            default=Path("."),
+            help="Workspace directory for project hook discovery.",
+        )
 
     kanban_parser = add_command_parser(
         "kanban", "Manage Kanban board tasks for the current workspace."

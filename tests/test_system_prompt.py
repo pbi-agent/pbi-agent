@@ -327,6 +327,29 @@ def test_get_sub_agent_system_prompt_appends_component_commands_in_order(tmp_pat
     assert "fixer" not in prompt
 
 
+def test_get_sub_agent_system_prompt_marks_component_commands_active(tmp_path):
+    prompt = get_sub_agent_system_prompt(
+        agent_prompt_override="You are the orchestrator.",
+        cwd=tmp_path,
+        component_commands=(
+            CommandConfig(
+                id="orchestrate",
+                name="orchestrate",
+                slash_alias="/orchestrate",
+                description="Run orchestration.",
+                instructions=(
+                    "The main agent orchestrates only and delegates to worker."
+                ),
+            ),
+        ),
+    )
+
+    assert "`<component_commands>` active" in prompt
+    assert '"main/orchestrating agent" = you' in prompt
+    assert "Use nested `sub_agent` when required+available" in prompt
+    assert "TODO.md/MEMORY.md ownership only blocks those edits" in prompt
+
+
 def test_get_sub_agent_system_prompt_appends_component_commands_without_agent_body(
     tmp_path,
 ):
@@ -756,7 +779,7 @@ def test_get_system_prompt_omits_sub_agent_catalog_when_tool_disabled(
     assert "code-reviewer" not in prompt
 
 
-def test_get_system_prompt_mentions_native_web_search_only_for_web_allowed_tool(
+def test_get_system_prompt_mentions_web_search_only_for_web_allowed_tool(
     tmp_path, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
@@ -776,8 +799,9 @@ def test_get_system_prompt_mentions_native_web_search_only_for_web_allowed_tool(
         )
     )
 
-    assert "Use provider-native web search" in web_allowed_prompt
-    assert "Use provider-native web search" not in read_allowed_prompt
+    assert "Use `web_search`" in web_allowed_prompt
+    assert "Use `web_search`" not in read_allowed_prompt
+    assert "Use provider-native web search" not in web_allowed_prompt
 
 
 def test_get_system_prompt_keeps_ask_user_ui_only(tmp_path, monkeypatch):

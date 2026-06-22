@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 
 from pbi_agent.config import (
     ConfigError,
@@ -13,6 +14,9 @@ from pbi_agent.config import (
 from pbi_agent.init_agents import format_init_bootstrap_result, init_workspace_bootstrap
 from pbi_agent.log_config import configure_logging
 from pbi_agent.maintenance import run_startup_maintenance
+from pbi_agent.hooks.discovery import discover_hooks
+from pbi_agent.hooks.review import format_hook_warning, hooks_requiring_review
+from pbi_agent.workspace_context import current_workspace_context
 
 from .catalogs import (
     _handle_agents_command,
@@ -22,6 +26,11 @@ from .catalogs import (
     _handle_skills_command,
 )
 from .config import _handle_config_command
+from .hooks import (
+    _handle_hooks_command,
+    _handle_hooks_enable_command,
+    _handle_hooks_trust_command,
+)
 from .kanban import _handle_kanban_command
 from .parser import _argv_with_default_command, _web_runtime_flags_in_args, build_parser
 from .run import _handle_run_command
@@ -62,6 +71,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sessions":
         return _handle_sessions_command(args)
 
+    if args.command == "hooks":
+        action = getattr(args, "hooks_action", None)
+        if action == "trust":
+            return _handle_hooks_trust_command(args)
+        if action == "enable":
+            return _handle_hooks_enable_command(args, enabled=True)
+        if action == "disable":
+            return _handle_hooks_enable_command(args, enabled=False)
+        return _handle_hooks_command(args)
+
     if args.command == "kanban":
         return _handle_kanban_command(args)
 
@@ -96,6 +115,10 @@ def main(argv: list[str] | None = None) -> int:
             runtime: Settings | ResolvedRuntime = resolve_web_runtime(
                 verbose=args.verbose
             )
+            runtime.settings.dangerously_bypass_hook_trust = (
+                bool(getattr(args, "dangerously_bypass_hook_trust", False))
+                or runtime.settings.dangerously_bypass_hook_trust
+            )
             runtime.settings.validate()
         except ConfigError as exc:
             LOGGER.debug("Starting web UI without an active web profile: %s", exc)
@@ -104,7 +127,14 @@ def main(argv: list[str] | None = None) -> int:
                 provider="openai",
                 model="gpt-5.4",
                 verbose=args.verbose,
+                dangerously_bypass_hook_trust=bool(
+                    getattr(args, "dangerously_bypass_hook_trust", False)
+                ),
             )
+        _warn_unreviewed_hooks(
+            current_workspace_context().execution_root,
+            runtime.settings if isinstance(runtime, ResolvedRuntime) else runtime,
+        )
         return _handle_web_command(
             args, runtime, update_notice=maintenance_result.update_notice
         )
@@ -123,7 +153,22 @@ def main(argv: list[str] | None = None) -> int:
     LOGGER.debug("Resolved settings: %s", settings.redacted())
 
     if args.command == "run":
+        _warn_unreviewed_hooks(Path(args.project_dir).resolve(), settings)
         return _handle_run_command(args, runtime)
 
     parser.error("Unknown command.")
     return 1
+
+
+def _warn_unreviewed_hooks(workspace, settings: Settings) -> None:
+    if settings.dangerously_bypass_hook_trust:
+        print(
+            "Warning: dangerously bypassing hook trust review; untrusted hooks may run.",
+            file=sys.stderr,
+        )
+        return
+    warning = format_hook_warning(
+        hooks_requiring_review(discover_hooks(workspace, settings))
+    )
+    if warning:
+        print(f"Warning: {warning}", file=sys.stderr)

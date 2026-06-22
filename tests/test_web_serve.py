@@ -1727,7 +1727,6 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
             "supports_responses_url": True,
             "supports_generic_api_url": False,
             "supports_service_tier": False,
-            "supports_native_web_search": True,
             "supports_image_inputs": True,
             "supports_model_profiles": True,
             "supports_stt": False,
@@ -2619,6 +2618,11 @@ def test_slash_command_search_endpoint_returns_web_commands(
             "kind": "local_command",
         },
         {
+            "name": "/hooks",
+            "description": "Inspect and review command hooks",
+            "kind": "local_command",
+        },
+        {
             "name": "/init",
             "description": "Bootstrap AGENTS.md plus default commands and sub-agents",
             "kind": "local_command",
@@ -2671,6 +2675,11 @@ def test_slash_command_search_endpoint_includes_command_file_commands(
             "kind": "local_command",
         },
         {
+            "name": "/hooks",
+            "description": "Inspect and review command hooks",
+            "kind": "local_command",
+        },
+        {
             "name": "/init",
             "description": "Bootstrap AGENTS.md plus default commands and sub-agents",
             "kind": "local_command",
@@ -2693,11 +2702,6 @@ def test_slash_command_search_endpoint_includes_command_file_commands(
         {
             "name": "/plan",
             "description": "Planning command",
-            "kind": "command",
-        },
-        {
-            "name": "/review",
-            "description": "Code review command",
             "kind": "command",
         },
     ]

@@ -20,6 +20,7 @@ from pbi_agent.agent.session import (
     MCP_COMMAND,
     COMPACT_COMMAND,
     COMPACTION_MARKER,
+    HOOKS_COMMAND,
     INIT_COMMAND,
     INTERACTIVE_ONLY_TOOLS,
     _open_compaction_provider,
@@ -341,8 +342,9 @@ class _ProviderStub:
         sub_agent_depth: int = 0,
         parent_context=None,
         tracer=None,
+        hook_runtime=None,
     ) -> tuple[list[dict[str, object]], bool]:
-        del display, session_usage, turn_usage, sub_agent_depth, tracer
+        del display, session_usage, turn_usage, sub_agent_depth, tracer, hook_runtime
         self.execute_calls.append(
             {
                 "response_id": response.response_id,
@@ -2262,6 +2264,90 @@ def test_run_session_loop_resets_welcome_and_usage_on_new_session(monkeypatch) -
     assert display.assistant_start_calls == 2
 
 
+def test_run_session_loop_applies_session_start_context_once(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from pbi_agent.hooks.runtime import HookRuntimeResult
+    from pbi_agent.hooks.schemas import HookEventName
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy(["hello", "again", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    monotonic_values = iter([5.0, 6.5, 10.0, 11.0])
+    session_start_session_ids: list[str | None] = []
+
+    class FakeHookRuntime:
+        stop_hook_active = False
+
+        def __init__(self, **kwargs: object) -> None:
+            self.session_id = kwargs.get("session_id")
+
+        def run(self, event: HookEventName, **kwargs: object) -> HookRuntimeResult:
+            del kwargs
+            if event == HookEventName.SESSION_START:
+                session_start_session_ids.append(self.session_id)
+                return HookRuntimeResult(additional_context=["startup context"])
+            return HookRuntimeResult()
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr("pbi_agent.agent.session.hooks.HookRuntime", FakeHookRuntime)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    exit_code = run_session_loop(settings, display, workspace_root=tmp_path)
+
+    assert exit_code == 0
+    assert session_start_session_ids and session_start_session_ids[0]
+    assert "startup context" in str(provider.request_instructions[0])
+    assert "startup context" not in str(provider.request_instructions[1])
+
+
+def test_run_session_loop_reports_resume_reason_for_resume_command(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy(["__resume_session__:session-123", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    reasons: list[str] = []
+
+    def fake_session_start_hook(
+        self: object,
+        *,
+        reason: str,
+        tracer: object | None = None,
+    ) -> None:
+        del self, tracer
+        reasons.append(reason)
+        return None
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._resume_session",
+        lambda **_: None,
+    )
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.hooks.SessionHookCoordinator.run_session_start",
+        fake_session_start_hook,
+    )
+
+    exit_code = run_session_loop(settings, display, workspace_root=tmp_path)
+
+    assert exit_code == 0
+    assert reasons == ["resume"]
+
+
 def test_run_session_loop_interactive_mode_injects_ask_user_prompt_rules(
     monkeypatch,
 ) -> None:
@@ -2598,6 +2684,7 @@ def test_run_session_loop_honors_per_turn_tool_history_preference(
             sub_agent_depth: int = 0,
             parent_context=None,
             tracer=None,
+            hook_runtime=None,
         ) -> tuple[list[dict[str, object]], bool]:
             del (
                 response,
@@ -2607,6 +2694,7 @@ def test_run_session_loop_honors_per_turn_tool_history_preference(
                 turn_usage,
                 sub_agent_depth,
                 parent_context,
+                hook_runtime,
             )
             output = {"ok": True, "result": "/workspace"}
             if tracer is not None:
@@ -2855,6 +2943,46 @@ def test_run_session_loop_handles_skills_command_locally(monkeypatch) -> None:
     assert display.markdown_calls == [
         "### Project Skills\n\n- `repo-skill`: Demo skill"
     ]
+    assert display.assistant_start_calls == 0
+
+
+def test_run_session_loop_handles_hooks_command_locally(monkeypatch, tmp_path) -> None:
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy([HOOKS_COMMAND, "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    hooks_path = tmp_path / ".agents" / "hooks.json"
+    hooks_path.parent.mkdir(parents=True)
+    hooks_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "shell",
+                            "hooks": [{"type": "command", "command": "echo check"}],
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_session_loop(settings, display, workspace_root=tmp_path)
+
+    assert exit_code == 0
+    assert provider.request_messages == []
+    assert len(display.markdown_calls) == 1
+    markdown = display.markdown_calls[0]
+    assert "### Hooks" in markdown
+    assert "- `PreToolUse` matcher `shell` from `project` — **untrusted**" in markdown
+    assert "  - command: `echo check`" in markdown
+    assert "Review hooks with `pbi-agent hooks`" in markdown
     assert display.assistant_start_calls == 0
 
 
@@ -4037,6 +4165,88 @@ def test_run_session_loop_resolves_command_profile_before_tool_settings(
     ]
     assert provider.request_settings[0].allowed_tools == ("web", "shell")
     assert provider.request_settings[1].allowed_tools == ("read",)
+
+
+def test_run_session_loop_resets_command_settings_after_prompt_hook_block(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from pbi_agent.hooks.runtime import HookRuntimeResult
+    from pbi_agent.hooks.schemas import HookEventName
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PBI_AGENT_SESSION_DB_PATH", str(tmp_path / "sessions.db"))
+    create_provider_config(
+        ProviderConfig(
+            id="openai-main",
+            name="OpenAI Main",
+            kind="openai",
+            api_key="saved-openai-key",
+        )
+    )
+    create_model_profile_config(
+        ModelProfileConfig(
+            id="analysis",
+            name="Analysis",
+            provider_id="openai-main",
+            model="profile-model",
+            allowed_tools=("web", "shell"),
+        )
+    )
+    _write_command(
+        tmp_path,
+        "profile-tools",
+        "---\n"
+        "name: Profile Tools\n"
+        "description: Use profile tools.\n"
+        "model_profile_id: analysis\n"
+        "---\n\n"
+        "Use the profile.",
+    )
+    provider = _RuntimeSettingsChatProviderStub()
+    display = _SessionDisplaySpy(["/profile-tools inspect", "hello", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+    monotonic_values = iter(float(value) for value in range(100))
+
+    class FakeHookRuntime:
+        stop_hook_active = False
+
+        def __init__(self, **kwargs: object) -> None:
+            del kwargs
+
+        def run(self, event: HookEventName, **kwargs: object) -> HookRuntimeResult:
+            payload = kwargs.get("payload")
+            if (
+                event == HookEventName.USER_PROMPT_SUBMIT
+                and isinstance(payload, dict)
+                and payload.get("prompt") == "/profile-tools inspect"
+            ):
+                return HookRuntimeResult(
+                    blocked=True,
+                    block_reason="blocked by hook",
+                )
+            return HookRuntimeResult()
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+    monkeypatch.setattr("pbi_agent.agent.session.HookRuntime", FakeHookRuntime)
+    monkeypatch.setattr(
+        "pbi_agent.agent.session.time.monotonic",
+        lambda: next(monotonic_values),
+    )
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert display.markdown_calls == ["blocked by hook"]
+    assert provider.request_messages == ["hello"]
+    assert provider.request_settings[0].model == DEFAULT_MODEL
+    assert [item.model for item in provider.runtime_settings_calls] == [
+        "profile-model",
+        DEFAULT_MODEL,
+    ]
 
 
 def test_run_single_turn_preserves_cli_tool_overrides_for_command_profile(

@@ -40,6 +40,7 @@ import { ModelProfilesSettingsSection } from "./ModelProfilesSettingsSection";
 import type { ProfilePayload } from "./ModelProfileModal";
 import { ModelProfileModal } from "./ModelProfileModal";
 import { MaintenanceSettingsSection } from "./MaintenanceSettingsSection";
+import { HooksSettingsSection } from "./HooksSettingsSection";
 import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
 import { ProviderAuthFlowModal } from "./ProviderAuthFlowModal";
 import { ProviderUsageLimitsDialog } from "./ProviderUsageLimitsDialog";
@@ -72,6 +73,7 @@ type SettingsTabId =
   | "skills"
   | "commands"
   | "agents"
+  | "hooks"
   | "maintenance";
 
 const SETTINGS_NAV_GROUPS: Array<{
@@ -115,6 +117,11 @@ const SETTINGS_NAV_GROUPS: Array<{
           id: "agents",
           label: "Agents",
           description: "Delegated workers",
+        },
+        {
+          id: "hooks",
+          label: "Hooks",
+          description: "Command hook review",
         },
       ],
     },
@@ -517,6 +524,8 @@ export function SettingsPage() {
                     {activeTab === "commands" && <CommandsSettingsSection commands={commands} />}
 
                     {activeTab === "agents" && <AgentsSettingsSection agents={agents} />}
+
+                    {activeTab === "hooks" && <HooksSettingsSection />}
 
                     {activeTab === "maintenance" && (
                       <MaintenanceSettingsSection

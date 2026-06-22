@@ -442,10 +442,6 @@ def test_stt_only_provider_configs_roundtrip_and_metadata(monkeypatch) -> None:
     assert config_module.provider_ui_metadata("xai")["supports_model_profiles"] is True
     assert config_module.provider_ui_metadata("google")["supports_stt"] is True
     assert (
-        config_module.provider_ui_metadata("google_gcp")["supports_native_web_search"]
-        is False
-    )
-    assert (
         config_module.provider_ui_metadata("google")["supports_model_profiles"] is True
     )
     assert config_module.provider_ui_metadata("deepgram")["supports_stt"] is True
@@ -665,6 +661,11 @@ def test_list_command_configs_skips_reserved_command_alias(tmp_path: Path) -> No
             "List project extensions.",
             "List project extensions.",
         ),
+    )
+    _write_command(
+        tmp_path,
+        "hooks.md",
+        _command_markdown("hooks", "List project hooks.", "List project hooks."),
     )
 
     assert list_command_configs(tmp_path) == []

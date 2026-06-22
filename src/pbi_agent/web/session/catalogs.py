@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from pbi_agent.agent.session import active_mcp_tool_names
-from pbi_agent.config import ResolvedRuntime, list_command_configs
+from pbi_agent.config import ResolvedRuntime, Settings, list_command_configs
 from pbi_agent.extensions import discover_extensions
+from pbi_agent.hooks.discovery import discover_hooks
+from pbi_agent.hooks.review import format_hook_warning, hooks_requiring_review
 from pbi_agent.tools.catalog import ToolCatalog
 from pbi_agent.web.command_registry import (
     list_slash_commands,
@@ -29,6 +31,9 @@ class _CatalogsManager(Protocol):
     _workspace_root: Path
     _directory_key: str
 
+    @property
+    def settings(self) -> Settings: ...
+
     def _resolve_runtime_optional(
         self,
         profile_id: str | None,
@@ -44,6 +49,18 @@ class _CatalogsManager(Protocol):
     def list_sessions(self) -> list[dict[str, Any]]: ...
 
     def list_tasks(self) -> list[dict[str, Any]]: ...
+
+
+def _hook_warnings(manager: _CatalogsManager) -> list[str]:
+    settings = manager.settings
+    if getattr(settings, "dangerously_bypass_hook_trust", False):
+        return [
+            "Dangerously bypassing hook trust review; untrusted hooks may run.",
+        ]
+    warning = format_hook_warning(
+        hooks_requiring_review(discover_hooks(manager._workspace_root, settings))
+    )
+    return [warning] if warning else []
 
 
 class CatalogsMixin:
@@ -102,6 +119,7 @@ class CatalogsMixin:
                 for item in manager._live_sessions.values()
             ],
             "board_stages": manager.list_board_stages(),
+            "hook_warnings": _hook_warnings(manager),
         }
 
     def search_skill_mentions(

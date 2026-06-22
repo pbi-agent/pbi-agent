@@ -92,7 +92,7 @@ Allowed groups:
 | --- | --- |
 | `read` | `explore_workspace` |
 | `write` | `apply_patch`, `replace_in_file`, `write_file` |
-| `web` | `read_web_url` and provider-native web search |
+| `web` | `read_web_url`, `web_search` |
 | `sub-agent` | `sub_agent` |
 | `shell` | `shell` |
 
@@ -108,7 +108,7 @@ configured through profiles. Project commands may opt into `ask-user` for their
 own command turn.
 
 Omit `write` for read-only profiles. Omit `web` to disable both `read_web_url`
-and native provider web search.
+and Firecrawl-backed `web_search`.
 
 ## Model discovery and custom values
 

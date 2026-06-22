@@ -38,6 +38,11 @@ COMMANDS: tuple[SlashCommand, ...] = (
         hidden_keywords="extension extensions python tools commands list",
     ),
     SlashCommand(
+        name="/hooks",
+        description="Inspect and review command hooks",
+        hidden_keywords="hook hooks trust review managed policy automation",
+    ),
+    SlashCommand(
         name="/init",
         description="Bootstrap AGENTS.md plus default commands and sub-agents",
         hidden_keywords="agents.md instructions setup bootstrap create overwrite force",

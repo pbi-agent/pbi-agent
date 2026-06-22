@@ -191,6 +191,7 @@ class BootstrapResponse(BaseModel):
     tasks: list[TaskRecordModel]
     live_sessions: list[LiveSessionModel]
     board_stages: list[BoardStageModel]
+    hook_warnings: list[str] = []
 
 
 class WorkspaceRecordModel(BaseModel):

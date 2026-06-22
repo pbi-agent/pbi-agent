@@ -45,15 +45,17 @@ def test_anthropic_provider_advertises_simple_edit_tools_only() -> None:
     assert "replace_in_file" in tool_names
     assert "write_file" in tool_names
     assert "read_web_url" in tool_names
+    assert "web_search" in tool_names
 
 
-def test_anthropic_provider_hides_native_web_search_without_web_group() -> None:
+def test_anthropic_provider_hides_web_tools_without_web_group() -> None:
     provider = AnthropicProvider(_make_settings(allowed_tools=("read",)))
 
     tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     assert "read_web_url" not in tool_names
+    assert "web_search" not in tool_names
     assert not any(
-        tool.get("type") == "web_search_20250305" for tool in provider._tools
+        str(tool.get("type", "")).startswith("web_search") for tool in provider._tools
     )
 
 
@@ -946,22 +948,18 @@ def test_anthropic_execute_tool_calls_serializes_image_attachments(
 
 def test_anthropic_web_search_tool_included_when_enabled() -> None:
     provider = AnthropicProvider(_make_settings())
-    web_tool = {"type": "web_search_20260209", "name": "web_search"}
-    assert web_tool in provider._tools
-
-
-def test_anthropic_web_search_tool_uses_direct_callers_for_haiku_models() -> None:
-    provider = AnthropicProvider(_make_settings(model="claude-haiku-4-5"))
-    assert {
-        "type": "web_search_20260209",
-        "name": "web_search",
-        "allowed_callers": ["direct"],
-    } in provider._tools
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
+    assert "web_search" in tool_names
+    assert not any(
+        str(tool.get("type", "")).startswith("web_search") for tool in provider._tools
+    )
 
 
 def test_anthropic_web_search_tool_excluded_without_web_group() -> None:
     provider = AnthropicProvider(_make_settings(allowed_tools=("read",)))
+    tool_names = {tool["name"] for tool in provider._tools if "name" in tool}
     tool_types = [t.get("type") for t in provider._tools]
+    assert "web_search" not in tool_names
     assert "web_search_20260209" not in tool_types
 
 

@@ -20,7 +20,6 @@ class ProviderKindMetadataModel(BaseModel):
     supports_responses_url: bool
     supports_generic_api_url: bool
     supports_service_tier: bool
-    supports_native_web_search: bool
     supports_image_inputs: bool
     supports_model_profiles: bool
     supports_stt: bool

@@ -112,9 +112,10 @@ def test_github_copilot_responses_provider_advertises_simple_edit_tools_only() -
     assert "replace_in_file" in tool_names
     assert "write_file" in tool_names
     assert "read_web_url" in tool_names
+    assert "web_search" in tool_names
 
 
-def test_github_copilot_provider_includes_read_web_url_with_web_group() -> None:
+def test_github_copilot_provider_includes_web_tools_with_web_group() -> None:
     provider = GitHubCopilotProvider(_make_settings(allowed_tools=("web",)))
 
     tool_names = {
@@ -123,6 +124,8 @@ def test_github_copilot_provider_includes_read_web_url_with_web_group() -> None:
         if "name" in tool  # type: ignore[attr-defined]
     }
     assert "read_web_url" in tool_names
+    assert "web_search" in tool_names
+    assert "explore_workspace" not in tool_names
 
 
 def test_github_copilot_provider_forwards_runtime_settings_to_delegate() -> None:

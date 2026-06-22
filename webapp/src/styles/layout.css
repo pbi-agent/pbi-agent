@@ -7,6 +7,17 @@
   overflow: hidden;
 }
 
+.app-hook-warning {
+  flex: 0 0 auto;
+  padding: var(--sp-3) 0;
+  background: var(--color-surface-0);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-hook-warning .app-hook-warning__alert {
+  margin: 0 var(--sp-5);
+}
+
 /* ── Unified shell layout (sidebar + main content) ──────────────────────── */
 .app-shell-layout {
   flex: 1;

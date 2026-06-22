@@ -695,10 +695,26 @@ def route_function_result(
         )
 
     if name == "web_search":
-        raw_sources = args.get("sources", [])
+        result_payload = to_dict(result)
+        nested_result = result_payload.get("result")
+        if isinstance(nested_result, dict) and "sources" not in result_payload:
+            result_payload = nested_result
+        raw_sources = result_payload.get("sources", args.get("sources", []))
         sources = raw_sources if isinstance(raw_sources, list) else []
         raw_queries = args.get("queries", [])
         queries = raw_queries if isinstance(raw_queries, list) else []
+        raw_query = args.get("query")
+        if isinstance(raw_query, str) and raw_query.strip():
+            queries = [raw_query.strip(), *queries]
+        elif not queries:
+            raw_result_queries = result_payload.get("queries", [])
+            if isinstance(raw_result_queries, list):
+                queries = [
+                    query for query in raw_result_queries if isinstance(query, str)
+                ]
+            raw_result_query = result_payload.get("query")
+            if isinstance(raw_result_query, str) and raw_result_query.strip():
+                queries = [raw_result_query.strip(), *queries]
         return name, format_web_search_sources_item(
             sources,
             queries=queries,

@@ -1,5 +1,3 @@
-- [x] Locate slash-command dropdown rendering and styles.
-- [x] Make command dropdown overlay upward above the composer card.
-- [x] Add scrollable command list behavior.
-- [x] Run focused frontend validation.
-- [x] Record task result in memory.
+- [x] Verify nested sub-agent runtime limits
+- [x] Check session/run persistence supports parent-child nesting
+- [x] Summarize confirmation and caveats

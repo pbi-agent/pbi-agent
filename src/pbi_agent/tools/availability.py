@@ -10,6 +10,7 @@ _V4A_FILE_EDIT_PROVIDERS = {"openai", "chatgpt"}
 _TOOLS_EXCLUDED_FOR_V4A_PROVIDERS = {"replace_in_file", "write_file"}
 _TOOLS_EXCLUDED_FOR_NON_V4A_PROVIDERS = {"apply_patch"}
 _WEB_FETCH_TOOL = "read_web_url"
+_WEB_SEARCH_TOOL = "web_search"
 UI_ONLY_TOOL_NAMES = frozenset({"ask_user"})
 UI_ONLY_TOOL_CATEGORIES: dict[str, frozenset[str]] = {
     "ask-user": UI_ONLY_TOOL_NAMES,
@@ -17,7 +18,7 @@ UI_ONLY_TOOL_CATEGORIES: dict[str, frozenset[str]] = {
 BUILTIN_TOOL_CATEGORIES: dict[str, frozenset[str]] = {
     "read": frozenset({"explore_workspace"}),
     "write": frozenset({"apply_patch", "replace_in_file", "write_file"}),
-    "web": frozenset({_WEB_FETCH_TOOL}),
+    "web": frozenset({_WEB_FETCH_TOOL, _WEB_SEARCH_TOOL}),
     "sub-agent": frozenset({"sub_agent"}),
     "shell": frozenset({"shell"}),
 }
@@ -87,10 +88,3 @@ def without_ui_only_tool_categories(
         for category in allowed_tools
         if category not in UI_ONLY_TOOL_CATEGORIES
     )
-
-
-def native_web_search_enabled(settings: Settings) -> bool:
-    allowed_tools = settings.allowed_tools
-    if allowed_tools is None:
-        return True
-    return "web" in allowed_tools

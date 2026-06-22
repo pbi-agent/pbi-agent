@@ -44,7 +44,7 @@ const TOOL_VISIBILITY_OPTIONS = [
   {
     id: "web",
     label: "Web",
-    description: "Fetch URLs and provider-native web search.",
+    description: "Fetch URLs and Firecrawl-backed web_search.",
   },
   {
     id: "sub-agent",

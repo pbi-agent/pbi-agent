@@ -24,6 +24,7 @@ import type {
   AgentMentionSearchPayload,
   BoardStage,
   BootstrapPayload,
+  HookListPayload,
   CommandCandidatesPayload,
   CommandInstallPayload,
   CommandListPayload,
@@ -221,6 +222,37 @@ export async function fetchConfigBootstrap(): Promise<ConfigBootstrapPayload> {
   return apiRequest<"GET /api/config/bootstrap", ConfigBootstrapPayload>(
     "GET /api/config/bootstrap",
     "/api/config/bootstrap",
+  );
+}
+
+export async function fetchHooks(): Promise<HookListPayload> {
+  return apiRequest<"GET /api/hooks", HookListPayload>(
+    "GET /api/hooks",
+    "/api/hooks",
+  );
+}
+
+export async function trustHook(key: string): Promise<HookListPayload> {
+  return apiRequest<"POST /api/hooks/trust", HookListPayload>(
+    "POST /api/hooks/trust",
+    "/api/hooks/trust",
+    { method: "POST", body: jsonBody("POST /api/hooks/trust", { key }) },
+  );
+}
+
+export async function enableHook(key: string): Promise<HookListPayload> {
+  return apiRequest<"POST /api/hooks/enable", HookListPayload>(
+    "POST /api/hooks/enable",
+    "/api/hooks/enable",
+    { method: "POST", body: jsonBody("POST /api/hooks/enable", { key }) },
+  );
+}
+
+export async function disableHook(key: string): Promise<HookListPayload> {
+  return apiRequest<"POST /api/hooks/disable", HookListPayload>(
+    "POST /api/hooks/disable",
+    "/api/hooks/disable",
+    { method: "POST", body: jsonBody("POST /api/hooks/disable", { key }) },
   );
 }
 

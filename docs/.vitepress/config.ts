@@ -131,6 +131,7 @@ export default defineConfig({
               { text: 'Project Skills', link: '/customization/skills' },
               { text: 'Project Commands', link: '/customization/commands' },
               { text: 'Project Sub-agents', link: '/customization/sub-agents' },
+              { text: 'Hooks', link: '/customization/hooks' },
               { text: 'Workspace Reload', link: '/customization/reload' },
               { text: 'MCP Servers', link: '/customization/mcp' },
               { text: 'File Constraints', link: '/customization/file-constraints' }
@@ -146,6 +147,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: 'Changelog', link: '/changelog/' },
+          { text: 'v0.21.0', link: '/changelog/v0.21.0' },
           { text: 'v0.20.0', link: '/changelog/v0.20.0' },
           { text: 'v0.19.0', link: '/changelog/v0.19.0' },
           { text: 'v0.18.0', link: '/changelog/v0.18.0' },
