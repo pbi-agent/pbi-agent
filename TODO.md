@@ -1,3 +1,6 @@
-- [x] Verify nested sub-agent runtime limits
-- [x] Check session/run persistence supports parent-child nesting
-- [x] Summarize confirmation and caveats
+- [x] Resume release PR/workflow state and protect unrelated changes
+- [x] Inspect release PR branch, commits, diffs, and checks
+- [x] Run/verify required release validation
+- [x] Push release branch and open release PR
+- [x] Merge/publish release and verify tag, GitHub Release, and package status
+- [x] Update task memory and report outcome
