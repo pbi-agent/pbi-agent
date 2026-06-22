@@ -8,6 +8,7 @@ import { useSidebarShortcut } from "../hooks/useSidebar";
 import { useTaskEvents } from "../hooks/useTaskEvents";
 import { AskUserNotificationEffects } from "./notifications/AskUserNotificationEffects";
 import { SessionEndedNotificationEffects } from "./notifications/SessionEndedNotificationEffects";
+import { SessionFinishedNotificationEffects } from "./notifications/SessionFinishedNotificationEffects";
 import { LoadingSpinner } from "./shared/LoadingSpinner";
 import { OnboardingModal } from "./OnboardingModal";
 import { AppSidebarLayout } from "./AppSidebar";
@@ -74,6 +75,7 @@ export function AppShell() {
   return (
     <div className="app-shell bg-background text-foreground">
       <AskUserNotificationEffects />
+      <SessionFinishedNotificationEffects />
       <SessionEndedNotificationEffects
         liveSessionEvents={liveSessionEvents}
         liveSessions={bootstrap?.live_sessions ?? []}

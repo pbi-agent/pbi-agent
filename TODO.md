@@ -1,7 +1,7 @@
-- [x] Inspect Hooks badge styling against settings badge patterns
-- [x] Patch Hooks badge markup/CSS
-- [ ] Run focused frontend validation
-- [ ] Update task memory
-- [x] Update orchestrate planning instructions
-- [x] Validate orchestrate command diff
-- [x] Update memory for orchestrate command edit
+# Session TODO
+
+- [x] Diagnose why successful main-session end notifications don't fire while AFK
+- [x] Add store-driven `SessionFinishedNotificationEffects` (turn finished, input re-enabled, no question/error) firing notification + sound when AFK
+- [x] Mount in `AppShell`
+- [x] Add component test
+- [x] Validate: vitest, lint, typecheck, web:build, full test:web
