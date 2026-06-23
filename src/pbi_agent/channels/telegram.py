@@ -30,10 +30,10 @@ from pbi_agent.models.messages import (
 )
 from pbi_agent.session_store import MessageImageAttachment, MessageRecord, SessionStore
 from pbi_agent.task_runner import run_single_turn_in_directory
+from pbi_agent.channels.telegram_markdown import format_telegram_markdown_chunks
 from pbi_agent.channels.types import ChannelRuntimeStatus, TelegramChannelConfig
 
 TELEGRAM_PLATFORM = "telegram"
-TELEGRAM_MESSAGE_LIMIT_UTF16 = 4096
 DEFAULT_IMAGE_PROMPT = "Please analyze the attached image."
 
 
@@ -101,8 +101,10 @@ class TelegramBotClient:
         text: str,
         thread_id: int | None = None,
     ) -> None:
-        for chunk in split_telegram_text(text):
-            payload: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
+        for chunk_text, entities in format_telegram_markdown_chunks(text):
+            payload: dict[str, Any] = {"chat_id": chat_id, "text": chunk_text}
+            if entities:
+                payload["entities"] = entities
             if thread_id is not None:
                 payload["message_thread_id"] = thread_id
             self._request("sendMessage", payload)
@@ -731,26 +733,6 @@ def parse_telegram_update(
         thread_id=thread_id,
         attachments=attachments,
     )
-
-
-def split_telegram_text(text: str) -> list[str]:
-    if not text:
-        return [""]
-    chunks: list[str] = []
-    current = ""
-    current_units = 0
-    for char in text:
-        units = len(char.encode("utf-16-le")) // 2
-        if current and current_units + units > TELEGRAM_MESSAGE_LIMIT_UTF16:
-            chunks.append(current)
-            current = char
-            current_units = units
-        else:
-            current += char
-            current_units += units
-    if current:
-        chunks.append(current)
-    return chunks
 
 
 def _is_new_session_command(text: str) -> bool:

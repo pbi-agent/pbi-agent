@@ -1,13 +1,28 @@
-- [x] Reviewer round 1: review existing /new implementation
-- [x] Fixer round 1: reserve `/new` in central project-command alias validation
-- [x] Main: inspect fixer diff and run focused validation
+- [x] Reviewer round 1: review existing Telegram Markdown implementation
+- [x] Main: inspect reviewer outcome
+- [x] Fixer round 1: resolve reviewer finding about split entity trailing whitespace
+- [x] Main: inspect fixer diff and rerun focused validation
 - [x] Reviewer round 2: verify reviewer finding is resolved
-- [x] Main: inspect reviewer result and run focused validation
-- [x] Code-quality-reviewer round 1: review maintainability
-- [x] Fixer round 2: centralize session row creation in SessionStore
-- [x] Main: inspect fixer diff and run focused validation
-- [x] Code-quality-reviewer round 2: verify maintainability fix
-- [x] Main: inspect code-quality result and run focused validation
+- [x] Fixer round 2: resolve reviewer findings about backslashes and empty chunks
+- [x] Main: inspect fixer round 2 diff and rerun focused validation
+- [x] Reviewer round 3: verify all reviewer findings are resolved
+- [x] Fixer round 3: resolve reviewer findings about regex escapes and multi-whitespace trim
+- [x] Main: inspect fixer round 3 diff and rerun focused validation
+- [x] Reviewer round 4: verify all reviewer findings are resolved
+- [x] Fixer round 4: resolve all-whitespace split entity trim finding
+- [x] Main: inspect fixer round 4 diff and rerun focused validation
+- [x] Reviewer round 5: verify all reviewer findings are resolved
+- [x] Fixer round 5: resolve regex marker escapes and code-overlap findings
+- [x] Main: inspect fixer round 5 diff and rerun focused validation
+- [x] Reviewer round 6: verify all reviewer findings are resolved
+- [x] Fixer round 6: resolve split-format trimming and code-link overlap findings
+- [x] Main: inspect fixer round 6 diff and rerun focused validation
+- [x] Reviewer round 7: verify all reviewer findings are resolved
+- [x] Code-quality-reviewer round 1: review maintainability of Telegram Markdown implementation
+- [x] Fixer round 7: extract Telegram Markdown formatting into focused module
+- [x] Main: inspect fixer round 7 diff and rerun validation
+- [x] Code-quality-reviewer round 2: verify maintainability after extraction
+- [x] Main: inspect code-quality outcome
 - [x] Final validation
 - [x] Update memory
 - [x] Handoff

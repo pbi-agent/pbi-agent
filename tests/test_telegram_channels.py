@@ -8,10 +8,10 @@ import threading
 from fastapi.testclient import TestClient
 
 from pbi_agent.channels.telegram import (
+    TelegramBotClient,
     TelegramInboundMessage,
     TelegramChannelRunner,
     parse_telegram_update,
-    split_telegram_text,
 )
 from pbi_agent.channels.types import TelegramChannelConfig
 from pbi_agent.config import ResolvedRuntime, Settings
@@ -101,10 +101,28 @@ def test_parse_group_topic_and_channel_photo() -> None:
     assert channel.attachments[0].file_id == "large"
 
 
-def test_split_telegram_text_counts_utf16_units() -> None:
-    chunks = split_telegram_text("a" * 4095 + "🙂")
+def test_telegram_client_sends_message_entities(monkeypatch) -> None:
+    payloads = []
+    client = TelegramBotClient("123:abc")
 
-    assert chunks == ["a" * 4095, "🙂"]
+    def fake_request(method, payload, *, timeout=None):
+        payloads.append((method, payload))
+        return {}
+
+    monkeypatch.setattr(client, "_request", fake_request)
+
+    client.send_message(chat_id="42", text="Hello **Telegram**")
+
+    assert payloads == [
+        (
+            "sendMessage",
+            {
+                "chat_id": "42",
+                "text": "Hello Telegram",
+                "entities": [{"type": "bold", "offset": 6, "length": 8}],
+            },
+        )
+    ]
 
 
 def test_channel_session_mapping_reuses_existing_session() -> None:
