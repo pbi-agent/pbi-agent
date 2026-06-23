@@ -24,8 +24,6 @@ import {
 } from "../ui/card";
 import {
   Field,
-  FieldContent,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "../ui/field";
@@ -37,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
+import { Separator } from "../ui/separator";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 
@@ -143,152 +142,162 @@ function TelegramChannelCard({
 
   const statusVariant =
     telegram.status.state === "running"
-      ? "success"
+      ? "running"
       : telegram.status.state === "error"
-        ? "warning"
+        ? "failed"
         : "secondary";
+  const statusLabel =
+    telegram.status.state.charAt(0).toUpperCase() +
+    telegram.status.state.slice(1);
+  const tokenHint = telegram.has_token_secret
+    ? "(stored; leave blank to keep)"
+    : "";
 
   return (
     <Card className="settings-item settings-channel-card">
-      <CardHeader className="settings-channel-card__header">
-        <div className="settings-channel-card__title-row">
-          <div className="settings-channel-card__heading">
-            <CardTitle className="settings-item__name settings-channel-card__title">
-              <SendIcon data-icon="inline-start" />
-              Telegram
-            </CardTitle>
-            <CardDescription className="settings-channel-card__description">
-              Text-only polling channel with photo/image document input.
-            </CardDescription>
-          </div>
-          <Badge variant={statusVariant}>{telegram.status.state}</Badge>
-        </div>
-      </CardHeader>
       <CardContent className="settings-channel-card__content">
-        <FieldGroup className="settings-channel-form">
-          {error && (
-            <Alert variant="destructive" className="settings-error-banner">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {telegram.status.error && (
-            <Alert variant="destructive" className="settings-error-banner">
-              <AlertDescription>{telegram.status.error}</AlertDescription>
-            </Alert>
-          )}
-          <Field
-            orientation="horizontal"
-            className="settings-channel-toggle"
-          >
-            <FieldContent>
-              <FieldLabel htmlFor="telegram-channel-enabled">
-                Enable Telegram
-              </FieldLabel>
-              <FieldDescription>
-                Accept Telegram messages for this workspace.
-              </FieldDescription>
-            </FieldContent>
+        <div className="settings-channel-card__header">
+          <div className="settings-channel-card__heading">
+            <SendIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+            <span className="settings-channel-card__title">Telegram</span>
+            <Badge variant={statusVariant} size="meta">
+              {statusLabel}
+            </Badge>
+          </div>
+          <div className="settings-channel-card__toggle">
+            <FieldLabel
+              htmlFor="telegram-channel-enabled"
+              className="settings-channel-card__toggle-label"
+            >
+              Enabled
+            </FieldLabel>
             <Switch
               id="telegram-channel-enabled"
+              size="sm"
               checked={enabled}
               onCheckedChange={setEnabled}
             />
-          </Field>
-          <Field className="settings-channel-field">
-            <FieldLabel>Token source</FieldLabel>
-            <Select
-              value={tokenSource}
-              onValueChange={(value) =>
-                setTokenSource(value === "secret" ? "secret" : "env")
-              }
-            >
-              <SelectTrigger className="settings-channel-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="env">Environment variable</SelectItem>
-                <SelectItem value="secret">Stored token</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          {tokenSource === "env" ? (
+          </div>
+        </div>
+
+        {error && (
+          <Alert variant="destructive" className="settings-error-banner">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {telegram.status.error && (
+          <Alert variant="destructive" className="settings-error-banner">
+            <AlertDescription>{telegram.status.error}</AlertDescription>
+          </Alert>
+        )}
+
+        <Separator />
+
+        <FieldGroup className="settings-channel-form">
+          <div className="settings-channel-grid">
             <Field className="settings-channel-field">
-              <FieldLabel>Environment variable</FieldLabel>
-              <Input
-                className="settings-channel-control"
-                value={tokenEnvVar}
-                onChange={(event) => setTokenEnvVar(event.target.value)}
-                placeholder="PBI_AGENT_TELEGRAM_BOT_TOKEN"
-              />
-            </Field>
-          ) : (
-            <Field className="settings-channel-field">
-              <FieldLabel>
-                Bot token{" "}
-                {telegram.has_token_secret ? "(stored; leave blank to keep)" : ""}
-              </FieldLabel>
-              <Input
-                className="settings-channel-control"
-                value={tokenSecret}
-                onChange={(event) => setTokenSecret(event.target.value)}
-                placeholder={
-                  telegram.has_token_secret ? "Stored token hidden" : "123:abc"
+              <FieldLabel>Token source</FieldLabel>
+              <Select
+                value={tokenSource}
+                onValueChange={(value) =>
+                  setTokenSource(value === "secret" ? "secret" : "env")
                 }
-                type="password"
+              >
+                <SelectTrigger className="settings-channel-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="env">Environment variable</SelectItem>
+                  <SelectItem value="secret">Stored token</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            {tokenSource === "env" ? (
+              <Field className="settings-channel-field">
+                <FieldLabel>Environment variable</FieldLabel>
+                <Input
+                  className="settings-channel-control"
+                  value={tokenEnvVar}
+                  onChange={(event) => setTokenEnvVar(event.target.value)}
+                  placeholder="PBI_AGENT_TELEGRAM_BOT_TOKEN"
+                />
+              </Field>
+            ) : (
+              <Field className="settings-channel-field">
+                <FieldLabel>Bot token {tokenHint}</FieldLabel>
+                <Input
+                  className="settings-channel-control"
+                  value={tokenSecret}
+                  onChange={(event) => setTokenSecret(event.target.value)}
+                  placeholder={
+                    telegram.has_token_secret ? "Stored token hidden" : "123:abc"
+                  }
+                  type="password"
+                />
+              </Field>
+            )}
+          </div>
+
+          <div className="settings-channel-grid">
+            <Field className="settings-channel-field">
+              <FieldLabel>Allowed user IDs</FieldLabel>
+              <Textarea
+                className="settings-channel-textarea"
+                value={allowedUsers}
+                onChange={(event) => setAllowedUsers(event.target.value)}
+                placeholder="One Telegram user ID per line"
               />
             </Field>
-          )}
-          <Field className="settings-channel-field">
-            <FieldLabel>Allowed user IDs</FieldLabel>
-            <Textarea
-              className="settings-channel-textarea"
-              value={allowedUsers}
-              onChange={(event) => setAllowedUsers(event.target.value)}
-              placeholder="One Telegram user ID per line"
-            />
-          </Field>
-          <Field className="settings-channel-field">
-            <FieldLabel>Allowed chat/channel IDs</FieldLabel>
-            <Textarea
-              className="settings-channel-textarea"
-              value={allowedChats}
-              onChange={(event) => setAllowedChats(event.target.value)}
-              placeholder="One group, supergroup, or channel ID per line"
-            />
-          </Field>
-          {telegram.last_update_id != null && (
-            <p className="text-muted-foreground text-sm">
-              Last Telegram update: {telegram.last_update_id}
-            </p>
-          )}
-          <div className="settings-row__actions settings-channel-actions">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onRestart}
-              disabled={busy}
-            >
-              <RefreshCwIcon data-icon="inline-start" />
-              Restart
-            </Button>
-            <Button
-              type="button"
-              onClick={() =>
-                onSave({
-                  enabled,
-                  token_source: tokenSource,
-                  token_env_var: tokenEnvVar,
-                  token_secret: tokenSecret || null,
-                  allowed_users: lines(allowedUsers),
-                  allowed_chats: lines(allowedChats),
-                })
-              }
-              disabled={busy}
-            >
-              Save Telegram
-            </Button>
+            <Field className="settings-channel-field">
+              <FieldLabel>Allowed chat/channel IDs</FieldLabel>
+              <Textarea
+                className="settings-channel-textarea"
+                value={allowedChats}
+                onChange={(event) => setAllowedChats(event.target.value)}
+                placeholder="One group, supergroup, or channel ID per line"
+              />
+            </Field>
           </div>
         </FieldGroup>
+
+        <Separator />
+
+        <div className="settings-channel-actions">
+          {telegram.last_update_id != null && (
+            <span className="settings-channel-meta">
+              Last update #{telegram.last_update_id}
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="settings-channel-button"
+            onClick={onRestart}
+            disabled={busy}
+          >
+            <RefreshCwIcon data-icon="inline-start" />
+            Restart
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="settings-channel-button"
+            onClick={() =>
+              onSave({
+                enabled,
+                token_source: tokenSource,
+                token_env_var: tokenEnvVar,
+                token_secret: tokenSecret || null,
+                allowed_users: lines(allowedUsers),
+                allowed_chats: lines(allowedChats),
+              })
+            }
+            disabled={busy}
+          >
+            Save
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

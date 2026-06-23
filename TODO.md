@@ -1,3 +1,3 @@
-- [x] Fix Channels settings layout and generic sidebar label
-- [x] Run focused frontend validation
-- [x] Update memory
+- [x] Inspect channel button hover styles and shared app button patterns
+- [x] Update channel action button hover border styling
+- [x] Run focused validation
