@@ -99,6 +99,7 @@ from pbi_agent.agent.session.shared import (
     HOOKS_COMMAND,
     INTERACTIVE_ONLY_TOOLS,
     MCP_COMMAND,
+    NEW_COMMAND,
     NEW_SESSION_SENTINEL,
     RELOAD_COMMAND,
     RESUME_SESSION_PREFIX,
@@ -553,7 +554,11 @@ def run_session_loop(
                     turn_interactive_mode = False
                     turn_include_tool_history = include_tool_history
                     queued_item_id = None
-                if user_input == NEW_SESSION_SENTINEL:
+                normalized_command = _normalize_user_command(user_input)
+                if (
+                    user_input == NEW_SESSION_SENTINEL
+                    or normalized_command == NEW_COMMAND
+                ):
                     provider.reset_conversation()
                     session_usage = _reset_session(
                         current_runtime,
@@ -593,7 +598,6 @@ def run_session_loop(
                 if user_input.lower() in {"exit", "quit"}:
                     should_exit = True
                     break
-                normalized_command = _normalize_user_command(user_input)
                 if normalized_command == SKILLS_COMMAND:
                     _render_temporary_command_markdown(
                         format_project_skills_markdown(

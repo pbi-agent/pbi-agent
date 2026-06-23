@@ -1,3 +1,13 @@
-- [x] Inspect channel button hover styles and shared app button patterns
-- [x] Update channel action button hover border styling
-- [x] Run focused validation
+- [x] Reviewer round 1: review existing /new implementation
+- [x] Fixer round 1: reserve `/new` in central project-command alias validation
+- [x] Main: inspect fixer diff and run focused validation
+- [x] Reviewer round 2: verify reviewer finding is resolved
+- [x] Main: inspect reviewer result and run focused validation
+- [x] Code-quality-reviewer round 1: review maintainability
+- [x] Fixer round 2: centralize session row creation in SessionStore
+- [x] Main: inspect fixer diff and run focused validation
+- [x] Code-quality-reviewer round 2: verify maintainability fix
+- [x] Main: inspect code-quality result and run focused validation
+- [x] Final validation
+- [x] Update memory
+- [x] Handoff

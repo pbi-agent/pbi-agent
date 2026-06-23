@@ -18,6 +18,7 @@ from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     ConfigConflictError,
     ConfigError,
+    CommandConfig,
     CommandManifestError,
     InternalConfig,
     MaintenanceConfig,
@@ -667,8 +668,25 @@ def test_list_command_configs_skips_reserved_command_alias(tmp_path: Path) -> No
         "hooks.md",
         _command_markdown("hooks", "List project hooks.", "List project hooks."),
     )
+    _write_command(
+        tmp_path,
+        "new.md",
+        _command_markdown("new", "Start a new session.", "Start a new session."),
+    )
 
     assert list_command_configs(tmp_path) == []
+
+
+def test_command_config_rejects_reserved_new_alias() -> None:
+    command = CommandConfig(
+        id="new",
+        name="New",
+        slash_alias="/new",
+        instructions="Start a new session.",
+    )
+
+    with pytest.raises(ConfigError, match="reserved"):
+        command.validate()
 
 
 def test_list_command_configs_skips_empty_files(tmp_path: Path) -> None:

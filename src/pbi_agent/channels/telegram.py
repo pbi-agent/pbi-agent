@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pbi_agent.agent.session.shared import NEW_COMMAND
 from pbi_agent.config import ResolvedRuntime
 from pbi_agent.display.protocol import (
     PendingToolCall,
@@ -542,6 +543,9 @@ class TelegramChannelRunner:
 
     def _run_turn(self, message: TelegramInboundMessage) -> None:
         prompt = message.text.strip() or DEFAULT_IMAGE_PROMPT
+        if _is_new_session_command(prompt):
+            self._create_new_channel_session(message)
+            return
         images: list[ImageAttachment] = []
         for attachment in message.attachments:
             try:
@@ -588,6 +592,25 @@ class TelegramChannelRunner:
             chat_id=message.chat_id,
             thread_id=message.thread_id,
             text=response,
+        )
+
+    def _create_new_channel_session(self, message: TelegramInboundMessage) -> None:
+        settings = self._runtime.settings
+        with SessionStore() as store:
+            store.create_channel_session_mapping(
+                directory=self._directory_key,
+                platform=TELEGRAM_PLATFORM,
+                source_key=message.source_key,
+                provider=settings.provider,
+                provider_id=self._runtime.provider_id,
+                profile_id=self._runtime.profile_id,
+                model=settings.model,
+                title=message.title,
+            )
+        self._client.send_message(
+            chat_id=message.chat_id,
+            thread_id=message.thread_id,
+            text="Started a new conversation. Send your next message to continue here.",
         )
 
     def _send_turn_error(self, message: TelegramInboundMessage) -> None:
@@ -728,6 +751,10 @@ def split_telegram_text(text: str) -> list[str]:
     if current:
         chunks.append(current)
     return chunks
+
+
+def _is_new_session_command(text: str) -> bool:
+    return " ".join(text.strip().lower().split()) == NEW_COMMAND
 
 
 def resolve_telegram_token(config: TelegramChannelConfig) -> str:

@@ -6,6 +6,7 @@ import { renderWithProviders } from "../../test/render";
 import { useLiveSessionEvents } from "../../hooks/useLiveSessionEvents";
 import {
   ApiError,
+  createSession,
   enhancePrompt,
   expandSessionInput,
   fetchBootstrap,
@@ -240,6 +241,14 @@ vi.mock("./Composer", async () => {
           <button
             type="button"
             onClick={() => {
+              void onSubmit({ text: "/new", images: [] });
+            }}
+          >
+            Submit New Slash
+          </button>
+          <button
+            type="button"
+            onClick={() => {
               void onSubmit({ text: "!ls -la", images: [] });
             }}
           >
@@ -281,6 +290,7 @@ vi.mock("../../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api")>();
   return {
     ...actual,
+    createSession: vi.fn(),
     deleteSession: vi.fn(),
     enhancePrompt: vi.fn(),
     expandSessionInput: vi.fn(),
@@ -599,6 +609,9 @@ describe("SessionPage", () => {
     vi.mocked(fetchBootstrap).mockResolvedValue(makeBootstrap());
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap());
     vi.mocked(fetchSessions).mockResolvedValue([makeSessionRecord()]);
+    vi.mocked(createSession).mockResolvedValue(
+      makeSessionRecord({ session_id: "fresh-session", title: "" }),
+    );
     vi.mocked(enhancePrompt).mockResolvedValue({
       text: "Refined prompt.",
       session: makeSessionRecord({ total_tokens: 42, input_tokens: 30, output_tokens: 12 }),
@@ -1735,6 +1748,26 @@ describe("SessionPage", () => {
       interactive_mode: false,
       include_tool_history: false,
     });
+  });
+
+  it("starts and redirects to a fresh session for the new slash command", async () => {
+    const user = userEvent.setup();
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Timeline 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Submit New Slash" }));
+
+    await waitFor(() => expect(createSession).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(createSession).mock.calls[0]?.[0]).toEqual({
+      profile_id: "analysis",
+    });
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(expandSessionInput).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(fetchSessionDetail).toHaveBeenCalledWith("fresh-session")
+    );
   });
 
   it("persists and sends the include tool history preference", async () => {

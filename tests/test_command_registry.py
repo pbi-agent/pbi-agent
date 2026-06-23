@@ -9,6 +9,7 @@ from pbi_agent.web.command_registry import (
 
 def test_list_slash_commands_for_web_excludes_local_only_commands() -> None:
     assert [command.name for command in list_slash_commands()] == [
+        "/new",
         "/skills",
         "/mcp",
         "/agents",
@@ -27,6 +28,7 @@ def test_search_slash_commands_ranks_matches_by_name_and_keywords() -> None:
     assert [command.name for command in search_slash_commands("serv")] == ["/mcp"]
     assert [command.name for command in search_slash_commands("bootstrap")] == ["/init"]
     assert [command.name for command in search_slash_commands("refresh")] == ["/reload"]
+    assert [command.name for command in search_slash_commands("fresh")] == ["/new"]
     assert [command.name for command in search_slash_commands("trust")] == ["/hooks"]
 
 

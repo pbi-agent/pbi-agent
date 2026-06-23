@@ -99,6 +99,11 @@ type SubAgentDisplayMap = Record<string, {
 const EMPTY_TIMELINE_ITEMS: TimelineItem[] = [];
 const TOOL_HISTORY_SHORTCUT = "Alt+Shift+H";
 const WORKSPACE_EXPLORER_SHORTCUT = "Alt+Shift+E";
+const NEW_SESSION_COMMAND = "/new";
+
+function normalizeSessionCommand(value: string): string {
+  return value.trim().toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+}
 
 function formatAltShiftShortcut(key: string): string {
   const platform = typeof navigator === "undefined" ? "" : navigator.platform;
@@ -770,6 +775,15 @@ export function SessionPage({
     try {
       const { text, images } = payload;
       setInputWarnings([]);
+      if (normalizeSessionCommand(text) === NEW_SESSION_COMMAND) {
+        if (images.length > 0) {
+          throw new Error("New session commands cannot include image attachments.");
+        }
+        await createSessionMutation.mutateAsync({
+          ...(selectedSavedProfileId ? { profile_id: selectedSavedProfileId } : {}),
+        });
+        return;
+      }
       if (text.startsWith("!")) {
         if (images.length > 0) {
           throw new Error("Shell commands cannot include image attachments.");

@@ -129,6 +129,110 @@ def test_channel_session_mapping_reuses_existing_session() -> None:
     assert second == first
 
 
+def test_channel_session_mapping_can_replace_default_session() -> None:
+    with SessionStore() as store:
+        first = store.get_or_create_channel_session_mapping(
+            directory="workspace",
+            platform="telegram",
+            source_key="dm:123",
+            provider="openai",
+            model="gpt-5.4",
+            title="Telegram dm:123",
+        )
+        fresh = store.create_channel_session_mapping(
+            directory="workspace",
+            platform="telegram",
+            source_key="dm:123",
+            provider="openai",
+            model="gpt-5.4",
+            title="Telegram dm:123",
+        )
+        reused = store.get_or_create_channel_session_mapping(
+            directory="workspace",
+            platform="telegram",
+            source_key="dm:123",
+            provider="openai",
+            model="gpt-5.4",
+            title="ignored",
+        )
+
+    assert fresh != first
+    assert reused == fresh
+
+
+def test_telegram_new_command_remaps_source_without_agent_run(
+    tmp_path, monkeypatch
+) -> None:
+    config = TelegramChannelConfig(
+        enabled=True,
+        token_source="secret",
+        token_secret="123:abc",
+        allowed_users=["123"],
+    )
+    runtime = ResolvedRuntime(
+        settings=Settings(api_key="test-key", provider="openai"),
+        provider_id=None,
+        profile_id=None,
+    )
+    directory_key = f"telegram-new-{tmp_path.name}"
+    runner = TelegramChannelRunner(
+        runtime=runtime,
+        workspace_root=Path.cwd(),
+        directory_key=directory_key,
+        config=config,
+        owner_id="owner-new",
+    )
+    fake_client = _FakeTelegramClient()
+    runner._client = fake_client  # type: ignore[assignment]
+
+    with SessionStore() as store:
+        old_session_id = store.get_or_create_channel_session_mapping(
+            directory=directory_key,
+            platform="telegram",
+            source_key="dm:123",
+            provider="openai",
+            model="gpt-5.4",
+            title="Telegram dm:123",
+        )
+
+    def fail_run_single_turn(*args, **kwargs):
+        raise AssertionError("agent turn should not run for /new")
+
+    monkeypatch.setattr(
+        "pbi_agent.channels.telegram.run_single_turn_in_directory",
+        fail_run_single_turn,
+    )
+
+    runner._run_turn(
+        TelegramInboundMessage(
+            update_id=1,
+            chat_id="123",
+            message_id=1,
+            source_key="dm:123",
+            title="Telegram dm:123",
+            text="/new",
+        )
+    )
+
+    with SessionStore() as store:
+        new_session_id = store.get_or_create_channel_session_mapping(
+            directory=directory_key,
+            platform="telegram",
+            source_key="dm:123",
+            provider="openai",
+            model="gpt-5.4",
+            title="ignored",
+        )
+
+    assert new_session_id != old_session_id
+    assert fake_client.messages == [
+        (
+            "123",
+            "Started a new conversation. Send your next message to continue here.",
+        )
+    ]
+
+
 def test_token_lease_blocks_same_token_in_second_workspace() -> None:
     config = TelegramChannelConfig(
         enabled=True,

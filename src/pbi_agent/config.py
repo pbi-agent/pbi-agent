@@ -100,6 +100,7 @@ RESERVED_COMMAND_ALIASES = frozenset(
         "/mcp",
         "/agents",
         "/init",
+        "/new",
         "/reload",
         "/compact",
         "/extensions",

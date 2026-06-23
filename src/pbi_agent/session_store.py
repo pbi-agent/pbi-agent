@@ -1212,29 +1212,66 @@ class SessionStore:
                 return str(row["session_id"])
 
             session_id = uuid.uuid4().hex
-            self._conn.execute(
-                "INSERT INTO sessions "
-                "(session_id, directory, provider, provider_id, model, profile_id, previous_id, title, "
-                "total_tokens, input_tokens, output_tokens, cost_usd, is_fork, "
-                "forked_from_session_id, forked_from_message_id, fork_created_at, "
-                "created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, 0, NULL, NULL, NULL, ?, ?)",
-                (
-                    session_id,
-                    normalized_directory,
-                    provider,
-                    provider_id,
-                    model,
-                    profile_id,
-                    title,
-                    now,
-                    now,
-                ),
+            self._insert_session_locked(
+                session_id=session_id,
+                directory=normalized_directory,
+                provider=provider,
+                provider_id=provider_id,
+                model=model,
+                profile_id=profile_id,
+                title=title,
+                now=now,
             )
             self._conn.execute(
                 "INSERT INTO channel_session_mappings "
                 "(directory, platform, source_key, session_id, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    normalized_directory,
+                    normalized_platform,
+                    source_key,
+                    session_id,
+                    now,
+                    now,
+                ),
+            )
+            self._conn.commit()
+        return session_id
+
+    def create_channel_session_mapping(
+        self,
+        *,
+        directory: str,
+        platform: str,
+        source_key: str,
+        provider: str,
+        model: str,
+        provider_id: str | None = None,
+        profile_id: str | None = None,
+        title: str = "",
+    ) -> str:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_platform = platform.strip().casefold()
+        session_id = uuid.uuid4().hex
+        now = _now_iso()
+        with self._lock:
+            self._insert_session_locked(
+                session_id=session_id,
+                directory=normalized_directory,
+                provider=provider,
+                provider_id=provider_id,
+                model=model,
+                profile_id=profile_id,
+                title=title,
+                now=now,
+            )
+            self._conn.execute(
+                "INSERT INTO channel_session_mappings "
+                "(directory, platform, source_key, session_id, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(directory, platform, source_key) DO UPDATE SET "
+                "session_id = excluded.session_id, "
+                "updated_at = excluded.updated_at",
                 (
                     normalized_directory,
                     normalized_platform,
@@ -1647,27 +1684,50 @@ class SessionStore:
         now = _now_iso()
         normalized_directory = _normalize_directory_key(directory)
         with self._lock:
-            self._conn.execute(
-                "INSERT INTO sessions "
-                "(session_id, directory, provider, provider_id, model, profile_id, previous_id, title, "
-                "total_tokens, input_tokens, output_tokens, cost_usd, is_fork, "
-                "forked_from_session_id, forked_from_message_id, fork_created_at, "
-                "created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, 0, NULL, NULL, NULL, ?, ?)",
-                (
-                    session_id,
-                    normalized_directory,
-                    provider,
-                    provider_id,
-                    model,
-                    profile_id,
-                    title,
-                    now,
-                    now,
-                ),
+            self._insert_session_locked(
+                session_id=session_id,
+                directory=normalized_directory,
+                provider=provider,
+                provider_id=provider_id,
+                model=model,
+                profile_id=profile_id,
+                title=title,
+                now=now,
             )
             self._conn.commit()
         return session_id
+
+    def _insert_session_locked(
+        self,
+        *,
+        session_id: str,
+        directory: str,
+        provider: str,
+        provider_id: str | None,
+        model: str,
+        profile_id: str | None,
+        title: str,
+        now: str,
+    ) -> None:
+        self._conn.execute(
+            "INSERT INTO sessions "
+            "(session_id, directory, provider, provider_id, model, profile_id, previous_id, title, "
+            "total_tokens, input_tokens, output_tokens, cost_usd, is_fork, "
+            "forked_from_session_id, forked_from_message_id, fork_created_at, "
+            "created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, 0, NULL, NULL, NULL, ?, ?)",
+            (
+                session_id,
+                directory,
+                provider,
+                provider_id,
+                model,
+                profile_id,
+                title,
+                now,
+                now,
+            ),
+        )
 
     def fork_session(self, session_id: str, fork_message_id: int) -> str:
         """Create a new session containing messages through ``fork_message_id``."""
