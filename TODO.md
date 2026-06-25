@@ -1,3 +1,6 @@
-- [x] Add slash-command kind badges in Composer completion list
-- [x] Add Composer tests for built-in vs project badges
-- [x] Run frontend validation (test:web, lint, typecheck)
+- [x] Inspect release context and workspace status
+- [x] Determine version and unreleased changes
+- [x] Create release branch and changelog edits
+- [x] Run release validation
+- [x] Commit, push, open release PR
+- [x] Merge/publish and verify release
