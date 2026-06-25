@@ -203,6 +203,7 @@ function makeConfigBootstrap(
         secret_source: "env_var",
         secret_env_var: "OPENAI_API_KEY",
         has_secret: true,
+        supports_stt: true,
         auth_status: {
           auth_mode: "api_key",
           backend: null,
@@ -227,6 +228,7 @@ function makeConfigBootstrap(
         secret_source: "none",
         secret_env_var: null,
         has_secret: false,
+        supports_stt: false,
         auth_status: {
           auth_mode: "chatgpt_account",
           backend: "openai-chatgpt",
@@ -528,6 +530,7 @@ function makeApiKeyProvider(
     secret_source: "env_var",
     secret_env_var: envNames[kind] ?? `${kind.toUpperCase()}_API_KEY`,
     has_secret: hasSecret,
+    supports_stt: ["openai", "xai", "google", "deepgram", "elevenlabs"].includes(kind),
     auth_status: {
       auth_mode: "api_key",
       backend: null,
@@ -538,6 +541,81 @@ function makeApiKeyProvider(
       email: null,
       plan_type: null,
       expires_at: null,
+    },
+  };
+}
+
+function makeXaiAccountProvider(
+  id = "xai-account",
+  name = "X Account",
+): ConfigBootstrapPayload["providers"][number] {
+  return {
+    id,
+    name,
+    kind: "xai",
+    auth_mode: "xai_account",
+    responses_url: null,
+    generic_api_url: null,
+    google_cloud_project: null,
+    google_cloud_location: null,
+    secret_source: "none",
+    secret_env_var: null,
+    has_secret: false,
+    supports_stt: false,
+    auth_status: {
+      auth_mode: "xai_account",
+      backend: "xai-account",
+      session_status: "connected",
+      has_session: true,
+      can_refresh: true,
+      account_id: "x-account-1",
+      email: "x@example.com",
+      plan_type: "SuperGrok",
+      expires_at: 1_800_000_000,
+    },
+  };
+}
+
+function withXaiMetadata(
+  bootstrap: ConfigBootstrapPayload,
+  supportsStt = true,
+): ConfigBootstrapPayload {
+  return {
+    ...bootstrap,
+    options: {
+      ...bootstrap.options,
+      provider_kinds: [...bootstrap.options.provider_kinds, "xai"],
+      provider_metadata: {
+        ...bootstrap.options.provider_metadata,
+        xai: {
+          label: "xAI",
+          description: "Uses xAI API keys or X account subscription auth.",
+          default_auth_mode: "api_key",
+          auth_modes: ["api_key", "xai_account"],
+          auth_mode_metadata: {
+            api_key: {
+              label: "API key",
+              account_label: null,
+              supported_methods: [],
+            },
+            xai_account: {
+              label: "X account",
+              account_label: "X / SuperGrok subscription account",
+              supported_methods: ["browser"],
+            },
+          },
+          default_model: "grok-4.20",
+          default_sub_agent_model: "grok-4.1-fast",
+          default_responses_url: "https://api.x.ai/v1/responses",
+          default_generic_api_url: null,
+          supports_responses_url: true,
+          supports_generic_api_url: false,
+          supports_service_tier: false,
+          supports_image_inputs: true,
+          supports_model_profiles: true,
+          supports_stt: supportsStt,
+        },
+      },
     },
   };
 }
@@ -617,6 +695,7 @@ describe("SettingsPage", () => {
         secret_source: "none",
         secret_env_var: null,
         has_secret: false,
+        supports_stt: false,
         auth_status: {
           auth_mode: "chatgpt_account",
           backend: "openai-chatgpt",
@@ -2122,6 +2201,32 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not offer connected X account providers for speech-to-text", async () => {
+    const user = userEvent.setup();
+    const bootstrap = makeConfigBootstrap({
+      providers: [
+        {
+          ...makeConfigBootstrap().providers[0],
+          has_secret: false,
+        },
+        makeXaiAccountProvider(),
+      ],
+    });
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(withXaiMetadata(bootstrap));
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Speech-to-text");
+
+    expect(
+      await screen.findByText("No speech-to-text provider ready"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: /speech-to-text provider/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/X Account \(xAI\)/)).not.toBeInTheDocument();
+  });
+
   it("renders provider capability badges in the provider list", async () => {
     const user = userEvent.setup();
     const elevenLabsProvider = makeApiKeyProvider(
@@ -2129,10 +2234,17 @@ describe("SettingsPage", () => {
       "ElevenLabs Main",
       "elevenlabs",
     );
+    const xaiAccountProvider = makeXaiAccountProvider();
     vi.mocked(fetchConfigBootstrap).mockResolvedValue(
-      makeConfigBootstrap({
-        providers: [...makeConfigBootstrap().providers, elevenLabsProvider],
-      }),
+      withXaiMetadata(
+        makeConfigBootstrap({
+          providers: [
+            ...makeConfigBootstrap().providers,
+            elevenLabsProvider,
+            xaiAccountProvider,
+          ],
+        }),
+      ),
     );
 
     renderWithProviders(<SettingsPage />);
@@ -2147,10 +2259,14 @@ describe("SettingsPage", () => {
     const elevenLabsCard = (await screen.findByText("ElevenLabs Main")).closest(
       ".provider-card",
     );
+    const xaiAccountCard = (await screen.findByText("X Account")).closest(
+      ".provider-card",
+    );
 
     expect(openAiCard).not.toBeNull();
     expect(chatGptCard).not.toBeNull();
     expect(elevenLabsCard).not.toBeNull();
+    expect(xaiAccountCard).not.toBeNull();
 
     expect(
       within(openAiCard as HTMLElement).getByText("Model profiles"),
@@ -2163,7 +2279,9 @@ describe("SettingsPage", () => {
     expect(
       within(chatGptCard as HTMLElement).getByText("Model profiles"),
     ).toHaveAttribute("data-slot", "badge");
-    expect(within(chatGptCard as HTMLElement).queryByText("STT")).not.toBeInTheDocument();
+    expect(
+      within(chatGptCard as HTMLElement).queryByText("STT"),
+    ).not.toBeInTheDocument();
 
     expect(
       within(elevenLabsCard as HTMLElement).queryByText("Model profiles"),
@@ -2173,6 +2291,13 @@ describe("SettingsPage", () => {
     ).toHaveAttribute("data-slot", "badge");
     expect(
       within(elevenLabsCard as HTMLElement).queryByText("STT-only"),
+    ).not.toBeInTheDocument();
+
+    expect(
+      within(xaiAccountCard as HTMLElement).getByText("Model profiles"),
+    ).toHaveAttribute("data-slot", "badge");
+    expect(
+      within(xaiAccountCard as HTMLElement).queryByText("STT"),
     ).not.toBeInTheDocument();
   });
 
@@ -2433,6 +2558,7 @@ describe("SettingsPage", () => {
             secret_source: "none",
             secret_env_var: null,
             has_secret: false,
+            supports_stt: false,
             auth_status: {
               auth_mode: "copilot_account",
               backend: "github_copilot",
@@ -2463,6 +2589,7 @@ describe("SettingsPage", () => {
             secret_source: "none",
             secret_env_var: null,
             has_secret: false,
+            supports_stt: false,
             auth_status: {
               auth_mode: "copilot_account",
               backend: "github_copilot",
@@ -2741,6 +2868,7 @@ describe("SettingsPage", () => {
         secret_source: "none",
         secret_env_var: null,
         has_secret: false,
+        supports_stt: false,
         auth_status: {
           auth_mode: "chatgpt_account",
           backend: "openai-chatgpt",
@@ -2887,6 +3015,27 @@ describe("SettingsPage", () => {
     );
   });
 
+  it("does not show usage limits for connected X account providers", async () => {
+    const user = userEvent.setup();
+    const bootstrap = makeConfigBootstrap({
+      providers: [...makeConfigBootstrap().providers, makeXaiAccountProvider()],
+    });
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(
+      withXaiMetadata(bootstrap, false),
+    );
+
+    renderWithProviders(<SettingsPage />);
+
+    await openSettingsTab(user, "Providers");
+    await screen.findByText("X Account");
+    await openProviderActionMenu(user, "X Account");
+
+    expect(
+      screen.queryByRole("menuitem", { name: "Usage" }),
+    ).not.toBeInTheDocument();
+    expect(fetchProviderUsageLimits).not.toHaveBeenCalled();
+  });
+
   it("fetches provider models when the profile modal opens and when the provider changes", async () => {
     const user = userEvent.setup();
     const bootstrap = makeConfigBootstrap({
@@ -2905,6 +3054,7 @@ describe("SettingsPage", () => {
           secret_source: "env_var",
           secret_env_var: "AZURE_API_KEY",
           has_secret: true,
+          supports_stt: false,
           auth_status: {
             auth_mode: "api_key",
             backend: null,
@@ -2929,6 +3079,7 @@ describe("SettingsPage", () => {
           secret_source: "env_var",
           secret_env_var: "XAI_API_KEY",
           has_secret: true,
+          supports_stt: true,
           auth_status: {
             auth_mode: "api_key",
             backend: null,

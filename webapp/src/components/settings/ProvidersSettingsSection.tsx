@@ -42,7 +42,7 @@ function authStatusLabel(status: ProviderAuthStatus): string {
 
 function supportsUsageLimits(provider: ProviderView): boolean {
   return (
-    provider.auth_mode !== "api_key" &&
+    (provider.kind === "chatgpt" || provider.kind === "github_copilot") &&
     provider.auth_status.session_status === "connected"
   );
 }
@@ -51,8 +51,8 @@ function supportsModelProfiles(provider: ProviderView, options: ConfigOptions): 
   return options.provider_metadata[provider.kind]?.supports_model_profiles !== false;
 }
 
-function supportsStt(provider: ProviderView, options: ConfigOptions): boolean {
-  return options.provider_metadata[provider.kind]?.supports_stt === true;
+function supportsStt(provider: ProviderView): boolean {
+  return provider.supports_stt;
 }
 
 function providerCapabilityBadges(
@@ -63,7 +63,7 @@ function providerCapabilityBadges(
   if (supportsModelProfiles(provider, options)) {
     badges.push({ label: "Model profiles", variant: "secondary" });
   }
-  if (supportsStt(provider, options)) {
+  if (supportsStt(provider)) {
     badges.push({ label: "STT", variant: "info" });
   }
   return badges;

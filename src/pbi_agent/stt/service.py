@@ -12,7 +12,7 @@ from pbi_agent.config import (
     PROVIDER_API_KEY_ENVS,
     ProviderConfig,
     load_internal_config,
-    provider_supports_stt,
+    provider_config_supports_stt,
     slugify,
 )
 from pbi_agent.stt.audio import convert_wav_to_wav_s16le_16k_mono, validate_wav_bytes
@@ -61,7 +61,7 @@ def resolve_selected_stt_provider() -> ResolvedSttProvider:
         raise SttConfigurationError(
             f"Selected speech-to-text provider '{provider_id}' was not found."
         )
-    if not provider_supports_stt(provider.kind):
+    if not provider_config_supports_stt(provider):
         raise SttConfigurationError(
             f"Selected provider '{provider.id}' does not support speech-to-text."
         )

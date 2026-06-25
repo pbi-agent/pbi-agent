@@ -441,6 +441,7 @@ export type ProviderView = {
   secret_source: "none" | "plaintext" | "env_var";
   secret_env_var: string | null;
   has_secret: boolean;
+  supports_stt: boolean;
   auth_status: ProviderAuthStatus;
 };
 

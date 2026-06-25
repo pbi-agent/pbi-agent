@@ -5,6 +5,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pbi_agent import __version__
@@ -33,7 +34,13 @@ _SUPPORTED_DISCOVERY_PROVIDERS = frozenset(
     }
 )
 _OPENAI_CHATGPT_MIN_CLIENT_VERSION = "0.124.0"
+_OAUTH_REFRESH_SKEW_SECS = 3600
 _MANUAL_ENTRY_ONLY_REASONS: dict[str, str] = {}
+_XAI_ACCOUNT_CURATED_MODELS: tuple[str, ...] = (
+    # Grok CLI and Hermes both expose this model for SuperGrok/Premium+
+    # subscription auth, but xAI's public model-list endpoints currently omit it.
+    "grok-composer-2.5-fast",
+)
 
 
 @dataclass(slots=True)
@@ -218,7 +225,7 @@ def _discover_xai_models(settings: Settings) -> list[DiscoveredProviderModel]:
     payload = response.get("models", [])
     if not isinstance(payload, list):
         return []
-    return [
+    models = [
         DiscoveredProviderModel(
             id=model_id,
             display_name=_string_value(item.get("display_name")) or model_id,
@@ -233,6 +240,21 @@ def _discover_xai_models(settings: Settings) -> list[DiscoveredProviderModel]:
         if isinstance(item, dict)
         if (model_id := _string_value(item.get("id")))
     ]
+    if _is_xai_account_auth(settings.auth):
+        existing_ids = {model.id for model in models}
+        models.extend(
+            DiscoveredProviderModel(
+                id=model_id,
+                display_name=model_id,
+                owned_by="xai",
+                input_modalities=["text"],
+                output_modalities=["text"],
+                supports_reasoning_effort=_xai_supports_reasoning_effort(model_id),
+            )
+            for model_id in _XAI_ACCOUNT_CURATED_MODELS
+            if model_id not in existing_ids
+        )
+    return models
 
 
 def _discover_github_copilot_models(
@@ -417,8 +439,20 @@ def _get_json(
     extra_headers: dict[str, str] | None = None,
     auth_header: str = "Authorization",
 ) -> dict[str, Any]:
+    proactively_refreshed = False
     retried_unauthorized_refresh = False
     while True:
+        if (
+            not proactively_refreshed
+            and settings.provider == "xai"
+            and isinstance(settings.auth, OAuthSessionAuth)
+            and _oauth_refresh_due(settings.auth)
+        ):
+            settings.auth = refresh_runtime_auth(
+                provider_kind=settings.provider,
+                auth=settings.auth,
+            )
+            proactively_refreshed = True
         request_auth = build_runtime_request_auth(
             provider_kind=settings.provider,
             request_url=url,
@@ -444,7 +478,7 @@ def _get_json(
             if (
                 exc.code == 401
                 and not retried_unauthorized_refresh
-                and settings.provider in {"openai", "azure", "chatgpt"}
+                and settings.provider in {"openai", "azure", "chatgpt", "xai"}
                 and isinstance(settings.auth, OAuthSessionAuth)
             ):
                 settings.auth = refresh_runtime_auth(
@@ -556,6 +590,16 @@ def _missing_auth_error(settings: Settings) -> ProviderModelDiscoveryError | Non
                 ),
             )
         return None
+    if settings.provider == "xai":
+        if settings.auth is None:
+            return ProviderModelDiscoveryError(
+                code="auth_required",
+                message=(
+                    "Missing authentication for provider 'xai'. "
+                    "Connect an X account session or configure an API key first."
+                ),
+            )
+        return None
     if not settings.api_key:
         return ProviderModelDiscoveryError(
             code="auth_required",
@@ -591,6 +635,19 @@ def _read_error_body(exc: urllib.error.HTTPError) -> str:
         return exc.read().decode("utf-8")
     except Exception:
         return ""
+
+
+def _oauth_refresh_due(auth: OAuthSessionAuth) -> bool:
+    if auth.expires_at is None:
+        return False
+    refresh_at = datetime.fromtimestamp(auth.expires_at, timezone.utc) - timedelta(
+        seconds=_OAUTH_REFRESH_SKEW_SECS
+    )
+    return datetime.now(timezone.utc) >= refresh_at
+
+
+def _is_xai_account_auth(auth: object) -> bool:
+    return isinstance(auth, OAuthSessionAuth) and auth.backend == "xai_account"
 
 
 def _whole_version(version: str) -> str:

@@ -24,6 +24,7 @@ from pbi_agent.config import (
     list_command_configs,
     load_internal_config,
     load_internal_config_snapshot,
+    provider_config_supports_stt,
     provider_has_secret,
     provider_secret_source,
     provider_ui_metadata,
@@ -806,6 +807,7 @@ class ConfigurationMixin:
             "secret_source": provider_secret_source(provider),
             "secret_env_var": provider.api_key_env,
             "has_secret": provider_has_secret(provider),
+            "supports_stt": provider_config_supports_stt(provider),
             "auth_status": self._auth_status_view(auth_status),
         }
 

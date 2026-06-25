@@ -12,6 +12,7 @@ from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
     AUTH_MODE_COPILOT_ACCOUNT,
+    AUTH_MODE_XAI_ACCOUNT,
 )
 from pbi_agent.config import (
     OPENAI_SERVICE_TIERS,
@@ -845,6 +846,7 @@ def build_parser() -> argparse.ArgumentParser:
             AUTH_MODE_API_KEY,
             AUTH_MODE_CHATGPT_ACCOUNT,
             AUTH_MODE_COPILOT_ACCOUNT,
+            AUTH_MODE_XAI_ACCOUNT,
         ],
         default=None,
         help="Provider authentication mode.",
@@ -882,6 +884,7 @@ def build_parser() -> argparse.ArgumentParser:
             AUTH_MODE_API_KEY,
             AUTH_MODE_CHATGPT_ACCOUNT,
             AUTH_MODE_COPILOT_ACCOUNT,
+            AUTH_MODE_XAI_ACCOUNT,
         ],
         default=None,
         help="Provider authentication mode.",

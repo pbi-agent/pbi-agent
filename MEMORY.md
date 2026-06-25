@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-06-23
+- Last compacted: 2026-06-24
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -25,6 +25,7 @@
 - Branding/providers: public copy = token-efficient local coding agent with browser web UI as main interface and non-interactive CLI for scripted/terminal runs; token-efficiency pillars are compact instructions, bounded workspace output, and omitted tool history by default. Preserve `pbi-agent`, `pbi_agent`, `PBI_AGENT_*`, `~/.pbi-agent`, logo `src/pbi_agent/web/static/logo.jpg`.
 - Provider modularization: shared helpers in `src/pbi_agent/providers/{transport,auth_strategies,endpoints,tool_execution,runtime}.py`; protocol helpers in `src/pbi_agent/providers/protocols/`. Existing providers use these where safe; OpenAI transport remains specialized, tool execution shared. Generic Chat Completions usage must preserve OpenAI-compatible prompt cache fields (`prompt_tokens_details.cached_tokens`, cache writes) into `TokenUsage`.
 - Generic Chat Completions: omit `tools`/`tool_choice` when no tools are available; parse reasoning from `reasoning`, `reasoning_content`, `reasoning_details`, and inline `<think>...</think>` blocks; preserve raw tagged reasoning in replay messages while display text remains separated.
+- xAI auth: `xai` supports API key plus `xai_account` OAuth subscription auth. OAuth uses xAI OIDC/PKCE via `urllib.request`, fixed `http://127.0.0.1:56121/callback` with no port fallback, validated HTTPS `x.ai`/`*.x.ai` URLs, and proactive/401 refresh for model discovery. xAI account discovery merges curated OAuth-only `grok-composer-2.5-fast` because Grok CLI/Hermes expose it while xAI model-list endpoints omit it. `ProviderView.supports_stt` is provider-level STT eligibility; xAI account is not STT/usage-limits capable unless support is added.
 - Model catalog: bundled pricing includes `glm-5.2` and `minimax-m3`; catalog key lookups normalize lower-case for case-insensitive exact/prefix matching.
 - OpenAI/ChatGPT: Responses use `instructions` + `previous_response_id`; Responses requests include `reasoning.encrypted_content` alongside provider-specific include values. GitHub Copilot Responses does not support `previous_response_id`; replay local history for user turns and tool follow-ups. ChatGPT subscription prepends system prompt. Codex transport is WebSocket-only with split timeouts/retry events, no unsupported compression.
 - Saved-session replay: cross-provider replay falls back to canonical message/tool history when raw traces incompatible. Responses replay strips output-only fields before request history. Responses-style providers persist/replay only final assistant output message while live display may show intermediate messages.
@@ -52,9 +53,6 @@
 
 ## Detailed Task Events
 
-## 2026-06-23
-- Adjusted Channels settings button hover styling: channel cards stay inert while Restart/Save buttons now have explicit hover/focus border-color, halo, and lift matching app action-button patterns; rebuilt static web bundle. Validation: `bun run typecheck`, `bun run lint`, `bun run web:build`, `git diff --check`.
-- Added built-in `/new`: browser slash submit creates/redirects to a fresh saved session; Telegram `/new` remaps the source to a new saved session without running the agent; `/new` is reserved/discoverable. Validation: focused pytest, Ruff, format check, basedpyright, frontend typecheck/lint, `bun run test:web` (passed on rerun), `bun run web:build`, `git diff --check`.
-- Reviewed `/new` implementation via reviewer/code-quality gates; fixed central `/new` reservation and factored default saved-session insertion through `SessionStore._insert_session_locked()`. Validation: full Ruff/format/basedpyright/pytest plus frontend test/lint/typecheck/build and `git diff --check`.
-- Added Telegram outbound Markdown rendering via Bot API message entities for headings/bold/italic/strike/code/pre/links with UTF-16 offsets and chunk splitting. Validation: focused Telegram pytest, Ruff, format check, basedpyright, `git diff --check`.
-- Review-gated Telegram outbound Markdown: fixed entity edge cases (split trimming, escapes, code/link overlaps), extracted formatter to `telegram_markdown.py`, and split focused tests. Validation: full `uv run ruff check .`, `uv run ruff format --check .`, `uv run basedpyright`, `uv run pytest -q --tb=short -x`.
+## 2026-06-24
+- Added xAI/X subscription auth (`xai_account`) with OAuth PKCE, fixed xAI callback, runtime/model-discovery OAuth auth, provider-level STT eligibility, CLI/web/API/frontend alignment, focused tests, and rebuilt static web bundle. Validation: `bun run web:api-types`, Ruff, format check, basedpyright, full pytest, full `bun run test:web`, frontend lint/typecheck, `bun run web:build`, `git diff --check`; review and code-quality gates ended clean.
+- Added xAI subscription model-discovery curated extra `grok-composer-2.5-fast` after confirming local `grok models` and Hermes curate it as OAuth-callable but absent from public model-list endpoints; API-key xAI discovery stays endpoint-only. Validation: focused model discovery pytest, Ruff, format check, and basedpyright for touched Python files.

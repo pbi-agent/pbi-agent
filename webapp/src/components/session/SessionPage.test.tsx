@@ -356,6 +356,7 @@ function makeConfigBootstrap(
         secret_source: "env_var",
         secret_env_var: "OPENAI_API_KEY",
         has_secret: true,
+        supports_stt: true,
         auth_status: {
           auth_mode: "api_key",
           backend: null,
@@ -1045,6 +1046,83 @@ describe("SessionPage", () => {
     expect(document.body.dataset.mockTranscript).toBe("dictated request");
   });
 
+  it("uses provider-level STT support for connected X account dictation readiness", async () => {
+    const defaultConfig = makeConfigBootstrap();
+    vi.mocked(fetchConfigBootstrap).mockResolvedValue(makeConfigBootstrap({
+      stt_provider_id: "xai-account",
+      providers: [
+        {
+          id: "xai-account",
+          name: "X Account",
+          kind: "xai",
+          auth_mode: "xai_account",
+          responses_url: null,
+          generic_api_url: null,
+          google_cloud_project: null,
+          google_cloud_location: null,
+          secret_source: "none",
+          secret_env_var: null,
+          has_secret: false,
+          supports_stt: false,
+          auth_status: {
+            auth_mode: "xai_account",
+            backend: "xai_account",
+            session_status: "connected",
+            has_session: true,
+            can_refresh: true,
+            account_id: "acct-x",
+            email: "x@example.com",
+            plan_type: null,
+            expires_at: null,
+          },
+        },
+      ],
+      options: {
+        ...defaultConfig.options,
+        provider_kinds: ["xai"],
+        provider_metadata: {
+          xai: {
+            label: "xAI",
+            description: "Uses xAI.",
+            default_auth_mode: "api_key",
+            auth_modes: ["api_key", "xai_account"],
+            auth_mode_metadata: {
+              api_key: {
+                label: "API key",
+                account_label: null,
+                supported_methods: [],
+              },
+              xai_account: {
+                label: "X account",
+                account_label: "X / SuperGrok subscription account",
+                supported_methods: ["browser"],
+              },
+            },
+            default_model: "grok-4",
+            default_sub_agent_model: null,
+            default_responses_url: null,
+            default_generic_api_url: null,
+            supports_responses_url: false,
+            supports_generic_api_url: false,
+            supports_service_tier: false,
+            supports_image_inputs: true,
+            supports_model_profiles: true,
+            supports_stt: true,
+          },
+        },
+      },
+    }));
+
+    renderSessionRoute("/sessions/session-1");
+
+    expect(await screen.findByText("Composer dictation available false")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/Composer dictation reason/)).toHaveTextContent(
+        "X Account does not support speech-to-text. Choose another provider in Settings.",
+      );
+    });
+  });
+
   it("passes a Settings reason when no STT provider is selected", async () => {
     renderSessionRoute("/sessions/session-1");
 
@@ -1117,6 +1195,7 @@ describe("SessionPage", () => {
         {
           ...makeConfigBootstrap().providers[0],
           has_secret: false,
+          supports_stt: true,
         },
       ],
     }));

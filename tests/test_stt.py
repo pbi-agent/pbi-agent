@@ -385,6 +385,32 @@ def test_stt_unsupported_selected_provider_rejected() -> None:
     assert "does not support speech-to-text" in response.json()["detail"]
 
 
+def test_stt_xai_account_provider_rejected_before_api_key_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-env-key")
+    provider = ProviderConfig(
+        id="x-account",
+        name="X Account",
+        kind="xai",
+        auth_mode="xai_account",
+    )
+    provider.validate()
+    save_internal_config(
+        InternalConfig(
+            providers=[provider],
+            web=WebConfig(stt_provider_id="x-account"),
+        )
+    )
+    app = create_app(_settings())
+
+    with TestClient(app) as client:
+        response = _post_wav(client)
+
+    assert response.status_code == 400
+    assert "does not support speech-to-text" in response.json()["detail"]
+
+
 def test_stt_rejects_non_wav_upload(monkeypatch: pytest.MonkeyPatch) -> None:
     _select_provider(
         ProviderConfig(

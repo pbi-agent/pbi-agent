@@ -725,7 +725,7 @@ export function SessionPage({
       };
     }
 
-    if (config.options.provider_metadata[provider.kind]?.supports_stt !== true) {
+    if (!provider.supports_stt) {
       return {
         available: false,
         reason: `${provider.name} does not support speech-to-text. Choose another provider in Settings.`,
