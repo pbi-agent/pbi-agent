@@ -18,6 +18,11 @@ class SlashCommand:
 
 COMMANDS: tuple[SlashCommand, ...] = (
     SlashCommand(
+        name="/new",
+        description="Start a fresh session",
+        hidden_keywords="new fresh reset restart conversation chat session",
+    ),
+    SlashCommand(
         name="/skills",
         description="Show discovered project skills",
         hidden_keywords="skill catalog list loaded skills",

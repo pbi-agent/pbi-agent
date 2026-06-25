@@ -11,6 +11,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from pbi_agent.channels.manager import WorkspaceChannelManager
+from pbi_agent.channels.setup import (
+    apply_telegram_channel_update,
+    channels_payload,
+)
+
 from pbi_agent.config import ResolvedRuntime, Settings
 from pbi_agent.session_store import (
     RecentWorkspaceRecord,
@@ -358,6 +364,12 @@ class WebSessionManager(
         self._lease_thread: threading.Thread | None = None
         self._started = False
         self._shutdown_requested = False
+        self._channel_manager = WorkspaceChannelManager(
+            runtime=self._default_runtime,
+            workspace_root=self._workspace_root,
+            directory_key=self._directory_key,
+            owner_id=self._manager_owner_id,
+        )
         self._lock = threading.Lock()
 
     @property
@@ -382,6 +394,20 @@ class WebSessionManager(
         if runtime is not None:
             return runtime.settings
         return self._default_runtime.settings
+
+    def get_channels_payload(self) -> dict[str, object]:
+        return channels_payload(self._channel_manager)
+
+    def update_telegram_channel(self, payload: dict[str, object]) -> dict[str, object]:
+        return apply_telegram_channel_update(
+            self._channel_manager,
+            payload,
+            restart_runner=True,
+        )
+
+    def restart_telegram_channel(self) -> dict[str, object]:
+        self._channel_manager.restart()
+        return self.get_channels_payload()
 
     def start(self) -> None:
         with self._lock:
@@ -422,6 +448,7 @@ class WebSessionManager(
             )
             self._lease_thread.start()
             self._started = True
+        self._channel_manager.start_enabled()
 
 
 class WebWorkspaceCoordinator:

@@ -6,6 +6,7 @@ from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
     AUTH_MODE_COPILOT_ACCOUNT,
+    AUTH_MODE_XAI_ACCOUNT,
     AUTH_FLOW_METHOD_BROWSER,
     AUTH_FLOW_METHOD_DEVICE,
     AuthFlowPollResult,
@@ -17,6 +18,7 @@ from pbi_agent.auth.models import (
     RequestAuthConfig,
     StoredAuthSession,
 )
+from pbi_agent.auth.browser_callback import BrowserAuthCallbackOptions
 from pbi_agent.auth.providers.base import AuthProviderBackend
 from pbi_agent.auth.providers.github_copilot import (
     GITHUB_COPILOT_BACKEND_ID,
@@ -26,6 +28,7 @@ from pbi_agent.auth.providers.openai_chatgpt import (
     OPENAI_CHATGPT_BACKEND_ID,
     OpenAIChatGPTAuthBackend,
 )
+from pbi_agent.auth.providers.xai import XAI_BACKEND_ID, XAIAuthBackend
 from pbi_agent.auth.store import (
     delete_auth_session,
     load_auth_session,
@@ -38,6 +41,8 @@ def provider_auth_backend_id(provider_kind: str, auth_mode: str) -> str | None:
         return OPENAI_CHATGPT_BACKEND_ID
     if provider_kind == "github_copilot" and auth_mode == AUTH_MODE_COPILOT_ACCOUNT:
         return GITHUB_COPILOT_BACKEND_ID
+    if provider_kind == "xai" and auth_mode == AUTH_MODE_XAI_ACCOUNT:
+        return XAI_BACKEND_ID
     return None
 
 
@@ -48,6 +53,8 @@ def provider_auth_modes(provider_kind: str) -> tuple[str, ...]:
         return (AUTH_MODE_CHATGPT_ACCOUNT,)
     if provider_kind == "github_copilot":
         return (AUTH_MODE_COPILOT_ACCOUNT,)
+    if provider_kind == "xai":
+        return (AUTH_MODE_API_KEY, AUTH_MODE_XAI_ACCOUNT)
     return (AUTH_MODE_API_KEY,)
 
 
@@ -56,6 +63,8 @@ def provider_auth_mode_label(auth_mode: str) -> str:
         return "ChatGPT account"
     if auth_mode == AUTH_MODE_COPILOT_ACCOUNT:
         return "GitHub Copilot account"
+    if auth_mode == AUTH_MODE_XAI_ACCOUNT:
+        return "X account"
     return "API key"
 
 
@@ -64,6 +73,8 @@ def provider_auth_account_label(auth_mode: str) -> str | None:
         return "ChatGPT subscription account"
     if auth_mode == AUTH_MODE_COPILOT_ACCOUNT:
         return "GitHub Copilot subscription account"
+    if auth_mode == AUTH_MODE_XAI_ACCOUNT:
+        return "X / SuperGrok subscription account"
     return None
 
 
@@ -72,6 +83,14 @@ def provider_auth_flow_methods(provider_kind: str, auth_mode: str) -> tuple[str,
         return ()
     backend = _get_backend_for_provider(provider_kind, auth_mode)
     return backend.supported_auth_flow_methods()
+
+
+def provider_browser_callback_options(
+    provider_kind: str,
+    auth_mode: str,
+) -> BrowserAuthCallbackOptions:
+    backend = _get_backend_for_provider(provider_kind, auth_mode)
+    return backend.browser_callback_options()
 
 
 def get_provider_auth_status(
@@ -305,6 +324,8 @@ def _get_backend(backend_id: str) -> AuthProviderBackend:
         return OpenAIChatGPTAuthBackend()
     if backend_id == GITHUB_COPILOT_BACKEND_ID:
         return GitHubCopilotAuthBackend()
+    if backend_id == XAI_BACKEND_ID:
+        return XAIAuthBackend()
     raise ValueError(f"Unknown auth backend '{backend_id}'.")
 
 

@@ -45,6 +45,10 @@ export type Body_upload_task_images_api_tasks_images_post = { files: string[] };
 
 export type BootstrapResponse = { workspace_root: string; workspace_key: string; workspace_display_path: string; is_sandbox: boolean; provider: string | null; provider_id: string | null; profile_id: string | null; model: string | null; reasoning_effort: string | null; supports_image_inputs: boolean; sessions: SessionRecordModel[]; tasks: TaskRecordModel[]; live_sessions: LiveSessionModel[]; board_stages: BoardStageModel[]; hook_warnings?: string[] };
 
+export type ChannelListResponse = { telegram: TelegramChannelConfigView };
+
+export type ChannelRuntimeStatusModel = { state: string; error?: string | null };
+
 export type CommandCandidateRequest = { source?: string | null };
 
 export type CommandCandidateViewModel = { name: string; command_id: string; slash_alias: string; description: string; model_profile_id: string | null; subpath: string | null };
@@ -213,7 +217,7 @@ export type ProviderUpdateRequest = { name?: string | null; kind?: string | null
 
 export type ProviderUsageLimitsResponse = { provider_id: string; provider_kind: string; account_label: string | null; plan_type: string | null; fetched_at: string; buckets: UsageLimitBucketModel[] };
 
-export type ProviderViewModel = { id: string; name: string; kind: string; auth_mode: string; responses_url: string | null; generic_api_url: string | null; google_cloud_project: string | null; google_cloud_location: string | null; secret_source: "none" | "plaintext" | "env_var"; secret_env_var: string | null; has_secret: boolean; auth_status: ProviderAuthStatusModel };
+export type ProviderViewModel = { id: string; name: string; kind: string; auth_mode: string; responses_url: string | null; generic_api_url: string | null; google_cloud_project: string | null; google_cloud_location: string | null; secret_source: "none" | "plaintext" | "env_var"; secret_env_var: string | null; has_secret: boolean; supports_stt: boolean; auth_status: ProviderAuthStatusModel };
 
 export type QuestionAnswerRequest = { question_id: string; answer: string; selected_suggestion_index?: number | null; custom?: boolean; custom_note?: string | null };
 
@@ -325,6 +329,10 @@ export type TaskUpdatedSseEventPayloadModel = { task: TaskRecordModel };
 
 export type TasksResponse = { tasks: TaskRecordModel[] };
 
+export type TelegramChannelConfigView = { enabled?: boolean; token_source?: string; token_env_var?: string; has_token_secret?: boolean; allowed_users?: string[]; allowed_chats?: string[]; last_update_id?: number | null; status: ChannelRuntimeStatusModel };
+
+export type TelegramChannelUpdateRequest = { enabled?: boolean; token_source?: string; token_env_var?: string; token_secret?: string | null; allowed_users?: string[]; allowed_chats?: string[] };
+
 export type ThinkingUpdatedSseEventModel = { seq: number; created_at: string; type: "thinking_updated"; payload: ThinkingUpdatedSseEventPayloadModel };
 
 export type ThinkingUpdatedSseEventPayloadModel = { live_session_id?: string | null; session_id?: string | null; resume_session_id?: string | null; item_id: string; title: string; content: string; sub_agent_id?: string | null };
@@ -408,6 +416,9 @@ export type ApiOperationResponses = {
   "GET /api/board/stages": BoardStagesResponse;
   "PUT /api/board/stages": BoardStagesResponse;
   "GET /api/bootstrap": BootstrapResponse;
+  "GET /api/channels": ChannelListResponse;
+  "PUT /api/channels/telegram": ChannelListResponse;
+  "POST /api/channels/telegram/restart": ChannelListResponse;
   "PUT /api/config/active-model-profile": ActiveProfileResponse;
   "GET /api/config/agents": AgentListResponse;
   "POST /api/config/agents/candidates": AgentCandidatesResponse;
@@ -491,6 +502,7 @@ export type ApiOperationResponses = {
 
 export type ApiJsonRequestBodies = {
   "PUT /api/board/stages": UpdateBoardStagesRequest;
+  "PUT /api/channels/telegram": TelegramChannelUpdateRequest;
   "PUT /api/config/active-model-profile": ActiveProfileRequest;
   "POST /api/config/agents/candidates": AgentCandidateRequest;
   "POST /api/config/agents/enabled": SkillEnabledRequest;

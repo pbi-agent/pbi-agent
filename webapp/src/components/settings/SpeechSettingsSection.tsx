@@ -19,9 +19,8 @@ function providerKindLabel(providerKind: string, options: ConfigOptions): string
 
 function providerSupportsStt(
   provider: ProviderView,
-  options: ConfigOptions,
 ): boolean {
-  return options.provider_metadata[provider.kind]?.supports_stt === true;
+  return provider.supports_stt;
 }
 
 function providerHasCredentials(provider: ProviderView): boolean {
@@ -61,8 +60,8 @@ export function SpeechSettingsSection({
   }, [sttProviderId]);
 
   const sttProviders = useMemo(
-    () => providers.filter((provider) => providerSupportsStt(provider, options)),
-    [providers, options],
+    () => providers.filter(providerSupportsStt),
+    [providers],
   );
   const credentialedProviders = useMemo(
     () => sttProviders.filter(providerHasCredentials),

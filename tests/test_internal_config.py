@@ -9,6 +9,7 @@ import pytest
 import pbi_agent.config as config_module
 from pbi_agent.auth.models import (
     AUTH_MODE_CHATGPT_ACCOUNT,
+    AUTH_MODE_XAI_ACCOUNT,
     ApiKeyAuth,
     OAuthSessionAuth,
 )
@@ -18,6 +19,7 @@ from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     ConfigConflictError,
     ConfigError,
+    CommandConfig,
     CommandManifestError,
     InternalConfig,
     MaintenanceConfig,
@@ -620,6 +622,61 @@ def test_select_stt_provider_persists_validates_and_delete_clears_selection(
     assert load_internal_config().web.stt_provider_id is None
 
 
+def test_select_stt_provider_rejects_xai_account_and_update_clears_selection(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(config_module, "load_dotenv", lambda: None)
+    create_provider_config(
+        ProviderConfig(id="xai-main", name="xAI Main", kind="xai", api_key="x-key")
+    )
+    create_provider_config(
+        ProviderConfig(
+            id="xai-account",
+            name="X Account",
+            kind="xai",
+            auth_mode=AUTH_MODE_XAI_ACCOUNT,
+        )
+    )
+
+    stt_provider_id, _ = select_stt_provider("xai-main")
+
+    assert stt_provider_id == "xai-main"
+    with pytest.raises(ConfigError, match="does not support speech-to-text"):
+        select_stt_provider("xai-account")
+
+    config_module.update_provider_config(
+        "xai-main",
+        auth_mode=AUTH_MODE_XAI_ACCOUNT,
+    )
+
+    assert load_internal_config().web.stt_provider_id is None
+
+
+def test_provider_auth_mode_parser_accepts_xai_account() -> None:
+    create_args = _args(
+        "config",
+        "providers",
+        "create",
+        "--name",
+        "X Account",
+        "--kind",
+        "xai",
+        "--auth-mode",
+        "xai_account",
+    )
+    update_args = _args(
+        "config",
+        "providers",
+        "update",
+        "xai-main",
+        "--auth-mode",
+        "xai_account",
+    )
+
+    assert create_args.auth_mode == AUTH_MODE_XAI_ACCOUNT
+    assert update_args.auth_mode == AUTH_MODE_XAI_ACCOUNT
+
+
 def test_find_command_config_by_alias_reads_command_files(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -667,8 +724,25 @@ def test_list_command_configs_skips_reserved_command_alias(tmp_path: Path) -> No
         "hooks.md",
         _command_markdown("hooks", "List project hooks.", "List project hooks."),
     )
+    _write_command(
+        tmp_path,
+        "new.md",
+        _command_markdown("new", "Start a new session.", "Start a new session."),
+    )
 
     assert list_command_configs(tmp_path) == []
+
+
+def test_command_config_rejects_reserved_new_alias() -> None:
+    command = CommandConfig(
+        id="new",
+        name="New",
+        slash_alias="/new",
+        instructions="Start a new session.",
+    )
+
+    with pytest.raises(ConfigError, match="reserved"):
+        command.validate()
 
 
 def test_list_command_configs_skips_empty_files(tmp_path: Path) -> None:

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from datetime import datetime, timezone
 from unittest.mock import Mock
 
 import pytest
 
 from pbi_agent.agent.tool_runtime import ToolExecutionBatch
+from pbi_agent.auth.models import OAuthSessionAuth
 from pbi_agent.cli import build_parser
 from pbi_agent.config import (
     DEFAULT_MAX_TOKENS,
@@ -454,6 +456,54 @@ def test_xai_request_turn_reuses_previous_response_id(monkeypatch) -> None:
             "output": '{"temperature":59}',
         }
     ]
+
+
+def test_xai_request_turn_uses_oauth_session_bearer(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(
+        request: urllib.request.Request,
+        timeout: float,
+    ) -> _FakeHTTPResponse:
+        del timeout
+        captured["url"] = request.full_url
+        captured["authorization"] = request.headers.get("Authorization")
+        return _FakeHTTPResponse(
+            {
+                "id": "resp_1",
+                "model": "grok-4-1-fast-reasoning",
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "Hi"}],
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    auth = OAuthSessionAuth(
+        provider_id="xai-main",
+        backend="xai_account",
+        access_token="oauth-token",
+        refresh_token="refresh-token",
+        expires_at=int(datetime.now(timezone.utc).timestamp()) + 7200,
+    )
+    provider = XAIProvider(_make_settings(api_key="", auth=auth))
+    provider.connect()
+
+    result = provider.request_turn(
+        user_message="Hello",
+        display=_DisplayStub(),
+        session_usage=TokenUsage(),
+        turn_usage=TokenUsage(),
+    )
+
+    assert result.text == "Hi"
+    assert captured["url"] == DEFAULT_XAI_RESPONSES_URL
+    assert captured["authorization"] == "Bearer oauth-token"
 
 
 def test_xai_execute_tool_calls_returns_function_call_outputs(

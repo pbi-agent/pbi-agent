@@ -148,16 +148,16 @@ wheels = [
 
 [[package]]
 name = "codetool-shell"
-version = "0.1.2"
+version = "0.1.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/65/5a/516e7a041ecd010f294772db77c984ed8cf376e4fa899649655e8a22e235/codetool_shell-0.1.2.tar.gz", hash = "sha256:cdbc2d8d55dacfbed8b9e5901ff861787ea3ec10f0f9d0916788664eded7d188", size = 258929, upload-time = "2026-06-21T22:23:16.347Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/c8/d839e59a40245b3efb165724c27bdaedbf51a3ee65b395c98b6f3063f106/codetool_shell-0.1.3.tar.gz", hash = "sha256:fc92586e22523a0e730c646cbb4452e19543e2ea8d1008a179b382e76f2083fc", size = 193866, upload-time = "2026-06-24T14:23:21.229Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/32/6cbe50c5c9b74a4ea50c4c5d4d27040f18dcf9c8a47f8e3aa967cab1e1e9/codetool_shell-0.1.2-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:5fa531894d8e8eeaf3c435440ba85774b7ad539195490dd44ae5baba0810a57d", size = 784417, upload-time = "2026-06-21T22:23:07.651Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/7f/31b7e68463d50372235f4d8ffe94e7ff4bac1d1a59cc56c9467d32842443/codetool_shell-0.1.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:7b752b4cc55b20dd1fe39dc10e2befcbc7736f6fbfcc86679bc786a06d68bad4", size = 754589, upload-time = "2026-06-21T22:23:09.416Z" },
-    { url = "https://files.pythonhosted.org/packages/5b/bc/19d82a3b206afb3acc626c3e1f430171bf7a1a00404db3efca1768470896/codetool_shell-0.1.2-py3-none-manylinux2014_aarch64.whl", hash = "sha256:aa2b11aee77dcac1a8764a68daea92a5e4594412895abcc7b5fc7e856ba8392e", size = 791958, upload-time = "2026-06-21T22:23:10.9Z" },
-    { url = "https://files.pythonhosted.org/packages/46/58/36f26a1caf1d30bdfb8dc7c9cac75f15d93285ed88464c0104c9fda9859b/codetool_shell-0.1.2-py3-none-manylinux2014_x86_64.whl", hash = "sha256:5610551117383b25f524eb17ea6b56728ff66bd5905fb6908b8c63332e4f557b", size = 822841, upload-time = "2026-06-21T22:23:12.305Z" },
-    { url = "https://files.pythonhosted.org/packages/3c/c8/fb6e06458178f4674da07b354e8238233ce8fddc9ed85555aa6d88595740/codetool_shell-0.1.2-py3-none-win_amd64.whl", hash = "sha256:2a2b25187fb9e0f171465e2985ee28b0fd2837951b61b04f50107a5d1b40edfd", size = 678911, upload-time = "2026-06-21T22:23:13.678Z" },
-    { url = "https://files.pythonhosted.org/packages/f3/2a/7b7d3453d6d872df817554b43d11c6497132fd638bb3516e741e6c427605/codetool_shell-0.1.2-py3-none-win_arm64.whl", hash = "sha256:80f2d7f5995edb17bcec478eb20ed8215e9199eceabcecbbfb2eb8e2f0db8a74", size = 634593, upload-time = "2026-06-21T22:23:14.958Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/60/65a808ccdf37c3073ad984c7f786d5697f72262c40107bc41d681bfbcb2d/codetool_shell-0.1.3-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:0ebeb7fee0d0c5758bee7cc7cc2100d346c9eaf61dba13f7407d7a5e475d580f", size = 799566, upload-time = "2026-06-24T14:23:12.585Z" },
+    { url = "https://files.pythonhosted.org/packages/73/28/61823a24af4f784ede3763f2c52f5339b137e3fba5c2b03b4d3034e6b6f5/codetool_shell-0.1.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a40b73fad3af2be35be315cd2ffa0e3ce813bbd681ea75ac15f3d43d3eeceed6", size = 763720, upload-time = "2026-06-24T14:23:14.176Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/11/da158593f2aee21f9e4bc40146febfea790e5d7c415055b433105720054e/codetool_shell-0.1.3-py3-none-manylinux2014_aarch64.whl", hash = "sha256:871a20c33f3e6c4cceebc4a68fcb88e180637f8cf4ec5ea8ee1e8ab832713db8", size = 803363, upload-time = "2026-06-24T14:23:15.488Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/d9/bc44d754511c799b7785aedf896b61e4f5be3d9fd178075987c3680bd678/codetool_shell-0.1.3-py3-none-manylinux2014_x86_64.whl", hash = "sha256:908568fb421d2435188f2b052515a7c7bb4c632f611740f51d8f1dcc05100b21", size = 841179, upload-time = "2026-06-24T14:23:16.862Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/e3/937ce7704598cd2caff0be7fc6e300bdc750d346a000b00dda49f88a7c35/codetool_shell-0.1.3-py3-none-win_amd64.whl", hash = "sha256:4823d0a2fa677cd2ba7e15ea99a929a0edba0e5d8df9f0934303193d612fbb60", size = 696596, upload-time = "2026-06-24T14:23:18.399Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/c3/a7e3f151fa5b13660d6f9ce8c8cf42fdb219e9c4bb20bb599f82d0a839b6/codetool_shell-0.1.3-py3-none-win_arm64.whl", hash = "sha256:5338010d288a01d03f03f1e7b6f218dcb2343cbdaa8c973a7c789a5f1193cb2b", size = 639911, upload-time = "2026-06-24T14:23:19.995Z" },
 ]
 
 [[package]]
@@ -258,6 +258,19 @@ wheels = [
 ]
 
 [[package]]
+name = "httpcore2"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "h11" },
+    { name = "truststore" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7b/9b/2b1d1833a58236d1f6ee755e027a3917da0db59cc9708554cefc440ee8b6/httpcore2-2.4.0.tar.gz", hash = "sha256:3093a8ab8980d9f910b9cb4351df9186a0ad2350a6284a9107ac9a362a584422", size = 64618, upload-time = "2026-06-11T06:35:53.425Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/72/4fdf2306143a92a471fad9f3655aa542d43aa9188a7c9534e82c9aecf837/httpcore2-2.4.0-py3-none-any.whl", hash = "sha256:5218779da5d6e3c2013ac706121abfb3815d450e0613495c0de50264dce58242", size = 80151, upload-time = "2026-06-11T06:35:50.89Z" },
+]
+
+[[package]]
 name = "httptools"
 version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -315,6 +328,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/0f/4c/751061ffa58615a32c31b2d82e8482be8dd4a89154f003147acee90f2be9/httpx_sse-0.4.3.tar.gz", hash = "sha256:9b1ed0127459a66014aec3c56bebd93da3c1bc8bb6618c8082039a44889a755d", size = 15943, upload-time = "2025-10-10T21:48:22.271Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d2/fd/6668e5aec43ab844de6fc74927e155a3b37bf40d7c3790e49fc0406b6578/httpx_sse-0.4.3-py3-none-any.whl", hash = "sha256:0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc", size = 8960, upload-time = "2025-10-10T21:48:21.158Z" },
+]
+
+[[package]]
+name = "httpx2"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "httpcore2" },
+    { name = "idna" },
+    { name = "truststore" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fc/60/b43ced4ccf26e95b396dbf67051d3e5042b645917d4da0469dd82a3bdd4f/httpx2-2.4.0.tar.gz", hash = "sha256:32e0734b61eb0824b3f56a9e98d6d92d381a3ef12c0045aa917ee63df6c411ef", size = 81691, upload-time = "2026-06-11T06:35:54.538Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/45/82bc57c3d9c3314f663b67cc057f1c017a6450685dde513f4f8db5cf431f/httpx2-2.4.0-py3-none-any.whl", hash = "sha256:425acd99297829599decf6701386dd84db3542597d36d3e2e4def930ecd57fd9", size = 74941, upload-time = "2026-06-11T06:35:52.235Z" },
 ]
 
 [[package]]
@@ -460,7 +489,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "basedpyright" },
-    { name = "httpx" },
+    { name = "httpx2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -470,7 +499,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "codetool-explore", specifier = "==0.7.0" },
-    { name = "codetool-shell", specifier = "==0.1.2" },
+    { name = "codetool-shell", specifier = "==0.1.3" },
     { name = "fastapi", specifier = "==0.135.2" },
     { name = "lark", specifier = "==1.3.1" },
     { name = "mcp", specifier = "==1.26.0" },
@@ -482,7 +511,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "basedpyright", specifier = "==1.39.3" },
-    { name = "httpx", specifier = "==0.28.1" },
+    { name = "httpx2", specifier = "==2.4.0" },
     { name = "pytest", specifier = "==9.0.3" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "ruff", specifier = "==0.15.7" },
@@ -932,6 +961,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/eb/e3/7c1dc7381d9f8ab7d854328ebfa884e62cb3f3d8549ddfd37c7814f42afa/starlette-1.3.1.tar.gz", hash = "sha256:05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0", size = 2703240, upload-time = "2026-06-12T09:23:11.602Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/bb/2799cc2ede3ed41131f8975621e7213dfc7ef4acbbaadfa440f32500c370/starlette-1.3.1-py3-none-any.whl", hash = "sha256:c7372aae11c3c3f26a42df7bd626cec2f47d03483d261d369516a615a53714c6", size = 73632, upload-time = "2026-06-12T09:23:10.017Z" },
+]
+
+[[package]]
+name = "truststore"
+version = "0.10.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/a3/1585216310e344e8102c22482f6060c7a6ea0322b63e026372e6dcefcfd6/truststore-0.10.4.tar.gz", hash = "sha256:9d91bd436463ad5e4ee4aba766628dd6cd7010cf3e2461756b3303710eebc301", size = 26169, upload-time = "2025-08-12T18:49:02.73Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/97/56608b2249fe206a67cd573bc93cd9896e1efb9e98bce9c163bcdc704b88/truststore-0.10.4-py3-none-any.whl", hash = "sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981", size = 18660, upload-time = "2025-08-12T18:49:01.46Z" },
 ]
 
 [[package]]

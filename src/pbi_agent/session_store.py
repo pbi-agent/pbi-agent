@@ -245,6 +245,26 @@ CREATE TABLE IF NOT EXISTS disabled_project_agents (
     PRIMARY KEY (directory, agent_name)
 );
 
+CREATE TABLE IF NOT EXISTS channel_configs (
+    directory    TEXT NOT NULL,
+    platform     TEXT NOT NULL,
+    config_json  TEXT NOT NULL DEFAULT '{}',
+    status       TEXT NOT NULL DEFAULT 'disabled',
+    error        TEXT,
+    updated_at   TEXT NOT NULL,
+    PRIMARY KEY (directory, platform)
+);
+
+CREATE TABLE IF NOT EXISTS channel_session_mappings (
+    directory      TEXT NOT NULL,
+    platform       TEXT NOT NULL,
+    source_key     TEXT NOT NULL,
+    session_id     TEXT NOT NULL REFERENCES sessions(session_id),
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
+    PRIMARY KEY (directory, platform, source_key)
+);
+
 CREATE TABLE IF NOT EXISTS maintenance_state (
     name             TEXT PRIMARY KEY,
     last_run_date    TEXT NOT NULL,
@@ -419,6 +439,16 @@ class RecentWorkspaceRecord:
     display_path: str
     is_sandbox: bool
     last_opened_at: str
+
+
+@dataclass(slots=True)
+class ChannelConfigRecord:
+    directory: str
+    platform: str
+    config: dict[str, Any]
+    status: str
+    error: str | None
+    updated_at: str
 
 
 _KANBAN_FIXED_STAGE_NAMES = {
@@ -960,6 +990,16 @@ class SessionStore:
             "agent_name = LOWER(agent_name) "
             "WHERE directory != LOWER(directory) OR agent_name != LOWER(agent_name)"
         )
+        self._conn.execute(
+            "UPDATE channel_configs SET directory = LOWER(directory), "
+            "platform = LOWER(platform) "
+            "WHERE directory != LOWER(directory) OR platform != LOWER(platform)"
+        )
+        self._conn.execute(
+            "UPDATE channel_session_mappings SET directory = LOWER(directory), "
+            "platform = LOWER(platform) "
+            "WHERE directory != LOWER(directory) OR platform != LOWER(platform)"
+        )
         self._conn.commit()
 
     def record_recent_workspace(
@@ -1035,6 +1075,214 @@ class SessionStore:
             is_sandbox=bool(row["is_sandbox"]),
             last_opened_at=str(row["last_opened_at"]),
         )
+
+    def get_channel_config(
+        self,
+        directory: str,
+        platform: str,
+    ) -> ChannelConfigRecord | None:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_platform = platform.strip().casefold()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM channel_configs WHERE directory = ? AND platform = ?",
+                (normalized_directory, normalized_platform),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            config = json.loads(str(row["config_json"]))
+        except json.JSONDecodeError:
+            config = {}
+        if not isinstance(config, dict):
+            config = {}
+        return ChannelConfigRecord(
+            directory=str(row["directory"]),
+            platform=str(row["platform"]),
+            config=config,
+            status=str(row["status"]),
+            error=row["error"],
+            updated_at=str(row["updated_at"]),
+        )
+
+    def set_channel_config(
+        self,
+        directory: str,
+        platform: str,
+        config: dict[str, Any],
+        *,
+        status: str = "disabled",
+        error: str | None = None,
+    ) -> ChannelConfigRecord:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_platform = platform.strip().casefold()
+        now = _now_iso()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO channel_configs "
+                "(directory, platform, config_json, status, error, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(directory, platform) DO UPDATE SET "
+                "config_json = excluded.config_json, "
+                "status = excluded.status, "
+                "error = excluded.error, "
+                "updated_at = excluded.updated_at",
+                (
+                    normalized_directory,
+                    normalized_platform,
+                    _serialize_json(config),
+                    status,
+                    error,
+                    now,
+                ),
+            )
+            self._conn.commit()
+        return ChannelConfigRecord(
+            directory=normalized_directory,
+            platform=normalized_platform,
+            config=dict(config),
+            status=status,
+            error=error,
+            updated_at=now,
+        )
+
+    def set_channel_status(
+        self,
+        directory: str,
+        platform: str,
+        *,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_platform = platform.strip().casefold()
+        now = _now_iso()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO channel_configs "
+                "(directory, platform, config_json, status, error, updated_at) "
+                "VALUES (?, ?, '{}', ?, ?, ?) "
+                "ON CONFLICT(directory, platform) DO UPDATE SET "
+                "status = excluded.status, "
+                "error = excluded.error, "
+                "updated_at = excluded.updated_at",
+                (normalized_directory, normalized_platform, status, error, now),
+            )
+            self._conn.commit()
+
+    def update_channel_config_fields(
+        self,
+        directory: str,
+        platform: str,
+        values: dict[str, Any],
+    ) -> ChannelConfigRecord:
+        current = self.get_channel_config(directory, platform)
+        config = dict(current.config if current is not None else {})
+        config.update(values)
+        return self.set_channel_config(
+            directory,
+            platform,
+            config,
+            status=current.status if current is not None else "disabled",
+            error=current.error if current is not None else None,
+        )
+
+    def get_or_create_channel_session_mapping(
+        self,
+        *,
+        directory: str,
+        platform: str,
+        source_key: str,
+        provider: str,
+        model: str,
+        provider_id: str | None = None,
+        profile_id: str | None = None,
+        title: str = "",
+    ) -> str:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_platform = platform.strip().casefold()
+        now = _now_iso()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT session_id FROM channel_session_mappings "
+                "WHERE directory = ? AND platform = ? AND source_key = ?",
+                (normalized_directory, normalized_platform, source_key),
+            ).fetchone()
+            if row is not None:
+                return str(row["session_id"])
+
+            session_id = uuid.uuid4().hex
+            self._insert_session_locked(
+                session_id=session_id,
+                directory=normalized_directory,
+                provider=provider,
+                provider_id=provider_id,
+                model=model,
+                profile_id=profile_id,
+                title=title,
+                now=now,
+            )
+            self._conn.execute(
+                "INSERT INTO channel_session_mappings "
+                "(directory, platform, source_key, session_id, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    normalized_directory,
+                    normalized_platform,
+                    source_key,
+                    session_id,
+                    now,
+                    now,
+                ),
+            )
+            self._conn.commit()
+        return session_id
+
+    def create_channel_session_mapping(
+        self,
+        *,
+        directory: str,
+        platform: str,
+        source_key: str,
+        provider: str,
+        model: str,
+        provider_id: str | None = None,
+        profile_id: str | None = None,
+        title: str = "",
+    ) -> str:
+        normalized_directory = _normalize_directory_key(directory)
+        normalized_platform = platform.strip().casefold()
+        session_id = uuid.uuid4().hex
+        now = _now_iso()
+        with self._lock:
+            self._insert_session_locked(
+                session_id=session_id,
+                directory=normalized_directory,
+                provider=provider,
+                provider_id=provider_id,
+                model=model,
+                profile_id=profile_id,
+                title=title,
+                now=now,
+            )
+            self._conn.execute(
+                "INSERT INTO channel_session_mappings "
+                "(directory, platform, source_key, session_id, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(directory, platform, source_key) DO UPDATE SET "
+                "session_id = excluded.session_id, "
+                "updated_at = excluded.updated_at",
+                (
+                    normalized_directory,
+                    normalized_platform,
+                    source_key,
+                    session_id,
+                    now,
+                    now,
+                ),
+            )
+            self._conn.commit()
+        return session_id
 
     def list_disabled_project_skills(self, directory: str) -> list[str]:
         normalized_directory = _normalize_directory_key(directory)
@@ -1436,27 +1684,50 @@ class SessionStore:
         now = _now_iso()
         normalized_directory = _normalize_directory_key(directory)
         with self._lock:
-            self._conn.execute(
-                "INSERT INTO sessions "
-                "(session_id, directory, provider, provider_id, model, profile_id, previous_id, title, "
-                "total_tokens, input_tokens, output_tokens, cost_usd, is_fork, "
-                "forked_from_session_id, forked_from_message_id, fork_created_at, "
-                "created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, 0, NULL, NULL, NULL, ?, ?)",
-                (
-                    session_id,
-                    normalized_directory,
-                    provider,
-                    provider_id,
-                    model,
-                    profile_id,
-                    title,
-                    now,
-                    now,
-                ),
+            self._insert_session_locked(
+                session_id=session_id,
+                directory=normalized_directory,
+                provider=provider,
+                provider_id=provider_id,
+                model=model,
+                profile_id=profile_id,
+                title=title,
+                now=now,
             )
             self._conn.commit()
         return session_id
+
+    def _insert_session_locked(
+        self,
+        *,
+        session_id: str,
+        directory: str,
+        provider: str,
+        provider_id: str | None,
+        model: str,
+        profile_id: str | None,
+        title: str,
+        now: str,
+    ) -> None:
+        self._conn.execute(
+            "INSERT INTO sessions "
+            "(session_id, directory, provider, provider_id, model, profile_id, previous_id, title, "
+            "total_tokens, input_tokens, output_tokens, cost_usd, is_fork, "
+            "forked_from_session_id, forked_from_message_id, fork_created_at, "
+            "created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 0, 0, 0.0, 0, NULL, NULL, NULL, ?, ?)",
+            (
+                session_id,
+                directory,
+                provider,
+                provider_id,
+                model,
+                profile_id,
+                title,
+                now,
+                now,
+            ),
+        )
 
     def fork_session(self, session_id: str, fork_message_id: int) -> str:
         """Create a new session containing messages through ``fork_message_id``."""

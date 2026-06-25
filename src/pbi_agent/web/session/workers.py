@@ -41,6 +41,7 @@ class WorkersMixin:
     _workspace_root: Any
     _bind_live_session: Any
     _cancel_provider_auth_flow_browser_timeout: Any
+    _channel_manager: Any
     _next_board_stage_id: Any
     _persist_task_user_prompt: Any
     _publish_live_event: Any
@@ -117,6 +118,7 @@ class WorkersMixin:
     def shutdown(self) -> None:
         with self._lock:
             self._shutdown_requested = True
+        self._channel_manager.stop()
         sessions = list(self._live_sessions.values())
         for session in sessions:
             session.display.request_shutdown()

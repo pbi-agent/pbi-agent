@@ -23,6 +23,7 @@ from pbi_agent.auth.service import (
     get_provider_auth_status,
     import_provider_auth_session,
     poll_provider_device_auth,
+    provider_browser_callback_options,
     refresh_provider_auth_session,
     start_provider_browser_auth,
     start_provider_device_auth,
@@ -175,7 +176,11 @@ class ProviderAuthMixin:
                             flow_id=flow_id,
                             params=params,
                         )
-                    )
+                    ),
+                    options=provider_browser_callback_options(
+                        provider.kind,
+                        provider.auth_mode,
+                    ),
                 )
                 browser_auth = start_provider_browser_auth(
                     provider_kind=provider.kind,

@@ -35,6 +35,7 @@ import {
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { AppearanceSettingsSection } from "./AppearanceSettingsSection";
 import { AgentsSettingsSection } from "./AgentsSettingsSection";
+import { ChannelsSettingsSection } from "./ChannelsSettingsSection";
 import { CommandsSettingsSection } from "./CommandsSettingsSection";
 import { ModelProfilesSettingsSection } from "./ModelProfilesSettingsSection";
 import type { ProfilePayload } from "./ModelProfileModal";
@@ -71,6 +72,7 @@ type SettingsTabId =
   | "speech"
   | "model-profiles"
   | "skills"
+  | "channels"
   | "commands"
   | "agents"
   | "hooks"
@@ -122,6 +124,11 @@ const SETTINGS_NAV_GROUPS: Array<{
           id: "hooks",
           label: "Hooks",
           description: "Command hook review",
+        },
+        {
+          id: "channels",
+          label: "Channels",
+          description: "Messaging channels",
         },
       ],
     },
@@ -526,6 +533,8 @@ export function SettingsPage() {
                     {activeTab === "agents" && <AgentsSettingsSection agents={agents} />}
 
                     {activeTab === "hooks" && <HooksSettingsSection />}
+
+                    {activeTab === "channels" && <ChannelsSettingsSection />}
 
                     {activeTab === "maintenance" && (
                       <MaintenanceSettingsSection

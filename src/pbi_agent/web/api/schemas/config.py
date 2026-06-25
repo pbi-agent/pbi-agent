@@ -50,6 +50,7 @@ class ProviderViewModel(BaseModel):
     secret_source: Literal["none", "plaintext", "env_var"]
     secret_env_var: str | None
     has_secret: bool
+    supports_stt: bool
     auth_status: "ProviderAuthStatusModel"
 
 

@@ -1601,10 +1601,27 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert provider_payload["provider"]["auth_mode"] == "api_key"
         assert provider_payload["provider"]["secret_source"] == "env_var"
         assert provider_payload["provider"]["has_secret"] is True
+        assert provider_payload["provider"]["supports_stt"] is True
         assert (
             provider_payload["provider"]["auth_status"]["session_status"] == "missing"
         )
         revision = provider_payload["config_revision"]
+
+        create_xai_provider_response = client.post(
+            "/api/config/providers",
+            headers={"If-Match": revision},
+            json={
+                "name": "X Account",
+                "kind": "xai",
+                "auth_mode": "xai_account",
+            },
+        )
+        assert create_xai_provider_response.status_code == 200
+        xai_provider_payload = create_xai_provider_response.json()
+        assert xai_provider_payload["provider"]["id"] == "x-account"
+        assert xai_provider_payload["provider"]["auth_mode"] == "xai_account"
+        assert xai_provider_payload["provider"]["supports_stt"] is False
+        revision = xai_provider_payload["config_revision"]
 
         create_profile_response = client.post(
             "/api/config/model-profiles",
@@ -1656,12 +1673,15 @@ def test_config_bootstrap_and_crud_endpoints_round_trip(
         assert refreshed_payload["stt_provider_id"] is None
         assert refreshed_payload["maintenance"] == {"retention_days": 14}
         assert {item["id"] for item in refreshed_payload["providers"]} == {
-            "openai-main"
+            "openai-main",
+            "x-account",
         }
-        assert refreshed_payload["providers"][0]["auth_mode"] == "api_key"
-        assert (
-            refreshed_payload["providers"][0]["auth_status"]["auth_mode"] == "api_key"
-        )
+        provider_views = {item["id"]: item for item in refreshed_payload["providers"]}
+        assert provider_views["openai-main"]["auth_mode"] == "api_key"
+        assert provider_views["openai-main"]["supports_stt"] is True
+        assert provider_views["x-account"]["auth_mode"] == "xai_account"
+        assert provider_views["x-account"]["supports_stt"] is False
+        assert provider_views["openai-main"]["auth_status"]["auth_mode"] == "api_key"
         assert (
             refreshed_payload["options"]["provider_metadata"]["openai"]["label"]
             == "OpenAI API"
@@ -2598,6 +2618,11 @@ def test_slash_command_search_endpoint_returns_web_commands(
     assert response.status_code == 200
     assert response.json()["items"] == [
         {
+            "name": "/new",
+            "description": "Start a fresh session",
+            "kind": "local_command",
+        },
+        {
             "name": "/skills",
             "description": "Show discovered project skills",
             "kind": "local_command",
@@ -2649,11 +2674,16 @@ def test_slash_command_search_endpoint_includes_command_file_commands(
 
     with TestClient(app) as client:
         response = client.get(
-            "/api/slash-commands/search", params={"q": "", "limit": 10}
+            "/api/slash-commands/search", params={"q": "", "limit": 11}
         )
 
     assert response.status_code == 200
     assert response.json()["items"] == [
+        {
+            "name": "/new",
+            "description": "Start a fresh session",
+            "kind": "local_command",
+        },
         {
             "name": "/skills",
             "description": "Show discovered project skills",
@@ -10517,6 +10547,7 @@ def test_config_provider_and_profile_list_update_delete_endpoints(
                 "generic_api_url": None,
                 "google_cloud_project": None,
                 "google_cloud_location": None,
+                "supports_stt": True,
                 "secret_source": "env_var",
                 "secret_env_var": "OPENAI_API_KEY",
                 "has_secret": True,

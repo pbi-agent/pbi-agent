@@ -12,6 +12,7 @@ from pbi_agent.auth.models import (
     AUTH_MODE_API_KEY,
     AUTH_MODE_CHATGPT_ACCOUNT,
     AUTH_MODE_COPILOT_ACCOUNT,
+    AUTH_MODE_XAI_ACCOUNT,
 )
 from pbi_agent.config import (
     OPENAI_SERVICE_TIERS,
@@ -20,6 +21,7 @@ from pbi_agent.config import (
 )
 from pbi_agent.web.defaults import DEFAULT_WEB_PORT
 
+from .channels import add_channels_parser
 from .shared import DEFAULT_COMMAND, DEFAULT_SANDBOX_IMAGE
 
 
@@ -579,6 +581,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print machine-readable JSON instead of task detail blocks.",
     )
 
+    add_channels_parser(
+        add_command_parser,
+        formatter_class=CleanHelpFormatter,
+    )
+
     skills_parser = add_command_parser(
         "skills", "List or install project-scoped skills."
     )
@@ -845,6 +852,7 @@ def build_parser() -> argparse.ArgumentParser:
             AUTH_MODE_API_KEY,
             AUTH_MODE_CHATGPT_ACCOUNT,
             AUTH_MODE_COPILOT_ACCOUNT,
+            AUTH_MODE_XAI_ACCOUNT,
         ],
         default=None,
         help="Provider authentication mode.",
@@ -882,6 +890,7 @@ def build_parser() -> argparse.ArgumentParser:
             AUTH_MODE_API_KEY,
             AUTH_MODE_CHATGPT_ACCOUNT,
             AUTH_MODE_COPILOT_ACCOUNT,
+            AUTH_MODE_XAI_ACCOUNT,
         ],
         default=None,
         help="Provider authentication mode.",

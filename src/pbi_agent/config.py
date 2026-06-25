@@ -100,6 +100,7 @@ RESERVED_COMMAND_ALIASES = frozenset(
         "/mcp",
         "/agents",
         "/init",
+        "/new",
         "/reload",
         "/compact",
         "/extensions",
@@ -188,6 +189,12 @@ class Settings:
                 raise ConfigError(
                     "Missing authentication for provider 'github_copilot'. "
                     "Configure a saved GitHub Copilot account session."
+                )
+        elif self.provider == "xai":
+            if self.auth is None:
+                raise ConfigError(
+                    "Missing authentication for provider 'xai'. "
+                    "Configure an X account session or API key."
                 )
         elif self.provider == "google_gcp":
             # Google Cloud can authenticate with an explicit bearer token or
@@ -718,6 +725,8 @@ def _default_auth_mode(provider_kind: str) -> str:
         return AUTH_MODE_CHATGPT_ACCOUNT
     if provider_kind == "github_copilot":
         return AUTH_MODE_COPILOT_ACCOUNT
+    if provider_kind == "xai":
+        return AUTH_MODE_API_KEY
     return AUTH_MODE_API_KEY
 
 
@@ -745,6 +754,14 @@ def provider_supports_model_profiles(provider_kind: str) -> bool:
 
 def provider_supports_stt(provider_kind: str) -> bool:
     return provider_kind in STT_PROVIDER_KINDS
+
+
+def provider_config_supports_stt(provider: ProviderConfig) -> bool:
+    if not provider_supports_stt(provider.kind):
+        return False
+    if provider.kind == "xai":
+        return provider.auth_mode == AUTH_MODE_API_KEY
+    return True
 
 
 def provider_ui_metadata(provider_kind: str) -> dict[str, Any]:
@@ -1016,8 +1033,8 @@ def replace_provider_config(
         updated if existing.id == updated.id else existing
         for existing in config.providers
     ]
-    if config.web.stt_provider_id == updated.id and not provider_supports_stt(
-        updated.kind
+    if config.web.stt_provider_id == updated.id and not provider_config_supports_stt(
+        updated
     ):
         config.web.stt_provider_id = None
     config.providers.sort(key=_config_sort_key)
@@ -1277,7 +1294,7 @@ def select_stt_provider(
         provider = _provider_map(config).get(slugify(provider_id))
         if provider is None:
             raise ConfigError(f"Unknown provider ID '{provider_id}'.")
-        if not provider_supports_stt(provider.kind):
+        if not provider_config_supports_stt(provider):
             raise ConfigError(
                 f"Provider '{provider.id}' does not support speech-to-text."
             )

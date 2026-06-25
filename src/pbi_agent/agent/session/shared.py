@@ -45,6 +45,7 @@ SKILLS_COMMAND = "/skills"
 MCP_COMMAND = "/mcp"
 AGENTS_COMMAND = "/agents"
 INIT_COMMAND = "/init"
+NEW_COMMAND = "/new"
 COMPACT_COMMAND = "/compact"
 RELOAD_COMMAND = "/reload"
 EXTENSIONS_COMMAND = "/extensions"
@@ -55,6 +56,7 @@ TEMPORARY_LOCAL_COMMANDS = frozenset(
         MCP_COMMAND,
         AGENTS_COMMAND,
         INIT_COMMAND,
+        NEW_COMMAND,
         RELOAD_COMMAND,
         EXTENSIONS_COMMAND,
         HOOKS_COMMAND,

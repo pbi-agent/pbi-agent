@@ -362,6 +362,7 @@ def test_reserved_slash_extension_names_include_compact(tmp_path, monkeypatch) -
     names = reserved_slash_extension_names()
 
     assert "compact" in names
+    assert "new" in names
 
 
 def test_open_runtime_provider_passes_command_reservations(
@@ -435,7 +436,7 @@ def test_open_runtime_provider_passes_command_reservations(
         reserved_names = captured["reserved_names"]
         assert callable(reserved_names)
         get_reserved_names = cast(Callable[[], set[str]], reserved_names)
-        assert {"compact", "skills", "project-command", "mcp-foo"} <= (
+        assert {"compact", "new", "skills", "project-command", "mcp-foo"} <= (
             get_reserved_names()
         )
 

@@ -10,10 +10,13 @@ import json
 import re
 import time
 import urllib.parse
+from datetime import datetime, timedelta, timezone
 from typing import Any, TYPE_CHECKING, cast
 
 from pbi_agent.agent.system_prompt import get_system_prompt
 from pbi_agent.agent.tool_runtime import execute_tool_calls as _execute_tool_calls
+from pbi_agent.auth.models import OAuthSessionAuth, RequestAuthConfig
+from pbi_agent.auth.service import build_runtime_request_auth, refresh_runtime_auth
 from pbi_agent.config import Settings
 from pbi_agent.models.messages import (
     CompletedResponse,
@@ -22,7 +25,7 @@ from pbi_agent.models.messages import (
     UserTurnInput,
     WebSearchSource,
 )
-from pbi_agent.providers.auth_strategies import BearerTokenAuth, json_model_headers
+from pbi_agent.providers.auth_strategies import json_model_headers
 from pbi_agent.providers.base import Provider
 from pbi_agent.providers.endpoints import responses_url
 from pbi_agent.providers.protocols.openai_responses import (
@@ -53,6 +56,7 @@ if TYPE_CHECKING:
     from pbi_agent.observability import RunTracer
 
 _REQUEST_TIMEOUT_SECS = 3600.0
+_OAUTH_REFRESH_SKEW_SECS = 3600
 _REASONING_EFFORT_MODELS = ("grok-3-mini",)
 _EFFORT_MAP: dict[str, str] = {
     "low": "low",
@@ -97,10 +101,9 @@ class XAIProvider(Provider):
         return self._previous_response_id
 
     def connect(self) -> None:
-        if not self._settings.api_key:
+        if self._settings.auth is None:
             raise ValueError(
-                "Missing API key. Set PBI_AGENT_API_KEY in environment or pass "
-                "--api-key."
+                "Missing authentication. Configure an xAI API key or X account session."
             )
 
     def close(self) -> None:
@@ -255,14 +258,15 @@ class XAIProvider(Provider):
             input_items=input_items,
             instructions=instructions,
         )
+        request_auth = self._request_auth(responses_url(self._settings))
         headers = json_model_headers()
-        headers.update(BearerTokenAuth(self._settings.api_key).headers())
+        headers.update(request_auth.headers)
 
         return self._transport.post(
             JsonRequestSpec(
                 provider=self._settings.provider,
                 model=self._settings.model,
-                url=responses_url(self._settings),
+                url=request_auth.request_url,
                 headers=headers,
                 body=request_body,
                 request_config=self._settings.redacted(),
@@ -282,6 +286,20 @@ class XAIProvider(Provider):
             display=display,
             tracer=tracer,
             parse_response=self._parse_response,
+        )
+
+    def _request_auth(self, request_url: str) -> RequestAuthConfig:
+        auth = self._settings.auth
+        if isinstance(auth, OAuthSessionAuth) and _oauth_refresh_due(auth):
+            self._settings.auth = refresh_runtime_auth(
+                provider_kind=self._settings.provider,
+                auth=auth,
+            )
+            auth = self._settings.auth
+        return build_runtime_request_auth(
+            provider_kind=self._settings.provider,
+            request_url=request_url,
+            auth=auth,
         )
 
     def _build_request_body(
@@ -499,6 +517,15 @@ class XAIProvider(Provider):
 
 def _build_user_input_item(prompt: str) -> dict[str, Any]:
     return {"role": "user", "content": prompt}
+
+
+def _oauth_refresh_due(auth: OAuthSessionAuth) -> bool:
+    if auth.expires_at is None:
+        return False
+    refresh_at = datetime.fromtimestamp(auth.expires_at, timezone.utc) - timedelta(
+        seconds=_OAUTH_REFRESH_SKEW_SECS
+    )
+    return datetime.now(timezone.utc) >= refresh_at
 
 
 def _history_items_to_input_items(

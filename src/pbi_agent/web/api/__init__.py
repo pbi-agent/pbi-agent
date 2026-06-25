@@ -1,5 +1,6 @@
 from .routers import (
     board_router,
+    channels_router,
     config_router,
     events_router,
     hooks_router,
@@ -11,6 +12,7 @@ from .routers import (
 
 __all__ = [
     "board_router",
+    "channels_router",
     "config_router",
     "events_router",
     "hooks_router",

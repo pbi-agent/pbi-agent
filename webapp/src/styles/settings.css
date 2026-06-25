@@ -637,6 +637,156 @@
   transform: translateY(-1px);
 }
 
+.settings-channel-card[data-slot="card"] {
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-4);
+}
+
+/* Channel cards are inert surfaces: no lift/hover, interactive affordances are the buttons. */
+.settings-channel-card.settings-item,
+.settings-channel-card.settings-item:hover,
+.settings-channel-card.settings-item:focus-within {
+  background: color-mix(in srgb, var(--color-surface-1) 82%, var(--color-surface-2));
+  border-color: var(--color-border-subtle);
+  box-shadow: none;
+  transform: none;
+}
+
+.settings-channel-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+}
+
+.settings-channel-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.settings-channel-card__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.settings-channel-card__title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  color: var(--color-text);
+}
+
+.settings-channel-card__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.settings-channel-card__toggle-label[data-slot="field-label"] {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  font-weight: var(--weight-medium);
+}
+
+.settings-channel-form[data-slot="field-group"] {
+  gap: var(--sp-3);
+}
+
+.settings-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+.settings-channel-field[data-slot="field"] {
+  min-width: 0;
+}
+
+.settings-channel-field [data-slot="field-label"] {
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+  font-size: var(--text-xs);
+  margin-bottom: var(--sp-1);
+}
+
+.settings-channel-select[data-slot="select-trigger"],
+.settings-channel-control[data-slot="input"],
+.settings-channel-textarea[data-slot="textarea"] {
+  width: 100%;
+}
+
+.settings-channel-textarea[data-slot="textarea"] {
+  min-height: 4rem;
+  resize: vertical;
+}
+
+.settings-channel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}
+
+.settings-channel-button[data-slot="button"] {
+  transition:
+    color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.settings-channel-button[data-slot="button"][data-variant="outline"] {
+  border-color: var(--color-border);
+}
+
+.settings-channel-button[data-slot="button"][data-variant="outline"]:not(:disabled):hover,
+.settings-channel-button[data-slot="button"][data-variant="outline"]:not(:disabled):focus-visible {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 12%, var(--muted));
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.settings-channel-button[data-slot="button"][data-variant="default"]:not(:disabled):hover,
+.settings-channel-button[data-slot="button"][data-variant="default"]:not(:disabled):focus-visible {
+  color: var(--primary-foreground);
+  background: var(--color-accent-hover);
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--color-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
+  transform: translateY(-1px);
+}
+
+.settings-channel-meta {
+  margin-right: auto;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 640px) {
+  .settings-channel-card__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .settings-channel-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .settings-item--provider {
   flex-direction: row;
   align-items: center;

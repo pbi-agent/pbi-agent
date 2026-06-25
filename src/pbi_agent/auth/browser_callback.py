@@ -44,6 +44,15 @@ class BrowserAuthCallbackOutcome:
     error_message: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class BrowserAuthCallbackOptions:
+    host: str = "127.0.0.1"
+    preferred_port: int = 1455
+    path: str = "/auth/callback"
+    callback_host: str = "localhost"
+    allow_port_fallback: bool = True
+
+
 class _BrowserCallbackServer(ThreadingHTTPServer):
     def __init__(
         self,
@@ -51,11 +60,14 @@ class _BrowserCallbackServer(ThreadingHTTPServer):
         callback_handler: Callable[
             [BrowserAuthCallbackParams], BrowserAuthCallbackOutcome
         ],
-        port: int,
+        options: BrowserAuthCallbackOptions,
     ) -> None:
-        super().__init__((_CALLBACK_SERVER_HOST, port), _BrowserCallbackHandler)
+        super().__init__(
+            (options.host, options.preferred_port), _BrowserCallbackHandler
+        )
         self.callback_handler = callback_handler
-        self.callback_path = _BROWSER_CALLBACK_PATH
+        self.callback_path = options.path
+        self.callback_host = options.callback_host
 
 
 class _BrowserCallbackHandler(BaseHTTPRequestHandler):
@@ -110,15 +122,19 @@ class BrowserAuthCallbackListener:
         callback_handler: Callable[
             [BrowserAuthCallbackParams], BrowserAuthCallbackOutcome
         ],
+        options: BrowserAuthCallbackOptions | None = None,
     ) -> None:
-        self._server = _create_callback_server(callback_handler=callback_handler)
+        self._server = _create_callback_server(
+            callback_handler=callback_handler,
+            options=options or BrowserAuthCallbackOptions(),
+        )
         self._thread: threading.Thread | None = None
 
     @property
     def callback_url(self) -> str:
         host, port = cast(tuple[str, int], self._server.server_address)
         del host
-        return f"http://localhost:{port}{self._server.callback_path}"
+        return f"http://{self._server.callback_host}:{port}{self._server.callback_path}"
 
     def start(self) -> None:
         if self._thread is not None:
@@ -134,7 +150,8 @@ class BrowserAuthCallbackListener:
     def shutdown(self) -> None:
         thread = self._thread
         self._thread = None
-        self._server.shutdown()
+        if thread is not None:
+            self._server.shutdown()
         self._server.server_close()
         if thread is not None:
             thread.join(timeout=1.0)
@@ -143,21 +160,44 @@ class BrowserAuthCallbackListener:
 def create_browser_auth_callback_listener(
     *,
     callback_handler: Callable[[BrowserAuthCallbackParams], BrowserAuthCallbackOutcome],
+    options: BrowserAuthCallbackOptions | None = None,
 ) -> BrowserAuthCallbackListener:
-    return BrowserAuthCallbackListener(callback_handler=callback_handler)
+    return BrowserAuthCallbackListener(
+        callback_handler=callback_handler,
+        options=options,
+    )
 
 
 def _create_callback_server(
     *,
     callback_handler: Callable[[BrowserAuthCallbackParams], BrowserAuthCallbackOutcome],
+    options: BrowserAuthCallbackOptions,
 ) -> _BrowserCallbackServer:
     try:
         return _BrowserCallbackServer(
             callback_handler=callback_handler,
-            port=_DEFAULT_CALLBACK_PORT,
+            options=options,
         )
-    except OSError:
-        return _BrowserCallbackServer(callback_handler=callback_handler, port=0)
+    except OSError as exc:
+        if not options.allow_port_fallback:
+            required_url = (
+                f"http://{options.callback_host}:{options.preferred_port}{options.path}"
+            )
+            raise OSError(
+                f"Could not start browser auth callback listener on required "
+                f"callback URL {required_url}. Ensure port "
+                f"{options.preferred_port} is available and try again."
+            ) from exc
+        return _BrowserCallbackServer(
+            callback_handler=callback_handler,
+            options=BrowserAuthCallbackOptions(
+                host=options.host,
+                preferred_port=0,
+                path=options.path,
+                callback_host=options.callback_host,
+                allow_port_fallback=options.allow_port_fallback,
+            ),
+        )
 
 
 def _first_query_value(params: dict[str, list[str]], key: str) -> str | None:

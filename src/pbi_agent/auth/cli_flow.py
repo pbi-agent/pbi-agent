@@ -18,6 +18,7 @@ from pbi_agent.auth.models import (
 from pbi_agent.auth.service import (
     complete_provider_browser_auth,
     poll_provider_device_auth,
+    provider_browser_callback_options,
     start_provider_browser_auth,
     start_provider_device_auth,
 )
@@ -85,6 +86,7 @@ def run_provider_browser_auth_flow(
 
     listener = create_browser_auth_callback_listener(
         callback_handler=callback_handler,
+        options=provider_browser_callback_options(provider_kind, auth_mode),
     )
     try:
         browser_auth = start_provider_browser_auth(

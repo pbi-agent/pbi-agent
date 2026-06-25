@@ -11,6 +11,7 @@ from pbi_agent.auth.models import (
     RequestAuthConfig,
     StoredAuthSession,
 )
+from pbi_agent.auth.browser_callback import BrowserAuthCallbackOptions
 
 
 class AuthProviderBackend(ABC):
@@ -49,6 +50,10 @@ class AuthProviderBackend(ABC):
     def supported_auth_flow_methods(self) -> tuple[str, ...]:
         """Return the built-in auth flow methods supported by this backend."""
         return ()
+
+    def browser_callback_options(self) -> BrowserAuthCallbackOptions:
+        """Return loopback callback settings for browser login."""
+        return BrowserAuthCallbackOptions()
 
     def start_browser_auth(
         self,

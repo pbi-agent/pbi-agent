@@ -25,6 +25,7 @@ from pbi_agent.agent.session import (
     INTERACTIVE_ONLY_TOOLS,
     _open_compaction_provider,
     _open_runtime_provider,
+    NEW_COMMAND,
     NEW_SESSION_SENTINEL,
     RELOAD_COMMAND,
     _resume_session,
@@ -3201,6 +3202,24 @@ def test_run_session_loop_treats_agents_reload_as_user_message(monkeypatch) -> N
     assert provider.refresh_tools_calls == 0
     assert display.markdown_calls == []
     assert display.assistant_start_calls == 1
+
+
+def test_run_session_loop_handles_new_command_locally(monkeypatch) -> None:
+    provider = _ChatProviderStub()
+    display = _SessionDisplaySpy(["hello", NEW_COMMAND, "next", "quit"])
+    settings = Settings(api_key="test-key", provider="openai", max_tool_workers=2)
+
+    monkeypatch.setattr(
+        "pbi_agent.agent.session._open_runtime_provider",
+        _stub_runtime_provider(provider),
+    )
+
+    exit_code = run_session_loop(settings, display)
+
+    assert exit_code == 0
+    assert provider.request_messages == ["hello", "next"]
+    assert provider.reset_calls == 1
+    assert display.assistant_start_calls == 2
 
 
 def test_run_session_loop_handles_reload_command_locally(monkeypatch) -> None:
