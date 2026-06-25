@@ -1,0 +1,22 @@
+# v0.22.0
+
+**Release date:** 2026-06-25
+
+## Added
+
+- Added a Telegram channel MVP with workspace-scoped configuration, in-process polling runners, and text or image input routed into web sessions ([548d0507](https://github.com/pbi-agent/pbi-agent/commit/548d050763dcc282a8455012b0e5d90794df62bd)).
+- Added Settings → Channels UI and web APIs to configure, enable, and monitor Telegram sources ([548d0507](https://github.com/pbi-agent/pbi-agent/commit/548d050763dcc282a8455012b0e5d90794df62bd), [ebd29a63](https://github.com/pbi-agent/pbi-agent/commit/ebd29a63efd26eaa4d3c46402648d69f45afcd51)).
+- Added `pbi-agent channels` CLI commands to show, configure, and restart channel runners from the terminal ([84dca135](https://github.com/pbi-agent/pbi-agent/commit/84dca1356262cc6f3d2e12105877c20245733be9)).
+- Added xAI subscription authentication with OAuth PKCE alongside API-key login, including proactive token refresh for model discovery ([793623c4](https://github.com/pbi-agent/pbi-agent/commit/793623c4e4fa940d93e6bbc965da95127d834009)).
+- Added the `/new` command to open a fresh web session and remap Telegram source defaults ([02c40101](https://github.com/pbi-agent/pbi-agent/commit/02c4010189c131722cc8b8a85419955058f0abb5)).
+
+## Changed
+
+- Telegram outbound replies now render Markdown with entity-aware chunking for safer message delivery ([4dab546f](https://github.com/pbi-agent/pbi-agent/commit/4dab546ffdf8a9ea6b0a27fbf94400a6b00e91b8)).
+- Shell tool output now uses `codetool-shell` 0.1.3 for default stdout/stderr compression before bounding large streams ([e68f3f8f](https://github.com/pbi-agent/pbi-agent/commit/e68f3f8f7240feba6d8ed33dfb3a731a75ad9b5d)).
+
+## Fixed
+
+- Pinned FastAPI/Starlette test client dependencies with `httpx2` and `httpcore2` so web API tests use a supported HTTP stack ([9351deb3](https://github.com/pbi-agent/pbi-agent/commit/9351deb32b59bee927a83f9b1a10670a808e0630)).
+
+Full changelog: docs/changelog/v0.22.0.md
