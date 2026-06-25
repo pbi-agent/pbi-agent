@@ -56,3 +56,4 @@
 ## 2026-06-25
 - Fixed `/review` findings for `pbi-agent channels telegram restart`: no-web fallback validates/persists status without starting Telegram polling, and web restart requires matching workspace key. Validation: `pytest tests/cli/test_channels.py`, Ruff, format check, basedpyright on touched CLI file.
 - Fixed `/code-quality-review` finding by moving channels subparser registration from `cli/parser.py` into `cli/channels.py` via `add_channels_parser()`, leaving parser orchestration-only. Validation: `pytest tests/cli/test_channels.py`, Ruff, format check, basedpyright on touched CLI files.
+- Slash-command composer popup now shows kind badges (`built-in`, `project`, `extension`) using API `kind` on each suggestion. Validation: `bun run test:web` Composer tests, `bun run lint`, `bun run typecheck`.

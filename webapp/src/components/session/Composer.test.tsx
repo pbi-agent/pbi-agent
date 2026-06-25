@@ -1122,6 +1122,34 @@ describe("Composer", () => {
     );
   });
 
+  it("shows built-in and project badges on slash command suggestions", async () => {
+    const user = userEvent.setup();
+    vi.mocked(searchSlashCommands).mockResolvedValue([
+      {
+        name: "/new",
+        description: "Start a fresh session",
+        kind: "local_command",
+      },
+      {
+        name: "/review",
+        description: "Review recent changes",
+        kind: "command",
+      },
+    ]);
+    renderComposer();
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "/");
+
+    await screen.findByRole("listbox", {
+      name: "Slash command suggestions",
+    });
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(2));
+    const builtInBadge = await screen.findByText("built-in");
+    const projectBadge = await screen.findByText("project");
+    expect(builtInBadge.closest(".composer__completion-kind--built-in")).not.toBeNull();
+    expect(projectBadge.closest(".composer__completion-kind--project")).not.toBeNull();
+  });
+
   it("loads slash commands beyond the old eight-item cap into the anchored popup", async () => {
     const user = userEvent.setup();
     const commands = Array.from({ length: 12 }, (_, index) => ({

@@ -3593,6 +3593,21 @@
   color: var(--color-accent);
 }
 
+.composer__completion-kind--built-in {
+  background: color-mix(in srgb, var(--color-accent-muted) 68%, white 32%);
+  color: var(--color-accent);
+}
+
+.composer__completion-kind--project {
+  background: color-mix(in srgb, var(--color-surface-3) 82%, var(--color-accent) 18%);
+  color: var(--color-text-secondary);
+}
+
+.composer__completion-kind--extension {
+  background: color-mix(in srgb, var(--color-surface-3) 78%, var(--color-warning, #d97706) 22%);
+  color: var(--color-text-secondary);
+}
+
 .composer__send {
   width: 32px;
   height: 32px;
