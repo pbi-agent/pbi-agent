@@ -148,16 +148,16 @@ wheels = [
 
 [[package]]
 name = "codetool-shell"
-version = "0.1.2"
+version = "0.1.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/65/5a/516e7a041ecd010f294772db77c984ed8cf376e4fa899649655e8a22e235/codetool_shell-0.1.2.tar.gz", hash = "sha256:cdbc2d8d55dacfbed8b9e5901ff861787ea3ec10f0f9d0916788664eded7d188", size = 258929, upload-time = "2026-06-21T22:23:16.347Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/c8/d839e59a40245b3efb165724c27bdaedbf51a3ee65b395c98b6f3063f106/codetool_shell-0.1.3.tar.gz", hash = "sha256:fc92586e22523a0e730c646cbb4452e19543e2ea8d1008a179b382e76f2083fc", size = 193866, upload-time = "2026-06-24T14:23:21.229Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/32/6cbe50c5c9b74a4ea50c4c5d4d27040f18dcf9c8a47f8e3aa967cab1e1e9/codetool_shell-0.1.2-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:5fa531894d8e8eeaf3c435440ba85774b7ad539195490dd44ae5baba0810a57d", size = 784417, upload-time = "2026-06-21T22:23:07.651Z" },
-    { url = "https://files.pythonhosted.org/packages/dc/7f/31b7e68463d50372235f4d8ffe94e7ff4bac1d1a59cc56c9467d32842443/codetool_shell-0.1.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:7b752b4cc55b20dd1fe39dc10e2befcbc7736f6fbfcc86679bc786a06d68bad4", size = 754589, upload-time = "2026-06-21T22:23:09.416Z" },
-    { url = "https://files.pythonhosted.org/packages/5b/bc/19d82a3b206afb3acc626c3e1f430171bf7a1a00404db3efca1768470896/codetool_shell-0.1.2-py3-none-manylinux2014_aarch64.whl", hash = "sha256:aa2b11aee77dcac1a8764a68daea92a5e4594412895abcc7b5fc7e856ba8392e", size = 791958, upload-time = "2026-06-21T22:23:10.9Z" },
-    { url = "https://files.pythonhosted.org/packages/46/58/36f26a1caf1d30bdfb8dc7c9cac75f15d93285ed88464c0104c9fda9859b/codetool_shell-0.1.2-py3-none-manylinux2014_x86_64.whl", hash = "sha256:5610551117383b25f524eb17ea6b56728ff66bd5905fb6908b8c63332e4f557b", size = 822841, upload-time = "2026-06-21T22:23:12.305Z" },
-    { url = "https://files.pythonhosted.org/packages/3c/c8/fb6e06458178f4674da07b354e8238233ce8fddc9ed85555aa6d88595740/codetool_shell-0.1.2-py3-none-win_amd64.whl", hash = "sha256:2a2b25187fb9e0f171465e2985ee28b0fd2837951b61b04f50107a5d1b40edfd", size = 678911, upload-time = "2026-06-21T22:23:13.678Z" },
-    { url = "https://files.pythonhosted.org/packages/f3/2a/7b7d3453d6d872df817554b43d11c6497132fd638bb3516e741e6c427605/codetool_shell-0.1.2-py3-none-win_arm64.whl", hash = "sha256:80f2d7f5995edb17bcec478eb20ed8215e9199eceabcecbbfb2eb8e2f0db8a74", size = 634593, upload-time = "2026-06-21T22:23:14.958Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/60/65a808ccdf37c3073ad984c7f786d5697f72262c40107bc41d681bfbcb2d/codetool_shell-0.1.3-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:0ebeb7fee0d0c5758bee7cc7cc2100d346c9eaf61dba13f7407d7a5e475d580f", size = 799566, upload-time = "2026-06-24T14:23:12.585Z" },
+    { url = "https://files.pythonhosted.org/packages/73/28/61823a24af4f784ede3763f2c52f5339b137e3fba5c2b03b4d3034e6b6f5/codetool_shell-0.1.3-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a40b73fad3af2be35be315cd2ffa0e3ce813bbd681ea75ac15f3d43d3eeceed6", size = 763720, upload-time = "2026-06-24T14:23:14.176Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/11/da158593f2aee21f9e4bc40146febfea790e5d7c415055b433105720054e/codetool_shell-0.1.3-py3-none-manylinux2014_aarch64.whl", hash = "sha256:871a20c33f3e6c4cceebc4a68fcb88e180637f8cf4ec5ea8ee1e8ab832713db8", size = 803363, upload-time = "2026-06-24T14:23:15.488Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/d9/bc44d754511c799b7785aedf896b61e4f5be3d9fd178075987c3680bd678/codetool_shell-0.1.3-py3-none-manylinux2014_x86_64.whl", hash = "sha256:908568fb421d2435188f2b052515a7c7bb4c632f611740f51d8f1dcc05100b21", size = 841179, upload-time = "2026-06-24T14:23:16.862Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/e3/937ce7704598cd2caff0be7fc6e300bdc750d346a000b00dda49f88a7c35/codetool_shell-0.1.3-py3-none-win_amd64.whl", hash = "sha256:4823d0a2fa677cd2ba7e15ea99a929a0edba0e5d8df9f0934303193d612fbb60", size = 696596, upload-time = "2026-06-24T14:23:18.399Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/c3/a7e3f151fa5b13660d6f9ce8c8cf42fdb219e9c4bb20bb599f82d0a839b6/codetool_shell-0.1.3-py3-none-win_arm64.whl", hash = "sha256:5338010d288a01d03f03f1e7b6f218dcb2343cbdaa8c973a7c789a5f1193cb2b", size = 639911, upload-time = "2026-06-24T14:23:19.995Z" },
 ]
 
 [[package]]
@@ -499,7 +499,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "codetool-explore", specifier = "==0.7.0" },
-    { name = "codetool-shell", specifier = "==0.1.2" },
+    { name = "codetool-shell", specifier = "==0.1.3" },
     { name = "fastapi", specifier = "==0.135.2" },
     { name = "lark", specifier = "==1.3.1" },
     { name = "mcp", specifier = "==1.26.0" },
