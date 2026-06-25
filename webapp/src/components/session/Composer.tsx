@@ -131,6 +131,17 @@ const FILE_MENTION_POLL_INTERVAL_MS = 500;
 const COMPLETION_RESULT_LIMIT = 8;
 const SLASH_COMMAND_COMPLETION_LIMIT = 200;
 
+function slashCommandKindLabel(kind: SlashCommandItem["kind"]): string {
+  switch (kind) {
+    case "local_command":
+      return "built-in";
+    case "command":
+      return "project";
+    case "extension":
+      return "extension";
+  }
+}
+
 function parseActiveMention(
   text: string,
   cursorIndex: number,
@@ -1550,6 +1561,19 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
                 ) : item.kind === "skill" ? (
                   <span className="composer__completion-kind composer__completion-kind--skill">
                     {item.skill.enabled === false ? "disabled skill" : "skill"}
+                  </span>
+                ) : item.kind === "slash" ? (
+                  <span
+                    className={cn(
+                      "composer__completion-kind",
+                      item.command.kind === "local_command"
+                        ? "composer__completion-kind--built-in"
+                        : item.command.kind === "command"
+                          ? "composer__completion-kind--project"
+                          : "composer__completion-kind--extension",
+                    )}
+                  >
+                    {slashCommandKindLabel(item.command.kind)}
                   </span>
                 ) : null}
               </Button>

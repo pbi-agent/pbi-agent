@@ -1,10 +1,3 @@
-# Release v0.22.0
-
-- [x] Load release-writing skill and gather git/changelog context
-- [x] Determine commits/PRs since last release and pick version
-- [x] Create `chore/release-v0.22.0`, bump version, write changelog
-- [>] Run full validation suite
-- [ ] Determine commits/PRs since last release and pick version
-- [ ] Create `chore/release-v0.22.0`, bump version, write changelog
-- [ ] Run full validation suite
-- [ ] Commit, push, open PR, merge, verify publish
+- [x] Add slash-command kind badges in Composer completion list
+- [x] Add Composer tests for built-in vs project badges
+- [x] Run frontend validation (test:web, lint, typecheck)
