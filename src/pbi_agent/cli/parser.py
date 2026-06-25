@@ -21,6 +21,7 @@ from pbi_agent.config import (
 )
 from pbi_agent.web.defaults import DEFAULT_WEB_PORT
 
+from .channels import add_channels_parser
 from .shared import DEFAULT_COMMAND, DEFAULT_SANDBOX_IMAGE
 
 
@@ -578,6 +579,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="json_output",
         action="store_true",
         help="Print machine-readable JSON instead of task detail blocks.",
+    )
+
+    add_channels_parser(
+        add_command_parser,
+        formatter_class=CleanHelpFormatter,
     )
 
     skills_parser = add_command_parser(

@@ -1,7 +1,7 @@
 # MEMORY.md
 
 ## Metadata
-- Last compacted: 2026-06-24
+- Last compacted: 2026-06-25
 - Scope: durable repo memory + active-day task events.
 - Format: only `Metadata`, `Long-Term Memory`, and `Detailed Task Events`.
 
@@ -33,7 +33,7 @@
 - `google_gcp`: provider wrapper with Vertex/Gemini shape handlers for Gemini `generateContent`, OpenAI Chat Completions, OpenAI Responses/xAI, Anthropic Messages. Uses client-side history for GCP xAI/Responses. Does not advertise native web search until shape-native tools exist. Same-shape runtime changes update active shape/protocol in place so history survives model/max-token/tool changes.
 - `google_gcp` auth/endpoints: derive Vertex project/location from saved provider or CLI before env fallback. API-key-like tokens/envs use `x-goog-api-key` + Gemini express `v1beta1`; express unsupported-token errors retry once with standard Vertex OAuth/ADC using saved project/location. Non-Gemini Vertex shapes skip API-key-like auth and use OAuth2/ADC; forced API-key auth errors early. ADC via `gcloud auth application-default print-access-token`, timeout default 30s overrideable by `PBI_AGENT_GOOGLE_GCP_ACCESS_TOKEN_TIMEOUT`; bearer cached until expiry and refreshed once after expiry errors. Strip `google/` model prefix for Gemini endpoint paths. GCP Responses tool schemas drop unsupported JSON-Schema combinators like `oneOf`.
 - Web sessions/routes: saved sessions use session-scoped APIs; no user-facing `/api/live-sessions/*` or `/sessions/live/:id`. Blank/saved sessions start/continue without active live id; completed Kanban-bound runs detach live ids without ending saved conversation.
-- Channels: workspace-scoped web-managed channel configs live in `sessions.db`; Telegram MVP uses `urllib.request` polling, per-runner in-process token leases, per-source queues/session mappings, best-effort 👀 reactions after enqueue, text/photo/image-document input, and Settings → Channels with workspace-scoped query cache. Telegram outbound Markdown entity formatting/chunking lives in `src/pbi_agent/channels/telegram_markdown.py`. Channels settings use a compact inert Telegram card: header enable/status, two-column grids, separators, and action-button hover border/halo styling.
+- Channels: workspace-scoped web-managed channel configs live in `sessions.db`; Telegram MVP uses `urllib.request` polling, per-runner in-process token leases, per-source queues/session mappings, best-effort 👀 reactions after enqueue, text/photo/image-document input, and Settings → Channels with workspace-scoped query cache. Telegram outbound Markdown entity formatting/chunking lives in `src/pbi_agent/channels/telegram_markdown.py`. `pbi-agent channels` exposes workspace-scoped CLI show/configure/restart; CLI configure persists without starting a runner, and restart validates locally unless it confirms a same-workspace web server. Channels settings use a compact inert Telegram card: header enable/status, two-column grids, separators, and action-button hover border/halo styling.
 - Web session internals: `src/pbi_agent/web/session_manager.py` thin facade over mixins in `src/pbi_agent/web/session/`; patch worker/auth globals in `pbi_agent.web.session.workers` and `pbi_agent.web.session.provider_auth`.
 - Web events: app/session streams use SSE `GET /api/events/{stream}` and `/api/events/sessions/{session_id}` with `server.connected`, heartbeat, `since`/`Last-Event-ID`; WebSocket event routes/helpers removed; frontend keeps defensive `parseSseEvent()`.
 - Web workspace switching/search: workspace APIs/picker use explicit workspace root/directory key across web/session/task/sub-agent/tool/extension/MCP contexts. `workspace_switched` SSE clears workspace-scoped UI/query/session state and redirects other tabs to Sessions. WSL picker prefers Windows dialog via `powershell.exe`, maps with `wslpath`. `/api/sessions?q=` literal-LIKE searches current-workspace titles/messages.
@@ -53,6 +53,6 @@
 
 ## Detailed Task Events
 
-## 2026-06-24
-- Added xAI/X subscription auth (`xai_account`) with OAuth PKCE, fixed xAI callback, runtime/model-discovery OAuth auth, provider-level STT eligibility, CLI/web/API/frontend alignment, focused tests, and rebuilt static web bundle. Validation: `bun run web:api-types`, Ruff, format check, basedpyright, full pytest, full `bun run test:web`, frontend lint/typecheck, `bun run web:build`, `git diff --check`; review and code-quality gates ended clean.
-- Added xAI subscription model-discovery curated extra `grok-composer-2.5-fast` after confirming local `grok models` and Hermes curate it as OAuth-callable but absent from public model-list endpoints; API-key xAI discovery stays endpoint-only. Validation: focused model discovery pytest, Ruff, format check, and basedpyright for touched Python files.
+## 2026-06-25
+- Fixed `/review` findings for `pbi-agent channels telegram restart`: no-web fallback validates/persists status without starting Telegram polling, and web restart requires matching workspace key. Validation: `pytest tests/cli/test_channels.py`, Ruff, format check, basedpyright on touched CLI file.
+- Fixed `/code-quality-review` finding by moving channels subparser registration from `cli/parser.py` into `cli/channels.py` via `add_channels_parser()`, leaving parser orchestration-only. Validation: `pytest tests/cli/test_channels.py`, Ruff, format check, basedpyright on touched CLI files.

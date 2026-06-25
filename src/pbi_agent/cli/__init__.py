@@ -22,6 +22,7 @@ _MODULE_ATTRS = (
     "config",
     "catalogs",
     "kanban",
+    "channels",
     "sessions",
     "shared",
 )

@@ -1,5 +1,5 @@
-- [x] Inspect current xAI model discovery and auth implementation
-- [x] Inspect Hermes/Grok installed clients for subscription model endpoints
-- [x] Implement model discovery/list changes for xAI subscription
-- [x] Add/update focused tests
-- [x] Run validation and update memory
+# Session TODO
+
+- [x] Move channels parser registration into `cli/channels.py`
+- [x] Run focused CLI/channel validation
+- [x] Record task memory

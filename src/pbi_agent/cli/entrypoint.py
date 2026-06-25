@@ -18,6 +18,7 @@ from pbi_agent.hooks.discovery import discover_hooks
 from pbi_agent.hooks.review import format_hook_warning, hooks_requiring_review
 from pbi_agent.workspace_context import current_workspace_context
 
+from .channels import _handle_channels_command
 from .catalogs import (
     _handle_agents_command,
     _handle_agents_flag,
@@ -83,6 +84,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "kanban":
         return _handle_kanban_command(args)
+
+    if args.command == "channels":
+        return _handle_channels_command(args)
 
     if args.command == "config":
         try:

@@ -64,7 +64,7 @@ class WorkspaceChannelManager:
         record = self._record()
         return TelegramChannelConfig.from_dict(record.config if record else None)
 
-    def update_telegram_config(
+    def persist_telegram_config(
         self,
         config: TelegramChannelConfig,
     ) -> ChannelRuntimeStatus:
@@ -77,6 +77,13 @@ class WorkspaceChannelManager:
                 status=status.state if config.enabled else "disabled",
                 error=status.error,
             )
+        return status
+
+    def update_telegram_config(
+        self,
+        config: TelegramChannelConfig,
+    ) -> ChannelRuntimeStatus:
+        self.persist_telegram_config(config)
         self.restart()
         return self.status()
 
